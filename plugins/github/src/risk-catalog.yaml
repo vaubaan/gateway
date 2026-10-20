@@ -3,7 +3,7 @@
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
 # Handbook : docs/handbook/providers/github.md.
 #
-# 18 fine-grained risks + 1 fallback (`github.uncategorized-write`). Each
+# 16 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
 # `matches` is one slice pattern or a list ; the risk is touched when at
 # least one pattern intersects the concrete slice the classifier emitted.
 # Bracket lists mix exact names and globs (`[main,master,release-*]`).
@@ -21,8 +21,8 @@
 # creator adds it explicitly when a mission needs unconventional branches.
 
 provider: github
-catalog_version: 8
-catalog_date: 2026-10-18
+catalog_version: 9
+catalog_date: 2026-10-20
 
 risks:
   # ---------------------------------------------------------------
@@ -360,9 +360,14 @@ risks:
       persistence: posture
 
   # ---------------------------------------------------------------
-  # WRITES — credential mint (install token, two purposes)
+  # DEPRECATED — the install-token mint of the company's GitHub App, gone
+  # with the App (ADR one-place-to-authorize-services-token-first, catalog
+  # v9). Ids are never deleted : a mission that still names them holds a
+  # risk no call touches.
   # ---------------------------------------------------------------
   - id: github.mint-install-token-clone
+    deprecated: true
+    replaced_by: github.read-code
     label: 'Mint an install token (purpose=clone, read-only)'
     reason: >-
       Credential creation, but scoped to `contents:read` only. The token
@@ -379,6 +384,8 @@ risks:
       persistence: session
 
   - id: github.mint-install-token-push
+    deprecated: true
+    replaced_by: github.git-push
     label: 'Mint an install token (purpose=push, write)'
     reason: >-
       Credential creation with `contents:write + pull_requests:write +
@@ -470,8 +477,6 @@ presets:
         quota: 50
         rate_limit: { max: 5, window_seconds: 60 }
         gate: approval
-      # git through the gateway's remote replaces the minted tokens of catalog v5 :
-      # the two mint risks stay in the catalog, a creator adds them by hand.
       - risk_id: github.git-push
         quota: 200
         rate_limit: { max: 10, window_seconds: 60 }

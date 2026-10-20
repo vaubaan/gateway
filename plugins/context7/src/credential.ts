@@ -63,6 +63,5 @@ export const context7CredentialSpec: ApiKeyCredentialSpec = {
     recommendedExpiryDays: null,
     docsUrl: 'https://context7.com/docs/howto/api-keys',
   },
-  manualRevocation: CONTEXT7_MANUAL_REVOCATION,
   verify: verifyContext7Key,
 };

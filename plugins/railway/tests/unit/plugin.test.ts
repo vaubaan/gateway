@@ -12,7 +12,7 @@ import {
   serializeSlice,
   type ConnectionContext,
   type ExecuteContext,
-  type OAuth2Secret,
+  type ApiKeySecret,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 import {
@@ -29,9 +29,7 @@ import {
 import {
   RAILWAY_AGENT_HINT,
   RAILWAY_GRAPHQL_URL,
-  RAILWAY_MCP_RESOURCE,
   RAILWAY_MCP_URL,
-  RAILWAY_TOKEN_URL,
   classifyRailway,
   environmentsOf,
   railwayPlugin,
@@ -84,12 +82,9 @@ const undiscovered: Resource = {
 };
 const foreign: Resource = { provider: 'vercel', ref: 'prj_1', displayName: 'other' };
 
-const secret = (over: Partial<OAuth2Secret> = {}): OAuth2Secret => ({
-  kind: 'oauth2',
-  accessToken: 'rlwy_at',
-  refreshToken: 'rlwy_rt',
-  expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-  scopes: ['openid', 'offline_access', 'workspace:member'],
+const secret = (over: Partial<ApiKeySecret> = {}): ApiKeySecret => ({
+  kind: 'api-key',
+  fields: { api_token: 'rlwy_at' },
   metadata: {},
   ...over,
 });
@@ -380,20 +375,8 @@ describe('classifyRailway', () => {
 // ─── Credential spec ─────────────────────────────────────────────────────────
 
 describe('railway credential', () => {
-  test('declares the OAuth2 flow of the rewrap ADR', () => {
-    expect(railwayPlugin.credential).toMatchObject({
-      kind: 'oauth2',
-      authorizationUrl: 'https://backboard.railway.com/oauth/auth',
-      tokenUrl: RAILWAY_TOKEN_URL,
-      scopes: ['openid', 'offline_access', 'workspace:member'],
-      pkce: true,
-      resourceIndicator: RAILWAY_MCP_RESOURCE,
-      clientAuthMethod: 'client_secret_basic',
-      refreshable: true,
-      extraAuthorizationParams: { prompt: 'consent' },
-    });
-    // The refresh is the standard refresh_token grant (Basic client auth,
-    // `resource` indicator) the host performs from the spec : no override.
+  test('a workspace or account token pasted by hand, the one way of connecting', () => {
+    expect(railwayPlugin.credential).toMatchObject({ kind: 'api-key', label: 'workspace token' });
     expect('refresh' in railwayPlugin).toBe(false);
   });
 });
@@ -692,7 +675,13 @@ describe('discoverRailwayResources', () => {
         method: 'POST',
         url: RAILWAY_GRAPHQL_URL,
         respond: (c) => {
-          const vars = (c.json as { variables: { after: string | null; first: number } }).variables;
+          const sent = c.json as {
+            query: string;
+            variables: { after: string | null; first: number };
+          };
+          // A token connection asks the account's workspaces after its own projects.
+          if (sent.query.includes('vaubaanWorkspaces')) return { data: { me: { workspaces: [] } } };
+          const vars = sent.variables;
           expect(vars.first).toBe(100);
           return vars.after === null
             ? page(
@@ -738,7 +727,8 @@ describe('discoverRailwayResources', () => {
     expect((fetch.calls[0]!.json as { query: string }).query).toMatch(
       /services\s*\{\s*edges\s*\{\s*node\s*\{\s*id\s+name/,
     );
-    expect(fetch.calls).toHaveLength(2);
+    // Two pages of projects, then the account's workspaces.
+    expect(fetch.calls).toHaveLength(3);
     expect((fetch.calls[1]!.json as { variables: { after: string } }).variables.after).toBe('c1');
     expect(fetch.calls[0]!.headers.authorization).toBe('Bearer rlwy_at');
   });
@@ -747,11 +737,15 @@ describe('discoverRailwayResources', () => {
     const fetch = mockFetch([
       {
         url: RAILWAY_GRAPHQL_URL,
-        respond: () => page([{ id: PROJECT_STG, name: 'p', envs: [] }], 'more'),
+        respond: (c) =>
+          (c.json as { query: string }).query.includes('vaubaanWorkspaces')
+            ? { data: { me: { workspaces: [] } } }
+            : page([{ id: PROJECT_STG, name: 'p', envs: [] }], 'more'),
       },
     ]);
     const resources = await railwayPlugin.discoverResources(connCtx(fetch));
-    expect(fetch.calls).toHaveLength(5);
+    // Five pages of projects, then the account's workspaces (none).
+    expect(fetch.calls).toHaveLength(6);
     expect(resources).toHaveLength(5);
   });
 

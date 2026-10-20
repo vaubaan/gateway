@@ -1,150 +1,122 @@
 /**
- * Credential of the `github` provider : a GitHub App the company registers,
- * installed on its organisation (`app-install` kind).
+ * Credential of the `github` provider : a fine-grained personal access token
+ * pasted by hand (`api-key` kind), the one way of connecting GitHub.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADR
- *        plugin-contract-and-credential-spec D2.
+ *        one-place-to-authorize-services-token-first.
  *
- * The operator configures the App once (app id, private key, slug, OAuth
- * client id and secret) — created from the interface through GitHub's App
- * manifest flow (`app-manifest.ts`, `manifestRegistration` below), or
- * entered by hand ; the host redirects the connecting user to the
- * installation page and receives `installation_id` on the callback. The App
- * is registered with "Request user authorization (OAuth) during
- * installation", so the callback also carries a `code` : the host exchanges
- * it for a user access token, checks that `installation_id` is among
- * `GET /user/installations` for that token, and drops the token
- * (`userVerification` below — declarative, this plugin runs none of it and
- * never receives the client secret). Only then is the installation id stored
- * as the connection's secret. At call time the plugin mints a short-lived
- * installation token from the App's private key (`app-install.ts`), scoped
- * to the repositories and permissions the call needs.
+ * A person creates a token at GitHub — often on a shared service account,
+ * with Vaubaan deciding who may do what — and pastes it. The token is the
+ * connection's secret ; every API tool and the git remote send it as the
+ * bearer. GitHub enforces what it may do : the permissions its owner ticked.
  *
- * The other way to connect, a fine-grained personal access token pasted by
- * hand when no App is registered, is `token.ts` (ADR
- * token-connections-beside-the-integration-app).
+ * Fine-grained tokens only. A classic token (`ghp_`) reaches every
+ * repository and organisation of its account with coarse scopes and may
+ * never expire ; a fine-grained one names its resource owner, its
+ * repositories and its permissions, and GitHub recommends it. The field's
+ * pattern refuses a classic token before anything is sent.
+ *
+ * Checked at paste (`verifyGithubToken`) : `GET /user` names the account ;
+ * the `github-authentication-token-expiration` response header, when GitHub
+ * sends one, gives the expiry. The repositories it reaches are the
+ * resources (`GET /user/repos`, discovery).
  */
 
 import {
+  UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
-  type AppInstallCredentialSpec,
+  type ApiKeyCredentialSpec,
   type ConnectionContext,
-  type ProviderAppConfig,
+  type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
-import {
-  GITHUB_API_BASE,
-  GITHUB_API_HEADERS,
-  mintInstallationToken,
-  type AppCredentials,
-  type ScopedInstallationToken,
-} from './app-install.ts';
-import { githubManifestRegistration } from './app-manifest.ts';
-import { GITHUB_APP_CONFIG, GITHUB_WEB_BASE } from './credential-keys.ts';
+import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
+import { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
 
-export { GITHUB_APP_CONFIG, GITHUB_WEB_BASE };
-/** `GET /user/installations` accepts at most 100 items per page. */
-const INSTALLATIONS_PER_PAGE = 100;
+/** Name of the form field, and key of the secret, holding the token. */
+export const GITHUB_TOKEN_FIELD = 'token';
 
-export const githubCredential: AppInstallCredentialSpec = {
-  kind: 'app-install',
-  appConfigFields: [
+/** Where a person manages their fine-grained tokens at GitHub. */
+export const GITHUB_TOKENS_PAGE = 'https://github.com/settings/personal-access-tokens';
+
+/** Response header carrying a personal access token's expiry, when GitHub sends it. */
+export const GITHUB_TOKEN_EXPIRATION_HEADER = 'github-authentication-token-expiration';
+
+/** Fine-grained tokens start with `github_pat_` ; classic ones (`ghp_`) are refused. */
+export const GITHUB_FINE_GRAINED_TOKEN_PATTERN = '^github_pat_[A-Za-z0-9_]{20,255}$';
+
+export const githubCredential: ApiKeyCredentialSpec = {
+  kind: 'api-key',
+  label: 'fine-grained personal access token',
+  fields: [
     {
-      name: GITHUB_APP_CONFIG.appId,
-      label: 'GitHub App ID',
-      secret: false,
-      pattern: '^[0-9]+$',
-      help: 'Numeric App ID shown on the App settings page (Settings → Developer settings → GitHub Apps).',
-    },
-    {
-      name: GITHUB_APP_CONFIG.privateKey,
-      label: 'GitHub App private key (PEM)',
+      name: GITHUB_TOKEN_FIELD,
+      label: 'Fine-grained personal access token',
       secret: true,
-      help: 'Generate a private key on the App settings page and paste the PEM (PKCS#1 or PKCS#8).',
-    },
-    {
-      name: GITHUB_APP_CONFIG.appSlug,
-      label: 'GitHub App slug',
-      secret: false,
-      pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$',
-      help: 'The URL slug of the App (https://github.com/apps/<slug>) ; used to build the installation link.',
-    },
-    {
-      name: GITHUB_APP_CONFIG.clientId,
-      label: 'GitHub App client ID',
-      secret: false,
-      pattern: '^[A-Za-z0-9._-]+$',
-      help: 'Client ID shown on the App settings page (not the App ID). The App must have "Request user authorization (OAuth) during installation" enabled.',
-    },
-    {
-      name: GITHUB_APP_CONFIG.clientSecret,
-      label: 'GitHub App client secret',
-      secret: true,
-      help: 'Generate a client secret on the App settings page. Used only to check that the person who installs the App has access to the installation.',
+      pattern: GITHUB_FINE_GRAINED_TOKEN_PATTERN,
+      placeholder: 'github_pat_…',
+      help: 'A classic token (ghp_…) is refused: it reaches every repository of its account.',
     },
   ],
-  installUrl(appConfig: ProviderAppConfig): string {
-    const slug = requireAppConfig(appConfig, GITHUB_APP_CONFIG.appSlug);
-    return `${GITHUB_WEB_BASE}/apps/${encodeURIComponent(slug)}/installations/new`;
+  createUrl: GITHUB_TOKENS_PAGE,
+  guide: {
+    steps: [
+      'Sign in to GitHub as the account the agents will act as.',
+      'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
+      'Choose the organisation as resource owner, and only the repositories the missions need.',
+      'Tick the permissions below; GitHub adds Metadata (read) by itself.',
+      'Generate the token, copy it, and paste it here. GitHub shows it once.',
+    ],
+    permissions: GITHUB_TOKEN_PERMISSIONS,
+    recommendedExpiryDays: 90,
+    docsUrl:
+      'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens',
   },
-  installationIdParam: 'installation_id',
-  userVerification: {
-    codeParam: 'code',
-    tokenUrl: `${GITHUB_WEB_BASE}/login/oauth/access_token`,
-    clientAuthMethod: 'client_secret_post',
-    installationsUrl: `${GITHUB_API_BASE}/user/installations`,
-    installationsHeaders: GITHUB_API_HEADERS,
-    installationsListField: 'installations',
-    installationIdField: 'id',
-    pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: INSTALLATIONS_PER_PAGE },
-  },
-  // The administrator may create the App from Settings → Administration → Company apps.
-  manifestRegistration: githubManifestRegistration,
+  verify: verifyGithubToken,
 };
 
-/** Read one app-config key or fail naming it (never a silent default). */
-export function requireAppConfig(appConfig: ProviderAppConfig, key: string): string {
-  const value = appConfig[key];
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`github: app configuration key '${key}' is missing`);
+/** The pasted token of a token connection. */
+export function githubTokenOf(ctx: ConnectionContext): string {
+  const secret = expectCredentialKind('github', ctx.credential, 'api-key');
+  const token = secret.fields[GITHUB_TOKEN_FIELD];
+  if (typeof token !== 'string' || token.length === 0) {
+    throw new Error(`github: the stored token has no '${GITHUB_TOKEN_FIELD}' field`);
   }
-  return value;
-}
-
-/** The App credentials of the context, PEM `\n` escapes un-escaped (operators often paste a one-line key). */
-export function appCredentialsOf(ctx: ConnectionContext): AppCredentials {
-  return {
-    appId: requireAppConfig(ctx.appConfig, GITHUB_APP_CONFIG.appId),
-    privateKeyPem: requireAppConfig(ctx.appConfig, GITHUB_APP_CONFIG.privateKey).replace(
-      /\\n/g,
-      '\n',
-    ),
-  };
-}
-
-export interface TokenScope {
-  /** Repository names without owner ; omit for an installation-wide token. */
-  readonly repositories?: readonly string[];
-  /** Permission subset ; omit for the App's full granted permissions. */
-  readonly permissions?: Readonly<Record<string, string>>;
+  return token;
 }
 
 /**
- * Mint an installation token for the connection of `ctx`, scoped as asked.
- * One mint per call : the installation id never expires, the token does.
+ * Who the token acts as and when it expires : `GET /user` (any valid token
+ * may read its own user) and the expiration header. A 401 is a rejected
+ * token ; any other failure is GitHub's.
  */
-export async function installationTokenFor(
-  ctx: ConnectionContext,
-  scope: TokenScope = {},
-): Promise<ScopedInstallationToken> {
-  const secret = expectCredentialKind('github', ctx.credential, 'app-install');
-  const creds = appCredentialsOf(ctx);
-  return mintInstallationToken({
-    ...creds,
-    installationId: secret.installationId,
-    ...(scope.repositories ? { repositories: [...scope.repositories] } : {}),
-    ...(scope.permissions ? { permissions: { ...scope.permissions } } : {}),
-    fetchImpl: ctx.fetch,
+export async function verifyGithubToken(ctx: ConnectionContext): Promise<CredentialCheck> {
+  const res = await ctx.fetch(`${GITHUB_API_BASE}/user`, {
+    method: 'GET',
+    headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${githubTokenOf(ctx)}` },
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });
+  if (res.status === 401 || res.status === 403) {
+    throw new UpstreamAuthError(`github rejected the token (HTTP ${res.status})`, res.status);
+  }
+  if (!res.ok) {
+    throw new UpstreamHttpError(`github GET /user failed with HTTP ${res.status}`, res.status);
+  }
+  const body = (await res.json()) as { login?: unknown };
+  return {
+    account: typeof body.login === 'string' ? body.login : null,
+    expiresAt: expiryOf(res.headers.get(GITHUB_TOKEN_EXPIRATION_HEADER)),
+  };
+}
+
+/**
+ * The header reads `2026-12-31 00:00:00 UTC` (GitHub's format) ; anything
+ * `Date` cannot read is taken as "not said" rather than guessed.
+ */
+export function expiryOf(header: string | null): string | null {
+  if (!header) return null;
+  const iso = header.trim().replace(' UTC', 'Z').replace(' ', 'T');
+  const at = Date.parse(iso);
+  return Number.isFinite(at) ? new Date(at).toISOString() : null;
 }

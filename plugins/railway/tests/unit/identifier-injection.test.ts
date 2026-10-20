@@ -57,14 +57,7 @@ const execCtx = (
   fetch: typeof globalThis.fetch,
   resources: readonly Resource[] = [project],
 ): ExecuteContext => ({
-  credential: {
-    kind: 'oauth2',
-    accessToken: 'rlwy_at',
-    refreshToken: 'rlwy_rt',
-    expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-    scopes: ['openid'],
-    metadata: {},
-  },
+  credential: { kind: 'api-key', fields: { api_token: 'rlwy_at' }, metadata: {} },
   appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   resources,

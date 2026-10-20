@@ -1,14 +1,12 @@
 /**
- * The token way of connecting Supabase (`token.ts`) against `mockFetch` : the
- * check at paste, discovery and a tool call with the pasted personal access
+ * The personal access token of Supabase (`credential.ts`) against
+ * `mockFetch` : the check at paste, discovery and a tool call with the pasted
  * token as bearer. No network.
  */
 import { describe, expect, test } from 'vitest';
 
 import {
   UpstreamAuthError,
-  credentialSpecFor,
-  unavailableToolReason,
   type ConnectionContext,
   type ExecuteContext,
 } from '@vaubaan/plugin-sdk';
@@ -16,7 +14,7 @@ import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import supabasePlugin, {
   SUPABASE_API_BASE,
-  supabaseTokenCredential,
+  supabaseCredential,
   verifySupabaseToken,
 } from '../../src/index.ts';
 
@@ -32,16 +30,13 @@ function ctx(fetch: MockFetch): ConnectionContext {
 }
 
 describe('supabase token — the declaration', () => {
-  test('OAuth app first, then a personal access token; every tool runs with the token', () => {
-    expect(supabasePlugin.credential.kind).toBe('oauth2');
-    expect(credentialSpecFor(supabasePlugin, 'api-key')).toBe(supabaseTokenCredential);
-    for (const tool of supabasePlugin.tools) {
-      expect(unavailableToolReason(supabasePlugin, 'api-key', tool.name)).toBeNull();
-    }
+  test('a personal access token is the one way of connecting', () => {
+    expect(supabasePlugin.credential).toBe(supabaseCredential);
+    expect(supabaseCredential.kind).toBe('api-key');
   });
 
   test('the field takes a personal access token and nothing else', () => {
-    const pattern = new RegExp(supabaseTokenCredential.fields[0]!.pattern!);
+    const pattern = new RegExp(supabaseCredential.fields[0]!.pattern!);
     expect(pattern.test(PAT)).toBe(true);
     expect(pattern.test('eyJhbGciOiJIUzI1NiJ9.service_role')).toBe(false);
   });

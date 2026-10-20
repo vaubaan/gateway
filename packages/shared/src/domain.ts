@@ -64,7 +64,7 @@ export interface Delegation {
 /** How a connection authenticates to its provider. Declared by the plugin.
  *  The constant is the source ; the type derives from it so a new kind cannot
  *  be added to one without the other. */
-export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'app-install', 'ssh-key'] as const;
+export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'ssh-key'] as const;
 export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
 export function isCredentialKind(raw: string): raw is CredentialKind {

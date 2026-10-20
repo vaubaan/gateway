@@ -43,7 +43,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { isUnderWorkflowDirectory, repoFullName } from './call.ts';
-import { GITHUB_WEB_BASE } from './credential.ts';
+import { GITHUB_WEB_BASE } from './api.ts';
 import { pushedRef, type GitRefKind } from './git-call.ts';
 import { targetOf } from './git-credential.ts';
 import { branchHeads } from './git-heads.ts';

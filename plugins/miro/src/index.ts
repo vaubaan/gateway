@@ -34,7 +34,8 @@ export const miroPlugin = definePlugin({
     'Miro boards: sticky notes, shapes, texts, cards, frames, connectors and tags — one resource per board.',
   summary:
     'One account is the access token of a Miro app installed on one team; one resource is one board of that team. A mission touches only the boards it was given. Miro boards have no environment: adding and editing, adding many items at once, deleting an item and deleting a frame are separate permissions instead.',
-  manualRevocation: miroCredential.manualRevocation,
+  manualRevocation:
+    'In Miro, open Settings, Your apps, and delete the app or uninstall it from the team; its token stops working.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/miro.md',
   tools: miroTools,
   toolTitles: miroToolTitles,

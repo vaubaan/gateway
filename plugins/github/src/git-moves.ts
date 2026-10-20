@@ -15,13 +15,9 @@
  * A provider failure on one ref reports that ref and goes on with the next;
  * only a failure before any ref was tried fails the call.
  *
- * The push token's permissions are checked before any ref moves, against what
- * the review found (a workflow change needs `workflows: write`); a grant from
- * the cache that falls short is minted afresh first. When GitHub refuses a
- * move for a permission the token lacks ("Resource not accessible by
- * integration", "… without `workflows` permission"), the grant is minted
- * afresh once for the push and the move tried once more; refused again, the
- * ref's error names the permission.
+ * When GitHub refuses a move for a permission the token lacks ("Resource not
+ * accessible by personal access token", "… without `workflows` permission"),
+ * the ref's error says so and points at the token's permissions.
  */
 import {
   ExecutorRefusal,
@@ -37,19 +33,37 @@ import {
 
 import { githubRepoRefs } from './call.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall, type GitCall } from './git-call.ts';
-import { gitGrant, upstream } from './git-credential.ts';
+import { upstream } from './git-credential.ts';
 import { GithubRest, HTTP_UNAUTHORIZED, HTTP_UNPROCESSABLE, refPath } from './git-rest.ts';
-import {
-  assertGranted,
-  gitPushNeeds,
-  isMissingPermissionRefusal,
-  missingPermissionSentence,
-  refusedForPermissionSentence,
-} from './permission-check.ts';
 
 /** What the gateway calls itself in the capabilities it sends GitHub. */
 const GIT_AGENT = 'vaubaan-gateway';
 const HTTP_SERVER_ERROR = 500;
+/** GitHub's HTTP status for a token that authenticates but may not do this. */
+const HTTP_FORBIDDEN = 403;
+
+/**
+ * GitHub's words for a token that lacks a permission: the REST API's
+ * "Resource not accessible by personal access token" (or "by integration"),
+ * and the git push's "refusing to allow a Personal Access Token to create or
+ * update workflow … without `workflows` permission".
+ */
+const MISSING_PERMISSION_WORDS =
+  /Resource not accessible by (personal access token|integration)|without [`'"]?workflows[`'"]? permission|refusing to allow a (Personal Access Token|GitHub App)/i;
+
+/** Whether GitHub refused a move for a permission the token lacks. A 403 for any other reason is not this. */
+export function isMissingPermissionRefusal(status: number | null, message: string): boolean {
+  return (status === null || status === HTTP_FORBIDDEN) && MISSING_PERMISSION_WORDS.test(message);
+}
+
+/** Longest part of GitHub's message a refusal quotes. */
+const MAX_QUOTED_GITHUB_MESSAGE = 200;
+
+/** The ref's error when GitHub refused its move for a permission the token lacks. */
+export function refusedForPermissionSentence(githubSaid: string): string {
+  const said = (githubSaid.split('\n')[0] ?? '').slice(0, MAX_QUOTED_GITHUB_MESSAGE);
+  return `${GIT_PUSH_TOOL} was refused by GitHub for a permission the account's token lacks (GitHub: “${said}”). The token needs Contents (read and write), and Workflows (read and write) for a change under .github/workflows/: create a token with them at GitHub and reconnect the account.`;
+}
 
 type MoveOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
@@ -65,15 +79,8 @@ export async function executeGit(
       `${GIT_FETCH_TOOL} is relayed by the gateway's git remote, never executed`,
     );
   }
-  const needs = gitPushNeeds(call.updates.map((u) => u.update));
-  let grant = await gitGrant(ctx, call.target, 'write');
-  if (grant.cached && missingPermissionSentence(GIT_PUSH_TOOL, needs, grant.permissions) !== null) {
-    // A cached grant may predate a permission granted since.
-    grant = await gitGrant(ctx, call.target, 'write', { fresh: true });
-  }
-  assertGranted(GIT_PUSH_TOOL, needs, grant.permissions);
   const rest = new GithubRest(ctx, call.target);
-  const mover = new RefMover(ctx, call.target.ref, rest, needs, !grant.cached);
+  const mover = new RefMover(ctx, call.target.ref, rest);
   const updates: GitPushResult['updates'][number][] = [];
   for (const [i, { update }] of call.updates.entries()) {
     let outcome: MoveOutcome;
@@ -100,27 +107,10 @@ class RefMover {
     private readonly ctx: ExecuteContext,
     private readonly repository: string,
     private readonly rest: GithubRest,
-    private readonly needs: Readonly<Record<string, string>>,
-    /** The push token was minted for this push: a refusal for a permission is final. */
-    private renewed: boolean,
   ) {}
 
-  /**
-   * GitHub refused a move for a permission the token lacks: mint afresh once
-   * for the push. `false` when it was already fresh — the refusal stands.
-   */
-  private async renewOnce(): Promise<boolean> {
-    if (this.renewed) return false;
-    this.renewed = true;
-    await this.rest.renew('write');
-    return true;
-  }
-
   private refusedForPermission(githubSaid: string): MoveOutcome {
-    return {
-      ok: false,
-      error: refusedForPermissionSentence(GIT_PUSH_TOOL, this.needs, githubSaid),
-    };
+    return { ok: false, error: refusedForPermissionSentence(githubSaid) };
   }
 
   async move(update: GitReviewedUpdate): Promise<MoveOutcome> {
@@ -147,15 +137,9 @@ class RefMover {
     path: string,
     body: unknown,
   ): Promise<MoveOutcome> {
-    let res = await this.rest.request('write', method, path, body);
-    let message = res.ok ? '' : await messageOf(res);
-    if (isMissingPermissionRefusal(res.status, message)) {
-      if (!(await this.renewOnce())) return this.refusedForPermission(message);
-      res = await this.rest.request('write', method, path, body);
-      message = res.ok ? '' : await messageOf(res);
-      if (isMissingPermissionRefusal(res.status, message))
-        return this.refusedForPermission(message);
-    }
+    const res = await this.rest.request('write', method, path, body);
+    const message = res.ok ? '' : await messageOf(res);
+    if (isMissingPermissionRefusal(res.status, message)) return this.refusedForPermission(message);
     if (res.ok) {
       await res.body?.cancel();
       return { ok: true };
@@ -179,10 +163,7 @@ class RefMover {
   private async compareAndSwap(update: GitReviewedUpdate): Promise<MoveOutcome> {
     const outcome = await this.sendCompareAndSwap(update);
     if (outcome.ok || !isMissingPermissionRefusal(null, outcome.error)) return outcome;
-    if (!(await this.renewOnce())) return this.refusedForPermission(outcome.error);
-    const again = await this.sendCompareAndSwap(update);
-    if (again.ok || !isMissingPermissionRefusal(null, again.error)) return again;
-    return this.refusedForPermission(again.error);
+    return this.refusedForPermission(outcome.error);
   }
 
   private async sendCompareAndSwap(update: GitReviewedUpdate): Promise<MoveOutcome> {

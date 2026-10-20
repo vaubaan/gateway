@@ -15,9 +15,9 @@ import {
   type GitTreeEntry,
 } from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
+import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
 import type { RepoTarget } from './call.ts';
-import { gitGrant } from './git-credential.ts';
+import { githubTokenOf } from './credential.ts';
 
 /** GitHub's compare API lists at most this many files ; a longer list is truncated. */
 export const COMPARE_MAX_FILES = 300;
@@ -103,8 +103,6 @@ function pathsOf(files: readonly CompareFile[]): string[] {
 }
 
 export class GithubRest {
-  private readonly tokens = new Map<GitAccess, string>();
-
   constructor(
     private readonly ctx: ExecuteContext,
     private readonly target: RepoTarget,
@@ -114,28 +112,13 @@ export class GithubRest {
     return `/repos/${this.target.owner}/${this.target.repo}`;
   }
 
-  /**
-   * Drop the grant of `access` and mint it afresh (once GitHub refused a
-   * request for a permission the cached token lacks): the next requests carry
-   * the new token. Returns what GitHub reports the new token may do.
-   */
-  async renew(access: GitAccess): Promise<Readonly<Record<string, string>>> {
-    const grant = await gitGrant(this.ctx, this.target, access, { fresh: true });
-    this.tokens.set(access, grant.token);
-    return grant.permissions;
-  }
-
   async request(
     access: GitAccess,
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     path: string,
     body?: unknown,
   ): Promise<Response> {
-    let token = this.tokens.get(access);
-    if (token === undefined) {
-      token = (await gitGrant(this.ctx, this.target, access)).token;
-      this.tokens.set(access, token);
-    }
+    const token = githubTokenOf(this.ctx);
     const res = await this.ctx.fetch(`${GITHUB_API_BASE}${this.repoPath}${path}`, {
       method,
       headers: {

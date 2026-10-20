@@ -1,15 +1,12 @@
 /**
- * The token way of connecting Railway (`token.ts`) against `mockFetch` : the
- * check at paste for a workspace and an account token, discovery with each,
- * an MCP-server tool on a token connection, and what an MCP refusal of a
- * pasted token turns into. No network.
+ * The token of Railway (`credential.ts`) against `mockFetch` : the check at
+ * paste for a workspace and an account token, discovery with each, an
+ * MCP-server tool, and what an MCP refusal of the token turns into. No network.
  */
 import { describe, expect, test } from 'vitest';
 
 import {
   UpstreamAuthError,
-  credentialSpecFor,
-  unavailableToolReason,
   type ConnectionContext,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
@@ -24,7 +21,7 @@ import railwayPlugin, {
   RAILWAY_GRAPHQL_URL,
   RAILWAY_MCP_URL,
   probeRailwayToken,
-  railwayTokenCredential,
+  railwayCredential,
   verifyRailwayToken,
 } from '../../src/index.ts';
 
@@ -138,19 +135,13 @@ async function failureOf(
 }
 
 describe('railway token — the declaration', () => {
-  test('OAuth app first, then a workspace token (recommended) that runs every tool', () => {
-    expect(railwayPlugin.credential.kind).toBe('oauth2');
-    expect(credentialSpecFor(railwayPlugin, 'api-key')).toBe(railwayTokenCredential);
-    expect(railwayTokenCredential.label).toBe('workspace token');
-    expect(railwayTokenCredential.unavailableTools).toBeUndefined();
-    for (const tool of railwayPlugin.tools) {
-      expect(unavailableToolReason(railwayPlugin, 'api-key', tool.name)).toBeNull();
-      expect(unavailableToolReason(railwayPlugin, 'oauth2', tool.name)).toBeNull();
-    }
+  test('a workspace token (recommended) is the one way of connecting, and runs every tool', () => {
+    expect(railwayPlugin.credential).toBe(railwayCredential);
+    expect(railwayCredential.label).toBe('workspace token');
   });
 
   test('the guide offers the account token second and says why not a project token', () => {
-    const steps = railwayTokenCredential.guide?.steps.join(' ') ?? '';
+    const steps = railwayCredential.guide?.steps.join(' ') ?? '';
     expect(steps.indexOf('workspace token')).toBeGreaterThan(-1);
     expect(steps.indexOf('workspace token')).toBeLessThan(steps.indexOf('account token'));
     expect(steps).toMatch(/project token is not accepted: it reaches one environment/);
@@ -287,20 +278,5 @@ describe('railway token — execution', () => {
     const failure = await failureOf(fetch, 'railway__list-projects');
     expect(failure.upstreamStatus).toBe(401);
     expect(failure.message).toMatch(/^Railway MCP upstream 401/);
-  });
-
-  test('an OAuth connection refused by the MCP server is not probed', async () => {
-    const fetch = mockFetch([mcpRefuses(401)]);
-    const oauth: CredentialSecret = {
-      kind: 'oauth2',
-      accessToken: TOKEN,
-      refreshToken: null,
-      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-      scopes: [],
-      metadata: {},
-    };
-    const failure = await failureOf(fetch, 'railway__list-projects', oauth);
-    expect(failure.upstreamStatus).toBe(401);
-    expect(fetch.calls).toHaveLength(1);
   });
 });

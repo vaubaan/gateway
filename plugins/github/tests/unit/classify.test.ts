@@ -413,9 +413,9 @@ describe('classifyGithub — PRs, comments, releases', () => {
   });
 });
 
-// ─── writes — rules / mint ─────────────────────────────────────────────────
+// ─── writes — rules ────────────────────────────────────────────────────────
 
-describe('classifyGithub — rules / mint', () => {
+describe('classifyGithub — rules', () => {
   test('update_branch_protection → branch-protection[branch].W', () => {
     const r = classifyGithub(
       'github__update_branch_protection',
@@ -423,36 +423,6 @@ describe('classifyGithub — rules / mint', () => {
       resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch-protection[main].W`]);
-  });
-
-  test('mint_install_token clone (with repoFullName) → install-token[clone].W', () => {
-    const r = classifyGithub(
-      'github__mint_install_token',
-      { purpose: 'clone', repoFullName: repoRef },
-      resources,
-    );
-    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].install-token[clone].W`]);
-  });
-
-  test('mint_install_token push (no repoFullName) → fan-out over the mission repos', () => {
-    const second: Resource = {
-      ...githubRepo,
-      ref: 'sbw-vaubaan/other',
-      displayName: 'sbw-vaubaan/other',
-    };
-    const r = classifyGithub('github__mint_install_token', { purpose: 'push' }, [
-      githubRepo,
-      second,
-    ]);
-    expect(expectSlices(r)).toEqual([
-      `github.repo[${repoRef}].install-token[push].W`,
-      'github.repo[sbw-vaubaan/other].install-token[push].W',
-    ]);
-  });
-
-  test('mint_install_token rejects invalid purpose', () => {
-    const r = classifyGithub('github__mint_install_token', { purpose: 'delete' }, resources);
-    expect(expectDenied(r)).toContain("requires purpose 'clone' or 'push'");
   });
 });
 
@@ -515,26 +485,6 @@ describe('classifyGithub — structural denials', () => {
     for (const missionResources of [[], [otherProvider]]) {
       const r = classifyGithub('github__list_branches', baseArgs, missionResources);
       expect(expectDenied(r)).toBe('no GitHub repository is selected in this mission.');
-    }
-  });
-
-  test('mint_install_token for a repository outside the mission', () => {
-    const r = classifyGithub(
-      'github__mint_install_token',
-      { purpose: 'push', repoFullName: 'someone-else/private' },
-      resources,
-    );
-    expect(expectDenied(r)).toBe(
-      "github repository 'someone-else/private' is not selected in this mission. Selected: sbw-vaubaan/gateway.",
-    );
-  });
-
-  test('mint_install_token in a mission without GitHub repository, with or without repoFullName', () => {
-    for (const args of [{ purpose: 'clone' }, { purpose: 'clone', repoFullName: repoRef }]) {
-      const r = classifyGithub('github__mint_install_token', args, []);
-      expect(expectDenied(r)).toBe(
-        'github__mint_install_token: no GitHub repository is selected in this mission.',
-      );
     }
   });
 

@@ -68,7 +68,7 @@ export type Door = 'execution' | 'management';
  *
  * Not to be confused with `CredentialKind` in `@vaubaan/shared`, which is
  * how a *connection* authenticates to its provider (`api-key`, `oauth2`,
- * `app-install`, `ssh-key`) and belongs to the plugin contract.
+ * `ssh-key`) and belongs to the plugin contract.
  */
 export type BearerKind = 'mission-token' | 'delegated-token' | 'human-session';
 

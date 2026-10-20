@@ -57,7 +57,7 @@ import {
   UPSERT_VARIABLE,
   UPSERT_VARIABLES,
 } from './custom-tools.ts';
-import { askRailwayGraphql, explainMcpRefusal, railwayBearerOf } from './token.ts';
+import { askRailwayGraphql, explainMcpRefusal, railwayBearerOf } from './credential.ts';
 import { railwayTools, toUpstreamName } from './tools.ts';
 import { RAILWAY_USER_AGENT } from './user-agent.ts';
 
@@ -361,12 +361,8 @@ export async function executeRailway(
   try {
     result = await executeCall(ctx.fetch, token, tool, effective.args, ctx.signal);
   } catch (err) {
-    // A pasted token refused by the MCP server : dead (401) or a kind the server does not take (403).
-    if (
-      err instanceof UpstreamAuthError &&
-      ctx.credential.kind === 'api-key' &&
-      !CUSTOM_TOOL_NAMES.has(tool)
-    ) {
+    // The token refused by the MCP server : dead (401) or a kind the server does not take (403).
+    if (err instanceof UpstreamAuthError && !CUSTOM_TOOL_NAMES.has(tool)) {
       throw await explainMcpRefusal(ctx.fetch, token, err, ctx.signal);
     }
     throw err;
@@ -389,10 +385,7 @@ export async function discoverRailwayResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
   const token = railwayBearerOf(ctx.credential);
-  if (ctx.credential.kind !== 'api-key') {
-    return listProjects(ctx, token, PROJECTS_QUERY, {});
-  }
-  // A pasted token: the projects it reaches (a workspace token: its workspace's ;
+  // The projects the token reaches (a workspace token: its workspace's ;
   // an account token: its personal ones), then, for an account token only, each
   // of its workspaces'. A workspace token has no `me` : its refusal ends the list.
   const out = await listProjects(ctx, token, PROJECTS_QUERY, {});

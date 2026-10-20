@@ -19,7 +19,7 @@ import { describe, expect, test } from 'vitest';
 
 import { executeGit } from '../../src/git-moves.ts';
 import { review } from '../../src/git-review.ts';
-import { executeCtx, mintRoute } from './fixtures.ts';
+import { executeCtx } from './fixtures.ts';
 
 const OLD = 'a'.repeat(40);
 const NEW = 'b'.repeat(40);
@@ -44,7 +44,6 @@ const text = (r: { content: readonly unknown[] }) => (r.content[0] as { text: st
 describe('moves', () => {
   test('a force-push is a compare-and-swap on the reviewed old id, through receive-pack', async () => {
     const fetch = mockFetch([
-      mintRoute(),
       {
         method: 'POST',
         url: RECEIVE_PACK,
@@ -66,7 +65,6 @@ describe('moves', () => {
 
   test('a delete GitHub refuses because the ref moved is reported on that ref', async () => {
     const fetch = mockFetch([
-      mintRoute(),
       {
         method: 'POST',
         url: RECEIVE_PACK,
@@ -86,7 +84,6 @@ describe('moves', () => {
 
   test('a provider failure on the second ref reports each ref on its own', async () => {
     const fetch = mockFetch([
-      mintRoute(),
       {
         method: 'POST',
         url: `${API}/git/refs`,
@@ -118,7 +115,6 @@ describe('moves', () => {
 
   test('a provider failure before any ref moved fails the call', async () => {
     const fetch = mockFetch([
-      mintRoute(),
       { method: 'POST', url: `${API}/git/refs`, status: 503, body: { message: 'down' } },
     ]);
     await expect(
@@ -161,7 +157,6 @@ describe('review', () => {
 
   test('a workflow change in an intermediate commit is a workflow change of the push', async () => {
     const fetch = mockFetch([
-      mintRoute(),
       refRoute(OLD),
       ...noOtherBranch,
       {
@@ -252,12 +247,7 @@ describe('review', () => {
   }
 
   test('a commit GitHub lists 300 files of is read by its trees: same workflows as its parent, none', async () => {
-    const fetch = mockFetch([
-      mintRoute(),
-      refRoute(OLD),
-      ...noOtherBranch,
-      ...largeCommit('3'.repeat(40)),
-    ]);
+    const fetch = mockFetch([refRoute(OLD), ...noOtherBranch, ...largeCommit('3'.repeat(40))]);
     const reviewed = await review(executeCtx(fetch), 'acme/app', [
       { ref: 'refs/heads/feature/x', old: OLD, new: NEW },
     ]);
@@ -311,7 +301,6 @@ describe('review', () => {
   test('an annotated tag is reviewed through the commit it points at', async () => {
     const TAG = 'd'.repeat(40);
     const fetch = mockFetch([
-      mintRoute(),
       absentTag('v1.0.0'),
       ...mainAtOld,
       // GitHub holds no commit under the tag object's id, a tag.
@@ -349,7 +338,7 @@ describe('review', () => {
   });
 
   test('a lightweight tag is reviewed as the commit itself', async () => {
-    const fetch = mockFetch([mintRoute(), absentTag('v1.0.1'), ...mainAtOld]);
+    const fetch = mockFetch([absentTag('v1.0.1'), ...mainAtOld]);
     const reviewed = await review(executeCtx(fetch), 'acme/app', [
       { ref: 'refs/tags/v1.0.1', old: null, new: NEW },
     ]);
@@ -366,7 +355,6 @@ describe('review', () => {
     const TAG = 'd'.repeat(40);
     const ORPHAN = 'e'.repeat(40);
     const fetch = mockFetch([
-      mintRoute(),
       absentTag('v2.0.0'),
       mainAtOld[0]!,
       mainAtOld[1]!,
@@ -406,7 +394,6 @@ describe('review', () => {
     const TAG = 'd'.repeat(40);
     const BLOB = 'f'.repeat(40);
     const fetch = mockFetch([
-      mintRoute(),
       absentTag('v3.0.0'),
       { method: 'GET', url: `${API}/git/commits/${TAG}`, status: 404, body: { message: 'no' } },
       {
@@ -427,12 +414,7 @@ describe('review', () => {
   });
 
   test('a commit GitHub lists 300 files of, whose workflows differ from its parent’s, is a workflow change', async () => {
-    const fetch = mockFetch([
-      mintRoute(),
-      refRoute(OLD),
-      ...noOtherBranch,
-      ...largeCommit('8'.repeat(40)),
-    ]);
+    const fetch = mockFetch([refRoute(OLD), ...noOtherBranch, ...largeCommit('8'.repeat(40))]);
     const reviewed = await review(executeCtx(fetch), 'acme/app', [
       { ref: 'refs/heads/feature/x', old: OLD, new: NEW },
     ]);

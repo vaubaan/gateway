@@ -5,7 +5,7 @@
  *
  * The rule under test : what is sent is exactly what was classified. A value
  * is either refused by both — and then nothing is sent, not even the token
- * mint — or accepted by both, and then every request names the repository
+ * — or accepted by both, and then every request names the repository
  * and the resource of the slice : the path GitHub receives is the path that
  * was built (no dot segment for a URL parser to remove) and it is one of the
  * paths the tool is expected to call.
@@ -19,9 +19,8 @@ import { describe, expect, test } from 'vitest';
 import { mockFetch, type MockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyGithub } from '../../src/classify.ts';
-import { installationTokenFor } from '../../src/credential.ts';
 import { githubPlugin } from '../../src/index.ts';
-import { MINT_URL, appRepo, connectionCtx, executeCtx } from './fixtures.ts';
+import { appRepo, connectionCtx, executeCtx } from './fixtures.ts';
 
 const API = 'https://api.github.com';
 const R = '/repos/acme/app';
@@ -86,7 +85,7 @@ interface Position {
   readonly kind: Kind;
   readonly tool: string;
   readonly args: (value: unknown) => Record<string, unknown>;
-  /** Every path the tool may call for an accepted value (the token mint aside). */
+  /** Every path the tool may call for an accepted value. */
   readonly paths: (value: string) => readonly string[];
   /** Further checks on what was sent for an accepted value. */
   readonly sent?: (value: string, requests: readonly Sent[]) => void;
@@ -119,13 +118,6 @@ const POSITIONS: readonly Position[] = [
     kind: 'member',
     tool: 'github__list_branches',
     args: (v) => ({ owner: 'acme', repo: v }),
-    paths: () => [],
-  },
-  {
-    name: 'mint_install_token.repoFullName',
-    kind: 'optMember',
-    tool: 'github__mint_install_token',
-    args: (v) => ({ purpose: 'clone', repoFullName: v }),
     paths: () => [],
   },
   {
@@ -335,20 +327,14 @@ const ANY_ANSWER = {
   sha: 'sha',
 };
 
-const MINT_ANSWER = { token: 'ghs_xxx', expires_at: '2026-10-13T11:00:00Z' };
-
 function openFetch(): MockFetch {
-  return mockFetch([
-    { method: 'POST', url: (url) => url.includes('/access_tokens'), body: MINT_ANSWER },
-    { url: () => true, body: ANY_ANSWER },
-  ]);
+  return mockFetch([{ url: () => true, body: ANY_ANSWER }]);
 }
 
-/** The requests sent to the REST API, the token mint aside. */
+/** The requests sent to the REST API. */
 function sentTo(fetch: MockFetch): Sent[] {
   const out: Sent[] = [];
   for (const call of fetch.calls) {
-    if (call.url === MINT_URL) continue;
     const written = /^https:\/\/api\.github\.com(\/[^?#]*)/.exec(call.url);
     if (!written) throw new Error(`request outside the GitHub API : ${call.url}`);
     const parsed = new URL(call.url);
@@ -398,7 +384,7 @@ describe('identifier positions — classify and execute agree on every hostile v
 
     const { fetch, failed } = await run(position.tool, args);
     if (!accepted) {
-      // Refused by the executor too, before the token mint.
+      // Refused by the executor too, before any call.
       expect(failed).toBe(true);
       expect(fetch.calls).toHaveLength(0);
       return;
@@ -407,9 +393,6 @@ describe('identifier positions — classify and execute agree on every hostile v
     const requests = sentTo(fetch);
     const allowed = position.paths(value);
     for (const request of requests) expect(allowed).toContain(request.path);
-    // The token is scoped to the mission's repository, whatever the value.
-    const mint = fetch.calls.find((c) => c.url === MINT_URL)!;
-    expect(mint.json).toMatchObject({ repositories: ['app'] });
     if (!failed) position.sent?.(value, requests);
   });
 });
@@ -643,7 +626,6 @@ describe('identifier positions — more refusals, by classify and by execute ali
 
   test('a default branch GitHub answers that is not a branch name stops create_branch', async () => {
     const fetch = mockFetch([
-      { method: 'POST', url: MINT_URL, body: MINT_ANSWER },
       { method: 'GET', url: `${API}${R}`, body: { default_branch: '../../tags/v1' } },
       { url: () => true, body: ANY_ANSWER },
     ]);
@@ -658,34 +640,18 @@ describe('identifier positions — more refusals, by classify and by execute ali
 });
 
 describe('identifier positions — the connection', () => {
-  test.each(['..', '.', '12/../34', '12/34', '%2e%2e', '', LONG, '12\n', '12?x=1#y', ' 12', '-1'])(
-    'an installation id %j mints nothing',
-    async (installationId) => {
-      const fetch = openFetch();
-      const ctx = connectionCtx(fetch, {
-        credential: { kind: 'app-install', installationId, metadata: {} },
-      });
-      await expect(installationTokenFor(ctx)).rejects.toThrow(/installation id/);
-      expect(fetch.calls).toHaveLength(0);
-    },
-  );
-
   test('discovery lists only repositories a call can name', async () => {
     const fetch = mockFetch([
-      { method: 'POST', url: MINT_URL, body: MINT_ANSWER },
       {
         method: 'GET',
-        url: (url) => url.startsWith(`${API}/installation/repositories?`),
-        body: {
-          total_count: 5,
-          repositories: [
-            { full_name: 'acme/app' },
-            { full_name: 'acme/.github' },
-            { full_name: 'acme/..' },
-            { full_name: 'acme/a/b' },
-            { full_name: 'acme' },
-          ],
-        },
+        url: (url) => url.startsWith(`${API}/user/repos?`),
+        body: [
+          { full_name: 'acme/app' },
+          { full_name: 'acme/.github' },
+          { full_name: 'acme/..' },
+          { full_name: 'acme/a/b' },
+          { full_name: 'acme' },
+        ],
       },
     ]);
     const warnings: string[] = [];
