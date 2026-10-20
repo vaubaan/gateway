@@ -243,7 +243,8 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
                   </Button>
                 </form>
               );
-              if (view.user.id === self) return toggle;
+              // Nothing on your own row: another administrator unmakes or deactivates you.
+              if (view.user.id === self) return null;
               return (
                 <>
                   {toggle}
@@ -322,7 +323,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
         <Hint>
           A person appears here once they have signed in. One person who signs in through two
           providers is two people here: the gateway never joins accounts by email. You cannot
-          deactivate yourself: another administrator can.
+          deactivate yourself or stop administering: another administrator can.
         </Hint>
       </Section>
 

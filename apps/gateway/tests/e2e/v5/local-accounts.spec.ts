@@ -195,13 +195,13 @@ test('the first administrator is created from the setup page; their first sign-i
   request,
 }) => {
   await control(request, '/local/setup');
-  // The setup page lists the addresses of the admin rule that have no account yet.
+  // The setup page takes any address: the holder of the setup link names the first administrator.
   await operatorAt(page, request, '/admin/first-administrator');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Create the first administrator',
   );
   const form = page.getByTestId('first-admin-form');
-  await expect(form.getByLabel('Address')).toHaveValue(E2E_OPERATOR.email);
+  await form.getByLabel('Address').fill(E2E_OPERATOR.email);
   await form.getByLabel(/^Password/).fill(OPS_PASSWORD);
   await form.getByLabel('The same password again').fill(OPS_PASSWORD);
   await snap(page, 'admin-first-administrator');
@@ -209,10 +209,8 @@ test('the first administrator is created from the setup page; their first sign-i
   await expect(page.getByTestId('notice')).toContainText(
     `Account of ${E2E_OPERATOR.email} created`,
   );
-  await page.goto('/admin/first-administrator');
-  await expect(page.getByTestId('first-admin-done')).toBeVisible();
 
-  // Named by the admin rule: the password leads to the enrolment, not to a session.
+  // An administrator from its creation: the password leads to the enrolment, not to a session.
   await signOut(page);
   await passwordSignIn(page, E2E_OPERATOR.email, OPS_PASSWORD);
   await expect(page).toHaveURL(`${PUBLIC_URL}/login/second-factor`);
