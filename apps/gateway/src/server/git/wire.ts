@@ -61,7 +61,7 @@ export function lfsUnsupported(): Response {
   return new Response(
     JSON.stringify({
       message:
-        'Git LFS is not supported by the Vaubaan git remote. A mission that needs LFS uses github__mint_install_token and talks to GitHub directly.',
+        'Git LFS is not supported by the Vaubaan git remote: LFS objects go through no mission. Push them with a credential of your own, outside the gateway.',
     }),
     {
       status: HTTP_NOT_IMPLEMENTED,

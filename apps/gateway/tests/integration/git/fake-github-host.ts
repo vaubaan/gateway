@@ -5,8 +5,6 @@
  *   https://github.com/<owner>/<repo>.git/…   served by the real `git http-backend`
  *                                             over bare repositories in a temporary
  *                                             directory, behind a local listener
- *   https://api.github.com/app/installations/<id>/access_tokens
- *                                             mints fake installation tokens and
  *                                             records the scope each one asked for
  *   https://api.github.com/repos/<o>/<r>       `default_branch` from the bare repo's HEAD
  *   https://api.github.com/repos/<o>/<r>/compare/<base>...<head>
@@ -71,11 +69,6 @@ export class FakeGithubHost {
   readonly minted: MintedToken[] = [];
   /** When set, the compare API answers this status (a GitHub outage). */
   compareStatus: number | null = null;
-  /**
-   * What an installation holds, by installation id; absent: everything. A
-   * token asking for more is refused with 422, as GitHub does.
-   */
-  readonly installations = new Map<string, Readonly<Record<string, string>>>();
   private server: Server | null = null;
   private port = 0;
   private next = 1;
@@ -209,35 +202,6 @@ export class FakeGithubHost {
       authorization: headers.get('authorization'),
       gitProtocol: null,
     });
-    const mint = /^\/app\/installations\/([^/]+)\/access_tokens$/.exec(url.pathname);
-    if (mint && method === 'POST') {
-      const body = JSON.parse(String(init?.body ?? '{}')) as {
-        repositories?: string[];
-        permissions?: Record<string, string>;
-      };
-      const held = this.installations.get(mint[1] ?? '');
-      if (held && !covers(held, body.permissions ?? {})) {
-        return json(
-          { message: 'The permissions requested are not granted to this installation.' },
-          422,
-        );
-      }
-      const token = `ghs_fake_${this.next++}`;
-      this.minted.push({
-        token,
-        repositories: body.repositories ?? null,
-        permissions: body.permissions ?? null,
-      });
-      return json(
-        {
-          token,
-          expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-          permissions: body.permissions ?? { contents: 'write', workflows: 'write' },
-          repositories: (body.repositories ?? []).map((name) => ({ name })),
-        },
-        201,
-      );
-    }
     const token = this.tokenOf(headers.get('authorization'));
     if (!token) return json({ message: 'Bad credentials' }, 401);
     const refs = await this.serveRefs(url, method, init, token);
@@ -586,16 +550,6 @@ async function relayCgi(stdout: ReadableStream<Uint8Array>, res: ServerResponse)
     res.write(value);
   }
   res.end();
-}
-
-/** Does `held` cover every permission of `asked` (`write` covers `read`)? */
-function covers(
-  held: Readonly<Record<string, string>>,
-  asked: Readonly<Record<string, string>>,
-): boolean {
-  return Object.entries(asked).every(
-    ([name, access]) => held[name] === access || (access === 'read' && held[name] === 'write'),
-  );
 }
 
 function json(body: unknown, status = 200): Response {

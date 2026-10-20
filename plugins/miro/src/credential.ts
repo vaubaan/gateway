@@ -84,7 +84,5 @@ export const miroCredential: ApiKeyCredentialSpec = {
     recommendedExpiryDays: null,
     docsUrl: 'https://developers.miro.com/docs/rest-api-build-your-first-hello-world-app',
   },
-  manualRevocation:
-    'In Miro, open Settings, Your apps, and delete the app or uninstall it from the team; its token stops working.',
   verify: verifyMiroToken,
 };

@@ -60,13 +60,16 @@ export function NoticeBanner({ notice }: { notice: Notice | null }) {
 
 const CREDENTIAL_KIND_LABEL = {
   oauth2: 'OAuth authorization',
-  'app-install': 'App installation',
   'api-key': 'API key',
   'ssh-key': 'SSH key pair',
 } as const;
 
-export function credentialKindLabel(kind: keyof typeof CREDENTIAL_KIND_LABEL | null): string {
-  return kind ? CREDENTIAL_KIND_LABEL[kind] : 'unknown';
+/** A kind the contract no longer knows (`app-install`) is named as stored, with what it means now. */
+export function credentialKindLabel(kind: string | null): string {
+  if (kind === null) return 'unknown';
+  if (kind in CREDENTIAL_KIND_LABEL)
+    return CREDENTIAL_KIND_LABEL[kind as keyof typeof CREDENTIAL_KIND_LABEL];
+  return `${kind} (a way this gateway no longer offers: reconnect the account)`;
 }
 
 /** Multi-line secrets (PEM private keys) need a textarea; other secrets are masked. */
@@ -81,7 +84,7 @@ function isMultiline(field: CredentialField): boolean {
  *
  * Each label is bound to its input through `credentialFieldId(idPrefix,
  * name)`. `idPrefix` must be unique on the page: a page that renders several
- * lists (Settings → Company apps, one per service) gives each its own.
+ * forms (the connect form and the OAuth-client form of a service) gives each its own.
  *
  * The shape a value must have is said before the person types: in the label,
  * read from the plugin's `pattern` (`shapeOfPattern`), in the field as its

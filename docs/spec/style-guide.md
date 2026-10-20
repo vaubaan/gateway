@@ -113,7 +113,7 @@ the word the protocol uses.
 | rotate                                    | **Replace key**                                          |
 | request: a claim, an approval request     | **Waiting for you**                                      |
 | delegation, OAuth client                  | **connected app**                                        |
-| provider app                              | **company app**                                          |
+| provider app                              | **OAuth client** (of a service)                          |
 | provider (the vendor); the provider pages | **service**; **Reference**                               |
 | session, audit                            | **Activity**                                             |
 | member                                    | **teammate**                                             |

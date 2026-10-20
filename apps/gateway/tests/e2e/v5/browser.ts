@@ -8,7 +8,7 @@
  * response back unchanged: the page lives on `https://gateway.e2e.test`, with
  * real cookies and a real `Origin` header, exactly as behind a TLS
  * terminator. The pages a browser is sent to outside the instance — the
- * simulated IdP's consent screen, the mocked provider's installation page —
+ * simulated IdP's consent screen, the pages of a mocked provider —
  * are answered by the launcher's control endpoints: the "user" consents and
  * the browser is sent back with what the real page would hand over.
  */
@@ -193,8 +193,8 @@ export async function issueDeveloperMission(
 }
 
 /**
- * A GitHub connection owned by the share spec's owner (an installation of the mocked
- * GitHub, so calls go through), with the owner, the beneficiary and the operator known
+ * A GitHub connection owned by the share spec's owner (a token of the mocked GitHub,
+ * so calls go through), with the owner, the beneficiary and the operator known
  * to the instance as if each had signed in once.
  */
 export async function seedShareScenario(
@@ -209,12 +209,12 @@ export async function seedShareScenario(
 }
 
 export interface UpstreamLog {
-  /** The installation token the mocked GitHub minted for the gateway. */
-  readonly installation_token: string;
+  /** The token of Ada's GitHub connection, as pasted: never to reach a browser or an executor. */
+  readonly connection_token: string;
   readonly calls: readonly {
     readonly method: string;
     readonly url: string;
-    readonly with_installation_token: boolean;
+    readonly with_connection_token: boolean;
   }[];
 }
 

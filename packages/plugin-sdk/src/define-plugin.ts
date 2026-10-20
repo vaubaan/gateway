@@ -20,12 +20,8 @@ import { baseRiskId, isRiskId } from '@vaubaan/shared/risk-id';
 
 import { semanticIssues } from './catalog-loader.ts';
 import {
-  CLIENT_ID_FIELD,
-  CLIENT_SECRET_FIELD,
-  isAppCredentialSpec,
   OAUTH2_REVOCATION_FORMATS,
   TOKEN_PERMISSION_ACCESS,
-  type AppInstallCredentialSpec,
   type CredentialSpec,
   type OAuth2CredentialSpec,
 } from './credential.ts';
@@ -417,52 +413,16 @@ function hookIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-/** Upper bound of one `unavailableTools` reason and of one guide step. */
+/** Upper bound of one guide step. */
 export const CREDENTIAL_SENTENCE_MAX_LENGTH = 300;
 
-/**
- * The primary spec and every alternative, each checked alone (issues of an
- * alternative are prefixed `alternativeCredentials[i]`), then together: kinds
- * unique, at most one company app.
- */
 function credentialSpecIssues(plugin: ProviderPlugin): string[] {
-  const issues = [...oneSpecIssues(plugin, plugin.credential, 'credential')];
-  const alternatives: unknown = plugin.alternativeCredentials;
-  if (alternatives === undefined) return issues;
-  if (!isList(alternatives))
-    return [...issues, 'alternativeCredentials: expected a list when present'];
-  alternatives.forEach((alt, i) => {
-    issues.push(...oneSpecIssues(plugin, alt as CredentialSpec, `alternativeCredentials[${i}]`));
-  });
-  const specs = [plugin.credential, ...alternatives].filter(
-    (s): s is CredentialSpec => isRecord(s) && typeof s.kind === 'string',
-  );
-  const kinds = specs.map((s) => s.kind);
-  const repeated = kinds.filter((k, i) => kinds.indexOf(k) !== i);
-  if (repeated.length > 0) {
-    issues.push(`alternativeCredentials: kind '${repeated[0]}' is declared twice`);
-  }
-  if (specs.filter((s) => isAppCredentialSpec(s)).length > 1) {
-    issues.push(
-      'alternativeCredentials: at most one way of connecting may go through a company app',
-    );
-  }
-  return issues;
-}
-
-function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string): string[] {
-  const own = kindSpecIssues(spec, plugin);
-  const issues = at === 'credential' ? own : own.map((i) => i.replace(/^credential/, at));
+  const at = 'credential';
+  const spec = plugin.credential;
+  const issues = kindSpecIssues(spec);
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
   // The git remote's tools need permissions on a token too.
   const tools = declaredToolNames(plugin);
-  issues.push(...toolReasonIssues(spec.unavailableTools, tools, `${at}.unavailableTools`));
-  if (
-    spec.manualRevocation !== undefined &&
-    !isSentence(spec.manualRevocation, PLUGIN_MANUAL_REVOCATION_MAX_LENGTH)
-  ) {
-    issues.push(`${at}.manualRevocation: expected one or two sentences when present`);
-  }
   if (spec.kind === 'api-key') {
     if (spec.label !== undefined && !isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
       issues.push(`${at}.label: expected a short name when present`);
@@ -474,13 +434,13 @@ function oneSpecIssues(plugin: ProviderPlugin, spec: CredentialSpec, at: string)
       issues.push(`${at}.createUrl: expected an https URL when present`);
     }
     if (spec.guide !== undefined) {
-      issues.push(...guideIssues(spec.guide, tools, spec.unavailableTools ?? {}, `${at}.guide`));
+      issues.push(...guideIssues(spec.guide, tools, `${at}.guide`));
     }
   }
   return issues;
 }
 
-/** A record tool → one sentence (`unavailableTools`, `unboundTools`): every key a tool of the plugin. */
+/** A record tool → one sentence (`unboundTools`): every key a tool of the plugin. */
 function toolReasonIssues(reasons: unknown, tools: ReadonlySet<unknown>, label: string): string[] {
   if (reasons === undefined) return [];
   if (!isRecord(reasons)) return [`${label}: expected a record tool → reason`];
@@ -499,12 +459,7 @@ function toolReasonIssues(reasons: unknown, tools: ReadonlySet<unknown>, label: 
  * this way of connecting can run: the page derives the permissions to tick
  * from it, so a tool nobody asked a permission for would fail at the provider.
  */
-function guideIssues(
-  guide: unknown,
-  tools: ReadonlySet<unknown>,
-  unavailable: Readonly<Record<string, string>>,
-  at: string,
-): string[] {
+function guideIssues(guide: unknown, tools: ReadonlySet<unknown>, at: string): string[] {
   if (!isRecord(guide)) return [`${at}: expected { steps, permissions, recommendedExpiryDays }`];
   const issues: string[] = [];
   if (!isList(guide.steps) || guide.steps.length === 0) {
@@ -545,14 +500,11 @@ function guideIssues(
     for (const tool of permission.tools) {
       if (!tools.has(tool))
         issues.push(`${where}.tools: '${String(tool)}' is not a tool of this plugin`);
-      else if (typeof tool === 'string' && tool in unavailable) {
-        issues.push(`${where}.tools: '${tool}' is unavailable this way`);
-      }
       served.add(tool);
     }
   });
   for (const tool of tools) {
-    if (typeof tool === 'string' && !(tool in unavailable) && !served.has(tool)) {
+    if (typeof tool === 'string' && !served.has(tool)) {
       issues.push(`${at}.permissions: no permission serves '${tool}'`);
     }
   }
@@ -563,7 +515,7 @@ function isSentence(x: unknown, max: number): x is string {
   return typeof x === 'string' && x.trim().length > 0 && x.length <= max;
 }
 
-function kindSpecIssues(spec: CredentialSpec, plugin: ProviderPlugin): string[] {
+function kindSpecIssues(spec: CredentialSpec): string[] {
   if (!spec || typeof spec !== 'object') return ['credential: missing CredentialSpec'];
   if (typeof spec.kind !== 'string' || !isCredentialKind(spec.kind)) {
     return [`credential.kind: expected one of ${CREDENTIAL_KINDS.join(' | ')}`];
@@ -589,223 +541,12 @@ function kindSpecIssues(spec: CredentialSpec, plugin: ProviderPlugin): string[] 
       // standard refresh_token grant from the spec (ADR plugin-contract D2 as
       // as amended) ; `refresh` is an override for non-standard flows.
       break;
-    case 'app-install':
-      if (!Array.isArray(spec.appConfigFields) || spec.appConfigFields.length === 0) {
-        issues.push('credential.appConfigFields: expected the operator settings of the app');
-      }
-      if (typeof spec.installUrl !== 'function')
-        issues.push('credential.installUrl: expected a function');
-      if (typeof spec.installationIdParam !== 'string' || spec.installationIdParam.length === 0) {
-        issues.push('credential.installationIdParam: expected a query parameter name');
-      }
-      if (spec.userVerification !== undefined) issues.push(...userVerificationIssues(spec));
-      if (spec.manifestRegistration !== undefined) {
-        issues.push(...manifestRegistrationIssues(spec, plugin));
-      }
-      break;
     case 'ssh-key':
       if (spec.algorithm !== 'ed25519')
         issues.push("credential.algorithm: only 'ed25519' is supported");
       if (!Array.isArray(spec.fields))
         issues.push('credential.fields: expected a list (host, port, user)');
       break;
-  }
-  return issues;
-}
-
-/** Upper bound of a declared page size. */
-export const MAX_INSTALLATIONS_PER_PAGE = 1000;
-const CLIENT_AUTH_METHODS: readonly string[] = ['client_secret_basic', 'client_secret_post'];
-
-function userVerificationIssues(spec: AppInstallCredentialSpec): string[] {
-  const at = 'credential.userVerification';
-  const v: unknown = spec.userVerification;
-  if (!isRecord(v)) return [`${at}: expected an object when present`];
-  const issues: string[] = [];
-  if (!isName(v.codeParam)) {
-    issues.push(`${at}.codeParam: expected a query parameter name`);
-  } else if (v.codeParam === spec.installationIdParam || v.codeParam === 'state') {
-    issues.push(`${at}.codeParam: must differ from installationIdParam and from 'state'`);
-  }
-  for (const key of ['tokenUrl', 'installationsUrl'] as const) {
-    if (!isHttpsUrl(v[key])) issues.push(`${at}.${key}: expected an https URL`);
-  }
-  if (typeof v.clientAuthMethod !== 'string' || !CLIENT_AUTH_METHODS.includes(v.clientAuthMethod)) {
-    issues.push(`${at}.clientAuthMethod: expected ${CLIENT_AUTH_METHODS.join(' | ')}`);
-  }
-  if (!isName(v.installationIdField)) {
-    issues.push(`${at}.installationIdField: expected a property name`);
-  }
-  if (v.installationsListField !== undefined && !isName(v.installationsListField)) {
-    issues.push(`${at}.installationsListField: expected a property name when present`);
-  }
-  issues.push(...installationsHeaderIssues(v.installationsHeaders, at));
-  issues.push(...paginationIssues(v.pagination, at));
-  issues.push(...oauthClientFieldIssues(spec));
-  return issues;
-}
-
-function installationsHeaderIssues(
-  headers: unknown,
-  at: string,
-  field = 'installationsHeaders',
-): string[] {
-  if (headers === undefined) return [];
-  if (!isRecord(headers)) return [`${at}.${field}: expected a record of header values`];
-  const issues: string[] = [];
-  for (const [name, value] of Object.entries(headers)) {
-    if (typeof value !== 'string') {
-      issues.push(`${at}.${field}.${name}: expected a string`);
-    }
-    if (name.toLowerCase() === 'authorization') {
-      issues.push(`${at}.${field}: the host sets Authorization itself`);
-    }
-  }
-  return issues;
-}
-
-function paginationIssues(pagination: unknown, at: string): string[] {
-  if (pagination === undefined) return [];
-  if (!isRecord(pagination)) return [`${at}.pagination: expected an object when present`];
-  const issues: string[] = [];
-  const { pageParam, perPageParam, perPage } = pagination;
-  if (!isName(pageParam) || !isName(perPageParam) || pageParam === perPageParam) {
-    issues.push(`${at}.pagination: pageParam and perPageParam must be two parameter names`);
-  }
-  if (
-    typeof perPage !== 'number' ||
-    !Number.isInteger(perPage) ||
-    perPage < 1 ||
-    perPage > MAX_INSTALLATIONS_PER_PAGE
-  ) {
-    issues.push(
-      `${at}.pagination.perPage: expected an integer from 1 to ${MAX_INSTALLATIONS_PER_PAGE}`,
-    );
-  }
-  return issues;
-}
-
-const MANIFEST_FUNCTIONS = [
-  'registrationUrl',
-  'buildManifest',
-  'conversionUrl',
-  'registeredApp',
-] as const;
-
-function manifestRegistrationIssues(
-  spec: AppInstallCredentialSpec,
-  plugin: ProviderPlugin,
-): string[] {
-  const at = 'credential.manifestRegistration';
-  const m: unknown = spec.manifestRegistration;
-  if (!isRecord(m)) return [`${at}: expected an object when present`];
-  const issues: string[] = [];
-  for (const fn of MANIFEST_FUNCTIONS) {
-    if (typeof m[fn] !== 'function') issues.push(`${at}.${fn}: expected a function`);
-  }
-  for (const key of ['manifestField', 'stateParam', 'codeParam'] as const) {
-    if (!isName(m[key])) issues.push(`${at}.${key}: expected a parameter name`);
-  }
-  if (isName(m.stateParam) && m.stateParam === m.codeParam) {
-    issues.push(`${at}: stateParam and codeParam must differ`);
-  }
-  if (typeof m.ownerLoginPattern !== 'string' || !isRegExpSource(m.ownerLoginPattern)) {
-    issues.push(`${at}.ownerLoginPattern: expected a regular expression`);
-  }
-  const max = m.nameMaxLength;
-  if (typeof max !== 'number' || !Number.isInteger(max) || max < 1) {
-    issues.push(`${at}.nameMaxLength: expected a positive integer`);
-  }
-  issues.push(...installationsHeaderIssues(m.conversionHeaders, at, 'conversionHeaders'));
-  issues.push(...appPermissionIssues(m.permissions, at, plugin));
-  return issues;
-}
-
-function appPermissionIssues(permissions: unknown, at: string, plugin: ProviderPlugin): string[] {
-  if (!isList(permissions) || permissions.length === 0) {
-    return [`${at}.permissions: expected at least one permission`];
-  }
-  // The git remote's tools are decided like any tool, so they need permissions too.
-  const tools = declaredToolNames(plugin);
-  const issues: string[] = [];
-  const seen = new Set<string>();
-  for (const [i, raw] of permissions.entries()) {
-    const where = `${at}.permissions[${i}]`;
-    if (!isRecord(raw) || !isName(raw.name) || !isName(raw.label) || !isName(raw.description)) {
-      issues.push(`${where}: expected a name, a label and a description`);
-      continue;
-    }
-    if (seen.has(raw.name)) issues.push(`${where}: '${raw.name}' is declared twice`);
-    seen.add(raw.name);
-    if (!isList(raw.levels) || raw.levels.length === 0) {
-      issues.push(`${where}.levels: expected at least one level`);
-      continue;
-    }
-    issues.push(...levelIssues(raw.levels, where, tools));
-  }
-  return issues;
-}
-
-function levelIssues(
-  levels: readonly unknown[],
-  where: string,
-  tools: ReadonlySet<string>,
-): string[] {
-  const issues: string[] = [];
-  const accesses = new Set<string>();
-  for (const level of levels) {
-    if (!isRecord(level) || !isName(level.access) || !isName(level.label) || !isList(level.tools)) {
-      issues.push(`${where}.levels: each level needs an access, a label and a list of tools`);
-      continue;
-    }
-    if (accesses.has(level.access)) issues.push(`${where}: level '${level.access}' twice`);
-    accesses.add(level.access);
-    for (const tool of level.tools) {
-      if (typeof tool !== 'string' || !tools.has(tool)) {
-        issues.push(`${where}.${level.access}: '${String(tool)}' is not a tool of the plugin`);
-      }
-    }
-    const onlyWhen: unknown = level.onlyWhen;
-    if (onlyWhen === undefined) continue;
-    if (!isRecord(onlyWhen)) {
-      issues.push(`${where}.${level.access}.onlyWhen: expected tool → condition`);
-      continue;
-    }
-    for (const [tool, words] of Object.entries(onlyWhen)) {
-      if (!level.tools.includes(tool) || !isName(words)) {
-        issues.push(`${where}.${level.access}.onlyWhen: '${tool}' must be one of its tools`);
-      }
-    }
-  }
-  return issues;
-}
-
-function isRegExpSource(source: string): boolean {
-  if (source.length === 0) return false;
-  try {
-    // nosemgrep: detect-non-literal-regexp -- validates that a plugin's declared pattern compiles; nothing is matched here
-    new RegExp(source);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** The host authenticates the app's OAuth client : the operator must be asked for it. */
-function oauthClientFieldIssues(spec: AppInstallCredentialSpec): string[] {
-  const issues: string[] = [];
-  const fields = isList(spec.appConfigFields) ? spec.appConfigFields : [];
-  const clientId = fields.find((f) => f.name === CLIENT_ID_FIELD);
-  const clientSecret = fields.find((f) => f.name === CLIENT_SECRET_FIELD);
-  if (!clientId || clientId.secret || clientId.required === false) {
-    issues.push(
-      `credential.appConfigFields: userVerification needs a required, non-secret '${CLIENT_ID_FIELD}' field`,
-    );
-  }
-  if (!clientSecret || !clientSecret.secret || clientSecret.required === false) {
-    issues.push(
-      `credential.appConfigFields: userVerification needs a required, secret '${CLIENT_SECRET_FIELD}' field`,
-    );
   }
   return issues;
 }

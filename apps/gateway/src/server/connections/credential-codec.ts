@@ -43,12 +43,6 @@ export function parseSecret(text: string): CredentialSecret {
         scopes: stringList(raw.scopes, 'scopes'),
         metadata,
       };
-    case 'app-install':
-      return {
-        kind: 'app-install',
-        installationId: requireString(raw.installationId, 'installationId'),
-        metadata,
-      };
     case 'ssh-key':
       return {
         kind: 'ssh-key',

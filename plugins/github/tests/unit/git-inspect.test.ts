@@ -21,7 +21,7 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 import { inspectPack, WORKFLOWS_UNVERIFIED } from '../../src/git-inspect.ts';
-import { connectionCtx, MINT_URL, appRepo } from './fixtures.ts';
+import { connectionCtx, appRepo } from './fixtures.ts';
 
 let root: string;
 let home: string;
@@ -106,12 +106,9 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-const githubFetch = async (input: unknown, init?: RequestInit): Promise<Response> => {
+const githubFetch = async (input: unknown): Promise<Response> => {
   const url = String(input instanceof Request ? input.url : input);
   requests.push(url);
-  if (url === MINT_URL && init?.method === 'POST') {
-    return json({ token: 'ghs_xxx', expires_at: '2099-01-01T00:00:00Z' }, 201);
-  }
   if (url === `https://github.com/acme/app.git/info/refs?service=${UPLOAD_PACK_SERVICE}`) {
     const refs = [...upstreamRefs()].map(([name, oid]) => ({ name, oid }));
     return new Response(

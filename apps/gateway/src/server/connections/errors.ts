@@ -16,8 +16,6 @@ export const CONNECT_ERROR_CODES = [
   'state-invalid',
   'provider-denied',
   'token-exchange-failed',
-  'installation-not-verified',
-  'installation-unverifiable',
   'credential-rejected',
   'provider-unreachable',
   'not-found',
@@ -36,7 +34,7 @@ export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
 export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> = {
   'provider-unknown': 'This service is not available on this gateway.',
   'app-not-configured':
-    'An administrator must register the company app of this service first (Settings → Company apps).',
+    'An administrator must declare the OAuth client of this service first, on its connect page.',
   'invalid-input': 'Some values are missing or do not have the expected format.',
   'return-url-refused': 'The return address is outside this gateway and was refused.',
   'rate-limited': 'Too many attempts to connect. Wait a minute and retry.',
@@ -44,10 +42,6 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
     'This authorization attempt has expired, was already used, or was started by another session. Start again from Accounts.',
   'provider-denied': 'The service did not grant the authorization.',
   'token-exchange-failed': 'The service refused to exchange the authorization for a credential.',
-  'installation-not-verified':
-    'The service did not confirm that you have access to this installation; nothing was connected.',
-  'installation-unverifiable':
-    'This service cannot prove who performed an installation. An administrator must explicitly accept unverified installations for it (Settings → Company apps).',
   'credential-rejected': 'The service rejected this credential.',
   'provider-unreachable': 'The service could not be reached. Retry in a moment.',
   'not-found': 'This account does not exist or is not yours.',
@@ -75,8 +69,6 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'state-invalid': 400,
   'provider-denied': 400,
   'token-exchange-failed': 502,
-  'installation-not-verified': 403,
-  'installation-unverifiable': 409,
   'credential-rejected': 400,
   'provider-unreachable': 502,
   'not-found': 404,

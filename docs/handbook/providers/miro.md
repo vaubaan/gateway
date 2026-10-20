@@ -35,8 +35,8 @@ is viable only with a non-expiring token**: the person leaves "Expire user
 authorization token" **unchecked** when creating the app. Miro still offers
 that choice, calls it "fine for test applications", recommends expiring
 tokens, and announces no deprecation on the pages read. If Miro drops it,
-the plugin needs a second way, `oauth2` with `refreshable: true` through a
-company app.
+the plugin moves to `oauth2` with `refreshable: true` through an OAuth client
+the company declares.
 
 ## Decisions
 
@@ -600,9 +600,8 @@ patterns are recursive, a deletion touches it too (§3, layering).
 
 ### 6.1 Credential (`api-key`, token first)
 
-One `api-key` spec, no alternative, no company app in v0.1 (ADR
-[`company-apps-kept-where-they-add-something`](../../decisions/company-apps-kept-where-they-add-something.md),
-D2 "token first";
+One `api-key` spec, the one way (ADR
+[`one-place-to-authorize-services-token-first`](../../decisions/one-place-to-authorize-services-token-first.md);
 [`token-connections-beside-the-integration-app`](../../decisions/token-connections-beside-the-integration-app.md)
 D1 for `label`, `guide`, `verify`).
 

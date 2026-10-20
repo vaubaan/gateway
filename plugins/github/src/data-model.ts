@@ -177,16 +177,6 @@ export const githubDataModel: DataModel = {
             'no current MCP tool touches secrets directly.',
         },
         {
-          name: 'install-token',
-          parent: 'repo',
-          cardinalities: ['one'],
-          description:
-            'A short-lived GitHub App installation credential (1h TTL), minted ' +
-            'with `purpose=clone` or `purpose=push`. Once minted, this token ' +
-            "leaves Vaubaan's gating perimeter — sensitivity is decided at mint " +
-            'time, by risk.',
-        },
-        {
           name: 'repo-settings',
           parent: 'repo',
           cardinalities: ['one'],

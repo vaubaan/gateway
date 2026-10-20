@@ -1,47 +1,27 @@
 /**
- * The token way of connecting GitHub (`token.ts`) against `mockFetch` : the
- * check at paste, discovery through `/user/repos`, every API tool with the
- * pasted token as bearer, and `github__mint_install_token` refused.
+ * The fine-grained token of GitHub (`credential.ts`) against `mockFetch` :
+ * the check at paste, discovery through `/user/repos`, every API tool with
+ * the pasted token as bearer.
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError, credentialSpecFor, unavailableToolReason } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
-import githubPlugin, {
-  expiryOf,
-  githubTokenCredential,
-  verifyGithubToken,
-} from '../../src/index.ts';
-import { appRepo, connectionCtx, executeCtx } from './fixtures.ts';
-
-const PAT = 'github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyz';
-const tokenCredential = { kind: 'api-key' as const, fields: { token: PAT }, metadata: {} };
+import githubPlugin, { expiryOf, githubCredential, verifyGithubToken } from '../../src/index.ts';
+import { PAT, appRepo, connectionCtx, executeCtx, tokenCredential } from './fixtures.ts';
 
 describe('github token — the declaration', () => {
-  test('the plugin connects through the App first, then with a fine-grained token', () => {
-    expect(githubPlugin.credential.kind).toBe('app-install');
-    expect(credentialSpecFor(githubPlugin, 'api-key')).toBe(githubTokenCredential);
+  test('the plugin connects with a fine-grained token, the one way', () => {
+    expect(githubPlugin.credential).toBe(githubCredential);
+    expect(githubCredential.kind).toBe('api-key');
   });
 
   test('only fine-grained tokens match the field', () => {
-    const pattern = new RegExp(githubTokenCredential.fields[0]!.pattern!);
+    const pattern = new RegExp(githubCredential.fields[0]!.pattern!);
     expect(pattern.test(PAT)).toBe(true);
     expect(pattern.test('ghp_0123456789abcdefghijklmnopqrstuvwxyzAB')).toBe(false);
     expect(pattern.test('github_pat_short')).toBe(false);
-  });
-
-  test('mint_install_token needs the App; every other tool runs with a token', () => {
-    expect(unavailableToolReason(githubPlugin, 'api-key', 'github__mint_install_token')).toMatch(
-      /^needs the GitHub App/,
-    );
-    for (const tool of githubPlugin.tools) {
-      if (tool.name === 'github__mint_install_token') continue;
-      expect(unavailableToolReason(githubPlugin, 'api-key', tool.name)).toBeNull();
-    }
-    expect(
-      unavailableToolReason(githubPlugin, 'app-install', 'github__mint_install_token'),
-    ).toBeNull();
   });
 });
 
@@ -109,7 +89,7 @@ describe('github token — discovery and execution', () => {
     expect(fetch.calls[0]!.headers.authorization).toBe(`Bearer ${PAT}`);
   });
 
-  test('an API tool sends the pasted token and mints nothing', async () => {
+  test('an API tool sends the pasted token', async () => {
     const fetch = mockFetch([
       {
         method: 'GET',
@@ -146,17 +126,5 @@ describe('github token — discovery and execution', () => {
         },
       ),
     ).rejects.toMatchObject({ upstreamStatus: 401 });
-  });
-
-  test('mint_install_token on a token connection is declined: it needs the App', async () => {
-    const fetch = mockFetch([]);
-    const result = await githubPlugin.execute(
-      executeCtx(fetch, [appRepo], { credential: tokenCredential }),
-      'github__mint_install_token',
-      { purpose: 'clone' },
-    );
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toMatch(/needs the GitHub App/);
-    expect(fetch.calls).toHaveLength(0);
   });
 });

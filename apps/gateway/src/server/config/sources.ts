@@ -365,10 +365,7 @@ export function isKeyRequired(spec: KeySpec, idpConfigured?: boolean): boolean {
   }
 }
 
-const SECRET_PROVIDER_FIELDS: ReadonlySet<ProviderAppField> = new Set([
-  'client_secret',
-  'private_key',
-]);
+const SECRET_PROVIDER_FIELDS: ReadonlySet<ProviderAppField> = new Set(['client_secret']);
 
 /** Environment variable names that set a given YAML path (for error messages). */
 export function envNamesFor(path: string): string[] {
@@ -419,7 +416,7 @@ export function isSecretKeyPath(path: string): boolean {
 /**
  * The variables of `env` that carry a secret or the path of one: the secret keys of
  * the table and their `_FILE` siblings, `VAUBAAN_SIGN_IN_<ID>_CLIENT_SECRET[_FILE]`,
- * `VAUBAAN_PROVIDER_<ID>_{CLIENT_SECRET,PRIVATE_KEY}[_FILE]`. The variables a YAML
+ * `VAUBAAN_PROVIDER_<ID>_CLIENT_SECRET[_FILE]`. The variables a YAML
  * file references at a secret key are added by the loader (`FileSourceResult`).
  */
 export function secretEnvVariables(env: EnvSource): string[] {

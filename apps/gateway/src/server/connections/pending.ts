@@ -23,7 +23,7 @@ export const NOTICE_TTL_MS = 5 * MINUTE_MS;
 const NOTICE_ID_BYTES = 16;
 const STATE_PATTERN = /^[A-Za-z0-9_-]{20,128}$/;
 
-export type PendingFlowKind = 'oauth2' | 'app-install';
+export type PendingFlowKind = 'oauth2';
 
 export interface PendingConnect {
   readonly kind: PendingFlowKind;

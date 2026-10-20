@@ -25,7 +25,6 @@ export const githubToolTitles: Readonly<Record<string, string>> = {
   github__push_files: 'Push files to a branch',
   github__create_pull_request: 'Open a pull request',
   github__add_issue_comment: 'Comment on an issue or pull request',
-  github__mint_install_token: 'Get a short-lived token for git',
   github__list_workflows: 'List workflows',
   github__list_workflow_runs: 'List workflow runs',
   github__list_workflow_jobs: 'List the jobs of a workflow run',

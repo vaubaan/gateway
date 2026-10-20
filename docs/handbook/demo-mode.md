@@ -15,7 +15,7 @@ tracks:
 `npm run demo` starts the real application on `http://localhost:3210`, signed
 into through a demo identity provider, connected to simulated services and
 already filled with data, so that somebody can click through every page
-without registering an OIDC client or a company app at a service. Nothing leaves the
+without registering an OIDC client or an OAuth client at a service. Nothing leaves the
 machine. Decision: [local-demo-mode](../decisions/local-demo-mode.md).
 Neighbours: [authentication](authentication.md) (the sign-in that runs
 unchanged), [connections](connections.md) (the connect flows),
@@ -129,7 +129,7 @@ can reach by itself.
 |          | **A connected app**, "Claude Code (demo)", a client registered through dynamic registration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Bob      | "Review the docs pull requests", created within the access Alice gave him, with two calls; teammate on Alice's "Ship the billing page" (Missions, "Shared with you"), with his own key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | Carol    | "Acme billing" (Stripe, test and live), on whose test mode she gave Alice access                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Settings | the local teams "GitHub admins" (Alice, Carol) and "Contractors" (Bob), next to the identity provider's group `engineering`; the GitHub App as company app; telemetry off and locked by the configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Settings | the local teams "GitHub admins" (Alice, Carol) and "Contractors" (Bob), next to the identity provider's group `engineering`; telemetry off and locked by the configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 What Activity shows is what those acts and calls wrote.
 
@@ -144,18 +144,21 @@ The list the command prints (`tour.ts`), without the values of the run
 2. **Connect an account**: Accounts → Connect an account, then pick a
    service.
 
-   | Service    | What to type                                              |
-   | ---------- | --------------------------------------------------------- |
-   | Stripe     | test key `sk_test_demo`, live key `sk_live_demo`          |
-   | Cloudflare | API token `demo-cloudflare-token-0123456789`              |
-   | Resend     | API key `re_demo_key`                                     |
-   | Upstash    | any email address, API key `demo-key`                     |
-   | Vercel     | token `demo-vercel-token`, team id `team_demo`            |
-   | GitHub     | opens a simulated installation page: pick an organisation |
+   | Service    | What to type                                             |
+   | ---------- | -------------------------------------------------------- |
+   | Stripe     | test key `sk_test_demo`, live key `sk_live_demo`         |
+   | Cloudflare | API token `demo-cloudflare-token-0123456789`             |
+   | Resend     | API key `re_demo_key`                                    |
+   | Upstash    | any email address, API key `demo-key`                    |
+   | Vercel     | token `demo-vercel-token`, team id `team_demo`           |
+   | GitHub     | one of the two demo fine-grained tokens printed at start |
 
    Any value of the right shape is accepted; each field says its shape.
-   Supabase and Railway need a company app the demo does not register: the
-   picker says so.
+   GitHub takes the two tokens of `DEMO_GITHUB_TOKENS` only (one per
+   organisation; the check at paste names the organisation). Supabase and
+   Railway take a token of the right shape, which the simulated API does not
+   answer; Gmail needs an OAuth client the demo does not declare: its card
+   says so.
 
 3. **Read what a service allows**: Reference → GitHub. Its permissions
    compared across its presets ("why?" unfolds the reason and the six words
@@ -213,8 +216,8 @@ The list the command prints (`tour.ts`), without the values of the run
     period per key holder and per agent label (`planner`, `coder`).
 13. **Settings**, as Alice (she administers the gateway): Connected apps
     ("Claude Code (demo)"); under Administration, Setup (a checklist of what
-    is left), Sign-in, Company apps (the GitHub App), People, Teams ("GitHub
-    admins", "Contractors"), Accounts without owner, Telemetry (off),
+    is left), Sign-in, People, Teams ("GitHub admins", "Contractors"),
+    Accounts without owner, Telemetry (off),
     Registered apps. Settings also holds the theme (System, Light, Dark) and
     the interface reference (`/design`).
 14. **Sign in as Carol**: she sees the GitHub account owned by the team
@@ -250,9 +253,8 @@ apps/gateway/tests/integration/demo/
 2. **Configuration**, in memory. `loadInstanceConfig` is called with an
    environment built here — a master key and a bootstrap token generated for the run (the token is never printed), a store path
    under a fresh `mkdtemp` directory of the OS temp dir, `ALICE`'s email as
-   the admin rule, `telemetry.enabled: false`, the `providers.github` block of
-   a GitHub App whose RSA key pair and secrets are generated for the run — and
-   an https placeholder as `public_url`, because **the loader accepts https
+   the admin rule, `telemetry.enabled: false` — and an https placeholder as
+   `public_url`, because **the loader accepts https
    only and is not changed**. The typed result then gets
    `publicUrl = http://localhost:<port>` and the demo IdP as `idp`. Nothing is
    read from the process environment or from a file.
@@ -299,23 +301,21 @@ a code bound to that person's claims (`sub`, `email`, `name`,
 ### The simulated services
 
 `createDemoProviders()` returns one `fetch` built on the SDK's `mockFetch`
-with routes for GitHub (the user verification of an installation, installation
-tokens, the repositories of two installations, the REST endpoints of the
-common tools), Stripe, Cloudflare DNS, Resend, Upstash Redis and Vercel. Every URL is
+with routes for GitHub (the check at paste of two fine-grained tokens,
+`GET /user`; the repositories each reaches, `GET /user/repos`; the REST
+endpoints of the common tools), Stripe, Cloudflare DNS, Resend, Upstash Redis and Vercel. Every URL is
 read off the plugin that calls it (credential spec, exported API base). A
 request no route answers throws `DemoProviderError` — "demo mode: no simulated
 answer for `<METHOD> <URL>` — nothing was sent to the real provider" — which
 the page shows as the service's error and the command writes on stderr.
 Adding an endpoint is one route in `providers.ts`.
 
-GitHub's connect flow sends the browser to GitHub's installation page. The
-demo cannot let a real browser go to github.com, so its registry is the
-shipped plugins with **one function replaced**: `credential.installUrl` of the
-GitHub plugin answers `/__demo/github/install`, a page that lists two
-organisations and redirects back to `/connections/callback/github` with an
-installation id, a code and the state. The rest of the flow is the shipped
-code against the simulated API: the code exchange, the check that the
-installation is among the user's, the installation token, discovery.
+GitHub is connected like any token service: the demo's registry is the
+shipped plugins unchanged, and `DEMO_GITHUB_TOKENS` (`providers.ts`) are the
+two fine-grained tokens the simulated API knows — one per organisation,
+`acme-org` and `acme-platform`, each reaching its repositories. The connect
+flow is the shipped code against the simulated API: the check at paste, then
+discovery.
 
 **Vercel** is one team (`acme`) and two projects, `acme-storefront` and
 `acme-docs`, each with a production and a preview deployment and two
@@ -376,8 +376,8 @@ names).
 | Refuses a real environment         | `assertDemoAllowed`: `NODE_ENV=production`, `VAUBAAN_CONFIG_FILE` or `VAUBAAN_PUBLIC_URL` set → exit 2 before anything is opened                                                                                                                     | `demo-safety.test.ts`               |
 | Nothing leaves the machine         | provider calls go to `providers.ts`; the SSH plugin is not registered; telemetry and client-document fetches refuse; the command also replaces the global `fetch` with one that refuses any host but the loopback, and disables Next's own telemetry | `providers.ts`, `main.ts`           |
 | Not reachable from the network     | the listener binds `127.0.0.1`                                                                                                                                                                                                                       | `demo-instance.ts`                  |
-| No lasting secret, no lasting data | master key, bootstrap token, GitHub App key pair, IdP signing key and client secrets are generated per run and kept in memory; the SQLite file is in a `mkdtemp` directory deleted on exit                                                           | `demo-smoke.test.ts` (deletion)     |
-| Said on every surface              | the banner "DEMO — simulated identity provider and services, no data leaves this machine" is printed at start and shown on the picker and the installation page                                                                                      | `demo-smoke.test.ts`                |
+| No lasting secret, no lasting data | master key, bootstrap token, IdP signing key and client secrets are generated per run and kept in memory; the SQLite file is in a `mkdtemp` directory deleted on exit                                                                                | `demo-smoke.test.ts` (deletion)     |
+| Said on every surface              | the banner "DEMO — simulated identity provider and services, no data leaves this machine" is printed at start and shown on the picker                                                                                                                | `demo-smoke.test.ts`                |
 
 The first line needed a fix outside the demo: the plugins' computed catalog
 path made Next trace the whole `apps/gateway` directory into the standalone
@@ -433,8 +433,9 @@ naming the application sources and the plugins).
 - Vercel's rewrapped tools answer canned text from one team and two
   projects; a tool the simulation has no answer for returns
   `{ "simulated": true }` with its name.
-- Supabase, Railway and Gmail need a company app, which the demo does
-  not register; registering one in Settings → Company apps does not make the
+- Supabase and Railway accept a token of the right shape but the simulated
+  API answers none of their calls; Gmail needs an OAuth client the demo does
+  not declare, and declaring one on its connect page does not make the
   service real, the code exchange is still refused. SSH is absent.
 - **Settings → Setup gives `dev` as the version while the page footer shows
   the stamped one.** The footer is rendered by the built application,

@@ -101,6 +101,13 @@ export class PushSide {
         if (answer.status === HTTP_UNAUTHORIZED) {
           await this.deps.credentialCache.drop(target.connection.id);
         }
+        // A 403 here is the provider's own permission check on the account's token.
+        if (answer.status === HTTP_FORBIDDEN) {
+          return gitText(
+            HTTP_FORBIDDEN,
+            `${scope.registered.plugin.displayName} refused the push for a permission the account's token lacks (HTTP 403): the token needs write access to this repository; its owner creates one with it and reconnects the account.`,
+          );
+        }
         return upstreamFailure(this.deps.logger, scope, `HTTP ${answer.status}`);
       }
       body = new Uint8Array(await answer.arrayBuffer());

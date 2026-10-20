@@ -151,8 +151,8 @@ the standalone tree), a `require` shim for CommonJS dependencies.
   `importSshKey`. A `ConnectError` or `SshKeyImportError` is `failed` with its
   message; nothing was stored.
 - **By hand** — every other account: `to-connect` or `connected` (the owner
-  holds one of that provider), with the reason (an app installation, an OAuth
-  grant, no plugin, revoked).
+  holds one of that provider), with the reason (a v4 app installation or OAuth
+  grant the importer cannot carry, no plugin, revoked).
 - **Resources** — `normalizeBindings` merges the duplicated rows (one per
   project, service and resource, every label kept) and adds the Stripe and SSH
   bindings. Each is matched on the owner's issuance connections
@@ -289,8 +289,8 @@ somewhere it stays.
 ### 2.4 Connect by hand, run again
 
 1. Connect, under the same owner, the accounts the report lists "TO CONNECT"
-   (GitHub through the company App, Railway, Supabase) — handbook
-   [connections](connections.md).
+   (GitHub, Railway, Supabase, each with a token made at the service) —
+   handbook [connections](connections.md).
 2. Run the same pipe with `--apply` again. Imported accounts are recognised
    ("already imported"), existing missions are left alone ("already
    exists"), and the deferred ones are issued; only their keys are printed.

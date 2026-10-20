@@ -3,8 +3,8 @@
  * upstream (spec §10 "integration on an ephemeral instance"; never a real
  * provider): an MCP client — the official SDK client, as a coding agent's
  * runtime would use it — connects with the mission token, lists the tools and
- * calls one; the gateway mints an installation token from the company's App
- * key, forwards to the GitHub API and returns the provider's answer.
+ * calls one; the gateway sends the connection's token to the GitHub API and
+ * returns the provider's answer.
  *
  * Also here: the protocol edges of the door (2025-era and 2026-07-28 clients,
  * plain `curl`-style JSON-RPC), the bearer dispatch and the separation of the
@@ -12,7 +12,6 @@
  * tokens an earlier build stored as argon2id), the surface rate
  * limit, the catalog endpoint and "no secret in logs".
  */
-import { generateKeyPairSync } from 'node:crypto';
 
 import { Client, ProtocolError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { githubPlugin } from '@vaubaan/plugin-github';
@@ -38,15 +37,9 @@ import type { ConnectionRecord } from '../../../src/server/store/types';
 
 const INSTALLATION_ID = '4242';
 const MINT_URL = `https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens`;
-const INSTALLATION_TOKEN = 'ghs_installation_token_never_returned';
+const CONNECTION_TOKEN = 'ghs_installation_token_never_returned';
 const MODERN_REVISION = '2026-07-28';
 const BRANCHES = [{ name: 'main' }, { name: 'feature/billing' }];
-
-const { privateKey: APP_PRIVATE_KEY } = generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-});
 
 function githubRoutes() {
   return [
@@ -55,7 +48,7 @@ function githubRoutes() {
       url: MINT_URL,
       status: 201,
       body: {
-        token: INSTALLATION_TOKEN,
+        token: CONNECTION_TOKEN,
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
         repositories: [{ id: 1, name: 'app', full_name: 'acme/app' }],
         permissions: { contents: 'read' },
@@ -82,11 +75,6 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
   const instance = await executionInstance({
     plugins: [githubPlugin],
     env: {
-      VAUBAAN_PROVIDER_GITHUB_APP_ID: '123',
-      VAUBAAN_PROVIDER_GITHUB_APP_SLUG: 'acme-gateway',
-      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: APP_PRIVATE_KEY,
-      VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: 'Iv1.0000000000000000',
-      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET: 'github-app-client-secret-never-sent',
       VAUBAAN_LOG_LEVEL: 'debug',
       ...env,
     },
@@ -98,8 +86,8 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
     credential: serializeSecret({
-      kind: 'app-install',
-      installationId: INSTALLATION_ID,
+      kind: 'api-key',
+      fields: { token: CONNECTION_TOKEN },
       metadata: {},
     }),
   });
@@ -185,13 +173,11 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       const [content] = result.content as { type: string; text: string }[];
       expect(JSON.parse(content?.text ?? 'null')).toEqual(BRANCHES);
 
-      // The gateway minted a repository-scoped installation token and used it upstream.
-      const [mint, api] = instance.upstream.calls;
-      expect(mint?.url).toBe(MINT_URL);
-      expect(mint?.json).toEqual({ repositories: ['app'] });
-      expect(api?.headers.authorization).toMatch(new RegExp(`${INSTALLATION_TOKEN}$`));
+      // The gateway sent the connection's token upstream…
+      const [api] = instance.upstream.calls;
+      expect(api?.headers.authorization).toMatch(new RegExp(`${CONNECTION_TOKEN}$`));
       // …and nothing of it reached the executor.
-      expect(JSON.stringify(result)).not.toContain(INSTALLATION_TOKEN);
+      expect(JSON.stringify(result)).not.toContain(CONNECTION_TOKEN);
 
       const [entry] = await instance.root.store.audit.list({ missionId: mission.mission.id });
       expect(entry).toMatchObject({
@@ -204,21 +190,6 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       await client.close();
     });
   }
-
-  it('reuses the installation token across calls (upstream credential cache)', async () => {
-    const mission = await instance.issueGithub();
-    const client = await connect(instance, mission.token);
-    for (let i = 0; i < 3; i++) {
-      await client.callTool({
-        name: 'github__list_branches',
-        arguments: { owner: 'acme', repo: 'app' },
-      });
-    }
-    const mints = instance.upstream.calls.filter((c) => c.url === MINT_URL);
-    expect(mints).toHaveLength(1);
-    expect(instance.upstream.calls).toHaveLength(4);
-    await client.close();
-  });
 
   it('hands the client the whole refusal: code, fields and hint in the JSON-RPC error data', async () => {
     const mission = await instance.issueGithub('read-only');
@@ -676,7 +647,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
     expect(all).toContain('tools/call');
     expect(all).toContain(mission.prefix);
     expect(all).not.toContain(secret);
-    expect(all).not.toContain(INSTALLATION_TOKEN);
+    expect(all).not.toContain(CONNECTION_TOKEN);
     expect(all).not.toContain('secrets/prod.env');
     expect(all).not.toContain('BEGIN PRIVATE KEY');
     expect(all).not.toContain('github-app-client-secret-never-sent');

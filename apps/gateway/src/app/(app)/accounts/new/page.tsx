@@ -17,7 +17,6 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import { ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
-import { PROVIDER_APPS_PAGE } from '@/server/connections';
 import { PROVIDERS_PATH } from '@/server/providers/links';
 
 export const dynamic = 'force-dynamic';
@@ -49,15 +48,9 @@ export default async function ConnectAccountPage({
       <Section first>
         {none && (
           <Callout tone="warn" title="No service can be connected yet" testId="no-service">
-            Each of them needs a company app, which an administrator registers once
-            {principal.isOperator ? (
-              <>
-                {' '}
-                — <Link href={PROVIDER_APPS_PAGE}>Settings → Company apps</Link>.
-              </>
-            ) : (
-              '.'
-            )}
+            Each of them signs people in through an OAuth client an administrator declares once, on
+            the service’s page
+            {principal.isOperator ? ' — open a service below to declare it.' : '.'}
           </Callout>
         )}
         <ServicePicker

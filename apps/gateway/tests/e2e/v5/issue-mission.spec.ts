@@ -130,9 +130,10 @@ test('create a three-account mission on one page, then replace its key and stop 
   const digest = page.getByTestId('preset-digest-github');
   await expect(digest).toContainText('8 run freely');
   await expect(digest).toContainText('2 ask you first');
-  // Nineteen ids on GitHub today: ten chosen, eight left out, and the fallback,
-  // which no preset holds and nobody counts as something a preset "left out".
-  await expect(digest).toContainText('8 not included');
+  // Nineteen ids on GitHub today: ten chosen, six left out, the two deprecated
+  // mint risks of the App and the fallback, which no preset holds and nobody
+  // counts as something a preset "left out".
+  await expect(digest).toContainText('6 not included');
   await expect(
     page.getByTestId('preset-detail-github').getByRole('link', { name: /In the reference/ }),
   ).toHaveAttribute('href', '/reference/github#preset-developer');
@@ -723,32 +724,14 @@ test('the reference explains each service: permissions against presets, tools, m
   expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(2.1);
   // The page does not scroll sideways at this width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
-  // The one tool that hands a token of the service to the agent, and its permissions, say so.
+  // No tool of the service hands a token to the agent: git goes through the gateway's
+  // remote, and the two mint risks of the App of earlier builds are retired.
   await page.goto('/reference/github#tools');
   await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
-  const mint = page.getByTestId('tool-table').locator('tr[data-row="github__mint_install_token"]');
-  await expect(mint).toContainText('hands a token to the agent');
-  await expect(mint.getByRole('link', { name: 'github.mint-install-token-push' })).toHaveAttribute(
-    'href',
-    '#risk-github.mint-install-token-push',
-  );
-  await expect(page.getByTestId('token-handout-note')).toContainText(
-    'What the agent then does with that token is outside the gateway',
-  );
-  await expect(page.getByTestId('token-handout-note')).toContainText(
-    'a token that can write is handed only after the creator approves the call',
-  );
-  await mint.getByRole('link', { name: 'github.mint-install-token-push' }).click();
-  const push = page.getByTestId('risk-github.mint-install-token-push');
-  await expect(push).toBeInViewport();
-  // The tag says what the token can do: a preset hands a write token after a yes only.
-  await expect(push).toContainText('hands a write token');
-  await expect(page.locator('[id="risk-github.mint-install-token-push-detail"]')).toContainText(
-    'github__mint_install_token',
-  );
-  await expect(page.getByTestId('risk-github.mint-install-token-clone')).toContainText(
-    'hands a read-only token',
-  );
+  await expect(page.getByTestId('tool-table')).not.toContainText('github__mint_install_token');
+  await expect(page.getByTestId('token-handout-note')).toHaveCount(0);
+  await page.goto('/reference/github#permissions');
+  await expect(page.getByTestId('risk-github.mint-install-token-push')).toContainText('retired');
   await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a');
   await snap(page, 'provider-token-handouts');
   // An unknown service is not found.

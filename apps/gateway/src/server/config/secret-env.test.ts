@@ -11,8 +11,8 @@ describe('secret variables leave the environment once loaded (H3)', () => {
       VAUBAAN_SIGN_IN_GITHUB_KIND: 'github',
       VAUBAAN_SIGN_IN_GITHUB_CLIENT_ID: 'Ov23liExample',
       VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET_FILE: '/run/secrets/gh',
-      VAUBAAN_PROVIDER_GITHUB_APP_ID: '12345',
-      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: 'pem',
+      VAUBAAN_PROVIDER_GMAIL_CLIENT_ID: '12345',
+      VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET: 'gsecret',
       VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET: 'cf',
     });
     expect(secretEnvVariables(env)).toEqual([
@@ -20,7 +20,7 @@ describe('secret variables leave the environment once loaded (H3)', () => {
       'VAUBAAN_MASTER_KEY',
       'VAUBAAN_MASTER_KEY_PREVIOUS',
       'VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET',
-      'VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY',
+      'VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET',
       'VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET_FILE',
     ]);
   });
@@ -31,8 +31,8 @@ describe('secret variables leave the environment once loaded (H3)', () => {
     expect(isSecretKeyPath('bootstrap_token')).toBe(true);
     expect(isSecretKeyPath('idp.client_secret')).toBe(true);
     expect(isSecretKeyPath('sign_in.entra.client_secret')).toBe(true);
-    expect(isSecretKeyPath('providers.github.private_key')).toBe(true);
-    expect(isSecretKeyPath('providers.github.app_id')).toBe(false);
+    expect(isSecretKeyPath('providers.gmail.client_secret')).toBe(true);
+    expect(isSecretKeyPath('providers.gmail.client_id')).toBe(false);
     expect(isSecretKeyPath('sign_in.entra.client_id')).toBe(false);
     expect(isSecretKeyPath('public_url')).toBe(false);
   });

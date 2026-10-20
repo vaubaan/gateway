@@ -40,4 +40,10 @@ export {
   type SharedMission,
   type StoppedMission,
 } from './now-reader';
-export { readSetup, type SetupDeps, type SetupView } from './setup';
+export {
+  oauthClientChecklist,
+  readSetup,
+  type OAuthClientChecklist,
+  type SetupDeps,
+  type SetupView,
+} from './setup';

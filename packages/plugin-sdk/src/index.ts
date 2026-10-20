@@ -15,7 +15,6 @@
 
 export * from './plugin.ts';
 export * from './credential.ts';
-export * from './app-permissions.ts';
 export * from './catalog-loader.ts';
 export * from './catalog-path.ts';
 export * from './arguments.ts';

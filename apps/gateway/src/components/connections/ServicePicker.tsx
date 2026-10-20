@@ -4,15 +4,15 @@
  * the plugin registry's (`ConnectionService.providers()`); nothing is
  * enumerated here.
  *
- * A service whose company app is not registered yet is still listed, dashed,
- * with what is missing: an administrator is led to where they register it,
- * anyone else reads who to ask.
+ * A service whose OAuth client is not declared yet is still listed, dashed,
+ * with what is missing: an administrator is led to its connect page, where
+ * the client is declared; anyone else reads who to ask.
  */
 import { PickCard, PickGrid, ServiceMark } from '@/components/ui';
-import { ACCOUNT_WORDS, TOKEN_CONNECT } from '@/lib/vocabulary';
+import { ACCOUNT_WORDS } from '@/lib/vocabulary';
 import {
+  connectPagePath,
   NEW_CONNECTION_PATH,
-  PROVIDER_APPS_PAGE,
   type ConnectableProvider,
 } from '@/server/connections';
 
@@ -21,24 +21,11 @@ function lowerFirst(label: string): string {
   return /^[A-Z][a-z]/.test(label) ? label.charAt(0).toLowerCase() + label.slice(1) : label;
 }
 
-/**
- * How the account is connected, in the words of the service where it has some:
- * the way offered first, then "or a token" when a second way can be used now
- * (the company app is registered and the service also takes a pasted token).
- */
+/** How the account is connected, in the words of the service where it has some. */
 export function howToConnect(provider: ConnectableProvider): string {
-  const first = wayWords(provider);
-  const second = provider.methods.find((m) => m.kind !== provider.kind && m.configured);
-  if (!second) return first;
-  return `${first} · ${second.usesApp ? `or your company’s app` : TOKEN_CONNECT.orToken}`;
-}
-
-function wayWords(provider: ConnectableProvider): string {
   switch (provider.kind) {
     case 'oauth2':
       return `sign in at ${provider.displayName}`;
-    case 'app-install':
-      return `install your company’s ${provider.displayName} app`;
     case 'ssh-key':
       return 'a key pair made here, installed on the host';
     case 'api-key': {
@@ -54,7 +41,7 @@ export function ServicePicker({
   returnTo = null,
 }: {
   providers: readonly ConnectableProvider[];
-  /** An administrator can register the company app a service misses. */
+  /** An administrator can declare the OAuth client a service misses. */
   administrator: boolean;
   /** Where to land after connecting (the mission being written). */
   returnTo?: string | null;
@@ -74,13 +61,13 @@ export function ServicePicker({
             <PickCard
               key={provider.id}
               unavailable
-              href={administrator ? PROVIDER_APPS_PAGE : undefined}
+              href={administrator ? connectPagePath(provider.id) : undefined}
               lead={lead}
               title={provider.displayName}
               description={
                 administrator
-                  ? 'needs a company app · register it'
-                  : 'needs a company app · ask an administrator'
+                  ? 'needs its OAuth client · declare it'
+                  : 'needs its OAuth client · ask an administrator'
               }
               testId={`service-${provider.id}`}
             />

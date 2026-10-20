@@ -45,7 +45,6 @@
 import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
 
 import {
-  MINT_TOOL,
   PROVIDER,
   githubRepoRefs,
   isWorkflowPath,
@@ -127,11 +126,6 @@ export function slicesOf(call: GithubCall): Slice[] {
     case 'github__search_issues':
       return [build(`${PROVIDER}.search.issues.R`)];
 
-    // ── Credential mint — one slice per repository the token is scoped to ──
-    case MINT_TOOL:
-      return call.repositories.map((repo) =>
-        build(`${PROVIDER}.repo[${repo.ref}].install-token[${call.purpose}].W`),
-      );
     default:
       return repoSlices(call);
   }

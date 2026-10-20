@@ -151,7 +151,7 @@ export class DemoIdp extends FakeIdp {
   }
 }
 
-/** The shell of the pages the demo serves itself (account picker, GitHub installation). */
+/** The shell of the pages the demo serves itself (account picker). */
 export function demoPage(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">

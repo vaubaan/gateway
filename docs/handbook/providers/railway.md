@@ -2,9 +2,9 @@
 title: Railway provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-20
 tracks:
-  - plugins/railway/src/token.ts
+  - plugins/railway/src/credential.ts
   - plugins/railway/src/user-agent.ts
   - plugins/railway/src/
   - plugins/railway/tests/
@@ -15,9 +15,9 @@ tracks:
 
 The Railway plugin on the v5 Plugin SDK (feature P1.2d). It rewraps the
 official Railway MCP server (`mcp.railway.com`) and adds four GraphQL
-variable tools, authenticates through the company's Railway Auth app
-(OAuth2 + PKCE, refresh on the hot path), discovers projects as resources
-and ships three presets. Plugin version 4.3.0. ADRs:
+variable tools, authenticates with a workspace or account token pasted by
+hand, discovers projects as resources and ships three presets. Plugin
+version 5.0.0. ADRs:
 [[railway-rewrap-remote-mcp]] (why rewrap, audience binding, refresh),
 [[plugin-contract-and-credential-spec]] (the contract) and
 [`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
@@ -36,16 +36,17 @@ plugins/railway/
     upstream-tools.json  the 10 frozen upstream declarations
     custom-tools.ts      the 4 GraphQL variable tools
     classify.ts          classifyRailway(tool, args, resources) — security-critical, pure
-    credential.ts        railwayCredentialSpec
+    credential.ts        railwayCredential (the pasted token), railwayBearerOf, verifyRailwayToken, probeRailwayToken
     execute.ts           executeRailway, discoverRailwayResources, executeCall, callUpstream,
                          callGraphql, parseFirstJsonRpcFrame
   tests/unit/
-    plugin.test.ts           kit, classifier on Resource[], credential, execute, discover (31)
-    classify.test.ts         per-tool slices of classifyRailway (22)
-    risk-catalog.test.ts     catalog shape and risksTouchedBy (19)
-    policy.test.ts           decisions of the gateway core, preset by preset (39)
-    identifier-injection.test.ts  hostile ids and variable names on classify and execute (294)
-    data-model.test.ts       data-model integrity (1)
+    plugin.test.ts           kit, classifier on Resource[], credential, execute, discover
+    credential.test.ts       the token: check at paste, discovery, MCP refusals
+    classify.test.ts         per-tool slices of classifyRailway
+    risk-catalog.test.ts     catalog shape and risksTouchedBy
+    policy.test.ts           decisions of the gateway core, preset by preset
+    identifier-injection.test.ts  hostile ids and variable names on classify and execute
+    data-model.test.ts       data-model integrity
 ```
 
 ## Data model and resources
@@ -131,7 +132,7 @@ schema has no `projectId`); anything else is `denied` ("ambiguous railway
 target").
 
 **`environmentId` is bound to `P`.** The id is sent upstream
-and the OAuth token reaches every project of the workspace, so whichever
+and the token reaches every project of the workspace, so whichever
 way the project was resolved, an `environmentId` argument must be one of
 the environments discovery stored on that project
 (`metadata.environments`). Otherwise the call is denied: "not an
@@ -205,7 +206,7 @@ project, environment and service of a project-scoped call, and
 `environmentId` and `serviceId` from their answer, never from the arguments.
 
 **Every id that is forwarded is bound to the mission's project; an id that
-cannot be bound is refused.** The OAuth token reaches every project of the
+cannot be bound is refused.** The token reaches every project of the
 workspace, so an id the gateway forwards without checking would be served on
 the mission's name: `get-logs` with the `deploymentId` of another project,
 `railway-agent` continuing a thread started on another project. Discovery
@@ -254,35 +255,16 @@ suggestions, the creator adjusts):
 needs `deploy`, `upsert-variable` and `bulk-variables-replace` — so
 `developer` plus `agent-action` is still refused.
 
-## Credential and refresh
-
-`railwayCredentialSpec` is `oauth2`: `authorizationUrl`
-`https://backboard.railway.com/oauth/auth`, `tokenUrl`
-`https://backboard.railway.com/oauth/token`, scopes `openid offline_access
-workspace:member`, `pkce: true`, `clientAuthMethod: client_secret_basic`,
-`resourceIndicator: https://mcp.railway.com` (RFC 8707 — without it the
-MCP server refuses the token), `extraAuthorizationParams: { prompt:
-consent }` (otherwise no refresh token), `refreshable: true`. The host runs
-the flow with the company's Auth app (`client_id` / `client_secret` from
-the instance configuration) and stores `{ accessToken, refreshToken,
-expiresAt, scopes }`.
-
-Access tokens last one hour, so refresh is on the hot path — and it is the
-standard RFC 6749 `refresh_token` grant with Basic client authentication
-plus the same `resource=https://mcp.railway.com` indicator, which the host
-performs from `tokenUrl`, `clientAuthMethod` and `resourceIndicator`. The
-plugin therefore declares `refreshable: true` and implements no `refresh`
-(the alignment on the v5 SDK removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
-The plugin never persists: the host refreshes and stores the result.
-
 ## Connecting with a workspace token
 
-Beside the OAuth app, `src/token.ts` declares a Railway token pasted by hand
-(`api-key`, label "workspace token"), the way offered when no Railway app is
-registered (ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md),
-amendment of 2026-10-14). One form takes either kind of token, both created
-under Account settings → Tokens; `railwayBearerOf` returns it or the OAuth
-access token.
+`src/credential.ts` declares a Railway token pasted by hand (`api-key`,
+field `api_token`, label "workspace token"), the one way of connecting (ADR
+[one-place-to-authorize-services-token-first](../../decisions/one-place-to-authorize-services-token-first.md);
+the company's Railway Auth app of earlier builds is described there; the
+facts checked against the service on 2026-10-14 are in the amendment of
+[token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)).
+One form takes either kind of token, both created under Account settings →
+Tokens; `railwayBearerOf` returns it.
 
 - **Kinds**: the **workspace token** (a workspace selected) is recommended —
   one workspace, least privilege, fit for a shared service account; the
@@ -321,8 +303,7 @@ three projects>`, else unnamed. Neither answers (GraphQL `errors`, no
   API → `UpstreamAuthError` 403 naming the kind ("refused this account
   token … reconnect with a workspace token"): the host treats 403 as "not
   permitted", so a healthy connection is not expired for the variable tools.
-  A probe that cannot reach Railway rethrows the original refusal. An OAuth
-  connection is never probed.
+  A probe that cannot reach Railway rethrows the original refusal.
 - **User-Agent**: every request carries `User-Agent: vaubaan-gateway`
   (`src/user-agent.ts`); Cloudflare in front of the MCP server refuses some
   default user agents (error 1010).
@@ -334,7 +315,7 @@ three projects>`, else unnamed. Neither answers (GraphQL `errors`, no
 
 `executeRailway(ctx, tool, args)` first answers a tool the plugin does not
 declare with an `isError` result, then reads the bearer with
-`railwayBearerOf` (the OAuth access token or the pasted token), then pins the target
+`railwayBearerOf` (the pasted token), then pins the target
 (`pinTarget`):
 
 1. an argument the tool does not declare is refused, by the classifier's own
@@ -406,37 +387,37 @@ with the upstream message.
 - **`risk-not-accepted` naming `railway.bulk-variables-replace`** on a
   variable write — the call set `replace`, sent an empty `variables`, or is
   a `railway-agent` call. Send the named variables without `replace`.
-- **`UpstreamAuthError` on every call** — token expired and the host did
-  not refresh, or the token lacks the MCP audience (`resource=` missing on
-  the authorize or token request). Check the stored `expiresAt` and that the
-  host sends `resourceIndicator` on the refresh request.
+- **`UpstreamAuthError` on every call** — the token was deleted at Railway,
+  or the account was connected through the Railway Auth app of an earlier
+  build (its owner reconnects it with a token from Accounts).
 - **`Railway GraphQL 401`** on variable tools or discovery — backboard
   refused the MCP-audience token; see the empirical caveat above.
 
 ## Tests
 
-`npx vitest run plugins/railway` — 406 tests. `plugin.test.ts` (31)
+`npx vitest run plugins/railway` — no test reaches Railway. `plugin.test.ts`
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
 classifier branches on `Resource[]` (including the `environmentId`
 binding), the credential spec, `execute` and `discoverResources` against
-`mockFetch`. `classify.test.ts` (22) pins the slices of each tool,
-`risk-catalog.test.ts` (19) the catalog shape and `risksTouchedBy`,
-`data-model.test.ts` (1) the data model. `policy.test.ts` (39) runs the
+`mockFetch`. `credential.test.ts` covers the token: the check at paste for
+a workspace and an account token, discovery with each, an MCP-server tool,
+what an MCP refusal of the token turns into. `classify.test.ts` pins the
+slices of each tool, `risk-catalog.test.ts` the catalog shape and
+`risksTouchedBy`, `data-model.test.ts` the data model. `policy.test.ts` runs the
 real classifier and catalog through the gateway decision core
 (`evaluateCallForToken`) with the accepted risks of each shipped preset: a
 decision per sample call for `read-only`, `developer` and `operator` on
 each environment, the risks each variable write touches, the refusal of
 env-scoped operations on an unlabelled or mislabelled project, and the
-`environmentId` binding. `identifier-injection.test.ts` (294) feeds
+`environmentId` binding. `identifier-injection.test.ts` feeds
 malformed ids and variable names to `classify` and to `execute`, checks
 that `execute` runs on the target the classifier resolved, that a
 `serviceId` is bound to its project (a foreign one, an unknown list, a
 project with no service), that undeclared arguments are refused on both
 sides, that `deploymentId` and `threadId` are refused whatever their value
 with nothing sent, that the declared schema does not offer them and that no
-other id-like argument is left unbound, and that discovery refuses a project id that is not a `railwayId`. No test reaches
-Railway.
+other id-like argument is left unbound, and that discovery refuses a project id that is not a `railwayId`.
 
 ## References
 

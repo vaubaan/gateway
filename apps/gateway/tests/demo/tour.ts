@@ -109,10 +109,11 @@ Things to try
        Resend      API key   re_demo_key
        Upstash     email     any address         API key   demo-key
        Vercel      token     demo-vercel-token   team id   team_demo
-       GitHub      opens a simulated installation page: pick an organisation.
+       GitHub      token     github_pat_11DEMO0000000000000_aaaa… (acme-org)
+                             or …_bbbb… (acme-platform); the page lists the
+                             permissions a real token would need
      Any value of the right shape is accepted; each field says its shape.
-     Supabase and Railway need a company app the demo does not register: the
-     picker says so.
+     Gmail needs an OAuth client the demo does not declare: the picker says so.
   3. Read what a service allows: Reference -> GitHub. Its permissions compared
      across its presets ("why?" unfolds the reason and the six words behind a
      severity), its tools, how it is modelled. Supabase adds a filter by part
@@ -166,7 +167,7 @@ Things to try
      agent label ("planner", "coder").
  13. Settings, as Alice (she administers the gateway): Connected apps ("Claude
      Code (demo)"); under Administration, Setup (a checklist of what is left),
-     Sign-in, Company apps (the GitHub App), People, Teams ("GitHub admins",
+     Sign-in, People, Teams ("GitHub admins",
      "Contractors"), Accounts without owner, Telemetry (off), Registered apps.
      Settings also holds the theme (System, Light, Dark) and the interface
      reference (/design).

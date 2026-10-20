@@ -37,8 +37,6 @@ const RETIRED_TOOLS = new Set<string>([
 const RETIRED_HINT =
   'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.';
 
-export const MINT_TOOL = 'github__mint_install_token';
-
 /** The branch `merge_pull_request` is classified on when the call declares no `base`. */
 export const DEFAULT_MERGE_BASE = 'main';
 
@@ -349,14 +347,7 @@ export type RepoCall = { readonly target: RepoTarget } & (
 
 export type GithubCall =
   /** Account-shaped : not bound to a repository of the mission. */
-  | { readonly tool: 'github__search_code' | 'github__search_issues' }
-  | {
-      readonly tool: typeof MINT_TOOL;
-      readonly purpose: 'clone' | 'push';
-      /** The mission's repositories the token is scoped to — one, or all of them. */
-      readonly repositories: readonly RepoTarget[];
-    }
-  | RepoCall;
+  { readonly tool: 'github__search_code' | 'github__search_issues' } | RepoCall;
 
 export interface Denied {
   readonly denied: string;
@@ -398,10 +389,6 @@ export function readGithubCall(
 
   // Global searches — not repo-scoped, so no resource lookup.
   if (tool === 'github__search_code' || tool === 'github__search_issues') return { tool };
-
-  // Credential mint — the optional `repoFullName` narrows the fan-out over
-  // the mission's repositories.
-  if (tool === MINT_TOOL) return readMintCall(args, missionRepos);
 
   // Every other tool needs `owner` + `repo` and must resolve to a resource.
   const target = resolveRepo(args, missionRepos);
@@ -558,36 +545,6 @@ export function readGithubCall(
     default:
       return { denied: `unknown github tool '${tool}'` };
   }
-}
-
-function readMintCall(
-  args: Readonly<Record<string, unknown>>,
-  missionRepos: readonly string[],
-): GithubCall | Denied {
-  const purpose = args.purpose;
-  if (purpose !== 'clone' && purpose !== 'push') {
-    return { denied: `${MINT_TOOL} requires purpose 'clone' or 'push'` };
-  }
-  if (missionRepos.length === 0) {
-    return { denied: `${MINT_TOOL}: ${NO_REPOSITORY_SELECTED}` };
-  }
-  if (isGiven(args.repoFullName)) {
-    const named = repoFullName(args.repoFullName);
-    if (named === null || !missionRepos.includes(named.ref)) {
-      return { denied: repositoryNotSelectedMessage(String(args.repoFullName), missionRepos) };
-    }
-    return { tool: MINT_TOOL, purpose, repositories: [named] };
-  }
-  // No repoFullName → fan out to every repository of the mission.
-  const repositories: RepoTarget[] = [];
-  for (const ref of missionRepos) {
-    const target = repoFullName(ref);
-    if (target === null) {
-      return { denied: `${MINT_TOOL}: mission repository '${quoted(ref)}' is not 'owner/repo'` };
-    }
-    repositories.push(target);
-  }
-  return { tool: MINT_TOOL, purpose, repositories };
 }
 
 /**

@@ -95,8 +95,6 @@ export const flyCredential: ApiKeyCredentialSpec = {
     recommendedExpiryDays: 90,
     docsUrl: 'https://fly.io/docs/security/tokens/',
   },
-  manualRevocation:
-    'Revoke the token in the Fly dashboard (organization, Tokens) or with fly tokens revoke <id>.',
   verify: verifyFlyToken,
 };
 

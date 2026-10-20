@@ -48,13 +48,13 @@ describe('missionGitView', () => {
     expect(view?.provider).toBe('GitHub');
   });
 
-  it('names the raw-token tool when the mission holds one of its permissions', () => {
+  it('names no raw-token tool: the GitHub plugin hands none since catalog v9', () => {
     const view = missionGitView({
       registry,
       publicUrl,
       connections,
       policy: [{ risk_id: 'github.mint-install-token-push', gate: 'approval' }],
     });
-    expect(view?.rawTokenTools).toEqual(['github__mint_install_token']);
+    expect(view?.rawTokenTools).toEqual([]);
   });
 });

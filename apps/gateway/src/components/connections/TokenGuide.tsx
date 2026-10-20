@@ -1,14 +1,14 @@
 /**
  * How to create a token by hand at a service, read from the plugin's
- * declaration (`ConnectMethod.guide`): where to go and the expiry to choose
- * (step 1), the permissions to tick with the tools each one serves, and the
- * tools a token cannot run (step 2). The connect page adds step 3, the form.
+ * declaration (`ConnectableProvider.guide`): where to go and the expiry to
+ * choose (step 1), the permissions to tick with the tools each one serves
+ * (step 2). The connect page adds step 3, the form.
  * Nothing about a service is written here; the frame's words are
  * `TOKEN_CONNECT`.
  */
-import { Callout, Disclosure, FormStep, Hint, Mono, Row, Rows } from '@/components/ui';
+import { FormStep, Hint, Row, Rows } from '@/components/ui';
 import { listed, TOKEN_CONNECT } from '@/lib/vocabulary';
-import type { ConnectMethod, TokenPermissionView, ToolLabel } from '@/server/connections';
+import type { ConnectableProvider, TokenPermissionView, ToolLabel } from '@/server/connections';
 
 import styles from './TokenGuide.module.css';
 
@@ -36,8 +36,14 @@ export function permissionLines(permissions: readonly TokenPermissionView[]): Pe
 }
 
 /** Steps 1 and 2 of the connect page for a way that has a guide. */
-export function TokenGuide({ service, method }: { service: string; method: ConnectMethod }) {
-  const guide = method.guide;
+export function TokenGuide({
+  service,
+  provider,
+}: {
+  service: string;
+  provider: ConnectableProvider;
+}) {
+  const guide = provider.guide;
   if (!guide) return null;
   const lines = permissionLines(guide.permissions);
   return (
@@ -48,9 +54,9 @@ export function TokenGuide({ service, method }: { service: string; method: Conne
             <li key={step}>{step}</li>
           ))}
         </ol>
-        {method.createUrl && (
+        {provider.createUrl && (
           <p className={styles.link}>
-            <a href={method.createUrl} target="_blank" rel="noreferrer noopener">
+            <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">
               {TOKEN_CONNECT.openTokenPage(service)}
             </a>
           </p>
@@ -62,7 +68,7 @@ export function TokenGuide({ service, method }: { service: string; method: Conne
         </Hint>
       </FormStep>
 
-      {(lines.length > 0 || method.unavailableTools.length > 0) && (
+      {lines.length > 0 && (
         <FormStep
           n={2}
           title={TOKEN_CONNECT.permissionsTitle}
@@ -90,47 +96,8 @@ export function TokenGuide({ service, method }: { service: string; method: Conne
               ))}
             </Rows>
           )}
-          {method.unavailableTools.length > 0 && <Unavailable method={method} />}
         </FormStep>
       )}
-    </div>
-  );
-}
-
-/** The tools a token cannot run, and why: one sentence, the list behind a disclosure when long. */
-function Unavailable({ method }: { method: ConnectMethod }) {
-  const tools = method.unavailableTools;
-  const first = tools[0]!;
-  return (
-    <div className={styles.unavailableBox}>
-      <Callout
-        tone="neutral"
-        title={TOKEN_CONNECT.notWithToken(tools.length)}
-        testId="token-unavailable"
-      >
-        {tools.length === 1 ? (
-          <p className={styles.unavailable}>
-            {first.title} (<Mono>{first.name}</Mono>) {first.reason}
-          </p>
-        ) : (
-          <>
-            <p className={styles.unavailable}>{first.reason}</p>
-            <Disclosure
-              id="account-connect:unavailable-tools"
-              show={`Show the ${tools.length} tools`}
-              hide="Hide the tools"
-            >
-              <ul className={styles.toolList}>
-                {tools.map((tool) => (
-                  <li key={tool.name}>
-                    {tool.title} <Mono>{tool.name}</Mono>
-                  </li>
-                ))}
-              </ul>
-            </Disclosure>
-          </>
-        )}
-      </Callout>
     </div>
   );
 }

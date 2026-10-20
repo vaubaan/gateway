@@ -46,6 +46,7 @@ import type { PendingRefsRepo } from '../store';
 import {
   CLEANUP_TIMEOUT_MS,
   GIT_AGENT,
+  HTTP_FORBIDDEN,
   HTTP_UNAUTHORIZED,
   IN_FLIGHT_MARGIN_MS,
   MAX_TEMPORARY_REFS_PER_MISSION,
@@ -257,6 +258,14 @@ export class TemporaryRefs {
       await answer.body?.cancel();
       if (answer.status === HTTP_UNAUTHORIZED) {
         await this.deps.credentialCache.drop(target.connection.id);
+      }
+      // A 403 on the upload is the provider's own permission check: the account's
+      // token cannot write to this repository.
+      if (answer.status === HTTP_FORBIDDEN) {
+        throw new PushStop(
+          `${target.plugin.displayName} refused the push for a permission the account's token lacks (HTTP 403): the token needs write access to this repository; its owner creates one with it and reconnects the account.`,
+          'the provider refused the push for a permission the token lacks (HTTP 403)',
+        );
       }
       throw new PushStop(
         `${target.plugin.displayName} refused to store the pack (HTTP ${answer.status}); push again, and tell the human if it persists`,

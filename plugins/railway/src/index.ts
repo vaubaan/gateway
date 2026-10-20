@@ -14,14 +14,6 @@
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyRailway, environmentsOf, isProjectScopedTool } from './classify.ts';
-import {
-  RAILWAY_APP_CONFIG_KEYS,
-  RAILWAY_AUTHORIZATION_URL,
-  RAILWAY_MCP_RESOURCE,
-  RAILWAY_SCOPES,
-  RAILWAY_TOKEN_URL,
-  railwayCredentialSpec,
-} from './credential.ts';
 import { railwayDataModel } from './data-model.ts';
 import {
   RAILWAY_AGENT_HINT,
@@ -30,7 +22,7 @@ import {
   discoverRailwayResources,
   executeRailway,
 } from './execute.ts';
-import { railwayTokenCredential } from './token.ts';
+import { railwayCredential } from './credential.ts';
 import { railwayToolTitles } from './tool-titles.ts';
 import { RAILWAY_TOOL_PREFIX, railwayTools, toUpstreamName } from './tools.ts';
 
@@ -41,13 +33,13 @@ export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url)
 export const railwayPlugin = definePlugin({
   id: 'railway',
   displayName: 'Railway',
-  version: '4.3.0',
+  version: '5.0.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:
-    'One account is one Railway account reached through the company Railway app, or a workspace token (or an account token) pasted by hand; every tool runs either way. One resource is one project. Its owner labels each project with an environment (prod, staging, preview or dev); deploys and variable changes are held per label, and a project without a label can only be inspected.',
+    'One account is one workspace token (or an account token) pasted by hand; every tool runs with it. One resource is one project. Its owner labels each project with an environment (prod, staging, preview or dev); deploys and variable changes are held per label, and a project without a label can only be inspected.',
   manualRevocation:
-    "In your Railway account settings, open Authorized Apps, select your company's app and choose Revoke Access: every token it holds stops working at once.",
+    'Delete the token in Railway, signed in as the account that created it: Account settings, Tokens.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/railway.md',
   tools: railwayTools,
   toolTitles: railwayToolTitles,
@@ -56,10 +48,7 @@ export const railwayPlugin = definePlugin({
   resourceCreatingTools: ['railway__create-project'],
   dataModel: railwayDataModel,
   catalog: railwayCatalog.catalog,
-  credential: railwayCredentialSpec,
-  // Beside the OAuth app : a workspace or account token pasted by hand, for
-  // every tool (ADR token-connections-beside-the-integration-app, amended).
-  alternativeCredentials: [railwayTokenCredential],
+  credential: railwayCredential,
   // Railway's agent takes a free-text request and acts with the whole
   // credential: no resource check can keep it off the project hosting the
   // gateway (SEC 2026-10-15 re-check M-1).
@@ -76,20 +65,15 @@ export default railwayPlugin;
 
 export {
   RAILWAY_AGENT_HINT,
-  RAILWAY_APP_CONFIG_KEYS,
-  RAILWAY_AUTHORIZATION_URL,
   RAILWAY_GRAPHQL_URL,
-  RAILWAY_MCP_RESOURCE,
   RAILWAY_MCP_URL,
-  RAILWAY_SCOPES,
-  RAILWAY_TOKEN_URL,
   RAILWAY_TOOL_PREFIX,
   classifyRailway,
   discoverRailwayResources,
   environmentsOf,
   executeRailway,
   isProjectScopedTool,
-  railwayCredentialSpec,
+  railwayCredential,
   railwayDataModel,
   railwayTools,
   toUpstreamName,
@@ -98,9 +82,8 @@ export type { RailwayEnvironmentRef } from './classify.ts';
 export {
   explainMcpRefusal,
   probeRailwayToken,
-  railwayTokenCredential,
   RAILWAY_TOKEN_FIELD,
   RAILWAY_TOKEN_KINDS,
   verifyRailwayToken,
-} from './token.ts';
-export type { RailwayTokenKind, RailwayTokenProbe } from './token.ts';
+} from './credential.ts';
+export type { RailwayTokenKind, RailwayTokenProbe } from './credential.ts';

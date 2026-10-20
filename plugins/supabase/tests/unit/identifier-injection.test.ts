@@ -36,14 +36,7 @@ const execCtx = (
   fetch: typeof globalThis.fetch,
   resources: readonly Resource[] = [project],
 ): ExecuteContext => ({
-  credential: {
-    kind: 'oauth2',
-    accessToken: 'sbp_access',
-    refreshToken: 'sbp_refresh',
-    expiresAt: '2026-10-13T12:00:00.000Z',
-    scopes: ['all'],
-    metadata: {},
-  },
+  credential: { kind: 'api-key', fields: { access_token: 'sbp_access' }, metadata: {} },
   appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   resources,

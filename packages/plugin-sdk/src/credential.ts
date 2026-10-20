@@ -6,10 +6,12 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  *
  * Three types, three moments :
- *   - `CredentialSpec`   : static declaration shipped by the plugin. The host
- *                          drives the flow generically from it (OAuth dance,
- *                          app installation, form, key pair) ; the plugin
- *                          writes no HTTP handler.
+ *   - `CredentialSpec`   : static declaration shipped by the plugin, one way
+ *                          of connecting per plugin (ADR
+ *                          one-place-to-authorize-services-token-first). The
+ *                          host drives the flow generically from it (form,
+ *                          OAuth dance, key pair) ; the plugin writes no HTTP
+ *                          handler.
  *   - `CredentialSecret` : the decrypted material, in memory only, handed to
  *                          `execute`, `discoverResources` and `refresh`.
  *   - `Credential`       : the encrypted envelope the store keeps
@@ -21,7 +23,7 @@ import type { CredentialKind } from '@vaubaan/shared';
 import type { ConnectionContext } from './plugin.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Form fields — shared by api-key forms, ssh-key forms and app configuration
+// Form fields — shared by api-key forms, ssh-key forms and OAuth client configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CredentialField {
@@ -39,35 +41,12 @@ export interface CredentialField {
   readonly pattern?: string;
 }
 
-/** The company's registered app for a provider, as the operator configured it. */
+/** The company's OAuth client for a provider, as the operator configured it (`oauth2` only). */
 export type ProviderAppConfig = Readonly<Record<string, string>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CredentialSpec — one variant per kind
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * What every way of connecting may say beside its own flow. A plugin that
- * connects in more than one way (`ProviderPlugin.alternativeCredentials`, ADR
- * token-connections-beside-the-integration-app) declares, per way, what that
- * way cannot do and where a person removes its grant.
- */
-export interface CredentialSpecCommon {
-  /**
-   * Tools of this plugin that a connection made this way cannot run, each
-   * with one sentence saying why and what it needs (`github__mint_install_token`
-   * → "needs the GitHub App: …"). The host refuses such a call before the
-   * budget is touched and leaves the tool out of `tools/list` for a mission
-   * whose connection was made this way. Keys are tool names of the plugin.
-   */
-  readonly unavailableTools?: Readonly<Record<string, string>>;
-  /**
-   * Where, at the provider, a person removes the grant of a connection made
-   * this way, when it differs from `ProviderPlugin.manualRevocation` (a pasted
-   * token is deleted on the token page, an app is uninstalled elsewhere).
-   */
-  readonly manualRevocation?: string;
-}
 
 /** Access a token permission grants at the provider, in the provider's own two words. */
 export const TOKEN_PERMISSION_ACCESS = ['read', 'read-write'] as const;
@@ -118,7 +97,7 @@ export interface CredentialCheck {
 }
 
 /** The user pastes one or more values (API token, account id). */
-export interface ApiKeyCredentialSpec extends CredentialSpecCommon {
+export interface ApiKeyCredentialSpec {
   readonly kind: 'api-key';
   readonly fields: readonly CredentialField[];
   /** URL of the provider page where the user creates the key. */
@@ -145,7 +124,7 @@ export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post
  * Authorization-code flow run by the host against the company's own OAuth
  * app. The plugin never sees the client secret.
  */
-export interface OAuth2CredentialSpec extends CredentialSpecCommon {
+export interface OAuth2CredentialSpec {
   readonly kind: 'oauth2';
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
@@ -205,269 +184,25 @@ export const OAUTH2_REVOCATION_FORMATS = ['token-form', 'client-credentials-json
 export type OAuth2RevocationFormat = (typeof OAUTH2_REVOCATION_FORMATS)[number];
 
 /**
- * App-config keys of the app's OAuth client. The host asks for them for every
- * `oauth2` spec ; an `app-install` spec that declares `userVerification` must
- * list both in `appConfigFields`. The secret is used by the host only : it is
- * removed from the `appConfig` a plugin receives.
+ * App-config keys of the OAuth client. The host asks for them for every
+ * `oauth2` spec. The secret is used by the host only : it is removed from the
+ * `appConfig` a plugin receives.
  */
 export const CLIENT_ID_FIELD = 'client_id';
 export const CLIENT_SECRET_FIELD = 'client_secret';
-
-/** How the host authenticates the app's OAuth client when it verifies an installation. */
-export type AppInstallClientAuthMethod = Exclude<OAuth2ClientAuthMethod, 'none'>;
-
-/** Page-number pagination of the installations list. */
-export interface AppInstallListPagination {
-  /** Query parameter carrying the 1-based page number (`page`). */
-  readonly pageParam: string;
-  /** Query parameter carrying the page size (`per_page`). */
-  readonly perPageParam: string;
-  /** Page size the host asks for ; a page shorter than this is the last one. */
-  readonly perPage: number;
-}
-
-/**
- * Proof that the human who came back from the installation page has access
- * to the installation the callback names. Declarative : the host runs it, the
- * plugin writes no code and never sees the client secret or the user token.
- *
- * The provider's installation page is configured to ask the installing user
- * to authorize the app (GitHub : "Request user authorization (OAuth) during
- * installation"), so the authorization request is implicit in the install
- * redirect and the callback carries an authorization code next to the
- * installation id. The host then :
- *   1. exchanges the code at `tokenUrl` with the app's `client_id` /
- *      `client_secret` for a user token ;
- *   2. lists the installations that token can reach at `installationsUrl` ;
- *   3. accepts the installation id only when it is in that list ;
- *   4. drops the user token (it is never stored and never handed to the plugin).
- *
- * A spec without this block cannot prove who performed an installation : the
- * host refuses to connect it unless the operator explicitly accepts unverified
- * installations for that provider app.
- */
-export interface AppInstallUserVerification {
-  /** Name of the callback query parameter carrying the authorization code (`code`). */
-  readonly codeParam: string;
-  /** Token endpoint the code is exchanged at (https). */
-  readonly tokenUrl: string;
-  readonly clientAuthMethod: AppInstallClientAuthMethod;
-  /** Endpoint listing the installations the user token can reach (https, GET, Bearer). */
-  readonly installationsUrl: string;
-  /** Static request headers of the list call (API version, `Accept`). Never `Authorization`. */
-  readonly installationsHeaders?: Readonly<Record<string, string>>;
-  /**
-   * Property of the JSON response holding the list (`installations`). Omit
-   * when the response body is the list itself.
-   */
-  readonly installationsListField?: string;
-  /** Property of each list item holding the installation id (`id`) — a string or a number. */
-  readonly installationIdField: string;
-  /** Omit when the endpoint answers the whole list in one response. */
-  readonly pagination?: AppInstallListPagination;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Creating the company's app from a manifest
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * One access level of a provider permission (`read`, `write`), and the tools
- * that need at least this level. Levels are listed lowest first ; a higher
- * level includes the lower ones.
- */
-export interface AppPermissionLevel {
-  /** The provider's word for the level, sent as is (`read`, `write`). */
-  readonly access: string;
-  /** What a person reads (`Read`, `Read and write`). */
-  readonly label: string;
-  /** Tools of this plugin that need at least this level ; may be empty. */
-  readonly tools: readonly string[];
-  /**
-   * The tools among `tools` that need this level for some calls only, each
-   * with the words that say which (`for a file under .github/workflows/`).
-   * The plugin checks such a need itself, call by call.
-   */
-  readonly onlyWhen?: Readonly<Record<string, string>>;
-}
-
-/**
- * One permission the company app may request, as the provider names it. The
- * single declaration the host derives the choice of permissions, the manifest
- * and the "tools that stop working" sentences from.
- */
-export interface AppPermission {
-  /** The provider's key (`contents`, `pull_requests`). */
-  readonly name: string;
-  readonly label: string;
-  /** One sentence : what the permission lets the app do. */
-  readonly description: string;
-  /** Lowest first ; at least one. */
-  readonly levels: readonly AppPermissionLevel[];
-  /** The provider grants it at its lowest level whatever is asked (GitHub's metadata). */
-  readonly mandatory?: boolean;
-  /**
-   * Set on a permission whose highest level a company may prefer to withhold :
-   * why it is sensitive, in one or two sentences. Shown next to the choice.
-   */
-  readonly sensitive?: string;
-}
-
-/** Who owns the app at the provider : an organisation (its login) or the administrator's own account. */
-export type AppOwner =
-  { readonly kind: 'organization'; readonly login: string } | { readonly kind: 'personal' };
-
-/** What the host hands `buildManifest` : addresses on `public_url`, the chosen permissions. */
-export interface AppManifestInput {
-  readonly name: string;
-  /** The instance's public URL (the app's homepage). */
-  readonly homepageUrl: string;
-  /** The connection callback of this provider (`/connections/callback/<id>`). */
-  readonly callbackUrl: string;
-  /** Where the provider sends the browser back after the app is created. */
-  readonly redirectUrl: string;
-  /** Permission name → access, the mandatory ones included. */
-  readonly permissions: Readonly<Record<string, string>>;
-}
-
-/** The app the provider created, read from its answer to the code exchange. */
-export interface RegisteredApp {
-  /** Every app-config field (`appConfigFields`), secrets included. */
-  readonly appConfig: ProviderAppConfig;
-  readonly name: string;
-  readonly slug: string;
-  readonly ownerLogin: string;
-  /** The app's page at the provider (https). */
-  readonly htmlUrl: string;
-  /** The permissions the app holds, as the provider answered them. */
-  readonly permissions: Readonly<Record<string, string>>;
-}
-
-/**
- * The company's app created from a manifest (GitHub App manifest flow) : the
- * administrator picks the owner, a name and the permissions ; the host posts
- * the manifest to `registrationUrl` with a single-use `state` ; the provider
- * asks the administrator to confirm and sends the browser back to
- * `redirectUrl` with a code ; the host exchanges the code, server to server,
- * at `conversionUrl(code)`. Declarative like `userVerification` : the host
- * runs the flow and stores the settings where the manual form would ; the
- * plugin writes no handler.
- */
-export interface AppManifestRegistration {
-  /** The permissions the app may request ; the default is every highest level. */
-  readonly permissions: readonly AppPermission[];
-  /** Regex source an organisation login must match before it is put in a URL. */
-  readonly ownerLoginPattern: string;
-  /** Longest name the provider accepts. */
-  readonly nameMaxLength: number;
-  /** The address the manifest is posted to (the host appends `stateParam`). */
-  registrationUrl(owner: AppOwner): string;
-  /** The form field carrying the JSON manifest (`manifest`). */
-  readonly manifestField: string;
-  /** The query parameter carrying the state, out and back (`state`). */
-  readonly stateParam: string;
-  /** The query parameter of the redirect carrying the code (`code`). */
-  readonly codeParam: string;
-  buildManifest(input: AppManifestInput): Readonly<Record<string, unknown>>;
-  /** The exchange endpoint for this code (POST, no authentication), or `null` for a malformed code. */
-  conversionUrl(code: string): string | null;
-  /** Static headers of the exchange (API version, `Accept`). Never `Authorization`. */
-  readonly conversionHeaders?: Readonly<Record<string, string>>;
-  /** The created app, or `null` when the answer lacks a field the instance needs. */
-  registeredApp(body: unknown): RegisteredApp | null;
-}
-
-/**
- * A platform app the company installs on its account (GitHub App). The host
- * redirects to the installation page and receives an installation id ; the
- * plugin mints short-lived tokens from the app's private key at call time.
- */
-export interface AppInstallCredentialSpec extends CredentialSpecCommon {
-  readonly kind: 'app-install';
-  /**
-   * Operator settings the host collects once (app id, private key, app slug…).
-   * With `userVerification`, must include `client_id` and a secret `client_secret`.
-   */
-  readonly appConfigFields: readonly CredentialField[];
-  /** Build the installation URL from the app configuration. */
-  installUrl(appConfig: ProviderAppConfig): string;
-  /** Name of the query parameter carrying the installation id on the callback. */
-  readonly installationIdParam: string;
-  /**
-   * How the host binds the installation to the identity of the human who
-   * performed it. Strongly recommended : without it the installation id of the
-   * callback is an unauthenticated claim.
-   */
-  readonly userVerification?: AppInstallUserVerification;
-  /**
-   * How the administrator creates the app from the interface, when the
-   * provider offers a manifest flow. Without it the app is entered by hand.
-   */
-  readonly manifestRegistration?: AppManifestRegistration;
-}
 
 /**
  * The instance generates a key pair ; the operator installs the public key
  * on the target host. The private key never leaves the instance.
  */
-export interface SshKeyCredentialSpec extends CredentialSpecCommon {
+export interface SshKeyCredentialSpec {
   readonly kind: 'ssh-key';
   readonly algorithm: 'ed25519';
   /** Non-secret connection parameters the user fills in (host, port, user). */
   readonly fields: readonly CredentialField[];
 }
 
-export type CredentialSpec =
-  ApiKeyCredentialSpec | OAuth2CredentialSpec | AppInstallCredentialSpec | SshKeyCredentialSpec;
-
-/** A way of connecting that goes through an app the company registers at the provider. */
-export type AppCredentialSpec = OAuth2CredentialSpec | AppInstallCredentialSpec;
-
-export function isAppCredentialSpec(spec: CredentialSpec): spec is AppCredentialSpec {
-  return spec.kind === 'oauth2' || spec.kind === 'app-install';
-}
-
-/**
- * Every way a plugin connects, its primary `credential` first, then its
- * `alternativeCredentials` in declared order. The one reading of the
- * declaration: the host never looks at the two members separately.
- */
-export function credentialSpecsOf(plugin: {
-  readonly credential: CredentialSpec;
-  readonly alternativeCredentials?: readonly CredentialSpec[];
-}): readonly CredentialSpec[] {
-  return [plugin.credential, ...(plugin.alternativeCredentials ?? [])];
-}
-
-/** The spec of one kind, or `null` when the plugin does not connect that way. */
-export function credentialSpecFor<K extends CredentialKind>(
-  plugin: Parameters<typeof credentialSpecsOf>[0],
-  kind: K,
-): Extract<CredentialSpec, { kind: K }> | null {
-  const found = credentialSpecsOf(plugin).find((spec) => spec.kind === kind);
-  return (found as Extract<CredentialSpec, { kind: K }> | undefined) ?? null;
-}
-
-/** The way of connecting through the company's app (at most one per plugin), or `null`. */
-export function appCredentialSpecOf(
-  plugin: Parameters<typeof credentialSpecsOf>[0],
-): AppCredentialSpec | null {
-  return credentialSpecsOf(plugin).find(isAppCredentialSpec) ?? null;
-}
-
-/**
- * Why a connection made with this kind cannot run this tool, or `null` when
- * it can. A kind the plugin does not declare runs nothing.
- */
-export function unavailableToolReason(
-  plugin: Parameters<typeof credentialSpecsOf>[0] & { readonly displayName: string },
-  kind: CredentialKind,
-  tool: string,
-): string | null {
-  const spec = credentialSpecFor(plugin, kind);
-  if (!spec) return `${plugin.displayName} cannot be connected with a '${kind}' credential.`;
-  return spec.unavailableTools?.[tool] ?? null;
-}
+export type CredentialSpec = ApiKeyCredentialSpec | OAuth2CredentialSpec | SshKeyCredentialSpec;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CredentialSecret — the decrypted material (memory only)
@@ -493,11 +228,6 @@ export interface OAuth2Secret extends SecretBase {
   readonly scopes: readonly string[];
 }
 
-export interface AppInstallSecret extends SecretBase {
-  readonly kind: 'app-install';
-  readonly installationId: string;
-}
-
 export interface SshKeySecret extends SecretBase {
   readonly kind: 'ssh-key';
   readonly privateKeyPem: string;
@@ -506,7 +236,7 @@ export interface SshKeySecret extends SecretBase {
   readonly fields: Readonly<Record<string, string>>;
 }
 
-export type CredentialSecret = ApiKeySecret | OAuth2Secret | AppInstallSecret | SshKeySecret;
+export type CredentialSecret = ApiKeySecret | OAuth2Secret | SshKeySecret;
 
 /** Thrown when a plugin is handed a secret of another kind than its spec declares. */
 export class CredentialKindMismatch extends Error {

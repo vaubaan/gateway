@@ -1,6 +1,7 @@
 /**
- * `POST /admin/provider-apps/<provider>` — saves (or clears) the company app
- * of one provider into `instance_config`, secrets sealed. Operator only,
+ * `POST /admin/provider-apps/<provider>` — saves (or clears) the OAuth client
+ * of one provider into `instance_config`, secrets sealed; the form is on the
+ * provider's connect page. Operator only,
  * origin-checked. One-line adapter over the host-agnostic handler; the
  * Administration layout guard does not cover route handlers, so the handler
  * authorizes by itself.

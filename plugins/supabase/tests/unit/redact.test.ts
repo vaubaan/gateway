@@ -8,7 +8,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { ExecuteContext, OAuth2Secret, Resource } from '@vaubaan/plugin-sdk';
+import type { CredentialSecret, ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -24,12 +24,9 @@ const REF = 'tlqgxnezmthbpzhdwxgi';
 const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
 
 const project: Resource = { provider: 'supabase', ref: REF, displayName: 'Acme / app' };
-const credential: OAuth2Secret = {
-  kind: 'oauth2',
-  accessToken: 'sbp_access',
-  refreshToken: 'sbp_refresh',
-  expiresAt: '2026-10-13T12:00:00.000Z',
-  scopes: ['all'],
+const credential: CredentialSecret = {
+  kind: 'api-key',
+  fields: { access_token: 'sbp_access' },
   metadata: {},
 };
 const execCtx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
