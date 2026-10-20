@@ -19,12 +19,12 @@
  *     `root.execution` (the door, the pipeline, `root.budget`), exactly as an
  *     agent's do;
  *   - Ada's connections seeded straight through the repositories, her GitHub
- *     one carrying an installation of the mocked GitHub;
+ *     one carrying a token of the mocked GitHub;
  *   - control endpoints under `/__e2e`, which exist only in this file and
  *     listen on a port of their own, the one after the app's (`controlPort`,
  *     `instance.ts`), since the app's port is the standalone server's: the
- *     consent screens the browser cannot reach (the simulated IdP's, the
- *     mocked GitHub's installation page), who signs in next, a token check
+ *     consent screens the browser cannot reach (the simulated IdP's), who
+ *     signs in next, a token check
  *     through `MissionService.verifyToken`, `small-mission` (a mission of Ada
  *     with a two-action quota and its token), `developer-mission` (a mission
  *     issued from the GitHub plugin's `developer` preset as shipped, for a
@@ -41,15 +41,12 @@
  * the test files out of it (`outputFileTracingExcludes`, `next.config.ts`).
  * Never part of the image.
  */
-import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { cpSync, existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { GITHUB_APP_PERMISSIONS, githubCredential } from '@vaubaan/plugin-github';
-import { defaultPermissionChoice, type AppManifestRegistration } from '@vaubaan/plugin-sdk';
 import { RAILWAY_GRAPHQL_URL } from '@vaubaan/plugin-railway';
 import { SUPABASE_API_BASE } from '@vaubaan/plugin-supabase';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
@@ -69,8 +66,6 @@ import {
   E2E_APPROVER_USER,
   E2E_AUDIT_USER,
   E2E_GIT,
-  E2E_GITHUB_ORG,
-  E2E_MANIFEST_CODE,
   E2E_OPERATOR,
   E2E_SHARE_OWNER,
   E2E_SHARE_TARGET,
@@ -119,72 +114,19 @@ async function readBody(req: IncomingMessage): Promise<string> {
 /* The mocked GitHub                                                         */
 /* ------------------------------------------------------------------------ */
 
-const random = (bytes = 24): string => randomBytes(bytes).toString('hex');
+const GITHUB_API = 'https://api.github.com';
 
-/**
- * The company's GitHub App, as the administrator entered it in Company apps
- * (stored, not mounted: the company-app spec removes it and creates one from
- * the manifest flow, then puts it back). The key pair and the secrets are
- * generated per run: no credential of this file exists anywhere else.
- */
-const GITHUB_APP = {
-  appId: '123',
-  slug: 'acme-gateway',
-  clientId: 'Iv1.e2e0000000000000',
-  clientSecret: random(),
-  privateKey: generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-  }).privateKey,
-};
-/** What GitHub hands the gateway; neither may ever reach a browser or an executor. */
-const INSTALLATION_TOKEN = `ghs_${random()}`;
-const USER_TOKEN = `ghu_${random()}`;
-
-const verification = githubCredential.userVerification;
-if (!verification) throw new Error('the github plugin no longer verifies installations');
-/** Every endpoint below is read off the plugin's own credential spec. */
-const GITHUB_API = new URL(verification.installationsUrl).origin;
-const GITHUB_INSTALL_PAGE = githubCredential.installUrl({ app_slug: GITHUB_APP.slug });
-
-/** The app-config fields of the company's App, as the form saves them. */
-function githubAppConfig(): Record<string, string> {
-  return {
-    app_id: GITHUB_APP.appId,
-    app_slug: GITHUB_APP.slug,
-    private_key: GITHUB_APP.privateKey,
-    client_id: GITHUB_APP.clientId,
-    client_secret: GITHUB_APP.clientSecret,
-  };
+/** The token of a GitHub request, whatever its scheme (`token`, `Bearer`, Basic `x-access-token`). */
+function githubTokenOf(authorization: string | null): string | null {
+  if (!authorization) return null;
+  const [scheme = '', value = ''] = authorization.split(' ');
+  if (/^basic$/i.test(scheme)) {
+    const decoded = Buffer.from(value, 'base64').toString('utf8');
+    return decoded.slice(decoded.indexOf(':') + 1) || null;
+  }
+  return value || null;
 }
 
-function requireManifestFlow(): AppManifestRegistration {
-  const flow = githubCredential.manifestRegistration;
-  if (!flow) throw new Error('the github plugin no longer offers the manifest flow');
-  return flow;
-}
-const manifestFlow = requireManifestFlow();
-
-/**
- * The App GitHub "creates" when the company-app spec confirms its manifest:
- * what `POST /app-manifests/{code}/conversions` answers. Its key is generated
- * per run too.
- */
-const CREATED_APP = {
-  id: 4_870_897,
-  slug: 'vaubaan-gateway-e2e-test',
-  owner: { login: E2E_GITHUB_ORG, type: 'Organization' },
-  html_url: 'https://github.com/apps/vaubaan-gateway-e2e-test',
-  client_id: 'Iv23liE2eCreated',
-  client_secret: random(),
-  webhook_secret: random(),
-  pem: generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-    privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-  }).privateKey,
-};
 /** The one project the mocked Supabase lists. */
 const MOCK_SUPABASE_PROJECT = 'abcdefghijklmnopqrst';
 
@@ -235,65 +177,34 @@ function railwayAnswerFor(query: string): unknown {
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * GitHub's side of the connect flow and of the calls: the token endpoint of
- * the user authorization, the installations that user can reach, the
- * installation token, the repositories of the installation, two read
- * endpoints and the file write. Any other request rejects (`mockFetch`):
+ * GitHub's side of the connect flow and of the calls: the check of a pasted
+ * token (`GET /user`), the repositories it reaches (`GET /user/repos`), two
+ * read endpoints and the file write. Any other request rejects (`mockFetch`):
  * nothing reaches a network.
  */
 function mockedGithub(): MockFetch {
   const api = escapeRegExp(GITHUB_API);
   return mockFetch([
     {
-      // The code exchange of the manifest flow: GitHub hands over the App it
-      // created, with the name and permissions of the manifest it was sent.
-      method: 'POST',
-      url: (url) => manifestFlow.conversionUrl(E2E_MANIFEST_CODE) === url,
-      status: 201,
-      respond: () => ({
-        ...CREATED_APP,
-        name: lastManifest.name,
-        permissions: lastManifest.permissions,
-      }),
-    },
-    {
-      method: 'POST',
-      url: verification!.tokenUrl,
-      body: { access_token: USER_TOKEN, token_type: 'bearer' },
-    },
-    {
       method: 'GET',
-      url: (url) => url.startsWith(`${verification!.installationsUrl}?`),
+      url: `${GITHUB_API}/user`,
+      // A token the mock does not know names nobody: the plugin's check refuses it.
       respond: (call) => ({
-        installations:
-          new URL(call.url).searchParams.get('page') === '1'
-            ? [{ id: Number(MOCK_GITHUB.installationId) }]
-            : [],
-      }),
-    },
-    {
-      method: 'POST',
-      url: `${GITHUB_API}/app/installations/${MOCK_GITHUB.installationId}/access_tokens`,
-      status: 201,
-      respond: () => ({
-        token: INSTALLATION_TOKEN,
-        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-        // The company's App holds what the tools need (its default permissions).
-        permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
+        login:
+          githubTokenOf(call.headers.authorization ?? null) === MOCK_GITHUB.token
+            ? MOCK_GITHUB.account
+            : null,
       }),
     },
     {
       method: 'GET',
-      url: (url) => url.startsWith(`${GITHUB_API}/installation/repositories?`),
-      body: {
-        total_count: MOCK_GITHUB.repositories.length,
-        repositories: MOCK_GITHUB.repositories.map((fullName) => ({
-          full_name: fullName,
-          default_branch: 'main',
-          private: true,
-          archived: false,
-        })),
-      },
+      url: (url) => url.startsWith(`${GITHUB_API}/user/repos?`),
+      body: MOCK_GITHUB.repositories.map((fullName) => ({
+        full_name: fullName,
+        default_branch: 'main',
+        private: true,
+        archived: false,
+      })),
     },
     {
       method: 'GET',
@@ -357,31 +268,9 @@ function mockedGithub(): MockFetch {
   ]);
 }
 
-/**
- * The installation page of the mocked GitHub: the user "installs the App and
- * authorizes", and GitHub sends the browser back with the installation id, a
- * single-use code and the `state` the gateway gave.
- */
-function githubInstallCallback(pageUrl: URL): string | null {
-  if (`${pageUrl.origin}${pageUrl.pathname}` !== GITHUB_INSTALL_PAGE) return null;
-  const callback = new URL(`${PUBLIC_URL}/connections/callback/github`);
-  callback.searchParams.set(githubCredential.installationIdParam, MOCK_GITHUB.installationId);
-  callback.searchParams.set('setup_action', 'install');
-  callback.searchParams.set(verification!.codeParam, random(10));
-  const state = pageUrl.searchParams.get('state');
-  if (state) callback.searchParams.set('state', state);
-  return callback.href;
-}
-
 /* ------------------------------------------------------------------------ */
 /* Fixtures                                                                  */
 /* ------------------------------------------------------------------------ */
-
-/** What the last manifest the mocked GitHub received asked for. */
-let lastManifest: { name: string; permissions: Record<string, string> } = {
-  name: 'unset',
-  permissions: {},
-};
 
 /** The risk the executor of "exhaust and claim" spends, and its quota. */
 const SMALL_RISK = 'github.read-code';
@@ -425,7 +314,7 @@ async function issueSmallMission(
 /**
  * A mission of the approver on a GitHub connection of their own, issued from the
  * plugin's `developer` preset exactly as shipped: its gated entries are what the
- * "approve an action" scenario is about. The connection is an installation of the
+ * "approve an action" scenario is about. The connection holds a token of the
  * mocked GitHub, so an approved call goes all the way to the provider.
  */
 async function issueDeveloperMission(
@@ -447,11 +336,7 @@ async function issueDeveloperMission(
   });
   await root.store.connections.reconnect(
     seeded.connection.id,
-    serializeSecret({
-      kind: 'app-install',
-      installationId: MOCK_GITHUB.installationId,
-      metadata: {},
-    }),
+    serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
   );
   const issued = await root.missions.service.issue(user, {
     name,
@@ -464,8 +349,8 @@ async function issueDeveloperMission(
 }
 
 /**
- * A mission of the approver from the `developer` preset as shipped, on an
- * installation whose repository is real git (`E2E_GIT`), and its token.
+ * A mission of the approver from the `developer` preset as shipped, on a
+ * token whose repository is real git (`E2E_GIT`), and its token.
  */
 async function issueGitMission(
   root: GatewayRoot,
@@ -485,7 +370,7 @@ async function issueGitMission(
   });
   await root.store.connections.reconnect(
     seeded.connection.id,
-    serializeSecret({ kind: 'app-install', installationId: E2E_GIT.installationId, metadata: {} }),
+    serializeSecret({ kind: 'api-key', fields: { token: E2E_GIT.token }, metadata: {} }),
   );
   const issued = await root.missions.service.issue(user, {
     name,
@@ -515,16 +400,15 @@ async function main(): Promise<void> {
   // signs in (`idp/next-user`), so a spec that forgets to fails at its sign-in.
   const mocked = mockedGithub();
   // The git remote spec's repository: real git behind a GitHub stand-in, reached
-  // by its own installation; every other provider request goes to the mock.
+  // with its own token; every other provider request goes to the mock.
   const gitHost = await FakeGithubHost.start();
   await gitHost.createRepository(E2E_GIT.repository);
+  gitHost.acceptToken(E2E_GIT.token, { contents: 'write', workflows: 'write', metadata: 'read' });
   const gitOwner = `/${E2E_GIT.repository.split('/')[0]}/`;
   const github: typeof fetch = (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const toGitHost =
-      url.pathname.startsWith(gitOwner) ||
-      url.pathname.startsWith(`/repos${gitOwner}`) ||
-      url.pathname === `/app/installations/${E2E_GIT.installationId}/access_tokens`;
+      url.pathname.startsWith(gitOwner) || url.pathname.startsWith(`/repos${gitOwner}`);
     return toGitHost ? gitHost.fetch(input, init) : mocked(input, init);
   };
 
@@ -553,18 +437,13 @@ async function main(): Promise<void> {
     claims: { sub: 'sub', email: 'email', groups: 'groups' },
     allowedEmailDomains: [],
   });
-  await root.providerApps.save('github', githubAppConfig());
   // Seeded under the issuer their ID tokens will carry: the same people sign in below.
   const seeded = await seedInstance(root, idp.iss);
-  // Ada's GitHub connection is an installation of the mocked GitHub, so her
+  // Ada's GitHub connection holds a token of the mocked GitHub, so her
   // missions' calls go all the way through the door to the mocked provider.
   await root.store.connections.reconnect(
     seeded.github.connection.id,
-    serializeSecret({
-      kind: 'app-install',
-      installationId: MOCK_GITHUB.installationId,
-      metadata: {},
-    }),
+    serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
   );
 
   // The control endpoints: the launcher's own listener, beside the app's port.
@@ -655,67 +534,27 @@ async function main(): Promise<void> {
         sendJson(res, 200, { ok: true });
         return;
       }
-      if (url.pathname === `${CONTROL_PREFIX}/github-app/clear` && req.method === 'POST') {
-        // The company-app spec starts from an instance without a GitHub App.
-        await root.providerApps.clear('github');
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-      if (url.pathname === `${CONTROL_PREFIX}/github-app/restore` && req.method === 'POST') {
-        // ...and puts the company's App back, whatever it left behind.
-        await root.providerApps.clear('github');
-        await root.providerApps.save('github', githubAppConfig());
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-      if (url.pathname === `${CONTROL_PREFIX}/github-app/manifest` && req.method === 'POST') {
-        // GitHub's side of the confirmation: it reads the manifest the browser
-        // posted and sends the browser back with a code and the state.
-        const posted = JSON.parse(await readBody(req)) as {
-          manifest: {
-            name: string;
-            redirect_url: string;
-            default_permissions: Record<string, string>;
-          };
-          state: string;
-        };
-        lastManifest = {
-          name: posted.manifest.name,
-          permissions: posted.manifest.default_permissions,
-        };
-        const back = new URL(posted.manifest.redirect_url);
-        back.searchParams.set(manifestFlow.codeParam, E2E_MANIFEST_CODE);
-        back.searchParams.set(manifestFlow.stateParam, posted.state);
-        sendJson(res, 200, {
-          redirect: back.href,
-          conversion: manifestFlow.conversionUrl(E2E_MANIFEST_CODE),
-        });
-        return;
-      }
       if (url.pathname === `${CONTROL_PREFIX}/provider-pages`) {
-        // The provider pages a browser is sent to during a connect flow.
-        sendJson(res, 200, { pages: [GITHUB_INSTALL_PAGE] });
+        // The provider pages a browser is sent to during a connect flow: none
+        // today, every shipped service of these specs connects with a pasted token.
+        sendJson(res, 200, { pages: [] });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/provider-page`) {
-        // The user's step on such a page: where the provider sends them back.
-        const callback = githubInstallCallback(new URL(url.searchParams.get('url') ?? ''));
-        if (callback) sendJson(res, 200, { callback });
-        else sendJson(res, 404, { error: 'not a page of a mocked provider' });
+        sendJson(res, 404, { error: 'not a page of a mocked provider' });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/upstream`) {
         // What the mocked provider received, and whether each request carried
-        // the installation token the gateway minted. The token itself is
-        // handed over so a spec can check it never reached the executor.
+        // the token of Ada's connection. The token itself is handed over so a
+        // spec can check it never reached the executor.
         sendJson(res, 200, {
-          installation_token: INSTALLATION_TOKEN,
+          connection_token: MOCK_GITHUB.token,
           calls: mocked.calls.map((call) => ({
             method: call.method,
             url: call.url,
-            with_installation_token: (call.headers.authorization ?? '').endsWith(
-              INSTALLATION_TOKEN,
-            ),
+            with_connection_token:
+              githubTokenOf(call.headers.authorization ?? null) === MOCK_GITHUB.token,
           })),
         });
         return;
@@ -767,11 +606,7 @@ async function main(): Promise<void> {
         });
         await root.store.connections.reconnect(
           connection.id,
-          serializeSecret({
-            kind: 'app-install',
-            installationId: MOCK_GITHUB.installationId,
-            metadata: {},
-          }),
+          serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
         );
         sendJson(res, 200, { connection_id: connection.id });
         return;

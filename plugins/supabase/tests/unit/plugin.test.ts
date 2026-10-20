@@ -6,10 +6,9 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  CredentialKindMismatch,
   type ConnectionContext,
   type ExecuteContext,
-  type OAuth2Secret,
+  type ApiKeySecret,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 import {
@@ -26,7 +25,6 @@ import {
   MAX_DISCOVERED_PROJECTS,
   SUPABASE_API_BASE,
   SUPABASE_CLASSIFIED_TOOLS,
-  SUPABASE_OAUTH_TOKEN_URL,
   supabasePlugin,
 } from '../../src/index.ts';
 
@@ -46,12 +44,9 @@ const prod: Resource = {
   displayName: 'Acme / app',
 };
 
-const oauthSecret = (overrides: Partial<OAuth2Secret> = {}): OAuth2Secret => ({
-  kind: 'oauth2',
-  accessToken: 'sbp_access',
-  refreshToken: 'sbp_refresh',
-  expiresAt: '2026-10-13T12:00:00.000Z',
-  scopes: ['all'],
+const tokenSecret = (overrides: Partial<ApiKeySecret> = {}): ApiKeySecret => ({
+  kind: 'api-key',
+  fields: { access_token: 'sbp_access' },
   metadata: { account: 'acme' },
   ...overrides,
 });
@@ -60,7 +55,7 @@ const connCtx = (
   fetch: typeof globalThis.fetch,
   overrides: Partial<ConnectionContext> = {},
 ): ConnectionContext => ({
-  credential: oauthSecret(),
+  credential: tokenSecret(),
   appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   ...overrides,
@@ -330,39 +325,14 @@ describe('supabase presets', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('supabase credential', () => {
-  test('oauth2 against the Management API, PKCE, Basic client auth, refreshable', () => {
+  test('a personal access token of the Management API, the one way of connecting', () => {
     const c = supabasePlugin.credential;
-    expect(c.kind).toBe('oauth2');
-    if (c.kind !== 'oauth2') return;
-    expect(c.authorizationUrl).toBe('https://api.supabase.com/v1/oauth/authorize');
-    expect(c.tokenUrl).toBe(SUPABASE_OAUTH_TOKEN_URL);
-    expect(c.scopes).toEqual(['all']);
-    expect(c.pkce).toBe(true);
-    expect(c.clientAuthMethod).toBe('client_secret_basic');
-    expect(c.refreshable).toBe(true);
-    // Supabase's refresh is the standard refresh_token grant : no plugin
-    // override, the host performs it from the spec.
+    expect(c.kind).toBe('api-key');
+    if (c.kind !== 'api-key') return;
+    expect(c.fields.map((f) => f.name)).toEqual(['access_token']);
+    expect(c.createUrl).toBe('https://supabase.com/dashboard/account/tokens');
+    expect(c.guide?.permissions.length).toBeGreaterThan(0);
     expect('refresh' in supabasePlugin).toBe(false);
-  });
-
-  test('a credential of another kind is refused before any call', async () => {
-    const never = mockFetch([]);
-    const ctx = execCtx(never);
-    const wrong = {
-      ...ctx,
-      // api-key is the pasted personal access token, a declared way; an SSH key is not.
-      credential: {
-        kind: 'ssh-key' as const,
-        privateKeyPem: 'k',
-        publicKey: 'p',
-        fields: {},
-        metadata: {},
-      },
-    };
-    await expect(
-      supabasePlugin.execute(wrong, 'supabase__get_project', { project_ref: STAGING_REF }),
-    ).rejects.toBeInstanceOf(CredentialKindMismatch);
-    expect(never.calls).toHaveLength(0);
   });
 });
 

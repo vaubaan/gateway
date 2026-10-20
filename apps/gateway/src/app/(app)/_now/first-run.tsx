@@ -21,16 +21,8 @@ import {
   StepMark,
 } from '@/components/ui';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';
-import {
-  ACTIONS,
-  count,
-  FIRST_RUN,
-  OPTIONAL_APP_WORDS,
-  PAGES,
-  ROUTES,
-  SECTIONS,
-  TERMS,
-} from '@/lib/vocabulary';
+import { ACTIONS, count, FIRST_RUN, PAGES, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
+import { connectPagePath } from '@/server/connections';
 import type { NowView, SetupView } from '@/server/now';
 
 import styles from './now.module.css';
@@ -82,26 +74,22 @@ function Setup({ setup, primary }: { setup: SetupView; primary: boolean }) {
               partial={`${apps.registered.length}/${apps.registered.length + apps.missing.length}`}
             />
           }
-          title={SECTIONS.companyApps}
-          description={`${
+          title={SECTIONS.oauthClients}
+          description={
             apps.missing.length === 0
-              ? 'Every service that signs people in through an app of your company has one.'
-              : `Register your company’s app for ${listed(apps.missing)} so that people can connect those accounts by signing in. Services that take a key need nothing.`
-          }${
-            apps.optional.length > 0
-              ? ` ${OPTIONAL_APP_WORDS.hint(listed(apps.optional), apps.optional.length > 1)}`
-              : ''
-          }`}
+              ? 'Every service that signs people in through an OAuth client of your company has one.'
+              : `Declare your company’s OAuth client for ${listed(apps.missing.map((app) => app.name))} on its connect page, so that people can connect those accounts by signing in. Services that take a key need nothing.`
+          }
           end={
             firstMissing === undefined ? (
               FIRST_RUN.done
             ) : (
               <ButtonLink
-                href={ADMIN_PAGES.companyApps}
+                href={connectPagePath(firstMissing.id)}
                 size="sm"
                 variant={primary && setup.sign_in ? 'primary' : 'secondary'}
               >
-                Register {firstMissing}
+                Declare {firstMissing.name}
               </ButtonLink>
             )
           }

@@ -6,10 +6,11 @@
  * account is reported as "to connect by hand".
  *
  * Kept out on purpose, whatever the bundle holds: the GitHub App
- * installation (the instance registers its own App), the Railway and
- * Supabase OAuth grants (a refresh token rotated by one side breaks the
- * other). The exporter does not decrypt them and the bundle schema refuses
- * a secret for them.
+ * installation, the Railway and Supabase OAuth grants — none of them is a
+ * way a v5 plugin connects any more (ADR
+ * one-place-to-authorize-services-token-first): those accounts are connected
+ * by hand with a token. The exporter does not decrypt them and the bundle
+ * schema refuses a secret for them.
  */
 import type { V4Account, V4SshHost, V4StripeAccount } from './bundle';
 

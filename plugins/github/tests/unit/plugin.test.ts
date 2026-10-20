@@ -7,7 +7,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { pluginIssues, writeHandoutRiskIds, type Resource } from '@vaubaan/plugin-sdk';
+import { type Resource } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertIdentifiersRefused,
@@ -17,7 +17,7 @@ import {
 } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyGithub, githubCatalog, githubCredential, githubPlugin } from '../../src/index.ts';
-import { appRepo, executeCtx, libRepo, mintRoute } from './fixtures.ts';
+import { appRepo, executeCtx, libRepo } from './fixtures.ts';
 
 const repo = { owner: 'acme', repo: 'app' };
 const feature = 'feature/test';
@@ -72,11 +72,6 @@ const samples = {
   ],
   github__create_pull_request: [{ args: { ...repo, title: 't', head: feature, base: 'main' } }],
   github__add_issue_comment: [{ args: { ...repo, issue_number: 1, body: 'b' } }],
-  github__mint_install_token: [
-    { args: { purpose: 'clone', repoFullName: 'acme/app' } },
-    { args: { purpose: 'push' } },
-    { args: { purpose: 'merge' }, expectDenied: true },
-  ],
   github__list_workflows: [{ args: { ...repo } }],
   github__list_workflow_runs: [{ args: { ...repo } }, { args: { ...repo, workflow_id: 'ci.yml' } }],
   github__list_workflow_jobs: [
@@ -146,16 +141,16 @@ describe('github plugin — structural kit', () => {
     assertNoWildcard(githubPlugin);
   });
 
-  test('28 tools declared, all prefixed', () => {
-    expect(githubPlugin.tools).toHaveLength(28);
+  test('27 tools declared, all prefixed', () => {
+    expect(githubPlugin.tools).toHaveLength(27);
     for (const t of githubPlugin.tools) expect(t.name.startsWith('github__')).toBe(true);
   });
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin, samples, { resources });
-    // The 26 MCP tools and the git remote's two.
-    expect(report.toolsChecked).toBe(30);
-    // The 18 named risks, in catalog order ; the fallback is not among them.
+    // The 25 MCP tools and the git remote's two.
+    expect(report.toolsChecked).toBe(29);
+    // The 16 named risks, in catalog order ; the fallback is not among them.
     expect(report.risksTouched).toEqual([
       'github.read-code',
       'github.read-meta',
@@ -173,10 +168,12 @@ describe('github plugin — structural kit', () => {
       'github.force-push',
       'github.branch-delete',
       'github.tag-write',
+    ]);
+    // The two mint risks of the App are deprecated : no call touches them (catalog v9).
+    expect(report.risksUntouched).toEqual([
       'github.mint-install-token-clone',
       'github.mint-install-token-push',
     ]);
-    expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
   });
 
@@ -187,10 +184,8 @@ describe('github plugin — structural kit', () => {
     const report = await assertIdentifiersRefused(githubPlugin, samples, {
       resources,
       context: (fetch, missionResources) => executeCtx(fetch, missionResources),
-      // The installation token is minted before the call that carries the identifiers.
-      routes: [mintRoute()],
     });
-    expect(report.toolsChecked).toBe(28);
+    expect(report.toolsChecked).toBe(27);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'branch',
@@ -242,7 +237,7 @@ describe('github catalog — presets', () => {
 
   test('ships read-only, developer and release-manager', () => {
     expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'release-manager']);
-    expect(githubCatalog.catalog.catalog_version).toBe(8);
+    expect(githubCatalog.catalog.catalog_version).toBe(9);
   });
 
   test('read-only grants reads only, no search, gate auto', () => {
@@ -272,16 +267,10 @@ describe('github catalog — presets', () => {
       expect(dev).not.toContain(id);
     }
     expect(entry('developer', 'github.workflow-write-via-file')?.gate).toBe('approval');
-    // Catalog v6 : git goes through the gateway's remote ; a force-push asks first,
-    // and no preset hands a token that leaves (the mint risks are added by hand).
+    // Catalog v6 : git goes through the gateway's remote ; a force-push asks first.
     expect(entry('developer', 'github.git-push')?.gate).toBe('auto');
     expect(entry('developer', 'github.force-push')?.gate).toBe('approval');
-    for (const id of [
-      'github.mint-install-token-clone',
-      'github.mint-install-token-push',
-      'github.branch-delete',
-      'github.tag-write',
-    ]) {
+    for (const id of ['github.branch-delete', 'github.tag-write']) {
       expect(dev).not.toContain(id);
     }
   });
@@ -289,62 +278,6 @@ describe('github catalog — presets', () => {
   test('release-manager pushes tags with git, each asking first', () => {
     expect(entry('release-manager', 'github.git-push')?.gate).toBe('auto');
     expect(entry('release-manager', 'github.tag-write')?.gate).toBe('approval');
-  });
-
-  // Spec §2.4: a token that can write is handed after approval; the clone token is
-  // read-only (`contents:read`) and is the only one a preset may leave on auto.
-  test('the push token is gated in every preset that carries it; only the clone token is declared read-only', () => {
-    expect(githubPlugin.tokenHandouts).toEqual([
-      {
-        tool: 'github__mint_install_token',
-        riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
-        readOnlyRiskIds: ['github.mint-install-token-clone'],
-      },
-    ]);
-    for (const preset of presets) {
-      const push = preset.entries.find((e) => e.risk_id === 'github.mint-install-token-push');
-      if (push) expect(push.gate, preset.id).toBe('approval');
-    }
-    expect([...writeHandoutRiskIds(githubPlugin)]).toEqual(['github.mint-install-token-push']);
-    expect(pluginIssues(githubPlugin)).toEqual([]);
-    // No shipped preset carries a mint risk since catalog v6 ; a preset that put the
-    // clone token on auto is still checked against the declaration.
-    const withClone = {
-      ...githubPlugin,
-      catalog: {
-        ...githubPlugin.catalog,
-        presets: githubPlugin.catalog.presets.map((p) =>
-          p.id !== 'developer'
-            ? p
-            : {
-                ...p,
-                entries: [
-                  ...p.entries,
-                  {
-                    risk_id: 'github.mint-install-token-clone',
-                    quota: 50,
-                    rate_limit: { max: 5, window_seconds: 60 },
-                    gate: 'auto' as const,
-                  },
-                ],
-              },
-        ),
-      },
-    };
-    expect(pluginIssues(withClone)).toEqual([]);
-    // Without the declaration the clone token is taken as write, and the preset is refused.
-    const undeclared = {
-      ...withClone,
-      tokenHandouts: (githubPlugin.tokenHandouts ?? []).map(({ tool, riskIds }) => ({
-        tool,
-        riskIds,
-      })),
-    };
-    expect(pluginIssues(undeclared)).toEqual([
-      expect.stringContaining(
-        "preset 'developer': 'github.mint-install-token-clone' hands the agent a token that can write",
-      ),
-    ]);
   });
 
   test('release-manager gates merge-protected, create-release and delete-release on approval', () => {
@@ -361,47 +294,29 @@ describe('github catalog — presets', () => {
   });
 });
 
-describe('github credential spec — app-install', () => {
-  test('declares the company app settings and the installation callback parameter', () => {
-    expect(githubCredential.kind).toBe('app-install');
-    expect(githubCredential.installationIdParam).toBe('installation_id');
-    expect(githubCredential.appConfigFields.map((f) => [f.name, f.secret])).toEqual([
-      ['app_id', false],
-      ['private_key', true],
-      ['app_slug', false],
-      ['client_id', false],
-      ['client_secret', true],
+describe('github credential spec — a fine-grained token', () => {
+  test('the one way of connecting is a pasted fine-grained token, with its guide', () => {
+    expect(githubCredential.kind).toBe('api-key');
+    expect(githubCredential.fields.map((f) => [f.name, f.secret])).toEqual([['token', true]]);
+    expect(githubCredential.createUrl).toBe('https://github.com/settings/personal-access-tokens');
+    expect(githubCredential.guide?.permissions.map((p) => p.name)).toEqual([
+      'Metadata',
+      'Contents',
+      'Pull requests',
+      'Issues',
+      'Actions',
+      'Administration',
+      'Workflows',
     ]);
   });
 
-  test('declares how the host binds an installation to the installing GitHub user', () => {
-    // "Request user authorization (OAuth) during installation" : the callback carries
-    // `code` ; the host exchanges it and reads GET /user/installations (100 per page).
-    expect(githubCredential.userVerification).toEqual({
-      codeParam: 'code',
-      tokenUrl: 'https://github.com/login/oauth/access_token',
-      clientAuthMethod: 'client_secret_post',
-      installationsUrl: 'https://api.github.com/user/installations',
-      installationsHeaders: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'vaubaan-gateway',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      installationsListField: 'installations',
-      installationIdField: 'id',
-      pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: 100 },
-    });
-    // Declarative only : the plugin exposes no code path that takes the client secret.
-    expect(Object.values(githubCredential.userVerification ?? {})).not.toContainEqual(
-      expect.any(Function),
-    );
-  });
-
-  test('builds the installation URL from the app slug, or fails naming the key', () => {
-    expect(githubCredential.installUrl({ app_slug: 'vaubaan-gateway' })).toBe(
-      'https://github.com/apps/vaubaan-gateway/installations/new',
-    );
-    expect(() => githubCredential.installUrl({})).toThrow(/app_slug/);
+  test('the two mint risks of the App are deprecated, never removed', () => {
+    const deprecated = githubCatalog.catalog.risks.filter((r) => r.deprecated).map((r) => r.id);
+    expect(deprecated).toEqual([
+      'github.mint-install-token-clone',
+      'github.mint-install-token-push',
+    ]);
+    expect(githubPlugin.tools.map((t) => t.name)).not.toContain('github__mint_install_token');
   });
 
   test('classifier refuses a repository outside the mission even when another is in', () => {

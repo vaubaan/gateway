@@ -93,9 +93,9 @@ first version:
   token.
 - **Configuration** — every key of the instance configuration (gateway spec
   §4.3) with its default, sign-in providers (OpenID Connect, GitHub), the
-  admin rule, provider apps.
+  admin rule, the OAuth client of a provider that connects that way.
 - **Connect a provider** — one page per plugin, generated in part from the
-  plugin (§2.3) and completed by hand (registering the company's app).
+  plugin (§2.3) and completed by hand (making the key at the service).
 - **Missions and agents** — create a mission, give its key to an agent,
   configure MCP clients (Claude Code, Cursor, others), the management door,
   the git remote.

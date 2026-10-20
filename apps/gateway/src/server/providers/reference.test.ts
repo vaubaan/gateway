@@ -248,32 +248,25 @@ describe('the reference of the shipped plugins', () => {
     expect(tool?.description).not.toBe('');
   });
 
-  it('marks the tools and risks that hand a provider token to the agent, from the plugin declaration', () => {
-    const github = referenceOf('github');
-    const mint = github.tools.find((t) => t.name === 'github__mint_install_token');
-    expect(mint).toMatchObject({
-      hands_token: true,
-      declared_risks: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
-    });
-    const handed = github.risk_groups
-      .flatMap((group) => group.entries)
-      .filter((entry) => entry.hands_token)
-      .map((entry) => entry.base_id);
-    expect(handed).toEqual(['github.mint-install-token-clone', 'github.mint-install-token-push']);
-    // What the token can do, as the plugin declares it: a preset gates the write one.
-    const access = Object.fromEntries(
-      github.risk_groups
+  it('marks no tool and no risk as handing a provider token: no shipped plugin declares one', () => {
+    // The GitHub App's install-token mint is gone (ADR one-place-to-authorize-services-token-first):
+    // its two risks stay in the catalog, deprecated, with no tool declared for them.
+    for (const reference of references) {
+      expect(
+        reference.tools.some((t) => t.hands_token),
+        reference.id,
+      ).toBe(false);
+      expect(
+        reference.tools.filter((t) => t.declared_risks !== null),
+        reference.id,
+      ).toEqual([]);
+      const handed = reference.risk_groups
         .flatMap((group) => group.entries)
-        .map((entry) => [entry.base_id, entry.token_access]),
-    );
-    expect(access['github.mint-install-token-clone']).toBe('read-only');
-    expect(access['github.mint-install-token-push']).toBe('write');
-    expect(access['github.read-code']).toBeNull();
-    // No other tool states its risks: they depend on the arguments.
-    expect(github.tools.filter((t) => t.declared_risks !== null)).toHaveLength(1);
-    for (const reference of references.filter((r) => r.id !== 'github')) {
-      expect(reference.tools.some((t) => t.hands_token)).toBe(false);
+        .filter((entry) => entry.hands_token);
+      expect(handed, reference.id).toEqual([]);
     }
+    const github = referenceOf('github');
+    expect(github.tools.find((t) => t.name === 'github__mint_install_token')).toBeUndefined();
   });
 
   it('says, on a card, the planes of the model and the environments of the catalog', () => {
@@ -296,9 +289,9 @@ describe('the reference of the shipped plugins', () => {
       github.presets.map((preset) => preset.id),
     );
     expect(byId.get('github.uncategorized-write')?.presets).toEqual([]);
-    // Catalog v6: no preset hands a token that leaves; the risk is added by hand.
+    // The deprecated mint risk of the App: no preset, no tool.
     expect(byId.get('github.mint-install-token-push')).toMatchObject({
-      declared_tools: ['github__mint_install_token'],
+      declared_tools: [],
       presets: [],
     });
     expect(byId.get('github.force-push')?.presets.map((p) => p.id)).toEqual(['developer']);

@@ -291,21 +291,17 @@ describe('loadInstanceConfig — provider apps', () => {
   it('parses VAUBAAN_PROVIDER_<ID>_<FIELD>, including hyphenated ids and _FILE secrets', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({
-        VAUBAAN_PROVIDER_GITHUB_APP_ID: '12345',
-        VAUBAAN_PROVIDER_GITHUB_APP_SLUG: 'acme-gateway',
-        VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY_FILE: '/run/secrets/gh.pem',
+        VAUBAAN_PROVIDER_GMAIL_CLIENT_ID: '12345.apps.googleusercontent.com',
+        VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET_FILE: '/run/secrets/gmail',
         VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_ID: 'cf-id',
         VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET: 'cf-secret',
       }),
-      readFile: fakeFiles({
-        '/run/secrets/gh.pem': '-----BEGIN KEY-----\nabc\n-----END KEY-----\n',
-      }),
+      readFile: fakeFiles({ '/run/secrets/gmail': 'GOCSPX-abc\n' }),
     });
-    expect([...config.providers.keys()].sort()).toEqual(['cloudflare-dns', 'github']);
-    expect(config.providers.get('github')).toEqual({
-      appId: '12345',
-      appSlug: 'acme-gateway',
-      privateKey: '-----BEGIN KEY-----\nabc\n-----END KEY-----',
+    expect([...config.providers.keys()].sort()).toEqual(['cloudflare-dns', 'gmail']);
+    expect(config.providers.get('gmail')).toEqual({
+      clientId: '12345.apps.googleusercontent.com',
+      clientSecret: 'GOCSPX-abc',
     });
     expect(config.providers.get('cloudflare-dns')).toEqual({
       clientId: 'cf-id',
@@ -460,7 +456,7 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
         VAUBAAN_IDP_ISSUER: 'https://idp.example.com',
         VAUBAAN_IDP_CLIENT_ID: 'gw',
         VAUBAAN_IDP_CLIENT_SECRET: 'idp-s3cret',
-        VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: 'pem-body',
+        VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET: 'gmail-s3cret',
         VAUBAAN_PROVIDER_VERCEL_CLIENT_SECRET: 'vercel-s3cret',
         VAUBAAN_PROVIDER_VERCEL_CLIENT_ID: 'public-id',
       }),
@@ -472,7 +468,7 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
         oldKey,
         TEST_BOOTSTRAP_TOKEN,
         'idp-s3cret',
-        'pem-body',
+        'gmail-s3cret',
         'vercel-s3cret',
       ]),
     );
@@ -520,9 +516,9 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
 
 describe('provider environment names', () => {
   it('splits VAUBAAN_PROVIDER_<ID>_<FIELD> with hyphenated ids and the longest field', () => {
-    expect(parseProviderEnvName('VAUBAAN_PROVIDER_GITHUB_APP_ID')).toEqual({
-      providerId: 'github',
-      field: 'app_id',
+    expect(parseProviderEnvName('VAUBAAN_PROVIDER_GMAIL_CLIENT_ID')).toEqual({
+      providerId: 'gmail',
+      field: 'client_id',
     });
     expect(parseProviderEnvName('VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET')).toEqual({
       providerId: 'cloudflare-dns',
@@ -530,7 +526,7 @@ describe('provider environment names', () => {
     });
     expect(parseProviderEnvName('VAUBAAN_PROVIDER_CLIENT_ID')).toBeNull();
     expect(parseProviderEnvName('VAUBAAN_PROVIDER_GITHUB_TOKEN')).toBeNull();
-    expect(parseProviderEnvName('OTHER_GITHUB_APP_ID')).toBeNull();
+    expect(parseProviderEnvName('OTHER_GMAIL_CLIENT_ID')).toBeNull();
   });
 });
 

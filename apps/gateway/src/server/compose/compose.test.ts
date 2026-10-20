@@ -83,7 +83,7 @@ describe('buildRoot', () => {
       loadConfig: () =>
         loadInstanceConfig({
           env: validEnv({
-            VAUBAAN_PROVIDER_GITHUB_APP_ID: '1',
+            VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: '1',
             VAUBAAN_PROVIDER_NOPE_CLIENT_ID: 'x',
           }),
         }),

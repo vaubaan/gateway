@@ -146,7 +146,6 @@ flowchart TB
   repo --> branch-protection
   repo --> collaborator
   repo --> secret
-  repo --> install-token
   repo --> repo-settings
 ```
 

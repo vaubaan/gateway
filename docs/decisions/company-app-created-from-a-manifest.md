@@ -1,6 +1,7 @@
 ---
 title: The company's app created from the interface through the provider's manifest flow; every instance registers its own; the app's permissions declared once by the plugin
-status: accepted
+status: superseded
+superseded-by: one-place-to-authorize-services-token-first
 date: 2026-10-14
 extends:
   - plugin-contract-and-credential-spec

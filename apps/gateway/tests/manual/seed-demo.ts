@@ -8,8 +8,8 @@
  *
  *   - a user, as the IdP would announce them;
  *   - a GitHub connection owned by that user, with two repositories. Its
- *     credential is a placeholder installation id: enough to issue a mission
- *     and list tools, not to call GitHub;
+ *     credential is a placeholder token: enough to issue a mission and list
+ *     tools, not to call GitHub;
  *   - a mission on one repository with the plugin's `read-only` preset, issued
  *     through `MissionService.issue` like the Missions page does.
  *
@@ -35,7 +35,11 @@ async function main(): Promise<void> {
       provider: 'github',
       owner: { kind: 'user', id: user.id },
       displayName: 'acme-org',
-      credential: serializeSecret({ kind: 'app-install', installationId: '1', metadata: {} }),
+      credential: serializeSecret({
+        kind: 'api-key',
+        fields: { token: `github_pat_11DEMO0000000000000_${'0'.repeat(40)}` },
+        metadata: {},
+      }),
     });
     await store.connections.syncDiscoveredResources(connection.id, [
       { ref: 'acme/app', displayName: 'acme/app', env: null },

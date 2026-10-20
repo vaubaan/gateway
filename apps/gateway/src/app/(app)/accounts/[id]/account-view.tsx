@@ -57,7 +57,6 @@ import {
   ACTIONS,
   ago,
   expiresOn,
-  listed,
   capitalize,
   count,
   formatNumber,
@@ -824,19 +823,6 @@ export function AccountView({
                       ]
                         .filter(Boolean)
                         .join(' · '),
-                    },
-                  ]
-                : []),
-              ...(detail.unavailableTools.length > 0
-                ? [
-                    {
-                      term: TOKEN_CONNECT.notWithToken(detail.unavailableTools.length),
-                      value: (
-                        <span data-testid="account-unavailable-tools">
-                          {listed(detail.unavailableTools.map((tool) => tool.title))} —{' '}
-                          {detail.unavailableTools[0]!.reason}
-                        </span>
-                      ),
                     },
                   ]
                 : []),

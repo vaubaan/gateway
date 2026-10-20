@@ -16,7 +16,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { AdminAct, AdminObjectType } from '@vaubaan/gateway-core';
-import { createRegistry, type AppInstallCredentialSpec } from '@vaubaan/plugin-sdk';
+import { createRegistry } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -35,7 +35,6 @@ import {
   fixturePlugin,
   OAUTH_SPEC,
   stateOf,
-  UNVERIFIED_APP_INSTALL_SPEC,
 } from '../../../src/server/connections/testing';
 import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
@@ -149,78 +148,6 @@ interface Rig {
   delegation(): Promise<{ client: OAuthClientRecord; id: string; tokens: TokenResponse }>;
 }
 
-/** An app-install service whose app the operator creates from the page (manifest flow). */
-const MANIFEST_SPEC: AppInstallCredentialSpec = {
-  ...UNVERIFIED_APP_INSTALL_SPEC,
-  manifestRegistration: {
-    permissions: [
-      {
-        name: 'things',
-        label: 'Things',
-        description: 'The things.',
-        levels: [{ access: 'read', label: 'Read', tools: [] }],
-      },
-    ],
-    ownerLoginPattern: '^[a-z]+$',
-    nameMaxLength: 34,
-    registrationUrl: () => 'https://manifestco.test/settings/apps/new',
-    manifestField: 'manifest',
-    stateParam: 'state',
-    codeParam: 'code',
-    buildManifest: (input) => ({ ...input }),
-    conversionUrl: (code) => `${MANIFEST_CONVERSION}/${code}`,
-    registeredApp: (body) =>
-      body && typeof body === 'object'
-        ? {
-            appConfig: { app_id: '77', app_slug: 'acme-app', private_key: 'pem-secret' },
-            name: 'Acme app',
-            slug: 'acme-app',
-            ownerLogin: 'acme',
-            htmlUrl: 'https://manifestco.test/apps/acme-app',
-            permissions: { things: 'read' },
-          }
-        : null,
-  },
-};
-const MANIFEST_CONVERSION = 'https://api.manifestco.test/conversions';
-
-/** Creates the `manifestco` app from the page, start to return, in one operator session. */
-async function createManifestApp(rig: Rig): Promise<Response> {
-  const session = await rig.root.auth.sessions.create({
-    kind: 'user',
-    userId: rig.operator.id,
-    login: { email: rig.operator.email, groups: [] },
-  });
-  const cookie = `${SESSION_COOKIE}=${session.id}`;
-  const started = await rig.root.connections.handlers.startAppRegistration(
-    new Request(`${PUBLIC_URL}/admin/provider-apps/manifestco/create`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        origin: PUBLIC_URL,
-        cookie,
-      },
-      body: new URLSearchParams({
-        owner_kind: 'organization',
-        owner_login: 'acme',
-        name: 'Acme app',
-        'permission.things': 'read',
-      }).toString(),
-    }),
-    'manifestco',
-  );
-  const state = new URL(started.headers.get('location') ?? '', PUBLIC_URL).searchParams.get(
-    'state',
-  );
-  if (!state) throw new Error('the creation did not start');
-  return rig.root.connections.handlers.completeAppRegistration(
-    new Request(`${PUBLIC_URL}/admin/provider-apps/manifestco/created?code=c0de&state=${state}`, {
-      headers: { cookie },
-    }),
-    'manifestco',
-  );
-}
-
 async function openRig(): Promise<Rig> {
   const provider = mockFetch([
     {
@@ -228,7 +155,6 @@ async function openRig(): Promise<Rig> {
       url: OAUTH_SPEC.tokenUrl,
       body: { access_token: 'access-token', refresh_token: 'refresh-token', expires_in: 3600 },
     },
-    { method: 'POST', url: `${MANIFEST_CONVERSION}/c0de`, status: 201, body: { id: 77 } },
   ]);
   const root = await buildRoot({
     loadConfig: () =>
@@ -254,8 +180,6 @@ async function openRig(): Promise<Rig> {
           ],
         }),
         fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC }),
-        fixturePlugin({ id: 'oldappco', credential: UNVERIFIED_APP_INSTALL_SPEC }),
-        fixturePlugin({ id: 'manifestco', credential: MANIFEST_SPEC }),
       ]),
     providerFetch: provider,
     // The identity-provider form checks the issuer's discovery document before saving.
@@ -689,10 +613,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   'ProviderAppsService.isReadOnly': READ,
   'ProviderAppsService.list': READ,
   'ProviderAppsService.status': READ,
-  'ProviderAppsService.installVerification': READ,
   'ProviderAppsService.hostAppConfig': READ,
   'ProviderAppsService.pluginAppConfig': READ,
-  'ProviderAppsService.pluginAppConfigFor': READ,
   'ProviderAppsService.save': {
     kind: 'mutation',
     target: providerApps,
@@ -724,51 +646,6 @@ const RULES: Readonly<Record<string, Rule>> = {
       act: 'config-changed',
       object: 'instance-config',
       objectId: 'provider-app:oauthco',
-      actor: 'operator',
-    },
-  },
-  'ProviderAppsService.registration': READ,
-  'ProviderAppsService.saveRegistered': {
-    kind: 'mutation',
-    target: providerApps,
-    drive: (rig) => createManifestApp(rig),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'provider-app:manifestco',
-      actor: 'operator',
-    },
-  },
-  'AppRegistrationService.manifestOf': READ,
-  'AppRegistrationService.defaultName': READ,
-  'AppRegistrationService.availability': READ,
-  'AppRegistrationService.pending': READ,
-  'AppRegistrationService.start': exempt(
-    `${SESSION_STATE}; the app exists only once the provider sends the administrator back (AppRegistrationService.complete)`,
-  ),
-  'AppRegistrationService.complete': {
-    kind: 'mutation',
-    target: (root) => root.connections.registration,
-    drive: (rig) => createManifestApp(rig),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'provider-app:manifestco',
-      actor: 'operator',
-    },
-  },
-  'ProviderAppsService.setAcceptUnverifiedInstallations': {
-    kind: 'mutation',
-    target: providerApps,
-    drive: async (rig) =>
-      rig.root.connections.handlers.saveProviderApp(
-        await rig.operatorPost('/admin/provider-apps/oldappco', { action: 'accept-unverified' }),
-        'oldappco',
-      ),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'provider-app:oldappco',
       actor: 'operator',
     },
   },
@@ -1831,9 +1708,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'administrator-granted',
       'administrator-revoked',
       'approval-granted',
-      'config-changed',
-      'config-changed',
-      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

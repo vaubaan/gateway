@@ -1,7 +1,7 @@
 /**
  * Who names this instance (spec §4.3, §4.2). The rule every setting shared by
  * the mounted configuration and the Administration page follows (telemetry's
- * toggle, the sign-in providers, the company apps):
+ * toggle, the sign-in providers, the OAuth clients of providers):
  *
  *   1. the configuration sets `instance_name` (file or environment)
  *        → that name, and the Administration field is read-only;

@@ -1,5 +1,5 @@
 import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
-import { credentialSpecFor, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
 import sshPlugin from '@vaubaan/plugin-ssh';
 import stripePlugin from '@vaubaan/plugin-stripe';
 import vercelPlugin from '@vaubaan/plugin-vercel';
@@ -88,7 +88,8 @@ describe('bundle validation', () => {
 
 describe('credential mapping holds to the plugins’ forms', () => {
   function fieldNames(plugin: ProviderPlugin, kind: 'api-key' | 'ssh-key'): string[] {
-    return (credentialSpecFor(plugin, kind)?.fields ?? []).map((f) => f.name);
+    const spec = plugin.credential;
+    return (spec.kind === kind ? spec.fields : []).map((f) => f.name);
   }
 
   it('Cloudflare and Vercel keys fill the api-key forms', () => {

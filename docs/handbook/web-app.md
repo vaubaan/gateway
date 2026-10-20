@@ -127,7 +127,7 @@ external`), never prefetched.
 | `/admin/bootstrap` in setup mode, `POST /api/setup/master-key`                                                                    | `admin/bootstrap/page.tsx`, `api/setup/master-key/route.ts`, `proxy.ts` (the redirect of every other path)                                     | [configuration](configuration.md), [authentication](authentication.md)                       |
 | `/admin`, `/admin/identity-provider`, `…/new`, `…/<id>`                                                                           | `admin/(guarded)/page.tsx`, `admin/(guarded)/identity-provider/**`, `admin/(guarded)/layout.tsx`, `components/settings/SignInProviderForm.tsx` | [authentication](authentication.md)                                                          |
 | `POST /api/admin/identity-provider`, `POST /api/admin/sign-in-providers`, `…/<id>/remove`                                         | `api/admin/identity-provider/route.ts`, `api/admin/sign-in-providers/**`                                                                       | [authentication](authentication.md)                                                          |
-| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                                                                    | `admin/(guarded)/provider-apps/**`                                                                                                             | [connections](connections.md)                                                                |
+| `POST /admin/provider-apps/<provider>` (the OAuth client of a service, declared from its connect page)                            | `admin/(guarded)/provider-apps/[provider]/route.ts`                                                                                            | [connections](connections.md)                                                                |
 | `/admin/telemetry`, `POST /api/admin/telemetry`                                                                                   | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts`                                                                           | [telemetry](telemetry.md)                                                                    |
 | `/admin/encryption`, `POST /api/admin/master-key/download`, `…/handed-over`                                                       | `admin/(guarded)/encryption/page.tsx`, `api/admin/master-key/**`                                                                               | [configuration](configuration.md), [authentication](authentication.md)                       |
 | `/accounts`, `/accounts/new`, `/accounts/new/<provider>`, `/accounts/<id>`                                                        | `(app)/accounts/**/page.tsx`                                                                                                                   | [connections](connections.md)                                                                |
@@ -395,7 +395,7 @@ groups of the local navigation: **You** — Preferences (`/settings`), Connected
 apps (`/settings/connected-apps`) — and, for an administrator
 (`isOperatorPrincipal(principal)`, `components/auth/principal.ts`),
 **Administration** — Setup (`/admin`), Sign-in (`/admin/identity-provider`),
-Company apps (`/admin/provider-apps`), People (`/admin/users`), Teams
+People (`/admin/users`), Teams
 (`/admin/groups`), Accounts without owner (`/admin/connections`), Telemetry,
 Registered apps (`/admin/oauth-clients`), in the order a gateway is set up.
 No label is used for two things. `SettingsFrame({ principal, children })`
@@ -406,7 +406,7 @@ apps and the Settings page use it. Each page under it opens with a
 `lib/vocabulary.ts`) and shares `components/settings/settings.module.css`;
 what each one shows is in the handbook of its feature
 ([authentication](authentication.md): Setup, Sign-in, People;
-[connections](connections.md): Company apps; [authority](authority.md): Teams,
+[authority](authority.md): Teams,
 Accounts without owner; [telemetry](telemetry.md);
 [management-door](management-door.md): Connected apps, Registered apps).
 
@@ -481,11 +481,11 @@ are windows of time, not calendar days: the server does not know the
 reader's time zone. The cost is a handful of indexed reads per mission the
 person can read, no scan. `readSetup(setupDepsOf(root))` (`server/now/setup.ts`)
 is the checklist an administrator reads on a first run: the host of the
-identity provider, the services whose company app is registered or missing
-(`ProviderAppsService.list`, `requiresApp`: it needs an app and offers no token
-way), those whose app is optional (they also connect with a token: never
-"missing"), and whether telemetry was decided. Settings → Setup counts its
-"Company apps" step the same way.
+identity provider, the services that sign people in through an OAuth client
+and whether it is declared (`ProviderAppsService.list`, `needsApp`; the
+missing ones carry the id of their service, for the link to its connect
+page), and whether telemetry was decided. Settings → Setup counts its
+"OAuth clients" step the same way.
 
 **The page has three forms** (`(app)/_now/`; style guide §1.1):
 
@@ -596,7 +596,6 @@ The protocol keeps its names; this file is the bridge, keyed by them.
 | `ago(from, now)`                                                                     | "now", "4 min", "1 h", "yesterday", "4 d"                                                                                                                                          |
 | `THEME_WORDS`                                                                        | System, Light, Dark                                                                                                                                                                |
 | `MISSION_ACTIONS`, `MISSION_WORDS`                                                   | the acts and the sentences of the mission pages ("Stop the mission", "Generate my key", "Shown once. Lost it? …")                                                                  |
-| `OPTIONAL_APP_WORDS`                                                                 | Company apps, for a service that also connects with a token: "not registered · optional", "The company app is optional for Railway", "Connect Railway with a token"                |
 | `limitsResetEvery`, `limitColumn`, `usedColumn`, `periodWord`                        | a period in words, from its length in seconds: "limits reset every week", "Per week", "Used this week", "this week"                                                                |
 | `shortDate`, `expiresOn`, `agoSentence`, `listed`                                    | "12 Nov" (UTC, the same on the server and in the browser), "expires 12 Nov", "4 min ago", "a, b and 3 more"                                                                        |
 
@@ -784,8 +783,8 @@ A `Field` that holds several controls (the claim mapping of the identity
 provider) takes no `htmlFor`: its wrapper is a `role="group"` named by the
 label, and each control carries its own `aria-label`. Ids must be unique on
 the page: `CredentialFieldInputs` (`components/connections/parts.tsx`) takes an
-`idPrefix`; Administration → Company apps passes `provider-app-<provider id>`
-because it renders one list per provider.
+`idPrefix`; the OAuth client form of a connect page passes
+`provider-app-<provider id>`.
 
 **Added with the mission pages**
 
@@ -1014,11 +1013,10 @@ The three sections, one file each beside the page:
    **"hands a token to the agent"** tag, each a link to its row in
    Permissions, and a note above the table states `TOKEN_HANDOUT_NOTE` (spec
    §2.4): a token that can write is handed only after the creator approves the
-   call, a read-only one may be handed without asking. Today that is
-   `github__mint_install_token`, `github.mint-install-token-clone` (read-only,
-   `auto` in the Developer preset) and `github.mint-install-token-push`
-   (write, `approval`). `data-testid`: `tool-table`, a row is
-   `tr[data-row="<tool name>"]`, `token-handout-note`.
+   call, a read-only one may be handed without asking. No shipped plugin
+   declares one since the GitHub App's mint tool left (catalog v9).
+   `data-testid`: `tool-table`, a row is `tr[data-row="<tool name>"]`,
+   `token-handout-note`.
 3. **How it is modelled** (`data-model.tsx`, `DataModelSection`) — where the
    environment of a call comes from (`EnvironmentReference.source`: `none`
    when the catalog has no entry held per environment; otherwise `call` when

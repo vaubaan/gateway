@@ -5,7 +5,21 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { openTestStore, type TestStore } from '../store/testing';
-import { connectionOwnerOf, connectionSummaryOf } from './mapping';
+import { connectionCredentialKind, connectionOwnerOf, connectionSummaryOf } from './mapping';
+
+describe('connectionCredentialKind', () => {
+  it('reads the kind as stored, keeps a word the contract no longer knows, and falls back to the plugin', () => {
+    expect(connectionCredentialKind({ metadata: { credential_kind: 'api-key' } }, 'oauth2')).toBe(
+      'api-key',
+    );
+    // The GitHub App of earlier builds: kept as is, so that the account is refused, not mistaken for a token.
+    expect(
+      connectionCredentialKind({ metadata: { credential_kind: 'app-install' } }, 'api-key'),
+    ).toBe('app-install');
+    expect(connectionCredentialKind({ metadata: {} }, 'api-key')).toBe('api-key');
+    expect(connectionCredentialKind({ metadata: { credential_kind: '' } }, null)).toBeNull();
+  });
+});
 
 describe('connection mapping', () => {
   let t: TestStore;

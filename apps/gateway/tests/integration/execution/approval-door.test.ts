@@ -9,10 +9,7 @@
  * on `/mcp`: refusal → the creator grants → the identical replay passes and reaches
  * the provider → the second identical replay is refused.
  */
-import { generateKeyPairSync } from 'node:crypto';
-
-import { GITHUB_APP_PERMISSIONS, githubPlugin } from '@vaubaan/plugin-github';
-import { defaultPermissionChoice } from '@vaubaan/plugin-sdk';
+import { githubPlugin } from '@vaubaan/plugin-github';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -26,7 +23,7 @@ import {
   type RpcBody,
 } from '../../../src/server/execution/testing';
 
-const INSTALLATION_ID = '4242';
+const PAT = 'github_pat_11AAAAAAA0TEST_0123456789abcdefghijklmnopqrstuvwxyz';
 const GATED = 'github.workflow-write-via-file';
 const UNGATED = 'github.feature-branch-write';
 const TOOL = 'github__create_or_update_file';
@@ -41,12 +38,6 @@ const ARGS = {
   content: WORKFLOW_BODY,
 };
 
-const { privateKey: APP_PRIVATE_KEY } = generateKeyPairSync('rsa', {
-  modulusLength: 2048,
-  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-  publicKeyEncoding: { type: 'spki', format: 'pem' },
-});
-
 interface Rig extends ExecutionInstance {
   readonly upstream: MockFetch;
   readonly logs: string[];
@@ -55,17 +46,6 @@ interface Rig extends ExecutionInstance {
 
 async function openRig(): Promise<Rig> {
   const upstream = mockFetch([
-    {
-      method: 'POST',
-      url: `https://api.github.com/app/installations/${INSTALLATION_ID}/access_tokens`,
-      status: 201,
-      body: {
-        token: 'ghs_installation_token_never_returned',
-        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-        // An App created with the default permissions (what the tools need).
-        permissions: defaultPermissionChoice(GITHUB_APP_PERMISSIONS),
-      },
-    },
     {
       method: 'PUT',
       url: /^https:\/\/api\.github\.com\/repos\/acme\/app\/contents\//,
@@ -77,11 +57,6 @@ async function openRig(): Promise<Rig> {
   const instance = await executionInstance({
     plugins: [githubPlugin],
     env: {
-      VAUBAAN_PROVIDER_GITHUB_APP_ID: '123',
-      VAUBAAN_PROVIDER_GITHUB_APP_SLUG: 'acme-gateway',
-      VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: APP_PRIVATE_KEY,
-      VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: 'Iv1.0000000000000000',
-      VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET: 'github-app-client-secret-never-sent',
       VAUBAAN_LOG_LEVEL: 'debug',
     },
     deps: { providerFetch: upstream, logWrite: (_level, text) => logs.push(text) },
@@ -91,11 +66,7 @@ async function openRig(): Promise<Rig> {
     provider: 'github',
     owner: { kind: 'user', id: instance.ada.id },
     displayName: 'acme-org',
-    credential: serializeSecret({
-      kind: 'app-install',
-      installationId: INSTALLATION_ID,
-      metadata: {},
-    }),
+    credential: serializeSecret({ kind: 'api-key', fields: { token: PAT }, metadata: {} }),
   });
   await store.connections.syncDiscoveredResources(github.id, [
     { ref: 'acme/app', displayName: 'acme/app', env: null },

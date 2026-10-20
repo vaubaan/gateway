@@ -20,19 +20,15 @@
 import type { Octokit as OctokitType } from '@octokit/rest';
 import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
 
-import { branchName, type GithubCall, type MINT_TOOL, type RepoCall } from './call.ts';
+import { branchName, type GithubCall, type RepoCall } from './call.ts';
 
 export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
 
 /**
- * Every call but the credential mint and the job log, which `execute.ts`
- * answers itself (the log is a redirect to a download, read bounded :
+ * Every call but the job log, which `execute.ts` answers itself (the log is a redirect to a download, read bounded :
  * `job-logs.ts`).
  */
-export type DispatchedCall = Exclude<
-  GithubCall,
-  { tool: typeof MINT_TOOL } | { tool: 'github__get_job_logs' }
->;
+export type DispatchedCall = Exclude<GithubCall, { tool: 'github__get_job_logs' }>;
 
 type Args = Readonly<Record<string, unknown>>;
 

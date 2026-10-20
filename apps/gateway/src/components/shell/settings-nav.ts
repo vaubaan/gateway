@@ -13,7 +13,6 @@ import { capitalize, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
 export const ADMIN_PAGES = {
   setup: '/admin',
   signIn: '/admin/identity-provider',
-  companyApps: '/admin/provider-apps',
   people: '/admin/users',
   teams: '/admin/groups',
   ownerlessAccounts: '/admin/connections',
@@ -39,7 +38,6 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
         // In the order an administrator sets a gateway up.
         { label: SECTIONS.setup, href: ADMIN_PAGES.setup, exact: true },
         { label: 'Sign-in', href: ADMIN_PAGES.signIn },
-        { label: SECTIONS.companyApps, href: ADMIN_PAGES.companyApps },
         { label: capitalize(TERMS.user.many), href: ADMIN_PAGES.people },
         { label: capitalize(TERMS.group.many), href: ADMIN_PAGES.teams },
         { label: 'Accounts without owner', href: ADMIN_PAGES.ownerlessAccounts },

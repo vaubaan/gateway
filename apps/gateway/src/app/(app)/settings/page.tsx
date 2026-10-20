@@ -83,7 +83,7 @@ export default async function SettingsPage() {
           <Rows>
             <Row
               title={SECTIONS.setup}
-              description="Sign-in, company apps, people and teams, telemetry: what a gateway needs, and what is left to do."
+              description="Sign-in, OAuth clients, people and teams, telemetry: what a gateway needs, and what is left to do."
               end={
                 <ButtonLink href={ADMIN_PAGES.setup} size="sm">
                   Open

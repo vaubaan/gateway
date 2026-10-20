@@ -58,14 +58,14 @@ export interface PluginLogger {
 
 /**
  * What a plugin receives whenever it talks to its provider on behalf of a
- * connection : the decrypted credential (in memory only), the company's app
- * configuration for this provider, and the IO primitives. The plugin never
+ * connection : the decrypted credential (in memory only), the company's OAuth
+ * client for this provider when it connects that way, and the IO primitives. The plugin never
  * reads `process.env`, never opens its own `fetch` : both are injected so
  * tests run with `mockFetch` and never reach a real provider.
  */
 export interface ConnectionContext {
   readonly credential: CredentialSecret;
-  /** The company's registered app for this provider (client id, app id…). Empty for `api-key`. */
+  /** The company's OAuth client for this provider (client id and its own settings). Empty for `api-key` and `ssh-key`. */
   readonly appConfig: ProviderAppConfig;
   readonly fetch: typeof fetch;
   readonly signal?: AbortSignal;
@@ -225,20 +225,12 @@ export interface ProviderPlugin {
   /** The risk catalog, loaded from `risk-catalog.yaml` at boot, presets included. */
   readonly catalog: RiskCatalog;
   /**
-   * How a connection to this provider is obtained, stored and refreshed —
-   * the primary way, offered first (the company's app, when there is one).
+   * How a connection to this provider is obtained, stored and refreshed :
+   * the one way of connecting, the simplest the provider offers — a token a
+   * person makes by hand whenever the provider has one, OAuth only where it
+   * has none (ADR one-place-to-authorize-services-token-first).
    */
   readonly credential: CredentialSpec;
-  /**
-   * Other ways the same provider can be connected, offered beside the
-   * primary one (a token pasted by hand when the company registered no app).
-   * Each has its own fields, check and `unavailableTools` ; discovery and
-   * execution read `ctx.credential.kind`. One declaration with `credential`:
-   * read both through `credentialSpecsOf`. Kinds are unique across the two,
-   * and at most one of them goes through a company app (`definePlugin`).
-   * ADR token-connections-beside-the-integration-app.
-   */
-  readonly alternativeCredentials?: readonly CredentialSpec[];
 
   /**
    * Classify a concrete call into the slices it touches. Pure : no IO, no

@@ -40,7 +40,6 @@ import {
   type ResourceStage,
 } from '@vaubaan/gateway-core';
 import {
-  unavailableToolReason,
   type ClassifyConnection,
   type ClassifyOutcome,
   type PluginRegistry,
@@ -121,8 +120,12 @@ export function unavailableReason(
   tool: string,
 ): string | null {
   const kind = connection?.credential_kind ?? plugin.credential.kind;
-  const byWay = unavailableToolReason(plugin, kind, tool);
-  if (byWay !== null) return byWay;
+  // An account connected a way the plugin no longer declares (the GitHub App
+  // of catalog v8, an OAuth app of Supabase or Railway) runs nothing until it
+  // is reconnected the way the service now offers.
+  if (kind !== plugin.credential.kind) {
+    return `this account was connected a way ${plugin.displayName} no longer offers on this gateway (${kind}); its owner reconnects it from Accounts.`;
+  }
   const unbound = plugin.unboundTools?.[tool];
   if (connection?.hosts_instance === true && unbound !== undefined) {
     return `this account can reach the resource that hosts this gateway. ${unbound}`;

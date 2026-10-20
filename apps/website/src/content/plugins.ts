@@ -71,9 +71,6 @@ export interface CredentialInfo {
   readonly recommendedExpiryDays: number | null;
   readonly docsUrl: string | null;
   readonly scopes: readonly string[];
-  /** The company app can be created from Settings → Company apps (a manifest flow). */
-  readonly createdFromSettings: boolean;
-  readonly unavailableTools: readonly { readonly tool: string; readonly why: string }[];
 }
 
 export interface PluginInfo {
@@ -198,11 +195,6 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     recommendedExpiryDays: guide ? guide.recommendedExpiryDays : null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
-    createdFromSettings: spec.kind === 'app-install' && spec.manifestRegistration !== undefined,
-    unavailableTools: Object.entries(spec.unavailableTools ?? {}).map(([tool, why]) => ({
-      tool,
-      why,
-    })),
   };
 }
 
@@ -240,7 +232,7 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
         rateWindowSeconds: entry.rate_limit.window_seconds,
       })),
     })),
-    credentials: [plugin.credential, ...(plugin.alternativeCredentials ?? [])].map(credentialInfo),
+    credentials: [credentialInfo(plugin.credential)],
     tokenHandouts: (plugin.tokenHandouts ?? []).map((handout) => ({
       tool: handout.tool,
       riskIds: [...handout.riskIds],

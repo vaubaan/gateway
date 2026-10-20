@@ -14,7 +14,7 @@
  *     `http://localhost:<port>`. The configuration loader only accepts https
  *     and is left as it is: the demo loads a placeholder through it and sets
  *     the URL on the typed result, as a test does;
- *   - the demo IdP (`demo-idp.ts`) and the simulated GitHub installation page
+ *   - the demo IdP (`demo-idp.ts`)
  *     served by the same listener under `/__demo/`, which exists nowhere but
  *     in this file: a normally composed root has no such route;
  *   - every provider request answered by `providers.ts`; the collector and
@@ -30,7 +30,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { githubPlugin } from '@vaubaan/plugin-github';
 import { createRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
 
 import type { CustomFetch } from '../../src/server/auth/relying-party';
@@ -40,22 +39,15 @@ import { SHIPPED_PLUGINS } from '../../src/server/compose/shipped-plugins';
 import { loadInstanceConfig, type LoadedConfig } from '../../src/server/config';
 import { MASTER_KEY_BYTES } from '../../src/server/config/load';
 import { SlidingWindowRateLimiter } from '../../src/server/rate-limit';
-import { DEMO_IDP_PATH, DemoIdp, demoPage, escapeHtml } from './demo-idp';
+import { DEMO_IDP_PATH, DemoIdp } from './demo-idp';
 import { ALICE } from './people';
-import {
-  createDemoProviders,
-  DEMO_INSTALLATIONS,
-  GITHUB_INSTALL_PATH,
-  githubAppEnv,
-  type DemoProviders,
-} from './providers';
+import { createDemoProviders, type DemoProviders } from './providers';
 import { seedDemo, type SeedSummary } from './seed';
 
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const LOOPBACK = '127.0.0.1';
 /** Everything the demo serves itself lives under this prefix. */
 export const DEMO_PREFIX = '/__demo';
-const INSTALLATION_PARAM = 'installation';
 
 type NextFactory = (options: { dev: boolean; dir: string; hostname: string; port: number }) => {
   prepare(): Promise<void>;
@@ -106,27 +98,18 @@ function listen(server: Server, port: number): Promise<number> {
 }
 
 /**
- * The shipped plugins, with two differences that keep a human's browser and
- * this process on the machine:
- *   - GitHub's installation page is moved to the demo listener: a real
- *     browser must never be sent to github.com with the demo App's slug;
- *   - the SSH plugin is left out: its calls do not go through `fetch` but open
- *     connections to whatever host the user names, which nothing here simulates.
- * Everything else of every plugin — tools, catalog, classifier, the user
- * verification of the installation — is the shipped code.
+ * The shipped plugins, with one difference that keeps this process on the
+ * machine: the SSH plugin is left out, because its calls do not go through
+ * `fetch` but open connections to whatever host the user names, which nothing
+ * here simulates. Everything else of every plugin — tools, catalog,
+ * classifier, the check of a pasted token — is the shipped code.
  */
-function demoPlugins(origin: string): ProviderPlugin[] {
-  return SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind !== 'ssh-key').map((plugin) => {
-    if (plugin.id !== githubPlugin.id || plugin.credential.kind !== 'app-install') return plugin;
-    return {
-      ...plugin,
-      credential: { ...plugin.credential, installUrl: () => `${origin}${GITHUB_INSTALL_PATH}` },
-    };
-  });
+function demoPlugins(): ProviderPlugin[] {
+  return SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind !== 'ssh-key');
 }
 
 /** The demo configuration, typed by the real loader, then pointed at the local origin. */
-function demoConfig(origin: string, storePath: string, idp: DemoIdp, providers: DemoProviders) {
+function demoConfig(origin: string, storePath: string, idp: DemoIdp) {
   return (): LoadedConfig => {
     const loaded = loadInstanceConfig({
       env: {
@@ -138,7 +121,6 @@ function demoConfig(origin: string, storePath: string, idp: DemoIdp, providers: 
         VAUBAAN_BOOTSTRAP_TOKEN: randomBytes(32).toString('hex'),
         VAUBAAN_ADMIN_EMAILS: ALICE.email,
         VAUBAAN_TELEMETRY_ENABLED: 'false',
-        ...githubAppEnv(providers.githubApp),
       },
     });
     return {
@@ -183,44 +165,6 @@ function refuseOutbound(what: string): typeof fetch {
   };
 }
 
-/** The simulated installation page of the company's GitHub App. */
-function githubInstallPage(
-  res: ServerResponse,
-  url: URL,
-  origin: string,
-  providers: DemoProviders,
-) {
-  const chosen = DEMO_INSTALLATIONS.find(
-    (installation) => installation.id === url.searchParams.get(INSTALLATION_PARAM),
-  );
-  if (chosen) {
-    const callback = providers.githubInstallCallback(
-      new URL(origin),
-      chosen.id,
-      url.searchParams.get('state'),
-    );
-    res.writeHead(303, { Location: callback.href, 'Cache-Control': 'no-store' });
-    res.end();
-    return;
-  }
-  const accounts = DEMO_INSTALLATIONS.map((installation) => {
-    const choice = new URL(url);
-    choice.searchParams.set(INSTALLATION_PARAM, installation.id);
-    const href = escapeHtml(`${choice.pathname}${choice.search}`);
-    const repositories = escapeHtml(installation.repositories.join(', '));
-    return `<li><a class="account" href="${href}"><strong>${escapeHtml(installation.account)}</strong><span>${repositories}</span></a></li>`;
-  }).join('\n');
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(
-    demoPage(
-      'Install the GitHub App',
-      `<h1>Install ${escapeHtml(providers.githubApp.slug)}</h1>
-<p>This stands in for GitHub's installation page. Pick the organisation to install the company's App on; the gateway then verifies, as with the real GitHub, that you can reach that installation.</p>
-<ul>${accounts}</ul>`,
-    ),
-  );
-}
-
 export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
   const progress = options.progress ?? (() => undefined);
   if (!hasBuild()) {
@@ -261,9 +205,6 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
   serve = async (req, res) => {
     const url = new URL(req.url ?? '/', origin);
     if (url.pathname.startsWith(`${DEMO_IDP_PATH}/`)) return idp.handle(req, res, url);
-    if (url.pathname === GITHUB_INSTALL_PATH) {
-      return githubInstallPage(res, url, origin, providers);
-    }
     if (url.pathname.startsWith(`${DEMO_PREFIX}/`) || !application) {
       res.writeHead(application ? 404 : 503, { 'Content-Type': 'text/plain' });
       res.end(application ? 'Not a page of the demo.\n' : 'The demo is starting.\n');
@@ -289,8 +230,8 @@ export async function startDemo(options: DemoOptions): Promise<RunningDemo> {
     const toLoopback: CustomFetch = (url, init) =>
       fetch(url.replace(origin, `http://${LOOPBACK}:${port}`), init as RequestInit);
     root = await getRoot({
-      loadConfig: demoConfig(origin, storePath, idp, providers),
-      buildRegistry: async () => createRegistry(demoPlugins(origin)),
+      loadConfig: demoConfig(origin, storePath, idp),
+      buildRegistry: async () => createRegistry(demoPlugins()),
       oidc: { fetch: toLoopback, allowInsecureIssuer: true },
       providerFetch: providers.fetch,
       telemetryFetch: refuseOutbound('telemetry'),

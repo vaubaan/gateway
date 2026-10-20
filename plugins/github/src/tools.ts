@@ -182,30 +182,6 @@ export const githubTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo', 'issue_number', 'body'],
     },
   },
-  // Mint install token — ephemeral GitHub App credential for clone / push
-  // flows outside the gateway (risks `github.mint-install-token-{clone,push}`).
-  {
-    name: 'github__mint_install_token',
-    description:
-      'Mint a short-lived (1h) GitHub App installation token scoped to repositories of the mission. Used for clone or push flows outside the gateway ; `purpose` picks the permission set.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        repoFullName: {
-          type: 'string',
-          description:
-            "Optional `<owner>/<repo>` — must be one of the mission's GitHub resources. Omit to scope the token to every GitHub resource of the mission.",
-        },
-        purpose: {
-          type: 'string',
-          enum: ['clone', 'push'],
-          description:
-            '`clone` → contents:read only. `push` → contents:write + pull_requests:write + metadata:read + workflows:write.',
-        },
-      },
-      required: ['purpose'],
-    },
-  },
   // Read - ci (workflows + their runs)
   {
     name: 'github__list_workflows',

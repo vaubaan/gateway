@@ -16,7 +16,6 @@ import { classifyGithub } from './classify.ts';
 import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
-import { githubTokenCredential } from './token.ts';
 import { githubGitRemoteOf } from './git-remote.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
@@ -33,25 +32,14 @@ export const githubGitRemote = githubGitRemoteOf(githubCatalog.catalog);
 export const githubPlugin = definePlugin({
   id: 'github',
   displayName: 'GitHub',
-  version: '3.3.0',
+  version: '4.0.0',
   description:
-    'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
+    'Repositories, branches, files, pull requests, issues, releases and workflows a fine-grained token reaches.',
   summary:
-    "One account is one installation of your company's GitHub App on an organisation, or a fine-grained personal access token; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.",
+    'One account is one fine-grained personal access token, made at GitHub for the organisation or the user that owns the repositories; one resource is one repository. A mission picks repositories and the permissions it holds on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different permissions.',
   manualRevocation:
-    "Uninstall your company's GitHub App from the organisation, in the organisation's settings under GitHub Apps, once no other account of this gateway uses that installation. The gateway never uninstalls it: one installation may serve several accounts.",
+    'Delete the token at GitHub, signed in as the account that created it: Settings, Developer settings, Personal access tokens, Fine-grained tokens.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/github.md',
-  // The one tool that hands the agent a provider token (spec §2.4) : a short-lived
-  // installation token scoped to the mission's repositories, for git itself. The
-  // clone token carries `contents:read` only ; the push token writes, so a preset
-  // may leave the first on `auto` and must gate the second by approval.
-  tokenHandouts: [
-    {
-      tool: 'github__mint_install_token',
-      riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
-      readOnlyRiskIds: ['github.mint-install-token-clone'],
-    },
-  ],
   // The instance as the agents' git remote (spec §4.1 ter) : clone, fetch and push
   // with the mission key as the password, every push decided ref by ref.
   gitRemote: githubGitRemote,
@@ -60,9 +48,6 @@ export const githubPlugin = definePlugin({
   dataModel: githubDataModel,
   catalog: githubCatalog.catalog,
   credential: githubCredential,
-  // Beside the App : a fine-grained token pasted by hand, for a company that
-  // registered no App (ADR token-connections-beside-the-integration-app).
-  alternativeCredentials: [githubTokenCredential],
   classify: classifyGithub,
   execute: executeGithub,
   discoverResources: discoverGithubResources,
@@ -71,21 +56,8 @@ export const githubPlugin = definePlugin({
 export default githubPlugin;
 
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
-export {
-  expiryOf,
-  githubTokenCredential,
-  GITHUB_TOKEN_FIELD,
-  MINT_NEEDS_THE_APP,
-  verifyGithubToken,
-} from './token.ts';
-export { buildAppJwt, mintInstallationToken } from './app-install.ts';
-export { discoverGithubResources, executeGithub, MINT_PERMISSIONS } from './execute.ts';
-export { GITHUB_APP_PERMISSIONS, githubManifestRegistration } from './app-manifest.ts';
-export { assertAppPermissions, needsOf } from './permission-check.ts';
+export { expiryOf, GITHUB_TOKEN_FIELD, verifyGithubToken } from './credential.ts';
+export { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
+export { discoverGithubResources, executeGithub } from './execute.ts';
 export { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall } from './git-call.ts';
-export {
-  COMPARE_MAX_COMMITS,
-  COMPARE_MAX_FILES,
-  GIT_TOKEN_PERMISSIONS,
-  workingBranchesOf,
-} from './git-remote.ts';
+export { COMPARE_MAX_COMMITS, COMPARE_MAX_FILES, workingBranchesOf } from './git-remote.ts';

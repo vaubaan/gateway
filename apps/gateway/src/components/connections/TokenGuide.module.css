@@ -26,14 +26,3 @@
   font-size: var(--text-xs);
   white-space: nowrap;
 }
-.unavailable {
-  margin: 0;
-}
-.toolList {
-  margin: var(--space-2) 0 0;
-  padding-left: 1.25em;
-  font-size: var(--text-sm);
-}
-.unavailableBox {
-  margin-top: var(--space-4);
-}

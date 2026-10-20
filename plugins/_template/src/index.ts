@@ -43,11 +43,12 @@ export const templatePlugin = definePlugin({
   toolTitles: templateToolTitles,
   dataModel: templateDataModel,
   catalog: templateCatalog.catalog,
-  // How a connection of this provider is obtained. The host runs the flow
-  // from this declaration (here : a form with one secret field) ; the plugin
-  // writes no route and never reads the environment. The other kinds —
-  // `oauth2`, `app-install` (with `userVerification`), `ssh-key` — are in
-  // plugins/README.md, step 5.
+  // How a connection of this provider is obtained : the one way, the
+  // simplest the provider offers — a key a person makes by hand whenever the
+  // provider has one. The host runs the flow from this declaration (here : a
+  // form with one secret field) ; the plugin writes no route and never reads
+  // the environment. The other kinds — `oauth2` (only where the provider has
+  // no token a person can make), `ssh-key` — are in plugins/README.md, step 5.
   credential: {
     kind: 'api-key',
     // Where the user creates the key ; shown as a link next to the form.

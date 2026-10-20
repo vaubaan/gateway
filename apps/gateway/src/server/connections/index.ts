@@ -12,7 +12,7 @@ import type { MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
-import { AppRegistrationService, type ProviderAppsService } from '../provider-apps';
+import type { ProviderAppsService } from '../provider-apps';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
@@ -42,8 +42,6 @@ export interface ConnectionsModule {
   /** Decrypted credentials and their refresh — the hook the execution door calls. */
   readonly credentials: CredentialBroker;
   readonly notices: NoticeStore;
-  /** Creating a company app from the provider's manifest flow (Administration → Company apps). */
-  readonly registration: AppRegistrationService;
   readonly handlers: ConnectionHandlers;
   /**
    * Runs a connection's discovery after a call that created one of its
@@ -80,24 +78,12 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     logger,
   });
   const notices = new NoticeStore(deps.sessions);
-  const registration = new AppRegistrationService({
-    registry: deps.registry,
-    providerApps: deps.providerApps,
-    sessions: deps.sessions,
-    publicUrl: deps.config.publicUrl,
-    callbackUrl: (providerId) => service.callbackUrl(providerId),
-    audit: deps.store.auditWriter,
-    fetch: outbound,
-    clock,
-    logger,
-  });
   const handlers = createConnectionHandlers({
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     connections: service,
     registry: deps.registry,
     providerApps: deps.providerApps,
-    registration,
     notices,
     audit: deps.store.auditWriter,
     logger,
@@ -108,7 +94,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     service,
     logger,
   });
-  return { service, credentials, notices, registration, handlers, discoveryAfterCall };
+  return { service, credentials, notices, handlers, discoveryAfterCall };
 }
 
 export {
@@ -135,31 +121,19 @@ export {
   type ConnectErrorCode,
 } from './errors';
 export {
-  ACCEPT_UNVERIFIED_ACTION,
-  APP_PERMISSION_PREFIX,
-  appRegistrationConfirmPath,
   actorOf,
+  CLEAR_PROVIDER_APP_ACTION,
+  connectPagePath,
+  PROVIDER_APP_ACTION_PATH,
+  providerAppActionPath,
   connectionPath,
   FIELD_PREFIX,
   METADATA_PREFIX,
-  METHOD_FIELD,
   NEW_CONNECTION_PATH,
   NOTICE_PARAM,
   OWNERLESS_CONNECTIONS_PAGE,
-  PROVIDER_APPS_PAGE,
-  providerAppPath,
-  tokenConnectPath,
-  REFUSE_UNVERIFIED_ACTION,
   type ConnectionHandlers,
 } from './handlers';
-export {
-  InstallationRefused,
-  InstallationVerificationUnavailable,
-  MAX_INSTALLATION_PAGES,
-  verifyInstallation,
-  type InstallationClaim,
-  type InstallationRefusalReason,
-} from './install-verification';
 export {
   cleanName,
   echoOfForm,
@@ -175,7 +149,6 @@ export {
   buildAuthorizationUrl,
   codeChallengeS256,
   exchangeCode,
-  exchangeUnsolicitedCode,
   newCodeVerifier,
   newState,
   OAuth2TokenError,
@@ -200,18 +173,13 @@ export {
   CONNECT_RATE_WINDOW_MS,
   CONNECTIONS_PATH,
   ConnectionService,
-  defaultMethod,
-  methodOf,
   ownerActRefusal,
   toPluginResource,
   type Actor,
   type ConnectableProvider,
-  type ConnectMethod,
   type TokenGuideView,
   type TokenPermissionView,
   type ToolLabel,
-  type UnavailableToolView,
-  type ConnectRefusalReason,
   type Connected,
   type ConnectionDetail,
   type ConnectionView,
@@ -221,7 +189,6 @@ export {
   type ImportedFrom,
   type ImportPastedInput,
   type ImportSshInput,
-  type InstallationBinding,
   type NewOwner,
   type ResourcePatch,
   type StartInput,

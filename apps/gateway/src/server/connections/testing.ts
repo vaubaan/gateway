@@ -3,16 +3,14 @@
  *
  * `fixturePlugin()` builds the smallest plugin `definePlugin` accepts around
  * a given `CredentialSpec`, so every credential kind can be driven without a
- * real provider plugin; the `*_SPEC` constants are one spec per kind (plus
- * `UNVERIFIED_APP_INSTALL_SPEC`, an `app-install` spec without
- * `userVerification`), with endpoints on RFC 2606 hosts. `connectionsHarness()` assembles the
+ * real provider plugin; the `*_SPEC` constants are one spec per kind, with
+ * endpoints on RFC 2606 hosts. `connectionsHarness()` assembles the
  * module over the `:memory:` store, in-memory ports and a `mockFetch`.
  */
 import {
   createRegistry,
   definePlugin,
   type ApiKeyCredentialSpec,
-  type AppInstallCredentialSpec,
   type ConnectionContext,
   type CredentialSecret,
   type CredentialSpec,
@@ -49,45 +47,6 @@ export const OAUTH_SPEC: OAuth2CredentialSpec = {
   refreshable: true,
 };
 
-const APP_INSTALL_FIELDS = [
-  { name: 'app_id', label: 'App ID', secret: false, pattern: '^[0-9]+$' },
-  { name: 'private_key', label: 'Private key (PEM)', secret: true },
-  { name: 'app_slug', label: 'App slug', secret: false },
-] as const;
-
-/** An installed app that cannot prove who installed it (no `userVerification`). */
-export const UNVERIFIED_APP_INSTALL_SPEC: AppInstallCredentialSpec = {
-  kind: 'app-install',
-  appConfigFields: APP_INSTALL_FIELDS,
-  installUrl: (appConfig) =>
-    `https://apps.example.com/${appConfig.app_slug ?? ''}/installations/new`,
-  installationIdParam: 'installation_id',
-};
-
-export const INSTALL_TOKEN_URL = 'https://apps.example.com/login/oauth/access_token';
-export const INSTALLATIONS_URL = 'https://api.apps.example.com/user/installations';
-export const INSTALLATIONS_PER_PAGE = 2;
-
-/** An installed app whose installations the host verifies, two per page. */
-export const APP_INSTALL_SPEC: AppInstallCredentialSpec = {
-  ...UNVERIFIED_APP_INSTALL_SPEC,
-  appConfigFields: [
-    ...APP_INSTALL_FIELDS,
-    { name: 'client_id', label: 'Client ID', secret: false },
-    { name: 'client_secret', label: 'Client secret', secret: true },
-  ],
-  userVerification: {
-    codeParam: 'code',
-    tokenUrl: INSTALL_TOKEN_URL,
-    clientAuthMethod: 'client_secret_post',
-    installationsUrl: INSTALLATIONS_URL,
-    installationsHeaders: { 'X-Api-Version': '2022-11-28' },
-    installationsListField: 'installations',
-    installationIdField: 'id',
-    pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: INSTALLATIONS_PER_PAGE },
-  },
-};
-
 export const API_KEY_SPEC: ApiKeyCredentialSpec = {
   kind: 'api-key',
   createUrl: 'https://keys.example.com/tokens',
@@ -110,8 +69,6 @@ export const SSH_KEY_SPEC: SshKeyCredentialSpec = {
 export interface FixturePluginOptions {
   readonly id: string;
   readonly credential: CredentialSpec;
-  /** Other ways the fixture connects (a token beside its app). */
-  readonly alternativeCredentials?: readonly CredentialSpec[];
   /** Tool titles, keyed by tool name. */
   readonly toolTitles?: Readonly<Record<string, string>>;
   readonly displayName?: string;
@@ -222,9 +179,6 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
       ],
     },
     credential: options.credential,
-    ...(options.alternativeCredentials
-      ? { alternativeCredentials: options.alternativeCredentials }
-      : {}),
     ...(options.toolTitles ? { toolTitles: options.toolTitles } : {}),
     classify(_tool, args) {
       const space = typeof args.space === 'string' ? args.space : null;

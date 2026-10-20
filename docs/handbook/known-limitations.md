@@ -53,12 +53,10 @@ change that removes it.
   recorded; Resend, Upstash Redis, Stripe, Gmail, SSH, Miro, Notion and
   Context7 have no live run at all, and Railway only the token check below. →
   [connections, "Tests"](connections.md#tests)
-- **Two live checks are still to do on GitHub and Railway**: whether
-  connecting an App that is already installed comes back with a `code` (L2),
-  and whether Railway's API accepts the token obtained for its MCP server
-  (L3). The first check, GitHub returning `state` on the installation
-  callback (L1), is answered: the App is connected on the instance that
-  serves this project's development. →
+- **One live check is still to do on Railway**: whether Railway's API
+  accepts the token obtained for its MCP server (L3). The two GitHub checks
+  (L1, L2) concerned the GitHub App's installation callback and are moot
+  since GitHub connects with a fine-grained token (2026-10-20). →
   [cutover-from-v4, "The live checks"](cutover-from-v4.md#4-the-live-checks)
 - **Railway tokens: what was checked live and what was not.** A workspace
   token was checked against Railway's MCP server on 2026-10-14; an account

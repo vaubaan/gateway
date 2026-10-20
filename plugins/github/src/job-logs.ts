@@ -4,7 +4,7 @@
  * `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs` answers a redirect
  * (302) to a short-lived download URL. The redirect is not followed by
  * `fetch` (`redirect: 'manual'`) : the download is a second request, sent
- * **without** the installation token — the URL carries its own short-lived
+ * **without** the connection's token — the URL carries its own short-lived
  * signature, and the token never leaves for another host.
  *
  * The body is read as a stream and at most `maxBytes` of it is kept : the
@@ -17,7 +17,7 @@
  */
 import { UpstreamHttpError, type ExecuteContext, type McpToolResult } from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
+import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
 import type { RepoCall } from './call.ts';
 
 export type JobLogsCall = Extract<RepoCall, { tool: 'github__get_job_logs' }>;

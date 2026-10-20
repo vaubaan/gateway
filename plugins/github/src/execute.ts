@@ -5,16 +5,10 @@
  *        decrypted in the context, is used for one call, and is never
  *        returned to the executor.
  *
- * Every call uses an installation token scoped to the repository named in
- * the arguments — minted (`credential.ts`) or, when the host provides a
- * connection-scoped cache, reused for a few minutes (`token-cache.ts`) — then
- * dispatches over Octokit with the injected `fetch`. 401 / 403 from GitHub →
+ * Every call sends the connection's token as the bearer and dispatches over
+ * Octokit with the injected `fetch`. What the token may do is what its owner
+ * ticked at GitHub, which GitHub enforces : 401 / 403 from GitHub →
  * `UpstreamAuthError`.
- *
- * `github__mint_install_token` is the one tool whose result IS a credential :
- * it returns a token scoped to the mission's repositories and to the
- * permission set of `purpose` ; once returned it leaves the gateway's
- * perimeter (risks `github.mint-install-token-{clone,push}`).
  */
 
 import { Octokit } from '@octokit/rest';
@@ -30,45 +24,13 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
-import {
-  MINT_TOOL,
-  PROVIDER,
-  githubRepoRefs,
-  readGithubCall,
-  repoFullName,
-  type GithubCall,
-} from './call.ts';
-import { installationTokenFor } from './credential.ts';
-import { githubTokenOf, MINT_NEEDS_THE_APP } from './token.ts';
+import { GITHUB_API_BASE, GITHUB_API_HEADERS, HTTP_FORBIDDEN } from './api.ts';
+import { PROVIDER, githubRepoRefs, readGithubCall, repoFullName, type GithubCall } from './call.ts';
+import { githubTokenOf } from './credential.ts';
 import { isGitTool } from './git-call.ts';
 import { executeGit } from './git-remote.ts';
 import { readJobLogs } from './job-logs.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
-import {
-  HTTP_FORBIDDEN,
-  assertAppPermissions,
-  declineMissingPermissions,
-  isMissingPermissionRefusal,
-  missingPermissionSentence,
-  mintPermissions,
-  needsOf,
-  refusedForPermissionSentence,
-} from './permission-check.ts';
-import { installationGrantForCall } from './token-cache.ts';
-
-/**
- * Permission sets of `github__mint_install_token`, by purpose, when the
- * installation holds everything the purpose may use. A push token carries
- * `pull_requests` and `workflows` only when the installation holds them
- * (`permission-check.ts`): GitHub refuses a token asking for more.
- */
-export const MINT_PERMISSIONS: Readonly<
-  Record<'clone' | 'push', Readonly<Record<string, string>>>
-> = {
-  clone: mintPermissions('clone', {}),
-  push: mintPermissions('push', {}),
-};
 
 /** Repositories per page and page cap of `discoverResources` (GitHub maxes `per_page` at 100). */
 export const DISCOVERY_PAGE_SIZE = 100;
@@ -94,83 +56,20 @@ async function executeRead(
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
   // The reader the classifier used, over the same mission resources : the
-  // call that runs is the call that was classified, or nothing runs — not
-  // even the token mint.
+  // call that runs is the call that was classified, or nothing runs.
   const call = readGithubCall(tool, args, githubRepoRefs(ctx.resources));
   if ('denied' in call) throw new ExecutorRefusal(refusalOf(tool, call.denied));
-  if (call.tool === MINT_TOOL) return mintInstallTokenTool(ctx, call);
-
-  // A token connection sends the pasted token itself; what it may do is what
-  // its owner ticked at GitHub, which GitHub enforces.
-  if (ctx.credential.kind === 'api-key') {
-    try {
-      return await send(ctx, call, args, githubTokenOf(ctx));
-    } catch (e: unknown) {
-      throw asAuthError(e);
-    }
-  }
-  return sendThroughTheApp(ctx, call, args);
-}
-
-/**
- * A call through the company's App. Least privilege : the per-call token only
- * sees the repository the call names ; account-shaped tools (search) get an
- * installation-wide token. Reused across calls when the host provides a
- * connection-scoped cache. What the installation holds is checked before
- * anything is sent: a missing permission is declined by name, not left to
- * GitHub's 403.
- *
- * A cached grant may predate a permission an administrator granted since
- * (it lives up to 50 minutes). So when it lacks what the call needs, or when
- * GitHub refuses the call for a missing permission ("Resource not accessible
- * by integration"), the grant is dropped and minted afresh — once — and the
- * call is checked and sent again — once. Refused again, the call is declined
- * by the permission's name.
- */
-async function sendThroughTheApp(
-  ctx: ExecuteContext,
-  call: SentCall,
-  args: Readonly<Record<string, unknown>>,
-): Promise<McpToolResult> {
-  const repo = 'target' in call ? call.target.repo : undefined;
-  const needs = needsOf(call);
-  let grant = await installationGrantForCall(ctx, repo);
-  let mintedAfresh = !grant.cached;
-  const renew = async (): Promise<void> => {
-    grant = await installationGrantForCall(ctx, repo, Date.now, { fresh: true });
-    mintedAfresh = true;
-  };
-  if (!mintedAfresh && missingPermissionSentence(call.tool, needs, grant.permissions) !== null) {
-    await renew();
-  }
-  assertAppPermissions(call, grant.permissions);
-  let refusal: unknown;
   try {
-    return await send(ctx, call, args, grant.token);
+    return await send(ctx, call, args, githubTokenOf(ctx));
   } catch (e: unknown) {
-    if (!refusedForAPermission(e)) throw asAuthError(e);
-    refusal = e;
+    throw asAuthError(e);
   }
-  if (!mintedAfresh) {
-    await renew();
-    assertAppPermissions(call, grant.permissions);
-    try {
-      return await send(ctx, call, args, grant.token);
-    } catch (e: unknown) {
-      if (!refusedForAPermission(e)) throw asAuthError(e);
-      refusal = e;
-    }
-  }
-  throw new ExecutorRefusal(refusedForPermissionSentence(call.tool, needs, messageOf(refusal)));
 }
-
-/** Every call but the credential mint, which leaves the gateway. */
-type SentCall = Exclude<GithubCall, { tool: typeof MINT_TOOL }>;
 
 /** One request of a checked call with `token` : the job log read bounded, any other tool over Octokit. */
 async function send(
   ctx: ExecuteContext,
-  call: SentCall,
+  call: GithubCall,
   args: Readonly<Record<string, unknown>>,
   token: string,
 ): Promise<McpToolResult> {
@@ -193,11 +92,6 @@ function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-/** GitHub refused the call because the installation token lacks a permission. */
-function refusedForAPermission(e: unknown): boolean {
-  return statusOf(e) === HTTP_FORBIDDEN && isMissingPermissionRefusal(HTTP_FORBIDDEN, messageOf(e));
-}
-
 /** 401 / 403 from GitHub → `UpstreamAuthError` ; anything else as it is. */
 function asAuthError(e: unknown): unknown {
   const status = statusOf(e);
@@ -218,60 +112,7 @@ function refusalOf(tool: string, denied: string): string {
   return denied.startsWith(tool) ? denied : `${tool}: ${denied}`;
 }
 
-/**
- * Mint a short-lived installation token scoped to the mission's repositories
- * (or the one named by `repoFullName`) with the permission set of `purpose`.
- * `call` comes from `readGithubCall` : an unknown purpose or a repository
- * outside the mission never reaches this function, and the repositories of
- * the token are the ones the slices named.
- */
-async function mintInstallTokenTool(
-  ctx: ExecuteContext,
-  call: Extract<GithubCall, { tool: typeof MINT_TOOL }>,
-): Promise<McpToolResult> {
-  // The host refuses it before the budget on a token connection
-  // (`unavailableTools`) ; this guard keeps a host that does not from minting nothing.
-  if (ctx.credential.kind !== 'app-install') {
-    throw new ExecutorRefusal(`${MINT_TOOL} ${MINT_NEEDS_THE_APP}`);
-  }
-  // The access_tokens endpoint takes names without owner.
-  const repositories = call.repositories.map((r) => r.repo);
-  const mint = (permissions: Readonly<Record<string, string>>) =>
-    installationTokenFor(ctx, { repositories, permissions });
-  let minted: Awaited<ReturnType<typeof mint>>;
-  try {
-    // Everything the purpose may use; GitHub answers 422 when the installation
-    // lacks one of them.
-    minted = await mint(MINT_PERMISSIONS[call.purpose]);
-  } catch (error) {
-    if (!notGranted(error)) throw error;
-    const needs = mintPermissions(call.purpose, NOTHING_HELD);
-    try {
-      // Then what the purpose cannot do without.
-      minted = await mint(needs);
-    } catch (again) {
-      if (notGranted(again)) declineMissingPermissions(call, needs);
-      throw again;
-    }
-  }
-  return json({
-    token: minted.token,
-    expires_at: minted.expiresAt.toISOString(),
-    repositories: minted.repositories,
-    permissions: minted.permissions,
-  });
-}
-
-/** The permissions of an installation that holds nothing optional: `mintPermissions` adds no extra. */
-const NOTHING_HELD: Readonly<Record<string, string>> = { metadata: 'read' };
-/** GitHub's answer to a token asking for a permission the installation does not hold. */
-const UNPROCESSABLE = 422;
-
-function notGranted(error: unknown): boolean {
-  return error instanceof UpstreamHttpError && error.status === UNPROCESSABLE;
-}
-
-interface InstallationRepositoryDto {
+interface RepositoryDto {
   readonly full_name: string;
   readonly default_branch?: string;
   readonly private?: boolean;
@@ -280,20 +121,16 @@ interface InstallationRepositoryDto {
 
 /**
  * Resources reachable through the connection : one `Resource` per
- * repository, paged by `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`.
- * Through the App, the repositories it is installed on
- * (`GET /installation/repositories`) ; with a pasted token, the repositories
- * the token reaches (`GET /user/repos`, a bare list). The owner labels the
+ * repository the token reaches (`GET /user/repos`, a bare list), paged by
+ * `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`. The owner labels the
  * environment later.
  */
 export async function discoverGithubResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const viaToken = ctx.credential.kind === 'api-key';
-  const token = viaToken ? githubTokenOf(ctx) : (await installationTokenFor(ctx)).token;
-  const path = viaToken ? '/user/repos' : '/installation/repositories';
+  const token = githubTokenOf(ctx);
+  const path = '/user/repos';
   const out: Resource[] = [];
-  let listed = 0;
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
     const url = `${GITHUB_API_BASE}${path}?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
     const res = await ctx.fetch(url, {
@@ -301,18 +138,16 @@ export async function discoverGithubResources(
       headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${token}` },
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401 || res.status === HTTP_FORBIDDEN) {
       throw new UpstreamAuthError(
-        `github rejected the ${viaToken ? 'personal access' : 'installation'} token (HTTP ${res.status})`,
+        `github rejected the personal access token (HTTP ${res.status})`,
         res.status,
       );
     }
     if (!res.ok) {
       throw new UpstreamHttpError(`github GET ${path} failed with HTTP ${res.status}`, res.status);
     }
-    const listing = repositoryPageOf(await res.json());
-    const repositories = listing.repositories;
-    listed += repositories.length;
+    const repositories = repositoriesOf(await res.json());
     for (const r of repositories) {
       // A name the reader of the calls would refuse is of no use to a
       // mission : it is left out, and said, instead of listing a resource no
@@ -335,25 +170,14 @@ export async function discoverGithubResources(
         },
       });
     }
-    const total = listing.total;
-    if (repositories.length < DISCOVERY_PAGE_SIZE || (total !== undefined && listed >= total))
-      break;
+    if (repositories.length < DISCOVERY_PAGE_SIZE) break;
   }
   return out;
 }
 
-/** `/installation/repositories` answers `{ total_count, repositories }`, `/user/repos` a bare list. */
-function repositoryPageOf(body: unknown): {
-  readonly repositories: readonly InstallationRepositoryDto[];
-  readonly total: number | undefined;
-} {
-  if (Array.isArray(body))
-    return { repositories: body as InstallationRepositoryDto[], total: undefined };
-  const wrapped = (body ?? {}) as {
-    total_count?: number;
-    repositories?: readonly InstallationRepositoryDto[];
-  };
-  return { repositories: wrapped.repositories ?? [], total: wrapped.total_count };
+/** `/user/repos` answers a bare list ; anything else lists nothing. */
+function repositoriesOf(body: unknown): readonly RepositoryDto[] {
+  return Array.isArray(body) ? (body as RepositoryDto[]) : [];
 }
 
 type OctokitLog = NonNullable<ConstructorParameters<typeof Octokit>[0]>['log'];

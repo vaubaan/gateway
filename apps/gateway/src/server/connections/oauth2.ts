@@ -20,12 +20,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 
-import type {
-  OAuth2ClientAuthMethod,
-  OAuth2CredentialSpec,
-  OAuth2Revocation,
-  OAuth2Secret,
-} from '@vaubaan/plugin-sdk';
+import type { OAuth2CredentialSpec, OAuth2Revocation, OAuth2Secret } from '@vaubaan/plugin-sdk';
 
 import { oneLine } from './errors';
 
@@ -67,16 +62,11 @@ export interface OAuth2Io {
   readonly now: () => Date;
 }
 
-/**
- * What a token request needs to know about the endpoint. An
- * `OAuth2CredentialSpec` is one; so is the `userVerification` block of an
- * `app-install` spec (`install-verification.ts`).
- */
-export interface TokenEndpoint {
-  readonly tokenUrl: string;
-  readonly clientAuthMethod: OAuth2ClientAuthMethod;
-  readonly resourceIndicator?: string;
-}
+/** What a token request needs to know about the endpoint: the part of an `OAuth2CredentialSpec` it reads. */
+type TokenEndpoint = Pick<
+  OAuth2CredentialSpec,
+  'tokenUrl' | 'clientAuthMethod' | 'resourceIndicator'
+>;
 
 /** Opaque, unguessable, URL-safe: the single-use nonce of a flow (`state`). */
 export function newState(): string {
@@ -172,24 +162,6 @@ export async function exchangeCode(
     scopes: token.scopes ?? [...spec.scopes],
     metadata: {},
   };
-}
-
-/**
- * Exchanges an authorization code the host did not ask for itself: the
- * provider started the authorization from its own installation page, so no
- * `redirect_uri` and no PKCE verifier were sent and none is replayed
- * (RFC 6749 §4.1.3: `redirect_uri` is required only when the authorization
- * request carried one). Returns the access token and nothing else — the
- * caller uses it once and drops it.
- */
-export async function exchangeUnsolicitedCode(
-  endpoint: TokenEndpoint,
-  client: OAuth2Client,
-  code: string,
-  io: OAuth2Io,
-): Promise<string> {
-  const body = new URLSearchParams({ grant_type: 'authorization_code', code });
-  return (await tokenRequest(endpoint, client, body, io)).accessToken;
 }
 
 /**

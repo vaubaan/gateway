@@ -465,14 +465,17 @@ You declare **how** a connection is obtained; the gateway runs the flow,
 stores the result encrypted and hands the decrypted secret to `execute` for
 the duration of one call. A plugin writes no route, never reads the
 environment and never sees an OAuth client secret. One `CredentialSpec` per
-plugin, of one of four kinds:
+plugin — the one way of connecting, the simplest the provider offers: a key a
+person makes by hand whenever the provider has one, `oauth2` only where it
+has none (ADR
+[one-place-to-authorize-services-token-first](../docs/decisions/one-place-to-authorize-services-token-first.md)) —
+of one of three kinds:
 
-| Kind          | When                                         | You declare                                                                                                | `execute` receives                                           |
-| ------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `api-key`     | The user pastes a key or token.              | `fields` (at least one `secret: true`), `createUrl?`                                                       | `{ fields, metadata }`                                       |
-| `oauth2`      | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`, `resourceIndicator?`… | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
-| `app-install` | The company installs an app (GitHub App).    | `appConfigFields`, `installUrl(appConfig)`, `installationIdParam`, `userVerification`                      | `{ installationId, metadata }`, plus `ctx.appConfig`         |
-| `ssh-key`     | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                        | `{ privateKeyPem, publicKey, fields, metadata }`             |
+| Kind      | When                                         | You declare                                                                                                | `execute` receives                                           |
+| --------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `createUrl?`                                                       | `{ fields, metadata }`                                       |
+| `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`, `resourceIndicator?`… | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
+| `ssh-key` | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                        | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
 **`api-key`** (the template):
 
@@ -496,44 +499,26 @@ credential: {
 In `help`, tell the user the narrowest key that works. The gateway restricts
 what an agent does with the key; it cannot restrict the key itself.
 
-**`oauth2`.** Each company registers its own OAuth app at the provider; an administrator enters its client id and secret in Settings → Administration → Company apps (the
-gateway always asks for those two; list anything else you need in
+**`oauth2`.** Only for a provider that offers no key a person can make.
+Each company declares its own OAuth client at the provider; an
+administrator enters its client id and secret on the service's connect page
+(the gateway always asks for those two; list anything else you need in
 `appConfigFields`). Set `refreshable: true` when the token endpoint issues
 refresh tokens: the gateway performs the standard `refresh_token` grant
 itself. Write `refresh()` on the plugin only when the provider's refresh is
 not the standard one.
 
-**`app-install` and `userVerification`.** After the installation the provider
-redirects the browser back with an installation id. That id is a claim made
-by a browser: without a check, a user could connect an installation that
-belongs to somebody else. `userVerification` tells the gateway how to check
-it. It is data, you run none of it:
+**A token with a guide** (`api-key`). Give the connect page what it shows:
+`label` (what the person creates, in the provider's words), `createUrl`,
+`guide` — the steps at the provider, the `permissions` to tick with the
+tools each serves (every tool of the plugin must be served by one;
+`definePlugin` checks), the expiry to choose — and `verify(ctx)`, asked
+before anything is stored: who the token acts as and when it expires, an
+`UpstreamAuthError` for a rejected token. The worked example is
+[`plugins/github/src/credential.ts`](./github/src/credential.ts) with its
+permissions in [`permissions.ts`](./github/src/permissions.ts).
 
-```ts
-userVerification: {
-  codeParam: 'code', //                 callback parameter carrying the authorization code
-  tokenUrl: 'https://github.com/login/oauth/access_token',
-  clientAuthMethod: 'client_secret_post', // or 'client_secret_basic'
-  installationsUrl: 'https://api.github.com/user/installations', // what the user can reach
-  installationsHeaders: { accept: 'application/vnd.github+json' }, // never Authorization
-  installationsListField: 'installations', // omit when the body is the list
-  installationIdField: 'id',
-  pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: 100 }, // omit if unpaged
-},
-```
-
-The gateway exchanges the code for a user token, lists the installations that
-token reaches, accepts the installation id only when it is in the list, and
-drops the token. For this to work the provider's app must ask the installing
-user to authorize it (GitHub: "Request user authorization (OAuth) during
-installation"), and `appConfigFields` must list `CLIENT_ID_FIELD` and a
-secret `CLIENT_SECRET_FIELD` (both exported by the SDK). **Declare the block
-whenever the provider offers such a list**: a spec without it is refused by
-the gateway unless the operator explicitly accepts unverified installations.
-The worked example is
-[`plugins/github/src/credential.ts`](./github/src/credential.ts).
-
-A plugin whose provider takes an app (`oauth2`, `app-install`) must also show
+A plugin whose provider signs people in (`oauth2`) must also show
 its settings in the two deployment examples, `deploy/config/gateway.example.yaml`
 and `deploy/config/.env.example`; a structural test compares them with the
 `appConfigFields` of the registered plugins (step 10).
@@ -856,15 +841,15 @@ grep -rniE 'template|widget|example\.com' plugins/acme
 
 A plugin under `plugins/` is tested by `npm run ci` but is not part of the
 gateway until it is registered. One list holds the providers; everything else
-("Connect an account", Company apps in the administration, Reference, the
-tool list) derives from it.
+("Connect an account", the setup checklist, Reference, the tool list)
+derives from it.
 
 1. `apps/gateway/package.json`: add `"@vaubaan/plugin-acme": "*"` to
    `dependencies`, then run `npm install`.
 2. `apps/gateway/src/server/compose/shipped-plugins.ts`: one import of the
    default export, placed in alphabetical order of the package names, and
    one entry at the end of `SHIPPED_PLUGINS`.
-3. For an `oauth2` or `app-install` plugin: its app settings in
+3. For an `oauth2` plugin: its OAuth client settings in
    `deploy/config/gateway.example.yaml` and `deploy/config/.env.example`.
 
 Add the provider to no other list; if a test or a page needs the provider
@@ -961,7 +946,7 @@ change yourself:
 | `report.fallbackHits` is not empty                                                    | A realistic call is covered by the fallback alone: add the catalog entry.                                                                                                                                                                                                                                                                          |
 | `mockFetch: unexpected GET …`                                                         | The plugin requested a URL no route covers: add the route or fix the URL.                                                                                                                                                                                                                                                                          |
 | `next build` fails reading `risk-catalog.yaml`                                        | The catalog is loaded with `new URL(…, import.meta.url)`: use `catalogPathNextTo(import.meta.url)`.                                                                                                                                                                                                                                                |
-| `example-config-providers.test.ts` fails                                              | An `oauth2` or `app-install` plugin is registered without its settings in `deploy/config/*.example*` (step 10).                                                                                                                                                                                                                                    |
+| `example-config-providers.test.ts` fails                                              | An `oauth2` plugin is registered without its settings in `deploy/config/*.example*` (step 10).                                                                                                                                                                                                                                                     |
 | `plugin-identifier-tests.test.ts` fails for `<id>`                                    | No test file of the plugin feeds `'..'` and an encoded or separator form (`%2e%2e`, `%2f`, `../`) to both `classify` and `execute` (step 8). The file is read with the TypeScript parser: the values must be string literals of the code, the classifier and the executor must be called, and at least one test must run (not `skip`, not `todo`). |
 
 More cases: SDK handbook,

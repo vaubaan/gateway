@@ -1,7 +1,6 @@
 /**
  * `POST /connections/connect/<provider>` — starts a connect flow (redirect to
- * the provider for `oauth2` / `app-install`) or submits its form (`api-key`,
- * `ssh-key`). One-line adapter over the host-agnostic handler.
+ * the provider for `oauth2`) or submits its form (`api-key`, `ssh-key`). One-line adapter over the host-agnostic handler.
  */
 import { getRoot } from '@/server/compose';
 

@@ -55,7 +55,7 @@ import {
   type ToolIdentifiers,
 } from './classify.ts';
 import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
-import { supabaseBearerOf } from './token.ts';
+import { supabaseBearerOf } from './credential.ts';
 import { SUPABASE_TOOL_NAMES } from './tools.ts';
 
 /** Public Management API of Supabase. */

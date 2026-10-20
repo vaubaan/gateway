@@ -1,8 +1,8 @@
 ---
-title: Connections — connect flows, resources, credential refresh, provider apps
+title: Connections — connect flows, resources, credential refresh, OAuth clients
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-20
 tracks:
   - apps/gateway/src/server/connections/
   - apps/gateway/src/server/provider-apps/
@@ -16,7 +16,6 @@ tracks:
   - apps/gateway/src/app/(app)/layout.tsx
   - apps/gateway/src/app/admin/(guarded)/provider-apps/
   - apps/gateway/src/components/connections/
-  - apps/gateway/src/components/settings/AppRegistration.tsx
   - apps/gateway/src/app/(app)/reference/[id]/page.tsx
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/lib/connections/session.ts
@@ -24,19 +23,23 @@ tracks:
   - apps/gateway/tests/unit/server/connections/
 ---
 
-# Connections — connect flows, resources, credential refresh, provider apps
+# Connections — connect flows, resources, credential refresh, OAuth clients
 
-How a user connects a provider through the company's own app, how the
-credential is stored and refreshed, how the resources of a connection are
-discovered and curated, and how the operator registers the provider apps
+How a user connects a provider — one way per service, the simplest the
+service offers —, how the credential is stored and refreshed, how the
+resources of a connection are discovered and curated, and how an
+administrator declares the OAuth client of a service that signs people in
 (spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §0 "Connection",
 "Resource"; §2.3 connection states; §4.2 Connections and Administration;
 §4.3; §6 anti-replay; §7.2). Decisions:
 [connect-driver-and-resource-curation](../decisions/connect-driver-and-resource-curation.md),
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
-D2 (the host runs the four flows and the standard refresh),
-[token-connections-beside-the-integration-app](../decisions/token-connections-beside-the-integration-app.md)
-(a service connects through the company app or with a token pasted by hand). Built on the
+D2 (the host runs the flows and the standard refresh),
+[one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)
+(one place to authorize a service; a token pasted by hand wherever the
+service offers one, OAuth only where it offers none; the GitHub App, the
+installation verification, the manifest flow and the second way of
+connecting of earlier builds are described there). Built on the
 [plugin SDK](plugin-sdk.md) (`CredentialSpec`, `discoverResources`,
 `experimental`), the [store](store.md) (`connections`,
 `connection_resources`, `instance_config`), the
@@ -48,24 +51,21 @@ D2 (the host runs the four flows and the standard refresh),
 
 ```
 apps/gateway/src/server/provider-apps/      host-agnostic, never imports `next`
-  fields.ts            appConfigFieldsOf(spec): which settings a provider's app needs
-  service.ts           ProviderAppsService: file-or-store values, sealed secrets, host/plugin views,
-                       saveRegistered / registration (an app created from the page)
-  registration.ts      AppRegistrationService: the manifest flow (start, pending, complete)
+  fields.ts            appConfigFieldsOf(spec): which settings the OAuth client of a service needs
+  service.ts           ProviderAppsService: file-or-store values, sealed secrets, host/plugin views
 apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   index.ts             createConnectionsModule(deps) → root.connections; barrel
   service.ts           ConnectionService: start/complete, discover, discoverAfterCall, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
   discovery-after-call.ts  DiscoveryAfterCall: the discovery the gateway runs after a call that created a resource
   credentials.ts       CredentialBroker: resolve() / refresh() — the refresh persistence hook
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError
-  install-verification.ts  verifyInstallation(): binds an app installation to the authorizing user
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
   credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
   ssh-keypair.ts       generateEd25519KeyPair(): OpenSSH private key + authorized_keys line
   input.ts             field validation, resolveReturnTo, env label, editable metadata lists
   mapping.ts           connectionSummaryOf(), connectionOwnerOf(): record → shown shapes
-  handlers.ts          Request → Response handlers of the eight endpoints (transfer and reassign: handbook authority)
+  handlers.ts          Request → Response handlers of the nine endpoints (transfer and reassign: handbook authority)
   errors.ts            ConnectError (closed codes + UI sentences), ConnectionUnavailableError,
                        ProviderUnreachableError
   testing.ts           fixturePlugin(), one spec per kind, connectionsHarness() — tests only
@@ -75,7 +75,8 @@ apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNoti
 apps/gateway/src/components/
   shell/AppShell.tsx                 the shell: AppShell (the side navigation) and AdminShell (the same, with the local navigation of Settings)
   connections/parts.tsx              NoticeBanner, AccountState, ExperimentalBadge, CredentialFieldInputs
-  connections/TokenGuide.tsx         steps 1 and 2 of the token way: where to create it, the permissions to tick
+  connections/TokenGuide.tsx         steps 1 and 2 of a token connection: where to create it, the permissions to tick
+  connections/OAuthClientForm.tsx    the OAuth client of a service, declared on its connect page by an administrator
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
 apps/gateway/src/app/(app)/accounts/
   page.tsx                           /accounts
@@ -97,12 +98,7 @@ apps/gateway/src/app/admin/(guarded)/connections/
   page.tsx                           /admin/connections   "Accounts without owner" (handbook authority)
   [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
 apps/gateway/src/app/admin/(guarded)/provider-apps/
-  page.tsx                           /admin/provider-apps   "Company apps"
-  [provider]/route.ts                POST /admin/provider-apps/<provider>
-  [provider]/create/route.ts         POST /admin/provider-apps/<provider>/create   → handlers.startAppRegistration
-  [provider]/confirm/page.tsx        /admin/provider-apps/<provider>/confirm?state=…   posts the manifest to the service
-  [provider]/created/route.ts        GET  /admin/provider-apps/<provider>/created  → handlers.completeAppRegistration
-apps/gateway/src/components/settings/AppRegistration.tsx   AppCreateForm, RegisteredAppFacts, permissionSummary
+  [provider]/route.ts                POST /admin/provider-apps/<provider>   → handlers.saveProviderApp (no page: the form is on the connect page)
 ```
 
 Route handlers are one-line adapters over `root.connections.handlers` (the
@@ -117,214 +113,112 @@ is under `server/` and is tested without Next.
 
 `compose/shipped-plugins.ts` imports the plugins the image ships and builds
 the registry (`buildShippedRegistry`, the default `RootDeps.buildRegistry`).
-The connect picker, Settings → Company apps, the store's catalog index and the
+The connect picker, the setup checklist, the store's catalog index and the
 tool list all derive from that registry. Adding a provider = one import and
 one entry in `SHIPPED_PLUGINS`, plus the dependency in
 `apps/gateway/package.json` (from which `next.config.ts` derives
 `transpilePackages`). `buildEmptyRegistry` remains for tests.
 
-## Provider apps
+## The OAuth client of a service
 
+A service that signs people in through its own authorization (`oauth2`)
+needs the company's OAuth client declared once before anyone connects; a
+service that takes a key needs nothing from an administrator.
 `appConfigFieldsOf(spec)` (`provider-apps/fields.ts`):
 
-| Credential kind | Fields the operator enters                                                                                 |
-| --------------- | ---------------------------------------------------------------------------------------------------------- |
-| `oauth2`        | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields`                          |
-| `app-install`   | the plugin's `appConfigFields` (GitHub: `app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`) |
-| `api-key`       | none — each user pastes a key of their own                                                                 |
-| `ssh-key`       | none — the instance generates the key pair                                                                 |
+| Credential kind | Fields the administrator enters                                                   |
+| --------------- | --------------------------------------------------------------------------------- |
+| `oauth2`        | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields` |
+| `api-key`       | none — each user pastes a key of their own                                        |
+| `ssh-key`       | none — the instance generates the key pair                                        |
+
+`needsProviderApp(spec)` is true when that list is not empty. Gmail is the
+one shipped plugin that needs it.
 
 `ProviderAppsService(config.providers, store.config, registry)`:
 
 - **Sources.** A `providers.<id>` block of the mounted configuration
-  (`VAUBAAN_PROVIDER_<ID>_<FIELD>`) wins for the whole provider: `source:
-'file'`, `isReadOnly(id)` true, `save()` refuses. The block is translated
-  to the snake_case record plugins read by `fileAppConfig()`. Otherwise the
-  values come from `instance_config` under `provider_apps.<id>.<field>`;
-  secret fields are sealed (`config.setSecret`, associated data
+  (`VAUBAAN_PROVIDER_<ID>_CLIENT_ID`, `VAUBAAN_PROVIDER_<ID>_CLIENT_SECRET[_FILE]`)
+  wins for the whole provider: `source: 'file'`, `isReadOnly(id)` true,
+  `save()` refuses. The block is translated to the snake_case record plugins
+  read by `fileAppConfig()`. Otherwise the values come from `instance_config`
+  under `provider_apps.<id>.<field>`; secret fields are sealed
+  (`config.setSecret`, associated data
   `instance_config:provider_apps.<id>.<field>`). A file block that lacks a
-  required field is reported `incomplete` — it is never completed from the
+  required field is reported incomplete — it is never completed from the
   store.
-- **`status(id)` / `list()`** → `ProviderAppStatus { needsApp, fields,
-source, configured, missing, values (non-secret only), secretsSet,
-installVerification }`. The secret values are never returned.
+- **`status(id)` / `list()`** → `ProviderAppStatus { providerId, displayName,
+experimental, credentialKind, needsApp, fields, source, configured, missing,
+values (non-secret only), secretsSet }`. The secret values are never
+  returned.
 - **`save(id, input)`** validates every field at once (`ProviderAppError.problems`:
   required, `pattern`), keeps a stored secret when the input is blank,
-  removes a blank optional field. **`clear(id)`** deletes the stored keys.
+  removes a blank optional field; refused for a provider that needs no
+  client. **`clear(id)`** deletes the stored keys of the provider.
 - **`hostAppConfig(id)`** — the full record, secrets included, for the
-  host's own use (OAuth client authentication, `installUrl(appConfig)`);
+  host's own use (OAuth client authentication, the declarative revocation);
   throws `ProviderAppNotConfigured` naming the missing fields.
 - **`pluginAppConfig(id)`** — what a plugin receives as `ctx.appConfig`:
-  the same record **without `client_secret`**, whatever the kind (the
-  OAuth client of an `oauth2` provider, and the one an `app-install`
-  provider uses to verify installations); an `app-install` plugin keeps
-  every other field (it mints installation tokens from the private key);
-  `{}` when no app exists.
-- **`installVerification(id)`** → `'verified'` (the plugin's `app-install`
-  spec declares `userVerification`), `'unverified-refused'` (it does not —
-  the default: nobody can connect the provider), `'unverified-accepted'`
-  (it does not and the operator accepted that), or `null` for the other
-  kinds. **`setAcceptUnverifiedInstallations(id, accept)`** writes the
-  operator's decision under
-  `provider_app_flags.<id>.accept_unverified_installations` (`'true'` or
-  absent). It is refused for a provider that verifies — the flag never
-  weakens a verification that exists — and it is not a field of the app:
-  it lives in the store whatever the source of the fields, and `clear(id)`
-  removes it.
+  the same record **without `client_secret`** (ADR
+  plugin-contract-and-credential-spec D2: a plugin never sees the OAuth
+  client secret); `{}` for a plugin that declares no OAuth client.
 
-The page `/admin/provider-apps` (**Company apps**, in Settings) lists one row
-per provider that needs an app: the service and what is registered
-("registered", with the tag "set in the mounted configuration" for a
-file-sourced app; "not registered"; "Incomplete: … missing"), and a
-"Register" or "Edit" link that opens the form of that service under its row
-(`?app=<provider id>`). A service whose plugin also declares a token way
-beside its app (`ProviderAppStatus.token`: an `api-key` spec among
-`credentialSpecsOf`, read from the plugins — GitHub, Railway and Supabase
-today) reads "not registered · optional", the hint under the table names
-those services, and while no app is set its form (or its creation form)
-opens on a note (`OptionalApp`, `data-testid="optional-app-<id>"`): the app
-is optional, people connect with a token they create at the service, and
-**Connect `<service>` with a token** leads to
-`tokenConnectPath(id)` = `/accounts/new/<id>?method=api-key`, the token way
-with the guide its plugin declares. `requiresApp(app)` (`needsApp` and no
-token way) is the one rule of what is "missing": Settings → Setup and the
-home's checklist count only those services, and name the optional ones apart. The form shows the URL to register at the provider
-(`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`
-— OAuth redirect URI; for an installed app, the callback URL of its user
-authorization when installations are verified, its setup URL otherwise),
-the fields
-(`CredentialFieldInputs`: secrets as password inputs, PEM-like secrets as a
-textarea, never pre-filled; its required `idPrefix` binds each label to its
-input and must be unique on the page, so each provider's list gets its own), Save, Remove for store-sourced settings, and Cancel.
-`POST /admin/provider-apps/<provider>` (`handlers.saveProviderApp`) goes
-through `guardMutation(request, deps, 'operator')` (origin, session, admin
-rule; the bootstrap operator may use it), answers 400 to a body that is not a
-form, and writes an `AdminAuditEntry` `config-changed` on `instance-config` /
-`provider-app:<id>` whose `before`/`after` carry the non-secret values, the
-names of the secrets set and, for an installed app, `install_verification`.
-Its `user_id` is `auditActorId(principal)`: the operator's user id, or
-`BOOTSTRAP_ACTOR_ID` for the bootstrap operator (shown as
-`BOOTSTRAP_ACTOR_LABEL` in the audit view's `actor.label`; handbook
-[authentication](authentication.md)).
+**Where it is declared.** On the service's own connect page,
+`/accounts/new/<id>` (`connectPagePath(id)`), for an administrator
+(`OAuthClientForm`): while the client is not declared the page shows, under
+"Declare the OAuth client of <service>" (`data-testid="oauth-client-missing"`),
+the redirect address to register at the service
+(`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`),
+the fields (`CredentialFieldInputs`: secrets as password inputs, never
+pre-filled; `idPrefix` `provider-app-<id>`), Save and, for store-sourced
+settings, Remove; once declared, the same form sits behind the disclosure
+"The OAuth client of <service>" (`data-testid="oauth-client-settings"`)
+under the connect form. Anyone else reads a callout with the same test id:
+an administrator declares it once, on this page. A file-sourced provider
+shows the form disabled with `CONFIG_WORDS.fileReadOnly`. Settings → Setup
+and the home's first-run checklist count the services whose client is
+missing (`SetupView.company_apps = { registered, missing: { id, name }[] }`,
+`now/setup.ts`) and link "Declare <service>" to that page; the picker leads
+an administrator there too.
 
-The handler itself only authorizes, checks that the provider is registered
-(`registry.has`; an unknown id gets the `provider-unknown` notice) and reads
-the settings before the change. A failure to read them (store,
-configuration) is not reported as an unknown provider: it propagates. The
-form's `action` then picks one of three helpers, each returning the new
-status and the notice — `setInstallAcceptance` (`accept-unverified` /
-`refuse-unverified`), `clearProviderApp` (`clear`), `storeProviderApp`
-(no action) — and `auditProviderApp` writes the one `config-changed` entry
-for all of them. The entry is written after the change is committed: when
-that write fails, the failure is logged at `error` (`audit entry not written
-for a saved configuration change`, with `actor` = `auditActorId(principal)`
-and `provider`) and the operator still gets the notice of the saved change,
-as for the IdP settings.
+`POST /admin/provider-apps/<provider>` (`providerAppActionPath(id)`,
+`handlers.saveProviderApp`) goes through
+`guardMutation(request, deps, 'operator')` (origin, session, admin rule; the
+bootstrap operator may use it), answers 400 to a body that is not a form,
+reads the status before the change, applies the form's `action` —
+`clear` (`CLEAR_PROVIDER_APP_ACTION`, `clearProviderApp`: refused when the
+file sets the provider) or none (`storeProviderApp`: the `field.<name>`
+values) — and writes one `AdminAuditEntry` `config-changed` on
+`instance-config` / `provider-app:<id>` whose `before`/`after` carry the
+non-secret values and the names of the secrets set (`auditView`). Its
+`user_id` is `auditActorId(principal)`: the operator's user id, or
+`BOOTSTRAP_ACTOR_ID` for the bootstrap operator (handbook
+[authentication](authentication.md)). The entry is written after the change
+is committed: when that write fails, the failure is logged at `error`
+(`audit entry not written for a saved configuration change`, with `actor`
+and `provider`) and the operator still gets the notice. The handler checks
+that the provider is registered (`registry.has`; an unknown id gets the
+`provider-unknown` notice on `/accounts/new`); a failure to read the
+settings (store, configuration) propagates. Success and every refusal come
+back to the connect page as a one-time notice.
 
-An installed app also shows how its installations are bound to the
-connecting user: "· installations verified" after "registered", or — for a
-plugin without `userVerification` — the mark "Cannot verify installations"
-and a warning note with its own form (outside
-the fields' fieldset, so it works for a file-sourced provider too) whose
-button posts `action=accept-unverified` / `action=refuse-unverified` to the
-same endpoint. Accepting is audited (`config-changed`), logged at `warn`
-and answered with a warning notice; the mark then reads "Unverified installations
-accepted". No shipped plugin needs it
-(`shipped-providers.test.ts` fails if one does).
+## One way per service
 
-### Company apps created from the page (manifest flow)
-
-ADR [company-app-created-from-a-manifest](../decisions/company-app-created-from-a-manifest.md).
-An `app-install` spec may declare `manifestRegistration` (plugin SDK,
-`AppManifestRegistration`): the permissions the app may request, each with
-levels and the tools that need them (`AppPermission`; the SDK's
-`app-permissions.ts` reads it), the registration address per owner, the
-manifest builder, the code exchange and the reader of its answer. GitHub is
-the one shipped plugin that declares it (`plugins/github/src/app-manifest.ts`).
-
-`AppRegistrationService` (`root.connections.registration`), nothing in it
-naming a provider:
-
-- **`availability(id)`** → `null` (offer it), `not-supported` (no
-  manifest), `read-only` (the configuration file sets the app) or
-  `already-set` (any field is stored: replacing an app is the form's job).
-- **`start(actor, id, choice)`** checks the owner (organisation login against
-  `ownerLoginPattern`, or the personal account), the name (required, at most
-  `nameMaxLength`) and the permissions (`checkPermissionChoice`: a level per
-  permission or `none`, a mandatory one kept, an unknown name or level
-  refused), builds the manifest (`url` = `public_url`, `callback_urls` = the
-  connection callback, `redirect_url` =
-  `<public_url>/admin/provider-apps/<id>/created`, the chosen
-  `default_permissions`) and stores it in the `SessionStore` under
-  `app-registration:<state>` with the web session id, the audit actor and
-  the choice, for `REGISTRATION_TTL_MS` (15 minutes). The state is 32 random
-  bytes, base64url. Refusals are `AppRegistrationError` with a closed code and
-  plain sentences.
-- **`pending(sessionId, id, state)`** — the confirm page reads the record back
-  (same session, same provider) without consuming it: the form's `action` is
-  `registrationUrl(owner)` with `?state=`, its one hidden field the manifest
-  JSON.
-- **`complete(sessionId, id, query)`** — the state is taken once (deleted
-  whatever happens next; refused if absent, expired, of another session or
-  provider), a missing code is `cancelled`, a code outside the plugin's
-  grammar `code-invalid`; availability is checked again; the code is posted
-  to `conversionUrl(code)` with `conversionHeaders` and no credential
-  (`redirect: 'error'`); a failed status is `exchange-refused` (only the
-  status is logged), no answer `exchange-failed`, an answer the plugin cannot
-  read `answer-unreadable`. The app is then stored by
-  **`ProviderAppsService.saveRegistered(id, appConfig, record)`**: the same
-  validation and sealing as `save`, plus the record of what the page shows —
-  name, slug, owner, link, the permissions the service answered, who and when
-  — as JSON under `provider_apps.<id>.registered`, in one transaction, refused
-  if any field is already stored. The webhook secret is not kept. One
-  `config-changed` entry on `provider-app:<id>`: `before`/`after` as a form
-  save, plus `created_from: 'manifest'`, `app_name`, `app_slug`, `owner`,
-  `owner_kind`, `permissions_requested` — never a secret.
-- **`registration(id)`** returns that record while the stored non-secret
-  fields still equal those it was created with (an app replaced by hand
-  drops it); `clear(id)` removes it with the fields.
-
-On the page, the line of such a service opens on `AppCreateForm` while
-`availability` is `null`: two plain sentences (it belongs to the owner, its
-key stays here encrypted, the service asks to confirm), the owner, the name
-(`Vaubaan <host>` by default), and one select per permission, the default
-every highest level, a sensitive permission marked "Sensitive." with its
-sentence, and what stops a level down ("Read only stops: …"; per condition,
-"…, for a file under .github/workflows/"), read from the plugin's tool
-titles. "Enter an app registered by hand" (`?by=hand`) opens the usual form,
-which links back. `POST …/create` (`guardMutation`, operator) answers 303 to
-the confirm page, or back to the line with a notice. The confirm page
-(`requireOperator`) shows owner, name and permissions and the button
-"Continue to <service>"; an unknown or expired state shows "This creation is
-no longer waiting". `GET …/created` is a top-level GET from the service
-(`guardSession`, operator; no session → `/login`, not an administrator →
-the Company apps page): success and every failure come back to the line
-as a one-time notice. A created app's line shows `RegisteredAppFacts` — the
-name linking to the app at the service, the owner, the permissions — the
-primary "Install it on your repositories" (`/accounts/new/<id>`: installing
-is connecting an account), and the form behind "Edit its settings by hand".
-
-## Two ways to connect one service
-
-A plugin declares its primary way in `credential` and may add others in
-`alternativeCredentials` (GitHub, Supabase and Railway: a token pasted by
-hand beside the company app). The host reads them only through
-`credentialSpecsOf` / `credentialSpecFor` / `appCredentialSpecOf` of the SDK.
+A plugin declares its one way of connecting in `credential` (ADR
+[one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
+the simplest the service offers — a key a person makes by hand (`api-key`)
+whenever the service has one, `oauth2` only where it has none (Gmail),
+`ssh-key` for a host. The host never looks for a second way.
 
 - **What is offered.** `ConnectionService.describe` builds one
-  `ConnectMethod` per declared way (`kind`, `usesApp`, `configured`, the form
-  `fields`, `createUrl`, `label`, the `guide` with each permission's tools as
-  `{ name, title }`, `unavailableTools` with their reasons).
-  `defaultMethod(provider)` is the first way usable now, else the primary;
-  `ConnectableProvider.kind/fields/createUrl` are that way's, and
-  `configured` is true when any way is usable. A way through the app is
-  usable when the app is complete (and its installations verifiable or
-  accepted); a token way always is.
-- **What is run.** `start(…, { method })` (`METHOD_FIELD` of the form)
-  picks the spec: the way asked for (an undeclared kind is `invalid-input`),
-  else the way of the account being reconnected
-  (`connectionCredentialKind(record, primary)`: `metadata.credential_kind`),
-  else the offered way. `complete` takes the spec of the pending flow's kind.
+  `ConnectableProvider` per plugin: `kind`, `usesApp` (true for `oauth2`),
+  `configured` (the OAuth client is declared, or none is needed), the form
+  `fields`, `createUrl`, `label` (what the person creates, in the service's
+  words) and the `guide` with each permission's tools as `{ name, title }`
+  (`toolLabel`: the plugin's `toolTitles`, else the name).
+- **What is run.** `start` runs the plugin's `credential`; `complete`
+  completes a pending `oauth2` flow only. A reconnection runs the same way,
+  whatever kind the stored credential has.
 - **A token is checked before it is stored.** `connectWithApiKey` calls the
   spec's `verify` (`verifyPasted`): who it acts as and its expiry. An
   `UpstreamAuthError` or an answer the plugin could not read refuses with
@@ -332,25 +226,24 @@ hand beside the company app). The host reads them only through
   expiry already past is refused with the date. Then the `required` first
   discovery. Stored in clear: `metadata.account`, `metadata.expires_at`,
   `credential_expires_at`; the token is sealed with the credential.
-- **Reconnecting another way** keeps the id and the missions; when the kind
-  changes, the old way's metadata (installation id, token account) is
-  dropped except `discovery`.
-- **The app's settings never reach a token connection.**
-  `ProviderAppsService.pluginAppConfigFor(id, kind)` is the `appConfig` the
-  broker and the connect driver hand a plugin: the app record for the kind
-  the app serves, `{}` otherwise. A token account keeps working when the app
-  is incomplete or removed.
-- **Refresh and revocation by kind.** A plugin's `refresh` override serves
-  its primary kind only, the generic grant an `oauth2` credential only: a
-  401 on a token expires the account at once. `canWithdraw(plugin, kind)`:
-  the plugin's `revoke` hook serves its primary kind, an `oauth2`
-  `revocation` an `oauth2` credential; a token is never withdrawn and
-  `providerGrantOf` reads the spec's own `manualRevocation` (where to delete
-  the token).
-- **Tools a way cannot run** (`unavailableTools`): the execution door's
-  resource stage refuses the call before the budget (`toolUnavailableOn`,
-  handbook [execution-door](execution-door.md)), `callableTools` leaves it out
-  of `tools/list`; `MissionConnection.credential_kind` carries the way.
+- **An account connected a way the plugin no longer offers** (the GitHub
+  App, the OAuth apps of Supabase and Railway of earlier builds: its
+  `metadata.credential_kind` is not the plugin's) keeps its id and its
+  missions, but the execution door refuses every call on it before the
+  budget (`toolUnavailableOn`, handbook [execution-door](execution-door.md):
+  "this account was connected a way <service> no longer offers on this
+  gateway") and `callableTools` leaves its tools out of `tools/list`, until
+  its owner reconnects it from Accounts; reconnecting drops the old way's
+  metadata (installation id, token account) except `discovery`. The gateway
+  withdraws nothing at the provider for such an account: `canWithdraw`
+  answers false for a kind the plugin does not declare, and `providerGrantOf`
+  says where to remove the grant by hand.
+- **Refresh and revocation.** A plugin's `refresh` override and the generic
+  `refresh_token` grant serve an `oauth2` credential only: a 401 on a token
+  expires the account at once. `canWithdraw(plugin, kind)`: the plugin's
+  `revoke` hook, or an `oauth2` `revocation`, for the kind the plugin
+  declares; a token is never withdrawn by the gateway and `providerGrantOf`
+  reads `plugin.manualRevocation` (where to delete it).
 
 ## The connect driver
 
@@ -373,15 +266,8 @@ oauth2       start    oauthClient() from hostAppConfig ──none──▶ app-n
                           redirect_uri, code_verifier, [resource]; client auth per clientAuthMethod
                       ──rejected──▶ token-exchange-failed   ──5xx / network──▶ provider-unreachable
                       finalize(discovery: best-effort)
-app-install  start    no userVerification and not accepted ──▶ installation-unverifiable
-                      installUrl(hostAppConfig) + ?state=<state>
-             complete take(state); query[installationIdParam] must match ^[A-Za-z0-9_-]{1,64}$
-                      ──absent / malformed──▶ provider-denied
-                      bindInstallation(): see "Installation binding"
-                      ──refused──▶ installation-not-verified / token-exchange-failed (audited)
-                      ──5xx / network──▶ provider-unreachable
-                      finalize(discovery: reject-auth-failure)
 api-key      start    readCredentialFields(spec.fields, form)  ──▶ invalid-input
+                      verifyPasted(): spec.verify  ──rejected──▶ credential-rejected  ──network──▶ provider-unreachable
                       finalize(discovery: required)
 ssh-key      start    readCredentialFields(); generateEd25519KeyPair('vaubaan-gateway')
                       finalize(discovery: deferred)   metadata.public_key shown on the page of the account
@@ -415,21 +301,20 @@ Basic` with form-encoded id and secret (RFC 6749 §2.3.1),
   `error_description`, never a credential.
 - **`start`** resolves what every kind needs once (`FlowStart`: actor,
   plugin, display name, return path, reconnect target) and dispatches to one
-  private method per kind: `startOAuth2`, `startAppInstall`,
-  `connectWithApiKey`, `connectWithSshKey`. The two redirect flows build
-  their pending record with `newPending`, the two form flows read their
-  values with `readFormOrThrow`. **`complete`** takes the pending record and
-  dispatches to `completeOAuth2` / `completeAppInstall`.
+  private method per kind: `startOAuth2`, `connectWithApiKey`,
+  `connectWithSshKey`. The redirect flow builds its pending record with
+  `newPending`, the two form flows read their values with `readFormOrThrow`.
+  **`complete`** takes the pending record and runs `completeOAuth2` when
+  the plugin's way is `oauth2`; anything else is `state-invalid`.
 - **`finalize`** runs the first discovery with the secret still in memory
   (`firstDiscovery`), then writes (`persist`: create or reconnect, audited),
   then records the discovery's outcome. Discovery policy per kind:
 
-  | Policy                | Kind          | A failed discovery…                                                                        |
-  | --------------------- | ------------- | ------------------------------------------------------------------------------------------ |
-  | `required`            | `api-key`     | refuses the connection (`credential-rejected` / `provider-unreachable`); nothing is stored |
-  | `reject-auth-failure` | `app-install` | refuses it only on `UpstreamAuthError` (an installation the app cannot reach)              |
-  | `best-effort`         | `oauth2`      | keeps the connection, records the error (the authorization code is spent)                  |
-  | `deferred`            | `ssh-key`     | is not attempted: the public key is not installed yet                                      |
+  | Policy        | Kind      | A failed discovery…                                                                        |
+  | ------------- | --------- | ------------------------------------------------------------------------------------------ |
+  | `required`    | `api-key` | refuses the connection (`credential-rejected` / `provider-unreachable`); nothing is stored |
+  | `best-effort` | `oauth2`  | keeps the connection, records the error (the authorization code is spent)                  |
+  | `deferred`    | `ssh-key` | is not attempted: the public key is not installed yet                                      |
 
   The `detail` of the error is the provider's status in the gateway's own
   words (`providerFailureReason`, `connections/failure-reason.ts`: "the
@@ -444,8 +329,8 @@ displayName, credential: serializeSecret(secret), credentialExpiresAt,
 metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
   the store with the connection id as associated data. `metadata_json`
   holds only clear facts: `credential_kind`, `fields` (the non-secret form
-  values: team id, host, user…), `public_key` (ssh), `installation_id`,
-  and `discovery { at, ok, count, error }`. Audit: `connection-created`.
+  values: team id, host, user…), `public_key` (ssh), `account` and
+  `expires_at` (a checked token), and `discovery { at, ok, count, error }`. Audit: `connection-created`.
 - **Reconnect.** `start(…, { reconnectId })` (the page
   `/accounts/new/<provider>?connection=<id>`) re-runs the flow of the
   same provider for a connection the actor owns and ends with
@@ -461,76 +346,13 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
 `ConnectError` codes (`errors.ts`, sentences in `CONNECT_ERROR_MESSAGES`):
 `provider-unknown`, `app-not-configured`, `invalid-input`,
 `return-url-refused`, `rate-limited`, `state-invalid`, `provider-denied`,
-`token-exchange-failed`, `installation-not-verified` (403),
-`installation-unverifiable` (409), `credential-rejected`,
+`token-exchange-failed`, `credential-rejected`,
 `provider-unreachable`, `not-found`, `connection-revoked`,
 `connection-unowned`, `provider-mismatch`, `label-read-only`, and the four
 of ownership (handbook [authority](authority.md)): `transfer-not-member`
 (403), `not-ownerless` (409), `owner-unknown`, `owner-group-empty`.
 A connection of another owner is reported exactly like a missing one
 (`not-found`).
-
-### Installation binding (`app-install`)
-
-A valid `state` proves who started the flow, not which installation they
-may claim: the installation id of the callback is a query parameter the
-browser controls. `ConnectionService.bindInstallation` therefore runs
-before `finalize`, hence before the plugin is asked to mint a token for the
-claimed id (ADR connect-driver-and-resource-curation, amendment of
-2026-10-13).
-
-**The plugin declares `userVerification`** (`AppInstallUserVerification`,
-[plugin SDK](plugin-sdk.md); GitHub does). The provider's app is set to ask
-the installing user to authorize it, so the callback carries an
-authorization code next to the installation id.
-`verifyInstallation(verification, client, { installationId, code }, io)`
-(`install-verification.ts`):
-
-1. `exchangeUnsolicitedCode()` (`oauth2.ts`) — `POST tokenUrl` with
-   `grant_type=authorization_code`, the code and the app's `client_id` /
-   `client_secret` per `clientAuthMethod`. No `redirect_uri` and no PKCE
-   verifier: the provider started that authorization itself, the host sent
-   neither.
-2. `GET installationsUrl` with `Authorization: Bearer <user token>` and the
-   spec's `installationsHeaders` (which can never replace `Authorization`),
-   page by page when `pagination` is declared (`perPageParam`, `pageParam`
-   from 1), reading `installationsListField` (or the body itself) and
-   `installationIdField` of each item, compared as strings.
-3. The id is in the list → resolved. A page shorter than `perPage` without
-   it, or `MAX_INSTALLATION_PAGES` (20) full pages without it → refused.
-
-The user token is a local of that function: it is not returned, stored,
-logged or put in an error message, and the plugin never receives it (nor
-the client secret). The connection's metadata records
-`installation_verification: 'user-authorization'`.
-
-| Outcome                                                                          | `ConnectError`              | Audited (`reason`)            |
-| -------------------------------------------------------------------------------- | --------------------------- | ----------------------------- |
-| no code in the callback (or `?error=` from the provider)                         | `installation-not-verified` | `no-authorization-code`       |
-| token endpoint refuses the code (4xx, or an `error` under 200)                   | `token-exchange-failed`     | `authorization-code-rejected` |
-| installations endpoint answers 401 / 403                                         | `installation-not-verified` | `installations-list-rejected` |
-| the id is not in the list                                                        | `installation-not-verified` | `installation-not-listed`     |
-| any other non-2xx, network, timeout (15 s), a body that is not the declared list | `provider-unreachable`      | no — the user retries         |
-
-A refusal stores nothing, writes an `AdminAuditEntry` `connection-refused`
-(object `connection` / the reconnect target, or `not-created:<provider>`;
-`after: { provider, reason, installation_id, reconnect }`) and logs
-`connection refused: installation not bound to the user` at `warn`. A
-reconnection goes through the same check.
-
-**The plugin declares none.** `start` and `complete` both refuse with
-`installation-unverifiable` (the second is audited with
-`verification-not-supported`: the operator may withdraw the acceptance
-while a user is at the provider) unless
-`providerApps.installVerification(id)` is `'unverified-accepted'`. Such a
-provider is also `configured: false` on the picker. When accepted, the
-connection is created as before P1.4b, with
-`installation_verification: 'none'` in its metadata and a `warn` log line.
-
-What the check proves: the account that authorized the app can reach the
-installation (for GitHub, `GET /user/installations` lists the installations
-the user has explicit read, write or admin access to through at least one
-repository). It does not prove that this account administers it.
 
 ### Created by the v4 importer (`importPastedKey`, `importSshKey`)
 
@@ -662,7 +484,7 @@ status through `CredentialBroker.resolve` (`execution/upstream-stage.ts`).
 ### The grant at the provider (`credentials.ts`, `oauth2.ts`, `provider-grant.ts`)
 
 Revoking a connection erases its credential here. The access the provider
-granted — the OAuth authorization, the installed app, the API key — is
+granted — the OAuth authorization, the API key — is
 another object, and it lives at the provider (spec §2.3; ADR
 [provider-side-revocation-on-connection-revoke](../decisions/provider-side-revocation-on-connection-revoke.md)).
 
@@ -929,33 +751,30 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
     shared.
   - **Connect an account**: `ServicePicker`, a grid of `PickCard`s from
     `ConnectionService.providers()` — the mark, the name and how the account
-    is connected (`howToConnect`: "sign in at Supabase", "install your
-    company’s GitHub app", "paste: test-mode key and live-mode key"; "· or
-    a token" when a second way is usable now). A
-    service whose company app is not registered is dashed and says who to
-    ask; for an administrator the card leads to Company apps. The primary
-    action of the page jumps to this region.
+    is connected (`howToConnect`: "sign in at Gmail", "paste: fine-grained
+    personal access token", "a key pair made here, installed on the host").
+    A service whose OAuth client is not declared is dashed and says who to
+    ask; for an administrator the card leads to the service's connect page,
+    where the client is declared. The primary action of the page jumps to
+    this region.
   - With no account and nothing shared the first region is one sentence
     (`EmptyState`) and the picker follows.
 - **`/accounts/new`** — the same picker on a page of its own, for whoever
   arrives from the mission being written (`?return_to=` is passed on).
-- **`/accounts/new/<provider>`** — chooses the way first
-  (`?method=<kind>`, else the way of the account reconnected, else
-  `defaultMethod`). The header's secondary action switches to the other way
-  when it is usable ("Use a token instead" / "Connect through your company’s
-  <service> app instead"), keeping `?connection=` and `?return_to=`. A way
-  with a `guide` is three steps (`FormStep`): **1** "Create the token at
-  <service>" (the plugin's steps, the link to its token page, the expiry to
-  choose or "gives these tokens no expiry"), **2** "Permissions to tick" —
-  one row per permission name (`permissionLines`: "read and write" when any
-  of its tools writes, "for" the titles of the tools it serves) and, when the
-  way cannot run some tools, a note naming them and why — **3** "Paste it
-  here", the form, then two sentences: what the gateway does with the token
-  and why a shared service account is fine. Without an app, a hint says so
-  (and, for an administrator, that registering it adds the other way). The
-  words are `TOKEN_CONNECT` (`lib/vocabulary.ts`); the steps, permissions and
-  reasons are the plugin's. For the other ways the form is
-  as follows, on the narrow measure: an
+- **`/accounts/new/<provider>`** — the one place to authorize the service:
+  the plugin's way, nothing to choose. A way with a `guide` is three steps
+  (`FormStep`): **1** "Create the token at <service>" (the plugin's steps,
+  the link to its token page, the expiry to choose or "gives these tokens
+  no expiry"), **2** "Permissions to tick" — one row per permission name
+  (`permissionLines`: "read and write" when any of its tools writes, "for"
+  the titles of the tools it serves; left out when the token carries no
+  permission choice — **3** "Paste it here", the form, then two sentences:
+  what the gateway does with the token and why a shared service account is
+  fine. The words are `TOKEN_CONNECT` (`lib/vocabulary.ts`); the steps and
+  permissions are the plugin's. An `oauth2` service whose client is not
+  declared shows the OAuth client section to an administrator and a callout
+  to anyone else ("The OAuth client of a service" above). For the other
+  ways the form is as follows, on the narrow measure: an
   optional name, then a "Continue to …" button (redirect flows) or the
   declared fields (`CredentialFieldInputs`: `field.<name>` inputs, secrets
   masked). **A field says its shape before the person types**: the label
@@ -1027,8 +846,7 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
   - An SSH account shows its public key in a copyable block above the lists.
   - A token account: the expiry the service gave is on the header's line
     ("expires 15 Jan"), a warning appears `TOKEN_EXPIRY_NOTICE_DAYS` (14)
-    ahead, and "Show details" adds "Token: acts as acme-bot · expires …" and
-    the tools the token cannot run, with why.
+    ahead, and "Show details" adds "Token: acts as acme-bot · expires …".
 - **`/accounts/<id>/share`** — "Give access", a dialog over the same page
   (handbook [authority](authority.md)).
 - **Notices.** A handler never puts a message in a URL: it stores a
@@ -1059,78 +877,60 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 `src/server/provider-apps/service.test.ts`), all on `openTestStore()` and
 `mockFetch` through `connectionsHarness()`:
 
-- `oauth2.test.ts` (28) — authorization URL, RFC 7636 vector, the three
+- `oauth2.test.ts` — authorization URL, RFC 7636 vector, the three
   client authentication methods, resource indicator, error mapping,
   rotation, a PKCE exchange without a verifier refused before any request.
-- `service.test.ts` (34) — the driver per credential kind against mocked
+- `service.test.ts` — the driver per credential kind against mocked
   provider endpoints: state replay, foreign user, crossed provider,
-  foreign return URL, denial, failed exchange, rate limit, the
-  installation binding (id in the user's list on a second page accepted
-  and the user token kept nowhere; id not in the list, missing code,
-  rejected code, denied list → refused, nothing stored, audited;
-  unreachable provider not audited; reconnection verified; a spec without
-  `userVerification` refused unless accepted, also when the acceptance is
-  withdrawn mid-flow), app-install
-  rejection, api-key rejection storing nothing, ssh key pair, ownership
-  (user and group), reconnect (an `unowned` connection refused), revoke, the resource merge (owner label,
-  name, hidden, list settings kept; stale; plugin-set label read-only), the
-  default environment (catalog labels only, owner only, audited once, plugin
-  label kept, pinning the default's label, cleared, refused when revoked),
-  failed discovery, expiry on a rejected credential.
-- `credentials.test.ts` (15) — resolve, skew refresh with rotation and
+  foreign return URL, denial, failed exchange, rate limit, api-key
+  rejection storing nothing, ssh key pair, ownership (user and group),
+  reconnect (an `unowned` connection refused), revoke, the resource merge
+  (owner label, name, hidden, list settings kept; stale; plugin-set label
+  read-only), the default environment (catalog labels only, owner only,
+  audited once, plugin label kept, pinning the default's label, cleared,
+  refused when revoked), failed discovery, expiry on a rejected credential.
+- `credentials.test.ts` — resolve, skew refresh with rotation and
   persistence, an `unowned` connection served, refreshed and kept `unowned`
   (also when its refresh is rejected), `expired` / `revoked` refused, single
   flight, rejected → `expired`, unreachable → still
   `active`, no refresh path, revoke race, plugin `refresh()` override.
-- `install-verification.test.ts` (5) — bare list and Basic client
-  authentication, ids as numbers or strings, malformed items, a spec header
-  cannot replace `Authorization`, the page cap, refusal versus unreachable,
-  no message carries the token or the client secret.
-- `mapping.test.ts` (3) — the summary, the owner's name, a vanished owner.
-- `pending.test.ts` (7), `input.test.ts` (23), `codec-and-keypair.test.ts`
-  (12, the generated key is parsed and used by `ssh2`),
-  `shipped-providers.test.ts` (7, the real plugins through the driver; no
-  shipped `app-install` plugin is unverifiable),
-  `provider-apps/service.test.ts` (15), `provider-apps/registration.test.ts`
-  (25: the manifest per permission choice and owner, invalid choices, the
-  file and already-set refusals, the state single-use, expiring and bound to
-  the session, a replay and a foreign session exchanging nothing, a cancelled
-  return, a malformed code, a refused, unreachable or unreadable exchange
-  storing nothing, an app entered by hand meanwhile, what is stored and
-  sealed, the audit entry and the logs without a secret, the record dropped
-  when the app is replaced by hand),
-  `token-connections.test.ts` (8: the offered way with and without an app,
-  a pasted token checked and stored with its account and expiry and never
-  shown, a rejected or expired token storing nothing, an undeclared way, the
-  app way still needing the app, an app account reconnected with a token on
-  the same id, a token never refreshed, a token revocation asking nothing).
-  `shipped-providers.test.ts` also asserts that GitHub, Supabase and Railway
-  are the services with two ways, and that every shipped token way has a
-  label, a link, a guide, a check and a manual revocation sentence.
+- `token-connections.test.ts` — a token service offered at once with its
+  guide and nothing to declare, a pasted token checked and stored with its
+  account and expiry and never shown, a rejected or expired token storing
+  nothing, an account made a way the plugin no longer offers reconnected
+  with a token on the same id (and withdrawn nowhere), a token never
+  refreshed, a token revocation asking nothing.
+- `mapping.test.ts` — the summary, the owner's name, a vanished owner.
+- `pending.test.ts`, `input.test.ts`, `codec-and-keypair.test.ts` (the
+  generated key is parsed and used by `ssh2`; a stored `app-install`
+  credential of an earlier build is an unknown kind),
+  `shipped-providers.test.ts` (the real plugins through the driver: one way
+  per service, a key offered at once, Gmail the one `oauth2` way, every
+  guided token way with a label, a link, steps and a check; the grant
+  withdrawn for Gmail only; a valid authorization redirect for every
+  `oauth2` plugin), `provider-apps/service.test.ts` (fields per kind, the
+  sources, sealed secrets, one transaction per save, every problem at once,
+  the client secret kept from the plugin, the file winning and read-only,
+  clear per provider).
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+3: the
 default environment read on every resource and never stored, the
 merge rule and the credential state transitions at the repository) and
-`tests/integration/connections/connect-flow.test.ts` (6) over `buildRoot`
-with the `:memory:` store and the **real** encryptor: operator registers
-the app → user connects → the blob and a dump of every table are scanned
-for the access token, refresh token, client secret, API key and SSH
-private key in clear → resources → owner edit survives a refresh → replay
-refused → revoke → `revoked`, blob NULL, audit trail. The `app-install`
-path: a foreign installation id and a callback without code are refused
-and audited, the rightful user connects, and **the user token, the
-authorization code, the client secret and the private key are in no table
-and no log line**; an unverifiable plugin is refused until the operator
-accepts it through the handler (403 for a user, refused for a verifying
-provider, audited); an unknown provider is reported as unknown while a
-failure to read the app settings propagates and writes nothing.
-`tests/unit/server/connections/provider-app-handler.test.ts` (4): a saved
-provider app, and an accepted unverified installation, whose audit entry
-cannot be written still stand and are logged at `error` with the actor and
-the provider (never the secret); the entry is written when the audit works;
-a body that is not a form is 400 on `saveProviderApp`, `connect` and
-`updateResource` and writes nothing. The guard of every mutating handler is
-covered by `tests/unit/server/auth/mutation-guard.test.ts` (handbook
+`tests/integration/connections/connect-flow.test.ts` over `buildRoot`
+with the `:memory:` store and the **real** encryptor: an administrator
+declares the OAuth client → user connects → the blob and a dump of every
+table are scanned for the access token, refresh token, client secret, API
+key and SSH private key in clear → resources → owner edit survives a
+refresh → replay refused → revoke → `revoked`, blob NULL, audit trail; an
+unknown provider is reported as unknown while a failure to read the client
+settings propagates and writes nothing.
+`tests/unit/server/connections/provider-app-handler.test.ts`: a saved
+OAuth client whose audit entry cannot be written still stands and is logged
+at `error` with the actor and the provider (never the secret); the entry is
+written when the audit works; a body that is not a form is 400 on
+`saveProviderApp`, `connect` and `updateResource` and writes nothing. The
+guard of every mutating handler is covered by
+`tests/unit/server/auth/mutation-guard.test.ts` (handbook
 [authentication](authentication.md)).
 `tests/integration/connections/repository-status.test.ts` (6): `revoked` is
 terminal for every credential and status writer (`reconnect`,
@@ -1148,12 +948,11 @@ entry fails still writes `mission-orphaned`. Transfer, `unowned` and the
 ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
 (handbook [authority](authority.md)).
 
-`tests/integration/connections/token-connect.test.ts` (1), on the real root
-with the real GitHub plugin and GitHub mocked: no app → the token is offered,
-a classic token refused before GitHub is asked, a fine-grained one checked
-and sealed (not in any table), a mission calls `github__list_branches` with
-it, `github__mint_install_token` is not listed and is refused with no credit
-consumed, a 401 expires the account, revoking asks GitHub nothing.
+`tests/integration/connections/token-connect.test.ts`, on the real root
+with the real GitHub plugin and GitHub mocked: a classic token refused
+before GitHub is asked, a fine-grained one checked and sealed (not in any
+table), a mission calls `github__list_branches` with it, a 401 expires the
+account, revoking asks GitHub nothing.
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md#manual-checks-by-feature), "Manual checks
@@ -1162,39 +961,21 @@ by feature", the section on connecting).
 ## How to debug
 
 - **A service cannot be picked under "Connect an account"** (its card is
-  dashed and says who to ask) — its company app is not complete. Settings →
-  Company apps (`/admin/provider-apps`) shows "Incomplete: <fields> missing"; with a
-  `providers.<id>` block in the mounted configuration the page is
-  read-only and the block must carry every required field.
+  dashed and says who to ask) — its OAuth client is not declared or not
+  complete. Its connect page (`/accounts/new/<id>`) shows the form to an
+  administrator; with a `providers.<id>` block in the mounted configuration
+  the form is read-only and the block must carry every required field.
 - **`state-invalid` after consent** — the flow took more than 10 minutes,
   the callback was opened twice, the user's session changed between start
   and callback (the state is bound to the user id), or the web session
   store lost the row. Look for `connect:` rows in `web_sessions`.
 - **`token-exchange-failed` with `redirect_uri_mismatch`** — the redirect
   URI registered at the provider is not exactly
-  `<public_url>/connections/callback/<provider>` (shown on
-  `/admin/provider-apps`).
+  `<public_url>/connections/callback/<provider>` (shown on the service's
+  connect page).
 - **`token-exchange-failed` with `invalid_client`** — wrong client secret,
   or the provider expects another `clientAuthMethod` than the plugin's
   spec declares.
-- **`installation-not-verified` with "no user authorization"** — the
-  provider's app does not request user authorization during installation
-  (GitHub: the checkbox "Request user authorization (OAuth) during
-  installation"), or it still redirects to a setup URL instead of the
-  callback URL shown on `/admin/provider-apps`. The audit entry
-  `connection-refused` has `reason: no-authorization-code`.
-- **`installation-not-verified` for a legitimate user** — the account that
-  authorized at the provider is not the one that can reach the
-  installation (signed in to the provider as someone else), or the user
-  reaches more than `MAX_INSTALLATION_PAGES × perPage` installations.
-  `reason: installation-not-listed`.
-- **`token-exchange-failed` on an installation** — wrong `client_id` /
-  `client_secret` of the app (`incorrect_client_credentials`), or the code
-  expired (`bad_verification_code`; GitHub codes live ten minutes).
-- **A service can no longer be picked under "Connect an account" after an
-  upgrade** — its app lacks the fields verification needs ("Incomplete:
-  client_id, client_secret missing" on `/admin/provider-apps`), or its plugin cannot verify
-  installations and nobody accepted that.
 - **A resource an agent created is not listed** — check that its tool is in the
   plugin's `resourceCreatingTools` (`resource-creating-tools.test.ts` pins the
   table), then the log lines `resource discovery after a creating call` (`added:
@@ -1212,7 +993,7 @@ rejected` with `failure` (the status in the gateway's words, never the
   "Reconnect" on the page of the account; the id and the missions are kept.
 - **Calls fail but the connection stays `active`** —
   `ProviderUnreachableError`: the token endpoint answered 5xx, timed out,
-  or the provider app configuration was removed (`ProviderAppNotConfigured`
+  or the OAuth client of the service was removed (`ProviderAppNotConfigured`
   names the fields).
 - **An owner's label disappeared after a refresh** — it cannot through
   `syncDiscoveredResources`, the only resource sync of the repository; check
@@ -1226,25 +1007,21 @@ rejected` with `failure` (the status in the gateway's words, never the
 
 - **A new provider** — write the plugin, add it to `SHIPPED_PLUGINS` and
   to `apps/gateway/package.json`. No page, route or list changes: the
-  forms derive from its `CredentialSpec`. If its app needs a field the
-  mounted configuration cannot express, add it to `PROVIDER_APP_FIELDS`
-  (`config/types.ts`); `shipped-providers.test.ts` fails until then.
-- **A new `app-install` provider** — declare `userVerification` in its
-  spec (token endpoint, installations endpoint, response shape) and list
-  `client_id` / `client_secret` in `appConfigFields`; `definePlugin` checks
-  both. The driver needs no change. A provider that has no such endpoint
-  ships without the block and is connectable only once the operator accepts
-  unverified installations.
-- **A token way for a service that has an app** — add an `api-key` spec
-  to `alternativeCredentials` with its `label`, `guide` (every tool it can run
-  served by a permission; `definePlugin` checks), `verify`,
-  `unavailableTools` and `manualRevocation`; read `ctx.credential.kind` in
-  `execute` and `discoverResources`. No page or route changes.
+  forms derive from its `CredentialSpec`. Declare the simplest way the
+  service offers: an `api-key` spec with its `label`, `createUrl`, `guide`
+  (every tool served by a permission; `definePlugin` checks) and `verify`
+  whenever a person can make a key at the service; `oauth2` only when it
+  offers none. If an OAuth client needs a field the mounted configuration
+  cannot express, add it to `PROVIDER_APP_FIELDS` (`config/types.ts`);
+  `shipped-providers.test.ts` fails until then.
 - **A new credential kind** — an ADR first (it changes the plugin
   contract), then: the variant in `credential-codec.ts`, one private method
   of `ConnectionService` with its discovery policy and its one-line case in
   `start` (and in `complete` for a redirect flow),
   `appConfigFieldsOf`, the form branch in `new/[provider]/page.tsx`.
+  A kind that leaves the contract needs no migration: a stored credential of
+  that kind is refused at the execution door until the account is
+  reconnected.
 - **A non-standard refresh** — the plugin implements `refresh(ctx)`; the
   broker calls it instead of the generic grant and persists the result.
 - **A hosted deployment** — replace the two `// single-process only`
@@ -1258,7 +1035,6 @@ rejected` with `failure` (the status in the gateway's words, never the
   §6, §7.2.
 - ADRs: [connect-driver-and-resource-curation](../decisions/connect-driver-and-resource-curation.md),
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
-  [oauth-app-install-per-provider](../decisions/oauth-app-install-per-provider.md)
-  (v4; the method per provider survives, the per-provider routes do not).
+  [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md).
 - Tests: [integration-tests](../tests/integration-tests.md),
   [e2e-tests](../tests/e2e-tests.md).

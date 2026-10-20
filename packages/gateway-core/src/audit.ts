@@ -87,8 +87,8 @@ export interface CallAuditEntry {
 export type AdminAct =
   | 'connection-created'
   | 'connection-reconnected'
-  /** A connect attempt the host refused because the installation could not be
-   *  bound to the connecting human (nothing was stored). */
+  /** A connect attempt the host refused before anything was stored (kept for
+   *  the entries of the GitHub App installations of earlier builds). */
   | 'connection-refused'
   | 'connection-transferred'
   /** The operator gave an owner to a connection that had none left (spec §2.3:

@@ -389,17 +389,6 @@ describe('definePlugin', () => {
     // standard refresh_token grant from the spec.
     expect(oauthIssues.filter((m) => /refresh/.test(m))).toEqual([]);
 
-    const appInstall: ProviderPlugin = {
-      ...acmePlugin,
-      credential: {
-        kind: 'app-install',
-        appConfigFields: [{ name: 'app_id', label: 'App id', secret: false }],
-        installUrl: (cfg) => `https://example.test/apps/${cfg.app_slug}/installations/new`,
-        installationIdParam: 'installation_id',
-      },
-    };
-    expect(pluginIssues(appInstall)).toEqual([]);
-
     const ssh: ProviderPlugin = {
       ...acmePlugin,
       credential: { kind: 'ssh-key', algorithm: 'ed25519', fields: [] },
@@ -412,102 +401,6 @@ describe('definePlugin', () => {
     } as unknown as ProviderPlugin;
     expect(pluginIssues(unknownKind)).toEqual([
       expect.stringMatching(/credential.kind: expected one of/),
-    ]);
-  });
-
-  test('app-install userVerification: a well-formed block passes, each malformed member is named', () => {
-    const fields = [
-      { name: 'app_id', label: 'App id', secret: false },
-      { name: 'client_id', label: 'Client id', secret: false },
-      { name: 'client_secret', label: 'Client secret', secret: true },
-    ];
-    const verification = {
-      codeParam: 'code',
-      tokenUrl: 'https://example.test/login/oauth/access_token',
-      clientAuthMethod: 'client_secret_post',
-      installationsUrl: 'https://api.example.test/user/installations',
-      installationsHeaders: { Accept: 'application/json' },
-      installationsListField: 'installations',
-      installationIdField: 'id',
-      pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: 100 },
-    } as const;
-    const withVerification = (
-      userVerification: unknown,
-      appConfigFields: unknown = fields,
-    ): ProviderPlugin =>
-      ({
-        ...acmePlugin,
-        credential: {
-          kind: 'app-install',
-          appConfigFields,
-          installUrl: () => 'https://example.test/apps/x/installations/new',
-          installationIdParam: 'installation_id',
-          userVerification,
-        },
-      }) as unknown as ProviderPlugin;
-
-    expect(pluginIssues(withVerification(verification))).toEqual([]);
-    // The single-response, bare-list shape is valid too.
-    expect(
-      pluginIssues(
-        withVerification({
-          codeParam: 'code',
-          tokenUrl: verification.tokenUrl,
-          clientAuthMethod: 'client_secret_basic',
-          installationsUrl: verification.installationsUrl,
-          installationIdField: 'id',
-        }),
-      ),
-    ).toEqual([]);
-
-    expect(pluginIssues(withVerification('yes'))).toEqual([
-      'credential.userVerification: expected an object when present',
-    ]);
-    expect(
-      pluginIssues(
-        withVerification({
-          codeParam: 'installation_id',
-          tokenUrl: 'http://example.test/token',
-          clientAuthMethod: 'none',
-          installationsUrl: 'not a url',
-          installationsHeaders: { authorization: 'Bearer x', 'X-Version': 1 },
-          installationsListField: '',
-          installationIdField: '',
-          pagination: { pageParam: 'page', perPageParam: 'page', perPage: 0 },
-        }),
-      ),
-    ).toEqual([
-      "credential.userVerification.codeParam: must differ from installationIdParam and from 'state'",
-      'credential.userVerification.tokenUrl: expected an https URL',
-      'credential.userVerification.installationsUrl: expected an https URL',
-      'credential.userVerification.clientAuthMethod: expected client_secret_basic | client_secret_post',
-      'credential.userVerification.installationIdField: expected a property name',
-      'credential.userVerification.installationsListField: expected a property name when present',
-      'credential.userVerification.installationsHeaders: the host sets Authorization itself',
-      'credential.userVerification.installationsHeaders.X-Version: expected a string',
-      'credential.userVerification.pagination: pageParam and perPageParam must be two parameter names',
-      'credential.userVerification.pagination.perPage: expected an integer from 1 to 1000',
-    ]);
-    expect(pluginIssues(withVerification({ ...verification, codeParam: 'state' }))).toEqual([
-      expect.stringMatching(/codeParam: must differ/),
-    ]);
-
-    // The host authenticates the app's OAuth client : both fields must be asked for.
-    expect(pluginIssues(withVerification(verification, [fields[0]]))).toEqual([
-      "credential.appConfigFields: userVerification needs a required, non-secret 'client_id' field",
-      "credential.appConfigFields: userVerification needs a required, secret 'client_secret' field",
-    ]);
-    expect(
-      pluginIssues(
-        withVerification(verification, [
-          fields[0],
-          { name: 'client_id', label: 'Client id', secret: false, required: false },
-          { name: 'client_secret', label: 'Client secret', secret: false },
-        ]),
-      ),
-    ).toEqual([
-      expect.stringMatching(/non-secret 'client_id' field/),
-      expect.stringMatching(/secret 'client_secret' field/),
     ]);
   });
 

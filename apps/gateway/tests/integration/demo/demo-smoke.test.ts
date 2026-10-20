@@ -228,7 +228,7 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     // What a colleague gave access to is a region of Accounts; connected apps are a page of Settings.
     ['/accounts', 'Acme billing'],
     ['/settings/connected-apps', 'Claude Code (demo)'],
-    ['/admin/provider-apps', 'installations verified'],
+    ['/accounts/new/github', 'Create the token at GitHub'],
     ['/admin/groups', 'GitHub admins'],
   ])('shows seeded data on %s', async (path, seeded) => {
     const response = await browser.get(path);

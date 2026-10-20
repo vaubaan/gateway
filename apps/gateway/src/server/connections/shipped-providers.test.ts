@@ -73,7 +73,7 @@ describe('shipped plugins through the generic connect driver', () => {
   it('withdraws the provider-side grant for the providers that document an endpoint, and for no other', () => {
     // The endpoints below are the ones read in the providers' documentation (ADR
     // provider-side-revocation-on-connection-revoke). A plugin joins this table with
-    // its source, never by analogy.
+    // its source, never by analogy. A pasted token is deleted by hand at the service.
     const declared = new Map(
       SHIPPED_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => [
         plugin.id,
@@ -82,76 +82,59 @@ describe('shipped plugins through the generic connect driver', () => {
     );
     expect(Object.fromEntries(declared)).toEqual({
       gmail: { url: 'https://oauth2.googleapis.com/revoke', format: 'token-form' },
-      supabase: {
-        url: 'https://api.supabase.com/v1/oauth/revoke',
-        format: 'client-credentials-json',
-      },
     });
     for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
-  it('every shipped token way guides the person, checks the token and says where to delete it', () => {
-    for (const plugin of SHIPPED_PLUGINS) {
-      for (const spec of plugin.alternativeCredentials ?? []) {
-        if (spec.kind !== 'api-key') continue;
-        expect(spec.label, plugin.id).toBeTruthy();
-        expect(spec.createUrl, plugin.id).toMatch(/^https:\/\//);
-        expect(spec.guide?.steps.length, plugin.id).toBeGreaterThan(0);
-        expect(typeof spec.verify, plugin.id).toBe('function');
-        expect(spec.manualRevocation, plugin.id).toBeTruthy();
-        // A secret is never shown back: the token field is secret.
-        expect(
-          spec.fields.every((field) => field.secret),
-          plugin.id,
-        ).toBe(true);
-      }
+  it('every shipped token way guides the person, checks the token and names what it is', () => {
+    // The guided token way (ADR one-place-to-authorize-services-token-first) : a label in
+    // the service's words, where to create it, the steps, a check at paste.
+    const guided = SHIPPED_PLUGINS.filter(
+      (plugin) => plugin.credential.kind === 'api-key' && plugin.credential.guide !== undefined,
+    );
+    expect(guided.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining(['github', 'railway', 'supabase']),
+    );
+    for (const plugin of guided) {
+      const spec = plugin.credential;
+      if (spec.kind !== 'api-key') continue;
+      expect(spec.label, plugin.id).toBeTruthy();
+      expect(spec.createUrl, plugin.id).toMatch(/^https:\/\//);
+      expect(spec.guide?.steps.length, plugin.id).toBeGreaterThan(0);
+      expect(typeof spec.verify, plugin.id).toBe('function');
+      // A secret is never shown back: the token field is secret.
+      expect(
+        spec.fields.some((field) => field.secret),
+        plugin.id,
+      ).toBe(true);
     }
   });
 
-  it('ships no app-install plugin whose installations cannot be verified', () => {
-    // Such a plugin would only be connectable with "accept unverified installations" on.
-    for (const plugin of SHIPPED_PLUGINS) {
-      if (plugin.credential.kind !== 'app-install') continue;
-      expect(plugin.credential.userVerification, plugin.id).toBeDefined();
-    }
-  });
-
-  it('offers a way only once its company app is configured, a token way at once, and flags experimental ones', async () => {
+  it('ships one way per service: a key at once, OAuth only where no key exists, and flags experimental ones', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const before = await h.service.providers();
-    // Redirect flows need the company app; forms need nothing from the operator.
+    // The OAuth way needs the company's client declared; a key needs nothing from the operator.
     for (const p of before) {
-      for (const way of p.methods) {
-        expect(way.configured, `${p.id} ${way.kind}`).toBe(!way.usesApp);
-        if (way.usesApp) expect(way.fields, p.id).toEqual([]);
-        else expect(way.fields.length, p.id).toBeGreaterThan(0);
-      }
-      // A service is connectable as soon as one of its ways needs no app, and offers that way.
-      expect(p.configured, p.id).toBe(p.methods.some((way) => !way.usesApp));
-      if (p.configured) expect(p.kind, p.id).not.toBe('oauth2');
+      expect(p.usesApp, p.id).toBe(p.kind === 'oauth2');
+      expect(p.configured, p.id).toBe(!p.usesApp);
+      if (p.usesApp) expect(p.fields, p.id).toEqual([]);
+      else expect(p.fields.length, p.id).toBeGreaterThan(0);
     }
-    const ways = before.flatMap((p) => p.methods.map((way) => way.kind));
-    expect(ways).toContain('oauth2');
-    expect(ways).toContain('app-install');
+    const ways = before.map((p) => p.kind);
     expect(ways).toContain('ssh-key');
-    // The owner's decision of 2026-10-14: these three also take a token pasted by hand.
-    expect(
-      before
-        .filter((p) => p.methods.length > 1)
-        .map((p) => p.id)
-        .sort(),
-    ).toEqual(['github', 'railway', 'supabase']);
+    expect(ways).not.toContain('app-install');
+    // Gmail is the one service with no key a person can make (ADR
+    // one-place-to-authorize-services-token-first): the only OAuth way shipped.
+    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual(['gmail']);
     expect(before.filter((p) => p.experimental).map((p) => p.id)).toEqual(
       SHIPPED_PLUGINS.filter((p) => p.experimental === true).map((p) => p.id),
     );
   });
 
-  it('builds a valid authorization or installation redirect for every redirect-flow plugin', async () => {
+  it('builds a valid authorization redirect for every oauth2 plugin', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const alice = await h.actor('alice@example.com');
-    const redirectFlows = SHIPPED_PLUGINS.filter(
-      (p) => p.credential.kind === 'oauth2' || p.credential.kind === 'app-install',
-    );
+    const redirectFlows = SHIPPED_PLUGINS.filter((p) => p.credential.kind === 'oauth2');
     for (const plugin of redirectFlows) {
       // Fill every declared field with a value of the declared shape.
       const values: Record<string, string> = {};

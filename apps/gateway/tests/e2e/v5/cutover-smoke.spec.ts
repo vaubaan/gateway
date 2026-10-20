@@ -61,31 +61,30 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // Nothing yet: one sentence, and the services to connect right under it.
   await expect(page.getByTestId('accounts-empty')).toContainText('No account yet.');
 
-  // ── 2. Connect GitHub through the company's App ───────────────────────────
+  // ── 2. Connect GitHub with a fine-grained token ───────────────────────────
   await page.getByRole('link', { name: 'Connect an account' }).click();
   await expect(page).toHaveURL(/\/accounts#connect$/);
-  // A service that needs a company app nobody registered is listed, and says so;
-  // one that also takes a token offers the token instead.
-  await expect(page.getByTestId('service-gmail')).toContainText('needs a company app');
+  // A service whose OAuth client nobody declared is listed, and says so;
+  // every other one says what to paste.
+  await expect(page.getByTestId('service-gmail')).toContainText('needs its OAuth client');
   await expect(page.getByTestId('service-railway')).toContainText('workspace token');
   await page.getByTestId('service-github').getByRole('link').click();
   await expect(
     page.getByRole('heading', { name: 'Connect a GitHub account', level: 1 }),
   ).toBeVisible();
-  // The how-to is folded until asked for.
-  await expect(page.getByText('you choose the account and what the app may reach')).toBeHidden();
-  await page.getByRole('button', { name: 'What happens at GitHub' }).click();
-  await expect(page.getByText('you choose the account and what the app may reach')).toBeVisible();
+  // The guide the plugin declares: where to create the token, the permissions to tick.
+  await expect(page.getByTestId('token-guide')).toContainText('Create the token at GitHub');
+  await expect(page.getByTestId('token-permissions')).toContainText('Contents');
   await page.getByLabel(/^Name/).fill(CONNECTION);
-  // To the provider's installation page (mocked), and back with the
-  // installation id, the user authorization code and the single-use state.
-  await page.getByRole('button', { name: 'Continue to GitHub' }).click();
+  // The token is checked at the mocked GitHub, then stored; it is never shown again.
+  await page.getByLabel(/Fine-grained personal access token/).fill(MOCK_GITHUB.token);
+  await page.getByRole('button', { name: 'Check and connect' }).click();
   await expect(page).toHaveURL(/\/accounts\/[0-9a-f-]{36}(\?.*)?$/);
   await expect(page.getByRole('heading', { name: CONNECTION, level: 1 })).toBeVisible();
   await expect(page.getByText('Connected', { exact: true })).toBeVisible();
   // The normal state is not labelled; the header says whose it is.
   await expect(page.getByText('you own it').first()).toBeVisible();
-  // The repositories of the installation were found as resources.
+  // The repositories the token reaches were found as resources.
   for (const repository of MOCK_GITHUB.repositories) {
     await expect(
       page.getByTestId('account-resources').getByRole('row', { name: new RegExp(repository) }),
@@ -96,10 +95,9 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByTestId('who-has-access').getByRole('row')).toHaveCount(2);
   await snap(page, 'cutover-connection');
   const connected = await upstreamLog(request);
-  expect(connected.calls.some((call) => call.url.includes('/user/installations'))).toBe(true);
-  expect(connected.calls.some((call) => call.url.includes('/installation/repositories'))).toBe(
-    true,
-  );
+  expect(connected.calls.some((call) => call.url.endsWith('/user'))).toBe(true);
+  expect(connected.calls.some((call) => call.url.includes('/user/repos'))).toBe(true);
+  expect(await page.content()).not.toContain(MOCK_GITHUB.token);
 
   // ── 3. Issue a mission from the plugin's preset ───────────────────────────
   await page.goto('/missions/new');
@@ -158,8 +156,8 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
     call.url.includes(`/repos/${REPOSITORY}/branches`),
   );
   expect(branchCalls).toHaveLength(1);
-  expect(branchCalls[0]?.with_installation_token).toBe(true);
-  expect(first.text).not.toContain(upstream.installation_token);
+  expect(branchCalls[0]?.with_connection_token).toBe(true);
+  expect(first.text).not.toContain(upstream.connection_token);
 
   // The two refusals a day of work may meet without anything being wrong:
   // a resource outside the mission, a risk the creator did not accept.
@@ -247,7 +245,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // Neither the mission token nor the provider's credential is on the page.
   const auditHtml = await page.content();
   expect(auditHtml).not.toContain(token);
-  expect(auditHtml).not.toContain(upstream.installation_token);
+  expect(auditHtml).not.toContain(upstream.connection_token);
   await snap(page, 'cutover-audit');
 
   // ── 9. …and on the mission's session page ─────────────────────────────────

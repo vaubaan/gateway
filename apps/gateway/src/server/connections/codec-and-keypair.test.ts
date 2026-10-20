@@ -18,7 +18,6 @@ describe('credential codec', () => {
       scopes: ['all'],
       metadata: {},
     },
-    { kind: 'app-install', installationId: '42', metadata: {} },
     {
       kind: 'ssh-key',
       privateKeyPem: 'pem',
@@ -38,7 +37,7 @@ describe('credential codec', () => {
     ['{"kind":"password","metadata":{}}', 'unknown kind'],
     ['{"kind":"oauth2","metadata":{},"scopes":[]}', "'accessToken' is missing"],
     ['{"kind":"api-key","fields":{"token":1},"metadata":{}}', "'fields.token' is not a string"],
-    ['{"kind":"app-install","installationId":"1"}', "'metadata' is not an object"],
+    ['{"kind":"app-install","installationId":"1","metadata":{}}', 'unknown kind'],
   ])('refuses %s', (text, reason) => {
     expect(() => parseSecret(text)).toThrow(CredentialFormatError);
     expect(() => parseSecret(text)).toThrow(reason);

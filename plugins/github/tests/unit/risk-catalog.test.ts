@@ -185,20 +185,6 @@ const OTHER_WRITES: readonly Row[] = [
   ['create_release', 'release and tag', { ...repo, tag_name: 'v1.0.0' }, ['create-release']],
   ['delete_release', 'one', { ...repo, release_id: 1 }, ['delete-release']],
   ['update_branch_protection', 'of main', { ...repo, branch: 'main' }, ['branch-protection-write']],
-  [
-    'mint_install_token',
-    'clone, one repository',
-    { purpose: 'clone', repoFullName: 'acme/app' },
-    ['mint-install-token-clone'],
-  ],
-  ['mint_install_token', 'clone, fan-out', { purpose: 'clone' }, ['mint-install-token-clone']],
-  [
-    'mint_install_token',
-    'push, one repository',
-    { purpose: 'push', repoFullName: 'acme/lib' },
-    ['mint-install-token-push'],
-  ],
-  ['mint_install_token', 'push, fan-out', { purpose: 'push' }, ['mint-install-token-push']],
 ];
 
 const OLD = 'a'.repeat(40);
@@ -340,7 +326,10 @@ describe('github — the risks each tool touches', () => {
 
   test('the rows name every risk of the catalog, and only risks of the catalog', () => {
     const expected = new Set(ROWS.flatMap(([, , , risks]) => risks));
-    const catalogIds = githubCatalog.catalog.risks.map((r) => r.id.slice(ID_PREFIX.length));
+    // A deprecated risk is matched by no call : the rows leave it out.
+    const catalogIds = githubCatalog.catalog.risks
+      .filter((r) => !r.deprecated)
+      .map((r) => r.id.slice(ID_PREFIX.length));
     expect(catalogIds.filter((id) => !expected.has(id))).toEqual([]);
     expect([...expected].filter((id) => !catalogIds.includes(id))).toEqual([]);
   });

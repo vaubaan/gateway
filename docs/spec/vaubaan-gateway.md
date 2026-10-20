@@ -35,27 +35,27 @@ interface speaks to people in other words. §4.2, §4.4 and §7 describe what a
 person sees and does, and use the interface's; a reader of the API, of a
 refusal or of the database finds the same thing under the protocol's name:
 
-| The interface says                               | The protocol and this spec say                                    |
-| ------------------------------------------------ | ----------------------------------------------------------------- |
-| account                                          | connection                                                        |
-| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction |
-| "Shared with you"                                | shares received; missions one is a member of                      |
-| permission (its id stays visible, in mono)       | risk, `RiskId`                                                    |
-| limits, per period and per minute                | budget: quota and rate limit                                      |
-| runs freely / ask me first                       | gate `auto` / `approval`                                          |
-| key, your key                                    | mission token, member token                                       |
-| machine key                                      | named token                                                       |
-| Replace key                                      | rotate                                                            |
-| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox               |
-| connected app                                    | delegation, held by an OAuth client                               |
-| Activity                                         | audit; the session of a mission                                   |
-| teammate                                         | mission member                                                    |
-| team                                             | group                                                             |
-| administrator                                    | operator                                                          |
-| service; company app; Reference                  | provider; provider app; the reference of each plugin              |
-| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)     |
-| setup kit                                        | bootstrap kit                                                     |
-| mission, preset, resource, environment           | the same                                                          |
+| The interface says                               | The protocol and this spec say                                                        |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| account                                          | connection                                                                            |
+| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction                     |
+| "Shared with you"                                | shares received; missions one is a member of                                          |
+| permission (its id stays visible, in mono)       | risk, `RiskId`                                                                        |
+| limits, per period and per minute                | budget: quota and rate limit                                                          |
+| runs freely / ask me first                       | gate `auto` / `approval`                                                              |
+| key, your key                                    | mission token, member token                                                           |
+| machine key                                      | named token                                                                           |
+| Replace key                                      | rotate                                                                                |
+| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                   |
+| connected app                                    | delegation, held by an OAuth client                                                   |
+| Activity                                         | audit; the session of a mission                                                       |
+| teammate                                         | mission member                                                                        |
+| team                                             | group                                                                                 |
+| administrator                                    | operator                                                                              |
+| service; OAuth client; Reference                 | provider; provider app (the OAuth client of a provider); the reference of each plugin |
+| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)                         |
+| setup kit                                        | bootstrap kit                                                                         |
+| mission, preset, resource, environment           | the same                                                                              |
 
 The page paths follow the interface's words (`/accounts`, `/waiting`,
 `/activity`, `/reference`, `/settings`); the paths that belong to a protocol do
@@ -69,8 +69,8 @@ company registered at a provider).
   domain: there is no tenant, no org, no project. Everything the
   instance holds belongs to the company that runs it.
 - **Operator** — the person or team that installs, configures and
-  maintains the instance (sign-in providers, provider apps, master key,
-  telemetry). The operator is not an identity of the domain; they have
+  maintains the instance (sign-in providers, the OAuth client of a
+  provider that connects that way, master key, telemetry). The operator is not an identity of the domain; they have
   access to the configuration, not to other people's missions. During the
   setup, the operator is whoever holds the bootstrap token (the setup
   link). Afterwards, the operators are the **administrators** of the
@@ -374,7 +374,7 @@ coding agents. v4 was a SaaS; v5 is a product you install.
 
 ```
 Instance                          (one company, one trust domain)
-├── Configuration                 (IdP, provider apps, master key, telemetry, public URL)
+├── Configuration                 (IdP, OAuth clients of providers, master key, telemetry, public URL)
 ├── Users[]                       (identified by the IdP)
 │     └── Delegations[]           (agent authorized to manage the user's missions; delegated token)
 ├── Groups[]                      (IdP claims or local table)
@@ -487,11 +487,12 @@ the company:
 - The executor receives the provider's response, never a credential
   usable outside the gateway. **One deliberate exception:** a tool whose
   very purpose is to hand the agent a short-lived, narrowly scoped
-  provider token, because the work cannot go through the gateway (a
-  repository-scoped installation token for a tool that speaks to the
-  provider directly — Git LFS, a provider CLI). Plain `git clone` and
-  `git push` go through the gateway's git remote (§4.1 ter) and need no
-  such token.
+  provider token, because the work cannot go through the gateway (a tool
+  that speaks to the provider directly — Git LFS, a provider CLI). No
+  shipped plugin declares such a tool since the GitHub App left (ADR
+  [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md));
+  the contract keeps the place for one. Plain `git clone` and `git push`
+  go through the gateway's git remote (§4.1 ter) and need no such token.
   Such a tool is a risk of its own in the catalog, never accepted by
   default, counted against the budget and audited like any call; the
   long-lived credential still never leaves the instance. **In a preset, a
@@ -1103,19 +1104,7 @@ interpreted as markup.
   removing one says how many people signed in through it: they can no
   longer sign in and their sessions end, and their missions and connected
   apps keep the rules of a deactivation (they stop only when the
-  administrator deactivates them); company apps (the apps registered at
-  each service — entered by hand, or, for a service that offers it,
-  **created from the page in one step**: the administrator picks the
-  owner (an organisation, or their own account at the service), a name
-  that defaults to one naming the instance, and the permissions the app
-  requests — by default what the service's tools need, the sensitive
-  ones explained and removable, each saying which tools stop working
-  without it; the service asks them to confirm, sends them back, and the
-  instance stores the app's settings where the form would, secrets never
-  shown back; afterwards the page shows the app, its owner, a link to it
-  at the service and its permissions, and the next step: installing it
-  on the company's repositories, which is connecting an account);
-  **people** — everyone who signed in, with the provider
+  administrator deactivates them); **people** — everyone who signed in, with the provider
   they signed in through (deactivate, reactivate, make or unmake an
   administrator), the **administrators** (every person, pending address and
   group of a provider named administrator, and by whom: the setup, an
@@ -1135,8 +1124,12 @@ interpreted as markup.
   administrator's only act on an account); registered apps (the OAuth
   clients of the management door: approve, disable); telemetry; and **the
   instance's name**, on the setup page, which an administrator sets or
-  clears (clearing it brings back the host). Acts that stop, remove or hand
-  over something are asked first. The public URL, the retention and the
+  clears (clearing it brings back the host). The OAuth client a service
+  needs before anyone connects it (§4.3) is not a page of Administration:
+  the administrator declares it on that service's connect page, the one
+  place to authorize a service (§7.2); the setup checklist names the
+  services whose client is missing and leads there. Acts that stop,
+  remove or hand over something are asked first. The public URL, the retention and the
   other keys of §4.3 are set in the instance configuration and shown in the
   interface, not edited there — except the instance's name and the
   telemetry opt-in, which the administrator sets in the interface unless
@@ -1173,14 +1166,14 @@ a mounted file, never committing anything:
   mail — the links that create a local account or reset its password.
   Without it, local accounts still work: the links are shown to the
   administrator to hand over;
-- per provider in use, the **app registered by the company** at that
-  provider: identifier and secret, or private key for app-install
-  providers. Each instance registers its own apps — entered here or on
-  the Administration page, or created from that page where the provider
-  offers it (§4.2); the instance never uses an app shared with another
-  instance, whose key would reach every installation of every company
-  using it. Optional for a provider whose plugin also accepts a pasted
-  token: without the app, people connect that provider with a token;
+- for a provider that connects through the service's own sign-in only
+  (`oauth2`: a service that offers no key a person can make — Gmail), the
+  **OAuth client the company declared** at that service: identifier and
+  secret, entered here or on the service's connect page (§7.2). Each
+  instance declares its own client; the instance never uses one shared
+  with another instance. Every other provider needs nothing here: people
+  connect it with a key they make at the service (ADR
+  [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md));
 - the operator's **bootstrap token**, the secret of the setup link: it
   opens the setup until the setup ends. Required while the configuration
   sets no sign-in provider; and an instance whose store names no
@@ -1278,9 +1271,10 @@ same for any agent, with no value of any mission.
   trusts each for the identities of its own issuer only, never for
   authorization: shares and missions are local, and admission is the
   instance's (allowed domains, invitations).
-- **Providers** — each company registers its own apps. The authorization
-  flow runs between the user, the provider and the instance; no third
-  party.
+- **Providers** — a key a person makes at the provider and pastes, or,
+  where the provider offers none, the company's own OAuth client. The
+  authorization flow runs between the user, the provider and the
+  instance; no third party.
 - **Community collector** — receives plugin reports from consenting
   instances, publishes aggregated statistics. See §9.
 - **MCP clients** — Claude Code, Cursor, Continue, scripts. The gateway
@@ -1364,17 +1358,15 @@ same for any agent, with no value of any mission.
   last credit produce exactly one allow and one refusal.
 - **Anti-replay and anti-redirect** on provider authorization flows:
   single-use nonce, return URL limited to the instance's public URL.
-- **Creating a company app from the interface** is an administrator's
-  act: its `state` is random, single-use, bound to the administrator's
-  web session and short-lived; the code the provider returns is
-  exchanged once, server to server, and only when no app is set for that
-  provider and the configuration file does not set it. The app's secrets
-  go straight to the encrypted settings, are never shown back and never
-  logged; the audit records who created which app (its identifier, its
-  name, the permissions requested), never a secret.
-- **A missing provider permission is a refusal, not a failure.** When
-  the company app lacks a permission a tool needs, the call is declined
-  with a message naming the permission, before anything is sent.
+- **Declaring the OAuth client of a service** is an administrator's act,
+  on the service's connect page: its secret goes straight to the
+  encrypted settings, is never shown back and never logged; the audit
+  records who changed which client (its identifier), never a secret.
+- **A pasted token is checked at the service before it is stored**, and a
+  call the service refuses for a permission the token lacks is reported as
+  such, naming what the token needs; the gateway sends the token as it
+  is and narrows nothing itself — the mission's decision is what narrows
+  a call.
 - **Surface rate limits** on the MCP endpoint per mission, on connection
   flows per user, on the request page per IP.
 - **Mission tokens at rest.** The instance stores a SHA-256 digest of each
@@ -1405,28 +1397,34 @@ sign-in —; with a provider of the company, the configuration's admin rule
 names them at the first start. They add a sign-in provider (or declare it
 in the configuration), sign in through it — which revokes the bootstrap
 token when they are an administrator —, and invite the addresses an open
-provider should admit. They then register one app per
-provider in use — in one step from Administration → Company apps where
-the provider offers it (GitHub), otherwise at the provider, entering its
-secrets by hand.
+provider should admit. Nothing else stands between them and the first
+account: a service that signs people in through an OAuth client (Gmail) is
+declared on its connect page the first time someone opens it; every other
+service is connected with a key.
 
 ### 7.2 Connect an account
 
-A user opens Accounts, picks a service under "Connect an account", is sent
-to the service, consents, comes back to the instance (or pastes the key the
-service issued). When the service offers both, the page offers the company's
-app if it is registered, with "use a token instead" one click away, and the
-token otherwise, with a guide derived from the plugin: where to create it,
-which permissions to grant for the plugin's tools, the expiry to choose, the
-tools a token cannot run, and that a shared service account is fine. A pasted
-token is checked at the service before it is stored (who it acts as, its
-expiry when the service says), is never shown back, and its expiry is shown
-on the account's page ahead of it; a token the service rejects makes the
-account "needs reconnecting". A tool the connection's way cannot run is not
-listed to the agent and is refused before any budget is spent. Removing such
-an account withdraws the grant at the service where the service offers a way
-for that token, and otherwise says where to delete the token there. The connection — the account — is created, encrypted, under
-their name. The plugin discovers its resources; the owner labels their
+A user opens Accounts, picks a service under "Connect an account", and
+lands on the one place that authorizes it. The page guides them through
+the simplest way the service offers (ADR
+[one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
+a key the person makes at the service and pastes, whenever the service
+lets a person make one, with a guide derived from the plugin — where to
+create it, which permissions to grant for the plugin's tools, the expiry
+to choose, and that a shared service account is fine; or, for a service
+that offers no such key (Gmail), the service's own sign-in: the person is
+sent to the service, consents and comes back. That second way needs the
+company's OAuth client declared at the service once; an administrator
+does so on the same page, before anyone connects, and the page tells
+everyone else who to ask until then. A pasted token is checked at the
+service before it is stored (who it acts as, its expiry when the service
+says), is never shown back, and its expiry is shown on the account's page
+ahead of it; a token the service rejects makes the account "needs
+reconnecting". An account connected a way the service's plugin no longer
+offers (an earlier build) runs nothing until its owner reconnects it.
+Removing an account withdraws the grant at the service where the service
+offers a way for it, and otherwise says where to delete the key there.
+The connection — the account — is created, encrypted, under their name. The plugin discovers its resources; the owner labels their
 environments. They are its owner. They may then hand it to a team they
 belong to; every member of the team becomes a full owner, and so will
 members who join it later.
@@ -1647,11 +1645,10 @@ automated suite. Trust comes from usage.
     nobody by itself, a pending address consumed by the first sign-in of
     its provider, and every act that would leave no administrator a way in
     refused;
-  - creating a company app from the interface (§6): the request built
-    per permission choice, the `state` single-use, expiring and bound to
-    the session, every failure of the exchange, the refusals when the
-    file sets the app or an app is already set, an audit entry without a
-    secret, and a tool refused by name when the app lacks its permission.
+  - the OAuth client of a service (§4.3, §7.2): declared on the connect
+    page by an administrator only, the file winning over the page, the
+    secret sealed and never echoed, an audit entry without a secret, the
+    page saying who to ask until it is declared.
 - **Integration**, on an ephemeral instance with embedded store and
   simulated IdP: connection, share, issuance, claim, approval and
   replay, revocation flows, the git remote with the real `git` client
@@ -1751,10 +1748,13 @@ automated suite. Trust comes from usage.
   [sign-in-providers-admission-and-admin-rule](../decisions/sign-in-providers-admission-and-admin-rule.md),
   [github-sign-in](../decisions/github-sign-in.md),
   [security-headers-set-by-the-application](../decisions/security-headers-set-by-the-application.md)).
-- Every instance registers its own company apps, never a shared one; for
-  GitHub the administrator creates the app from the interface through
-  the provider's app manifest (ADR
-  [company-app-created-from-a-manifest](../decisions/company-app-created-from-a-manifest.md)).
+- One place to authorize a service: a key the person makes and pastes
+  wherever the service offers one; the company's own OAuth client, declared
+  on the service's connect page, only where it offers none (Gmail). The
+  GitHub App, its manifest flow and the OAuth apps of Supabase and Railway
+  were removed on 2026-10-20 (ADR
+  [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)).
+  Every instance declares its own OAuth client, never a shared one.
 
 ### 11.2 Open questions
 

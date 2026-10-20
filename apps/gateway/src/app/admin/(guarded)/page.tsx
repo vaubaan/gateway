@@ -5,7 +5,7 @@
  * configuration holds.
  *
  * Each line is read from the service that owns the fact: sign-in from the
- * identity-provider settings, company apps from `ProviderAppsService`, the
+ * identity-provider settings, the OAuth clients from `ProviderAppsService`, the
  * accounts without owner from `ConnectionService.listOwnerless`, the apps that
  * wait from the client registry, telemetry from its overview, the name from
  * `InstanceNameService`. Nothing is decided here.
@@ -44,7 +44,6 @@ import {
   CONFIG_WORDS,
   count,
   formatNumber,
-  OPTIONAL_APP_WORDS,
   SECTIONS,
   SETTINGS_ACTIONS,
   SETTINGS_PAGES,
@@ -52,6 +51,8 @@ import {
   TERMS,
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
+import { oauthClientChecklist } from '@/server/now';
+import { connectPagePath } from '@/server/connections';
 import {
   INSTANCE_NAME_MAX_LENGTH,
   INSTANCE_NAME_PROBLEMS,
@@ -76,7 +77,6 @@ import {
   signedInFreshly,
   type MasterKeyProblem,
 } from '@/server/master-key';
-import { requiresApp } from '@/server/provider-apps';
 
 import { FIRST_ADMINISTRATOR_PAGE } from '@/server/users';
 
@@ -180,12 +180,8 @@ export default async function SetupPage({ searchParams }: Props) {
   const fresh =
     handover && (await signedInFreshly(root.auth.sessions, await headers(), new Date()));
 
-  // A service that also connects with a token is never missing: its app is optional.
-  const needApp = apps.filter(requiresApp);
-  const registered = needApp.filter((app) => app.configured);
-  const missing = needApp.filter((app) => !app.configured);
-  const optional = apps.filter((app) => app.needsApp && !requiresApp(app));
-  const keyed = apps.filter((app) => !app.needsApp);
+  const { registered, missing, keyed } = oauthClientChecklist(apps);
+  const needApp = [...registered, ...missing];
   const waiting = clients.filter((view) => view.status === 'pending');
   const administrators = users.filter(
     (view) =>
@@ -256,7 +252,7 @@ export default async function SetupPage({ searchParams }: Props) {
       description: 'What agents and the setup kit point at.',
     },
     {
-      key: 'company-apps',
+      key: 'oauth-clients',
       counted: true,
       state:
         needApp.length === 0 || missing.length === 0
@@ -265,11 +261,11 @@ export default async function SetupPage({ searchParams }: Props) {
             ? 'todo'
             : 'partial',
       partial: `${registered.length}/${needApp.length}`,
-      title: SECTIONS.companyApps,
+      title: SECTIONS.oauthClients,
       description: (
         <>
           {registered.length > 0 &&
-            `${listOf(registered.map((app) => app.displayName))} ${registered.length === 1 ? 'is' : 'are'} registered. `}
+            `${listOf(registered.map((app) => app.displayName))} ${registered.length === 1 ? 'is' : 'are'} declared. `}
           {missing.length > 0 && (
             <>
               <strong>{listOf(missing.map((app) => app.displayName))}</strong>{' '}
@@ -278,19 +274,14 @@ export default async function SetupPage({ searchParams }: Props) {
               {missing.length === 1 ? 'it is' : 'they are'}.{' '}
             </>
           )}
-          {optional.length > 0 &&
-            `${OPTIONAL_APP_WORDS.hint(
-              listOf(optional.map((app) => app.displayName)),
-              optional.length > 1,
-            )} `}
           {keyed.length > 0 &&
             `${listOf(keyed.map((app) => app.displayName))} connect with a key and need none.`}
         </>
       ),
       action: missing[0]
         ? {
-            label: `${SETTINGS_ACTIONS.register} ${missing[0].displayName}`,
-            href: `${ADMIN_PAGES.companyApps}?app=${encodeURIComponent(missing[0].providerId)}#${missing[0].providerId}`,
+            label: `${SETTINGS_ACTIONS.declare} ${missing[0].displayName}`,
+            href: connectPagePath(missing[0].providerId),
           }
         : undefined,
     },
