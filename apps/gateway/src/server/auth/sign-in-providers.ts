@@ -21,6 +21,8 @@ import {
   admissionProblem,
   fileSignInProviders,
   GITHUB_DOT_COM,
+  GITHUB_IS_NOT_OIDC,
+  isGithubDotComHost,
   isSignInKind,
   isSignInProviderId,
   issuerKey,
@@ -82,6 +84,12 @@ export type SaveMode = 'create' | 'update';
 export interface SignInProvidersOptions {
   /** Tests only: accept an `http://` issuer for the in-process providers. */
   readonly allowInsecureIssuer?: boolean;
+  /**
+   * Fetches an OpenID Connect issuer's discovery document before the provider is
+   * saved (`RelyingPartyFactory.checkIssuer`): `null` when it is valid, otherwise why
+   * not. Absent: no check (unit tests of the other rules).
+   */
+  readonly checkIssuer?: (issuer: URL) => Promise<string | null>;
 }
 
 const KEY_PREFIX = 'sign_in.';
@@ -381,6 +389,11 @@ export class SignInProvidersService {
     );
     if (ruleProblem) problems.push(ruleProblem);
     if (problems.length > 0 || !issuer || !clientSecret) throw new IdpSettingsError(problems);
+    // Last, and only for a new issuer: the one check that reaches the network.
+    if (kind === 'oidc' && (before === null || issuerChanged) && this.options.checkIssuer) {
+      const discovery = await this.options.checkIssuer(issuer);
+      if (discovery) throw new IdpSettingsError([discovery]);
+    }
 
     const base = {
       id,
@@ -497,6 +510,10 @@ export class SignInProvidersService {
     }
     if (url.search || url.hash) {
       problems.push('issuer must not carry a query string or fragment');
+      return null;
+    }
+    if (kind === 'oidc' && isGithubDotComHost(url)) {
+      problems.push(GITHUB_IS_NOT_OIDC);
       return null;
     }
     return url;

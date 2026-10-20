@@ -9,6 +9,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitHub is refused as an OpenID Connect provider, with the way out.** GitHub
+  speaks OAuth, not OpenID Connect: an OpenID Connect provider at
+  `https://github.com` used to be saved, then fail every sign-in with "The
+  identity provider could not be reached". The form in Settings → Sign-in, and
+  `sign_in.<id>.kind: oidc` or `idp.issuer` at boot, now refuse any github.com
+  address with "GitHub is not an OpenID Connect provider: choose the GitHub
+  kind", and the form's help says so. The GitHub kind is unchanged.
+- **The OpenID Connect form checks the issuer before saving.** A new issuer's
+  discovery document (`<issuer>/.well-known/openid-configuration`) is fetched
+  first; the provider is not saved when there is none, when it names another
+  issuer, when it is not a discovery document, or when the gateway cannot reach
+  it — and the form says which. The configuration file is not checked over the
+  network at boot.
+
 ## [2.0.0-alpha.3] - 2026-10-20
 
 ### Added

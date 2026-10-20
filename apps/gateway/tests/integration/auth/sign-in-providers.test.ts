@@ -15,7 +15,7 @@ import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../../src/server/config/testing';
 import { seedConnection } from '../../../src/server/missions/testing';
 import { FakeGithub, routeFetch, type FakeGithubUser } from './fake-github';
-import { FakeIdp } from './fake-idp';
+import { answerAnyDiscovery, FakeIdp } from './fake-idp';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const ADMIN_TEAM = 'acme/gateway-admins';
@@ -69,7 +69,11 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
         }),
       logWrite: () => undefined,
       oidc: {
-        fetch: routeFetch({ [idp.issuer.origin]: idp.fetch, [github.base.origin]: github.fetch }),
+        fetch: routeFetch({
+          [idp.issuer.origin]: idp.fetch,
+          [github.base.origin]: github.fetch,
+          'https://login.microsoftonline.com': answerAnyDiscovery,
+        }),
         allowInsecureIssuer: true,
       },
       ...memoryStoreDeps,

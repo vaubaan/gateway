@@ -23,6 +23,8 @@ import {
   admissionProblem,
   adminGroupProblem,
   GITHUB_DOT_COM,
+  GITHUB_IS_NOT_OIDC,
+  isGithubDotComHost,
   DEFAULT_LOCAL_PROVIDER_NAME,
   isSignInKind,
   isSignInProviderId,
@@ -876,6 +878,14 @@ function readIdp(r: Reader): IdpConfig | null {
     email: r.text(keySpec('idp.claims.email')),
     groups: r.text(keySpec('idp.claims.groups')),
   };
+  if (issuer && isGithubDotComHost(issuer)) {
+    // The idp.* keys describe an OpenID Connect provider; GitHub goes under sign_in.<id>.
+    r.issues.add(
+      issuerKey.path,
+      `${GITHUB_IS_NOT_OIDC} (sign_in.<id>.kind: github)`,
+      envNamesFor(issuerKey.path),
+    );
+  }
   const allowedEmailDomains = r.stringList('idp.allowed_email_domains').map((d) => d.toLowerCase());
   const invitationOnly = r.bool(keySpec('idp.invitation_only'));
   if (!issuer || !clientId || !clientSecret) return null;
@@ -982,6 +992,10 @@ function readSignInProvider(r: Reader, id: string, base: string): SignInProvider
       'must not carry a query string or fragment',
       envNamesFor(`${base}.issuer`),
     );
+  }
+  // A static check: the configuration never reaches the network at boot.
+  if (issuer && isGithubDotComHost(issuer)) {
+    r.issues.add(`${base}.issuer`, GITHUB_IS_NOT_OIDC, envNamesFor(`${base}.issuer`));
   }
   const claims = {
     sub: r.string(`${base}.claims.sub`, { fallback: 'sub' }) ?? 'sub',

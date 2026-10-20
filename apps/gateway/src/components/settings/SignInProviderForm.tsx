@@ -123,7 +123,7 @@ export function SignInProviderForm({
               ? undefined
               : google
                 ? 'Google’s one issuer, for every account and every Workspace.'
-                : 'Discovery runs against <issuer>/.well-known/openid-configuration.'
+                : 'The gateway fetches <issuer>/.well-known/openid-configuration before saving. GitHub is not an OpenID Connect provider: for it, choose the GitHub kind.'
           }
         >
           <Input

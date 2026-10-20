@@ -156,3 +156,94 @@ describe('SignInProvidersService', () => {
     ).rejects.toMatchObject({ problems: [expect.stringContaining('admission rule')] });
   });
 });
+
+describe('SignInProvidersService — what an OpenID Connect issuer must be', () => {
+  let t: TestStore;
+  let checked: string[];
+  let answer: string | null;
+  beforeEach(() => {
+    t = openTestStore();
+    checked = [];
+    answer = null;
+  });
+  afterEach(() => t.store.close());
+
+  function service(): SignInProvidersService {
+    return new SignInProvidersService(
+      { idp: null, signIn: [] },
+      { group: null, emails: ['ops@example.com'] },
+      new IdpSettingsService(null, t.store.config),
+      t.store.config,
+      CLOCK,
+      {
+        checkIssuer: (issuer) => {
+          checked.push(issuer.href);
+          return Promise.resolve(answer);
+        },
+      },
+    );
+  }
+
+  it('refuses github.com as an OpenID Connect issuer, saying which kind to choose, before any discovery', async () => {
+    const s = service();
+    for (const issuer of [
+      'https://github.com',
+      'https://github.com/login/oauth',
+      'https://www.github.com',
+    ]) {
+      await expect(
+        s.save({ ...COMPANY, id: 'gh', issuer, invitationOnly: true }, 'create'),
+      ).rejects.toMatchObject({
+        problems: expect.arrayContaining([
+          'GitHub is not an OpenID Connect provider: choose the GitHub kind',
+        ]) as unknown,
+      });
+    }
+    expect(checked).toEqual([]);
+    expect(await s.views()).toEqual([]);
+    // The GitHub kind is the way out.
+    await expect(s.save(GITHUB, 'create')).resolves.toMatchObject({ saved: { kind: 'github' } });
+    const resolved = (await s.resolve('github'))?.provider;
+    expect(resolved).toMatchObject({
+      kind: 'github',
+      issuer: new URL('https://github.com'),
+      clientSecret: 'github-secret',
+    });
+    // An edit of the GitHub provider is unchanged too, and never checks discovery.
+    await s.save({ ...GITHUB, name: 'GitHub (Acme)', clientSecret: null }, 'update');
+    expect((await s.view('github'))?.name).toBe('GitHub (Acme)');
+    expect(checked).toEqual([]);
+  });
+
+  it('checks the discovery document of a new issuer and refuses with its problem', async () => {
+    const s = service();
+    answer =
+      'there is no OpenID Connect discovery document at https://login.example.com/realms/acme/.well-known/openid-configuration (HTTP 404): check the issuer';
+    await expect(s.save(COMPANY, 'create')).rejects.toMatchObject({ problems: [answer] });
+    expect(checked).toEqual(['https://login.example.com/realms/acme']);
+    expect(await s.views()).toEqual([]);
+    answer = null;
+    await expect(s.save(COMPANY, 'create')).resolves.toMatchObject({ saved: { id: 'company' } });
+  });
+
+  it('checks again only when the issuer changes', async () => {
+    const s = service();
+    await s.save(COMPANY, 'create');
+    checked = [];
+    await s.save({ ...COMPANY, name: 'Acme SSO', clientSecret: null }, 'update');
+    expect(checked).toEqual([]);
+    answer = 'refused';
+    await expect(
+      s.save({ ...COMPANY, issuer: 'https://login.example.com/realms/other' }, 'update'),
+    ).rejects.toMatchObject({ problems: ['refused'] });
+    expect(checked).toEqual(['https://login.example.com/realms/other']);
+  });
+
+  it('does not check while the form has other problems', async () => {
+    const s = service();
+    await expect(s.save({ ...COMPANY, clientId: '' }, 'create')).rejects.toMatchObject({
+      problems: ['client id is required'],
+    });
+    expect(checked).toEqual([]);
+  });
+});

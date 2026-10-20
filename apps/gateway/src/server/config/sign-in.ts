@@ -9,7 +9,7 @@
  * group names its provider.
  *
  * This file is the one place of the server that names public identity
- * providers by address (`OPEN_ISSUERS`, `GITHUB_DOT_COM`): what makes them
+ * providers by address (`OPEN_ISSUERS`, `GITHUB_DOT_COM`, `isGithubDotComHost`): what makes them
  * open is a fact about those services, not a setting.
  */
 import type { IdpClaimMapping } from './types';
@@ -39,6 +39,20 @@ export function isSignInProviderId(raw: string): boolean {
 export const GITHUB_DOT_COM = 'https://github.com';
 /** github.com serves its REST API from its own host; a GitHub Enterprise Server from `/api/v3`. */
 export const GITHUB_DOT_COM_API = 'https://api.github.com';
+
+/**
+ * GitHub speaks OAuth, not OpenID Connect: github.com serves no discovery document
+ * and issues no ID token, so an OpenID Connect provider at a github.com address can
+ * be saved but never signs anyone in. Refused by the form and by the configuration.
+ */
+export const GITHUB_IS_NOT_OIDC =
+  'GitHub is not an OpenID Connect provider: choose the GitHub kind';
+
+/** Whether an issuer is on github.com or one of its subdomains (`www.github.com`, `api.github.com`). */
+export function isGithubDotComHost(issuer: URL): boolean {
+  const host = issuer.hostname.toLowerCase().replace(/\.$/, '');
+  return host === 'github.com' || host.endsWith('.github.com');
+}
 
 interface SignInProviderBase {
   /** Stable slug: the login and callback paths, the admin rule's prefix, group ownership. */

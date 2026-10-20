@@ -89,7 +89,10 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     idp,
     deps.store.config,
     clock,
-    { allowInsecureIssuer: deps.oidc?.allowInsecureIssuer },
+    {
+      allowInsecureIssuer: deps.oidc?.allowInsecureIssuer,
+      checkIssuer: (issuer) => relyingParties.checkIssuer(issuer),
+    },
   );
   const flows = createSignInFlows({
     publicUrl: deps.config.publicUrl,

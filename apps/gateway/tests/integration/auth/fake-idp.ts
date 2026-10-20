@@ -229,3 +229,23 @@ function json(body: unknown, status = 200): Response {
 function oauthError(error: string, status = 400): Response {
   return json({ error }, status);
 }
+
+/**
+ * Answers the discovery document of any issuer with a minimal valid one naming that
+ * issuer: for a test that saves an OpenID Connect provider through the form (which
+ * checks discovery before saving) and never signs in through it.
+ */
+export const answerAnyDiscovery: CustomFetch = (url) => {
+  const marker = '/.well-known/openid-configuration';
+  const at = url.indexOf(marker);
+  if (at < 0) return Promise.resolve(oauthError('not_found', 404));
+  const issuer = url.slice(0, at);
+  return Promise.resolve(
+    json({
+      issuer,
+      authorization_endpoint: `${issuer}/authorize`,
+      token_endpoint: `${issuer}/token`,
+      jwks_uri: `${issuer}/jwks`,
+    }),
+  );
+};
