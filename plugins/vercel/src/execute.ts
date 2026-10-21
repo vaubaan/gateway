@@ -167,7 +167,9 @@ export async function executeVercel(
 /**
  * Resources reachable with this credential : one `Resource` per project of
  * the connection's team, paged (`DISCOVERY_PAGE_SIZE` × `DISCOVERY_MAX_PAGES`).
- * The team is read first, which also validates the token. The environment
+ * The team is read first, which also validates the token. A token scoped to
+ * some projects is refused every team-level read (403) : the team's name and
+ * slug are then left out, and the project listing validates the token. The environment
  * axis is not a resource : every project carries the three Vercel
  * environments, noted in `metadata.environments`, and the classifier derives
  * the one a call touches from its arguments.
@@ -183,17 +185,7 @@ export async function discoverVercelResources(
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   };
 
-  const team = (await callRest(
-    call,
-    'GET',
-    `/v2/teams/${encodeURIComponent(teamId)}`,
-    {},
-    null,
-  )) as {
-    id?: string;
-    slug?: string;
-    name?: string;
-  };
+  const team = await readTeam(call, teamId);
 
   const projects: ProjectDto[] = [];
   let until: number | undefined;
@@ -231,6 +223,28 @@ export async function discoverVercelResources(
       environments: [...VERCEL_ENVS],
     },
   }));
+}
+
+interface TeamDto {
+  readonly id?: string;
+  readonly slug?: string;
+  readonly name?: string;
+}
+
+/** The team, or nothing when the token may not read it (a token scoped to projects). */
+async function readTeam(call: VercelCall, teamId: string): Promise<TeamDto> {
+  try {
+    return (await callRest(
+      call,
+      'GET',
+      `/v2/teams/${encodeURIComponent(teamId)}`,
+      {},
+      null,
+    )) as TeamDto;
+  } catch (e) {
+    if (e instanceof UpstreamAuthError && e.upstreamStatus === HTTP_FORBIDDEN) return {};
+    throw e;
+  }
 }
 
 interface ProjectDto {

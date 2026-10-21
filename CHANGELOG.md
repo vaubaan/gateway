@@ -14,6 +14,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **The second factor's codes copy in one click.** The recovery codes shown
   after an enrolment are one block with a copy button, and the secret's copy
   button gives it without the spaces it is shown with.
+- **A Vercel token scoped to some projects connects.** Vercel refuses such a
+  token every team-level read, and the connection used to fail on reading the
+  team; it now lists the projects the token reaches. The `team_id` field is
+  still the id of the team that owns them.
 
 ## [2.0.0-alpha.3] - 2026-10-21
 

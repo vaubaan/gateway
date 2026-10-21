@@ -83,10 +83,10 @@ what Vercel fails is thrown (`UpstreamAuthError` on 401/403,
 
 `api-key` with two fields, collected by the host's generic form:
 
-| Field     | Secret | Value                                                                                                    |
-| --------- | ------ | -------------------------------------------------------------------------------------------------------- |
-| `token`   | yes    | A Vercel access token (Account Settings → Tokens), created with a scope limited to the team you connect. |
-| `team_id` | no     | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.      |
+| Field     | Secret | Value                                                                                                         |
+| --------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `token`   | yes    | A Vercel access token (Account Settings → Tokens), scoped to the team you connect or to some of its projects. |
+| `team_id` | no     | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.           |
 
 There is no OAuth app to register: Vercel's REST API and MCP server are both
 reached with a personal access token, which is what works.

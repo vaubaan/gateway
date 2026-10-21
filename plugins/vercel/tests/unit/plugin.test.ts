@@ -840,11 +840,40 @@ describe('discoverVercelResources with mockFetch', () => {
     expect(fetch.calls).toHaveLength(1 + DISCOVERY_MAX_PAGES);
   });
 
-  test('a rejected token surfaces as UpstreamAuthError from the team check', async () => {
-    const fetch = mockFetch([{ url: /\/v2\/teams\//, status: 403, body: { error: 'forbidden' } }]);
+  test('a token scoped to projects, refused the team, still lists its projects', async () => {
+    const fetch = mockFetch([
+      { url: /\/v2\/teams\//, status: 403, body: { error: 'forbidden' } },
+      {
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v10/projects?teamId=team_abc&limit=100`,
+        body: { projects: [{ id: 'prj_a', name: 'a' }], pagination: { next: null } },
+      },
+    ]);
+    const resources = await vercelPlugin.discoverResources(ctx(fetch));
+    expect(resources.map((r) => r.ref)).toEqual(['prj_a']);
+    expect(resources[0]!.metadata).toEqual({
+      team_id: 'team_abc',
+      framework: null,
+      environments: ['prod', 'preview', 'development'],
+    });
+  });
+
+  test('a rejected token surfaces as UpstreamAuthError', async () => {
+    const fetch = mockFetch([
+      { url: /\/v2\/teams\//, status: 403, body: { error: 'forbidden' } },
+      { url: /\/v10\/projects\?/, status: 403, body: { error: 'forbidden' } },
+    ]);
     await expect(vercelPlugin.discoverResources(ctx(fetch))).rejects.toMatchObject({
       name: 'UpstreamAuthError',
       upstreamStatus: 403,
+    });
+  });
+
+  test('an invalid token surfaces as UpstreamAuthError from the team check', async () => {
+    const fetch = mockFetch([{ url: /\/v2\/teams\//, status: 401, body: { error: 'invalid' } }]);
+    await expect(vercelPlugin.discoverResources(ctx(fetch))).rejects.toMatchObject({
+      name: 'UpstreamAuthError',
+      upstreamStatus: 401,
     });
   });
 });
