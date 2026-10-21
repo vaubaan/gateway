@@ -9,8 +9,26 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.3] - 2026-10-21
+
 ### Added
 
+- **Google and Entra ID as presets of "Add a sign-in provider."** Beside OpenID
+  Connect, GitHub and local accounts, two buttons fill the form in — Google's
+  issuer, or the Entra tenant (its ID or domain, from which the gateway writes
+  the issuer), the claim names, the admission rule that fits (a Workspace
+  domain or invited people for Google, everyone of the tenant for Entra) — and
+  spell out where to register the client, step by step, with the redirect
+  address to paste. What is saved is an OpenID Connect provider, as before; a
+  provider saved from a preset is edited with the same fields.
+- **The backup carries the sign-in providers and the admin rule.** A copy made
+  by the backup command now holds, beside the store, the sign-in providers set
+  by the environment (client secrets sealed under the master key) and the admin
+  rule, so a gateway restored on another host signs its people in as before.
+  Restored, they are providers of the store, edited in Settings → Sign-in; the
+  new host's environment adds its own and wins on a shared id. The identity
+  provider must still accept the new host's callback address. ADR
+  backup-carries-the-sign-in-configuration.
 - **Recovery by the master key, loudly.** A gateway nobody can administer any
   more (a provider misconfigured, the last administrator's second factor lost,
   a restore on a new host) is recovered at `/admin/recover` by whoever holds
@@ -32,6 +50,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   every administrator. Providers saved before this version stay on.
 
 ### Changed
+
+- **One way of connecting per service, a pasted token wherever the service
+  offers one.** GitHub, Supabase and Railway connect with a token the person
+  makes (for GitHub, a fine-grained token); Gmail keeps OAuth, its client
+  declared by an administrator on Gmail's own connect page. **After the
+  upgrade, an account connected through the GitHub App or a Supabase or Railway
+  OAuth app runs nothing until it is reconnected with a token** — this includes
+  the account the gateway's git remote pushes with. A push refused by GitHub
+  with a 403 now says the token lacks write access to the repository. ADR
+  one-place-to-authorize-services-token-first.
 
 - **A second factor for everyone, whatever the sign-in provider.** Every
   sign-in now ends with the gateway's own code (an authenticator app, recovery
@@ -64,6 +92,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   with no administrator, no rule and no bootstrap token is refused. ADR
   administrators-live-in-the-instance.
 
+### Removed
+
+- **Company apps.** The GitHub App, its manifest flow and installation
+  verification, `github__mint_install_token` (its two risks deprecated in the
+  GitHub catalog v9), the Supabase and Railway OAuth apps, and the Company apps
+  page of Administration.
+
 ### Fixed
 
 - **GitHub is refused as an OpenID Connect provider, with the way out.** GitHub
@@ -79,19 +114,6 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   issuer, when it is not a discovery document, or when the gateway cannot reach
   it — and the form says which. The configuration file is not checked over the
   network at boot.
-
-## [2.0.0-alpha.3] - 2026-10-20
-
-### Added
-
-- **Google and Entra ID as presets of "Add a sign-in provider."** Beside OpenID
-  Connect, GitHub and local accounts, two buttons fill the form in — Google's
-  issuer, or the Entra tenant (its ID or domain, from which the gateway writes
-  the issuer), the claim names, the admission rule that fits (a Workspace
-  domain or invited people for Google, everyone of the tenant for Entra) — and
-  spell out where to register the client, step by step, with the redirect
-  address to paste. What is saved is an OpenID Connect provider, as before; a
-  provider saved from a preset is edited with the same fields.
 
 ## [2.0.0-alpha.2] - 2026-10-19
 
