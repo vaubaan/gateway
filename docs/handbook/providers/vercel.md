@@ -353,7 +353,9 @@ the list against the schemas, so a tool added later is covered or fails.
   unbound deployment argument, a missing or malformed argument of a custom
   tool. A rewrapped tool whose upstream
   answers an `isError` result is passed through as it is.
-- `discoverResources`: `GET /v2/teams/{team_id}` then `GET /v10/projects`
+- `discoverResources`: `GET /v2/teams/{team_id}` (a 403 there — a token scoped
+  to projects is refused every team-level read — leaves the team's slug and name
+  out, and the listing validates the token) then `GET /v10/projects`
   paged by `pagination.next` → `until`, 100 per page, 10 pages at most. A
   project whose id is not a `pathIdent` fails discovery (`project id "…" is
 not a path-safe identifier`): no call could name it.
