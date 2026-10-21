@@ -595,12 +595,18 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
   'CredentialBroker.resolve': READ,
   'CredentialBroker.contextOf': READ,
-  'CredentialBroker.oauthClient': READ,
   'CredentialBroker.forRevocation': READ,
   'CredentialBroker.withdrawAtProvider': exempt(
     'a step of ConnectionService.revoke, whose connection-revoked entry carries what the provider answered (after.provider_grant); it writes nothing in the store itself',
   ),
   'CredentialBroker.refresh': exempt(SYSTEM_REFRESH),
+  'OAuth2Clients.forTokenRequest': READ,
+  'OAuth2Clients.forAuthorization': exempt(
+    "registers the instance's own OAuth client at a service that accepts dynamic registration, as a step of a person's connect (ADR oauth-client-registered-by-the-gateway): nobody chose it, and the connection-created entry follows; the instance log names the provider and the client id",
+  ),
+  'OAuth2Clients.rejected': exempt(
+    'forgets a registered client the provider refused (invalid_client), during an exchange or a refresh, with no human act: the next connect registers again; the instance log says so',
+  ),
   'PendingConnectStore.create': exempt(SESSION_STATE),
   'PendingConnectStore.take': exempt(SESSION_STATE),
   'NoticeStore.put': exempt(SESSION_STATE),

@@ -54,6 +54,7 @@ export {
   wildcardLiteral,
   WILDCARD_ANY,
   WILDCARD_ONE,
+  CredentialRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
   toolPrefixFor,

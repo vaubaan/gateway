@@ -225,7 +225,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     expect(done.returnTo).toBe('/missions/new?from=connect');
   });
 
-  it('needs the company app, and reports a denial or a failed exchange with the provider wording', async () => {
+  it('needs the company app, and reports a denial or a failed exchange in the gateway’s words', async () => {
     const denied = harness([
       {
         method: 'POST',
@@ -251,7 +251,8 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
       ),
       'provider-denied',
     );
-    expect(refused.detail).toBe('access_denied: user said no');
+    // The protocol code only: `error_description` is the provider's text (ADR provider-error-text-stays-with-the-agent).
+    expect(refused.detail).toBe('OAuth Co: access_denied');
     // The state went with the denial.
     await expectConnectError(
       denied.h.service.complete(alice, 'oauthco', new URLSearchParams({ code: 'c', state: first })),
@@ -267,7 +268,8 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
       ),
       'token-exchange-failed',
     );
-    expect(failed.detail).toContain('invalid_grant: code already used');
+    expect(failed.detail).toBe('OAuth Co: the token endpoint answered HTTP 400 (invalid_grant)');
+    expect(failed.detail).not.toContain('code already used');
     expect(failed.detail).not.toContain('csecret');
     expect(await denied.h.store.connections.list()).toEqual([]);
     await expectConnectError(denied.h.service.start(alice, 'nope'), 'provider-unknown');

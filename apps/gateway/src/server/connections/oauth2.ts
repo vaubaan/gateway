@@ -9,6 +9,10 @@
  *   - the withdrawal of the grant when a connection is revoked, in the shape
  *     the spec's `revocation` block declares.
  *
+ *   - the dynamic registration of the instance's own client (RFC 7591), for a
+ *     spec that declares `clientRegistration` (`registerClient`; kept and
+ *     reused by `OAuth2Clients`).
+ *
  * Client authentication follows `clientAuthMethod` (§2.3.1): HTTP Basic with
  * form-encoded credentials, credentials in the body, or none for a public
  * client. The client secret is used here and nowhere else: plugins never
@@ -20,7 +24,12 @@
  */
 import { createHash, randomBytes } from 'node:crypto';
 
-import type { OAuth2CredentialSpec, OAuth2Revocation, OAuth2Secret } from '@vaubaan/plugin-sdk';
+import type {
+  OAuth2ClientRegistration,
+  OAuth2CredentialSpec,
+  OAuth2Revocation,
+  OAuth2Secret,
+} from '@vaubaan/plugin-sdk';
 
 import { oneLine } from './errors';
 
@@ -273,6 +282,121 @@ async function tokenRequest(
     expiresAt: expiryFrom(payload.expires_in, io.now()),
     scopes: scopesFrom(payload.scope),
   };
+}
+
+/** A registration endpoint that does not answer within this delay is unreachable. */
+export const REGISTRATION_REQUEST_TIMEOUT_MS = 15_000;
+
+/**
+ * A registration endpoint refused to register the client, or could not be
+ * reached. `rejected` separates a refusal (the provider will not register
+ * this client as asked) from a transient failure. The message never quotes
+ * the provider: only the status and the protocol error code.
+ */
+export class OAuth2RegistrationError extends Error {
+  constructor(
+    message: string,
+    /** HTTP status, or 0 when no response was received. */
+    readonly status: number,
+    readonly oauthError: string | null,
+    readonly rejected: boolean,
+  ) {
+    super(message);
+    this.name = 'OAuth2RegistrationError';
+  }
+}
+
+export interface ClientRegistrationRequest {
+  readonly redirectUri: string;
+  /** Shown by the provider on its consent page and in the person's list of apps. */
+  readonly clientName: string;
+}
+
+/** A protocol token (RFC 7591 §3.2.2 `error`), never free text. */
+const PROTOCOL_CODE = /^[a-z_]{1,40}$/;
+
+/**
+ * Registers a client at the provider (RFC 7591 §3.1): the authorization-code
+ * and refresh-token grants, the spec's scopes, `redirectUri` as the only
+ * redirect URI, the spec's `clientAuthMethod`. The answer must carry a
+ * `client_id`, a `client_secret` unless the client is public, and no other
+ * authentication method than the one asked for. Throws
+ * `OAuth2RegistrationError`.
+ */
+export async function registerClient(
+  registration: OAuth2ClientRegistration,
+  spec: Pick<OAuth2CredentialSpec, 'scopes' | 'clientAuthMethod'>,
+  request: ClientRegistrationRequest,
+  io: Pick<OAuth2Io, 'fetch'>,
+): Promise<OAuth2Client> {
+  const body = {
+    client_name: request.clientName,
+    redirect_uris: [request.redirectUri],
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    token_endpoint_auth_method: spec.clientAuthMethod,
+    ...(spec.scopes.length > 0 ? { scope: spec.scopes.join(' ') } : {}),
+  };
+  let response: Response;
+  try {
+    response = await io.fetch(registration.registrationUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+      redirect: 'error',
+      signal: AbortSignal.timeout(REGISTRATION_REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.name : 'unknown error';
+    throw new OAuth2RegistrationError(
+      `registration endpoint unreachable (${reason})`,
+      0,
+      null,
+      false,
+    );
+  }
+  const payload = await readJsonObject(response);
+  if (!response.ok) {
+    const code =
+      typeof payload?.error === 'string' && PROTOCOL_CODE.test(payload.error)
+        ? payload.error
+        : null;
+    throw new OAuth2RegistrationError(
+      `registration endpoint answered ${response.status}${code ? ` (${code})` : ''}`,
+      response.status,
+      code,
+      response.status >= 400 && response.status < 500,
+    );
+  }
+  const clientId = payload?.client_id;
+  if (typeof clientId !== 'string' || clientId.length === 0) {
+    throw new OAuth2RegistrationError(
+      `registration endpoint answered ${response.status} without a client id`,
+      response.status,
+      null,
+      false,
+    );
+  }
+  const method = payload?.token_endpoint_auth_method;
+  if (method !== undefined && method !== spec.clientAuthMethod) {
+    throw new OAuth2RegistrationError(
+      'the provider registered the client with another authentication method than the one asked for',
+      response.status,
+      null,
+      true,
+    );
+  }
+  if (spec.clientAuthMethod === 'none') return { clientId, clientSecret: null };
+  const secret = payload?.client_secret;
+  if (typeof secret !== 'string' || secret.length === 0) {
+    throw new OAuth2RegistrationError(
+      `registration endpoint answered ${response.status} without a client secret`,
+      response.status,
+      null,
+      false,
+    );
+  }
+  return { clientId, clientSecret: secret };
 }
 
 /** A provider that does not answer a revocation within this delay did not confirm it. */

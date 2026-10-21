@@ -16,6 +16,7 @@
  */
 
 import {
+  CredentialRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
   expectCredentialKind,
@@ -137,7 +138,7 @@ interface TokenInfo {
 export async function verifyFlyToken(ctx: ConnectionContext): Promise<CredentialCheck> {
   const org = orgSlugOf(ctx.credential);
   if (!imagePrefixesOfCredential(ctx.credential)) {
-    throw new UpstreamAuthError(
+    throw new CredentialRefusal(
       `${PROVIDER_ID}: '${IMAGE_PREFIXES_FIELD}' must list repository prefixes such as ghcr.io/acme/app`,
       401,
     );
@@ -158,7 +159,7 @@ export async function verifyFlyToken(ctx: ConnectionContext): Promise<Credential
   const body: unknown = await res.json();
   const tokens = isRecord(body) && Array.isArray(body.tokens) ? (body.tokens as unknown[]) : null;
   if (!tokens || tokens.length === 0) {
-    throw new UpstreamAuthError(
+    throw new CredentialRefusal(
       'Fly did not describe the token: is it a token of fly tokens create?',
       401,
     );
@@ -166,7 +167,7 @@ export async function verifyFlyToken(ctx: ConnectionContext): Promise<Credential
   const infos = tokens.filter(isRecord) as TokenInfo[];
   const orgs = new Set(infos.map((info) => info.org_slug));
   if (infos.length !== tokens.length || orgs.size !== 1 || !orgs.has(org)) {
-    throw new UpstreamAuthError(
+    throw new CredentialRefusal(
       `the token is not limited to the organization '${org}': create it with fly tokens create org --org ${org}`,
       401,
     );

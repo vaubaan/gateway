@@ -5,7 +5,10 @@
  * each provider needs).
  *
  *   oauth2    `client_id`, `client_secret` unless the client is public
- *             (`clientAuthMethod: 'none'`), then the plugin's `appConfigFields`
+ *             (`clientAuthMethod: 'none'`), then the plugin's `appConfigFields`;
+ *             nothing when the gateway registers its own client at the
+ *             service (`clientRegistration`, ADR
+ *             oauth-client-registered-by-the-gateway)
  *   api-key   nothing: the person pastes their own key
  *   ssh-key   nothing: the instance generates the key pair
  */
@@ -39,6 +42,7 @@ const CLIENT_SECRET: CredentialField = {
 export function appConfigFieldsOf(spec: CredentialSpec): readonly CredentialField[] {
   switch (spec.kind) {
     case 'oauth2': {
+      if (spec.clientRegistration !== undefined) return [];
       const base = spec.clientAuthMethod === 'none' ? [CLIENT_ID] : [CLIENT_ID, CLIENT_SECRET];
       const extra = (spec.appConfigFields ?? []).filter(
         (f) => f.name !== CLIENT_ID_FIELD && f.name !== CLIENT_SECRET_FIELD,

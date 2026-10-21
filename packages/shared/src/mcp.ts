@@ -91,6 +91,32 @@ export class UpstreamAuthError extends Error {
 }
 
 /**
+ * A credential refused for a reason the PLUGIN states in its own words: a
+ * pasted token that lacks a scope, reaches another organisation, or is not
+ * the kind of token the plugin needs; a provider that answers "this account
+ * may not use this service" in a way the plugin recognises. Unlike any other
+ * error, its message may be shown to the person who connects the account
+ * (ADR provider-error-text-stays-with-the-agent, amendment of 2026-10-21):
+ * the gateway keeps it, on the connect page, in the discovery state and in
+ * the audit.
+ *
+ * Rule for the plugin: the message is a sentence the plugin wrote, with at
+ * most values the person typed or identifiers the plugin checked (a scope
+ * name, an organisation slug). Never text the provider sent, never a part
+ * of the credential. Anything quoted from the provider goes in an
+ * `UpstreamAuthError` instead, which the gateway reduces to its status.
+ *
+ * It is an `UpstreamAuthError`: everything that treats a rejected credential
+ * (refresh, "needs reconnecting") treats this one the same way.
+ */
+export class CredentialRefusal extends UpstreamAuthError {
+  constructor(message: string, status = 401) {
+    super(message, status);
+    this.name = 'CredentialRefusal';
+  }
+}
+
+/**
  * Thrown by a plugin when the provider answered with an HTTP status that is
  * not a credential problem (a 4xx other than 401/403, a 5xx). The host reads
  * `status` for the audit summary and for the telemetry error class; the

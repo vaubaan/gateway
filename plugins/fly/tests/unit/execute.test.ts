@@ -615,8 +615,10 @@ describe('the token check at paste', () => {
   });
 
   test('a token of another organization, of several, or that Fly refuses is refused', async () => {
+    // The plugin's own sentence, which the connect page shows (CredentialRefusal).
     await expect(verify({ tokens: [{ org_slug: 'other' }] })).rejects.toMatchObject({
-      name: 'UpstreamAuthError',
+      name: 'CredentialRefusal',
+      upstreamStatus: 401,
     });
     await expect(
       verify({ tokens: [{ org_slug: 'vaubaan' }, { org_slug: 'other' }] }),

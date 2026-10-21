@@ -1,9 +1,10 @@
 /**
  * Errors of the connect flows. A `ConnectError` carries a closed code (what the
  * UI keys its sentence on), an HTTP status, and an optional `detail` that is
- * safe to show to the connecting user: a validation sentence, or the provider's
- * status in the gateway's own words (`providerFailureReason`) — never the
- * provider's text, never a credential, never a token.
+ * safe to show to the connecting user: a validation sentence, the provider's
+ * status in the gateway's own words (`providerFailureReason`), or a refusal
+ * the plugin wrote itself (`CredentialRefusal`) — never the provider's text,
+ * never a credential, never a token.
  */
 import type { ConnectionStatus } from '@vaubaan/shared';
 
@@ -16,6 +17,7 @@ export const CONNECT_ERROR_CODES = [
   'state-invalid',
   'provider-denied',
   'token-exchange-failed',
+  'client-registration-failed',
   'credential-rejected',
   'provider-unreachable',
   'not-found',
@@ -42,6 +44,8 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
     'This authorization attempt has expired, was already used, or was started by another session. Start again from Accounts.',
   'provider-denied': 'The service did not grant the authorization.',
   'token-exchange-failed': 'The service refused to exchange the authorization for a credential.',
+  'client-registration-failed':
+    'The service refused to register this gateway as one of its apps. Retry in a moment; if it keeps refusing, the service may not allow new apps for your organisation.',
   'credential-rejected': 'The service rejected this credential.',
   'provider-unreachable': 'The service could not be reached. Retry in a moment.',
   'not-found': 'This account does not exist or is not yours.',
@@ -69,6 +73,7 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'state-invalid': 400,
   'provider-denied': 400,
   'token-exchange-failed': 502,
+  'client-registration-failed': 502,
   'credential-rejected': 400,
   'provider-unreachable': 502,
   'not-found': 404,

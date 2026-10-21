@@ -18,6 +18,7 @@ import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
 import { DiscoveryAfterCall } from './discovery-after-call';
 import { createConnectionHandlers, type ConnectionHandlers } from './handlers';
+import { OAuth2Clients } from './oauth2-clients';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService } from './service';
 
@@ -55,10 +56,19 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'connections' });
   const outbound: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init));
+  const clients = new OAuth2Clients({
+    providerApps: deps.providerApps,
+    config: deps.store.config,
+    publicUrl: deps.config.publicUrl,
+    fetch: outbound,
+    clock,
+    logger,
+  });
   const credentials = new CredentialBroker({
     connections: deps.store.connections,
     registry: deps.registry,
     providerApps: deps.providerApps,
+    clients,
     fetch: outbound,
     clock,
     logger,
@@ -67,6 +77,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     store: deps.store,
     registry: deps.registry,
     providerApps: deps.providerApps,
+    clients,
     broker: credentials,
     grounds: deps.grounds,
     pending: new PendingConnectStore(deps.sessions),
@@ -104,6 +115,13 @@ export {
   type ResolvedCredential,
 } from './credentials';
 export { CredentialFormatError, parseSecret, serializeSecret } from './credential-codec';
+export {
+  OAUTH_CLIENT_KEY_PREFIX,
+  OAuth2ClientMissing,
+  OAuth2Clients,
+  REGISTERED_CLIENT_NAME,
+  registeredClientKey,
+} from './oauth2-clients';
 export {
   DISCOVERY_AFTER_CALL_RETRY_DELAYS_MS,
   DiscoveryAfterCall,

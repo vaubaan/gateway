@@ -684,7 +684,9 @@ export const INVARIANTS: readonly Invariant[] = [
       },
       {
         file: 'plugins/miro/tests/unit/identifiers.test.ts',
-        tests: ['`item_id` — a segment of the request path, refused before any request'],
+        tests: [
+          '`board` and `item_id` — what classify refuses, execute does not send, and the URL sent is the gateway’s',
+        ],
       },
       {
         file: 'plugins/upstash-redis/tests/unit/identifiers.test.ts',

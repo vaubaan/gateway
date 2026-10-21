@@ -7,7 +7,9 @@
  *
  *   api-key      start(): the form values, checked at paste and by a first discovery
  *   oauth2       start(): authorization redirect with a single-use `state` and PKCE
- *                complete(): code exchange with the company's OAuth client
+ *                complete(): code exchange with the service's OAuth client —
+ *                declared by an administrator, or registered by the gateway
+ *                itself (`OAuth2Clients`)
  *   ssh-key      start(): an ed25519 key pair generated here, public key shown
  *
  * A connection is created under the name of the user who connected it. An
@@ -38,13 +40,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { Logger } from '../logging';
-import {
-  CLIENT_ID_FIELD,
-  CLIENT_SECRET_FIELD,
-  needsProviderApp,
-  ProviderAppNotConfigured,
-  type ProviderAppsService,
-} from '../provider-apps';
+import { needsProviderApp, type ProviderAppsService } from '../provider-apps';
 import { catalogEnvsOf } from '../missions/catalog-view';
 import type { Store } from '../store';
 import { ownResourceEnv } from '../store/resource-env';
@@ -75,9 +71,11 @@ import {
   buildAuthorizationUrl,
   exchangeCode,
   newCodeVerifier,
+  OAuth2RegistrationError,
   OAuth2TokenError,
   type OAuth2Client,
 } from './oauth2';
+import { OAuth2ClientMissing, OAuth2Clients } from './oauth2-clients';
 import {
   connectionCredentialKind,
   connectionOwnerOf,
@@ -86,6 +84,9 @@ import {
 } from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';
+
+/** An OAuth `error` code is a token of the protocol (RFC 6749 §4.1.2.1), never free text. */
+const PROTOCOL_ERROR_CODE = /^[a-z_]{1,40}$/;
 
 /** Connect attempts (starts, callbacks, form posts) one user may make per window. */
 export const CONNECT_RATE_LIMIT = 10;
@@ -141,6 +142,16 @@ export interface ConnectableProvider {
   readonly description: string | null;
   readonly experimental: boolean;
   readonly kind: CredentialKind;
+  /**
+   * The service signs the person in itself (`oauth2`): the connect page sends
+   * them there and they come back. False for a key pasted or generated here.
+   */
+  readonly redirects: boolean;
+  /**
+   * The gateway registers its own OAuth client at the service (`oauth2` with
+   * `clientRegistration`): nobody declares anything before connecting.
+   */
+  readonly registersItself: boolean;
   /** Goes through an OAuth client the company declares at the service (`oauth2`). */
   readonly usesApp: boolean;
   /** Usable now: its OAuth client is declared, or it needs none. Users may connect. */
@@ -303,6 +314,8 @@ export interface ConnectionServiceDeps {
   readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
   readonly providerApps: ProviderAppsService;
+  /** The OAuth client of an `oauth2` service: declared, or registered by the gateway. */
+  readonly clients: OAuth2Clients;
   readonly broker: CredentialBroker;
   /** Re-checks the missions of a connection after an act that may have removed an authority. */
   readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
@@ -389,6 +402,8 @@ export class ConnectionService {
       description: plugin.description ?? null,
       experimental: plugin.experimental === true,
       kind: spec.kind,
+      redirects: spec.kind === 'oauth2',
+      registersItself: spec.kind === 'oauth2' && OAuth2Clients.registersItself(spec),
       usesApp,
       configured,
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
@@ -464,8 +479,10 @@ export class ConnectionService {
   }
 
   private async startOAuth2(flow: FlowStart, spec: OAuth2CredentialSpec): Promise<StartResult> {
-    const client = await this.oauthClient(flow.plugin);
     const pending = this.newPending('oauth2', flow, spec.pkce ? newCodeVerifier() : null);
+    const client = await this.clientOrThrow(flow.plugin, () =>
+      this.deps.clients.forAuthorization(flow.plugin, spec, pending.redirectUri),
+    );
     const state = await this.deps.pending.create(pending);
     const url = buildAuthorizationUrl(spec, client, {
       redirectUri: pending.redirectUri,
@@ -711,24 +728,33 @@ export class ConnectionService {
   ): Promise<Connected> {
     const denied = query.get('error');
     if (denied) {
-      const description = query.get('error_description');
-      throw new ConnectError('provider-denied', description ? `${denied}: ${description}` : denied);
+      // The protocol code only (RFC 6749 §4.1.2.1): `error_description` is the provider's text.
+      throw new ConnectError(
+        'provider-denied',
+        PROTOCOL_ERROR_CODE.test(denied) ? `${plugin.displayName}: ${denied}` : null,
+      );
     }
     const code = query.get('code');
     if (!code) throw new ConnectError('provider-denied', 'no authorization code was returned');
+    const client = await this.clientOrThrow(plugin, () =>
+      this.deps.clients.forTokenRequest(plugin, spec),
+    );
     let secret: CredentialSecret;
     try {
       secret = await exchangeCode(
         spec,
-        await this.oauthClient(plugin),
+        client,
         { code, redirectUri: pending.redirectUri, codeVerifier: pending.codeVerifier },
         { fetch: this.deps.fetch, now: () => this.deps.clock.now() },
       );
     } catch (err) {
       if (err instanceof OAuth2TokenError) {
+        if (err.oauthError === 'invalid_client') {
+          await this.deps.clients.rejected(plugin, spec, client.clientId);
+        }
         throw new ConnectError(
           err.rejected ? 'token-exchange-failed' : 'provider-unreachable',
-          err.message,
+          `${plugin.displayName}: ${providerFailureReason(err)}`,
         );
       }
       throw err;
@@ -1312,22 +1338,39 @@ export class ConnectionService {
     return connection;
   }
 
-  private async hostAppConfig(providerId: string): Promise<Readonly<Record<string, string>>> {
+  /**
+   * The OAuth client of a flow, or the `ConnectError` the page shows: a
+   * declared client not declared yet (`app-not-configured`), a registration
+   * the service refused (`client-registration-failed`) or could not take
+   * (`provider-unreachable`), a registered client gone between the start and
+   * the callback (`state-invalid`: start again).
+   */
+  private async clientOrThrow(
+    plugin: ProviderPlugin,
+    get: () => Promise<OAuth2Client>,
+  ): Promise<OAuth2Client> {
     try {
-      return await this.deps.providerApps.hostAppConfig(providerId);
+      return await get();
     } catch (err) {
-      if (err instanceof ProviderAppNotConfigured) throw new ConnectError('app-not-configured');
+      if (err instanceof OAuth2ClientMissing) {
+        throw new ConnectError(
+          plugin.credential.kind === 'oauth2' && OAuth2Clients.registersItself(plugin.credential)
+            ? 'state-invalid'
+            : 'app-not-configured',
+        );
+      }
+      if (err instanceof OAuth2RegistrationError) {
+        this.deps.logger.warn('OAuth client registration failed', {
+          provider: plugin.id,
+          failure: providerFailureReason(err),
+        });
+        throw new ConnectError(
+          err.rejected ? 'client-registration-failed' : 'provider-unreachable',
+          `${plugin.displayName}: ${providerFailureReason(err)}`,
+        );
+      }
       throw err;
     }
-  }
-
-  private async oauthClient(plugin: ProviderPlugin): Promise<OAuth2Client> {
-    const app = await this.hostAppConfig(plugin.id);
-    const clientId = app[CLIENT_ID_FIELD];
-    if (!clientId) throw new ConnectError('app-not-configured');
-    const spec = plugin.credential;
-    const isPublic = spec.kind === 'oauth2' && spec.clientAuthMethod === 'none';
-    return { clientId, clientSecret: isPublic ? null : (app[CLIENT_SECRET_FIELD] ?? null) };
   }
 
   private async discoverWith(

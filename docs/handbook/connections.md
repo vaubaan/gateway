@@ -27,8 +27,9 @@ tracks:
 
 How a user connects a provider — one way per service, the simplest the
 service offers —, how the credential is stored and refreshed, how the
-resources of a connection are discovered and curated, and how an
-administrator declares the OAuth client of a service that signs people in
+resources of a connection are discovered and curated, and where the OAuth
+client of a service that signs people in comes from — declared by an
+administrator, or registered by the gateway itself
 (spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §0 "Connection",
 "Resource"; §2.3 connection states; §4.2 Connections and Administration;
 §4.3; §6 anti-replay; §7.2). Decisions:
@@ -39,7 +40,9 @@ D2 (the host runs the flows and the standard refresh),
 (one place to authorize a service; a token pasted by hand wherever the
 service offers one, OAuth only where it offers none; the GitHub App, the
 installation verification, the manifest flow and the second way of
-connecting of earlier builds are described there). Built on the
+connecting of earlier builds are described there),
+[oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)
+(the client of a service that accepts dynamic registration). Built on the
 [plugin SDK](plugin-sdk.md) (`CredentialSpec`, `discoverResources`,
 `experimental`), the [store](store.md) (`connections`,
 `connection_resources`, `instance_config`), the
@@ -58,7 +61,9 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   service.ts           ConnectionService: start/complete, discover, discoverAfterCall, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
   discovery-after-call.ts  DiscoveryAfterCall: the discovery the gateway runs after a call that created a resource
   credentials.ts       CredentialBroker: resolve() / refresh() — the refresh persistence hook
-  oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError
+  oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError,
+                       registerClient (RFC 7591), OAuth2RegistrationError
+  oauth2-clients.ts    OAuth2Clients: the client of an `oauth2` service — declared, or registered and kept
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
   credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
@@ -122,18 +127,62 @@ one entry in `SHIPPED_PLUGINS`, plus the dependency in
 ## The OAuth client of a service
 
 A service that signs people in through its own authorization (`oauth2`)
-needs the company's OAuth client declared once before anyone connects; a
-service that takes a key needs nothing from an administrator.
+needs an OAuth client. Either the company declares it once before anyone
+connects (Gmail), or — when the service accepts dynamic client registration
+and the plugin declares `clientRegistration` — the gateway registers its own
+and nobody declares anything (Miro; "A client the gateway registers itself"
+below). A service that takes a key needs nothing from an administrator.
 `appConfigFieldsOf(spec)` (`provider-apps/fields.ts`):
 
-| Credential kind | Fields the administrator enters                                                   |
-| --------------- | --------------------------------------------------------------------------------- |
-| `oauth2`        | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields` |
-| `api-key`       | none — each user pastes a key of their own                                        |
-| `ssh-key`       | none — the instance generates the key pair                                        |
+| Credential kind                    | Fields the administrator enters                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------- |
+| `oauth2`                           | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields` |
+| `oauth2` with `clientRegistration` | none — the gateway registers its own client at the service                        |
+| `api-key`                          | none — each user pastes a key of their own                                        |
+| `ssh-key`                          | none — the instance generates the key pair                                        |
 
 `needsProviderApp(spec)` is true when that list is not empty. Gmail is the
 one shipped plugin that needs it.
+
+### A client the gateway registers itself (`oauth2-clients.ts`)
+
+`OAuth2Clients({ providerApps, config: store.config, publicUrl, fetch, clock,
+logger })` is where the connect flows and the broker get the client of an
+`oauth2` service (ADR
+[oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)):
+
+- **`forAuthorization(plugin, spec, redirectUri)`** — a flow starts. A
+  declared client comes from `providerApps.hostAppConfig` (none →
+  `OAuth2ClientMissing`, the page's `app-not-configured`). A registered one
+  is read from `instance_config`; when there is none, or when it was
+  registered for another callback (the public URL changed), the host
+  registers one (`registerClient`: `POST registrationUrl` with
+  `client_name` "Vaubaan Gateway (<public host>)", the one redirect URI,
+  the code and refresh grants, `response_types: ['code']`, the spec's
+  `token_endpoint_auth_method` and scopes) and stores it in one
+  transaction: `oauth_clients.<provider>.client_id`, `.redirect_uri`,
+  `.registered_at` as values, `.client_secret` sealed (associated data
+  `instance_config:oauth_clients.<provider>.client_secret`). The answer must
+  carry a client id, the secret of a confidential client, and no other auth
+  method than the one asked. Single-flight per provider in the process.
+- **`forTokenRequest(plugin, spec)`** — exchange, refresh, revocation: the
+  declared or the stored client, never a registration
+  (`OAuth2ClientMissing` when none).
+- **`rejected(plugin, spec, clientId)`** — the provider answered
+  `invalid_client` (code exchange in `completeOAuth2`, refresh in the
+  broker): a registered client that is still `clientId` is forgotten (its
+  four keys deleted, logged), so the next connect registers again. A
+  declared client is left alone. Every other account connected through the
+  forgotten client is turned `expired` at its next refresh (the broker reads
+  "no client" for a self-registering spec as a rejected credential: its grant
+  belonged to that client), never retried as unreachable.
+
+A refused registration is `client-registration-failed` (status and protocol
+code: "Board Co: the registration endpoint answered HTTP 403
+(access_denied)"); an unreachable one `provider-unreachable`; a registered
+client gone between the start and the callback `state-invalid`. Nothing of a
+registered client appears on the connect page, in Settings → Setup or in
+`pluginAppConfig` (`{}`).
 
 `ProviderAppsService(config.providers, store.config, registry)`:
 
@@ -207,12 +256,15 @@ back to the connect page as a one-time notice.
 A plugin declares its one way of connecting in `credential` (ADR
 [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
 the simplest the service offers — a key a person makes by hand (`api-key`)
-whenever the service has one, `oauth2` only where it has none (Gmail),
-`ssh-key` for a host. The host never looks for a second way.
+whenever the service has one that works, `oauth2` where it has none (Gmail,
+Miro), `ssh-key` for a host. The host never looks for a second way.
 
 - **What is offered.** `ConnectionService.describe` builds one
-  `ConnectableProvider` per plugin: `kind`, `usesApp` (true for `oauth2`),
-  `configured` (the OAuth client is declared, or none is needed), the form
+  `ConnectableProvider` per plugin: `kind`, `redirects` (true for `oauth2`:
+  the page sends the person to the service), `registersItself` (`oauth2`
+  with `clientRegistration`), `usesApp` (an administrator declares the
+  client: `oauth2` without `clientRegistration`), `configured` (the OAuth
+  client is declared, or none is needed), the form
   `fields`, `createUrl`, `label` (what the person creates, in the service's
   words) and the `guide` with each permission's tools as `{ name, title }`
   (`toolLabel`: the plugin's `toolTitles`, else the name).
@@ -254,17 +306,22 @@ Both pass the per-user rate limit first (`RateLimiter.take('connect:<userId>',
 CONNECT_RATE_LIMIT = 10, CONNECT_RATE_WINDOW_MS = 60 s)` → `rate-limited`).
 
 ```
-oauth2       start    oauthClient() from hostAppConfig ──none──▶ app-not-configured
+oauth2       start    clients.forAuthorization(): declared ──none──▶ app-not-configured
+                                              registered ──none / other callback──▶ registerClient()
+                                              ──refused──▶ client-registration-failed ──network──▶ provider-unreachable
                       pending.create({kind, providerId, userId, codeVerifier, redirectUri,
                                       returnTo, reconnectId})  → state   (TTL 10 min)
                       303 <authorizationUrl>?response_type=code&client_id&redirect_uri=
                           <public_url>/connections/callback/<id>&scope&state
                           [&code_challenge&code_challenge_method=S256] [&resource] [extras]
              complete pending.take(state, userId)  ──none / other provider──▶ state-invalid
-                      ?error=…                      ──▶ provider-denied (state already consumed)
+                      ?error=…                      ──▶ provider-denied (state already consumed;
+                                                        the protocol code only, never error_description)
+                      clients.forTokenRequest()     ──registered one gone──▶ state-invalid
                       exchangeCode(): POST tokenUrl, grant_type=authorization_code, code,
                           redirect_uri, code_verifier, [resource]; client auth per clientAuthMethod
                       ──rejected──▶ token-exchange-failed   ──5xx / network──▶ provider-unreachable
+                          (invalid_client: clients.rejected() forgets a registered client)
                       finalize(discovery: best-effort)
 api-key      start    readCredentialFields(spec.fields, form)  ──▶ invalid-input
                       verifyPasted(): spec.verify  ──rejected──▶ credential-rejected  ──network──▶ provider-unreachable
@@ -298,7 +355,9 @@ Basic` with form-encoded id and secret (RFC 6749 §2.3.1),
   error. `OAuth2TokenError.rejected` separates a dead grant (400/401/403 or
   an `invalid_grant`-class code) from a transient failure (5xx, network,
   15 s timeout). Messages carry the provider's `error` /
-  `error_description`, never a credential.
+  `error_description`, never a credential; the connect page shows
+  `providerFailureReason` of them (status and protocol code), never the
+  message.
 - **`start`** resolves what every kind needs once (`FlowStart`: actor,
   plugin, display name, return path, reconnect target) and dispatches to one
   private method per kind: `startOAuth2`, `connectWithApiKey`,
@@ -323,6 +382,11 @@ Basic` with form-encoded id and secret (RFC 6749 §2.3.1),
   shown, logged and stored (`discovery.error`, audit). The calling agent still
   receives the provider's message on a tool call (ADR
   [provider-error-text-stays-with-the-agent](../decisions/provider-error-text-stays-with-the-agent.md)).
+  One exception: a **`CredentialRefusal`** (an `UpstreamAuthError` whose
+  sentence the plugin wrote itself — "the token is not limited to the
+  organization 'acme'", "Miro refused its MCP server to this account…") is
+  kept as it is, on one line of at most 300 characters (amendment of
+  2026-10-21 of that ADR).
 
 - **What is stored.** `connections.create({ provider, owner: {kind:'user'},
 displayName, credential: serializeSecret(secret), credentialExpiresAt,
@@ -909,15 +973,25 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 - `token-connections.test.ts` — a token service offered at once with its
   guide and nothing to declare, a pasted token checked and stored with its
   account and expiry and never shown, a rejected or expired token storing
-  nothing, an account made a way the plugin no longer offers reconnected
+  nothing, a refusal the plugin wrote shown in its words and a quoted
+  provider body never, an account made a way the plugin no longer offers reconnected
   with a token on the same id (and withdrawn nowhere), a token never
   refreshed, a token revocation asking nothing.
 - `mapping.test.ts` — the summary, the owner's name, a vanished owner.
 - `pending.test.ts`, `input.test.ts`, `codec-and-keypair.test.ts` (the
   generated key is parsed and used by `ssh2`; a stored `app-install`
   credential of an earlier build is an unknown kind),
+  `oauth2-clients.test.ts` (the registration request and its refusals in
+  the gateway's words; one client per instance and provider, sealed,
+  reused, shared by two concurrent connects, registered again for a new
+  callback or after `invalid_client`; never registered for a token request;
+  a service with nothing to declare connected end to end, refreshed with the
+  registered client, its client forgotten on `invalid_client`),
+  `failure-reason.test.ts` (the status and our own words; a
+  `CredentialRefusal` kept),
   `shipped-providers.test.ts` (the real plugins through the driver: one way
-  per service, a key offered at once, Gmail the one `oauth2` way, every
+  per service, a key offered at once, Gmail and Miro the `oauth2` ways —
+  Miro's client registering itself —, every
   guided token way with a label, a link, steps and a check; the grant
   withdrawn for Gmail only; a valid authorization redirect for every
   `oauth2` plugin), `provider-apps/service.test.ts` (fields per kind, the

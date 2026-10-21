@@ -82,7 +82,7 @@ One handbook per provider plugin (`plugins/<id>`):
 | [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                   |
 | [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`, experimental and classifier-only: it classifies the modelled tools and discovers the mailbox, exposes no tool. |
 | [providers/fly](providers/fly.md)                       | `@vaubaan/plugin-fly`: the apps of one Fly organization, their machines, volumes, secrets, IPs and certificates.                        |
-| [providers/miro](providers/miro.md)                     | `@vaubaan/plugin-miro`: boards, items, frames, connectors and tags.                                                                     |
+| [providers/miro](providers/miro.md)                     | `@vaubaan/plugin-miro`: Miro's MCP server rewrapped, OAuth with a client the gateway registers.                                         |
 | [providers/notion](providers/notion.md)                 | `@vaubaan/plugin-notion`: pages, content, databases and comments under shared roots, proven by an ancestry walk.                        |
 
 ## Legacy

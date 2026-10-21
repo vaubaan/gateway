@@ -32,6 +32,7 @@ import { ProviderAppsService } from '../provider-apps';
 import { openTestStore, type TestStore } from '../store/testing';
 import type { GroupRecord, UserRecord } from '../store/types';
 import { CredentialBroker } from './credentials';
+import { OAuth2Clients } from './oauth2-clients';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService, type Actor } from './service';
 
@@ -44,6 +45,19 @@ export const OAUTH_SPEC: OAuth2CredentialSpec = {
   scopes: ['read', 'write'],
   pkce: true,
   clientAuthMethod: 'client_secret_basic',
+  refreshable: true,
+};
+
+/** An `oauth2` way whose client the gateway registers itself (RFC 7591), like Miro's MCP server. */
+export const REGISTERED_OAUTH_SPEC: OAuth2CredentialSpec = {
+  kind: 'oauth2',
+  authorizationUrl: 'https://mcp.provider.example.com/authorize',
+  tokenUrl: 'https://mcp.provider.example.com/token',
+  clientRegistration: { registrationUrl: 'https://mcp.provider.example.com/register' },
+  scopes: ['boards:read', 'boards:write'],
+  pkce: true,
+  resourceIndicator: 'https://mcp.provider.example.com/',
+  clientAuthMethod: 'client_secret_post',
   refreshable: true,
 };
 
@@ -206,6 +220,7 @@ export interface ConnectionsHarness extends TestStore {
   readonly registry: PluginRegistry;
   readonly fetch: MockFetch;
   readonly providerApps: ProviderAppsService;
+  readonly clients: OAuth2Clients;
   readonly broker: CredentialBroker;
   readonly service: ConnectionService;
   readonly pending: PendingConnectStore;
@@ -228,10 +243,19 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     registry,
   );
   const audit = new MemoryAuditWriter();
+  const clients = new OAuth2Clients({
+    providerApps,
+    config: test.store.config,
+    publicUrl: PUBLIC_URL,
+    fetch,
+    clock: test.clock,
+    logger: silentLogger,
+  });
   const broker = new CredentialBroker({
     connections: test.store.connections,
     registry,
     providerApps,
+    clients,
     fetch,
     clock: test.clock,
     logger: silentLogger,
@@ -247,6 +271,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     store: test.store,
     registry,
     providerApps,
+    clients,
     broker,
     grounds: authority.grounds,
     pending,
@@ -262,6 +287,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     registry,
     fetch,
     providerApps,
+    clients,
     broker,
     service,
     pending,

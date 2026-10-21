@@ -17,6 +17,7 @@ import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
 /** Plugin id → the tools whose success creates something its discovery lists. */
 const EXPECTED: Readonly<Record<string, readonly string[]>> = {
   fly: ['fly__create_app'],
+  miro: ['miro__board_create'],
   railway: ['railway__create-project'],
   resend: ['resend__create_domain', 'resend__create_segment'],
   'upstash-redis': ['upstash_redis__create_database'],

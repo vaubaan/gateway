@@ -10,7 +10,9 @@
  * A service that signs people in through an OAuth client (`oauth2`) needs it
  * declared once: an administrator does so here, on the same page, before
  * anyone connects (`OAuthClientForm`); afterwards the form stays one
- * disclosure away for them.
+ * disclosure away for them. A service that lets the gateway register its own
+ * client (`registersItself`, Miro) needs nothing: the button leads straight
+ * to the service (ADR oauth-client-registered-by-the-gateway).
  *
  * A field says the shape it expects before the person types (its placeholder
  * and the line under it are the plugin's); the how-to is folded by default.
@@ -73,7 +75,9 @@ function ledeOf(provider: ConnectableProvider): string {
   const name = provider.displayName;
   switch (provider.kind) {
     case 'oauth2':
-      return `You sign in at ${name} and allow your company’s OAuth client; the gateway never sees your password.`;
+      return provider.registersItself
+        ? `You sign in at ${name} and allow this gateway; there is nothing to create or paste, and the gateway never sees your password.`
+        : `You sign in at ${name} and allow your company’s OAuth client; the gateway never sees your password.`;
     case 'api-key':
       return provider.label
         ? `Create a ${provider.label} at ${name} and paste it here.`
@@ -88,7 +92,14 @@ function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconne
   const name = provider.displayName;
   return (
     <div className={styles.prose}>
-      {provider.kind === 'oauth2' && (
+      {provider.kind === 'oauth2' && provider.registersItself && (
+        <p>
+          “Continue” sends you to {name}. You sign in there and allow this gateway, which registered
+          itself as an app at {name} the first time someone connected; {name} then sends you back
+          here with a credential, which is encrypted and kept under your name.
+        </p>
+      )}
+      {provider.kind === 'oauth2' && !provider.registersItself && (
         <p>
           “Continue” sends you to {name}. You sign in there and allow the OAuth client your company
           declared; {name} then sends you back here with a credential, which is encrypted and kept
@@ -124,7 +135,7 @@ function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconne
 }
 
 function submitLabel(provider: ConnectableProvider, reconnect: boolean): string {
-  if (provider.usesApp) return `Continue to ${provider.displayName}`;
+  if (provider.redirects) return `Continue to ${provider.displayName}`;
   if (reconnect) return ACCOUNT_ACTIONS.reconnect;
   if (provider.kind === 'ssh-key') return 'Make the key pair and connect';
   return provider.guide ? TOKEN_CONNECT.submit : ACCOUNT_ACTIONS.connect;
@@ -186,7 +197,7 @@ export default async function ConnectOneAccountPage({
     if (reconnect.connection.provider !== provider.id) notFound();
   }
   const returnTo = firstParam(query.return_to);
-  const redirectFlow = provider.usesApp;
+  const redirectFlow = provider.redirects;
   // The OAuth client of a service that signs people in: declared here by an administrator.
   const oauthClient =
     provider.usesApp && principal.isOperator

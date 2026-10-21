@@ -164,7 +164,7 @@ describe('verify : internal connection tokens only', () => {
       bot: { owner: { type: 'user', user: { id: PAGE } } },
     });
     const refused = verify(ctx(fetch));
-    await expect(refused).rejects.toMatchObject({ name: 'UpstreamAuthError' });
+    await expect(refused).rejects.toMatchObject({ name: 'CredentialRefusal' });
     await expect(refused).rejects.toThrow(/not a personal access token/);
   });
 
