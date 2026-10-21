@@ -9,6 +9,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The second factor's codes copy in one click.** The recovery codes shown
+  after an enrolment are one block with a copy button, and the secret's copy
+  button gives it without the spaces it is shown with.
+
 ## [2.0.0-alpha.3] - 2026-10-21
 
 ### Added

@@ -87,6 +87,8 @@ export interface Notice {
    * long as the notice — read once, by the session it was written for.
    */
   readonly form?: FormEcho;
+  /** Codes to keep (the recovery codes shown once), drawn as one block with a copy button. */
+  readonly codes?: readonly string[];
 }
 
 interface StoredNotice extends Notice {
@@ -119,6 +121,7 @@ export class NoticeStore {
       title: stored.title,
       lines: stored.lines,
       ...(stored.form ? { form: stored.form } : {}),
+      ...(stored.codes ? { codes: stored.codes } : {}),
     };
   }
 }
