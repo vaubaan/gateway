@@ -1207,13 +1207,25 @@ a mounted file, never committing anything:
   Without it, local accounts still work: the links are shown to the
   administrator to hand over;
 - for a provider that connects through the service's own sign-in only
-  (`oauth2`: a service that offers no key a person can make — Gmail), the
-  **OAuth client the company declared** at that service: identifier and
-  secret, entered here or on the service's connect page (§7.2). Each
-  instance declares its own client; the instance never uses one shared
-  with another instance. Every other provider needs nothing here: people
-  connect it with a key they make at the service (ADR
+  (`oauth2`: a service that offers no key a person can use — Gmail, Miro),
+  its **OAuth client**, from one of two sources:
+  - **declared by an administrator** when the service requires it (Gmail):
+    the company registers the gateway at the service, then enters the
+    client's identifier and secret here or on the service's connect page
+    (§7.2);
+  - **registered by the gateway itself** when the service accepts dynamic
+    client registration (RFC 7591; Miro's MCP server): the instance registers
+    its own client the first time someone connects, keeps it with its secret
+    encrypted under the master key, reuses it for every connection, and
+    registers again when the service rejects it or the instance's public
+    URL changed. Nothing is entered here (ADR
+    [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)).
+
+  Either way each instance has its own client; the instance never uses one
+  shared with another instance. Every other provider needs nothing here:
+  people connect it with a key they make at the service (ADR
   [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md));
+
 - the operator's **bootstrap token**, the secret of the setup link: it
   opens the setup until the setup ends. Required while the configuration
   sets no sign-in provider; and an instance whose store names no
@@ -1466,11 +1478,16 @@ a key the person makes at the service and pastes, whenever the service
 lets a person make one, with a guide derived from the plugin — where to
 create it, which permissions to grant for the plugin's tools, the expiry
 to choose, and that a shared service account is fine; or, for a service
-that offers no such key (Gmail), the service's own sign-in: the person is
-sent to the service, consents and comes back. That second way needs the
-company's OAuth client declared at the service once; an administrator
-does so on the same page, before anyone connects, and the page tells
-everyone else who to ask until then. A pasted token is checked at the
+that offers no such key (Gmail, Miro), the service's own sign-in: the person
+is sent to the service, consents and comes back. That second way needs an
+OAuth client at the service. Where the service accepts dynamic client
+registration (Miro), the gateway registers its own the first time someone
+connects and nobody declares anything: the page says there is nothing to
+create or paste. Otherwise (Gmail) the company's OAuth client is declared
+at the service once; an administrator does so on the same page, before
+anyone connects, and the page tells everyone else who to ask until then.
+A refusal the gateway reports on this page is in its own words or in the
+plugin's — never the service's text. A pasted token is checked at the
 service before it is stored (who it acts as, its expiry when the service
 says), is never shown back, and its expiry is shown on the account's page
 ahead of it; a token the service rejects makes the account "needs
@@ -1825,12 +1842,17 @@ automated suite. Trust comes from usage.
   [github-sign-in](../decisions/github-sign-in.md),
   [security-headers-set-by-the-application](../decisions/security-headers-set-by-the-application.md)).
 - One place to authorize a service: a key the person makes and pastes
-  wherever the service offers one; the company's own OAuth client, declared
-  on the service's connect page, only where it offers none (Gmail). The
-  GitHub App, its manifest flow and the OAuth apps of Supabase and Railway
-  were removed on 2026-10-20 (ADR
+  wherever the service offers one that works; the service's sign-in only
+  where it offers none (Gmail, Miro). Its OAuth client is either declared
+  by an administrator on the service's connect page (Gmail), or registered
+  by the gateway itself where the service accepts dynamic client
+  registration (RFC 7591; Miro, 2026-10-21, ADR
+  [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)).
+  The GitHub App, its manifest flow and the OAuth apps of Supabase and
+  Railway were removed on 2026-10-20 (ADR
   [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)).
-  Every instance declares its own OAuth client, never a shared one.
+  Every instance has its own OAuth client, declared or registered, never a
+  shared one.
 
 ### 11.2 Open questions
 

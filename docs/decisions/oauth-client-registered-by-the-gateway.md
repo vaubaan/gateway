@@ -159,8 +159,8 @@ Vaubaan"): a client secret common to every instance, held by Vaubaan.
 ## References
 
 - Spec: `docs/spec/vaubaan-gateway.md` §4.3 (the OAuth client of a service),
-  §7.2 (connect an account), §11.1 — they describe the declared client only;
-  the self-registered client is to be added by a planning pass.
+  §7.2 (connect an account), §11.1 — amended on 2026-10-21 to describe both
+  sources of the client, declared and registered.
 - Code: `packages/plugin-sdk/src/credential.ts` (`OAuth2ClientRegistration`),
   `apps/gateway/src/server/connections/oauth2.ts` (`registerClient`),
   `apps/gateway/src/server/connections/oauth2-clients.ts`.
