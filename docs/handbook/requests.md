@@ -356,7 +356,8 @@ The sweeper expires the open requests of an orphaned mission on the normal
 - **The sealed arguments live as long as the request and no longer** (spec
   §3.5). Pausing the request's clock while the mission is orphaned would hold
   the arguments of an approval request for an unbounded time — and for ever on
-  a revoked connection, whose missions never come back.
+  a revoked connection, whose missions never come back when it was their only
+  one.
 - **A status filter in the sweep's SQL would be the one reader that bypasses
   the derived `orphaned`.** The store holds `active` for an orphaned mission;
   `sweepExpired` reads no mission at all.

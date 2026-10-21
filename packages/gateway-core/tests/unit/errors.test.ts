@@ -73,6 +73,11 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
       limit: { max: 60, window_seconds: 60 },
       retry_after_seconds: 12,
     }),
+  'connection-revoked': () =>
+    refuse.connectionRevoked({
+      connection: { id: 'con_1', name: 'GitHub (acme)' },
+      cause: 'connection-revoked',
+    }),
   'connection-unavailable': () =>
     refuse.connectionUnavailable({
       connection: { id: 'con_1', name: 'GitHub (acme)' },
@@ -90,9 +95,9 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
 };
 
 describe('refusal codes', () => {
-  test('there are exactly eight codes and a builder sample for each', () => {
-    expect(REFUSAL_CODES).toHaveLength(8);
-    expect(new Set(REFUSAL_CODES).size).toBe(8);
+  test('there are exactly nine codes and a builder sample for each', () => {
+    expect(REFUSAL_CODES).toHaveLength(9);
+    expect(new Set(REFUSAL_CODES).size).toBe(9);
     expect(Object.keys(SAMPLES).sort()).toEqual([...REFUSAL_CODES].sort());
   });
 
@@ -341,12 +346,32 @@ describe('a mission token that stopped working', () => {
       expect(error.message).toMatch(/human/);
       expect((REFUSAL_CODES as readonly string[]).includes(reason)).toBe(false);
     }
-    // The eight refusal codes are untouched.
-    expect(REFUSAL_CODES).toHaveLength(8);
+    // The nine refusal codes are untouched.
+    expect(REFUSAL_CODES).toHaveLength(9);
   });
 
   test('an unknown bearer carries no reason: nothing is said about a token that was never proven', () => {
     expect(new AuthError('unknown or revoked bearer.').reason).toBeNull();
+  });
+});
+
+describe('connection-revoked', () => {
+  test('says whether the account comes back, and to keep using the other accounts', () => {
+    const removed = refuse.connectionRevoked({
+      connection: { id: 'con_1', name: 'GitHub (acme)' },
+      cause: 'connection-revoked',
+    });
+    expect(removed).toMatchObject({ code: 'connection-revoked', final: true });
+    expect(removed.hint).toMatch(/never comes back/);
+    expect(removed.hint).toMatch(/other accounts/);
+    expect(removed.hint).toMatch(/new mission/);
+
+    const withdrawn = refuse.connectionRevoked({
+      connection: { id: 'con_1', name: 'GitHub (acme)' },
+      cause: 'access-withdrawn',
+    });
+    expect(withdrawn).toMatchObject({ code: 'connection-revoked', final: false });
+    expect(withdrawn.hint).toMatch(/same token works on it again/);
   });
 });
 

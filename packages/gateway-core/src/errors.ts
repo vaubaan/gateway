@@ -17,6 +17,7 @@
  *   -32001 Auth required (Vaubaan-specific, unknown or malformed bearer).
  */
 
+import type { ConnectionLoss } from './types.ts';
 import {
   isRefusalCode,
   type ConnectionStatus,
@@ -119,6 +120,14 @@ export interface ConnectionUnavailableRefusal extends RefusalBase<'connection-un
   readonly owner: Pick<ConnectionOwner, 'kind' | 'display'>;
 }
 
+export interface ConnectionRevokedRefusal extends RefusalBase<'connection-revoked'> {
+  readonly connection: { readonly id: string; readonly name: string };
+  /** `connection-revoked`: removed by its owner; `access-withdrawn`: the mission's creator lost it. */
+  readonly cause: ConnectionLoss;
+  /** True when nothing brings it back: a new mission is needed for another account. */
+  readonly final: boolean;
+}
+
 export interface MissionInactiveRefusal extends RefusalBase<'mission-inactive'> {
   readonly status: Exclude<MissionStatus, 'active'>;
   readonly reason: string;
@@ -137,6 +146,7 @@ export type Refusal =
   | ResourceNotInMissionRefusal
   | RateLimitedRefusal
   | ConnectionUnavailableRefusal
+  | ConnectionRevokedRefusal
   | MissionInactiveRefusal
   | WrongCredentialKindRefusal;
 
@@ -167,7 +177,7 @@ const HAND_TO_HUMAN =
 const INACTIVE_MISSION_NEXT_STEP: Readonly<Record<Exclude<MissionStatus, 'active'>, string>> = {
   expired: 'Only the mission creator can extend it.',
   orphaned:
-    'The authority behind it is missing. It serves calls again, with this same token, if that authority comes back (a share made again, the creator back in their group); a revoked connection never comes back. A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one. Report to the human rather than retrying in a loop.',
+    'The authority behind it is missing. It serves calls again, with this same token, if that authority comes back (a share made again, the creator back in their group); a revoked account never comes back. A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one. Report to the human rather than retrying in a loop.',
   revoked: 'A new mission must be issued.',
 };
 
@@ -302,6 +312,27 @@ export const refuse = {
       status: input.status,
       owner: { kind: input.owner.kind, display: input.owner.display },
       hint: `Connection '${input.connection.name}' is ${input.status}; every call through it fails until ${who} reconnects it. Contact them; nothing you can do from here fixes it.`,
+    };
+  },
+
+  connectionRevoked(input: {
+    connection: { id: string; name: string };
+    cause: ConnectionLoss;
+  }): ConnectionRevokedRefusal {
+    const name = input.connection.name;
+    const final = input.cause === 'connection-revoked';
+    const why = final
+      ? `Account '${name}' was removed from this gateway by its owner; it never comes back to this mission.`
+      : `The creator of this mission no longer has access to account '${name}' (its owner withdrew it, or the creator left the team that held it). Calls through it are refused while it is so; this same token works on it again if the access is given back.`;
+    const next = final
+      ? 'To use that service again, ask the mission creator to issue a new mission for the account that replaces it.'
+      : 'Ask the mission creator to get the access back, or to issue a new mission for another account.';
+    return {
+      code: 'connection-revoked',
+      connection: { id: input.connection.id, name },
+      cause: input.cause,
+      final,
+      hint: `${why} The mission still serves its other accounts: keep using them. ${next} Do not retry calls through '${name}'.`,
     };
   },
 

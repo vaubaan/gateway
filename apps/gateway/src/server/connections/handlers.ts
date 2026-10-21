@@ -329,7 +329,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           tone: grant.actionNeeded ? 'warning' : 'success',
           title: 'Account disconnected',
           lines: [
-            'The stored credential was erased. The missions that used this account are stopped and refuse every call; a disconnected account never comes back, so they stay stopped.',
+            'The stored credential was erased. The missions that used this account no longer reach it, for good: one that used other accounts keeps running on them, one that used only this account is stopped. A disconnected account never comes back; a mission for the account that replaces it is a new mission.',
             `${grant.title}. ${grant.text}`,
           ],
         });

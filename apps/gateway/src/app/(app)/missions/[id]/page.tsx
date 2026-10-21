@@ -72,7 +72,7 @@ import {
 import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
 import { missionGitView } from '@/server/missions/git-view';
 import { shortId } from '@/server/missions/short-id';
-import { explainOrphan } from '@/server/missions/orphan-reason';
+import { explainLost, explainOrphan } from '@/server/missions/orphan-reason';
 import { riskExplainer } from '@/server/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
 import type { RequestCall } from '@/server/requests';
@@ -169,8 +169,10 @@ export default async function MissionPage({ params, searchParams }: Props) {
         path: null,
       }));
 
-  const mark = missionMark(state, waiting.length, creatorName);
+  const mark = missionMark(state, waiting.length, creatorName, detail.lost.length);
   const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
+  // An orphaned mission says why as a whole; a running one says which accounts it lost.
+  const lostExplanation = orphan ? null : explainLost(detail.lost, detail.connections);
   const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
   const period = periodWord(periodSeconds);
 
@@ -339,6 +341,9 @@ export default async function MissionPage({ params, searchParams }: Props) {
                     </span>
                   ),
                 )}
+                {connection.lost && (
+                  <span data-testid={`account-lost-${connection.id}`}> (no longer serves)</span>
+                )}
               </span>
             ))}
             {' · '}
@@ -400,6 +405,20 @@ export default async function MissionPage({ params, searchParams }: Props) {
             testId="orphan-callout"
           >
             {orphanExplanation.lines.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </Callout>
+        </div>
+      )}
+
+      {lostExplanation && (
+        <div className={styles.block}>
+          <Callout
+            tone={lostExplanation.final ? 'bad' : 'warn'}
+            title={lostExplanation.title}
+            testId="lost-accounts-callout"
+          >
+            {lostExplanation.lines.map((line) => (
               <p key={line}>{line}</p>
             ))}
           </Callout>

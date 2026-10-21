@@ -90,6 +90,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'mission-closed': true,
   'mission-orphaned': true,
   'mission-restored': true,
+  'mission-connection-lost': true,
+  'mission-connection-restored': true,
   'budget-extended': true,
   'period-reset': true,
   'expiry-extended': true,

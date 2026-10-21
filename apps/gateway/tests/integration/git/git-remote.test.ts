@@ -360,6 +360,40 @@ describe('keys', () => {
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/mission/);
   });
+
+  it('refuses git through a revoked account of a mission that still serves its others', async () => {
+    const token = `ghp_${randomBytes(18).toString('hex')}`;
+    const account = await rig.tokenHolding(token, { metadata: 'read', contents: 'write' });
+    const issued = await rig.root.missions.service.issue(rig.ada, {
+      name: 'Two accounts',
+      connections: [
+        { connection_id: account.id, preset: 'developer' },
+        {
+          connection_id: rig.connection.id,
+          resources: { scope: 'all' },
+          policy: [line('depot.read')],
+        },
+      ],
+      period: { kind: 'recurring', length_seconds: 86_400 },
+      expires_at: null,
+    });
+    if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
+    await rig.root.store.connections.revoke(account.id);
+
+    const result = await rig.git(
+      rig.workdir(),
+      ['clone', '-q', rig.remote(), 'a'],
+      issued.token.secret,
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/was removed and no longer serves this mission/);
+    const other = await rig.call(
+      { mission: issued.mission, token: issued.token.secret, prefix: issued.token.prefix },
+      'depot__read_item',
+      { space: 'scratch' },
+    );
+    expect(other.error).toBeUndefined();
+  });
 });
 
 describe('the other door', () => {

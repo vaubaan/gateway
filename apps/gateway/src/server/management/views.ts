@@ -317,6 +317,12 @@ function orphanView(orphan: NonNullable<MissionOverview['orphan']>): OrphanView 
   };
 }
 
+export interface LostConnectionView {
+  readonly connection_id: string;
+  readonly cause: MissionOverview['lost'][number]['cause'];
+  readonly final: boolean;
+}
+
 export interface MissionPolicyView {
   readonly risk_id: RiskId;
   readonly quota: number;
@@ -360,6 +366,15 @@ export interface MissionView {
   readonly state: MissionStateName;
   /** Set while the mission is orphaned: every call is refused until the authority returns. */
   readonly orphan: OrphanView | null;
+  /**
+   * The connections that no longer serve this mission, while it may serve through its
+   * others: `cause` `connection-revoked` (removed by its owner) or `connection-missing`
+   * never come back (`final: true`); `access-withdrawn` (the user's access to it was
+   * withdrawn) serves again if the access returns. Calls through them are refused
+   * `connection-revoked`. Nothing is added in their place: to reach the account that
+   * replaced one, issue a new mission. Empty when every connection serves.
+   */
+  readonly lost_connections: readonly LostConnectionView[];
   readonly created_at: string;
   readonly expires_at: string | null;
   readonly period: DraftPeriod;
@@ -420,6 +435,11 @@ export function missionView(
     creator_email: overview.creator.email,
     state: state.kind,
     orphan: overview.orphan ? orphanView(overview.orphan) : null,
+    lost_connections: overview.lost.map((part) => ({
+      connection_id: part.connection_id,
+      cause: part.cause,
+      final: part.final,
+    })),
     created_at: mission.createdAt,
     expires_at: mission.expiresAt,
     period:

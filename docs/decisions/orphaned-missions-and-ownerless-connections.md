@@ -23,6 +23,12 @@ extends:
 > `orphaned` is derived and reversible" below (D1′, D2′, D7′). The title, the
 > first decision, the third consequence and the first rejected alternative
 > are kept as written, for the record of what was decided first.
+>
+> **Amended on 2026-10-21** — Decision 2 and D2′ are narrowed: a revoked
+> connection removes only its part of a mission, which keeps serving through
+> its other connections; a share withdrawn on one connection does the same,
+> reversibly. See "Amendment 2026-10-21 — a revoked connection removes only
+> its part of a mission" below (D2″, D8, D9).
 
 ## Context
 
@@ -307,3 +313,167 @@ no reader ever sees them, so it is not the snapshot spec §10 forbids.
   the door pay it on every record load, the budget stage's included.
 - **Rebuild the `missions` table to drop the value from its CHECK.** A
   table rebuild under foreign keys for a constraint two triggers give.
+
+## Amendment 2026-10-21 — a revoked connection removes only its part of a mission
+
+Decided by the product owner on 2026-10-21. Amends Decision 2 and D2′; D1′
+(derived, never stored) and D7′ (human acts audited, the door never) stand and
+are extended to the parts of a mission. Spec §2.3, §4.1, §7.8 and §8 say it
+since.
+
+### Why
+
+Decision 2 made one revoked connection orphan every mission that carries it,
+whole and for ever. On 2026-10-21 an owner deleted an account connected through
+the GitHub App of earlier builds and connected its replacement by token: two
+multi-connection "everything I hold" missions (GitHub, Fly, Supabase, Vercel,
+Cloudflare) stopped entirely, their Fly, Supabase, Vercel and Cloudflare parts
+included, although nothing about those four accounts had changed. Every agent
+holding those tokens had to be given new ones, and the budgets of four
+untouched accounts started again from zero. The consequence the ADR listed
+("a multi-connection mission stops entirely when one of its connections is
+revoked") was written as a cost; in use it is a defect, for the same reason the
+first amendment gave: the click is the creator's, the outage is every project
+that uses the token.
+
+### D2″ — Each connection is a part of the mission, lost on its own
+
+A mission is partitioned per connection already (spec §3.1, `partitionOf`).
+Each part is now grounded on its own. `MissionGrounds.check` returns, besides
+`grounded`, the list of **lost parts** — `{ connectionId, cause, uncovered }`,
+in the mission's order of connections:
+
+| Part lost because                   | `cause`              | Comes back?                                   |
+| ----------------------------------- | -------------------- | --------------------------------------------- |
+| the connection is `revoked`         | `connection-revoked` | never                                         |
+| the connection no longer exists     | `connection-missing` | never                                         |
+| the creator holds nothing on it now | `access-withdrawn`   | when a share or a membership grounds it again |
+
+The mission stays `active` while at least one part that carries an accepted
+risk serves. It is **orphaned** as a whole when:
+
+- **every part is lost** — cause `connection-revoked` (or
+  `connection-missing`) when all the losses are final, `authority-lost` naming
+  a withdrawn part when one may come back;
+- **the creator is removed** (deactivated, gone from the IdP):
+  `creator-removed`, whatever still serves;
+- **a share is narrowed** under a part (`gapsOf` answers basis `share` with
+  uncovered risks): `authority-lost`, as before.
+
+**Nothing ever widens.** A lost part is never replaced: the account that
+replaced a revoked one is reached by a new mission. A revoked connection's part
+takes no new permission (`MissionService.permissionOptions` leaves it out,
+`limitIssues` refuses it — `exceeds-authority`), and a withdrawn part takes none
+either, since the creator holds nothing there. Budgets and quotas of the parts
+that serve are untouched; the counters of a lost part stay as they were.
+
+### Per case — why a share withdrawn on one connection is partial, and a narrowed one is not
+
+The product owner's lean was that a share revoked on one connection is the
+authority of that connection disappearing, the same thing as its revocation
+seen from the creator. Adopted, with its consequence: the derivation reads the
+authority, not the act, so "the creator holds nothing on this connection any
+more" — `gapsOf` basis `none` — covers a share revoked, a share of a group the
+creator left, and a group-owned connection whose group the creator left. All
+three are one fact for the mission and get one answer: the part is lost, and it
+comes back with the access (D1′ keeps it derived). Telling them apart would
+need the act, which a derived state does not have; and the most frequent of
+them — an IdP that omits one group at one sign-in (D1′, "Why") — is exactly
+where stopping the other accounts hurts most.
+
+Kept whole:
+
+- **A narrowed share** (the creator still holds the connection, under a
+  restriction that no longer covers some accepted risks). The owner chose new
+  terms for an account the creator keeps using; the share notice already says
+  which missions it stops (Decision 5). Making it partial would leave a part
+  that holds the account but may not use it as composed, and invite trimming
+  its policy — a change of the mission by someone who is not its creator. The
+  creator reads the uncovered risks on the mission page and issues a new
+  mission within the new terms.
+- **A removed creator.** Every part rests on the creator; none serves without
+  them. Unchanged.
+
+### D8 — The refusal names the account: `connection-revoked`
+
+A call that needs a lost part is refused with a new structured refusal,
+`connection-revoked` — `connection` (id, name), `cause`
+(`connection-revoked` | `access-withdrawn`), `final` — whose hint says that the
+mission still serves its other accounts, whether this one comes back, and to
+ask the mission's creator for a mission on the account that replaced it. It is
+distinct from `connection-unavailable`, which stays the refusal of an
+`expired` connection its owner can reconnect. It is decided where
+`connection-unavailable` was (`checkConnectionAvailable`, after the resource
+stage, before classification): the execution door and the git remote get it
+from the same check. Nothing is counted.
+
+The door marks the lost connections in the mission's context
+(`MissionConnection.lost`, from `MissionGrounds.inspect`); a revoked one is
+marked whatever the grounds said, its status being final.
+
+**`tools/list` drops a lost connection's tools**, and the catalog lists the
+connection with `lost`. Discovery is filtered per provider already (spec §4.1
+"Discovery"); listing tools every call of which is refused would invite an
+agent to try them. The catalog keeps the connection, marked, so that an agent
+can say why a tool it used yesterday is gone.
+
+The bootstrap kit regenerated for a new token leaves a lost connection out, for
+the same reason.
+
+### D9 — Audit: which mission lost which connection, named by the human who acted
+
+`watch` … `settle` compares the lost parts too. For a mission grounded before
+and after the act:
+
+- `mission-connection-lost` — the act lost one or more parts:
+  `before: { status: 'active', lost }`, `after: { status: 'active', lost,
+newly_lost: [{ connection_id, cause }] }`;
+- `mission-connection-restored` — a withdrawn part serves again:
+  `after.restored` lists them.
+
+Both name the human behind the act (the owner who revoked the connection or
+the share, the operator who edited a group, the user whose sign-in changed
+their groups), like `mission-orphaned` and `mission-restored`, which keep their
+meaning for the whole mission and now carry `lost` in their states. An access
+withdrawn then the connection revoked is a new loss (the cause changed), with
+its own entry. The two part acts are written through `appendUnlessLatest` among
+themselves; the caveat of D7′ (two acts at once) holds, widened: two concurrent
+acts on two different connections of one mission can hold the second entry
+back — not reachable while every store call is synchronous in one process.
+
+### Consequences
+
+- A revoked account costs its missions that account only. The tokens, the
+  sessions and the budgets of the other accounts are kept.
+- `connection-unavailable` is, as before, the refusal of an `expired`
+  connection; a revoked one is now always `connection-revoked`, also in the
+  instant between the revocation and the next read (the status is final).
+- The mission page and `list_my_missions` (`lost_connections`) say which
+  account no longer serves, and whether it comes back; the missions list and
+  the account page mark the mission "Lost an account". The revoke dialog says
+  that a mission that uses only this account stops, one that uses others keeps
+  running on them.
+- The share notice counts the missions that lost the account
+  (`RevokeOutcome.partsLost`), and the restore forecast counts the missions
+  whose part a new share brings back.
+- A ninth refusal code. The community collector's `decision_reports` check
+  lists it (`deploy/collector/schema.sql`); a collector whose schema was
+  applied before refuses reports of that code until the file is applied again.
+- New administrative acts: `mission-connection-lost`,
+  `mission-connection-restored`.
+
+### Rejected alternatives
+
+- **Keep orphaning whole** (Decision 2 as written). Seen in production: the
+  outage of four accounts for a change on a fifth.
+- **Move the part to the replacing account** (same provider, same owner). It
+  would widen a mission to a credential its creator never chose for it, with
+  resources it never selected: the opposite of "nothing ever widens".
+- **Answer `connection-unavailable` with `status: 'revoked'`.** That code
+  tells the agent an owner can reconnect; nobody can, and the agent would wait
+  for nothing. A distinct code says "never, use the others".
+- **Keep the lost connection's tools in `tools/list`.** Simpler, but the agent
+  would be offered tools refused on every call.
+- **Partial on a narrowed share too.** See "Per case" above.
+- **Store the lost parts** (a column per mission connection). The same stored
+  verdict D1′ rejected, under another name.

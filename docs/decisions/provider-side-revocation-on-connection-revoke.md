@@ -65,7 +65,10 @@ Checked with Context7 on 2026-10-13, never from memory:
 
 The credential is read, the connection is revoked in the store, and only then
 is the provider asked, within ten seconds. Whatever the provider does — refuse,
-hang, be down — the connection is revoked here and its missions refuse.
+hang, be down — the connection is revoked here and its missions refuse every
+call through it (since 2026-10-21 they keep serving through their other
+connections: ADR orphaned-missions-and-ownerless-connections, amendment
+2026-10-21).
 
 ### D5. The outcome is stored and shown
 

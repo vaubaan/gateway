@@ -156,6 +156,33 @@ describe('a service connected with a pasted token', () => {
     expect(again.connection.metadata).not.toHaveProperty('installation_id');
   });
 
+  it('an `app-install` account (the GitHub App of earlier builds) is reconnected with a token, its stored blob never read', async () => {
+    // The kind the contract no longer knows since the GitHub App was removed: its sealed
+    // blob does not decode (`parseSecret` refuses it), and Reconnect must not need it.
+    const h = dualHarness(async () => ({ account: 'bot', expiresAt: null }));
+    const alice = await h.actor('alice@example.com');
+    const existing = await h.store.connections.create({
+      provider: 'dual',
+      owner: { kind: 'user', id: alice.user.id },
+      displayName: 'Dual (app)',
+      credential: '{"kind":"app-install","installationId":"1","metadata":{}}',
+      credentialExpiresAt: null,
+      metadata: { credential_kind: 'app-install', installation_id: '1' },
+    });
+    expect((await h.service.get(alice, existing.id)).credentialKind).toBe('app-install');
+
+    const again = await h.service.start(alice, 'dual', {
+      reconnectId: existing.id,
+      fields: { token: TOKEN },
+    });
+    if (again.kind !== 'connected') throw new Error('expected a connection');
+    expect(again.connection.id).toBe(existing.id);
+    expect(again.reconnected).toBe(true);
+    expect(again.connection.status).toBe('active');
+    expect(again.connection.metadata).toMatchObject({ credential_kind: 'api-key', account: 'bot' });
+    expect(again.connection.metadata).not.toHaveProperty('installation_id');
+  });
+
   it('a rejected token cannot be refreshed: the account needs reconnecting', async () => {
     const h = dualHarness();
     const alice = await h.actor('alice@example.com');

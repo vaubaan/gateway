@@ -650,6 +650,62 @@ async function main(): Promise<void> {
         sendJson(res, 200, { connection_id: connection.id });
         return;
       }
+      if (url.pathname === `${CONTROL_PREFIX}/partial-loss-scenario` && req.method === 'POST') {
+        // The share owner holds a GitHub account (the mocked GitHub's token) and a
+        // Supabase one, and has a mission on both: disconnecting the first must leave
+        // the mission running on the second.
+        const { name } = JSON.parse(await readBody(req)) as { name: string };
+        const owner = await root.store.users.upsertFromIdp({
+          issuer: IDP_ISSUER,
+          subject: E2E_SHARE_OWNER.sub,
+          email: E2E_SHARE_OWNER.email,
+          displayName: E2E_SHARE_OWNER.name,
+        });
+        const { connection: github } = await seedConnection(root.store, {
+          provider: 'github',
+          owner: { kind: 'user', id: owner.id },
+          displayName: name,
+          resources: MOCK_GITHUB.repositories.map((ref) => ({ ref })),
+        });
+        await root.store.connections.reconnect(
+          github.id,
+          serializeSecret({ kind: 'api-key', fields: { token: MOCK_GITHUB.token }, metadata: {} }),
+        );
+        const { connection: supabase } = await seedConnection(root.store, {
+          provider: 'supabase',
+          owner: { kind: 'user', id: owner.id },
+          displayName: `${name} Supabase`,
+          resources: [{ ref: MOCK_SUPABASE_PROJECT, displayName: 'app', env: null }],
+        });
+        const issued = await root.missions.service.issue(owner, {
+          name: `Both accounts of ${name}`,
+          connections: [
+            { connection_id: github.id, preset: 'read-only' },
+            {
+              connection_id: supabase.id,
+              resources: { scope: 'all' },
+              policy: [
+                {
+                  risk_id: 'supabase.read-data',
+                  quota: 10,
+                  rate_limit: { max: 5, window_seconds: 60 },
+                  gate: 'auto',
+                },
+              ],
+            },
+          ],
+          period: { kind: 'recurring', length_seconds: 86_400 },
+          expires_at: null,
+        });
+        if (!issued.ok) throw new Error(`partial-loss mission refused: ${JSON.stringify(issued)}`);
+        sendJson(res, 200, {
+          connection_id: github.id,
+          mission_id: issued.mission.id,
+          mission_name: issued.mission.name,
+          token: issued.token.secret,
+        });
+        return;
+      }
       if (url.pathname === `${CONTROL_PREFIX}/verify-token` && req.method === 'POST') {
         const { token } = JSON.parse(await readBody(req)) as { token: string };
         const verification = await root.missions.service.verifyToken(token);

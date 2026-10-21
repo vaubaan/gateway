@@ -10,7 +10,7 @@
  */
 import type { RiskId } from '@vaubaan/shared';
 
-import type { OrphanCause } from '../authority/mission-grounds';
+import type { OrphanCause, PartLossCause } from '../authority/mission-grounds';
 
 export interface OrphanExplanationInput {
   readonly cause: OrphanCause;
@@ -26,6 +26,58 @@ export interface OrphanExplanation {
 }
 
 const KEPT = 'Its keys, its activity and what it counted are kept as they are.';
+
+export interface LostConnectionInput {
+  readonly connection_id: string;
+  readonly cause: PartLossCause;
+  readonly final: boolean;
+}
+
+export interface LostExplanation {
+  /** False when one of the accounts may come back (an access withdrawn). */
+  readonly final: boolean;
+  readonly title: string;
+  readonly lines: readonly string[];
+}
+
+/**
+ * What the creator and the members read on a mission that lost some of its accounts
+ * and still serves through the others (ADR orphaned-missions-and-ownerless-connections,
+ * amendment 2026-10-21). Nothing is added in place of a lost account: the account that
+ * replaced it is reached by a new mission. `null` when every account serves.
+ */
+export function explainLost(
+  lost: readonly LostConnectionInput[],
+  connections: readonly { readonly id: string; readonly display_name: string }[],
+): LostExplanation | null {
+  if (lost.length === 0) return null;
+  const nameOf = (id: string): string => {
+    const named = connections.find((c) => c.id === id);
+    return named ? `“${named.display_name}”` : 'an account that no longer exists';
+  };
+  const lines = lost.map((part) => {
+    switch (part.cause) {
+      case 'connection-revoked':
+        return `${nameOf(part.connection_id)} was disconnected by its owner. It never comes back to this mission: calls through it are refused.`;
+      case 'connection-missing':
+        return `An account of this mission no longer exists. Calls through it are refused.`;
+      case 'access-withdrawn':
+        return `${nameOf(part.connection_id)}: you no longer have access to it (its owner withdrew it, or you left the team that held it). Calls through it are refused until the access is given back, with this same mission.`;
+    }
+  });
+  const final = lost.every((part) => part.final);
+  return {
+    final,
+    title:
+      lost.length === 1
+        ? 'An account no longer serves this mission'
+        : `${lost.length} accounts no longer serve this mission`,
+    lines: [
+      ...lines,
+      'The mission keeps running on its other accounts, with its keys and limits as they are. Nothing is added in place of a lost account: to work on the account that replaced it, create a new mission.',
+    ],
+  };
+}
 const REVOKE_AND_REISSUE =
   'Nothing brings it back: stop this mission and create a new one on an account you can use.';
 

@@ -10,6 +10,6 @@ import type { MissionGrounds } from './mission-grounds';
  * `orphaned` uses the real module (`createAuthorityModule`).
  */
 export const alwaysGrounded: Pick<MissionGrounds, 'inspect' | 'derive'> = {
-  inspect: async (mission) => ({ mission, orphan: null }),
+  inspect: async (mission) => ({ mission, orphan: null, lost: [] }),
   derive: async (mission) => mission,
 };

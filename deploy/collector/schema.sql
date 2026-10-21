@@ -159,7 +159,7 @@ alter table public.decision_reports
       or gateway_version ~ '^[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}(-[0-9A-Za-z.-]{1,32})?(\+[0-9A-Za-z.-]{1,32})?$'
     ),
   add constraint decision_reports_decision_known
-    check (decision in ('allowed', 'risk-not-accepted', 'budget-exhausted', 'approval-required', 'resource-not-in-mission', 'rate-limited', 'connection-unavailable', 'mission-inactive')),
+    check (decision in ('allowed', 'risk-not-accepted', 'budget-exhausted', 'approval-required', 'resource-not-in-mission', 'rate-limited', 'connection-unavailable', 'connection-revoked', 'mission-inactive')),
   -- At most 32 ids, each `<plugin>.<name>` with no `[env]`. The plugin is
   -- already constrained to `[a-z0-9-]`, so it is safe inside the pattern.
   add constraint decision_reports_risks_shape
