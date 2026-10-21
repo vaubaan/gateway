@@ -5,7 +5,16 @@
  */
 import type { CredentialField } from '@vaubaan/plugin-sdk';
 
-import { Callout, Field, Input, StatusMark, Tag, Textarea, type Tone } from '@/components/ui';
+import {
+  Callout,
+  CodeBlock,
+  Field,
+  Input,
+  StatusMark,
+  Tag,
+  Textarea,
+  type Tone,
+} from '@/components/ui';
 import { ACCOUNT_STATES, ACCOUNT_WORDS } from '@/lib/vocabulary';
 import {
   FIELD_PREFIX,
@@ -53,6 +62,11 @@ export function NoticeBanner({ notice }: { notice: Notice | null }) {
         {notice.lines.map((line) => (
           <p key={line}>{line}</p>
         ))}
+        {notice.codes && notice.codes.length > 0 && (
+          <CodeBlock label="Recovery codes" testId="notice-codes">
+            {notice.codes.join('\n')}
+          </CodeBlock>
+        )}
       </Callout>
     </div>
   );

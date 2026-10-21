@@ -332,8 +332,8 @@ export function createLocalAuthHandlers(
       title,
       lines: [
         'Keep these recovery codes somewhere safe: each one signs you in once when your authenticator app is not at hand. They are shown only now.',
-        ...recoveryCodes,
       ],
+      codes: recoveryCodes,
     });
   }
 

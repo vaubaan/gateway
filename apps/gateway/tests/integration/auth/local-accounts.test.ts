@@ -396,7 +396,7 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       expect(principal).toMatchObject({ kind: 'user', isOperator: true });
       const noticeId = new URL(location, PUBLIC_URL).searchParams.get('notice');
       const notice = await root.connections.notices.take(principal?.sessionId ?? '', noticeId);
-      const recoveryCodes = (notice?.lines ?? []).filter((line) =>
+      const recoveryCodes = (notice?.codes ?? []).filter((line) =>
         /^[a-z2-7]{5}-[a-z2-7]{5}$/.test(line),
       );
       expect(recoveryCodes).toHaveLength(8);

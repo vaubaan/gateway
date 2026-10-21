@@ -1,7 +1,8 @@
 /**
  * The second factor's forms (ADR local-accounts-sign-in-provider): the code
  * asked at sign-in, and the enrolment — a QR code the authenticator app scans
- * (rendered as an SVG data URL, nothing fetched), the secret to type by hand,
+ * (rendered as an SVG data URL, nothing fetched), the secret to type by hand
+ * (shown in groups of four, copied without the spaces),
  * and the first code that confirms it. Used outside the shell at sign-in and
  * inside it on Settings → Security.
  */
@@ -88,7 +89,7 @@ export function EnrolSecondFactor({
           Scan it with an authenticator app (Aegis, Google Authenticator, 1Password, Bitwarden…), or
           type the secret below into the app by hand.
         </p>
-        <CodeBlock label="Secret, to type by hand" wrap testId="totp-secret">
+        <CodeBlock label="Secret, to type by hand" copy={secret} wrap testId="totp-secret">
           {secret.match(/.{1,4}/g)?.join(' ') ?? secret}
         </CodeBlock>
       </div>
