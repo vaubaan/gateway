@@ -243,6 +243,37 @@ export interface RestoreConfig {
   readonly maxBytes: number;
 }
 
+/**
+ * The S3-compatible bucket the scheduled backup uploads to (ADR
+ * scheduled-encrypted-backup-to-object-storage, D1).
+ */
+export interface BackupBucketConfig {
+  /** https, or http for a loopback host only; an origin, nothing else. */
+  readonly endpoint: URL;
+  readonly region: string;
+  readonly bucket: string;
+  /** Literal key prefix, possibly empty; end it with `/` for a folder. */
+  readonly prefix: string;
+  /** `true`: `<endpoint>/<bucket>/<key>`; `false`: `<bucket>.<endpoint host>/<key>`. */
+  readonly pathStyle: boolean;
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+}
+
+/**
+ * Scheduled, encrypted, self-checked backup (`backup.*`). `null` in `InstanceConfig`
+ * when no `backup.s3.*` key is set: the instance backs nothing up.
+ */
+export interface BackupConfig {
+  readonly s3: BackupBucketConfig;
+  /** Seconds between two runs: from 3600 to 86400, dividing a day. */
+  readonly everySeconds: number;
+  /** Minutes after midnight UTC of the day's first run (`backup.at`). */
+  readonly atMinutes: number;
+  /** Backups kept in the bucket; 0 keeps every one. */
+  readonly keep: number;
+}
+
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
@@ -284,6 +315,8 @@ export interface InstanceConfig {
   readonly telemetry: TelemetryConfig;
   /** Mail delivery, or `null` when no relay is configured. */
   readonly mail: MailConfig | null;
+  /** The scheduled backup, or `null` when no bucket is configured. */
+  readonly backup: BackupConfig | null;
   readonly retentionDays: number;
   readonly requests: { readonly expirySeconds: number };
   readonly approvals: { readonly expirySeconds: number };
@@ -311,6 +344,7 @@ export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   }
   if (config.bootstrapToken) out.push(config.bootstrapToken);
   if ('mail' in config && config.mail?.smtpPassword) out.push(config.mail.smtpPassword);
+  if (config.backup) out.push(config.backup.s3.secretAccessKey);
   // A presigned URL is the credential itself; a file path is harmless but treated alike.
   const from = config.restore.from;
   if (from) out.push(from.kind === 'url' ? from.url.href : from.path);

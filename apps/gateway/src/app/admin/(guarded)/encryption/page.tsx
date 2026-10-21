@@ -4,6 +4,10 @@
  * download for an administrator signed in recently (ADR
  * master-key-generated-and-handed-over-by-the-instance). The key itself
  * appears nowhere on the page: it leaves as a file, audited.
+ *
+ * "Scheduled backup" reports the encrypted backup to object storage (ADR
+ * scheduled-encrypted-backup-to-object-storage): where it goes, when, the latest
+ * one and the latest failure. Read-only: the `backup.*` keys configure it.
  */
 import { headers } from 'next/headers';
 
@@ -20,7 +24,8 @@ import {
   Section,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { CONFIG_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { CONFIG_WORDS, formatNumber, SETTINGS_PAGES } from '@/lib/vocabulary';
+import { timeOfDay, type BackupView } from '@/server/backup';
 import {
   CONFIRMED_FIELD,
   FRESH_SIGN_IN_MS,
@@ -52,9 +57,10 @@ export default async function EncryptionPage({ searchParams }: Props) {
   const { root } = await requireOperator();
   const params = await searchParams;
   const problem = isProblem(params[KEY_PROBLEM_PARAM]) ? params[KEY_PROBLEM_PARAM] : null;
-  const [key, fresh] = await Promise.all([
+  const [key, fresh, backup] = await Promise.all([
     root.masterKey.service.state(),
     signedInFreshly(root.auth.sessions, await headers(), new Date()),
+    root.backup.view(),
   ]);
   const minutes = Math.round(FRESH_SIGN_IN_MS / 60_000);
 
@@ -115,6 +121,8 @@ export default async function EncryptionPage({ searchParams }: Props) {
         </Hint>
       </Section>
 
+      <BackupSection view={backup} />
+
       <Section title="Download the key" id="download" testId="master-key-download">
         {fresh ? (
           <form method="post" action={MASTER_KEY_DOWNLOAD_ACTION} className={styles.form}>
@@ -145,5 +153,103 @@ export default async function EncryptionPage({ searchParams }: Props) {
         )}
       </Section>
     </>
+  );
+}
+
+function every(seconds: number): string {
+  const hours = seconds / 3600;
+  return hours === 24 ? 'every day' : hours === 1 ? 'every hour' : `every ${hours} hours`;
+}
+
+/** The scheduled backup: off, or where, when, the latest one and the latest failure. */
+function BackupSection({ view }: { view: BackupView }) {
+  const { config, status } = view;
+  if (!config) {
+    return (
+      <Section title="Scheduled backup" note={CONFIG_WORDS.fileReadOnly} testId="backup-status">
+        <Hint>
+          Off. This gateway backs nothing up by itself. Set the <Mono>backup.s3.*</Mono> keys of the
+          configuration (an S3-compatible bucket and its access key) and it uploads a backup,
+          encrypted with a key derived from the master key and checked before it leaves, on the
+          schedule you give it. The <Mono>backup</Mono> command still makes a copy by hand.
+        </Hint>
+      </Section>
+    );
+  }
+  const latest = status.latest;
+  return (
+    <Section title="Scheduled backup" note={CONFIG_WORDS.fileReadOnly} testId="backup-status">
+      {status.lastOutcome === 'failed' && status.lastError && (
+        <div className={styles.notes}>
+          <Callout tone="bad" title="The latest backup failed" testId="backup-failed">
+            {status.lastAttemptAt && (
+              <>
+                On <LocalDate ts={status.lastAttemptAt} />, at the {status.lastError.stage}{' '}
+                step:{' '}
+              </>
+            )}
+            {status.lastError.message}. Nothing was uploaded by that run.
+          </Callout>
+        </div>
+      )}
+      <KeyValue
+        items={[
+          {
+            term: 'Destination',
+            value: (
+              <>
+                the bucket <Mono>{config.s3.bucket}</Mono> at <Mono>{config.s3.endpoint.host}</Mono>
+                {config.s3.prefix && (
+                  <>
+                    , under <Mono>{config.s3.prefix}</Mono>
+                  </>
+                )}
+              </>
+            ),
+          },
+          {
+            term: 'Schedule',
+            value: `${every(config.everySeconds)} from ${timeOfDay(config.atMinutes)} UTC; ${
+              config.keep === 0
+                ? 'every backup is kept'
+                : `the ${formatNumber(config.keep)} newest are kept`
+            }`,
+          },
+          {
+            term: 'Next run',
+            value: view.running ? (
+              'running now'
+            ) : view.nextRunAt ? (
+              <LocalDate ts={view.nextRunAt.toISOString()} />
+            ) : (
+              'not scheduled'
+            ),
+          },
+          {
+            term: 'Latest backup',
+            value: latest ? (
+              <span data-testid="backup-latest">
+                <LocalDate ts={latest.at} /> · <Mono>{latest.objectKey}</Mono> ·{' '}
+                {formatNumber(latest.bytes)} bytes · encrypted under key version {latest.keyVersion}{' '}
+                · checked before upload
+                <span className={styles.sub}>
+                  SHA-256 <Mono>{latest.sha256}</Mono>
+                </span>
+              </span>
+            ) : (
+              'none yet'
+            ),
+          },
+          ...(status.pruneError
+            ? [{ term: 'Old backups', value: `not all deleted: ${status.pruneError}` }]
+            : []),
+        ]}
+      />
+      <Hint>
+        A backup opens only with the master key of the version it names: keep a previous key after a
+        rotation for as long as a backup made under it is kept. Each backup and each failure is in
+        the activity.
+      </Hint>
+    </Section>
   );
 }

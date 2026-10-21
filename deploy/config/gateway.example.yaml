@@ -225,6 +225,34 @@
 #   # env: VAUBAAN_MAIL_TLS — starttls (default, port 587), implicit (port 465), none (a local relay)
 #   tls: starttls
 
+# Scheduled backup (spec §6, "Backups"; ADR
+# scheduled-encrypted-backup-to-object-storage): an S3-compatible bucket this
+# gateway uploads a backup to, encrypted under a key derived from the master
+# key and restored into a temporary file before it leaves. Leave the block out
+# to back nothing up. With `s3`, endpoint, region, bucket, access key id and
+# secret are required.
+# backup:
+#   s3:
+#     # env: VAUBAAN_BACKUP_S3_ENDPOINT — https (http only for localhost)
+#     endpoint: https://fly.storage.tigris.dev
+#     # env: VAUBAAN_BACKUP_S3_REGION — `auto` for Tigris and R2
+#     region: auto
+#     # env: VAUBAAN_BACKUP_S3_BUCKET
+#     bucket: acme-gateway-backups
+#     # env: VAUBAAN_BACKUP_S3_PREFIX — literal; end it with / for a folder
+#     prefix: gateway/
+#     # env: VAUBAAN_BACKUP_S3_PATH_STYLE — true: <endpoint>/<bucket>/<key> (MinIO)
+#     path_style: false
+#     # env: VAUBAAN_BACKUP_S3_ACCESS_KEY_ID, VAUBAAN_BACKUP_S3_SECRET_ACCESS_KEY (or _FILE)
+#     access_key_id: AKIA...
+#     secret_access_key: ${file:/run/secrets/backup_secret_access_key}
+#   # env: VAUBAAN_BACKUP_EVERY — 1h to 24h, dividing a day (default 24h)
+#   every: 24h
+#   # env: VAUBAAN_BACKUP_AT — HH:MM UTC, the first run of the day (default 03:00)
+#   at: "03:00"
+#   # env: VAUBAAN_BACKUP_KEEP — backups kept, the newest; 0 keeps all (default)
+#   keep: 14
+
 # Community telemetry (spec §9): anonymous reports, every field from a closed
 # vocabulary or a bucket (shown on Administration → Telemetry). Off by default.
 # telemetry:

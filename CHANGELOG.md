@@ -9,6 +9,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Scheduled, encrypted backup to S3-compatible storage.** Set the
+  `backup.s3.*` keys (endpoint, region, bucket, prefix, path-style, access key)
+  and the gateway backs itself up on its own schedule (`backup.every`, 1h to
+  24h, from `backup.at`, UTC), keeping the `backup.keep` newest. Each backup is
+  the `backup` command's copy, encrypted under a key derived from the master
+  key (AES-256-GCM in chunks, HKDF; the file names the key versions it needs),
+  restored into a temporary file and checked — integrity, schema, every sealed
+  secret opened — before it is uploaded; one that fails is not uploaded and the
+  failure is recorded. Settings → Encryption shows the latest backup and the
+  latest failure, `GET /healthz` gains a `backup` object (no endpoint, bucket or
+  credential) for an external checker, and the activity records each run. The
+  `restore` command and the first-boot restore take these backups as they take
+  a plain copy, with the SHA-256 of the object. Not yet tried against a real
+  bucket. ADR scheduled-encrypted-backup-to-object-storage.
+
 ### Changed
 
 - **Disconnecting an account takes that account only out of its missions.**

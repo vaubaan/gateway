@@ -7,6 +7,10 @@
  *   2. acquire: the source (an absolute file, or an https URL followed by hand
  *      through at most five https redirects) is streamed into a temporary file of
  *      the store's directory, hashed on the way, cut at `maxBytes`;
+ *   2b. an encrypted backup (ADR scheduled-encrypted-backup-to-object-storage, D9) — the
+ *      SHA-256 is the encrypted object's — is opened with the instance's master key of
+ *      the version its header names into a second temporary file, which the next steps
+ *      read and install;
  *   3. verify, on the temporary copy: SHA-256 (when expected) first, then SQLite
  *      opens it read-only, `integrity_check` is `ok`, every recorded migration is
  *      one this image ships with the same checksum, every sealed blob opens with
@@ -36,7 +40,9 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
+import { BackupCipherError, decryptBackupFile, isEncryptedBackupFile } from '../backup/cipher';
 import type { RestoreSource } from '../config/restore-source';
+import type { EncryptionKeys } from '../config/types';
 import type { Encryptor } from '../crypto';
 import {
   heldByAnotherConnection,
@@ -96,7 +102,17 @@ export interface VerificationReport {
   readonly keyVersions: readonly KeyVersionFinding[];
 }
 
+/** What an encrypted backup's header said (`null` for a plain store copy). */
+export interface RestoreEncryption {
+  /** The master key version the file was encrypted under. */
+  readonly keyVersion: number;
+  /** The versions its sealed secrets are under, as the backup named them. */
+  readonly sealedKeyVersions: readonly number[];
+}
+
 export interface RestoreReport extends VerificationReport {
+  /** The backup's encryption, when the source was an encrypted backup. */
+  readonly encryption: RestoreEncryption | null;
   /** Whether the copy replaced `store.path` (false on a dry run). */
   readonly installed: boolean;
   /** What existed and was moved aside, as `<name>.replaced-<UTC timestamp>`. */
@@ -115,6 +131,11 @@ export interface RestoreOptions {
   readonly encryptor: Encryptor;
   /** The key versions this instance holds (current and previous). */
   readonly keyVersions: readonly number[];
+  /**
+   * The instance's master keys, to open an encrypted backup. Without them an encrypted
+   * backup is refused (a plain copy needs only the encryptor).
+   */
+  readonly masterKeys?: EncryptionKeys;
   readonly force?: boolean;
   readonly dryRun?: boolean;
   readonly fetch?: typeof fetch;
@@ -151,22 +172,71 @@ export async function restoreStore(options: RestoreOptions): Promise<RestoreRepo
   const storeExisted = storeHasContent(storePath);
   if (storeExisted && !options.dryRun) assertReplaceable(options);
 
-  const temp = join(
-    /* turbopackIgnore: true */ dir,
-    `.${basename(storePath)}.restore-${randomBytes(6).toString('hex')}.tmp`,
-  );
+  const stem = `.${basename(storePath)}.restore-${randomBytes(6).toString('hex')}`;
+  const temp = join(/* turbopackIgnore: true */ dir, `${stem}.tmp`);
+  const plainTemp = join(/* turbopackIgnore: true */ dir, `${stem}.plain.tmp`);
   try {
-    const { bytes, sha256 } = await acquire(options, temp);
-    const report = await verify(temp, options, { bytes, sha256 });
-    if (options.dryRun) return { ...report, installed: false, movedAside: [], storeExisted };
+    const acquired = await acquire(options, temp);
+    const { copy, encryption } = await openIfEncrypted(temp, plainTemp, options, acquired);
+    const report = await verify(copy, options, acquired);
+    if (options.dryRun) {
+      return { ...report, encryption, installed: false, movedAside: [], storeExisted };
+    }
     // The state may have changed during a long download: check again, then replace.
     if (storeHasContent(storePath)) assertReplaceable(options);
-    const movedAside = install(temp, storePath, (options.now ?? (() => new Date()))());
-    return { ...report, installed: true, movedAside, storeExisted };
+    const movedAside = install(copy, storePath, (options.now ?? (() => new Date()))());
+    return { ...report, encryption, installed: true, movedAside, storeExisted };
   } finally {
-    for (const leftover of [temp, `${temp}-wal`, `${temp}-shm`, `${temp}-journal`]) {
-      rmSync(/* turbopackIgnore: true */ leftover, { force: true });
+    for (const file of [temp, plainTemp]) {
+      for (const leftover of [file, `${file}-wal`, `${file}-shm`, `${file}-journal`]) {
+        rmSync(/* turbopackIgnore: true */ leftover, { force: true });
+      }
     }
+  }
+}
+
+/**
+ * An encrypted backup is checked against its expected SHA-256 as it was downloaded,
+ * then opened into `plainTemp`; a plain copy is read where it is.
+ */
+async function openIfEncrypted(
+  temp: string,
+  plainTemp: string,
+  options: RestoreOptions,
+  acquired: { readonly bytes: number; readonly sha256: string },
+): Promise<{ copy: string; encryption: RestoreEncryption | null }> {
+  if (!(await isEncryptedBackupFile(temp))) return { copy: temp, encryption: null };
+  const partial: VerificationReport = {
+    bytes: acquired.bytes,
+    sha256: acquired.sha256,
+    integrity: 'not checked',
+    schemaVersion: 0,
+    shippedSchemaVersion: 0,
+    keyVersions: [],
+  };
+  if (options.sha256 !== null && options.sha256 !== acquired.sha256) {
+    throw new RestoreError(
+      'verify',
+      `SHA-256 mismatch: expected ${options.sha256}, the copy is ${acquired.sha256}; nothing else was read`,
+      partial,
+    );
+  }
+  if (!options.masterKeys) {
+    throw new RestoreError(
+      'verify',
+      'the copy is an encrypted backup and no master key was given to open it',
+      partial,
+    );
+  }
+  try {
+    const header = await decryptBackupFile(temp, plainTemp, options.masterKeys);
+    return {
+      copy: plainTemp,
+      encryption: { keyVersion: header.keyVersion, sealedKeyVersions: header.sealedKeyVersions },
+    };
+  } catch (err) {
+    if (err instanceof BackupCipherError) throw new RestoreError('verify', err.message, partial);
+    throw err;
   }
 }
 
@@ -334,6 +404,8 @@ async function verify(
   options: RestoreOptions,
   copy: { readonly bytes: number; readonly sha256: string },
 ): Promise<VerificationReport> {
+  // `bytes` and `sha256` are those of the source as acquired (for an encrypted
+  // backup, the encrypted object), whichever file `temp` is.
   const partial: VerificationReport = {
     bytes: copy.bytes,
     sha256: copy.sha256,

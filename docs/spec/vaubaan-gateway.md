@@ -1241,6 +1241,11 @@ a mounted file, never committing anything:
   provider B. A group without a provider is accepted while one provider
   is configured, and refused once there are several. Without a rule, the
   setup names the first administrator;
+- optionally, a **scheduled backup** to S3-compatible object storage:
+  the bucket (endpoint, region, name, a key prefix, path-style addressing
+  for the stores that need it), the access key and its secret, how often
+  (every hour to every day, from a time of day) and how many backups to
+  keep. Without it, nothing is backed up by the instance (§6, "Backups");
 - the **telemetry level** (off, plugin-health, plugin-health +
   usage-stats; §9) and the collector URL (default supplied,
   overridable, disableable);
@@ -1348,6 +1353,23 @@ same for any agent, with no value of any mission.
   configuration is read. Rotating it seals every stored secret again
   under the new key, after which the previous key is removed: a leaked
   key stops opening the current store.
+- **Backups.** A backup is a consistent copy of the store. The `backup`
+  command writes one beside the store for the operator to carry away. The
+  scheduled backup (§4.3) goes further, inside the running instance: the
+  copy is **encrypted under a key derived from the master key** (so the
+  object storage, and whoever reads the bucket, holds ciphertext only),
+  then **checked before it leaves** — restored into a temporary file,
+  integrity checked, every sealed secret opened with the instance's keys —
+  and only a copy that passes is uploaded. A copy that fails is not
+  uploaded and the failure is recorded. The instance reports its latest
+  backup (time, object, size, SHA-256, check result, last error) to an
+  administrator and, without any secret, to an external checker through
+  its health endpoint; each backup and each failure is in the activity.
+  The restore accepts an encrypted backup the way it accepts a plain copy,
+  with the SHA-256 of the object as uploaded: it opens with the key
+  versions the backup names, so a rotated key is kept as long as a backup
+  still needed is sealed under it. Old backups beyond the configured count
+  are deleted; nothing else in the bucket is touched.
 - **No credential to the executor.** Invariant §2.4.
 - **Transport.** The instance exposes plain HTTP on the local network and
   requires being placed behind a TLS termination held by the company.

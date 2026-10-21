@@ -2,7 +2,7 @@
 title: Authentication — sign-in providers (OIDC, GitHub, local accounts), admission, web session, bootstrap token, administrators
 status: current
 date: 2026-10-13
-last_synced: 2026-10-20
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
@@ -1340,6 +1340,10 @@ token is active, the setup page creates another administrator's account.
 - **`/admin/encryption`** — **Encryption**: the key's version, the file it
   is read from (or "the configuration, by value"), whether this gateway
   generated it and when it was handed over (`master-key-state`); then
+  **Scheduled backup** (`backup-status`, `root.backup.view()`, handbook
+  [store](store.md#scheduled-backup)): off and the keys that turn it on, or
+  the destination, the schedule, the next run, the latest backup (SHA-256
+  included) and the latest failure (`backup-failed`), read-only; then
   **Download the key** (`master-key-download`): for a session opened less
   than ten minutes ago, the box "I understand that this file opens every
   secret of this gateway…" and the button (`POST

@@ -265,6 +265,14 @@ environment.
   it up with a volume snapshot or SQLite's `VACUUM INTO` (`store.backupTo()`
   in the [store handbook](../docs/handbook/store.md#backup); inside the
   container, `node apps/gateway/backup.mjs` makes that copy on the volume).
+  Off the host: set the `backup.s3.*` keys (`VAUBAAN_BACKUP_S3_*`, examples in
+  `config/.env.example`) and the gateway uploads a backup to an S3-compatible
+  bucket on its own schedule (`VAUBAAN_BACKUP_EVERY`, `VAUBAAN_BACKUP_AT`,
+  `VAUBAAN_BACKUP_KEEP`), encrypted under a key derived from the master key and
+  restored into a temporary file before it leaves; Settings → Encryption and
+  `GET /healthz` (`backup`) report the latest one, the activity each run (handbook
+  [store](../docs/handbook/store.md#scheduled-backup)). Restore one like any copy,
+  with the SHA-256 of the object and the master key of the version it names.
 - **Restore, moving hosts**: `node apps/gateway/restore.mjs <file or https URL>
 --sha256 <hex>` inside the container puts a copy back after checking its hash,
   its integrity, its schema and that this instance's keys open its secrets

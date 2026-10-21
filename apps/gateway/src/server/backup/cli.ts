@@ -23,23 +23,13 @@
  * Exit codes (sysexits): 0 done, 1 the copy failed its integrity check or an
  * unexpected failure, 64 usage, 73 the file exists, 77 run as root, 78 not configured.
  */
-import { existsSync, rmSync, statSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
-import { IdpSettingsService } from '../auth/idp-settings';
-import { SignInProvidersService, type CarriedSignIn } from '../auth/sign-in-providers';
 import { ConfigError, loadProcessConfig, type LoadedConfig } from '../config';
 import { createEncryptor } from '../crypto';
-import { openCopyConfig } from '../store';
-import {
-  backupTo,
-  integrityOf,
-  MEMORY_PATH,
-  openReadonlyDb,
-  schemaVersionOf,
-  type StoreDb,
-} from '../store/db';
-import { sealedVersionsOf } from '../store/repositories/sealed-blobs';
+import { backupTo, MEMORY_PATH, openReadonlyDb } from '../store/db';
+import { CopyWriteError, writeStoreCopy, type StoreCopy } from './copy';
 
 export const EXIT_OK = 0;
 export const EXIT_FAILED = 1;
@@ -140,77 +130,44 @@ async function run(argv: readonly string[], io: BackupIo, deps: BackupDeps): Pro
     return EXIT_CANNOT_CREATE;
   }
 
-  const source = openReadonlyDb(storePath);
+  let copy: StoreCopy;
   try {
-    backupTo(source, target);
-  } finally {
-    source.close();
-  }
-
-  let carried: CarriedSignIn;
-  try {
-    carried = await carrySignIn(loaded, target, deps.now);
-  } catch {
-    rmSync(target, { force: true });
+    copy = await writeStoreCopy({
+      vacuumInto: (to) => {
+        const source = openReadonlyDb(storePath);
+        try {
+          backupTo(source, to);
+        } finally {
+          source.close();
+        }
+      },
+      target,
+      config: loaded.config,
+      encryptor: await createEncryptor(loaded.config.encryption),
+      now: deps.now,
+    });
+  } catch (err) {
+    if (!(err instanceof CopyWriteError)) throw err;
     io.stderr(
       'backup: the sign-in configuration could not be written into the copy (details withheld); the copy was removed. The store was only read.\n',
     );
     return EXIT_FAILED;
   }
-
-  let copy: StoreDb | null = null;
-  try {
-    copy = openReadonlyDb(target);
-    const integrity = integrityOf(copy);
-    const schema = schemaVersionOf(copy);
-    const versions = [...new Set(sealedVersionsOf(copy).map((v) => v.keyVersion))].sort(
-      (a, b) => a - b,
-    );
-    const size = statSync(target).size;
-    io.stdout(
-      [
-        `backup: ${target}`,
-        `backup: ${size} bytes, schema version ${schema}, integrity_check: ${integrity}`,
-        versions.length === 0
-          ? 'backup: it holds no sealed secret.'
-          : `backup: its secrets are sealed under master key version(s) ${versions.join(', ')}: ` +
-            'the copy opens only with the keys of those versions as they are now. Keep them with it.',
-        carried.providers.length === 0
-          ? 'backup: no sign-in provider is set by the configuration; the copy holds the providers and administrators of the store.'
-          : `backup: it carries the sign-in provider(s) the configuration sets (${carried.providers.join(', ')}) ` +
-            'as providers kept in the store, their client secrets sealed; the administrators are in the store.',
-        'backup: copy it off the volume (deploy/railway.md §6), then delete it from the volume.',
-      ].join('\n') + '\n',
-    );
-    return integrity === 'ok' ? EXIT_OK : EXIT_FAILED;
-  } finally {
-    copy?.close();
-  }
-}
-
-/**
- * Writes the configuration's sign-in providers into the copy as
- * store-held ones (`SignInProvidersService.carryIntoStore`).
- */
-async function carrySignIn(
-  loaded: LoadedConfig,
-  target: string,
-  now: (() => Date) | undefined,
-): Promise<CarriedSignIn> {
-  const { config } = loaded;
-  const encryptor = await createEncryptor(config.encryption);
-  const clock = { now: now ?? (() => new Date()) };
-  const copy = openCopyConfig(target, encryptor, clock);
-  try {
-    const providers = new SignInProvidersService(
-      config,
-      async () => [],
-      new IdpSettingsService(config.idp, copy.config),
-      copy.config,
-      clock,
-    );
-    return await providers.carryIntoStore();
-  } finally {
-    copy.close();
-  }
+  const versions = copy.sealedKeyVersions;
+  io.stdout(
+    [
+      `backup: ${target}`,
+      `backup: ${copy.bytes} bytes, schema version ${copy.schemaVersion}, integrity_check: ${copy.integrity}`,
+      versions.length === 0
+        ? 'backup: it holds no sealed secret.'
+        : `backup: its secrets are sealed under master key version(s) ${versions.join(', ')}: ` +
+          'the copy opens only with the keys of those versions as they are now. Keep them with it.',
+      copy.carried.length === 0
+        ? 'backup: no sign-in provider is set by the configuration; the copy holds the providers and administrators of the store.'
+        : `backup: it carries the sign-in provider(s) the configuration sets (${copy.carried.join(', ')}) ` +
+          'as providers kept in the store, their client secrets sealed; the administrators are in the store.',
+      'backup: copy it off the volume (deploy/railway.md §6), then delete it from the volume.',
+    ].join('\n') + '\n',
+  );
+  return copy.integrity === 'ok' ? EXIT_OK : EXIT_FAILED;
 }
