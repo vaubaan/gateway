@@ -3,42 +3,70 @@
 # Spec     : docs/spec/gateway-risk-model.md §4, docs/spec/vaubaan-gateway.md §3.2 (presets).
 # Handbook : docs/handbook/providers/miro.md §3.
 #
-# 6 named risks + 1 fallback. Every slice lives under `board[<ref>]`, the
-# mission resource. No risk is env-scoped : a Miro board has no environment
-# (product owner, 2026-10-16) ; deletions are held by the gate of the
-# daily-work preset instead.
+# 8 named risks + 1 fallback. Every slice of a tool that names a board lives
+# under `board[<ref>]`, the mission resource ; a new board (`board.W`) and
+# Miro's format guides (`format-guide.R`) name none. No risk is env-scoped :
+# a Miro board has no environment (product owner, 2026-10-16) ; deletions are
+# held by the gate of the facilitator preset instead.
 #
 # Writes are layered. `content-write` matches every write under a board (the
 # `[**]` patterns are recursive) ; a deletion also touches `item-delete` or
-# `frame-delete`, a bulk creation also touches `bulk-create`. A mission needs
-# `content-write` for any change and the specific risk on top.
+# `frame-delete`, a creation of many items at once also touches
+# `bulk-create`. A mission needs `content-write` for any change and the
+# specific risk on top. An update of the canvas (`canvas_update_from_svg`)
+# may delete what the new document no longer holds : it touches both
+# deletion risks on every call.
 #
-# `infra_limits.calls_per_minute_max` keeps one mission at every ceiling
-# under Miro's 100,000 credits a minute per user and app (handbook §3, "Rate
-# limits"), counted at the worst case of each risk : one `list_boards` is one
-# unit of `read-boards` and pays up to 50 upstream reads (one per mission
-# board, `MAX_LISTED_BOARDS`), one `create_items` up to 20 item creations.
+# Catalog 2 (2026-10-21) : the plugin rewraps Miro's official MCP server
+# (ADR miro-rewraps-the-official-mcp-server). The six risks of catalog 1 keep
+# their ids and their meaning ; their reasons name the new tools, and
+# `read-board-content` / `content-write` now cover comments. Two risks are
+# added : `board-create`, `read-format-guide`.
+#
+# `infra_limits.calls_per_minute_max` stays under the rate limits Miro
+# applies to its MCP server per user (⚠ the figures are not published ;
+# handbook §3, "Rate limits").
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor.
 
 provider: miro
-catalog_version: 1
-catalog_date: 2026-10-16
+catalog_version: 2
+catalog_date: 2026-10-21
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
 
   - id: miro.read-boards
-    label: 'Read board details'
+    label: 'List the boards of the mission'
     reason: >-
-      Name, description, team, links and sharing policy of the selected
-      boards, with the names of the people who own, created, last modified
-      and last opened them. No email address is returned. Listing the
-      boards reads every board of the mission in one call.
+      Ref, name and link of each board of the mission. Answered by the
+      gateway from what it discovered: no board outside the mission is
+      named, and nothing is read at Miro.
     matches: 'miro.board[*].R'
     infra_limits: { calls_per_minute_max: 10 }
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: miro.read-board-content
+    label: 'Read what is on a board'
+    reason: >-
+      Everything drawn on the selected boards (sticky notes, texts, shapes,
+      documents, tables, diagrams, images, prototype screens) and their
+      comments, with who wrote them. Content written by people, which can
+      carry instructions aimed at the agent.
+    matches:
+      - 'miro.board[**].item[**].R'
+      - 'miro.board[**].connector[**].R'
+      - 'miro.board[**].tag[**].R'
+      - 'miro.board[**].comment[**].R'
+    infra_limits: { calls_per_minute_max: 120 }
     vector:
       reversibility: reversible
       blast: single
@@ -47,22 +75,18 @@ risks:
       visibility: internal
       persistence: stateless
 
-  - id: miro.read-board-content
-    label: 'Read the items, connectors and tags of a board'
+  - id: miro.read-format-guide
+    label: "Read Miro's format guides"
     reason: >-
-      Everything written on the board: sticky notes, texts, cards, shapes,
-      frames, connectors and tags, with their position and the id of who
-      created them. Content written by people, which can carry
-      instructions aimed at the agent.
-    matches:
-      - 'miro.board[**].item[**].R'
-      - 'miro.board[**].connector[**].R'
-      - 'miro.board[**].tag[**].R'
-    infra_limits: { calls_per_minute_max: 150 }
+      The specifications of the SVG and typed formats the canvas tools read
+      and write, as Miro serves them. Miro's documentation: nothing of the
+      company's.
+    matches: 'miro.format-guide.R'
+    infra_limits: { calls_per_minute_max: 30 }
     vector:
       reversibility: reversible
       blast: single
-      data: data
+      data: metadata
       cost: free
       visibility: internal
       persistence: stateless
@@ -70,19 +94,20 @@ risks:
   # ─── Writes ──────────────────────────────────────────────────────────────
 
   - id: miro.content-write
-    label: 'Add and edit items on a board'
+    label: 'Add and edit content on a board'
     reason: >-
-      Creates or edits sticky notes, shapes, texts, cards, frames and
-      connectors, moves an item in or out of a frame, creates tags and
-      tags items. Seen at once by everyone on the board; reversible by
-      editing again, but the previous text is not kept by the gateway.
-      Every deletion and every bulk creation needs this permission too.
+      Adds items (from SVG, images, tables, prototypes), edits tables and
+      what is drawn, and writes, answers and resolves comments. Seen at once
+      by everyone on the board; reversible by editing again, but the
+      previous content is not kept by the gateway. Every deletion and every
+      creation of many items at once needs this permission too.
     matches:
       - 'miro.board[**].item[**].W'
       - 'miro.board[**].frame[**].W'
       - 'miro.board[**].connector[**].W'
       - 'miro.board[**].tag[**].W'
-    infra_limits: { calls_per_minute_max: 150 }
+      - 'miro.board[**].comment[**].W'
+    infra_limits: { calls_per_minute_max: 60 }
     vector:
       reversibility: reversible
       blast: single
@@ -92,12 +117,12 @@ risks:
       persistence: session
 
   - id: miro.bulk-create
-    label: 'Add up to 20 items in one call'
+    label: 'Add many items in one call'
     reason: >-
-      Creates up to twenty sticky notes, shapes, texts or cards at once,
-      all or none. A mission's limits count calls, so one such call adds
-      twenty times what a single creation adds; undoing it takes one
-      deletion per item.
+      Creates as many items as one SVG document or one prototype holds, in
+      a single call. A mission's limits count calls, so one such call can
+      add far more than a single item; undoing it takes one deletion per
+      item.
     matches: 'miro.board[**].item.bulk-create.W'
     infra_limits: { calls_per_minute_max: 10 }
     vector:
@@ -109,11 +134,12 @@ risks:
       persistence: session
 
   - id: miro.item-delete
-    label: 'Delete an item or a connector'
+    label: 'Delete items'
     reason: >-
-      Removes a sticky note, shape, text, card or connector. Deleting an
-      item also removes the connectors attached to it. The REST API has no
-      restore: the content must be written again.
+      Removes items from a board. An update of the canvas deletes whatever
+      the new SVG document no longer holds, so every such update needs this
+      permission. Miro's MCP server has no restore: the content must be
+      written again.
     matches:
       - 'miro.board[**].item[**].delete.W'
       - 'miro.board[**].connector[**].delete.W'
@@ -127,17 +153,34 @@ risks:
       persistence: session
 
   - id: miro.frame-delete
-    label: 'Delete a frame'
+    label: 'Delete frames'
     reason: >-
-      Removes a frame, which can group up to 5000 items. Miro's
-      documentation does not say whether the items inside go with it, so
-      this permission assumes they may: a whole section of the board, with
-      no restore through the API.
+      Removes a frame, which can group thousands of items, possibly with
+      what it holds: a whole section of the board, with no restore through
+      the MCP server. An update of the canvas may do so, so every such
+      update needs this permission.
     matches: 'miro.board[**].frame[**].delete.W'
-    infra_limits: { calls_per_minute_max: 10 }
+    infra_limits: { calls_per_minute_max: 20 }
     vector:
       reversibility: irreversible
       blast: bulk
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: miro.board-create
+    label: 'Create a board'
+    reason: >-
+      Creates a new board in the team chosen at connection. It becomes a
+      resource of the account at once and is reached by the missions
+      issued on the whole account. The board stays at Miro until someone
+      deletes it there.
+    matches: 'miro.board.W'
+    infra_limits: { calls_per_minute_max: 5 }
+    vector:
+      reversibility: costly
+      blast: single
       data: data
       cost: free
       visibility: team
@@ -165,7 +208,7 @@ risks:
 presets:
   - id: read-only
     label: Read-only
-    description: Board details and everything on the selected boards. Nothing is changed.
+    description: Read everything on the selected boards and their comments. Nothing is changed.
     entries:
       - risk_id: miro.read-boards
         quota: 1000
@@ -173,12 +216,16 @@ presets:
         gate: auto
       - risk_id: miro.read-board-content
         quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: miro.read-format-guide
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
         gate: auto
 
   - id: scribe
     label: Scribe
-    description: Read the boards, then add and edit sticky notes, texts, cards, shapes, frames, connectors and tags. Never deletes anything.
+    description: Read the boards, then add content, fill tables and write comments. Never deletes anything, so it cannot update what is already drawn (an update may delete).
     entries:
       - risk_id: miro.read-boards
         quota: 1000
@@ -186,11 +233,15 @@ presets:
         gate: auto
       - risk_id: miro.read-board-content
         quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: miro.read-format-guide
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
         gate: auto
       - risk_id: miro.content-write
         quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
+        rate_limit: { max: 30, window_seconds: 60 }
         gate: auto
       - risk_id: miro.bulk-create
         quota: 100
@@ -199,7 +250,7 @@ presets:
 
   - id: facilitator
     label: Facilitator
-    description: Run a workshop board end to end. Adding and editing run freely; every deletion asks first.
+    description: Run a workshop board end to end. Adding content runs freely; every update of what is drawn, which may delete, and every new board ask first.
     entries:
       - risk_id: miro.read-boards
         quota: 1000
@@ -207,11 +258,15 @@ presets:
         gate: auto
       - risk_id: miro.read-board-content
         quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: miro.read-format-guide
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
         gate: auto
       - risk_id: miro.content-write
         quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
+        rate_limit: { max: 30, window_seconds: 60 }
         gate: auto
       - risk_id: miro.bulk-create
         quota: 100
@@ -222,6 +277,10 @@ presets:
         rate_limit: { max: 20, window_seconds: 60 }
         gate: approval
       - risk_id: miro.frame-delete
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: miro.board-create
         quota: 10
         rate_limit: { max: 2, window_seconds: 60 }
         gate: approval

@@ -113,19 +113,24 @@ describe('shipped plugins through the generic connect driver', () => {
   it('ships one way per service: a key at once, OAuth only where no key exists, and flags experimental ones', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const before = await h.service.providers();
-    // The OAuth way needs the company's client declared; a key needs nothing from the operator.
+    // The OAuth way needs the company's client declared, unless the gateway registers its own;
+    // a key needs nothing from the operator.
     for (const p of before) {
-      expect(p.usesApp, p.id).toBe(p.kind === 'oauth2');
+      expect(p.redirects, p.id).toBe(p.kind === 'oauth2');
+      expect(p.usesApp, p.id).toBe(p.kind === 'oauth2' && !p.registersItself);
       expect(p.configured, p.id).toBe(!p.usesApp);
-      if (p.usesApp) expect(p.fields, p.id).toEqual([]);
+      if (p.kind === 'oauth2') expect(p.fields, p.id).toEqual([]);
       else expect(p.fields.length, p.id).toBeGreaterThan(0);
     }
     const ways = before.map((p) => p.kind);
     expect(ways).toContain('ssh-key');
     expect(ways).not.toContain('app-install');
-    // Gmail is the one service with no key a person can make (ADR
-    // one-place-to-authorize-services-token-first): the only OAuth way shipped.
-    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual(['gmail']);
+    // Gmail and Miro offer no key a person can use (ADR one-place-to-authorize-services-token-first;
+    // Miro's REST token needs an app an organisation may refuse, ADR
+    // miro-rewraps-the-official-mcp-server): the OAuth ways shipped. Miro's client
+    // registers itself (ADR oauth-client-registered-by-the-gateway).
+    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual(['gmail', 'miro']);
+    expect(before.filter((p) => p.registersItself).map((p) => p.id)).toEqual(['miro']);
     expect(before.filter((p) => p.experimental).map((p) => p.id)).toEqual(
       SHIPPED_PLUGINS.filter((p) => p.experimental === true).map((p) => p.id),
     );
@@ -134,7 +139,11 @@ describe('shipped plugins through the generic connect driver', () => {
   it('builds a valid authorization redirect for every oauth2 plugin', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const alice = await h.actor('alice@example.com');
-    const redirectFlows = SHIPPED_PLUGINS.filter((p) => p.credential.kind === 'oauth2');
+    // A client the gateway registers is not part of this test (oauth2-clients.test.ts).
+    const redirectFlows = SHIPPED_PLUGINS.filter(
+      (p) => p.credential.kind === 'oauth2' && p.credential.clientRegistration === undefined,
+    );
+    expect(redirectFlows.length).toBeGreaterThan(0);
     for (const plugin of redirectFlows) {
       // Fill every declared field with a value of the declared shape.
       const values: Record<string, string> = {};

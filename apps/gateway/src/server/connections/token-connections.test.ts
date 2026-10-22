@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ApiKeyCredentialSpec, CredentialCheck } from '@vaubaan/plugin-sdk';
-import { UpstreamAuthError } from '@vaubaan/shared';
+import { CredentialRefusal, UpstreamAuthError } from '@vaubaan/shared';
 
 import { serializeSecret } from './credential-codec';
 import { ConnectError, type ConnectErrorCode } from './errors';
@@ -117,6 +117,29 @@ describe('a service connected with a pasted token', () => {
     );
     expect(late.detail).toContain('expired on 2020-01-01');
     expect(await expired.store.connections.list()).toHaveLength(0);
+  });
+
+  it("a refusal the plugin wrote reaches the page in the plugin's words; the provider's never does", async () => {
+    const sentence = 'the token lacks the scope Things: write; create it again with that scope';
+    const refused = dualHarness(async () => {
+      throw new CredentialRefusal(sentence, 403);
+    });
+    const alice = await refused.actor('alice@example.com');
+    const err = await expectConnectError(
+      refused.service.start(alice, 'dual', { fields: { token: TOKEN } }),
+      'credential-rejected',
+    );
+    expect(err.detail).toBe(`Dual: ${sentence}`);
+
+    const quoted = dualHarness(async () => {
+      throw new UpstreamAuthError(`403: {"scopes":[],"token":"${TOKEN}"}`, 403);
+    });
+    const bob = await quoted.actor('bob@example.com');
+    const hidden = await expectConnectError(
+      quoted.service.start(bob, 'dual', { fields: { token: TOKEN } }),
+      'credential-rejected',
+    );
+    expect(hidden.detail).toBe('Dual: the provider rejected the credential (HTTP 403)');
   });
 
   it('an account made a way the plugin no longer offers is reconnected with a token, same id', async () => {

@@ -35,6 +35,33 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - An account connected through the GitHub App of earlier builds
   (`app-install`) is reconnected with a token on the same account, its old
   credential never read — now covered by a test.
+- **Miro connects through Miro's own MCP server, with one click and Miro's
+  consent — no Miro app to create, nothing to paste.** The Miro plugin
+  (0.2.0) rewraps Miro's official MCP server (`https://mcp.miro.com/`): the
+  person signs in at Miro, chooses a team and allows the gateway, which
+  registers its own OAuth client at Miro the first time someone connects. It
+  works in a Miro Enterprise organisation that allows approved apps only, once
+  its administrator has enabled Miro's MCP server. The tools are Miro's
+  (canvas read and drawing as SVG, comments, images, prototypes, tables, a
+  new board), each acting on a board of the mission; an update of what is
+  drawn may delete, so it needs the deletion permissions and, in the
+  facilitator preset, asks first. ADRs miro-rewraps-the-official-mcp-server,
+  oauth-client-registered-by-the-gateway.
+  **After the upgrade, Miro accounts connected with the access token of a
+  Miro app run nothing until their owner reconnects them from Accounts** (the
+  button now leads to Miro); their missions keep their permissions and
+  presets, and their agents read the new tool list (the 30 tools of the REST
+  plugin are gone).
+- **A service whose sign-in accepts dynamic client registration needs
+  nothing from an administrator.** The gateway registers its own OAuth client
+  there (named after the instance's host), keeps it sealed in the instance
+  settings, reuses it, and registers again when the service rejects it or
+  the public URL changed. Gmail still needs its client declared.
+- **The connect page shows the reason a plugin gives for refusing a key**,
+  in the plugin's own words ("the token is not limited to the organization
+  'acme'…"), instead of a bare HTTP status; a provider's own text is still
+  never shown. A refused OAuth sign-in now shows the protocol code only, never
+  the service's description.
 
 ### Fixed
 

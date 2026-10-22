@@ -1,0 +1,306 @@
+{
+  "source": "modelled from developers.miro.com/docs/miro-mcp-tools and the changelog 'Legacy MCP board tools have been removed' (read 2026-10-21); tools/list needs a Miro account and was not captured",
+  "captured_at": null,
+  "tools": [
+    {
+      "name": "board_search_boards",
+      "description": "Search and list the boards the current user can open in the team chosen at authorization, by name, description, ownership or content.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Words to look for. Omit to list the boards."
+          }
+        }
+      }
+    },
+    {
+      "name": "board_create",
+      "description": "Create a new board in the team chosen at authorization.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "The name of the new board." },
+          "description": { "type": "string", "description": "A description of the board." }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "canvas_search",
+      "description": "Find items on a board before reading them. With result_mode \"overview\", a high-level pass over frames, documents, prototypes, tables and diagrams.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of an item of it (moveToWidget)."
+          },
+          "query": { "type": "string", "description": "What to look for on the board." },
+          "result_mode": { "type": "string", "description": "\"overview\" for a high-level pass." }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "canvas_read_as_svg",
+      "description": "Read existing board items and return them as SVG; text content comes back as Markdown.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of an item of it (moveToWidget)."
+          }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "canvas_create_from_svg",
+      "description": "Create several board items at once from an SVG document written in the canvas composer format (see canvas_get_canvas_composer_skill).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of the frame to create into (moveToWidget)."
+          },
+          "svg": { "type": "string", "description": "The SVG document." }
+        },
+        "required": ["miro_url", "svg"]
+      }
+    },
+    {
+      "name": "canvas_update_from_svg",
+      "description": "Apply an SVG document to the board as a diff: items are created, updated and deleted to match it. Read the current items first; a document body is replaced whole.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of an item of it (moveToWidget)."
+          },
+          "svg": { "type": "string", "description": "The SVG document." }
+        },
+        "required": ["miro_url", "svg"]
+      }
+    },
+    {
+      "name": "canvas_get_canvas_composer_skill",
+      "description": "Get the specification of the SVG format the canvas tools read and write.",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "canvas_load_format_skill",
+      "description": "Get the specification of one typed format (a diagram, a document, a table, a timeline...) for the canvas tools.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "format": { "type": "string", "description": "The format to load." }
+        },
+        "required": ["format"]
+      }
+    },
+    {
+      "name": "comment_list_comments",
+      "description": "List the comments of a board, or of one item of it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of an item of it (moveToWidget)."
+          }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "comment_create",
+      "description": "Start a comment thread on a board, or on one item of it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of an item of it (moveToWidget)."
+          },
+          "content": { "type": "string", "description": "The text of the comment." }
+        },
+        "required": ["miro_url", "content"]
+      }
+    },
+    {
+      "name": "comment_reply",
+      "description": "Add a reply to an existing comment thread.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the board." },
+          "comment_id": { "type": "string", "description": "The comment thread to reply to." },
+          "content": { "type": "string", "description": "The text of the reply." }
+        },
+        "required": ["miro_url", "comment_id", "content"]
+      }
+    },
+    {
+      "name": "comment_resolve",
+      "description": "Resolve or reopen a comment thread.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the board." },
+          "comment_id": { "type": "string", "description": "The comment thread." },
+          "resolved": {
+            "type": "boolean",
+            "description": "true to resolve, false to reopen. Defaults to true."
+          }
+        },
+        "required": ["miro_url", "comment_id"]
+      }
+    },
+    {
+      "name": "image_get_data",
+      "description": "Get the metadata and the image data (base64) of an image item.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the image item (moveToWidget)." }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "image_get_url",
+      "description": "Get a download URL for an image item.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the image item (moveToWidget)." }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "image_create",
+      "description": "Create an image item on a board from the URL of an image.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of the frame to create into (moveToWidget)."
+          },
+          "image_url": { "type": "string", "description": "The URL of the image to add." },
+          "title": { "type": "string", "description": "A title for the image." }
+        },
+        "required": ["miro_url", "image_url"]
+      }
+    },
+    {
+      "name": "image_get_upload_url",
+      "description": "Get a temporary, single-use presigned URL to upload an image.",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "prototype_read",
+      "description": "Read the prototype screens of a board, with their metadata.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of a prototype of it (moveToWidget)."
+          }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "prototype_create",
+      "description": "Create a prototype from one or more HTML screens.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of the frame to create into (moveToWidget)."
+          },
+          "screens": { "type": "array", "description": "The HTML screens of the prototype." }
+        },
+        "required": ["miro_url", "screens"]
+      }
+    },
+    {
+      "name": "table_create",
+      "description": "Create a table with the given columns (Miro marks the table tools as deprecating soon).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": {
+            "type": "string",
+            "description": "URL of the board, or of the frame to create into (moveToWidget)."
+          },
+          "title": { "type": "string", "description": "The title of the table." },
+          "columns": { "type": "array", "description": "The columns and their types." }
+        },
+        "required": ["miro_url", "columns"]
+      }
+    },
+    {
+      "name": "table_list_rows",
+      "description": "Get the rows of a table with its column metadata, optionally filtered.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the table item (moveToWidget)." },
+          "filter": { "type": "object", "description": "A filter on the columns." }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "table_sync_rows",
+      "description": "Add or update the rows of a table, matched on a key column.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the table item (moveToWidget)." },
+          "rows": { "type": "array", "description": "The rows to add or update." },
+          "key_column": { "type": "string", "description": "The column rows are matched on." }
+        },
+        "required": ["miro_url", "rows"]
+      }
+    },
+    {
+      "name": "table_get_latest_update_history",
+      "description": "Get the latest changes made to a table.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the table item (moveToWidget)." }
+        },
+        "required": ["miro_url"]
+      }
+    },
+    {
+      "name": "table_update_view",
+      "description": "Change how a table is shown (its view settings).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "miro_url": { "type": "string", "description": "URL of the table item (moveToWidget)." },
+          "view": { "type": "object", "description": "The view settings." }
+        },
+        "required": ["miro_url", "view"]
+      }
+    },
+    {
+      "name": "user_who_am_i",
+      "description": "Get the profile of the current user.",
+      "inputSchema": { "type": "object", "properties": {} }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 title: Plugin SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-21
 tracks:
   - packages/plugin-sdk/src/
   - packages/plugin-sdk/tests/
@@ -231,7 +231,16 @@ D3).
 | the executor declines the call: unknown tool, an argument it cannot read, a target outside the mission | returns `{ content: [text], isError: true }` | no `upstream_error`: nothing failed at the provider | `classification-error` / `executor_refused` |
 
 `UpstreamAuthError` and `UpstreamHttpError` live in `@vaubaan/shared`
-(`mcp.ts`) and are re-exported by the SDK. Both carry the provider's status
+(`mcp.ts`) and are re-exported by the SDK, with **`CredentialRefusal`**, an
+`UpstreamAuthError` whose message the plugin wrote itself ("the token is not
+limited to the organization 'acme'"): the one provider failure whose text the
+gateway shows to the person who connects (connect page, discovery state,
+audit), on one line of at most 300 characters. Its message holds only the
+plugin's words and values the person typed or the plugin checked — never text
+the provider sent, never a part of the credential (ADR
+provider-error-text-stays-with-the-agent, amendment of 2026-10-21). Throw it
+from `verify` or `discoverResources`; everything else that reads a rejected
+credential treats it as an `UpstreamAuthError`. Both carry the provider's status
 (`upstreamStatus`, `status`): the host reads it for the audit summary and the
 telemetry class, and never stores the message, which goes to the agent only
 (`Upstream error: <message>`).
@@ -282,22 +291,32 @@ provider says the credential itself is invalid.
 
 ### `CredentialSpec` and `CredentialSecret` (`credential.ts`)
 
-| Kind      | Spec fields                                                                                                                                                        | Secret the plugin receives                                   |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `api-key` | `fields` (≥ 1 with `secret: true`), `createUrl?`                                                                                                                   | `{ fields: Record<name, value>, metadata }`                  |
-| `oauth2`  | `authorizationUrl`, `tokenUrl` (https), `scopes`, `pkce`, `resourceIndicator?`, `clientAuthMethod`, `refreshable`, `extraAuthorizationParams?`, `appConfigFields?` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
-| `ssh-key` | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                                                | `{ privateKeyPem, publicKey, fields, metadata }`             |
+| Kind      | Spec fields                                                                                                                                                                               | Secret the plugin receives                                   |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `api-key` | `fields` (≥ 1 with `secret: true`), `createUrl?`                                                                                                                                          | `{ fields: Record<name, value>, metadata }`                  |
+| `oauth2`  | `authorizationUrl`, `tokenUrl` (https), `scopes`, `pkce`, `resourceIndicator?`, `clientAuthMethod`, `refreshable`, `extraAuthorizationParams?`, `appConfigFields?`, `clientRegistration?` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
+| `ssh-key` | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                                                                       | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
 One way of connecting per plugin, the simplest the provider offers (ADR
 [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
-`api-key` whenever a person can make a key at the provider, `oauth2` only
-where the provider offers none (gmail), `ssh-key` for a host. The kinds and
+`api-key` whenever a person can make a key at the provider that works,
+`oauth2` where the provider offers none (gmail, miro), `ssh-key` for a host. The kinds and
 declarations of earlier builds that went through an app the company
 registered (`app-install`, its installation verification and manifest flow,
 `alternativeCredentials`) are described in that ADR; a stored credential of
 a kind the plugin no longer declares is refused at the execution door until
 the account is reconnected. `ctx.appConfig` is the company's OAuth client
-of an `oauth2` provider without `client_secret`; `{}` for the other kinds.
+of an `oauth2` provider without `client_secret`; `{}` for the other kinds
+and for a client the gateway registers itself.
+
+**A client the gateway registers itself.** `clientRegistration:
+{ registrationUrl }` on an `oauth2` spec says the provider accepts dynamic
+client registration (RFC 7591, as remote MCP servers do): the host registers
+one client per instance there, keeps it, reuses it, and registers again when
+the provider rejects it (ADR
+[oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)).
+Nobody declares anything: `definePlugin` refuses `appConfigFields` beside it
+(and checks the URL is https). Shipped example: `plugins/miro/src/credential.ts`.
 
 **Revocation of an `oauth2` grant** is declared, not coded:
 `revocation: { url, format }` on the spec, with `format` one of
@@ -327,7 +346,7 @@ An `api-key` spec may also carry:
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `label?`  | what the person creates, lower case, in the service's words ("fine-grained personal access token")                                                                                                                                                                                  |
 | `guide?`  | `{ steps, permissions: { name, access: 'read' \| 'read-write', tools }[], recommendedExpiryDays: number \| null, docsUrl? }` — rendered by the connect page; every tool the way can run must be served by a permission (an empty list means the token carries no permission choice) |
-| `verify?` | `(ctx) → { account, expiresAt }`: asked before anything is stored; throw `UpstreamAuthError` on a rejected token                                                                                                                                                                    |
+| `verify?` | `(ctx) → { account, expiresAt }`: asked before anything is stored; throw `UpstreamAuthError` on a rejected token, `CredentialRefusal` when the reason is a sentence the plugin wrote (below)                                                                                        |
 
 The guide is the one place the permissions of a token are declared (GitHub:
 `plugins/github/src/permissions.ts`); `definePlugin` checks that every tool

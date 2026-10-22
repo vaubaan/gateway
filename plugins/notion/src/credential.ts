@@ -15,7 +15,7 @@
  */
 
 import {
-  UpstreamAuthError,
+  CredentialRefusal,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
@@ -34,7 +34,7 @@ export async function verifyNotionToken(ctx: ConnectionContext): Promise<Credent
   const bot = isObject(me) && me.type === 'bot' && isObject(me.bot) ? me.bot : null;
   const owner = bot && isObject(bot.owner) ? bot.owner : null;
   if (!bot || !owner || owner.type !== 'workspace') {
-    throw new UpstreamAuthError(
+    throw new CredentialRefusal(
       'Notion: this is not an internal connection token. Paste the token of an internal connection (Developer portal, Build, Internal connections), not a personal access token.',
       401,
     );

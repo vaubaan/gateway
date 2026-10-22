@@ -40,7 +40,7 @@ export interface OAuthClientChecklist {
   readonly registered: readonly ProviderAppStatus[];
   /** Services whose OAuth client is still to declare. */
   readonly missing: readonly ProviderAppStatus[];
-  /** Services connected with a key: nothing to declare. */
+  /** Services with nothing to declare: connected with a key, or through a client the gateway registers itself. */
   readonly keyed: readonly ProviderAppStatus[];
 }
 

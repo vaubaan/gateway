@@ -126,6 +126,23 @@ ADR upstream-credential-cache-and-rejected-credentials), the git remote's
 plugin that derives a short-lived credential per call behaves, which the
 next such plugin will need; removing them would be a decision of their own.
 
+### Amendment of 2026-10-21 — Miro joins Gmail on the OAuth way, with nothing to declare
+
+Miro's REST token belongs to an app the person creates; an organisation
+that allows approved apps only hands that app a token without scopes, and
+the token way is unusable there. The Miro plugin now connects through
+Miro's official MCP server by OAuth (ADR
+[miro-rewraps-the-official-mcp-server](miro-rewraps-the-official-mcp-server.md)),
+and its token way is removed — still one way per service. The cost this ADR
+held against OAuth (declaring the gateway at the service) does not apply:
+Miro's authorization server accepts dynamic client registration, and the
+gateway registers its own client there (ADR
+[oauth-client-registered-by-the-gateway](oauth-client-registered-by-the-gateway.md)).
+The rule reads: a token a person can make, whenever the service offers one
+that works; otherwise the service's sign-in, with the client the gateway
+registers itself when the service allows it, declared by an administrator
+when it does not.
+
 ## Rejected alternatives
 
 ### Keep the GitHub App, token first everywhere else (the proposal of 2026-10-16)

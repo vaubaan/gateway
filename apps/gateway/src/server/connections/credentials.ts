@@ -17,8 +17,10 @@
  *
  * Refresh is generic for `oauth2` (ADR plugin-contract-and-credential-spec D2,
  * amended): the host performs the standard `refresh_token` grant from the spec
- * with the company's client credentials, rotates the refresh token and seals
- * the result. A plugin's own `refresh()` is called instead only when it
+ * with the service's OAuth client (declared by an administrator, or registered
+ * by the gateway itself — `OAuth2Clients`), rotates the refresh token and
+ * seals the result. A registered client the provider rejects (`invalid_client`)
+ * is forgotten, so the reconnect registers a new one. A plugin's own `refresh()` is called instead only when it
  * declares one (non-standard flow). The OAuth client secret never reaches a
  * plugin: `appConfig` is `ProviderAppsService.pluginAppConfig()`.
  */
@@ -27,14 +29,13 @@ import { UpstreamAuthError } from '@vaubaan/shared';
 import {
   type ConnectionContext,
   type CredentialSecret,
-  type OAuth2CredentialSpec,
   type PluginRegistry,
   type ProviderAppConfig,
   type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
-import { CLIENT_ID_FIELD, CLIENT_SECRET_FIELD, type ProviderAppsService } from '../provider-apps';
+import type { ProviderAppsService } from '../provider-apps';
 import type { ConnectionsRepo } from '../store';
 import type { Clock } from '../store/clock';
 import type { ConnectionRecord, ProviderGrantOutcome } from '../store/types';
@@ -49,6 +50,7 @@ import {
   type OAuth2Client,
   type RevocationAttempt,
 } from './oauth2';
+import { OAuth2ClientMissing, type OAuth2Clients } from './oauth2-clients';
 
 /** An access token that expires within this delay is refreshed before use. */
 export const REFRESH_SKEW_MS = 60_000;
@@ -67,6 +69,8 @@ export interface CredentialBrokerDeps {
   readonly connections: ConnectionsRepo;
   readonly registry: PluginRegistry;
   readonly providerApps: ProviderAppsService;
+  /** The OAuth client of an `oauth2` service: declared, or registered by the gateway. */
+  readonly clients: Pick<OAuth2Clients, 'forTokenRequest' | 'rejected'>;
   readonly fetch: typeof fetch;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -258,9 +262,12 @@ export class CredentialBroker {
     if (spec.kind !== 'oauth2' || !spec.revocation || held.credential.kind !== 'oauth2') {
       return { outcome: 'no-token' };
     }
-    return revokeGrant(spec.revocation, await this.oauthClient(plugin.id, spec), held.credential, {
-      fetch: this.deps.fetch,
-    });
+    return revokeGrant(
+      spec.revocation,
+      await this.deps.clients.forTokenRequest(plugin, spec),
+      held.credential,
+      { fetch: this.deps.fetch },
+    );
   }
 
   /** The `ConnectionContext` a plugin receives for a connection-level call (discovery). */
@@ -377,29 +384,35 @@ export class CredentialBroker {
         HTTP_UNAUTHORIZED,
       );
     }
+    let client: OAuth2Client;
     try {
-      return await refreshGrant(spec, await this.oauthClient(plugin.id, spec), credential, {
+      client = await this.deps.clients.forTokenRequest(plugin, spec);
+    } catch (err) {
+      // A registered client was forgotten after the provider rejected it: the grant
+      // of this connection belonged to it and can never be refreshed again.
+      if (err instanceof OAuth2ClientMissing && spec.clientRegistration !== undefined) {
+        throw new UpstreamAuthError(
+          `${plugin.displayName} no longer accepts the client this connection was made with; reconnect it`,
+          HTTP_UNAUTHORIZED,
+        );
+      }
+      throw err;
+    }
+    try {
+      return await refreshGrant(spec, client, credential, {
         fetch: this.deps.fetch,
         now: () => this.deps.clock.now(),
       });
     } catch (err) {
       if (err instanceof OAuth2TokenError) {
+        if (err.oauthError === 'invalid_client') {
+          await this.deps.clients.rejected(plugin, spec, client.clientId);
+        }
         if (!err.rejected) throw new ProviderUnreachableError(err.message);
         throw new UpstreamAuthError(err.message, err.status || HTTP_UNAUTHORIZED);
       }
       throw err;
     }
-  }
-
-  /** The company's OAuth client, secret included — host use only. */
-  async oauthClient(providerId: string, spec: OAuth2CredentialSpec): Promise<OAuth2Client> {
-    const app = await this.deps.providerApps.hostAppConfig(providerId);
-    const clientId = app[CLIENT_ID_FIELD];
-    if (!clientId) throw new Error(`provider '${providerId}': client_id is not configured`);
-    return {
-      clientId,
-      clientSecret: spec.clientAuthMethod === 'none' ? null : (app[CLIENT_SECRET_FIELD] ?? null),
-    };
   }
 }
 

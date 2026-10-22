@@ -2,6 +2,7 @@
 title: A provider's error text goes to the calling agent only; the gateway keeps the status in its own words
 status: accepted
 date: 2026-10-13
+amended: 2026-10-21
 extends:
   - decision-stages-fail-closed-and-audited
   - connect-driver-and-resource-curation
@@ -72,6 +73,45 @@ credentials.
   That is the price of not knowing which message carries what.
 - Plugins are unchanged; a future plugin that quotes a body is covered by the
   same sinks.
+
+## Amendment of 2026-10-21 — a refusal the plugin wrote is shown; the callback's description is not
+
+The Miro plugin refused a token without its scopes with a sentence of its
+own ("the token lacks the scope(s) boards:read, boards:write; give the app
+…"), thrown as an `UpstreamAuthError`: the connect page showed "the provider
+rejected the credential (HTTP 403)", and the person had no way to know what
+to fix (product owner, 2026-10-20). The rule hid text the plugin wrote, not
+only text the provider sent.
+
+1. **`CredentialRefusal`** (`@vaubaan/shared`, re-exported by the plugin
+   SDK) is an `UpstreamAuthError` whose message the **plugin** authored. It
+   is the one exception `providerFailureReason` keeps as it is (one line, at
+   most 300 characters): on the connect page (`ConnectError.detail`), in the
+   discovery state, the audit and the logs. Everything that reads a rejected
+   credential (refresh, "needs reconnecting") reads it the same way, since it
+   is an `UpstreamAuthError`.
+2. **The plugin's rule**: the message is a sentence the plugin wrote, with
+   at most values the person typed or identifiers the plugin checked (a
+   scope name, an organisation slug). Never text the provider sent, never a
+   part of the credential. Anything quoted from the provider stays in a plain
+   `UpstreamAuthError`, which the gateway reduces to its status as before.
+   Plugins that throw it today: Fly (a token of another organisation, image
+   prefixes, a token Fly does not describe), Notion (a personal token where
+   an internal connection's is needed), Miro (Miro refusing its MCP server to
+   an account: ADR miro-rewraps-the-official-mcp-server).
+3. **Two leaks of the OAuth callback closed on the way.** A denial at the
+   provider kept `error_description` in the detail, and a refused code
+   exchange kept the token endpoint's message (`error_description`
+   included): both are provider text. The denial now shows the protocol
+   code alone (`<service>: access_denied`), the failed exchange
+   `providerFailureReason` ("the token endpoint answered HTTP 400
+   (invalid_grant)"). A refused dynamic client registration (ADR
+   oauth-client-registered-by-the-gateway) follows the same rule: status and
+   protocol code.
+
+Rejected: a flag on `UpstreamAuthError` ("this message is safe"). A class
+is what a reviewer greps for and what a test can assert; a flag is set by
+habit.
 
 ## Rejected alternatives
 

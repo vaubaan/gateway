@@ -6,19 +6,26 @@
  * Handbook : docs/handbook/providers/miro.md §2, §5.
  *
  * Pure. The call is read once by `readMiroCall` (board resolved against the
- * mission, every identifier through its grammar, the closed bodies) ; this
- * file only places what it read on the data model. Every slice is rooted at
- * `miro.board[<ref>]`, the ref of the mission resource, so the gateway reads
- * the board back from the slice (audit, approval requests).
+ * mission, identifiers through their grammars, the closed surface) ; this
+ * file only places what it read on the data model. Every slice of a call that
+ * names a board is rooted at `miro.board[<ref>]`, the ref of the mission
+ * resource, so the gateway reads the board back from the slice (audit,
+ * approval requests).
  *
  * Conventions :
- *   1. **Layered writes.** A deletion emits `…[id].delete.W` (risk
- *      `item-delete` or `frame-delete`), the bulk call `item.bulk-create.W`
- *      (risk `bulk-create`) ; the recursive patterns of `content-write`
- *      match both, so a mission needs `content-write` too.
- *   2. **A frame is its own entity** for the typed frame tools ; `get_item`
- *      and `list_items` read any item, frames included, as `item`.
- *   3. **Moving into a frame emits no frame slice** (handbook §5.3).
+ *   1. **Layered writes.** A deletion emits `…delete.W` (risk `item-delete`
+ *      or `frame-delete`), a creation of many items at once
+ *      `item.bulk-create.W` (risk `bulk-create`) ; the recursive patterns of
+ *      `content-write` match both, so a mission needs `content-write` too.
+ *   2. **An update of the canvas may delete.** `canvas_update_from_svg`
+ *      applies an SVG as a diff : what the document no longer holds is
+ *      deleted, frames included. It touches `item-delete` and `frame-delete`
+ *      on every call (`*` : which items is not known before Miro applies it).
+ *   3. **Creating into a frame emits no frame slice** : `item_id` names
+ *      where the new items go, not an item that changes.
+ *   4. **No board, no resource.** A new board (`board.W`) and the format
+ *      guides of the canvas tools (`format-guide.R`, Miro's documentation,
+ *      nothing of the customer's) name no board.
  */
 
 import {
@@ -30,7 +37,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readMiroCall, type MiroCall } from './call.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { PROVIDER_ID, UPSTREAM_TOOL } from './identity.ts';
 
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 // Every identifier passed its grammar in `readMiroCall`, and every grammar is
@@ -44,60 +51,73 @@ function slice(action: 'R' | 'W', path: readonly SliceSegment[]): Slice {
 
 /** The slices of a call that `readMiroCall` accepted. */
 export function slicesOf(call: MiroCall): Slice[] {
-  if (call.op === 'list-boards') {
-    // One slice naming every board read : a list when there are several, so
+  if (call.kind === 'list-boards') {
+    // One slice naming every board listed : a list when there are several, so
     // the audit keeps them all (the resource stage reads list values too).
-    const [only] = call.boards;
+    const refs = call.boards.map((b) => b.ref);
+    const [only] = refs;
     const boards: SliceSegment =
-      call.boards.length === 1 && only !== undefined
-        ? ident(only)
-        : { kind: 'list', values: [...call.boards] };
+      refs.length === 1 && only !== undefined ? ident(only) : { kind: 'list', values: refs };
     return [slice('R', [name('board'), boards])];
   }
+
+  if (call.upstream === UPSTREAM_TOOL.boardCreate) return [slice('W', [name('board')])];
+  if (
+    call.upstream === UPSTREAM_TOOL.canvasComposerSkill ||
+    call.upstream === UPSTREAM_TOOL.canvasFormatSkill
+  ) {
+    return [slice('R', [name('format-guide')])];
+  }
+
+  if (call.board === null) throw new Error(`${PROVIDER_ID}: '${call.tool}' names no board`);
   const root: readonly SliceSegment[] = [name('board'), ident(call.board)];
-  const entityOf = (kind: string): string => (kind === 'frame' ? 'frame' : 'item');
-  switch (call.op) {
-    case 'get-board':
-      return [slice('R', root)];
-    case 'list-items':
-      return [slice('R', [...root, name('item'), ANY])];
-    case 'get-item':
-      return [slice('R', [...root, name('item'), ident(call.itemId)])];
-    case 'list-connectors':
-      return [slice('R', [...root, name('connector'), ANY])];
-    case 'get-connector':
-      return [slice('R', [...root, name('connector'), ident(call.connectorId)])];
-    case 'list-tags':
-      return [slice('R', [...root, name('tag'), ANY])];
-    case 'list-item-tags':
-      return [slice('R', [...root, name('item'), ident(call.itemId), name('tag-link'), ANY])];
-    case 'create-item':
-      return [slice('W', [...root, name(entityOf(call.kind))])];
-    case 'update-item':
-      return [slice('W', [...root, name(entityOf(call.kind)), ident(call.itemId)])];
-    case 'delete-item':
-      return [slice('W', [...root, name(entityOf(call.kind)), ident(call.itemId), name('delete')])];
-    case 'create-connector':
-      return [slice('W', [...root, name('connector')])];
-    case 'update-connector':
-      return [slice('W', [...root, name('connector'), ident(call.connectorId)])];
-    case 'delete-connector':
-      return [slice('W', [...root, name('connector'), ident(call.connectorId), name('delete')])];
-    case 'create-tag':
-      return [slice('W', [...root, name('tag')])];
-    case 'attach-tag':
-    case 'remove-tag':
+  const item = call.item === null ? ANY : ident(call.item);
+  const comment = call.comment === null ? ANY : ident(call.comment);
+
+  switch (call.upstream) {
+    case UPSTREAM_TOOL.canvasSearch:
+    case UPSTREAM_TOOL.canvasReadAsSvg:
+    case UPSTREAM_TOOL.prototypeRead:
+    case UPSTREAM_TOOL.imageGetData:
+    case UPSTREAM_TOOL.imageGetUrl:
+    case UPSTREAM_TOOL.tableListRows:
+    case UPSTREAM_TOOL.tableUpdateHistory:
+      return [slice('R', [...root, name('item'), item])];
+
+    case UPSTREAM_TOOL.commentListComments:
+      return [slice('R', [...root, name('comment'), ANY])];
+
+    case UPSTREAM_TOOL.canvasCreateFromSvg:
+    case UPSTREAM_TOOL.prototypeCreate:
       return [
-        slice('W', [
-          ...root,
-          name('item'),
-          ident(call.itemId),
-          name('tag-link'),
-          ident(call.tagId),
-        ]),
+        slice('W', [...root, name('item')]),
+        slice('W', [...root, name('item'), name('bulk-create')]),
       ];
-    case 'bulk-create':
-      return [slice('W', [...root, name('item'), name('bulk-create')])];
+
+    case UPSTREAM_TOOL.imageCreate:
+    case UPSTREAM_TOOL.tableCreate:
+      return [slice('W', [...root, name('item')])];
+
+    case UPSTREAM_TOOL.canvasUpdateFromSvg:
+      return [
+        slice('W', [...root, name('item'), item]),
+        slice('W', [...root, name('item'), ANY, name('delete')]),
+        slice('W', [...root, name('frame'), ANY, name('delete')]),
+      ];
+
+    case UPSTREAM_TOOL.tableSyncRows:
+    case UPSTREAM_TOOL.tableUpdateView:
+      return [slice('W', [...root, name('item'), item])];
+
+    case UPSTREAM_TOOL.commentCreate:
+      return [slice('W', [...root, name('comment')])];
+
+    case UPSTREAM_TOOL.commentReply:
+    case UPSTREAM_TOOL.commentResolve:
+      return [slice('W', [...root, name('comment'), comment])];
+
+    default:
+      throw new Error(`${PROVIDER_ID}: '${call.tool}' has no slice mapping`);
   }
 }
 

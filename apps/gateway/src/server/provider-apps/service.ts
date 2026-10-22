@@ -44,7 +44,7 @@ export interface ProviderAppStatus {
   readonly displayName: string;
   readonly experimental: boolean;
   readonly credentialKind: CredentialSpec['kind'];
-  /** False for `api-key` / `ssh-key` providers: nothing to declare, always connectable. */
+  /** False for `api-key` / `ssh-key` providers and for an `oauth2` client the gateway registers itself: nothing to declare, always connectable. */
   readonly needsApp: boolean;
   readonly fields: readonly CredentialField[];
   readonly source: ProviderAppSource;
@@ -186,7 +186,9 @@ export class ProviderAppsService {
     const fields = appConfigFieldsOf(plugin.credential);
     if (fields.length === 0) {
       throw new ProviderAppError([
-        `${plugin.displayName} needs no OAuth client: each person connects with their own key`,
+        plugin.credential.kind === 'oauth2'
+          ? `${plugin.displayName} needs no OAuth client to declare: the gateway registers its own at ${plugin.displayName}`
+          : `${plugin.displayName} needs no OAuth client: each person connects with their own key`,
       ]);
     }
     if (this.isReadOnly(providerId)) {

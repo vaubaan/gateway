@@ -159,7 +159,9 @@ export function pluginPageMarkdown(
 function credentialKindWords(c: CredentialInfo): string {
   switch (c.kind) {
     case 'oauth2':
-      return "through your company's OAuth client at the service (one click once an administrator declared it)";
+      return c.registersItself
+        ? 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)'
+        : "through your company's OAuth client at the service (one click once an administrator declared it)";
     case 'api-key':
       return `with a ${c.label ?? 'key'} pasted by hand`;
     case 'ssh-key':
@@ -222,7 +224,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     '',
     '## How to connect',
     '',
-    'On the instance: Accounts → Connect an account, then pick the service. A service that signs people in through its own authorization (Gmail) needs its OAuth client declared once by an administrator, on the same page, or set in the configuration (`providers.<id>.*`, see [configuration keys](/docs/configuration/keys)). Every instance declares its own client: this gateway never uses one shared with another instance.',
+    'On the instance: Accounts → Connect an account, then pick the service. A service that signs people in through its own authorization (Gmail) needs its OAuth client declared once by an administrator, on the same page, or set in the configuration (`providers.<id>.*`, see [configuration keys](/docs/configuration/keys)). A service that accepts dynamic client registration (Miro) needs nothing: the gateway registers its own client there the first time someone connects. Every instance has its own client: this gateway never uses one shared with another instance.',
     '',
   );
   plugin.credentials.forEach((c) => lines.push(...credentialMarkdown(c)));

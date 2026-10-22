@@ -1,4 +1,4 @@
-import { UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
+import { CredentialRefusal, UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { ConnectError, ProviderUnreachableError } from './errors';
@@ -42,5 +42,21 @@ describe('providerFailureReason: the status and our own words, never the provide
     const reason = providerFailureReason(err);
     expect(reason).toBe(expected);
     expect(reason).not.toContain(ECHOED);
+  });
+});
+
+describe('providerFailureReason: a refusal the plugin wrote itself is kept', () => {
+  it('shows the sentence of a CredentialRefusal, on one bounded line', () => {
+    const sentence = 'the token lacks the scope boards:write; give the app boards:write';
+    expect(providerFailureReason(new CredentialRefusal(sentence, 403))).toBe(sentence);
+    expect(providerFailureReason(new CredentialRefusal(`a\n  b ${'x'.repeat(400)}`))).toMatch(
+      /^a b x+…$/,
+    );
+  });
+
+  it('is still a rejected credential for everything that reads UpstreamAuthError', () => {
+    const refusal = new CredentialRefusal('not the kind of token this needs', 401);
+    expect(refusal).toBeInstanceOf(UpstreamAuthError);
+    expect(refusal.upstreamStatus).toBe(401);
   });
 });

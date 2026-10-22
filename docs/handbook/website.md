@@ -87,7 +87,8 @@ The generator:
    loader reads its `risk-catalog.yaml`, as at gateway boot. Each is reduced to
    `PluginInfo`: id, name, version, description, summary, experimental,
    tools (with their titles), risks (label, reason, severity, kind, envs),
-   presets, credentials (kind, fields, guide steps, permissions, scopes),
+   presets, credentials (kind, fields, guide steps, permissions, scopes, whether
+   the gateway registers its own OAuth client),
    token handouts, git remote.
 2. `parseThresholds(schema.sql)`.
 3. `fetchHealth(PLUGIN_STATS_URL)`: `GET https://telemetry.vaubaan.com/v1/plugin_stats?tool=is.null`,

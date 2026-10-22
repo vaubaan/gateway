@@ -121,13 +121,27 @@ export interface ApiKeyCredentialSpec {
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';
 
 /**
- * Authorization-code flow run by the host against the company's own OAuth
- * app. The plugin never sees the client secret.
+ * Authorization-code flow run by the host. The OAuth client is either the
+ * company's own, declared once by an administrator (`appConfigFields`, Gmail),
+ * or one the gateway registers itself at the provider (`clientRegistration`,
+ * Miro's MCP server). The plugin never sees the client secret.
  */
 export interface OAuth2CredentialSpec {
   readonly kind: 'oauth2';
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
+  /**
+   * The provider lets a client register itself (RFC 7591 dynamic client
+   * registration): the host registers this instance as a client the first
+   * time someone connects, keeps the client (its secret sealed in the
+   * instance settings), reuses it for every connection of the instance, and
+   * registers again when the provider rejects it or the instance's callback
+   * address changed. Nobody declares anything: no administrator step, no
+   * secret to paste. Absent: an administrator declares the company's client
+   * (`client_id`, `client_secret`, `appConfigFields`). ADR
+   * oauth-client-registered-by-the-gateway.
+   */
+  readonly clientRegistration?: OAuth2ClientRegistration;
   readonly scopes: readonly string[];
   /** RFC 7636. Always true for a public client (`clientAuthMethod: 'none'`). */
   readonly pkce: boolean;
@@ -147,7 +161,12 @@ export interface OAuth2CredentialSpec {
   readonly refreshable: boolean;
   /** Extra static query parameters (`access_type=offline`, `prompt=consent`). */
   readonly extraAuthorizationParams?: Readonly<Record<string, string>>;
-  /** Provider-specific operator settings beyond `client_id` / `client_secret`, which the host always asks for. */
+  /**
+   * Provider-specific operator settings beyond `client_id` / `client_secret`,
+   * which the host asks for whenever the client is declared by an
+   * administrator. Not allowed with `clientRegistration`: nobody declares
+   * anything then.
+   */
   readonly appConfigFields?: readonly CredentialField[];
   /**
    * How the provider withdraws the grant when a connection is revoked (spec
@@ -157,6 +176,18 @@ export interface OAuth2CredentialSpec {
    * grant by hand (`ProviderPlugin.manualRevocation`).
    */
   readonly revocation?: OAuth2Revocation;
+}
+
+/**
+ * How the host registers its own OAuth client at a provider that accepts
+ * dynamic client registration (RFC 7591). The registration asks for the
+ * authorization-code and refresh-token grants, the spec's `scopes`, the
+ * instance's callback as the only redirect URI, and `clientAuthMethod` as the
+ * token endpoint authentication method.
+ */
+export interface OAuth2ClientRegistration {
+  /** The registration endpoint (https), as the provider's authorization server metadata names it. */
+  readonly registrationUrl: string;
 }
 
 /**

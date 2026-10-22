@@ -1,15 +1,16 @@
 {
   "name": "@vaubaan/plugin-miro",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Miro boards: items, frames, connectors and tags",
+  "description": "Vaubaan Gateway provider plugin for Miro boards, through Miro's official MCP server",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "type-check": "tsc -p tsconfig.json --noEmit"
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "capture-upstream-tools": "tsx scripts/capture-upstream-tools.ts"
   },
   "dependencies": {
     "@vaubaan/plugin-sdk": "*"

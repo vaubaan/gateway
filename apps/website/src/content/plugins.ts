@@ -71,6 +71,8 @@ export interface CredentialInfo {
   readonly recommendedExpiryDays: number | null;
   readonly docsUrl: string | null;
   readonly scopes: readonly string[];
+  /** `oauth2` whose client the gateway registers itself: nobody declares anything. */
+  readonly registersItself: boolean;
 }
 
 export interface PluginInfo {
@@ -195,6 +197,7 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     recommendedExpiryDays: guide ? guide.recommendedExpiryDays : null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
+    registersItself: spec.kind === 'oauth2' && spec.clientRegistration !== undefined,
   };
 }
 

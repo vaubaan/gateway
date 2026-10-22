@@ -1,316 +1,198 @@
 /**
- * `classifyMiro`, branch by branch : the slice of every tool, the board
- * resolution, the closed argument surface (top level and the objects
- * forwarded to Miro), the bounds Miro sets, the bulk elements.
+ * The classifier of the `miro` provider : the slices of every tool, and
+ * every refusal `readMiroCall` makes before a slice is written.
  */
 import { describe, expect, test } from 'vitest';
 
-import { serializeSlice, toolPrefixFor, type Resource } from '@vaubaan/plugin-sdk';
+import { serializeSlice } from '@vaubaan/plugin-sdk';
 
 import { classifyMiro } from '../../src/classify.ts';
-import { PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { TOOL } from '../../src/identity.ts';
 import {
   BOARD,
-  CONNECTOR,
-  FRAME,
+  BOARD_URL,
+  COMMENT,
   ITEM,
-  ITEM_2,
   OTHER_BOARD,
   SAMPLES,
-  TAG,
   retro,
   workshop,
 } from './fixtures.ts';
 
-function slices(
+function slicesOf(
   tool: string,
-  args: Record<string, unknown>,
-  resources: readonly Resource[] = [workshop],
+  args: Readonly<Record<string, unknown>>,
+  resources = [workshop],
 ): string[] {
   const out = classifyMiro(tool, args, resources);
   if ('denied' in out) throw new Error(out.denied);
   return out.slices.map(serializeSlice);
 }
 
-function denied(
+function denial(
   tool: string,
-  args: Record<string, unknown>,
-  resources: readonly Resource[] = [workshop],
+  args: Readonly<Record<string, unknown>>,
+  resources = [workshop],
 ): string {
   const out = classifyMiro(tool, args, resources);
-  if (!('denied' in out))
-    throw new Error(`expected a denial, got ${out.slices.map(serializeSlice).join(', ')}`);
+  if (!('denied' in out)) throw new Error(`expected a denial, got ${JSON.stringify(out)}`);
   return out.denied;
 }
 
-const B = `miro.board[${BOARD}]`;
-
-describe('slices', () => {
-  test('reads', () => {
-    // One slice, the boards read as a list : the audit keeps every one of them.
-    expect(slices(TOOL.listBoards, {}, [workshop, retro])).toEqual([
+describe('slices, tool by tool', () => {
+  test('list_boards names the boards of the mission, as a list when there are several', () => {
+    expect(slicesOf(TOOL.listBoards, {})).toEqual([`miro.board[${BOARD}].R`]);
+    expect(slicesOf(TOOL.listBoards, {}, [workshop, retro])).toEqual([
       `miro.board[${BOARD},${OTHER_BOARD}].R`,
     ]);
-    expect(slices(TOOL.listBoards, {})).toEqual([`miro.board[${BOARD}].R`]);
-    expect(slices(TOOL.getBoard, { board: BOARD })).toEqual([`${B}.R`]);
-    expect(slices(TOOL.listItems, { board: BOARD })).toEqual([`${B}.item[*].R`]);
-    expect(slices(TOOL.getItem, { board: BOARD, item_id: ITEM })).toEqual([`${B}.item[${ITEM}].R`]);
-    expect(slices(TOOL.listConnectors, {})).toEqual([`${B}.connector[*].R`]);
-    expect(slices(TOOL.getConnector, { connector_id: CONNECTOR })).toEqual([
-      `${B}.connector[${CONNECTOR}].R`,
-    ]);
-    expect(slices(TOOL.listTags, {})).toEqual([`${B}.tag[*].R`]);
-    expect(slices(TOOL.listItemTags, { item_id: ITEM })).toEqual([
-      `${B}.item[${ITEM}].tag-link[*].R`,
-    ]);
   });
 
-  test('typed item writes : the collection, the item, the delete leaf ; frames apart', () => {
-    const prefix = toolPrefixFor(PROVIDER_ID);
-    const content: Record<string, Record<string, unknown>> = {
-      sticky_note: { content: 'x' },
-      shape: { content: 'x' },
-      text: { content: 'x' },
-      card: { title: 'x' },
-    };
-    for (const noun of ['sticky_note', 'shape', 'text', 'card']) {
-      expect(slices(`${prefix}create_${noun}`, { data: content[noun] })).toEqual([`${B}.item.W`]);
-      expect(
-        slices(`${prefix}update_${noun}`, {
-          item_id: ITEM,
-          position: { x: 1, y: 2 },
-        }),
-      ).toEqual([`${B}.item[${ITEM}].W`]);
-      expect(slices(`${prefix}delete_${noun}`, { item_id: ITEM })).toEqual([
-        `${B}.item[${ITEM}].delete.W`,
+  test('reads under the board, on the item when one is named', () => {
+    expect(slicesOf(TOOL.canvasSearch, { board: BOARD, query: 'x' })).toEqual([
+      `miro.board[${BOARD}].item[*].R`,
+    ]);
+    expect(slicesOf(TOOL.canvasReadAsSvg, { board: BOARD, item_id: ITEM })).toEqual([
+      `miro.board[${BOARD}].item[${ITEM}].R`,
+    ]);
+    for (const tool of [
+      TOOL.imageGetData,
+      TOOL.imageGetUrl,
+      TOOL.tableListRows,
+      TOOL.tableUpdateHistory,
+    ]) {
+      expect(slicesOf(tool, { board: BOARD, item_id: ITEM }), tool).toEqual([
+        `miro.board[${BOARD}].item[${ITEM}].R`,
       ]);
     }
-    expect(slices(TOOL.createFrame, { data: { title: 'F' } })).toEqual([`${B}.frame.W`]);
-    expect(slices(TOOL.updateFrame, { frame_id: FRAME, data: { title: 'G' } })).toEqual([
-      `${B}.frame[${FRAME}].W`,
-    ]);
-    expect(slices(TOOL.deleteFrame, { frame_id: FRAME })).toEqual([
-      `${B}.frame[${FRAME}].delete.W`,
+    expect(slicesOf(TOOL.commentListComments, { board: BOARD })).toEqual([
+      `miro.board[${BOARD}].comment[*].R`,
     ]);
   });
 
-  test('moving an item into a frame emits no frame slice', () => {
-    expect(slices(TOOL.updateStickyNote, { item_id: ITEM, parent_frame_id: FRAME })).toEqual([
-      `${B}.item[${ITEM}].W`,
-    ]);
-    expect(slices(TOOL.updateStickyNote, { item_id: ITEM, parent_frame_id: null })).toEqual([
-      `${B}.item[${ITEM}].W`,
-    ]);
+  test('a board named by its URL is the same board', () => {
+    expect(slicesOf(TOOL.prototypeRead, { board: BOARD_URL })).toEqual(
+      slicesOf(TOOL.prototypeRead, { board: BOARD }),
+    );
+    expect(
+      slicesOf(TOOL.prototypeRead, { board: `${BOARD_URL}?moveToWidget=${ITEM}&cot=14` }),
+    ).toEqual([`miro.board[${BOARD}].item[*].R`]);
   });
 
-  test('connectors, tags, bulk', () => {
-    expect(slices(TOOL.createConnector, { start_item_id: ITEM, end_item_id: ITEM_2 })).toEqual([
-      `${B}.connector.W`,
-    ]);
-    expect(slices(TOOL.updateConnector, { connector_id: CONNECTOR, shape: 'curved' })).toEqual([
-      `${B}.connector[${CONNECTOR}].W`,
-    ]);
-    expect(slices(TOOL.deleteConnector, { connector_id: CONNECTOR })).toEqual([
-      `${B}.connector[${CONNECTOR}].delete.W`,
-    ]);
-    expect(slices(TOOL.createTag, { title: 'Urgent' })).toEqual([`${B}.tag.W`]);
-    for (const tool of [TOOL.attachTag, TOOL.removeTag]) {
-      expect(slices(tool, { item_id: ITEM, tag_id: TAG })).toEqual([
-        `${B}.item[${ITEM}].tag-link[${TAG}].W`,
+  test('creating many items at once is a write and a bulk creation', () => {
+    for (const tool of [TOOL.canvasCreateFromSvg, TOOL.prototypeCreate]) {
+      const [sample] = SAMPLES[tool] ?? [];
+      expect(slicesOf(tool, sample?.args ?? {}), tool).toEqual([
+        `miro.board[${BOARD}].item.W`,
+        `miro.board[${BOARD}].item.bulk-create.W`,
       ]);
     }
-    expect(slices(TOOL.createItems, { items: [{ type: 'shape' }] })).toEqual([
-      `${B}.item.bulk-create.W`,
+  });
+
+  test('an update of the canvas may delete items and frames : both, on every call', () => {
+    expect(slicesOf(TOOL.canvasUpdateFromSvg, { board: BOARD, svg: '<svg/>' })).toEqual([
+      `miro.board[${BOARD}].item[*].W`,
+      `miro.board[${BOARD}].item[*].delete.W`,
+      `miro.board[${BOARD}].frame[*].delete.W`,
+    ]);
+    expect(
+      slicesOf(TOOL.canvasUpdateFromSvg, { board: BOARD, item_id: ITEM, svg: '<svg/>' })[0],
+    ).toBe(`miro.board[${BOARD}].item[${ITEM}].W`);
+  });
+
+  test('single creations, table edits and comments', () => {
+    expect(slicesOf(TOOL.imageCreate, { board: BOARD, image_url: 'https://e.com/a.png' })).toEqual([
+      `miro.board[${BOARD}].item.W`,
+    ]);
+    expect(slicesOf(TOOL.tableCreate, { board: BOARD, columns: [] })).toEqual([
+      `miro.board[${BOARD}].item.W`,
+    ]);
+    expect(slicesOf(TOOL.tableSyncRows, { board: BOARD, item_id: ITEM, rows: [] })).toEqual([
+      `miro.board[${BOARD}].item[${ITEM}].W`,
+    ]);
+    expect(slicesOf(TOOL.commentCreate, { board: BOARD, content: 'Hi' })).toEqual([
+      `miro.board[${BOARD}].comment.W`,
+    ]);
+    expect(slicesOf(TOOL.commentResolve, { board: BOARD, comment_id: COMMENT })).toEqual([
+      `miro.board[${BOARD}].comment[${COMMENT}].W`,
     ]);
   });
 
-  test('every sample slice reads back as itself', () => {
-    for (const [tool, samples] of Object.entries(SAMPLES)) {
-      for (const sample of samples) {
-        const out = classifyMiro(tool, sample.args, sample.resources ?? [workshop]);
-        if ('denied' in out) continue;
-        for (const s of out.slices) expect(serializeSlice(s)).toMatch(/^miro\.board\[/);
-      }
-    }
-  });
-});
-
-describe('board resolution', () => {
-  test('a board outside the mission is refused, never replaced by the single board', () => {
-    expect(denied(TOOL.getBoard, { board: OTHER_BOARD })).toBe(
-      `board '${OTHER_BOARD}' is not selected in this mission`,
-    );
-    const foreign: Resource = { provider: 'other', ref: OTHER_BOARD, displayName: 'Foreign' };
-    expect(denied(TOOL.getBoard, { board: OTHER_BOARD }, [workshop, foreign])).toBe(
-      `board '${OTHER_BOARD}' is not selected in this mission`,
-    );
-  });
-
-  test('absent : the single board ; none or several is refused', () => {
-    expect(slices(TOOL.getBoard, {})).toEqual([`${B}.R`]);
-    expect(denied(TOOL.getBoard, {}, [workshop, retro])).toBe(
-      'board: argument missing and the mission touches 2 Miro boards — name one',
-    );
-    expect(denied(TOOL.getBoard, {}, [])).toBe(
-      'board: argument missing and the mission touches no Miro board',
-    );
-    expect(denied(TOOL.listBoards, {}, [])).toBe('the mission touches no Miro board');
-  });
-
-  test('list_boards reads at most 50 boards', () => {
-    const many = Array.from({ length: 51 }, (_, i): Resource => ({
-      provider: PROVIDER_ID,
-      ref: `board${i}~`,
-      displayName: `B${i}`,
-    }));
-    expect(denied(TOOL.listBoards, {}, many)).toMatch(/at most 50/);
-    const fifty = slices(TOOL.listBoards, {}, many.slice(0, 50));
-    expect(fifty).toHaveLength(1);
-    expect(fifty[0]).toBe(
-      `miro.board[${many
-        .slice(0, 50)
-        .map((b) => b.ref)
-        .join(',')}].R`,
-    );
-  });
-
-  test('a malformed board is refused', () => {
-    expect(denied(TOOL.getBoard, { board: 42 })).toBe('board: malformed board ref');
-    expect(denied(TOOL.getBoard, { board: 'a b' })).toBe('board: malformed board ref');
+  test('a new board and the format guides name no board', () => {
+    expect(slicesOf(TOOL.boardCreate, { name: 'New' }, [])).toEqual(['miro.board.W']);
+    expect(slicesOf(TOOL.canvasComposerSkill, {}, [])).toEqual(['miro.format-guide.R']);
+    expect(slicesOf(TOOL.canvasFormatSkill, { format: 'kanban' }, [])).toEqual([
+      'miro.format-guide.R',
+    ]);
   });
 });
 
 describe('refusals', () => {
-  test('an unknown tool, an undeclared argument', () => {
-    const unknown = `${toolPrefixFor(PROVIDER_ID)}delete_board`;
-    expect(denied(unknown, {})).toBe(`unknown miro tool '${unknown}'`);
-    expect(denied(TOOL.getItem, { item_id: ITEM, assignee: 'x' })).toBe(
-      `assignee: not an argument of '${TOOL.getItem}' — nothing classifies it, so it is not sent.`,
-    );
-    // A card's `assigneeId` is a field of no allowlist.
-    expect(denied(TOOL.createCard, { data: { title: 'T', assigneeId: '123' } })).toMatch(
-      /^data\.assigneeId: not a field this tool sends to Miro/,
-    );
+  test('an unknown tool, and the tools left out of the plugin', () => {
+    expect(denial('miro__delete_board', {})).toMatch(/unknown tool/);
+    expect(denial('miro__board_search_boards', {})).toMatch(/unknown tool/);
+    expect(denial('miro__image_get_upload_url', {})).toMatch(/unknown tool/);
+    expect(denial('miro__user_who_am_i', {})).toMatch(/unknown tool/);
   });
 
-  test('missing ids', () => {
-    expect(denied(TOOL.getItem, {})).toBe('item_id: missing');
-    expect(denied(TOOL.deleteFrame, {})).toBe('frame_id: missing');
-    expect(denied(TOOL.getConnector, {})).toBe('connector_id: missing');
-    expect(denied(TOOL.attachTag, { item_id: ITEM })).toBe('tag_id: missing');
-  });
-
-  test('the objects forwarded to Miro are closed, flat and typed', () => {
-    expect(denied(TOOL.createStickyNote, { data: 'text' })).toBe('data: expected an object');
-    expect(denied(TOOL.createStickyNote, { data: ['x'] })).toBe('data: expected an object');
-    expect(denied(TOOL.createStickyNote, { style: { fontSize: '14' } })).toMatch(
-      /^style\.fontSize: not a field/,
-    );
-    expect(denied(TOOL.createStickyNote, { geometry: { rotation: 10 } })).toMatch(
-      /^geometry\.rotation: not a field/,
-    );
-    expect(denied(TOOL.createShape, { data: { content: { nested: true } } })).toBe(
-      'data.content: expected a string, a number, a boolean or null',
-    );
-    expect(denied(TOOL.createShape, { position: { x: 0, y: 0, origin: 'center' } })).toMatch(
-      /^position\.origin: not a field/,
-    );
-    expect(denied(TOOL.createShape, { data: { 'bad key': 1 } })).toMatch(
-      /^data\.a field with a malformed name: not a field/,
-    );
-  });
-
-  test('required content, a frame without parent, an empty update', () => {
-    expect(denied(TOOL.createText, {})).toBe('data: required to create a text');
-    expect(denied(TOOL.createText, { data: {} })).toBe('data.content: required to create a text');
-    expect(denied(TOOL.createFrame, {})).toBe('data: required to create a frame');
-    expect(denied(TOOL.updateCard, { item_id: ITEM })).toMatch(/^nothing to change/);
-    expect(denied(TOOL.updateConnector, { connector_id: CONNECTOR })).toMatch(/^nothing to change/);
-    // The frame tools do not declare parent_frame_id at all.
-    expect(denied(TOOL.createFrame, { data: {}, parent_frame_id: FRAME })).toMatch(
-      /^parent_frame_id: not an argument/,
-    );
-  });
-
-  test('connectors : distinct ends, snap and shape values, captions', () => {
-    expect(denied(TOOL.createConnector, { start_item_id: ITEM, end_item_id: ITEM })).toBe(
-      'end_item_id: must differ from start_item_id',
-    );
-    expect(denied(TOOL.createConnector, { start_item_id: ITEM })).toBe('end_item_id: missing');
+  test('an argument the schema does not declare — miro_url above all : the gateway writes it', () => {
     expect(
-      denied(TOOL.createConnector, { start_item_id: ITEM, end_item_id: ITEM_2, end_snap_to: 'up' }),
-    ).toMatch(/^end_snap_to: expected one of/);
-    expect(denied(TOOL.updateConnector, { connector_id: CONNECTOR, start_snap_to: 'top' })).toBe(
-      'start_snap_to: give start_item_id with it',
-    );
-    expect(
-      denied(TOOL.createConnector, { start_item_id: ITEM, end_item_id: ITEM_2, shape: 'zigzag' }),
-    ).toMatch(/^shape: expected one of/);
-    const tooMany = Array.from({ length: 21 }, () => ({ content: 'c' }));
-    expect(
-      denied(TOOL.createConnector, { start_item_id: ITEM, end_item_id: ITEM_2, captions: tooMany }),
-    ).toMatch(/^captions: expected a list of at most 20/);
-    expect(
-      denied(TOOL.createConnector, {
-        start_item_id: ITEM,
-        end_item_id: ITEM_2,
-        captions: [{ content: 'x'.repeat(201) }],
+      denial(TOOL.canvasReadAsSvg, {
+        board: BOARD,
+        miro_url: 'https://miro.com/app/board/o9J_kzlUDmo=/',
       }),
-    ).toMatch(/^captions\[0\]\.content: expected a text of at most 200/);
-    expect(
-      denied(TOOL.createConnector, {
-        start_item_id: ITEM,
-        end_item_id: ITEM_2,
-        captions: [{ content: 'ok', color: 'red' }],
-      }),
-    ).toMatch(/^captions\[0\]\.color: not a field/);
+    ).toMatch(/miro_url: not an argument/);
+    expect(denial(TOOL.canvasSearch, { board: BOARD, team_id: '1' })).toMatch(/team_id/);
   });
 
-  test("Miro's bounds : limits, offset, type, tag title and colour", () => {
-    expect(denied(TOOL.listItems, { limit: 5 })).toBe('limit: expected an integer from 10 to 50');
-    expect(denied(TOOL.listItems, { limit: '20' })).toBe(
-      'limit: expected an integer from 10 to 50',
+  test('a board outside the mission, or not a board at all', () => {
+    expect(denial(TOOL.canvasSearch, { board: OTHER_BOARD })).toMatch(
+      /not a board of this mission/,
     );
-    expect(denied(TOOL.listConnectors, { limit: 51 })).toBe(
-      'limit: expected an integer from 10 to 50',
+    expect(denial(TOOL.canvasSearch, {})).toMatch(/expected a board ref/);
+    for (const hostile of [
+      'uXjVOD6LSME=',
+      'https://miro.com.evil.example/app/board/uXjVOD6LSME=/',
+      'http://miro.com/app/board/uXjVOD6LSME=/',
+      'https://user@miro.com/app/board/uXjVOD6LSME=/',
+      'https://miro.com:444/app/board/uXjVOD6LSME=/',
+      'https://miro.com/app/board/uXjVOD6LSME=/extra',
+      'https://miro.com/app/board/../uXjVOD6LSME=/',
+      '*',
+      42,
+    ]) {
+      expect(denial(TOOL.canvasSearch, { board: hostile }), String(hostile)).toMatch(
+        /expected a board ref/,
+      );
+    }
+  });
+
+  test('item and comment ids pass their grammar ; a required item is required', () => {
+    expect(denial(TOOL.imageGetUrl, { board: BOARD })).toMatch(/item_id: required/);
+    expect(denial(TOOL.imageGetUrl, { board: BOARD, item_id: 3458764517517819000 })).toMatch(
+      /numeric Miro item id/,
     );
-    expect(denied(TOOL.listTags, { limit: 0 })).toBe('limit: expected an integer from 1 to 50');
-    expect(denied(TOOL.listTags, { offset: -1 })).toBe(
-      'offset: expected an integer from 0 to 10000',
+    expect(denial(TOOL.imageGetUrl, { board: BOARD, item_id: '1&focusWidget=2' })).toMatch(
+      /numeric Miro item id/,
     );
-    expect(denied(TOOL.listItems, { type: 'connector' })).toMatch(/^type: expected one of/);
-    expect(denied(TOOL.listItems, { parent_frame_id: 'x' })).toBe('parent_frame_id: malformed id');
-    expect(denied(TOOL.createTag, { title: '' })).toMatch(/^title: expected a text of 1 to 120/);
-    expect(denied(TOOL.createTag, { title: 'x'.repeat(121) })).toMatch(/^title:/);
-    expect(denied(TOOL.createTag, { title: 'ok', fill_color: 'pink' })).toMatch(
-      /^fill_color: expected one of/,
+    expect(denial(TOOL.commentReply, { board: BOARD, comment_id: '../x', content: 'a' })).toMatch(
+      /comment_id/,
     );
   });
 
-  test('bulk : 1 to 20 elements of the four item types, each closed like its typed tool', () => {
-    expect(denied(TOOL.createItems, {})).toBe('items: expected a list of 1 to 20 items');
-    expect(denied(TOOL.createItems, { items: [] })).toBe('items: expected a list of 1 to 20 items');
-    const many = Array.from({ length: 21 }, () => ({ type: 'shape' }));
-    expect(denied(TOOL.createItems, { items: many })).toBe(
-      'items: expected a list of 1 to 20 items',
+  test("Miro's own arguments : required ones, and their JSON type", () => {
+    expect(denial(TOOL.canvasCreateFromSvg, { board: BOARD })).toMatch(/svg: required/);
+    expect(denial(TOOL.canvasCreateFromSvg, { board: BOARD, svg: 3 })).toMatch(
+      /svg: expected string/,
     );
-    expect(denied(TOOL.createItems, { items: ['x'] })).toBe('items[0]: expected an object');
-    expect(denied(TOOL.createItems, { items: [{ type: 'frame', data: {} }] })).toBe(
-      'items[0].type: expected one of sticky_note, shape, text, card',
-    );
-    expect(denied(TOOL.createItems, { items: [{ type: 'image', data: { url: 'x' } }] })).toMatch(
-      /^items\[0\]\.type/,
-    );
-    expect(denied(TOOL.createItems, { items: [{ type: 'shape', parent: { id: FRAME } }] })).toMatch(
-      /^items\[0\]\.parent: not a field of an item/,
+    expect(denial(TOOL.tableSyncRows, { board: BOARD, item_id: ITEM, rows: {} })).toMatch(
+      /rows: expected array/,
     );
     expect(
-      denied(TOOL.createItems, {
-        items: [{ type: 'shape' }, { type: 'card', data: { assigneeId: '1' } }],
-      }),
-    ).toMatch(/^items\[1\]\.data\.assigneeId: not a field/);
-    expect(denied(TOOL.createItems, { items: [{ type: 'text' }] })).toBe(
-      'items[0].data: required to create a text',
-    );
+      denial(TOOL.commentResolve, { board: BOARD, comment_id: COMMENT, resolved: 'yes' }),
+    ).toMatch(/resolved: expected boolean/);
+  });
+
+  test('list_boards with no board in the mission', () => {
+    expect(denial(TOOL.listBoards, {}, [])).toMatch(/no Miro board/);
   });
 });
