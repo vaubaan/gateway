@@ -5115,7 +5115,7 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   Two runs never overlap. The schedule: a missed run made up one minute after the
   start, then the slots; a recent attempt waits for the next slot; off without a
   bucket.
-- **`src/server/backup/cipher.test.ts`** (21) — the file format: round trips at the
+- **`src/server/crypto/backup-file.test.ts`** (21) — the file format: round trips at the
   chunk boundaries, the header, the previous key, a missing version, a wrong key, and
   every alteration (bit flip, header edit, truncation, swap, append) refused.
 - **`src/server/backup/s3/sigv4.test.ts`** (6) — the S3 documentation's SigV4 examples

@@ -153,7 +153,9 @@ function nonceOf(index: number, final: boolean): Buffer {
 }
 
 function sealChunk(key: Buffer, header: Buffer, index: number, final: boolean, plain: Buffer) {
-  const cipher = createCipheriv('aes-256-gcm', key, nonceOf(index, final));
+  const cipher = createCipheriv('aes-256-gcm', key, nonceOf(index, final), {
+    authTagLength: TAG_BYTES,
+  });
   cipher.setAAD(header);
   return Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
 }
@@ -166,7 +168,9 @@ function openChunk(
   sealed: Buffer,
 ): Buffer {
   if (sealed.length < TAG_BYTES) throw new BackupCipherError('the backup is cut short');
-  const decipher = createDecipheriv('aes-256-gcm', key, nonceOf(index, final));
+  const decipher = createDecipheriv('aes-256-gcm', key, nonceOf(index, final), {
+    authTagLength: TAG_BYTES,
+  });
   decipher.setAAD(header);
   decipher.setAuthTag(sealed.subarray(sealed.length - TAG_BYTES));
   try {

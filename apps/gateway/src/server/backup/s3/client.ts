@@ -284,9 +284,13 @@ function metaHeaders(metadata: Readonly<Record<string, string>>): Record<string,
 
 /** The text of the first `<tag>…</tag>`, XML entities decoded, or `null`. */
 export function tagValue(xml: string, tag: string): string | null {
-  const match = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(xml);
-  if (!match) return null;
-  return (match[1] ?? '')
+  const open = `<${tag}>`;
+  const start = xml.indexOf(open);
+  if (start < 0) return null;
+  const end = xml.indexOf(`</${tag}>`, start + open.length);
+  if (end < 0) return null;
+  return xml
+    .slice(start + open.length, end)
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'")
     .replace(/&lt;/g, '<')

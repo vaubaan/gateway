@@ -4,7 +4,7 @@
  *
  *   copy       `VACUUM INTO` a temporary file of the store's directory, the sign-in
  *              configuration carried in, `integrity_check` ok (`writeStoreCopy`);
- *   encrypt    the copy under a key derived from the master key (`cipher.ts`), then the
+ *   encrypt    the copy under a key derived from the master key (`crypto/backup-file.ts`), then the
  *              plain copy is removed;
  *   self-check the restore's own dry run on the encrypted bytes, with their SHA-256:
  *              opened, integrity checked, migrations compared, every sealed blob opened;
@@ -27,7 +27,7 @@ import type { Logger } from '../logging';
 import { RestoreError, restoreStore } from '../restore/restore';
 import type { Store } from '../store';
 import { MEMORY_PATH } from '../store/db';
-import { BackupCipherError, encryptBackupFile } from './cipher';
+import { BackupCipherError, encryptBackupFile } from '../crypto/backup-file';
 import { CopyWriteError, writeStoreCopy } from './copy';
 import { S3Client, S3Error } from './s3/client';
 import { amzDate } from './s3/sigv4';

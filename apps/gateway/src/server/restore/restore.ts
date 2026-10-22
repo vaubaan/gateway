@@ -40,7 +40,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-import { BackupCipherError, decryptBackupFile, isEncryptedBackupFile } from '../backup/cipher';
+import { BackupCipherError, decryptBackupFile, isEncryptedBackupFile } from '../crypto/backup-file';
 import type { RestoreSource } from '../config/restore-source';
 import type { EncryptionKeys } from '../config/types';
 import type { Encryptor } from '../crypto';

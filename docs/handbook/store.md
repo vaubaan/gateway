@@ -17,6 +17,7 @@ tracks:
   - apps/gateway/src/server/store/repositories/pending-refs.ts
   - apps/gateway/src/server/restore/
   - apps/gateway/src/server/backup/
+  - apps/gateway/src/server/crypto/backup-file.ts
   - apps/gateway/tests/integration/restore/
   - apps/gateway/tests/integration/backup/
 ---
@@ -809,13 +810,15 @@ itself up to an S3-compatible bucket on a schedule.
 ```
 apps/gateway/src/server/backup/
   copy.ts         writeStoreCopy(): VACUUM INTO, sign-in carried, backup.status removed, read back
-  cipher.ts       the encrypted file, format vaubaan-backup v1: encryptBackupFile / decryptBackupFile
   status.ts       BackupStatus, the record in instance_config `backup.status` (JSON)
   scheduled.ts    BackupService: the timer, runOnce(), prune, health(), view(); nextRunAfter()
   s3/sigv4.ts     AWS Signature Version 4 (node:crypto)
   s3/client.ts    S3Client: PutObject, multipart, ListObjectsV2, DeleteObject; S3Error
   index.ts        createBackupModule() → root.backup
   cli.ts, main.ts the `backup` command (above)
+apps/gateway/src/server/crypto/
+  backup-file.ts  the encrypted file, format vaubaan-backup v1: encryptBackupFile / decryptBackupFile
+                  (in the crypto module, like every cipher and key derivation)
 ```
 
 **The schedule.** `root.backup.start()` runs at boot (after the master-key module) and
@@ -849,7 +852,7 @@ and waits for a run in progress.
    Anything else under the prefix is left alone. A failure here is recorded as
    `pruneError` and does not fail the run.
 
-**The file format** (`cipher.ts`): header `"VAUBAAN-BACKUP"` ‖ `0x01` ‖ key version K
+**The file format** (`crypto/backup-file.ts`): header `"VAUBAAN-BACKUP"` ‖ `0x01` ‖ key version K
 (u32 BE) ‖ salt (32 random bytes) ‖ chunk size (u32 BE, 1 MiB) ‖ n (u8) ‖ n sealed key
 versions (u32 BE); then chunks of AES-256-GCM (`ciphertext ‖ tag`), nonce = chunk index
 (u64 BE) ‖ final flag (u32 BE), associated data = the header; file key =
@@ -977,7 +980,7 @@ The Docker smoke test runs the command and the first-boot restore in the image
 
 ## Tests
 
-- `src/server/backup/cipher.test.ts` (21) — round trips at 0, 1, a chunk minus one, a
+- `src/server/crypto/backup-file.test.ts` (21) — round trips at 0, 1, a chunk minus one, a
   chunk, a chunk plus one and several chunks; the header (key version, chunk size, sealed
   versions); a SQLite file is not an encrypted backup; two encryptions differ; the
   previous key opens a backup made under it; a missing version refused by name; a wrong

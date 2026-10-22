@@ -765,7 +765,7 @@ Sign-in, connections, missions, audit, store and caches:
 | A scheduled backup made up after a missed slot          | 1 min after the boot | `CATCH_UP_DELAY_MS`                             | `backup/scheduled.ts`                             |
 | Largest backup uploaded in one PUT; multipart part size | 64 MiB; 16 MiB       | `SINGLE_PUT_MAX_BYTES`, `MULTIPART_PART_BYTES`  | `backup/scheduled.ts`                             |
 | One upload request; any other request to the storage    | 10 min; 60 s         | `S3_UPLOAD_TIMEOUT_MS`, `S3_REQUEST_TIMEOUT_MS` | `backup/s3/client.ts`                             |
-| Chunk of an encrypted backup                            | 1 MiB                | `BACKUP_CHUNK_BYTES`                            | `backup/cipher.ts`                                |
+| Chunk of an encrypted backup                            | 1 MiB                | `BACKUP_CHUNK_BYTES`                            | `crypto/backup-file.ts`                           |
 | Download of a restore, start to end                     | 30 min               | `DOWNLOAD_TIMEOUT_MS`                           | `restore/restore.ts`                              |
 | Redirects a restore download follows (each to https)    | 5                    | `MAX_REDIRECTS`                                 | `restore/restore.ts`                              |
 | Entries of the in-memory cache                          | 10 000               | `DEFAULT_MAX_ENTRIES`                           | `packages/gateway-core/src/cache.ts`              |

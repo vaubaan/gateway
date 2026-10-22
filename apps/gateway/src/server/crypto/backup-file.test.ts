@@ -18,7 +18,7 @@ import {
   encryptBackupFile,
   isEncryptedBackupFile,
   readBackupHeader,
-} from './cipher';
+} from './backup-file';
 
 const CHUNK = 64;
 
