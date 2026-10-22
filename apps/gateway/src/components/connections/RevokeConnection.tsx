@@ -18,7 +18,7 @@ export function RevokeConnection({
 }: {
   action: string;
   name: string;
-  /** How many missions use the account and still run: they stop for good. */
+  /** How many running missions use the account: they lose it for good. */
   running: number;
   /** What disconnecting does to the access granted at the service, in one or two sentences. */
   atProvider: string;
@@ -46,8 +46,9 @@ export function RevokeConnection({
               The stored credential is erased, and{' '}
               {running === 0
                 ? 'no mission uses this account today'
-                : `the ${count(running, TERMS.mission)} that ${running === 1 ? 'uses' : 'use'} this account ${running === 1 ? 'stops' : 'stop'} for good`}
-              . This cannot be undone: to use the service again you connect a new account.
+                : `the ${count(running, TERMS.mission)} that ${running === 1 ? 'uses' : 'use'} this account ${running === 1 ? 'loses' : 'lose'} it for good: one that uses only this account stops, one that uses others keeps running on them`}
+              . This cannot be undone: to use the service again you connect a new account, and
+              create new missions on it.
               <br />
               <br />
               {atProvider}

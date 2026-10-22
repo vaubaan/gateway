@@ -197,11 +197,12 @@ describe('execution door: the call pipeline', () => {
   });
 
   describe('structured refusals — every code, every field, the hint', () => {
-    it('covers the eight codes of the spec', () => {
+    it('covers the nine codes of the spec', () => {
       expect([...REFUSAL_CODES].sort()).toEqual(
         [
           'approval-required',
           'budget-exhausted',
+          'connection-revoked',
           'connection-unavailable',
           'mission-inactive',
           'rate-limited',
@@ -413,7 +414,7 @@ describe('execution door: the call pipeline', () => {
       expect(await consumed(mission, READ)).toBe(0);
     });
 
-    it('mission-inactive: a revoked connection orphans the missions that carry it, as a derived state (spec §7.8)', async () => {
+    it('mission-inactive: a revoked connection orphans a mission it was the only connection of, as a derived state (spec §7.8)', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
       // Revoked behind the services' back: the door's own re-check must see it.
       await instance.root.store.connections.revoke(instance.connection.id);

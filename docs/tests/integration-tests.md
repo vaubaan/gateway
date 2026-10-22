@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-20
+last_synced: 2026-10-21
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -133,7 +133,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/auth/sign-in-providers.test.ts`                                                                         |        10 |
 | `apps/gateway/src/server/auth/verified-email.test.ts`                                                                            |         5 |
 | `apps/gateway/src/server/authority/authority-service.test.ts`                                                                    |        20 |
-| `apps/gateway/src/server/authority/mission-grounds.test.ts`                                                                      |        27 |
+| `apps/gateway/src/server/authority/mission-grounds.test.ts`                                                                      |        34 |
 | `apps/gateway/src/server/backup/carry-sign-in.test.ts`                                                                           |         3 |
 | `apps/gateway/src/server/backup/cli.test.ts`                                                                                     |         3 |
 | `apps/gateway/src/server/compose/boot-config.test.ts`                                                                            |        10 |
@@ -160,7 +160,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                |        16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                                            |        24 |
 | `apps/gateway/src/server/connections/shipped-providers.test.ts`                                                                  |         8 |
-| `apps/gateway/src/server/connections/token-connections.test.ts`                                                                  |         6 |
+| `apps/gateway/src/server/connections/token-connections.test.ts`                                                                  |         7 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                                                                                    |        12 |
 | `apps/gateway/src/server/crypto/master-key-file.test.ts`                                                                         |         7 |
 | `apps/gateway/src/server/crypto/password.test.ts`                                                                                |         4 |
@@ -251,6 +251,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/authority/missions-on-connection.test.ts`                                                        |         8 |
 | `apps/gateway/tests/integration/authority/ownership.test.ts`                                                                     |        13 |
 | `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                                           |         7 |
+| `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                             |         6 |
 | `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                                              |        19 |
 | `apps/gateway/tests/integration/authority/share-restores.test.ts`                                                                |        11 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                                             |         6 |
@@ -281,7 +282,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                                                   |        13 |
 | `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                                                 |        37 |
 | `apps/gateway/tests/integration/git/git-remote-workflows.test.ts`                                                                |         8 |
-| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                                          |        16 |
+| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                                          |        17 |
 | `apps/gateway/tests/integration/import-v4/import-v4.test.ts`                                                                     |        15 |
 | `apps/gateway/tests/integration/instance/instance-name.test.ts`                                                                  |         7 |
 | `apps/gateway/tests/integration/instance/master-key-handover.test.ts`                                                            |         8 |
@@ -379,9 +380,9 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/gateway-core/tests/unit/audit.test.ts`                                                                                 |         2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                                                                          |        11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                                                                 |         7 |
-| `packages/gateway-core/tests/unit/errors.test.ts`                                                                                |        32 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                                                                                |        34 |
 | `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                                           |        12 |
-| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                                              |        38 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                                              |        39 |
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                                          |         9 |
 | `packages/gateway-core/tests/unit/token-holder.test.ts`                                                                          |         3 |
 | `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                                               |        10 |
@@ -523,13 +524,15 @@ this table says where each requirement lives, and what is not written yet.
 | `scripts/export-v4.test.mjs`                                                                                                     |        16 |
 | `scripts/lockfile-gate.test.mjs`                                                                                                 |        12 |
 | `scripts/release-lib.test.mjs`                                                                                                   |        55 |
-| **TOTAL** (`npx vitest run` per project, 2026-10-20, after the rebase on main, with a build; 414 files; 11731 passed, 1 skipped) | **11732** |
+| **TOTAL** (`npx vitest run` per project, 2026-10-20, with a build; 414 files; 11731 passed, 1 skipped; + 18 tests on 2026-10-21) | **11750** |
 
 The table is generated from the JSON reports of one run of each project
 (`npx vitest run --project shared --reporter=json`, then `--project isolated`).
 A count is the number of tests the file declares, `it.each` expanded,
 **skipped tests included**: the TOTAL is the reports' number of tests, of
-which 11731 ran and 1 was skipped in that run, made with a build (as
+which 11731 ran and 1 was skipped in that run (the 18 tests of the lost-part
+change of 2026-10-21 — six of them in a new file — are added by hand to the
+rows they belong to), made with a build (as
 `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -749,7 +752,7 @@ npx vitest run packages/policy-engine     # one package
 ## Scenarios — Shared
 
 > Covers: `packages/shared/src/` — the risk-id grammar, the MCP tool-name
-> convention and the eight refusal codes (`vaubaan-gateway.md` §4.1, §6),
+> convention and the nine refusal codes (`vaubaan-gateway.md` §4.1, §6),
 > the token format, the session event details, the data-model check. Suites
 > co-located with the source.
 
@@ -758,7 +761,7 @@ npx vitest run packages/policy-engine     # one package
   round-trip and null/empty env; `baseRiskId`; `isProviderId`;
   `isExplicitRiskId` (wildcards rejected).
 - **`mcp.test.ts`** (10) — `toolPrefixFor` / `splitToolName` (hyphen ↔
-  underscore, first separator only, malformed names); the eight refusal
+  underscore, first separator only, malformed names); the nine refusal
   codes of spec §4.1 and §6; `isRefusalCode`.
 - **`api-key.test.ts`** (12) — `generateApiKey` for `live` and `test`
   (`vbn_live_<8>_<32>` / `vbn_test_<8>_<32>`, the prefix being part of the
@@ -1237,8 +1240,9 @@ enforced limits is pinned to what the code enforces today.
   The decision is
   unchanged since v4; its inputs are the v5 `Resource[]` and the plugin's
   `classify`.
-- **`errors.test.ts`** (32) — the eight refusal codes: exactly eight in
-  `REFUSAL_CODES`, one builder sample per code, every field of every code,
+- **`errors.test.ts`** (34) — the nine refusal codes: exactly nine in
+  `REFUSAL_CODES`, one builder sample per code; `connection-revoked` says
+  whether the account comes back and to keep using the other accounts; every field of every code,
   `hint` non-empty and serializable, `isRefusal` guard, JSON-RPC mapping
   (`-32603`, refusal in `data`, code in the message); `mission-inactive` for
   an orphaned mission tells how long an earlier request stays grantable;
@@ -1267,9 +1271,11 @@ enforced limits is pinned to what the code enforces today.
   token at execution, session at either) → `wrong-credential-kind` with
   door/presented/expected; `parseBearer`; `DoorAuthenticator` end to end;
   unknown bearer → `AuthError`, not a refusal.
-- **`pipeline.test.ts`** (38) — `checkMissionActive` (status, passed and
+- **`pipeline.test.ts`** (39) — `checkMissionActive` (status, passed and
   future `expires_at`, **an unreadable `expires_at` is expired: the check
-  fails closed**), `checkConnectionAvailable`; `CallPipeline` over a
+  fails closed**), `checkConnectionAvailable` (`expired` →
+  `connection-unavailable`; `revoked` or marked `lost` →
+  `connection-revoked`, with its cause and `final`); `CallPipeline` over a
   context built from the shared types (`ConnectionResource`, policy entry
   list, one-off period): happy path with the full audit entry, inactive
   mission refused before anything else, `resource-not-in-mission` before
@@ -2441,12 +2447,14 @@ Integration:
   call `connection-unavailable`; revoking it asks GitHub nothing and says
   where to delete the token.
 - Unit, beside the code: `src/server/connections/token-connections.test.ts`
-  (6: the token offered at once with the plugin's guide and nothing for an
+  (7: the token offered at once with the plugin's guide and nothing for an
   administrator to declare, a pasted token's check and what is kept, a
   rejected or expired token storing nothing, **an account made a way the
   plugin no longer offers** — an `oauth2` secret of an earlier build — read
-  with no withdrawal and reconnected with a token on the same id, no refresh
-  for a token, no withdrawal for a token),
+  with no withdrawal and reconnected with a token on the same id, and **an
+  `app-install` account of the removed GitHub App** — a blob that no longer
+  decodes — reconnected with a token on the same id without the blob being
+  read; no refresh for a token, no withdrawal for a token),
   `src/server/execution/execution.test.ts` ("an account connected a way the
   plugin no longer offers": left out of `tools/list`, refused by the resource
   stage naming the account and the kind, until its owner reconnects it),
@@ -2927,9 +2935,12 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
     `allowed_resources`; before any risk — the entry has no slice),
     `rate-limited` (`risk_id`, `limit`, `retry_after_seconds`; quota intact),
     `connection-unavailable` (expired connection, its name, the owner's
-    email), `mission-inactive` (a revoked connection orphans the missions
-    that carry it, as a derived state — the `missions` row stays `active`;
-    a revoked mission, an expired one; also on `tools/list`).
+    email), `mission-inactive` (a revoked connection orphans a mission it
+    was the only connection of, as a derived state — the `missions` row
+    stays `active`; a revoked mission, an expired one; also on
+    `tools/list`); `connection-revoked` on a mission that keeps serving
+    through its other connections is in "Scenarios — Authority"
+    (`revoked-connection-drops-its-part.test.ts`).
   - _resource selection_: a selected resource gone stale is refused naming
     it while a hidden one still works; a mission stored `all` with an empty
     list covers nothing, including a resource discovered later, and still
@@ -3091,7 +3102,9 @@ reaches github.com.
   empty, no end, too long refused; **a property test over 3000 generated
   heads**); the listing filters (the capabilities moved off a hidden first
   ref, the placeholder line, v2 untouched, `ls-refs`).
-- **`tests/integration/git/git-remote.test.ts`** (16) — clone with protocol v2
+- **`tests/integration/git/git-remote.test.ts`** (17) — a clone through a
+  revoked account of a mission that still serves its others is refused with
+  the `connection-revoked` line, the other account still served; clone with protocol v2
   (the header relayed) and v0, the key never upstream, a read token for one
   repository, one `github__git_fetch` entry; a fetch after an upstream push; a
   repository outside the mission named; a feature branch pushed (risks
@@ -3242,8 +3255,17 @@ Unit, beside the code (102):
   once for several group-owned connections; the uncovered ids per connection
   with the basis left (`share` or `none`); nothing asked where nothing was
   accepted; a removed user; a membership change seen on the next check.
-- **`src/server/authority/mission-grounds.test.ts`** (27) — **the `orphaned`
-  derivation**: grounded for the owner and for a covered beneficiary;
+- **`src/server/authority/mission-grounds.test.ts`** (34) — **the `orphaned`
+  derivation** and **the lost parts** (ADR
+  [[orphaned-missions-and-ownerless-connections]], amendment 2026-10-21): a
+  revoked connection of a two-connection mission is a lost part and the
+  mission stays `active`; every connection revoked → orphaned
+  `connection-revoked`; a withdrawn access as the last part → orphaned
+  `authority-lost`; **a narrowed share and a removed creator still orphan the
+  whole mission**; the revocation audited as `mission-connection-lost`
+  (`newly_lost`, the owner named); a withdrawn access comes back with a new
+  share (`forecastShare` lists it, `mission-connection-restored`), and the
+  same connection revoked afterwards is a new loss. Then grounded for the owner and for a covered beneficiary;
   `authority-lost` naming the connection and the uncovered risks (share
   narrowed; creator dropped from the owner group); `connection-revoked` even
   for the owner; **an expired or unowned connection does not orphan**;
@@ -3391,7 +3413,23 @@ operator):
   is granted once the authority is back. **An orphaned mission takes no gate
   edit** (`inactive`), its creator revokes it, and a share made again does
   not bring a revoked mission back. A removed creator. A revoked connection orphans every
-  mission that carries it, the owner's included. Audit visibility: the owner
+  mission it was the only connection of, the owner's included.
+- **`revoked-connection-drops-its-part.test.ts`** (6) — **a revoked connection
+  removes only its part of a mission** (spec §2.3, §4.1, §7.8): through the
+  connection service, on a Depot + Acme mission, a Depot call is refused
+  `connection-revoked` (`final: true`, the hint pointing to the other
+  accounts, nothing executed) while an Acme call is served; `tools/list`
+  drops the Depot tools; the catalog marks the connection `lost`; the mission
+  page reads `active` with `lost` and `MissionDetailConnection.lost`, the kit
+  no longer names the account, `list_my_missions` carries
+  `lost_connections`; one `mission-connection-lost` entry names the owner and
+  no `mission-orphaned`; **nothing widens** — a permission added on the lost
+  connection is refused and `permissionOptions` offers none there; both
+  connections revoked → `mission-inactive` (`orphaned`) and one
+  `mission-orphaned`; **a share withdrawn on one connection** takes that part
+  (`partsLost: 1`, `connection-revoked` with `cause: 'access-withdrawn'`,
+  `final: false`) and a share made again gives it back
+  (`mission-connection-restored`, same token). Audit visibility: the owner
   reads the share acts, the creator the orphaning, an operator all. **No
   transitive sharing**: a beneficiary who shares, lists or revokes reads "not
   found"; every member of an owner group shares. **A request on an

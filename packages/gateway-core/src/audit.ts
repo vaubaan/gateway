@@ -144,6 +144,14 @@ export type AdminAct =
    *  or added a group member, the user whose sign-in carried the group again);
    *  `before` carries the cause the mission was orphaned for. */
   | 'mission-restored'
+  /** A connection of a mission that keeps serving through its others stopped serving it
+   *  (ADR orphaned-missions-and-ownerless-connections, amendment 2026-10-21): it was
+   *  revoked, or the creator's access to it was withdrawn. The entry names the human
+   *  whose act did it; `after.newly_lost` lists the connections and their cause. */
+  | 'mission-connection-lost'
+  /** A connection whose access had been withdrawn serves a mission again (a share made
+   *  again, a membership back). `after.restored` lists the connections. */
+  | 'mission-connection-restored'
   | 'budget-extended'
   | 'period-reset'
   | 'expiry-extended'

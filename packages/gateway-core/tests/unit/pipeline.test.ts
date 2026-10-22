@@ -256,15 +256,25 @@ describe('checkConnectionAvailable', () => {
     expect(checkConnectionAvailable({ ...connection, status: 'unowned' })).toBeNull();
   });
 
-  test('expired and revoked refuse naming the owner', () => {
-    for (const status of ['expired', 'revoked'] as const) {
-      const r = checkConnectionAvailable({ ...connection, status });
-      expect(r?.code).toBe('connection-unavailable');
-      if (r?.code === 'connection-unavailable') {
-        expect(r.status).toBe(status);
-        expect(r.owner.display).toBe('ana@example.test');
-      }
+  test('expired refuses naming the owner who reconnects it', () => {
+    const r = checkConnectionAvailable({ ...connection, status: 'expired' });
+    expect(r?.code).toBe('connection-unavailable');
+    if (r?.code === 'connection-unavailable') {
+      expect(r.status).toBe('expired');
+      expect(r.owner.display).toBe('ana@example.test');
     }
+  });
+
+  test('revoked, or lost to the mission, refuses connection-revoked', () => {
+    const revoked = checkConnectionAvailable({ ...connection, status: 'revoked' });
+    expect(revoked).toMatchObject({ code: 'connection-revoked', final: true });
+    const withdrawn = checkConnectionAvailable({ ...connection, lost: 'access-withdrawn' });
+    expect(withdrawn).toMatchObject({
+      code: 'connection-revoked',
+      cause: 'access-withdrawn',
+      final: false,
+      connection: { id: connection.id },
+    });
   });
 });
 

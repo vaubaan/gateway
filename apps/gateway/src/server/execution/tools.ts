@@ -8,7 +8,9 @@
  * the branch, the path, the environment), so a finer static filter would
  * either hide callable tools or need a contract the plugins do not have. A
  * listed tool can therefore still be refused `risk-not-accepted` at call time.
- * Experimental plugins list nothing (`ProviderPlugin.experimental`).
+ * Experimental plugins list nothing (`ProviderPlugin.experimental`). A
+ * connection whose part of the mission is lost (`MissionConnection.lost`) lists
+ * nothing either: every call through it is refused `connection-revoked`.
  *
  * `GET /mcp/catalog` is the agent's source of discovery for upstream refs: the
  * whole tool surface of the instance with a `callable` flag, the connections
@@ -18,7 +20,7 @@
  * Xavier's token on mission X" (spec §0 "Mission token": the holder is
  * authenticated).
  */
-import { tokenHolderLabel, type MissionContext } from '@vaubaan/gateway-core';
+import { tokenHolderLabel, type ConnectionLoss, type MissionContext } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { unavailableReason } from './resource-stage';
@@ -33,14 +35,22 @@ import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 import type { CurrentPeriod, MissionState } from '../budget';
 
-/** Providers for which the mission holds a connection and accepts at least one risk. */
+/**
+ * Providers for which the mission holds a connection that still serves it (not lost:
+ * revoked, or the creator's access withdrawn) and accepts at least one risk.
+ */
 export function callableProviders(ctx: MissionContext): Set<string> {
   const accepted = new Set<string>();
   for (const entry of ctx.policy) {
     const parsed = parseRiskId(entry.risk_id);
     if (parsed) accepted.add(parsed.provider);
   }
-  return new Set(ctx.connections.map((c) => c.provider).filter((p) => accepted.has(p)));
+  return new Set(
+    ctx.connections
+      .filter((c) => !c.lost)
+      .map((c) => c.provider)
+      .filter((p) => accepted.has(p)),
+  );
 }
 
 /** What `tools/list` returns for the mission. */
@@ -94,6 +104,12 @@ export interface CatalogConnection {
   readonly provider: string;
   readonly name: string;
   readonly status: ConnectionStatus;
+  /**
+   * Set when the connection no longer serves this mission: `connection-revoked` (for
+   * good) or `access-withdrawn` (the creator's access; it may come back). Its tools
+   * are not callable. Absent: it serves.
+   */
+  readonly lost?: ConnectionLoss;
   readonly resources: readonly CatalogResource[];
 }
 
@@ -181,6 +197,7 @@ export function buildCatalog(
       provider: connection.provider,
       name: connection.display_name,
       status: connection.status,
+      ...(connection.lost ? { lost: connection.lost } : {}),
       resources: ctx.resources
         .filter((r) => r.connection_id === connection.id)
         .map((r) => ({

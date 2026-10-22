@@ -16,12 +16,17 @@
  *
  * The second test is the ownership loop: transfer to a team, the team
  * empties, the account has no owner, the administrator names one.
+ *
+ * The third is a disconnection under a two-account mission: the mission
+ * loses that account only (ADR orphaned-missions-and-ownerless-connections,
+ * amendment 2026-10-21) — refused `connection-revoked` there, served on the
+ * other, and its page says which account is gone.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
 import { connectAgent, type Agent } from './agent';
 import { passSecondFactor, routeToInstance, seedShareScenario, signInAs } from './browser';
-import { E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
+import { controlUrl, E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
 import { createMission, permissionRow, pickPreset } from './mission-pages';
 
 const READ_CODE = 'github.read-code';
@@ -284,7 +289,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(ines.getByText('Access given', { exact: true })).toBeVisible();
   await expect(
     ines.getByText(
-      '1 stopped mission is covered again and serves calls from now on, with its limits as they were.',
+      '1 mission is covered again on this account and serves calls through it from now on, with its limits as they were.',
     ),
   ).toBeVisible();
 
@@ -448,4 +453,79 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
   await expect(ines.getByText('you own it').first()).toBeVisible();
   await expect(ines.getByRole('link', { name: 'Give access', exact: true })).toBeVisible();
+});
+
+test('disconnecting one account of a two-account mission takes that account only: the mission keeps running on the other', async ({
+  browser,
+  request,
+}) => {
+  const connectionName = 'ines-two-accounts';
+  const seeded = await request.post(controlUrl('/partial-loss-scenario'), {
+    data: { name: connectionName },
+  });
+  expect(seeded.ok()).toBe(true);
+  const scenario = (await seeded.json()) as {
+    connection_id: string;
+    mission_id: string;
+    mission_name: string;
+    token: string;
+  };
+  const executor = (agent = await connectAgent(scenario.token));
+  const tools = await executor.listTools();
+  expect(tools.some((name) => name.startsWith('github__'))).toBe(true);
+  expect(tools.some((name) => name.startsWith('supabase__'))).toBe(true);
+
+  // ── The owner disconnects the GitHub account ────────────────────────────
+  const ines = await browserOf(
+    browser,
+    request,
+    E2E_SHARE_OWNER,
+    `/accounts/${scenario.connection_id}`,
+  );
+  await ines.getByTestId('disconnect-account').click();
+  const disconnecting = ines
+    .getByRole('dialog')
+    .filter({ hasText: `Disconnect ${connectionName}?` });
+  await expect(disconnecting).toContainText(
+    'one that uses only this account stops, one that uses others keeps running on them',
+  );
+  await disconnecting.getByRole('textbox').fill(connectionName);
+  await disconnecting.getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await expect(ines.getByText('Account disconnected', { exact: true })).toBeVisible();
+  // The page of the disconnected account says the mission no longer uses it.
+  const missions = ines.getByTestId('account-missions');
+  await expect(missions).toContainText(scenario.mission_name);
+  await expect(missions).toContainText('Lost an account');
+  await expect(missions).not.toContainText('Needs an owner');
+
+  // ── The executor: refused on GitHub with the reason, still served elsewhere ──
+  const refused = await executor.call('github__get_file_contents', {
+    owner: 'acme',
+    repo: 'app',
+    path: 'README.md',
+  });
+  if (refused.outcome !== 'refused') throw new Error('a call through a lost account passed');
+  expect(refused.refusal).toMatchObject({
+    code: 'connection-revoked',
+    cause: 'connection-revoked',
+    final: true,
+  });
+  expect(refused.refusal.hint).toContain('other accounts');
+  const after = await executor.listTools();
+  expect(after.some((name) => name.startsWith('github__'))).toBe(false);
+  expect(after.some((name) => name.startsWith('supabase__'))).toBe(true);
+
+  // ── The mission page says which account is gone, and that it never comes back ──
+  await ines.goto('/missions');
+  await expect(ines.getByRole('row').filter({ hasText: scenario.mission_name })).toContainText(
+    'Lost an account',
+  );
+  await ines.goto(`/missions/${scenario.mission_id}`);
+  await expect(ines.getByTestId('orphan-callout')).toHaveCount(0);
+  const lost = ines.getByTestId('lost-accounts-callout');
+  await expect(lost).toContainText('An account no longer serves this mission');
+  await expect(lost).toContainText(`“${connectionName}” was disconnected by its owner`);
+  await expect(lost).toContainText('keeps running on its other accounts');
+  await expect(ines.getByTestId(`account-lost-${scenario.connection_id}`)).toBeVisible();
+  await snap(ines, 'mission-lost-an-account');
 });

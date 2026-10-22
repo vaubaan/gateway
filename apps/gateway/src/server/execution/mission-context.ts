@@ -33,6 +33,11 @@
  * "list" tool that filters its answer to the mission (`fly__list_apps`,
  * `cloudflare_dns__list_zones`) sees the same live list.
  *
+ * A connection whose part of the mission is lost (revoked, or the creator's
+ * access to it withdrawn: `MissionGrounds`) stays in `connections`, marked
+ * `lost`: the pipeline refuses its calls `connection-revoked` and `tools/list`
+ * leaves its tools out, while the mission serves through the others.
+ *
  * Nothing here is cached: the reads are local (SQLite) and a revocation, an
  * expired connection or a stale resource must be seen by the next call.
  */
@@ -52,6 +57,7 @@ import {
   connectionPublicFields,
   connectionSummaryOf,
 } from '../connections/mapping';
+import type { LostPart } from '../authority';
 import type { Store } from '../store';
 import { reachedResources, reachesLaterResources } from '../store/mission-reach';
 import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
@@ -94,9 +100,12 @@ export async function loadMissionContext(
   token: AuthenticatedToken,
   /** The instance's own resources: never part of a mission's context. */
   selfResources: readonly SelfResource[],
+  /** The connections whose part of the mission is lost (`MissionGrounds.inspect`). */
+  lost: readonly LostPart[] = [],
 ): Promise<MissionContext> {
   const connections: MissionConnection[] = [];
   const resources: MissionResource[] = [];
+  const lostOn = new Map(lost.map((part) => [part.connectionId, part.cause] as const));
 
   for (const selection of mission.connections) {
     const connection = await store.connections.getById(selection.connectionId);
@@ -104,6 +113,7 @@ export async function loadMissionContext(
     // simply gives the mission nothing to call.
     if (!connection) continue;
     const discovered = await store.connections.listResources(connection.id);
+    const loss = lostOn.get(connection.id);
     connections.push({
       ...connectionSummaryOf(connection),
       owner: await ownerOf(store, connection),
@@ -115,6 +125,12 @@ export async function loadMissionContext(
         isSelfResource(selfResources, connection.provider, r.ref),
       ),
       ...(reachesLaterResources(selection) ? { reaches_later_resources: true } : {}),
+      // A revoked connection is lost whatever the grounds said: its status is final.
+      ...(loss === 'access-withdrawn'
+        ? { lost: 'access-withdrawn' as const }
+        : loss || connection.status === 'revoked'
+          ? { lost: 'connection-revoked' as const }
+          : {}),
     });
     const reached = reachedResources(selection, discovered, (r) =>
       isSelfResource(selfResources, connection.provider, r.ref),

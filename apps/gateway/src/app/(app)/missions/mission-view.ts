@@ -31,6 +31,8 @@ export function missionMark(
   state: MissionState,
   waiting: number,
   waitsFor: string | null = null,
+  /** How many of its accounts no longer serve it (`MissionOverview.lost`). */
+  lostAccounts = 0,
 ): MissionMark {
   switch (state.kind) {
     case 'revoked':
@@ -47,6 +49,7 @@ export function missionMark(
       ? { label: `Waiting for ${waitsFor}`, tone: 'warn', over: false }
       : { ...MISSION_STATES.waiting, over: false };
   }
+  if (lostAccounts > 0) return { ...MISSION_STATES.accountLost, over: false };
   if (state.exhausted.length > 0) return { ...MISSION_STATES.limitReached, over: false };
   return { ...MISSION_STATES.active, over: false };
 }

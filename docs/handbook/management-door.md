@@ -2,7 +2,7 @@
 title: Management door — authorization server, delegated tokens, admission, tools
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/oauth-as/
   - apps/gateway/src/server/management/
@@ -885,7 +885,12 @@ What each answer contains (`views.ts`):
   by a human in the interface. `state` (`active`, `expired`, `orphaned`,
   `revoked`) and `orphan` (`cause`, `connection_id`, `uncovered`,
   `can_come_back`) exactly as `MissionService.list` derives them at this
-  read; `policy` with `remaining` per risk; `session` (current period);
+  read; `lost_connections` (`connection_id`, `cause` —
+  `connection-revoked` | `connection-missing` | `access-withdrawn` —,
+  `final`): the accounts that no longer serve a mission still running on its
+  others (`MissionOverview.lost`; ADR orphaned-missions-and-ownerless-connections,
+  amendment 2026-10-21) — nothing is added in their place, a new mission
+  reaches the account that replaced one; `policy` with `remaining` per risk; `session` (current period);
   `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`,
   `this_delegation` — true for the missions `rotate_mission_token` accepts);
   the masked `token_prefix` (of the **user's own** token on that mission; `null`

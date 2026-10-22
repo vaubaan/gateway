@@ -63,6 +63,7 @@ import {
   mayAllow,
   MISSION_STATES,
   ORPHAN_WORDS,
+  PART_LOSS_WORDS,
   ownedBy,
   PAGES,
   ROUTES,
@@ -404,6 +405,8 @@ function missionFacts(
   ];
   if (mission.state === 'orphaned' && mission.orphan_cause) {
     facts.push(ORPHAN_WORDS[mission.orphan_cause]);
+  } else if (mission.part_lost) {
+    facts.push(PART_LOSS_WORDS[mission.part_lost]);
   }
   if (mission.state === 'expired' && mission.expires_at) {
     facts.push(`expired ${shortDate(mission.expires_at, now)}`);
@@ -424,6 +427,8 @@ function MissionRow({
 }) {
   const stopped = mission.state === 'orphaned';
   const ended = mission.state === 'expired' || mission.state === 'revoked';
+  // Still running on its other accounts, not on this one.
+  const lostHere = !stopped && !ended && mission.part_lost !== null;
   return (
     <Row
       title={mission.name}
@@ -434,6 +439,10 @@ function MissionRow({
         stopped ? (
           <StatusMark tone={MISSION_STATES.orphaned.tone}>
             {MISSION_STATES.orphaned.label}
+          </StatusMark>
+        ) : lostHere ? (
+          <StatusMark tone={MISSION_STATES.accountLost.tone}>
+            {MISSION_STATES.accountLost.label}
           </StatusMark>
         ) : mission.exhausted > 0 ? (
           <StatusMark tone={MISSION_STATES.limitReached.tone}>
@@ -482,7 +491,10 @@ export function AccountView({
   const ownerActs = context.unshareable === null;
   const catalog = new Map(context.risks.map((risk) => [risk.risk_id, risk] as const));
   const total = context.risks.length;
-  const running = missions.filter((mission) => mission.state === 'active');
+  // The missions this account still serves: a disconnection would take it from them.
+  const running = missions.filter(
+    (mission) => mission.state === 'active' && mission.part_lost === null,
+  );
   const live = missions.filter(
     (mission) => mission.state === 'active' || mission.state === 'orphaned',
   );

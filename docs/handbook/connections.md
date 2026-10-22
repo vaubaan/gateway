@@ -2,7 +2,7 @@
 title: Connections — connect flows, resources, credential refresh, OAuth clients
 status: current
 date: 2026-10-13
-last_synced: 2026-10-20
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/connections/
   - apps/gateway/src/server/provider-apps/
@@ -473,10 +473,22 @@ it watches the missions of the connection across the act
 (`grounds.watchConnection` → `settle`, handbook [authority](authority.md)).
 It also withdraws the grant at the provider when the provider documents
 how — see "The grant at the provider" below.
-Missions that carry a `revoked` connection are `orphaned` from then on and
-stay so: the execution door derives it on every request
-(`MissionGrounds.inspect`, cause `connection-revoked`) and refuses every
-call of the mission with `mission-inactive`. Calls on an `expired`
+Missions that carry a `revoked` connection lose their part on it for good
+and keep serving through their other connections (ADR
+orphaned-missions-and-ownerless-connections, amendment 2026-10-21): the
+execution door derives it on every request (`MissionGrounds.inspect`, lost
+part `connection-revoked`) and refuses every call through that connection
+with `connection-revoked`; a mission that had no other connection is
+`orphaned` and stays so (`mission-inactive`). The settlement writes
+`mission-connection-lost` (or `mission-orphaned`) naming the owner who
+revoked. The revoke dialog says that a mission that uses only this account
+stops and one that uses others keeps running on them; the account page marks
+a mission that lost it "Lost an account" (`MissionOnConnection.part_lost`)
+and no longer counts it among the missions a disconnection would stop.
+Reconnect is offered on `active` and `expired` connections whatever their
+stored credential kind, an `app-install` one of earlier builds included: it
+writes the plugin's current way and never reads the old blob
+(`token-connections.test.ts`). Calls on an `expired`
 connection are refused with `connection-unavailable` (handbook
 [execution-door](execution-door.md)) by the upstream stage, which reads the
 status through `CredentialBroker.resolve` (`execution/upstream-stage.ts`).

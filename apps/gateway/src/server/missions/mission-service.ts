@@ -39,9 +39,12 @@ import type {
   AuthorityService,
   AuthoritySubject,
   InspectedMission,
+  LostPart,
   MissionGrounds,
   OrphanCause,
+  PartLossCause,
 } from '../authority';
+import { isFinalLoss } from '../authority';
 import {
   budgetMissionOf,
   currentPeriod,
@@ -231,6 +234,11 @@ export interface MissionOnConnection {
   readonly expires_at: Iso8601 | null;
   /** Why it reads `orphaned`; `null` otherwise. */
   readonly orphan_cause: OrphanCause | null;
+  /**
+   * Set when THIS connection no longer serves the mission (revoked, or the creator's
+   * access withdrawn) while the mission may still serve through its others.
+   */
+  readonly part_lost: PartLossCause | null;
   /** The resources of THIS connection the mission was issued on: explicit ids. */
   readonly resource_ids: readonly string[];
   /** True when it was issued on the whole connection: every resource, later ones included. */
@@ -370,6 +378,19 @@ export interface MissionAccess extends InspectedMission {
   readonly role: MissionRole;
 }
 
+/**
+ * A connection of a mission that no longer serves it (ADR
+ * orphaned-missions-and-ownerless-connections, amendment 2026-10-21): the mission
+ * keeps serving through its other connections, and nothing is ever added back in
+ * its place.
+ */
+export interface MissionLostConnection {
+  readonly connection_id: string;
+  readonly cause: PartLossCause;
+  /** True when it never comes back (revoked or gone); false while the access may return. */
+  readonly final: boolean;
+}
+
 /** Why a mission reads `orphaned` right now (handbook authority, "Orphaned missions"). */
 export interface MissionOrphanReason {
   readonly cause: OrphanCause;
@@ -389,6 +410,8 @@ export interface MissionOverview {
   readonly state: MissionState;
   /** Set while the mission is orphaned; `null` as soon as the authority is back. */
   readonly orphan: MissionOrphanReason | null;
+  /** The connections that no longer serve it, in the mission's order; empty when all serve. */
+  readonly lost: readonly MissionLostConnection[];
   /**
    * The public part of the reader's own active token of this mission; `null`
    * when they have none (a member who has not generated theirs, a revoked token).
@@ -408,6 +431,8 @@ export interface MissionDetailConnection {
   readonly resources: readonly IssuanceResource[];
   /** Issued on the whole connection: resources discovered later are reached too. */
   readonly reaches_later: boolean;
+  /** Why this connection no longer serves the mission; `null` while it serves. */
+  readonly lost: PartLossCause | null;
 }
 
 export interface MissionDetailRisk extends MissionPolicyEntry {
@@ -838,7 +863,7 @@ export class MissionService {
     if (!connection || !(await this.owns(user, connection))) return [];
     const listed: MissionOnConnection[] = [];
     for (const stored of await this.deps.store.missions.listForConnection(connectionId)) {
-      const { mission, orphan } = await this.deps.grounds.inspect(stored);
+      const { mission, orphan, lost } = await this.deps.grounds.inspect(stored);
       const state = await this.stateOf(mission);
       const creator = await this.deps.store.users.getById(mission.creatorUserId);
       const membership = await this.membershipOf(mission, user.id);
@@ -854,6 +879,7 @@ export class MissionService {
         exhausted: state.kind === 'active' ? state.exhausted.length : 0,
         expires_at: mission.expiresAt,
         orphan_cause: orphan?.cause ?? null,
+        part_lost: lost.find((part) => part.connectionId === connectionId)?.cause ?? null,
         resource_ids: selection?.resourceIds ?? [],
         reaches_later: selection ? reachesLaterResources(selection) : false,
         permissions: accepted.length,
@@ -1139,7 +1165,8 @@ export class MissionService {
     }[] = [];
     for (const selected of mission.connections) {
       const connection = await this.deps.store.connections.getById(selected.connectionId);
-      if (!connection) continue;
+      // A revoked connection serves the mission no more: nothing is added on it.
+      if (!connection || connection.status === 'revoked') continue;
       const context = await this.issuanceConnection(user, connection);
       if (!context) continue;
       const resources = reached.find((r) => r.id === connection.id)?.resources ?? [];
@@ -1249,7 +1276,9 @@ export class MissionService {
       );
       if (own.length === 0) continue;
       for (const line of own) judged.add(line.risk_id);
-      const context = await this.issuanceConnection(user, connection);
+      // A revoked connection's part of the mission is lost for good: nothing widens on it.
+      const context =
+        connection.status === 'revoked' ? null : await this.issuanceConnection(user, connection);
       if (!context) {
         issues.push({
           code: 'exceeds-authority',
@@ -1456,7 +1485,7 @@ export class MissionService {
     const { mission } = inspected;
     const issuers = await this.issuersOf([mission]);
     const overview = await this.overviewOf(inspected, user, issuers.get(mission.id) ?? null);
-    const connections = await this.detailConnections(mission);
+    const connections = await this.detailConnections(mission, inspected.lost);
     const remaining = overview.state.kind === 'active' ? overview.state.remaining : null;
     const rows = this.catalogRowsOf(connections);
     const openUntil = await this.openGatesOf(mission, overview.state);
@@ -1522,7 +1551,7 @@ export class MissionService {
   }
 
   private async overviewOf(
-    { mission, orphan, role }: MissionAccess,
+    { mission, orphan, lost, role }: MissionAccess,
     reader: Reader,
     issuedVia: MissionIssuer | null,
   ): Promise<MissionOverview> {
@@ -1538,6 +1567,11 @@ export class MissionService {
         connection_id: orphan.connectionId,
         uncovered: [...orphan.uncovered],
       },
+      lost: lost.map((part) => ({
+        connection_id: part.connectionId,
+        cause: part.cause,
+        final: isFinalLoss(part.cause),
+      })),
       token: token ? { prefix: token.prefix, createdAt: token.createdAt } : null,
       issuedVia,
     };
@@ -1649,7 +1683,10 @@ export class MissionService {
    * at issuance, or the connection's live list for a whole-connection mission,
    * never the ones discovery no longer returns nor the instance's own.
    */
-  private async detailConnections(mission: MissionRecord): Promise<MissionDetailConnection[]> {
+  private async detailConnections(
+    mission: MissionRecord,
+    lost: readonly LostPart[] = [],
+  ): Promise<MissionDetailConnection[]> {
     const details: MissionDetailConnection[] = [];
     for (const c of mission.connections) {
       const connection = await this.deps.store.connections.getById(c.connectionId);
@@ -1665,6 +1702,7 @@ export class MissionService {
           this.deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider,
         resources: reached.map((r) => toIssuanceResource(r, false)),
         reaches_later: reachesLaterResources(c),
+        lost: lost.find((part) => part.connectionId === c.connectionId)?.cause ?? null,
       });
     }
     return details;
@@ -1689,7 +1727,11 @@ export class MissionService {
     token: { secret: string } | { prefix: string },
     known?: readonly MissionDetailConnection[],
   ): Promise<BootstrapKit> {
-    const connections = known ?? (await this.detailConnections(mission));
+    // A connection that no longer serves the mission is not handed to its agents.
+    const connections = (
+      known ??
+      (await this.detailConnections(mission, (await this.deps.grounds.inspect(mission)).lost))
+    ).filter((connection) => connection.lost === null);
     const rows = this.catalogRowsOf(connections);
     const policy: KitPolicyLine[] = mission.policy.map(policyEntryOf).map((entry) => ({
       ...entry,

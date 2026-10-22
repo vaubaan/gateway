@@ -2,23 +2,34 @@
  * Mission grounds — is the authority a mission was issued under there, now?
  * (spec §2.3 "orphaned", §7.8).
  *
- * A mission is grounded while its creator, *now*, still covers on every
- * connection the mission carries the accepted risks of that connection:
+ * Each connection a mission carries is a PART of it, grounded on its own
+ * (ADR orphaned-missions-and-ownerless-connections, amendment 2026-10-21).
+ * A part is LOST when the authority of that one connection is gone:
+ *
+ *   connection-revoked   the connection was revoked (final)
+ *   connection-missing   the connection no longer exists (final)
+ *   access-withdrawn     the creator holds nothing on it any more: the share
+ *                        that grounded it was revoked, or they left the group
+ *                        that owned or received it (comes back with the access)
+ *
+ * The mission keeps serving through its other parts; a call that needs a lost
+ * part is refused `connection-revoked`. The whole mission is ORPHANED when:
  *
  *   creator-removed      the creator is unknown or was removed from the IdP
- *   connection-missing   a connection of the mission no longer exists
- *   connection-revoked   a connection of the mission was revoked (terminal)
- *   authority-lost       the creator no longer covers some accepted risk: the
- *                        share that grounded it was revoked or narrowed, or
- *                        they left the group that owned or received it
+ *   authority-lost       the creator still holds a connection but no longer
+ *                        covers some of its accepted risks (a share narrowed),
+ *                        or every part is lost and one of them may come back
+ *   connection-revoked   every part is lost for good (revoked connections)
+ *   connection-missing   idem, the first lost part being a missing connection
  *
  * `orphaned` is that verdict and nothing else: it is **derived on every
  * read, never stored**. The store keeps `active` for an orphaned mission, and
  * a migration trigger refuses the value. When the authority comes back (the
  * share is made again, the creator is back in the group at the next sign-in,
  * the operator reassigns the connection), the same mission serves calls
- * again, with the same token, the same session and the same counters. A
- * revoked connection never comes back, so its missions stay orphaned.
+ * again, with the same token, the same session and the same counters; so does
+ * a part whose access was withdrawn. A revoked connection never comes back:
+ * its part stays lost, and a mission with nothing else stays orphaned.
  *
  * Three ways in:
  *
@@ -40,7 +51,10 @@
  *                        taken before the act and again by `settle(actorId)`
  *                        after it, and each mission whose verdict changed
  *                        gets one entry naming that human: `mission-orphaned`
- *                        or `mission-restored`. The entry is written through
+ *                        or `mission-restored` for the whole mission,
+ *                        `mission-connection-lost` or
+ *                        `mission-connection-restored` for a part of one that
+ *                        keeps serving. The entry is written through
  *                        `AuditRepo.appendUnlessLatest`: a change another act
  *                        already recorded while this one was under way is
  *                        not recorded a second time.
@@ -64,6 +78,27 @@ export const ORPHAN_CAUSES = [
 ] as const;
 export type OrphanCause = (typeof ORPHAN_CAUSES)[number];
 
+/** Why one connection of a mission no longer serves it. */
+export const PART_LOSS_CAUSES = [
+  'connection-revoked',
+  'connection-missing',
+  'access-withdrawn',
+] as const;
+export type PartLossCause = (typeof PART_LOSS_CAUSES)[number];
+
+/** A connection of a mission that serves it no more (its part of the mission is lost). */
+export interface LostPart {
+  readonly connectionId: string;
+  readonly cause: PartLossCause;
+  /** The accepted risks of that connection (empty when the connection is missing). */
+  readonly uncovered: readonly RiskId[];
+}
+
+/** True when nothing brings the part back: the connection was revoked or is gone. */
+export function isFinalLoss(cause: PartLossCause): boolean {
+  return cause !== 'access-withdrawn';
+}
+
 /** Why a mission is orphaned right now. */
 export interface OrphanReason {
   readonly cause: OrphanCause;
@@ -73,14 +108,18 @@ export interface OrphanReason {
   readonly uncovered: readonly RiskId[];
 }
 
+/** `lost`: the parts that serve no more, in the mission's order of connections. */
 export type GroundsVerdict =
-  { readonly grounded: true } | ({ readonly grounded: false } & OrphanReason);
+  | { readonly grounded: true; readonly lost: readonly LostPart[] }
+  | ({ readonly grounded: false; readonly lost: readonly LostPart[] } & OrphanReason);
 
 /** A mission as a reader sees it, with the reason when it reads `orphaned`. */
 export interface InspectedMission {
   /** `status` is `orphaned` when the stored one is `active` and the grounds are gone. */
   readonly mission: MissionRecord;
   readonly orphan: OrphanReason | null;
+  /** The connections whose part is lost; the mission may still serve through the others. */
+  readonly lost: readonly LostPart[];
 }
 
 /** What a human act did to the missions that were watched around it. */
@@ -89,6 +128,10 @@ export interface GroundsShift {
   readonly orphaned: readonly MissionRecord[];
   /** Orphaned before the act, grounded after it. */
   readonly restored: readonly MissionRecord[];
+  /** Grounded before and after, with a connection lost by the act: they serve with the others. */
+  readonly partsLost: readonly MissionRecord[];
+  /** Grounded before and after, with a lost connection that serves again since the act. */
+  readonly partsRestored: readonly MissionRecord[];
 }
 
 /** The verdicts taken before a human act; `settle` compares them with the ones after it. */
@@ -109,10 +152,11 @@ export interface MissionGroundsDeps {
 
 /** The two acts that alternate on a mission; the idempotent write compares within them. */
 const GROUNDS_ACTS = ['mission-orphaned', 'mission-restored'] as const;
-type GroundsAct = (typeof GROUNDS_ACTS)[number];
+/** The same for one part of a mission that keeps serving. */
+const PART_ACTS = ['mission-connection-lost', 'mission-connection-restored'] as const;
+type GroundsAct = (typeof GROUNDS_ACTS)[number] | (typeof PART_ACTS)[number];
 
-const GROUNDED: GroundsVerdict = { grounded: true };
-const NO_SHIFT: GroundsShift = { orphaned: [], restored: [] };
+const NO_SHIFT: GroundsShift = { orphaned: [], restored: [], partsLost: [], partsRestored: [] };
 
 /**
  * The accepted risks of a mission that belong to one connection (spec §3.1
@@ -134,28 +178,68 @@ export class MissionGrounds {
    * `forecastShare` passes it, and no reader of a mission's state does.
    */
   async check(mission: MissionRecord, supposing?: SupposedShare): Promise<GroundsVerdict> {
+    const lost = new Map<string, LostPart>();
     const questions: AuthorityQuestion[] = [];
     for (const selection of mission.connections) {
       const connection = await this.deps.connections.getById(selection.connectionId);
       if (!connection) {
-        return ungrounded('connection-missing', selection.connectionId);
+        lost.set(selection.connectionId, {
+          connectionId: selection.connectionId,
+          cause: 'connection-missing',
+          uncovered: [],
+        });
+        continue;
       }
-      if (connection.status === 'revoked') return ungrounded('connection-revoked', connection.id);
-      questions.push({ connection, riskIds: partitionOf(mission, connection.provider) });
+      const riskIds = partitionOf(mission, connection.provider);
+      if (connection.status === 'revoked') {
+        lost.set(connection.id, {
+          connectionId: connection.id,
+          cause: 'connection-revoked',
+          uncovered: riskIds,
+        });
+        continue;
+      }
+      questions.push({ connection, riskIds });
     }
+    const inOrder = (): LostPart[] =>
+      mission.connections.flatMap((c) => {
+        const part = lost.get(c.connectionId);
+        return part ? [part] : [];
+      });
+    // Nothing left to ask about: whatever the creator holds, no part serves.
+    if (questions.length === 0) return lost.size > 0 ? wholeLoss(inOrder()) : grounded([]);
+
     const { subjectRemoved, gaps } = await this.deps.authority.gapsOf(
       { id: mission.creatorUserId },
       questions,
       supposing,
     );
-    if (subjectRemoved) return ungrounded('creator-removed', null);
-    const [first] = gaps;
-    if (!first) return GROUNDED;
-    return ungrounded(
-      'authority-lost',
-      first.connectionId,
-      gaps.flatMap((gap) => gap.uncovered),
-    );
+    if (subjectRemoved) return ungrounded('creator-removed', null, [], inOrder());
+    const narrowed: (typeof gaps)[number][] = [];
+    for (const gap of gaps) {
+      // `none`: the creator holds nothing on this connection any more. Its part is
+      // lost like a revoked one, but it comes back with the access.
+      if (gap.basis === 'none') {
+        lost.set(gap.connectionId, {
+          connectionId: gap.connectionId,
+          cause: 'access-withdrawn',
+          uncovered: gap.uncovered,
+        });
+      } else narrowed.push(gap);
+    }
+    const [first] = narrowed;
+    if (first) {
+      return ungrounded(
+        'authority-lost',
+        first.connectionId,
+        narrowed.flatMap((gap) => gap.uncovered),
+        inOrder(),
+      );
+    }
+    // A part serves while its connection is not lost and carries an accepted risk.
+    const serving = questions.some((q) => q.riskIds.length > 0 && !lost.has(q.connection.id));
+    if (lost.size > 0 && !serving) return wholeLoss(inOrder());
+    return grounded(inOrder());
   }
 
   /**
@@ -164,13 +248,14 @@ export class MissionGrounds {
    * `expired` are stored facts no authority changes, returned without a read.
    */
   async inspect(mission: MissionRecord): Promise<InspectedMission> {
-    if (mission.status !== 'active') return { mission, orphan: null };
+    if (mission.status !== 'active') return { mission, orphan: null, lost: [] };
     const verdict = await this.check(mission);
-    if (verdict.grounded) return { mission, orphan: null };
-    const { cause, connectionId, uncovered } = verdict;
+    if (verdict.grounded) return { mission, orphan: null, lost: verdict.lost };
+    const { cause, connectionId, uncovered, lost } = verdict;
     return {
       mission: { ...mission, status: 'orphaned' },
       orphan: { cause, connectionId, uncovered },
+      lost,
     };
   }
 
@@ -180,17 +265,21 @@ export class MissionGrounds {
   }
 
   /**
-   * The missions of the connection that are orphaned now and would be grounded once
-   * `share` is made: they would serve calls again, with the token their agent still
-   * holds. Nothing is written. What `settle` records after the act is the truth of the
-   * act; this is what the owner is shown before it.
+   * The missions of the connection that would serve calls again once `share` is made,
+   * with the token their agent still holds: the orphaned ones it would ground, and the
+   * ones whose part on this connection it would bring back. Nothing is written. What
+   * `settle` records after the act is the truth of the act; this is what the owner is
+   * shown before it.
    */
   async forecastShare(share: SupposedShare): Promise<MissionRecord[]> {
     const restored: MissionRecord[] = [];
     for (const mission of await this.deps.missions.listForConnection(share.connectionId)) {
       if (mission.status !== 'active') continue;
-      if ((await this.check(mission)).grounded) continue;
-      if ((await this.check(mission, share)).grounded) restored.push(mission);
+      const now = await this.check(mission);
+      if (now.grounded && !isLostOn(now, share.connectionId)) continue;
+      const then = await this.check(mission, share);
+      if (!then.grounded) continue;
+      if (!now.grounded || !isLostOn(then, share.connectionId)) restored.push(mission);
     }
     return restored;
   }
@@ -222,21 +311,50 @@ export class MissionGrounds {
         if (before.size === 0) return NO_SHIFT;
         const orphaned: MissionRecord[] = [];
         const restored: MissionRecord[] = [];
+        const partsLost: MissionRecord[] = [];
+        const partsRestored: MissionRecord[] = [];
         // Listed again: a mission revoked during the act is no longer `active`,
         // and one issued during it was not watched.
         for (const mission of await list()) {
           const was = before.get(mission.id);
           if (!was || mission.status !== 'active') continue;
           const now = await this.check(mission);
-          if (was.grounded === now.grounded) continue;
-          const act: GroundsAct = now.grounded ? 'mission-restored' : 'mission-orphaned';
-          // Counted only when this act's entry was written: a change another act
-          // recorded since the watch was taken is theirs, in the trail and in the notice.
-          if (!(await this.record(mission, act, actorId, was, now, since))) continue;
-          if (now.grounded) restored.push(mission);
-          else orphaned.push({ ...mission, status: 'orphaned' });
+          if (was.grounded !== now.grounded) {
+            const act: GroundsAct = now.grounded ? 'mission-restored' : 'mission-orphaned';
+            const entry = { before: stateOf(was), after: stateOf(now) };
+            // Counted only when this act's entry was written: a change another act
+            // recorded since the watch was taken is theirs, in the trail and in the notice.
+            if (!(await this.record(mission, act, GROUNDS_ACTS, actorId, entry, since))) continue;
+            if (now.grounded) restored.push(mission);
+            else orphaned.push({ ...mission, status: 'orphaned' });
+            continue;
+          }
+          // Orphaned before and after: nothing serves either way, the parts are not followed.
+          if (!now.grounded) continue;
+          const newlyLost = now.lost.filter((part) => !sameLoss(was.lost, part));
+          const back = was.lost.filter((part) => !isLostOn(now, part.connectionId));
+          if (newlyLost.length > 0) {
+            const entry = {
+              before: { status: 'active', lost: partsOf(was.lost) },
+              after: { status: 'active', lost: partsOf(now.lost), newly_lost: partsOf(newlyLost) },
+            };
+            const act = 'mission-connection-lost';
+            if (await this.record(mission, act, PART_ACTS, actorId, entry, since)) {
+              partsLost.push(mission);
+            }
+          }
+          if (back.length > 0) {
+            const entry = {
+              before: { status: 'active', lost: partsOf(was.lost) },
+              after: { status: 'active', lost: partsOf(now.lost), restored: partsOf(back) },
+            };
+            const act = 'mission-connection-restored';
+            if (await this.record(mission, act, PART_ACTS, actorId, entry, since)) {
+              partsRestored.push(mission);
+            }
+          }
         }
-        return { orphaned, restored };
+        return { orphaned, restored, partsLost, partsRestored };
       },
     };
   }
@@ -254,7 +372,7 @@ export class MissionGrounds {
   }
 
   /**
-   * Writes the entry unless the mission's latest grounds entry is the same act and
+   * Writes the entry unless the mission's latest entry among `among` is the same act and
    * was written since `watchedSince`: then another act recorded this very change.
    * An equal entry from before the watch is an earlier change (the one in between
    * went unrecorded, or was purged), and does not hold this one back. Returns
@@ -263,9 +381,9 @@ export class MissionGrounds {
   private async record(
     mission: MissionRecord,
     act: GroundsAct,
+    among: readonly GroundsAct[],
     actorId: string,
-    before: GroundsVerdict,
-    after: GroundsVerdict,
+    entry: { readonly before: Record<string, unknown>; readonly after: Record<string, unknown> },
     watchedSince: string,
   ): Promise<boolean> {
     const written = await this.deps.audit.appendUnlessLatest(
@@ -275,36 +393,86 @@ export class MissionGrounds {
         user_id: actorId,
         act,
         object: { type: 'mission', id: mission.id },
-        before: stateOf(before),
-        after: stateOf(after),
+        before: entry.before,
+        after: entry.after,
         delegated_client_id: null,
       },
-      { among: GROUNDS_ACTS, since: watchedSince },
+      { among, since: watchedSince },
     );
     if (written === null) return false;
-    this.deps.logger.warn(act === 'mission-orphaned' ? 'mission orphaned' : 'mission restored', {
+    this.deps.logger.warn(LOG_LINE[act], {
       mission_id: mission.id,
       actor_id: actorId,
-      ...reasonFields(before.grounded ? after : before),
+      before: entry.before,
+      after: entry.after,
     });
     return true;
   }
 }
 
+const LOG_LINE: Readonly<Record<GroundsAct, string>> = {
+  'mission-orphaned': 'mission orphaned',
+  'mission-restored': 'mission restored',
+  'mission-connection-lost': 'mission lost a connection',
+  'mission-connection-restored': 'mission connection serves again',
+};
+
+function grounded(lost: readonly LostPart[]): GroundsVerdict {
+  return { grounded: true, lost };
+}
+
+/**
+ * Every part is lost: orphaned. While one of them may come back (an access withdrawn),
+ * the cause is `authority-lost` and names it; otherwise the first loss, which is final.
+ */
+function wholeLoss(lost: readonly LostPart[]): GroundsVerdict {
+  const withdrawn = lost.filter((part) => !isFinalLoss(part.cause));
+  const [first] = withdrawn;
+  if (first) {
+    return ungrounded(
+      'authority-lost',
+      first.connectionId,
+      withdrawn.flatMap((part) => part.uncovered),
+      lost,
+    );
+  }
+  const [final] = lost;
+  if (!final) return grounded([]);
+  const cause: OrphanCause =
+    final.cause === 'connection-missing' ? 'connection-missing' : 'connection-revoked';
+  return ungrounded(cause, final.connectionId, [], lost);
+}
+
+function isLostOn(verdict: GroundsVerdict, connectionId: string): boolean {
+  return verdict.lost.some((part) => part.connectionId === connectionId);
+}
+
+/** The same connection lost for the same cause: an access withdrawn, then revoked, is a new loss. */
+function sameLoss(parts: readonly LostPart[], part: LostPart): boolean {
+  return parts.some((p) => p.connectionId === part.connectionId && p.cause === part.cause);
+}
+
+function partsOf(parts: readonly LostPart[]): Record<string, unknown>[] {
+  return parts.map((part) => ({ connection_id: part.connectionId, cause: part.cause }));
+}
+
 function ungrounded(
   cause: OrphanCause,
   connectionId: string | null,
-  uncovered: readonly RiskId[] = [],
+  uncovered: readonly RiskId[],
+  lost: readonly LostPart[],
 ): GroundsVerdict {
-  return { grounded: false, cause, connectionId, uncovered };
+  return { grounded: false, cause, connectionId, uncovered, lost };
 }
 
 function reasonFields(verdict: GroundsVerdict): Record<string, unknown> {
-  if (verdict.grounded) return {};
+  const parts = verdict.lost.length > 0 ? { lost: partsOf(verdict.lost) } : {};
+  if (verdict.grounded) return parts;
   return {
     cause: verdict.cause,
     connection_id: verdict.connectionId,
     uncovered: verdict.uncovered,
+    ...parts,
   };
 }
 

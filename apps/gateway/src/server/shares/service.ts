@@ -112,7 +112,10 @@ export interface ShareOutcome {
   readonly replaced: ShareRecord | null;
   /** Missions that lost their grounds because the restriction shrank. */
   readonly orphaned: number;
-  /** Orphaned missions this share grounds again: they serve calls from now on. */
+  /**
+   * Missions this share makes serve again: orphaned ones it grounds, and ones whose part
+   * on this connection it brings back (their other connections kept serving meanwhile).
+   */
   readonly restored: number;
 }
 
@@ -136,7 +139,10 @@ export interface ShareForecast {
 export interface RevokeOutcome {
   readonly share: ShareRecord;
   readonly targetLabel: string;
+  /** Missions that had nothing else to serve with: every call is refused. */
   readonly orphaned: number;
+  /** Missions that lost this connection and keep serving through their others. */
+  readonly partsLost: number;
 }
 
 /** One risk of a received restriction; `known` is false when the catalog dropped it since. */
@@ -310,7 +316,8 @@ export class ShareService {
     } finally {
       settled = await watch.settle(actor.user.id);
     }
-    const { orphaned, restored } = settled;
+    const { orphaned } = settled;
+    const restored = [...settled.restored, ...settled.partsRestored];
     this.deps.logger.info('connection shared', {
       connection_id: connection.id,
       share_id: created.id,
@@ -330,8 +337,9 @@ export class ShareService {
   }
 
   /**
-   * Terminal for the share (spec §2.3). The missions it grounded read
-   * `orphaned` until a new share covers them again.
+   * Terminal for the share (spec §2.3). A mission it grounded loses its part on this
+   * connection and serves through its others; one with nothing else reads `orphaned`.
+   * Both serve again on this connection when a new share covers them.
    */
   async revoke(actor: Actor, shareId: string, onConnectionId?: string): Promise<RevokeOutcome> {
     const share = await this.deps.store.shares.getById(shareId);
@@ -342,7 +350,7 @@ export class ShareService {
     }
     await this.owned(actor, share.connectionId);
     const targetLabel = await principalLabel(this.deps.store, share.target);
-    if (share.status === 'revoked') return { share, targetLabel, orphaned: 0 };
+    if (share.status === 'revoked') return { share, targetLabel, orphaned: 0, partsLost: 0 };
 
     const watch = await this.deps.grounds.watchConnection(share.connectionId);
     let revoked: ShareRecord;
@@ -354,7 +362,7 @@ export class ShareService {
       const current =
         err instanceof InvariantError ? await this.deps.store.shares.getById(share.id) : null;
       if (current?.status !== 'revoked') throw err;
-      return { share: current, targetLabel, orphaned: 0 };
+      return { share: current, targetLabel, orphaned: 0, partsLost: 0 };
     }
     // The revocation is stored: the missions it orphaned are settled whether or not
     // its own entry could be written (the failure, if any, still reaches the caller).
@@ -364,13 +372,19 @@ export class ShareService {
     } finally {
       settled = await watch.settle(actor.user.id);
     }
-    const { orphaned } = settled;
+    const { orphaned, partsLost } = settled;
     this.deps.logger.info('share revoked', {
       connection_id: share.connectionId,
       share_id: share.id,
       missions_orphaned: orphaned.length,
+      missions_part_lost: partsLost.length,
     });
-    return { share: revoked, targetLabel, orphaned: orphaned.length };
+    return {
+      share: revoked,
+      targetLabel,
+      orphaned: orphaned.length,
+      partsLost: partsLost.length,
+    };
   }
 
   /**

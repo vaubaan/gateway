@@ -162,6 +162,8 @@ export default async function MissionsPage() {
     mark: missionMark(
       overview.state,
       overview.role === 'creator' ? (waiting.get(overview.mission.id) ?? 0) : 0,
+      null,
+      overview.lost.length,
     ),
   }));
   const created = listed.filter((m) => m.role === 'creator');

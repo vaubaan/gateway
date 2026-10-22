@@ -126,9 +126,11 @@ export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
   'rate-limited':
     'too many actions on that permission in a short window. Wait `retry_after_seconds`, then retry once; nothing was counted against the limit.',
   'connection-unavailable':
-    'the account behind this mission needs reconnecting or was disconnected. Nothing you can do fixes it: tell the human who owns the account (`owner`).',
+    'the account behind this call needs reconnecting (its credential expired). Nothing you can do fixes it: tell the human who owns the account (`owner`).',
+  'connection-revoked':
+    'the account behind this call no longer serves this mission: it was removed (`final: true`, it never comes back), or the mission creator lost access to it (`final: false`, it serves again if the access is given back). The mission still works on its other accounts: keep using them. Do not retry through that account; tell the human, so the mission creator can issue a mission for the account that replaces it.',
   'mission-inactive':
-    'the mission is expired, without an owner (`orphaned`) or stopped (`revoked`). Stop calling with this key and report to the human: a stopped mission needs a new one, an expired one more time, and one without an owner works again with this same key once its creator may allow its permissions again. A request opened before the mission lost its owner can be answered only until it expires; after that, your next refused call opens a new one.',
+    'the mission is expired, without an owner (`orphaned`: none of its accounts serves it any more) or stopped (`revoked`). Stop calling with this key and report to the human: a stopped mission needs a new one, an expired one more time, and one without an owner works again with this same key once its creator may allow its permissions again. A request opened before the mission lost its owner can be answered only until it expires; after that, your next refused call opens a new one.',
   'wrong-credential-kind':
     'this key was presented on the wrong door. A mission key only opens the execution endpoint above; do not send it anywhere else.',
 };

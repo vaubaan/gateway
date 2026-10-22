@@ -2,7 +2,7 @@
 title: Authority — owners, shares, local groups, orphaned missions, unowned connections
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/shares/
@@ -59,7 +59,7 @@ other is stored:
 
 | State                | Meaning                                                               | Stored? | Begins                                                                                | Ends                                                                                        |
 | -------------------- | --------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| mission `orphaned`   | its creator does not cover its accepted risks, now                    | no      | the instant the authority is missing, for every reader                                | the instant it is back (never, on a revoked connection); or the creator revokes the mission |
+| mission `orphaned`   | its creator does not cover its accepted risks, now, as a whole        | no      | the instant the authority is missing, for every reader                                | the instant it is back (never, on a revoked connection); or the creator revokes the mission |
 | connection `unowned` | its owner group has no member left, or its owner user was deactivated | yes     | `ConnectionsRepo.markOwnerlessUnowned` (after a membership removal or a deactivation) | the operator's `reassign`                                                                   |
 
 ```
@@ -371,27 +371,55 @@ The admin rule counts **IdP-claimed** groups only (`currentAuthority` in
 and never stored** (spec §2.3; ADR amendment of 2026-10-13). The `missions`
 row of an orphaned mission says `active`; migration `0007` makes the table
 refuse the value ([store](store.md)). When the authority comes back the same
-mission serves calls again, with the same token, session and counters. A
-revoked connection never comes back, so its missions stay orphaned.
+mission serves calls again, with the same token, session and counters.
 
-`check(mission)` returns `{ grounded: true }` or the first cause it meets:
-
-| Cause                | When                                                                                | Can it end?                                           |
-| -------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `connection-missing` | a connection of the mission no longer exists                                        | no                                                    |
-| `connection-revoked` | a connection of the mission is `revoked`                                            | no: revocation is terminal                            |
-| `creator-removed`    | the creator is unknown or `removed` (an operator deactivated them)                  | when an operator reactivates the account              |
-| `authority-lost`     | `gapsOf` finds accepted risks the creator no longer covers (`uncovered` lists them) | when a share or a membership covers every one of them |
-
-Each connection is asked about its own partition of the policy:
+**Each connection is a part of the mission, lost on its own** (ADR
+orphaned-missions-and-ownerless-connections, amendment 2026-10-21). Each
+connection is asked about its own partition of the policy:
 `partitionOf(mission, provider)` keeps the accepted ids whose provider is the
-connection's. An `expired` or `unowned` connection removes no authority and
-does not orphan.
+connection's. A part is **lost** when the authority of that one connection is
+gone; the mission keeps serving through the others:
 
-**Readers.** `inspect(mission)` → `{ mission, orphan }` is the mission as a
+| Lost part `cause`    | When                                                                                                                     | Can it end?                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| `connection-revoked` | the connection is `revoked`                                                                                              | no: revocation is terminal                    |
+| `connection-missing` | the connection no longer exists                                                                                          | no                                            |
+| `access-withdrawn`   | `gapsOf` answers basis `none`: the creator holds nothing on it (share revoked, left the group that owned or received it) | when a share or a membership grounds it again |
+
+`check(mission)` returns `{ grounded: true, lost }` (`lost`: the lost parts,
+in the mission's order of connections, `{ connectionId, cause, uncovered }`)
+or `{ grounded: false, cause, connectionId, uncovered, lost }` — the whole
+mission orphaned:
+
+| Orphan `cause`       | When                                                                                                                             | Can it end?                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `connection-revoked` | every part is lost, for good (the first lost one is revoked)                                                                     | no: revocation is terminal                            |
+| `connection-missing` | idem, the first lost part being a missing connection                                                                             | no                                                    |
+| `creator-removed`    | the creator is unknown or `removed` (an operator deactivated them), whatever still serves                                        | when an operator reactivates the account              |
+| `authority-lost`     | a share narrowed under a part (`gapsOf` basis `share`: `uncovered` lists the risks), or every part is lost and one was withdrawn | when a share or a membership covers every one of them |
+
+A part "serves" while its connection is not lost and carries at least one
+accepted risk. An `expired` or `unowned` connection removes no authority:
+its part is not lost (an `expired` one answers `connection-unavailable` until
+it is reconnected). Nothing is ever added in a lost part's place: a revoked
+connection's part takes no new permission (`permissionOptions` leaves it out,
+`limitIssues` answers `exceeds-authority`), a withdrawn one neither (the
+creator holds nothing there), and the bootstrap kit regenerated for a new
+token leaves a lost connection out (`kitOf`). Budgets and counters of every
+part are untouched.
+
+**Readers.** `inspect(mission)` → `{ mission, orphan, lost }` is the mission as a
 reader must see it: `status: 'orphaned'` in place of `active` when the verdict
-is ungrounded, with the reason (`cause`, `connectionId`, `uncovered`);
-`derive(mission)` is the same without the reason. A mission the store holds as
+is ungrounded, with the reason (`cause`, `connectionId`, `uncovered`), and the
+lost parts in either case; `derive(mission)` is the mission alone. The
+execution door hands `lost` to `loadMissionContext`, which marks those
+connections `lost` in the mission's context: the pipeline refuses their calls
+`connection-revoked` (git included), `tools/list` leaves their tools out, and
+the catalog lists them with `lost` ([execution-door](execution-door.md)). The
+mission service turns them into `MissionOverview.lost`
+(`{ connection_id, cause, final }`), `MissionDetailConnection.lost` and
+`MissionOnConnection.part_lost`; the management door into
+`lost_connections` ([management-door](management-door.md)). A mission the store holds as
 `revoked` or `expired` is returned as it is, without a read. Nothing is
 written, and no administrative entry: no human is behind a read.
 
@@ -451,18 +479,32 @@ issued meanwhile was not watched) and writes, naming `actorId`:
 connection_id, uncovered }`;
 - `mission-restored` for a mission orphaned before and grounded after —
   `before: { status: 'orphaned', cause, connection_id, uncovered }`,
-  `after: { status: 'active' }`.
+  `after: { status: 'active' }`;
+- `mission-connection-lost` for a mission grounded before and after that lost
+  one or more parts — `before: { status: 'active', lost }`,
+  `after: { status: 'active', lost, newly_lost: [{ connection_id, cause }] }`;
+  an access withdrawn then its connection revoked is a new loss (the cause
+  changed);
+- `mission-connection-restored` for a mission grounded before and after whose
+  withdrawn part serves again — `after.restored` lists the connections.
 
-| Act                                                | Watch                              | Orphans | Restores | Actor                  |
-| -------------------------------------------------- | ---------------------------------- | ------- | -------- | ---------------------- |
-| `ShareService.share` (new, or replacing)           | `watchConnection`                  | yes     | yes      | the owner              |
-| `ShareService.revoke`                              | `watchConnection`                  | yes     | —        | the owner              |
-| `ConnectionService.revoke`                         | `watchConnection`                  | yes     | —        | the owner              |
-| `ConnectionService.transfer`                       | `watchConnection`                  | yes     | yes      | the owner              |
-| `ConnectionService.reassign`                       | `watchConnection`                  | yes     | yes      | the operator           |
-| `GroupService.addMember` / `removeMember`          | `MembershipSettler.watch` (member) | yes     | yes      | the operator           |
-| a sign-in (`completeLogin`, around the group sync) | `MembershipSettler.watch` (user)   | yes     | yes      | the user who signed in |
-| `UserAdminService.deactivate` / `reactivate`       | `MembershipSettler.watch` (user)   | yes     | yes      | the operator           |
+Each state carries `lost: [{ connection_id, cause }]` when a part is lost. The
+two part acts are guarded among themselves (`appendUnlessLatest`), like the
+two whole-mission acts. `settle` returns
+`{ orphaned, restored, partsLost, partsRestored }`; `ShareService.revoke`
+reports `orphaned` and `partsLost`, `ShareService.share` counts the missions
+restored whole or in part as `restored`, and `forecastShare` lists both.
+
+| Act                                                | Watch                              | Orphans         | Restores | Actor                  |
+| -------------------------------------------------- | ---------------------------------- | --------------- | -------- | ---------------------- |
+| `ShareService.share` (new, or replacing)           | `watchConnection`                  | yes             | yes      | the owner              |
+| `ShareService.revoke`                              | `watchConnection`                  | yes (or a part) | —        | the owner              |
+| `ConnectionService.revoke`                         | `watchConnection`                  | yes (or a part) | —        | the owner              |
+| `ConnectionService.transfer`                       | `watchConnection`                  | yes             | yes      | the owner              |
+| `ConnectionService.reassign`                       | `watchConnection`                  | yes             | yes      | the operator           |
+| `GroupService.addMember` / `removeMember`          | `MembershipSettler.watch` (member) | yes             | yes      | the operator           |
+| a sign-in (`completeLogin`, around the group sync) | `MembershipSettler.watch` (user)   | yes             | yes      | the user who signed in |
+| `UserAdminService.deactivate` / `reactivate`       | `MembershipSettler.watch` (user)   | yes             | yes      | the operator           |
 
 The watch holds verdicts for the length of one act, for the audit only: no
 reader sees them. The watch and the act are not one transaction, so two acts
@@ -613,8 +655,8 @@ waits for its confirmation: `303` to the dialog with `?confirm=<id>`.
 ```ts
 const { service, grounds, membership } = root.authority;
 const held = await service.authorityOf(user, connection); // { basis, riskIds }
-const verdict = await grounds.check(mission); // { grounded } | { cause, … }
-const { mission: seen, orphan } = await grounds.inspect(stored); // seen.status may be 'orphaned'
+const verdict = await grounds.check(mission); // { grounded, lost } | { cause, …, lost }
+const { mission: seen, orphan, lost } = await grounds.inspect(stored); // seen.status may be 'orphaned'
 await root.shares.service.share(actor, connectionId, {
   target: { kind: 'user', email: 'colleague@example.com' },
   riskIds: ['github.read-code', 'github.read-meta'], // explicit ids, never "all"
@@ -627,28 +669,35 @@ A page that catches a service error matches it by shape (`isShareError(err,
 
 ### Tests
 
-| File                                                      | Covers                                                                                                                                                                                                                                                                                                                                                           |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/server/authority/authority-service.test.ts`          | owner, union of shares, per-connection subsets, `gapsOf`, cheap path, `uncoveredRisks`                                                                                                                                                                                                                                                                           |
-| `src/server/authority/mission-grounds.test.ts`            | every cause (`connection-missing` included), partition, `inspect` / `derive`, watches, two acts under way at once (one change, one entry; an older equal entry does not hold a new one back; the mirror case), `MembershipSettler`, `derivedMissionReads`                                                                                                        |
-| `src/server/missions/orphan-reason.test.ts`               | the sentences of the mission page, per cause                                                                                                                                                                                                                                                                                                                     |
-| `src/server/shares/*.test.ts`                             | restriction helpers, share service (`connection-unowned`, `provider-unknown`, the route's connection, a revocation lost to another one, settlement when the entry fails), error shape                                                                                                                                                                            |
-| `src/server/groups/service.test.ts`                       | local groups (one entry per change, settlement when the entry fails), admin rule and local groups, `findActiveUserByEmail`                                                                                                                                                                                                                                       |
-| `src/server/missions/catalog-view.test.ts`                | the catalog view is the authority enumeration, an entry the authority cannot enumerate included                                                                                                                                                                                                                                                                  |
-| `tests/integration/authority/share-and-orphan.test.ts`    | share → issue within R1 → exceed → revoke → orphaned → refused; lose → regain: same token, session, counters; revoked connection stays orphaned; a claim and an approval request on an orphaned mission expire on the normal delay ([requests](requests.md))                                                                                                     |
-| `tests/integration/authority/ownership.test.ts`           | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next; a share to oneself or to a fellow member of the owner group refused (`target-is-owner`, nothing stored), so leaving the group orphans the member's missions; a share to a former member and a share to a group the sharer belongs to accepted            |
-| `tests/integration/auth/deactivate-user.test.ts`          | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation; what a half-failed deactivation left open is closed before the user is active again, and a reactivation that cannot close it does not happen ([authentication](authentication.md)) |
-| `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                                                                                                                                 |
-| `tests/integration/authority/share-restores.test.ts`      | the forecast (exact, read-only, union of shares, replacement of the target's share, group target), and the confirmation over HTTP: nothing stored on the first post, shared on the post that carries every mission, back again otherwise                                                                                                                         |
-| `tests/integration/authority/close-orphaned.test.ts`      | an owner of the connection closes an orphaned mission (entry, tokens, the door), never one that serves; strangers, former group members and delegated clients read "not found"; what the page of the account lists; the route                                                                                                                                    |
-| `tests/integration/authority/rules-read-by-pages.test.ts` | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                                   |
-| `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                   |
-| `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                        |
-| `tests/unit/structural/authority-not-snapshotted.test.ts` | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified                                                                                                                                                                                                                           |
-| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the Give access dialog, Shared with you, removal (asked first), restoration by a new access, the ownership loop (browser)                                                                                                                                                                                                                                        |
+| File                                                                    | Covers                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/server/authority/authority-service.test.ts`                        | owner, union of shares, per-connection subsets, `gapsOf`, cheap path, `uncoveredRisks`                                                                                                                                                                                                                                                                                                                                                                                |
+| `src/server/authority/mission-grounds.test.ts`                          | every cause (`connection-missing` included), partition, lost parts (a revoked connection of two, all revoked, a withdrawn last part, a narrowed share and a removed creator stay whole, `mission-connection-lost` / `-restored` and a withdrawn-then-revoked part), `inspect` / `derive`, watches, two acts under way at once (one change, one entry; an older equal entry does not hold a new one back; the mirror case), `MembershipSettler`, `derivedMissionReads` |
+| `src/server/missions/orphan-reason.test.ts`                             | the sentences of the mission page, per cause                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `src/server/shares/*.test.ts`                                           | restriction helpers, share service (`connection-unowned`, `provider-unknown`, the route's connection, a revocation lost to another one, settlement when the entry fails), error shape                                                                                                                                                                                                                                                                                 |
+| `src/server/groups/service.test.ts`                                     | local groups (one entry per change, settlement when the entry fails), admin rule and local groups, `findActiveUserByEmail`                                                                                                                                                                                                                                                                                                                                            |
+| `src/server/missions/catalog-view.test.ts`                              | the catalog view is the authority enumeration, an entry the authority cannot enumerate included                                                                                                                                                                                                                                                                                                                                                                       |
+| `tests/integration/authority/share-and-orphan.test.ts`                  | share → issue within R1 → exceed → revoke → orphaned → refused; lose → regain: same token, session, counters; revoked connection stays orphaned; a claim and an approval request on an orphaned mission expire on the normal delay ([requests](requests.md))                                                                                                                                                                                                          |
+| `tests/integration/authority/ownership.test.ts`                         | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next; a share to oneself or to a fellow member of the owner group refused (`target-is-owner`, nothing stored), so leaving the group orphans the member's missions; a share to a former member and a share to a group the sharer belongs to accepted                                                                                                                 |
+| `tests/integration/auth/deactivate-user.test.ts`                        | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation; what a half-failed deactivation left open is closed before the user is active again, and a reactivation that cannot close it does not happen ([authentication](authentication.md))                                                                                                      |
+| `tests/integration/authority/handlers.test.ts`                          | the form posts and their notices                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `tests/integration/authority/share-restores.test.ts`                    | the forecast (exact, read-only, union of shares, replacement of the target's share, group target), and the confirmation over HTTP: nothing stored on the first post, shared on the post that carries every mission, back again otherwise                                                                                                                                                                                                                              |
+| `tests/integration/authority/close-orphaned.test.ts`                    | an owner of the connection closes an orphaned mission (entry, tokens, the door), never one that serves; strangers, former group members and delegated clients read "not found"; what the page of the account lists; the route                                                                                                                                                                                                                                         |
+| `tests/integration/authority/rules-read-by-pages.test.ts`               | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                                                                                                                                        |
+| `tests/integration/store/ownership-and-orphans.test.ts`                 | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `tests/integration/store/audit-guarded-append.test.ts`                  | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                                                                                                                             |
+| `tests/unit/structural/authority-not-snapshotted.test.ts`               | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified                                                                                                                                                                                                                                                                                                                                |
+| `tests/integration/authority/revoked-connection-drops-its-part.test.ts` | a revoked connection of a two-connection mission: `connection-revoked` there, the other served, `tools/list` and the catalog, the mission page, the kit and `list_my_missions`, the audit naming the owner, nothing added on it, every connection revoked → orphaned; a share withdrawn on one connection and made again                                                                                                                                              |
+| `tests/e2e/v5/share-and-orphan.spec.ts`                                 | the Give access dialog, Shared with you, removal (asked first), restoration by a new access, the ownership loop, a disconnection under a two-account mission (browser)                                                                                                                                                                                                                                                                                                |
 
 ## How to debug
 
+- **A call is refused `connection-revoked` while the mission runs.** That
+  connection's part is lost: `grounds.inspect(mission).lost` names it and the
+  cause (`connection-revoked`: final; `access-withdrawn`: comes back with the
+  access). Audit → the mission: `mission-connection-lost` names who did it.
+  The mission page shows the same ("An account no longer serves this
+  mission"). To reach the account that replaced it, issue a new mission.
 - **A mission answers `mission-inactive` / `orphaned`.** Its page
   (`/missions/<id>`) shows the cause as of that page load, the connection and
   the uncovered risks; `grounds.check(mission)` gives the same. Audit → the

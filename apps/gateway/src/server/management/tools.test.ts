@@ -236,6 +236,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
         role: 'creator',
         creator: { id: 'user-ada', email: 'ada@example.com' },
         orphan: null,
+        lost: [],
         token: null,
         issuedVia:
           delegationId === null
@@ -557,6 +558,7 @@ describe('views', () => {
         creator: { id: 'user-ada', email: 'ada@example.com' },
         state: { kind: 'orphaned' },
         orphan: { cause, connection_id: 'conn-acme', uncovered: ['acme.read'] },
+        lost: [],
         token: null,
         issuedVia: null,
       }) as unknown as MissionOverview;
@@ -753,6 +755,7 @@ describe('views', () => {
       creator: { id: 'user-ada', email: 'ada@example.com' },
       state: { kind: 'orphaned' },
       orphan: { cause: 'connection-revoked', connection_id: 'conn-acme', uncovered: [] },
+      lost: [{ connection_id: 'conn-acme', cause: 'connection-revoked', final: true }],
       token: { prefix: 'AbCd1234', createdAt: NOW.toISOString() },
       issuedVia: { delegation_id: 'delegation-2', client_id: 'other', client_name: 'Other agent' },
     } as MissionOverview;
@@ -761,6 +764,7 @@ describe('views', () => {
       mission_id: 'm1',
       state: 'orphaned',
       orphan: { cause: 'connection-revoked', can_come_back: false },
+      lost_connections: [{ connection_id: 'conn-acme', cause: 'connection-revoked', final: true }],
       period: { kind: 'recurring', length_seconds: 3600 },
       session: null,
       issued_via: {

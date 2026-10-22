@@ -12,7 +12,8 @@
  *                 with its reason (`AUTH_FAILURE_REASONS`); a web session or a
  *                 delegated token → `wrong-credential-kind`
  *   grounds       the creator's authority, re-read on every request; a mission
- *                 whose grounds are gone reads `orphaned` for this request
+ *                 whose grounds are gone reads `orphaned` for this request, and
+ *                 a connection whose part is lost is marked `lost` in it
  *   surface rate  requests per minute per mission, one window for both doors
  *
  * Each door renders a denial in its own protocol: JSON-RPC for MCP, HTTP and
@@ -243,7 +244,7 @@ export class MissionAdmission {
           // Authority is never snapshotted in a mission, and `orphaned` is never
           // stored: the creator's authority is re-read here, and the mission is
           // orphaned for this request exactly when it does not ground it now.
-          const { mission, orphan } = await this.deps.grounds.inspect(verified.mission);
+          const { mission, orphan, lost } = await this.deps.grounds.inspect(verified.mission);
           if (orphan) {
             // No administrative entry: no human is behind this read. The refused
             // call itself is audited by the pipeline (`mission-inactive`).
@@ -254,11 +255,15 @@ export class MissionAdmission {
               uncovered: orphan.uncovered,
             });
           }
+          // A lost connection (revoked, or the creator's access withdrawn) is marked in
+          // the context: its calls are refused `connection-revoked`, its tools unlisted,
+          // and the mission serves through its other connections.
           const context = await loadMissionContext(
             this.deps.store,
             mission,
             verified.token,
             this.deps.config.selfResources,
+            lost,
           );
           this.missionsByContext.set(context, mission);
           return { kind: 'mission-token', context };

@@ -1060,8 +1060,10 @@ export class ConnectionService {
 
   /**
    * Terminal. The sealed credential is erased, and the missions that carry
-   * the connection are `orphaned` from then on, and stay so: a revoked
-   * connection never comes back (spec §2.3, §7.8).
+   * the connection lose their part on it for good: they keep serving through
+   * their other connections, and one with no other part left is `orphaned`
+   * and stays so — a revoked connection never comes back (spec §2.3, §7.8; ADR
+   * orphaned-missions-and-ownerless-connections, amendment 2026-10-21).
    *
    * The grant at the provider is withdrawn too when the provider documents
    * how (`CredentialBroker.withdrawAtProvider`). In this order, on purpose:

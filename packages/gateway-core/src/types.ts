@@ -82,8 +82,18 @@ export type ConnectionOwner = Principal & { readonly display: string };
 /** The slice of a connection a mission context carries. Credentials are
  *  never part of the context: the upstream stage decrypts them in memory
  *  for the duration of one call (spec §2.4). */
+/** Why a connection no longer serves a mission that keeps serving through its others
+ *  (ADR orphaned-missions-and-ownerless-connections, amendment 2026-10-21):
+ *  `connection-revoked` — revoked by an owner, for good; `access-withdrawn` — the
+ *  creator holds nothing on it any more, and it serves again if the access returns. */
+export const CONNECTION_LOSSES = ['connection-revoked', 'access-withdrawn'] as const;
+export type ConnectionLoss = (typeof CONNECTION_LOSSES)[number];
+
 export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_name' | 'status'> & {
   readonly owner: ConnectionOwner;
+  /** Set when this connection's part of the mission is lost: every call through it is
+   *  refused `connection-revoked`, and its tools leave `tools/list`. Absent: it serves. */
+  readonly lost?: ConnectionLoss;
   /** How the connection was made, when its plugin connects in more than one
    *  way: a tool its way cannot run is refused before the budget and left out
    *  of `tools/list`. Absent or `null`: the plugin's primary way. */

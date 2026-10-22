@@ -2,7 +2,7 @@
 title: Gateway core
 status: current
 date: 2026-10-13
-last_synced: 2026-10-13
+last_synced: 2026-10-21
 tracks:
   - packages/gateway-core/src/
   - packages/gateway-core/tests/unit/
@@ -101,7 +101,8 @@ codes, one builder each under `refuse.*`, every refusal carrying its
 | `approval-required`       | `risk_id`, `risk_ids`, `fingerprint`, `approval_url`, `expires_at`, `approval_valid_seconds` | nothing executed, nothing held; one request covers every gated risk of the call; replay the same tool and arguments within the delay |
 | `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                                   | which refs the mission may touch                                                                                                     |
 | `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                                         | wait N seconds; quota not consumed                                                                                                   |
-| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}`           | who can reconnect                                                                                                                    |
+| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}`           | who can reconnect (the pipeline answers it for `expired` only)                                                                       |
+| `connection-revoked`      | `connection {id,name}`, `cause` (`connection-revoked` \| `access-withdrawn`), `final`        | the mission still serves its other accounts; whether this one comes back; ask the creator for a mission on its replacement           |
 | `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                                | stop calling, report to the human                                                                                                    |
 | `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                               | where the presented kind IS accepted (`ACCEPTED_AT`)                                                                                 |
 
@@ -112,8 +113,14 @@ which connection statuses refuse: `expired` and `revoked`. An `unowned`
 connection (its owning group emptied) keeps serving its missions until
 someone reconnects or revokes it (spec §2). The wording per inactive
 mission status lives in status-keyed records, so a new status fails to
-compile until it has its sentence. The unit test asserts exactly eight codes in `REFUSAL_CODES` and one
+compile until it has its sentence. The unit test asserts exactly nine codes in `REFUSAL_CODES` and one
 sample per code.
+
+`checkConnectionAvailable(connection)` answers `connection-revoked` for a
+connection marked `lost` (`MissionConnection.lost`: `connection-revoked` |
+`access-withdrawn`, set by the host from the mission's grounds) or whose
+status is `revoked`, and `connection-unavailable` for an `expired` one (ADR
+orphaned-missions-and-ownerless-connections, amendment 2026-10-21).
 
 **JSON-RPC mapping** — unchanged since v4: `refusalToRpcError(id, refusal)`
 yields `{ code: -32603, message: 'Vaubaan refused the call: <code>', data: <refusal> }`.
@@ -137,7 +144,7 @@ a new one fails to compile until it has its sentence);
 `AuthError.tokenStopped(reason)` builds it. These are deliberately **not**
 refusal codes: a mission has several tokens, one per holder, and a token that
 stopped says nothing about the mission, which may be serving the others
-(`mission-inactive` would be false). The eight codes stay eight (ADR
+(`mission-inactive` would be false). The refusal codes stay nine (ADR
 [mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md),
 D6; the door's side is in [execution-door](execution-door.md), "Token
 holders").
@@ -550,7 +557,7 @@ pivot D1; the Upstash ADR is superseded).
 
 `packages/gateway-core/tests/unit/`, vitest, no network, no store:
 
-- `errors.test.ts` (31) — eight codes, one sample each, every field, hint
+- `errors.test.ts` (32) — nine codes, one sample each, every field, hint
   non-empty and serializable; `isRefusal`; `isUnavailableConnectionStatus`;
   `rpcError` / `rpcSuccess`; `AuthError` code and status; a mission token that
   stopped working is an `AuthError` carrying its reason and sentence, never a

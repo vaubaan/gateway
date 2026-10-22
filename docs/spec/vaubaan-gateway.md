@@ -427,7 +427,13 @@ owner; `revoked` by an owner, terminal. An `expired` connection makes
 every call of the missions that carry it fail with
 `connection-unavailable`, naming the connection, until someone
 reconnects it. A `revoked` connection grounds no authority any more: the
-missions that carry it become `orphaned`. Revoking a connection erases
+missions that carry it lose their part on it, for good — every call through
+it is refused `connection-revoked` —, and keep serving through their other
+connections; a mission left with no connection that serves becomes
+`orphaned` (amended on 2026-10-21, ADR
+[orphaned-missions-and-ownerless-connections](../decisions/orphaned-missions-and-ownerless-connections.md)).
+Nothing takes the lost part's place: the account that replaced it is reached
+by a new mission. Revoking a connection erases
 its credential on the instance and, **when the provider offers a way to
 do it, also withdraws the grant at the provider**; the interface says,
 provider by provider, whether the grant was withdrawn there or must be
@@ -440,7 +446,11 @@ operator reassigns an owner. This is the operator's only act on the
 domain.
 
 **Share**: `active` → `revoked`, terminal. Revoking a share does not
-revoke the missions the target already issued; it turns them `orphaned`
+revoke the missions the target already issued. A mission whose creator then
+holds nothing on that connection loses its part on it, as for a revoked
+connection but reversibly: it comes back when an access covers it again. A
+mission left with no connection that serves, or one that the share's
+replacement no longer covers (a narrowed restriction), becomes `orphaned`
 (see below).
 
 **Mission**:
@@ -453,16 +463,22 @@ revoke the missions the target already issued; it turns them `orphaned`
   with the claim URL.
 - `expired` — `expires_at` passed. Terminal unless extended by the
   creator.
-- `orphaned` — the upstream authority vanished (share revoked,
-  connection revoked, creator deactivated by an operator or dropped from the
-  owner group that grounded their authority). Every call is refused. The
+- `orphaned` — the upstream authority vanished as a whole: none of its
+  connections serves it any more (each revoked, or the creator's access to
+  it withdrawn: a share revoked, the creator dropped from the owner group
+  that grounded it), a share was narrowed under one of them, or the creator
+  was deactivated by an operator. Every call is refused. A mission that
+  lost some of its connections but not all is not orphaned: it serves
+  through the others, refuses `connection-revoked` through the lost ones,
+  and says which (§7.8). The
   state is **derived from the creator's current authority, never
   stored as a verdict**: if the authority comes back (the share is made
   again, the creator is back in the owner group at the next sign-in),
   the mission serves calls again, with its session and counters intact.
   A share that would bring orphaned missions back names them to the owner
   before it is made (§7.3).
-  A revoked connection never comes back, so its missions stay orphaned.
+  A revoked connection never comes back, so a mission that has nothing
+  else stays orphaned, and the part of one that has stays lost.
   An orphaned mission may be closed — revoked, for good — by its
   creator, or by an owner of one of the connections it carries. An owner
   has that right only while the mission is orphaned: a mission that
@@ -798,7 +814,7 @@ door of the same surface: the same token, the same admission, the same
 decision and the same audit.
 
 - **Discovery** (`tools/list`): the tools of the providers the mission
-  carries. In v5.0 the list is filtered **per provider, not per tool**: a
+  carries, a connection it lost excepted (§2.3). In v5.0 the list is filtered **per provider, not per tool**: a
   listed tool may still be refused `risk-not-accepted` at call time. The
   catalog endpoint below is the precise source of what a mission can
   call. Filtering per tool needs plugins to declare the risks each tool
@@ -821,11 +837,18 @@ decision and the same audit.
   - `rate-limited`: `RiskId`, limit, delay before retry.
   - `connection-unavailable`: the connection is `expired` (the provider
     rejected its credential); connection name and owner to contact.
-    A `revoked` connection is not answered this way: it orphans the
-    missions that carry it (§2.3), which then answer `mission-inactive`.
+    A `revoked` connection is not answered this way.
+  - `connection-revoked`: the connection no longer serves this mission,
+    which still serves through its other connections (§2.3): connection
+    id and name, the cause (`connection-revoked`: removed by its owner;
+    `access-withdrawn`: the creator's access to it was withdrawn) and
+    whether it is final. The hint tells the agent to keep using the other
+    accounts and to ask the mission's creator for a mission on the account
+    that replaced it. Git through the gateway on that connection is refused
+    the same way.
   - `mission-inactive`: `expired`, `orphaned` or `revoked`, with the
-    reason. `orphaned` covers every loss of the creator's authority, a
-    revoked connection included.
+    reason. `orphaned` covers every loss of the creator's authority as a
+    whole, every connection revoked included.
   - `wrong-credential-kind`: the bearer is not a mission token (a
     delegated token or a human session presented at the execution door),
     with the door that would accept it. The same code is returned by the
@@ -1514,8 +1537,13 @@ new request.
 The creator stops a mission (a revocation, for good) or replaces its key
 (a rotation) without changing the mission; replacing asks first, and the
 old key stops at once. The owner removes an access or disconnects an
-account; the missions that depend on it become `orphaned` and refuse
-everything, with the reason, and the confirmation says how many.
+account; the missions that use it lose that account only and keep running
+on their others, those that used nothing else become `orphaned` and refuse
+everything, with the reason, and the confirmation says how many. The
+mission's page says which account it lost and whether it comes back (never,
+for a disconnected one); its creator issues a new mission to reach the
+account that replaced it. Nothing is ever added to a mission in a lost
+account's place.
 When a connection is revoked, the owner is told what became of the
 access granted at the provider: withdrawn there too, or theirs to remove
 by hand, with the place to do it.
@@ -1565,7 +1593,8 @@ of [gateway-risk-model](./gateway-risk-model.md) §12.
 
 For an administrative act: timestamp, user, act (connection, share,
 revocation, issuance, extension, reset, approval, rotation, change of
-limits, a member removed or leaving, delegation granted or revoked,
+limits, a mission orphaned or restored, a mission that lost an account or
+got it back — naming the human whose act did it —, a member removed or leaving, delegation granted or revoked,
 an administrator named or removed, the configuration's admin rule applied,
 a sign-in provider tested, switched on or off, a second factor enrolled,
 reset or waived for a provider, an administrator named with the master key,

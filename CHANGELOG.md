@@ -9,6 +9,33 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Disconnecting an account takes that account only out of its missions.**
+  A mission that uses several accounts keeps running on the others, with its
+  keys, its limits and what it counted; calls through the disconnected account
+  are refused with a new code, `connection-revoked`, whose hint says it never
+  comes back, to keep using the other accounts, and to ask the mission's
+  creator for a mission on the account that replaced it (git through the
+  gateway reads the same). Its tools leave `tools/list`; the catalog marks it
+  `lost`. Removing someone's access to one account does the same, until an
+  access is given again. A mission whose every account is gone, a mission
+  whose creator was deactivated, and one under an access narrowed to less
+  than it uses still stop as a whole. The mission page says which account no
+  longer serves and whether it comes back ("Lost an account" in the lists),
+  `list_my_missions` carries `lost_connections`, and the audit records
+  `mission-connection-lost` naming who disconnected. Nothing is ever added in
+  a lost account's place. Before, one disconnected account stopped every
+  mission that used it, whole and for good. ADR
+  orphaned-missions-and-ownerless-connections, amendment 2026-10-21.
+- The bootstrap kit's instructions list the new refusal code. The community
+  collector's schema (`deploy/collector/schema.sql`) accepts it in a decision
+  report: apply the file again on the collector, and deploy the website,
+  before instances of this version report usage statistics.
+- An account connected through the GitHub App of earlier builds
+  (`app-install`) is reconnected with a token on the same account, its old
+  credential never read — now covered by a test.
+
 ### Fixed
 
 - **The second factor's codes copy in one click.** The recovery codes shown

@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/git/paths.ts
@@ -318,10 +318,24 @@ refused call. A `revoked` or `expired` mission is not re-checked.
 17–45 µs per request): [authority](authority.md), "Orphaned missions" and
 "The door".
 
-A consequence: a mission that carries a **revoked** connection is refused
-`mission-inactive` (orphaned), not `connection-unavailable`; the latter is the
-refusal of an `expired` connection. A revoked connection never comes back, so
-that mission stays orphaned.
+`inspect` also returns the mission's **lost parts** — a connection revoked,
+or one the creator's access to was withdrawn (handbook authority, "Orphaned
+missions"; ADR orphaned-missions-and-ownerless-connections, amendment
+2026-10-21). They go to `loadMissionContext`, which marks each such
+connection `lost` (`connection-revoked` | `access-withdrawn`; a `revoked` one
+whatever the grounds said, its status being final). The mission keeps serving
+through its other connections:
+
+- a call that resolves to a lost connection is refused `connection-revoked`
+  by `checkConnectionAvailable`, right after the resource stage — nothing
+  classified, nothing counted; the git remote's prechecks run the same check,
+  so `git clone` / `push` on that connection read the refusal's line
+  ("…was removed and no longer serves this mission…");
+- `tools/list` leaves its tools out (`callableProviders` skips a lost
+  connection), and the catalog lists it with `lost`;
+- a mission whose every connection is lost reads `orphaned` and is refused
+  `mission-inactive`, as before. `connection-unavailable` stays the refusal of
+  an `expired` connection, which its owner reconnects.
 
 ### Mission context (`mission-context.ts`)
 
@@ -894,9 +908,12 @@ not to buffer (`X-Accel-Buffering: no` covers nginx).
 ## Discovery and catalog (`tools.ts`)
 
 `callableTools(ctx, registry)`: every tool of each non-experimental plugin
-whose provider the mission both holds a connection for and accepts at least one
-risk of (`callableProviders`). The filter is per provider: a listed tool can
-still be refused `risk-not-accepted` at call time.
+whose provider the mission both holds a connection for — one that still serves
+it, not `lost` — and accepts at least one risk of (`callableProviders`). The
+filter is per provider: a listed tool can still be refused `risk-not-accepted`
+at call time. The catalog's `connections[]` carries `lost`
+(`connection-revoked` | `access-withdrawn`) on a connection the mission lost;
+its tools are not `callable`.
 
 `GET /mcp/catalog` (mission token; 405 with `Allow: GET` for another method; 401 / 403 / 429 as `/mcp`; an inactive
 mission is 403 `mission-inactive`), `Cache-Control: no-store`:

@@ -26,6 +26,10 @@ const LINE_OF: { readonly [C in Refusal['code']]: (r: Extract<Refusal, { code: C
   'rate-limited': (r) => `too many actions on ${r.risk_id}; retry in ${r.retry_after_seconds} s`,
   'connection-unavailable': (r) =>
     `the account ${r.connection.name} is ${r.status}; ask ${r.owner.display} to reconnect it`,
+  'connection-revoked': (r) =>
+    r.final
+      ? `the account ${r.connection.name} was removed and no longer serves this mission; ask the mission creator for a mission on the account that replaces it`
+      : `the mission's creator no longer has access to the account ${r.connection.name}; it serves again if the access is given back`,
   'mission-inactive': (r) => `the mission is ${r.status}: ${r.reason}`,
   'wrong-credential-kind': (r) =>
     `this is not a mission key; the ${r.door} door expects a ${r.expected}`,

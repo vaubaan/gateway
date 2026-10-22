@@ -140,11 +140,11 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
         const lines = [
           `${holderOf(outcome.targetLabel)} can no longer write missions on this account.`,
         ];
-        lines.push(
-          outcome.orphaned > 0
-            ? orphanedLine(outcome.orphaned)
-            : 'No running mission depended on it.',
-        );
+        if (outcome.partsLost > 0) lines.push(partsLostLine(outcome.partsLost));
+        if (outcome.orphaned > 0) lines.push(orphanedLine(outcome.orphaned));
+        if (outcome.orphaned === 0 && outcome.partsLost === 0) {
+          lines.push('No running mission depended on it.');
+        }
         return await redirectWithNotice(
           principal.sessionId,
           connectionPath(outcome.share.connectionId),
@@ -182,8 +182,12 @@ function orphanedLine(count: number): string {
   return `${count} ${count === 1 ? 'mission that depended on it is' : 'missions that depended on it are'} stopped and ${count === 1 ? 'refuses' : 'refuse'} every call, until an access covers ${count === 1 ? 'it' : 'them'} again.`;
 }
 
+function partsLostLine(count: number): string {
+  return `${count} ${count === 1 ? 'mission' : 'missions'} no longer ${count === 1 ? 'uses' : 'use'} this account and ${count === 1 ? 'keeps' : 'keep'} running on ${count === 1 ? 'its' : 'their'} other accounts, until an access covers ${count === 1 ? 'it' : 'them'} again.`;
+}
+
 function restoredLine(count: number): string {
-  return `${count} stopped ${count === 1 ? 'mission is' : 'missions are'} covered again and ${count === 1 ? 'serves' : 'serve'} calls from now on, with ${count === 1 ? 'its' : 'their'} limits as they were.`;
+  return `${count} ${count === 1 ? 'mission is' : 'missions are'} covered again on this account and ${count === 1 ? 'serves' : 'serve'} calls through it from now on, with ${count === 1 ? 'its' : 'their'} limits as they were.`;
 }
 
 /** "the Platform team": the service labels a group `group <name>`; a person keeps their email. */

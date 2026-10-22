@@ -407,6 +407,8 @@ export const MISSION_STATES = {
   expired: { label: 'expired', tone: null },
   revoked: { label: 'stopped', tone: null },
   orphaned: { label: 'Needs an owner', tone: 'bad' },
+  /** Running, with an account that no longer serves it (revoked, or access withdrawn). */
+  accountLost: { label: 'Lost an account', tone: 'warn' },
 } as const satisfies Record<string, StateWord>;
 
 /** Keyed by `ConnectionStatus`. */
@@ -590,6 +592,13 @@ export const ORPHAN_WORDS = {
   'authority-lost': 'its creator no longer holds the permissions it uses',
 } as const;
 
+/** Why an account no longer serves a mission that still runs. Keyed by `PartLossCause`. */
+export const PART_LOSS_WORDS = {
+  'connection-revoked': 'no longer uses this account: it was disconnected',
+  'connection-missing': 'no longer uses this account: it no longer exists',
+  'access-withdrawn': 'no longer uses this account: its creator lost access to it',
+} as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Reference (the pages under `/reference`). Protocol names: provider, plugin,
 // risk, preset, tool, plane, slice pattern.
@@ -699,6 +708,7 @@ export const REFUSAL_WORDS = {
   'resource-not-in-mission': 'resource not in this mission',
   'rate-limited': 'too fast: per-minute limit',
   'connection-unavailable': 'account needs reconnecting',
+  'connection-revoked': 'account no longer in this mission',
   'mission-inactive': 'mission not running',
   'wrong-credential-kind': 'wrong kind of key',
 } as const;
@@ -726,6 +736,8 @@ export const ACT_WORDS = {
   'mission-closed': 'closed a mission',
   'mission-orphaned': 'left a mission without an owner',
   'mission-restored': 'brought a mission back',
+  'mission-connection-lost': 'took an account out of a mission',
+  'mission-connection-restored': 'gave an account back to a mission',
   'budget-extended': 'raised a limit',
   'period-reset': 'reset the limits',
   'expiry-extended': 'extended a mission',

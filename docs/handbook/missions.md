@@ -2,7 +2,7 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-18
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
@@ -158,7 +158,7 @@ about this instant:
 
 | Method                           | On an orphaned mission                                                                                                                                                                                                     |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list`, `get`                    | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`                                                                                                                                             |
+| `list`, `get`                    | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`; `lost` lists the lost connections, orphaned or not                                                                                         |
 | `setGate`                        | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                                                                                                                                                                     |
 | `rotate`                         | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                                                                                                                                                                     |
 | `revoke`                         | revokes: the stored status goes `active` → `revoked`, terminal. The creator; **or, while the mission is orphaned, an owner of one of its connections** (handbook [authority](authority.md), "Closing an orphaned mission") |
@@ -176,6 +176,26 @@ keys, its activity and what it counted are kept. The page offers
 "Stop the mission" on every mission that is not revoked yet, an orphaned or
 expired one included; "Replace my key" and "Generate my key" only while the
 mission serves calls.
+
+**A mission that lost an account and still runs** (ADR
+orphaned-missions-and-ownerless-connections, amendment 2026-10-21).
+`MissionOverview.lost` (`MissionLostConnection`: `connection_id`, `cause` —
+`connection-revoked` | `connection-missing` | `access-withdrawn` —, `final`)
+lists the connections whose part of the mission is lost, in the mission's
+order; `MissionDetailConnection.lost` marks the same on each connection, and
+`MissionOnConnection.part_lost` on the page of an account. On a mission that
+is not orphaned, `/missions/<id>` renders them with `explainLost(lost,
+connections)` (`orphan-reason.ts`): a callout `lost-accounts-callout`, "An
+account no longer serves this mission" (red when every loss is final, amber
+while one may come back), one line per account — "“acme-org” was disconnected
+by its owner. It never comes back to this mission…", or "you no longer have
+access to it… until the access is given back" — and that the mission keeps
+running on its other accounts and that the account that replaced a lost one is
+reached by a new mission. The head lists the account with "(no longer
+serves)". Nothing is added in a lost account's place: `permissionOptions`
+leaves a revoked connection out and `changePermissions` / `setLimits` refuse a
+line on it (`exceeds-authority`); `kitOf` leaves a lost connection out of the
+kit generated for a new token.
 
 ## The draft
 
@@ -1082,12 +1102,13 @@ door), its **state**, what it **allows** ("26 permissions · 2 accounts") and
 when it **ends**. "Your key" (masked, or "no key yet") is a detail column,
 behind the page's "Show details" (`DetailScope` `missions:list`).
 
-The state is `missionMark(state, waiting)`:
+The state is `missionMark(state, waiting, waitsFor, lostAccounts)`:
 
 | The mission                                        | Reads           | Tone  |
 | -------------------------------------------------- | --------------- | ----- |
 | serves calls                                       | running         | none  |
 | has a request waiting for its creator (the reader) | Waiting for you | amber |
+| runs, but lost an account (`lost` not empty)       | Lost an account | amber |
 | has a permission at its limit                      | Limit reached   | red   |
 | is `orphaned`                                      | Needs an owner  | red   |
 | is `expired`                                       | expired         | none  |

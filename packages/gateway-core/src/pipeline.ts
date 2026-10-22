@@ -13,7 +13,7 @@
  *   authenticate(bearer, door)      wrong-credential-kind  (this module)
  *   mission state                   mission-inactive       (this module)
  *   resource resolution             resource-not-in-mission (ResourceStage, execution door)
- *   connection availability         connection-unavailable (this module)
+ *   connection availability         connection-revoked, connection-unavailable (this module)
  *   classify + risk decision        risk-not-accepted      (RiskStage over risk-gateway.ts)
  *   budget / rate / gate            budget-exhausted, rate-limited, approval-required (BudgetStage)
  *   upstream mint + forward         —                      (UpstreamStage, execution door)
@@ -172,7 +172,7 @@ const INACTIVE_MISSION_REASON: Readonly<
 > = {
   expired: (expires_at) => `the mission expired at ${expires_at ?? 'an unknown time'}`,
   orphaned: () =>
-    'the authority behind the mission is missing right now (share or connection revoked, creator out of the group that grounded it, creator gone)',
+    'the authority behind the mission is missing right now (every account it uses revoked or withdrawn, a share narrowed under it, creator gone)',
   revoked: () => 'the mission was revoked by its creator',
 };
 
@@ -202,10 +202,19 @@ export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | nu
   return null;
 }
 
-/** `connection-unavailable` when the connection is `expired` or `revoked`.
- *  An `unowned` connection keeps serving its missions (spec §2: "missions
- *  keep running, but nobody can share or reconnect"). */
+/** `connection-revoked` when the connection's part of the mission is lost (revoked, or
+ *  the creator's access withdrawn: the mission serves through its other connections);
+ *  `connection-unavailable` when the connection is `expired`. An `unowned` connection
+ *  keeps serving its missions (spec §2: "missions keep running, but nobody can share
+ *  or reconnect"). */
 export function checkConnectionAvailable(connection: MissionConnection): Refusal | null {
+  const lost = connection.lost ?? (connection.status === 'revoked' ? 'connection-revoked' : null);
+  if (lost) {
+    return refuse.connectionRevoked({
+      connection: { id: connection.id, name: connection.display_name },
+      cause: lost,
+    });
+  }
   if (!isUnavailableConnectionStatus(connection.status)) return null;
   return refuse.connectionUnavailable({
     connection: { id: connection.id, name: connection.display_name },
