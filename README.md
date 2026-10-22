@@ -31,7 +31,9 @@ cloud services with their resources, and access given to a teammate or a
 team; missions with limits per permission and "ask me first" where you want
 it, worked on alone or as a team, each person with their own key; both MCP
 doors; "Waiting for you", where a mission's creator answers what an agent
-asks; the activity record; a per-service reference of every permission and
+asks; the activity record; a scheduled backup to S3-compatible storage,
+encrypted under the instance's own key and restored once before it is
+uploaded; a per-service reference of every permission and
 preset; a plugin per service (named in the diagram below); a Docker image
 built from source and published by the release pipeline, and a demo that
 runs on a laptop.

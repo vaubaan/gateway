@@ -221,6 +221,42 @@ const KEY_TABLE = [
     default: 'starttls',
     oneOf: MAIL_TLS_MODES,
   },
+  // Scheduled, encrypted backup to S3-compatible storage (ADR
+  // scheduled-encrypted-backup-to-object-storage): off unless `backup.s3.*` is set,
+  // and then the whole block (endpoint, region, bucket, access key id, secret).
+  { path: 'backup.s3.endpoint', env: 'VAUBAAN_BACKUP_S3_ENDPOINT', kind: 'string', format: 'url' },
+  { path: 'backup.s3.region', env: 'VAUBAAN_BACKUP_S3_REGION', kind: 'string' },
+  { path: 'backup.s3.bucket', env: 'VAUBAAN_BACKUP_S3_BUCKET', kind: 'string' },
+  { path: 'backup.s3.prefix', env: 'VAUBAAN_BACKUP_S3_PREFIX', kind: 'string' },
+  {
+    path: 'backup.s3.path_style',
+    env: 'VAUBAAN_BACKUP_S3_PATH_STYLE',
+    kind: 'bool',
+    default: false,
+  },
+  { path: 'backup.s3.access_key_id', env: 'VAUBAAN_BACKUP_S3_ACCESS_KEY_ID', kind: 'string' },
+  {
+    path: 'backup.s3.secret_access_key',
+    env: 'VAUBAAN_BACKUP_S3_SECRET_ACCESS_KEY',
+    kind: 'secret',
+  },
+  {
+    path: 'backup.every',
+    env: 'VAUBAAN_BACKUP_EVERY',
+    kind: 'string',
+    format: 'duration',
+    default: '24h',
+    maxSeconds: 86_400,
+  },
+  { path: 'backup.at', env: 'VAUBAAN_BACKUP_AT', kind: 'string', default: '03:00' },
+  {
+    path: 'backup.keep',
+    env: 'VAUBAAN_BACKUP_KEEP',
+    kind: 'int',
+    default: 0,
+    min: 0,
+    max: 10_000,
+  },
   { path: 'telemetry.enabled', env: 'VAUBAAN_TELEMETRY_ENABLED', kind: 'bool', default: false },
   {
     path: 'telemetry.level',

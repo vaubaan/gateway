@@ -246,6 +246,13 @@ export type AdminAct =
   /** The master key's holder named an administrator through the recovery page:
    *  `after` carries what was named. The actor is `recovery`. */
   | 'administrator-recovered'
+  /** The scheduled backup uploaded one (ADR scheduled-encrypted-backup-to-object-storage):
+   *  `after` carries the object key, size, SHA-256, key versions, the self-check and what
+   *  the retention deleted. Object: `instance-config` / `backup`; actor `schedule`. */
+  | 'backup-made'
+  /** A scheduled backup failed and nothing was uploaded: `after` carries the stage and the
+   *  reason (never a URL or a secret). Object: `instance-config` / `backup`. */
+  | 'backup-failed'
   | 'config-changed';
 
 export type AdminObjectType =
@@ -283,6 +290,12 @@ export const RECOVERY_ACTOR_ID = 'recovery';
 
 /** How a recovery is named wherever an actor is shown. */
 export const RECOVERY_ACTOR_LABEL = 'Recovery with the master key';
+
+/** The `user_id` of entries the scheduled backup writes: the instance, on its schedule. */
+export const SCHEDULE_ACTOR_ID = 'schedule';
+
+/** How the scheduled backup is named wherever an actor is shown. */
+export const SCHEDULE_ACTOR_LABEL = 'The backup schedule';
 
 export interface AdminAuditEntry {
   readonly kind: 'admin';

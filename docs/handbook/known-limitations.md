@@ -2,7 +2,7 @@
 title: Known limitations — what has not been done, and what is not there
 status: current
 date: 2026-10-13
-last_synced: 2026-10-19
+last_synced: 2026-10-21
 tracks:
   - apps/gateway/src/server/execution/tools.ts
   - apps/gateway/src/server/execution/scope-caps.ts
@@ -159,7 +159,26 @@ change that removes it.
   [configuration, "Ports and their single-process implementations"](configuration.md#ports-and-their-single-process-implementations)
 - **No high availability.** One image, one process, one SQLite file on a
   volume: a restart or the loss of the host is an outage, and durability is
-  what your backups of that file give. → [store, "Backup"](store.md#backup)
+  what your backups of that file give. The scheduled backup sends them off the
+  host, but at most once an hour: what changed since the last one is lost with
+  the host. → [store, "Scheduled backup"](store.md#scheduled-backup)
+
+## Backups
+
+- **The scheduled backup has met no real bucket yet.** It speaks S3 through its
+  own SigV4 client, held to AWS's documented examples and to an in-process fake;
+  Tigris, Cloudflare R2, MinIO and AWS have not been tried. Check the first run
+  on Settings → Encryption. → [store, "Scheduled backup"](store.md#scheduled-backup)
+- **A run holds the server for the length of the copy.** `VACUUM INTO` runs on the
+  server's own handle and blocks its event loop while it copies: unnoticed for a
+  store of megabytes, seconds for a large one. The volume also needs room for the
+  store twice more during a run. → [store, "Scheduled backup"](store.md#scheduled-backup)
+- **No "back up now" button, no weekly schedule.** A run happens at the slots
+  (every 1 to 24 hours) and once a minute after a start that missed one; the
+  `backup` command still makes a plain copy by hand.
+- **`/healthz` carries the backup report** until `/ops/stats` exists: anyone who
+  can reach the health endpoint sees the latest object key, size and SHA-256 (no
+  endpoint, bucket or credential).
 
 ## Not built
 

@@ -230,6 +230,7 @@ async function run(argv: readonly string[], io: RestoreIo, deps: RestoreDeps): P
       storePath: config.store.path,
       encryptor,
       keyVersions: [config.encryption.keyVersion, ...config.encryption.previousKeys.keys()],
+      masterKeys: config.encryption,
       force: args.force,
       dryRun: args.dryRun,
       fetch: deps.fetch,
@@ -269,6 +270,11 @@ function renderFindings(report: VerificationReport, hashExpected: boolean): stri
 
 function renderReport(report: RestoreReport, hashExpected: boolean): string {
   const lines = [renderFindings(report, hashExpected).trimEnd()];
+  if (report.encryption) {
+    lines.push(
+      `restore: an encrypted backup, opened with master key version ${report.encryption.keyVersion}`,
+    );
+  }
   if (!report.installed) {
     lines.push(
       report.storeExisted

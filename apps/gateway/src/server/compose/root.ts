@@ -16,6 +16,7 @@ import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
+import { createBackupModule, type BackupService, type BackupTimers } from '../backup';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
@@ -102,6 +103,8 @@ export interface GatewayRoot {
   readonly instance: InstanceModule;
   /** The master key: generated here or not, handed over or not, downloadable by an operator. */
   readonly masterKey: MasterKeyModule;
+  /** The scheduled, encrypted, self-checked backup to object storage (off unless configured). */
+  readonly backup: BackupService;
   /** Authorization server of the management door: clients, consent, delegated tokens. */
   readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
@@ -141,6 +144,10 @@ export interface RootDeps {
   readonly telemetryFetch?: typeof fetch;
   /** Outbound fetch of Client ID Metadata Documents (tests inject a fake; unused unless enabled). */
   readonly clientDocumentFetch?: ClientDocumentFetcher;
+  /** Outbound HTTP to the backup's object storage (tests inject an in-process fake). */
+  readonly backupFetch?: typeof fetch;
+  /** The scheduled backup's timers (tests drive them by hand). */
+  readonly backupTimers?: BackupTimers;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
 }
@@ -187,7 +194,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   try {
     await checkSealedKeys(store, config, logger);
     const modules = await wireModules(
-      { config, logger, registry, store, build, masterKeyGenerated },
+      { config, logger, registry, store, build, masterKeyGenerated, encryptor },
       deps,
       opened,
     );
@@ -331,6 +338,7 @@ interface RootBase {
   readonly build: BuildInfo;
   /** The boot wrote the master key file at this start (`boot-config.ts`). */
   readonly masterKeyGenerated: boolean;
+  readonly encryptor: Encryptor;
 }
 
 type RootModules = Pick<
@@ -353,6 +361,7 @@ type RootModules = Pick<
   | 'telemetry'
   | 'instance'
   | 'masterKey'
+  | 'backup'
   | 'oauth'
   | 'users'
   | 'management'
@@ -364,7 +373,7 @@ type RootModules = Pick<
  * completes (`close()`) or a later step throws.
  */
 async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Promise<RootModules> {
-  const { config, logger, registry, store, build, masterKeyGenerated } = base;
+  const { config, logger, registry, store, build, masterKeyGenerated, encryptor } = base;
 
   // Web sessions live in the embedded store (`store.webSessions`, table
   // `web_sessions`) so they survive a restart and are revocable; a hosted
@@ -514,6 +523,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
   // Remembered in the store, so the setup hands the key over once, across restarts.
   if (masterKeyGenerated) await masterKey.service.recordGenerated();
+  // The scheduled backup arms its timer when `backup.s3.*` is configured; `stop()` waits
+  // for a run in progress, so it is registered before the store's close runs.
+  const backup = createBackupModule({
+    config,
+    store,
+    encryptor,
+    logger,
+    fetch: deps.backupFetch,
+    timers: deps.backupTimers,
+  });
+  opened.push(() => backup.stop());
+  await backup.start();
   // The authorization server comes before the doors: the execution door refuses
   // a delegated token by kind, the management door admits nothing else.
   const oauth = createOAuthAsModule({
@@ -611,6 +632,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     telemetry,
     instance,
     masterKey,
+    backup,
     oauth,
     users,
     management,

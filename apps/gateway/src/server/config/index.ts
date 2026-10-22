@@ -36,6 +36,12 @@ export {
 } from './sources';
 export * from './sign-in';
 export {
+  isBackupPeriod,
+  parseBackupEndpoint,
+  parseTimeOfDay,
+  SECONDS_PER_DAY,
+} from './backup-config';
+export {
   CLIENT_REGISTRATION_POLICIES,
   LOG_LEVELS,
   PROVIDER_APP_FIELD_PROPERTY,
@@ -46,6 +52,8 @@ export {
   secretValues,
   type AbsentMasterKeyReason,
   type AdminRule,
+  type BackupBucketConfig,
+  type BackupConfig,
   type ClientRegistrationPolicy,
   type EncryptionConfig,
   type EncryptionKeys,

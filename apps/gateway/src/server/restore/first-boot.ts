@@ -50,6 +50,7 @@ export async function restoreAtFirstBoot(ctx: FirstBootRestoreContext): Promise<
       storePath,
       encryptor: ctx.encryptor,
       keyVersions: [config.encryption.keyVersion, ...config.encryption.previousKeys.keys()],
+      masterKeys: config.encryption,
       fetch: ctx.fetch,
     });
     logger.info('store restored', {
@@ -57,6 +58,7 @@ export async function restoreAtFirstBoot(ctx: FirstBootRestoreContext): Promise<
       bytes: report.bytes,
       sha256: report.sha256,
       schema_version: report.schemaVersion,
+      encrypted_under_key_version: report.encryption?.keyVersion ?? null,
       key_versions: report.keyVersions.map((k) => `${k.keyVersion}: ${k.blobs} blobs`),
       moved_aside: report.movedAside,
     });
