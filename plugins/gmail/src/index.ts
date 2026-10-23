@@ -45,6 +45,7 @@ import {
   discoverGmailResources,
   executeGmail,
 } from './execute.ts';
+import { GMAIL_ICON } from './icon.ts';
 import {
   GMAIL_CLASSIFIED_TOOLS,
   GMAIL_TOOL_PREFIX,
@@ -59,7 +60,8 @@ export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 export const gmailPlugin: ProviderPlugin = definePlugin({
   id: GMAIL_PLUGIN_ID,
   displayName: 'Gmail',
-  version: '0.3.0',
+  icon: GMAIL_ICON,
+  version: '0.3.1',
   description:
     'Experimental, classifier-only : identity-zoned risks for reading, drafting and labelling in a Gmail mailbox. No tool is executable yet.',
   summary:

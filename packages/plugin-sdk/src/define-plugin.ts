@@ -33,6 +33,13 @@ export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 /** Upper bound of `ProviderPlugin.summary` : a paragraph, not a handbook. */
 export const PLUGIN_SUMMARY_MAX_LENGTH = 600;
 
+/**
+ * `ProviderPlugin.icon` : the `d` attribute of one SVG path — a drawing
+ * command first, then commands, numbers and separators only. No markup, no
+ * `url(…)`, nothing a page could not put inside `<path d="…">` as it is.
+ */
+export const SVG_PATH_DATA_PATTERN = /^[Mm][0-9A-Za-z.,\s+-]*$/;
+
 /** Upper bound of one `ProviderPlugin.toolTitles` entry : a headline, not a description. */
 export const TOOL_TITLE_MAX_LENGTH = 60;
 
@@ -215,6 +222,11 @@ function identityIssues(plugin: ProviderPlugin): string[] {
   }
   if (typeof plugin.version !== 'string' || !PLUGIN_VERSION_PATTERN.test(plugin.version)) {
     issues.push(`version: expected semver (MAJOR.MINOR.PATCH), got '${String(plugin.version)}'`);
+  }
+  if (plugin.icon !== undefined) {
+    if (typeof plugin.icon !== 'string' || !SVG_PATH_DATA_PATTERN.test(plugin.icon)) {
+      issues.push('icon: expected the path data of one SVG path (`M…`) when present');
+    }
   }
   if (plugin.summary !== undefined) {
     if (typeof plugin.summary !== 'string' || plugin.summary.trim().length === 0) {

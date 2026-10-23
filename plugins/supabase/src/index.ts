@@ -16,6 +16,7 @@ import { classifySupabase, SUPABASE_CLASSIFIED_TOOLS, SUPABASE_TOOL_PLANES } fro
 import { supabaseCredential } from './credential.ts';
 import { supabaseDataModel } from './data-model.ts';
 import { discoverSupabaseResources, executeSupabase } from './execute.ts';
+import { SUPABASE_ICON } from './icon.ts';
 import { supabaseToolTitles } from './tool-titles.ts';
 import { supabaseTools } from './tools.ts';
 
@@ -26,7 +27,8 @@ export const supabaseCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url
 export const supabasePlugin = definePlugin({
   id: 'supabase',
   displayName: 'Supabase',
-  version: '5.0.0',
+  icon: SUPABASE_ICON,
+  version: '5.0.1',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
   summary:

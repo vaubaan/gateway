@@ -140,6 +140,8 @@ export interface ConnectableProvider {
   readonly id: string;
   readonly displayName: string;
   readonly description: string | null;
+  /** The path data of the service's monochrome mark; `null` when the plugin declares none. */
+  readonly icon: string | null;
   readonly experimental: boolean;
   readonly kind: CredentialKind;
   /**
@@ -206,6 +208,8 @@ export interface ProviderGrantView {
 export interface ConnectionView {
   readonly connection: ConnectionRecord;
   readonly providerLabel: string;
+  /** The service's mark (`ProviderPlugin.icon`); `null` when the plugin declares none or is gone. */
+  readonly providerIcon: string | null;
   readonly providerGrant: ProviderGrantView;
   readonly experimental: boolean;
   /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
@@ -400,6 +404,7 @@ export class ConnectionService {
       id: plugin.id,
       displayName: plugin.displayName,
       description: plugin.description ?? null,
+      icon: plugin.icon ?? null,
       experimental: plugin.experimental === true,
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
@@ -1473,6 +1478,7 @@ export class ConnectionService {
     return {
       connection,
       providerLabel: registered?.plugin.displayName ?? connection.provider,
+      providerIcon: registered?.plugin.icon ?? null,
       providerGrant: this.providerGrantOf(connection).grant,
       experimental: registered?.plugin.experimental === true,
       credentialKind: kind,

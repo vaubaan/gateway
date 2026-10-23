@@ -23,6 +23,7 @@ import {
   executeRailway,
 } from './execute.ts';
 import { railwayCredential } from './credential.ts';
+import { RAILWAY_ICON } from './icon.ts';
 import { railwayToolTitles } from './tool-titles.ts';
 import { RAILWAY_TOOL_PREFIX, railwayTools, toUpstreamName } from './tools.ts';
 
@@ -33,7 +34,8 @@ export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url)
 export const railwayPlugin = definePlugin({
   id: 'railway',
   displayName: 'Railway',
-  version: '5.0.0',
+  icon: RAILWAY_ICON,
+  version: '5.0.1',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:

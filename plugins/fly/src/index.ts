@@ -12,6 +12,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyFly } from './classify.ts';
 import { flyDataModel } from './data-model.ts';
 import { discoverFlyResources, executeFly } from './execute.ts';
+import { FLY_ICON } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
 import { flyCredential } from './token.ts';
 import { flyToolTitles, flyTools } from './tools.ts';
@@ -23,7 +24,8 @@ export const flyCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 export const flyPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Fly.io',
-  version: '0.2.0',
+  icon: FLY_ICON,
+  version: '0.2.1',
   description:
     'Apps on Fly.io: machines, images, volumes and snapshots, secrets, IP addresses and ' +
     'certificates — one resource per app.',

@@ -20,6 +20,7 @@ import {
   discoverCloudflareDnsResources,
   executeCloudflareDns,
 } from './execute.ts';
+import { CLOUDFLARE_DNS_ICON } from './icon.ts';
 import { cloudflareDnsToolTitles } from './tool-titles.ts';
 import { cloudflareDnsTools } from './tools.ts';
 
@@ -30,7 +31,8 @@ export const cloudflareDnsCatalog = loadCatalogFile(catalogPathNextTo(import.met
 export const cloudflareDnsPlugin = definePlugin({
   id: 'cloudflare-dns',
   displayName: 'Cloudflare DNS',
-  version: '3.0.0',
+  icon: CLOUDFLARE_DNS_ICON,
+  version: '3.0.1',
   description:
     'DNS zones and records on Cloudflare : records, BIND import / export, zone settings, ' +
     'DNSSEC and cache purge — one resource per zone.',

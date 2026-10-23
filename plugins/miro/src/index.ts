@@ -19,6 +19,7 @@ import { classifyMiro } from './classify.ts';
 import { miroCredential } from './credential.ts';
 import { miroDataModel } from './data-model.ts';
 import { discoverMiroResources, executeMiro } from './execute.ts';
+import { MIRO_ICON } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
 import { miroToolTitles } from './tool-titles.ts';
 import { miroTools } from './tools.ts';
@@ -30,8 +31,9 @@ export const miroCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 export const miroPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Miro',
+  icon: MIRO_ICON,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.3.0',
+  version: '0.3.1',
   description:
     "Miro boards through Miro's own MCP server: read and draw on boards, tables, comments, prototypes — one resource per board.",
   summary:

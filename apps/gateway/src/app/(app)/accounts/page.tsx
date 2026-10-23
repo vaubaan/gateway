@@ -120,7 +120,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.account,
       cell: ({ view, ownership: owns }) => (
         <span className={styles.named}>
-          <ServiceMark name={view.providerLabel} />
+          <ServiceMark name={view.providerLabel} icon={view.providerIcon} />
           <span className={styles.namedText}>
             <Link href={connectionPath(view.connection.id)} className={styles.name}>
               {view.connection.displayName}
@@ -182,7 +182,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.account,
       cell: (row) => (
         <span className={styles.named}>
-          <ServiceMark name={row.providerLabel} />
+          <ServiceMark name={row.providerLabel} icon={row.providerIcon} />
           <span className={styles.namedText}>
             <span className={styles.name}>{row.connection.displayName}</span>
             <span className={styles.sub}>{row.providerLabel}</span>
@@ -356,6 +356,7 @@ async function ownedRow(root: GatewayRoot, actor: Actor, view: ConnectionView): 
 interface SharedRow {
   readonly connection: ReceivedShare['connection'];
   readonly providerLabel: string;
+  readonly providerIcon: string | null;
   readonly givenBy: string;
   /** Through which teams the access reaches the person; empty when it was given to them. */
   readonly through: readonly string[];
@@ -381,6 +382,7 @@ function sharedRows(
       rows.set(item.connection.id, {
         connection: item.connection,
         providerLabel: item.providerLabel,
+        providerIcon: item.providerIcon,
         givenBy: holderWords(item.ownerLabel),
         through,
         since: item.share.createdAt,

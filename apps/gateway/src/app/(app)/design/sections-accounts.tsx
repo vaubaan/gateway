@@ -7,9 +7,9 @@
  */
 import { ConfirmSubmit, PickCard, PickGrid, ServiceMark } from '@/components/ui';
 
-import { GallerySection, Line, Specimen } from './specimen';
+import { type GalleryIcons, GallerySection, Line, Specimen } from './specimen';
 
-export function AccountSections() {
+export function AccountSections({ icons }: { icons: GalleryIcons }) {
   return (
     <>
       <GallerySection
@@ -22,19 +22,19 @@ export function AccountSections() {
             <PickGrid label="Services">
               <PickCard
                 href="#pick"
-                lead={<ServiceMark name="GitHub" />}
+                lead={<ServiceMark name="GitHub" icon={icons.github} />}
                 title="GitHub"
                 description="install your company’s GitHub app"
               />
               <PickCard
                 href="#pick"
-                lead={<ServiceMark name="Stripe" />}
+                lead={<ServiceMark name="Stripe" icon={icons.stripe} />}
                 title="Stripe"
                 description="paste: test-mode key and live-mode key"
               />
               <PickCard
                 unavailable
-                lead={<ServiceMark name="Railway" />}
+                lead={<ServiceMark name="Railway" icon={icons.railway} />}
                 title="Railway"
                 description="needs its OAuth client · ask an administrator"
               />

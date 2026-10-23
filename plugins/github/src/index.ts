@@ -17,6 +17,7 @@ import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubGitRemoteOf } from './git-remote.ts';
+import { GITHUB_ICON } from './icon.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
 
@@ -32,7 +33,8 @@ export const githubGitRemote = githubGitRemoteOf(githubCatalog.catalog);
 export const githubPlugin = definePlugin({
   id: 'github',
   displayName: 'GitHub',
-  version: '4.0.0',
+  icon: GITHUB_ICON,
+  version: '4.0.1',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows a fine-grained token reaches.',
   summary:

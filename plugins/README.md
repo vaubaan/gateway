@@ -97,13 +97,19 @@ in **three** places and derived everywhere else:
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `plugins/acme/package.json`          | `"name": "@vaubaan/plugin-acme"`, the `description`.                                                                  |
 | `plugins/acme/src/identity.ts`       | `PROVIDER_ID = 'acme'`.                                                                                               |
+| `plugins/acme/src/icon.ts`           | The service's mark: a Simple Icons path (CC0 1.0; name the slug in the comment) or one drawn by hand on the 24 grid.  |
 | `plugins/acme/src/risk-catalog.yaml` | `provider: acme`, and the `template` prefix of every risk id, pattern and preset entry (`template.` and `template[`). |
 
 Rename the exported symbols too (`templatePlugin` → `acmePlugin`,
 `classifyTemplate` → `classifyAcme`, `TEMPLATE_API_BASE` → `ACME_API_BASE`…)
 and set `displayName`, `description`, `summary` (the paragraph the interface shows on the provider's page under Reference,
 in the interface's words: what one account is, what one resource is, where
-the environment comes from) and the API base URL. **Change nothing
+the environment comes from), `icon` (the `d` of one SVG path on a 24×24 grid,
+shown monochrome beside the name wherever the interface marks the service —
+`require('simple-icons').si<Name>.path` is the usual source, CC0 1.0; vendor
+the string in `src/icon.ts` with a comment naming the slug, never a runtime
+dependency on the package; the structural test `plugin-icons.test.ts` holds
+every shipped plugin to declaring one) and the API base URL. **Change nothing
 else yet**: the workspaces and widgets of the imaginary provider stay until
 you replace them file by file in steps 2 to 8. This lists what is left of
 the scaffold; it must print nothing by the end of step 9:

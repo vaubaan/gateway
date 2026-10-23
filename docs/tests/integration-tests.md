@@ -335,7 +335,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                                                                                                                        |        90 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                                                                                                                                                          |       161 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                                                                                                                      |         3 |
-| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                                                                                                                     |        33 |
+| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                                                                                                                     |        34 |
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                                                                                                                      |        76 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                                                                                                                             |         8 |
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                                                                                                                   |        30 |
@@ -360,11 +360,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                                                                                                                       |        16 |
 | `apps/gateway/tests/unit/structural/deployed-commit.test.ts`                                                                                                                                             |        15 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                                                                                                                    |        10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                                                                                                                       |       115 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                                                                                                                       |       118 |
 | `apps/gateway/tests/unit/structural/module-mocks-isolated.test.ts`                                                                                                                                       |         2 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                                                                                                                        |         3 |
 | `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                                                                                                                         |       560 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                                                                                                                      |        10 |
+| `apps/gateway/tests/unit/structural/plugin-icons.test.ts`                                                                                                                                                |        29 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                                                                                                                     |        33 |
 | `apps/gateway/tests/unit/structural/resource-creating-tools.test.ts`                                                                                                                                     |        15 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                                                                                                                             |        71 |
@@ -395,7 +396,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                                                                                                               |         4 |
 | `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                                                                                                                        |        32 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                                                                                                                 |         9 |
-| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                                                                                                                        |        11 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                                                                                                                        |        12 |
 | `packages/plugin-sdk/tests/unit/slices.test.ts`                                                                                                                                                          |        21 |
 | `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                                                                                                                       |         9 |
 | `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                                                                                                                     |        14 |
@@ -663,12 +664,12 @@ npx vitest run packages/policy-engine     # one package
   entry on the fallback is an error; an entry recognised by convention
   without `fallback: true` loads with a warning through `warn` and is
   still indexed as the fallback).
-- **`registry.test.ts`** (11) — ids in registration order, `has/get/require`,
+- **`registry.test.ts`** (12) — ids in registration order, `has/get/require`,
   `providerForTool` (exact name, prefix rule for unlisted tools, null),
-  `toolDeclarations`, `labels` (with `experimental`, and `summary` when the plugin has one), `idEnum` (non-empty tuple, throws when
+  `toolDeclarations`, `labels` (with `experimental`, `summary` when the plugin has one, and `icon` — `null` without one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (35) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); `summary` optional, a non-empty paragraph of at most 600 characters when present; **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
+- **`define-plugin.test.ts`** (35) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); `summary` optional, a non-empty paragraph of at most 600 characters when present; `icon` optional, the path data of one SVG path when present (`SVG_PATH_DATA_PATTERN`: a drawing command first, then commands, numbers and separators — markup, `url(…)` and an empty string are issues; ADR service-icons-declared-by-the-plugin); **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -1785,8 +1786,11 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   page path redirects to a page or a route that exists, and the provider
   callback is never redirected**; the three states of the theme and its
   cookie; the words and sentence patterns of the vocabulary.
-- **`tests/unit/app/design-system.test.tsx`** (33) — the components rendered
-  to static markup: one `h1` per page header and the order of its actions; a
+- **`tests/unit/app/design-system.test.tsx`** (34) — the components rendered
+  to static markup: one `h1` per page header and the order of its actions; **a
+  service shown by the icon its plugin declares** (one `<path>` filled with
+  `currentColor` in a 24-unit `viewBox`, no hue, `aria-hidden`) **and by two
+  letters on a hue without one** (`icon` absent or `null` render the same); a
   meter drawn only near its limit, with its figure in words; **a table over
   its column budget throws** (five by default, seven with details), its
   caption, its detail columns and its row tones; marks that carry their word;
@@ -4836,9 +4840,9 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   tests per invariant; the count is in the table above) — **the index of
   the structural suite**. `manifest.ts` lists the invariants (an id, a
   statement, a source, the proofs: a file and the titles of the tests that
-  prove it); 26 invariants today, `every-refused-call-audited` the latest
-  (a call refused because a decision stage threw leaves its entry; proofs in
-  the two `pipeline.test.ts`). **A proof is a test the runner will run**:
+  prove it); 27 invariants today, `shipped-plugin-icons` the latest (every
+  shipped plugin declares the icon the interface shows it by; proofs in
+  `plugin-icons.test.ts` and `define-plugin.test.ts`). **A proof is a test the runner will run**:
   the proof files are read with the TypeScript parser, so a title that
   survives only in a comment or in a string that is not a title, or only on
   `it.skip` / `it.todo`, does not count; a proof that runs on a condition
@@ -4858,6 +4862,12 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   catalog, no preset id or entry says "everything" (no wildcard), no plugin
   ships the id of the gateway's built-in preset `everything-i-hold`, each
   preset is named once.
+- **`plugin-icons.test.ts`** (2 per shipped plugin, plus 1) — read from the
+  plugins the image ships: each declares `icon`, the path data of one SVG
+  path (`SVG_PATH_DATA_PATTERN`), drawn on the 24-unit grid (no coordinate
+  beyond twice the grid: a path exported for a 512 px grid is refused). The
+  interface keeps no provider → icon list of its own (ADR
+  service-icons-declared-by-the-plugin).
 - **`persisted-enumerations.test.ts`** (10) — what the schema itself holds:
   `share_restrictions` and `mission_policy` store one row per risk and their
   `risk_id` refuses the empty string and any `*`; no table has a column that

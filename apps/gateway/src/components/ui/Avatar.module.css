@@ -122,6 +122,20 @@
   border-radius: 8px;
   font-size: var(--text-sm);
 }
+/* The brand icon: one ink on the neutral fill, never a hue, never a status. */
+.serviceIcon {
+  background: var(--fill);
+  color: var(--ink-2);
+}
+.serviceGlyph {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.serviceLg .serviceGlyph {
+  width: 22px;
+  height: 22px;
+}
 
 .key {
   display: inline-flex;

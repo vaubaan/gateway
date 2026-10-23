@@ -32,6 +32,8 @@ export interface ProviderLabel {
   readonly displayName: string;
   readonly version: string;
   readonly description: string | null;
+  /** `ProviderPlugin.icon` : the path data of the service's monochrome mark ; `null` when the plugin declares none. */
+  readonly icon: string | null;
   /** `ProviderPlugin.summary` : the plain-words paragraph of the provider reference. */
   readonly summary: string | null;
   /** `ProviderPlugin.experimental`, normalised to a boolean. */
@@ -166,6 +168,7 @@ export class PluginRegistry {
       displayName: plugin.displayName,
       version: plugin.version,
       description: plugin.description ?? null,
+      icon: plugin.icon ?? null,
       summary: plugin.summary ?? null,
       experimental: plugin.experimental ?? false,
     }));

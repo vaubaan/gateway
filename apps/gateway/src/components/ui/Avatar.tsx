@@ -1,14 +1,17 @@
 /**
  * Who, at a glance: a person is a round mark with initials, a machine key is a
- * dashed square — the shape says which, the colour never does. The hue of a
- * person or of a service is taken from their name (`hueOf`), so the same
- * person has the same mark on every page; it is decoration and carries no
- * meaning, which is why none of the five hues is a status colour.
+ * dashed square, a service is its brand icon in one ink — the shape says
+ * which, the colour never does. The hue of a person is taken from their name
+ * (`hueOf`), so the same person has the same mark on every page; it is
+ * decoration and carries no meaning, which is why none of the five hues is a
+ * status colour.
  *
  * - `Avatar`, `AvatarStack` — the mark, alone or overlapped.
  * - `KeyHolder` — the mark, the name, and the qualifiers said in words
  *   ("· you · creator", "· machine key").
- * - `ServiceMark` — the two letters of a service (GitHub → GH).
+ * - `ServiceMark` — the icon the service's plugin declares, monochrome on a
+ *   neutral fill; two letters on a hue (GitHub → GH) when it declares none
+ *   (ADR service-icons-declared-by-the-plugin).
  * - `KeyMark` — a masked key in mono with the key icon.
  * - `AgentLabel` — the name an agent gave itself (never verified).
  */
@@ -136,15 +139,34 @@ export function serviceLetters(name: string): string {
 
 export function ServiceMark({
   name,
+  icon = null,
   size = 'sm',
 }: {
   /** The service's display name, from the plugin registry. */
   name: string;
+  /**
+   * The `d` of the service's icon (`ProviderPlugin.icon`, a 24-unit grid),
+   * from the registry too; `null` or absent for a plugin that declares none.
+   */
+  icon?: string | null;
   size?: 'sm' | 'lg';
 }) {
+  const sizeClass = size === 'lg' ? styles.serviceLg : '';
+  if (icon) {
+    return (
+      <span
+        className={[styles.service, styles.serviceIcon, sizeClass].join(' ')}
+        aria-hidden="true"
+      >
+        <svg viewBox="0 0 24 24" className={styles.serviceGlyph} focusable="false">
+          <path d={icon} fill="currentColor" />
+        </svg>
+      </span>
+    );
+  }
   return (
     <span
-      className={[styles.service, size === 'lg' ? styles.serviceLg : ''].join(' ')}
+      className={[styles.service, sizeClass].join(' ')}
       data-hue={hueOf(name)}
       aria-hidden="true"
     >

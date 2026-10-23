@@ -9,6 +9,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **A service is shown by its brand icon, monochrome.** Accounts, the connect
+  picker, Reference and an account's page mark a service with the icon its
+  plugin declares (`ProviderPlugin.icon`, the path of one SVG on a 24-unit
+  grid, filled with the secondary ink on a neutral fill — never coloured),
+  in place of two letters on a hue. Every shipped plugin declares one
+  (twelve from Simple Icons, CC0 1.0; Context7 and SSH drawn by hand) and
+  takes a patch version; a plugin without an icon still shows its two letters.
+  The hues now mean a person. ADR service-icons-declared-by-the-plugin.
+
 ## [2.0.0-alpha.5] - 2026-10-23
 
 ### Changed
