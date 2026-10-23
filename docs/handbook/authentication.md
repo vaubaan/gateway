@@ -601,8 +601,23 @@ ADR [administrators-live-in-the-instance](../decisions/administrators-live-in-th
 
 **State.** A provider saved in Settings has a state in `instance_config`,
 `sign_in_state.<id>` (`SignInProvidersService.state`): `enabled`, `changed_at`
-(its last save) and the last `test` (`ProviderTestRecord`). No state reads as
-on — every provider saved before this version. `save` writes it: a new OpenID
+(its last save), the last `test` (`ProviderTestRecord`) and `registered_for`
+— the public address (origin) the provider was set up for, written by `save`
+(a local provider: none) and again by `recordTest` when a test passes, since
+its callback is registered at the identity provider per public URL. No state
+reads as on — every provider saved before this version — and as set up
+nowhere in particular.
+**A restore on another host** (ADR
+[backup-carries-the-sign-in-configuration](../decisions/backup-carries-the-sign-in-configuration.md),
+amendment 2026-10-23): `views()` carries `registeredFor`, and
+`setUpElsewhere(view, publicUrl)` names the host it was set up for when it
+is not this instance's. The sign-in page then says under the provider's
+button that it was set up for that host and signs people in here once an
+administrator registers this address at the provider (and, with local
+accounts, to use the email and password meanwhile); Settings → Sign-in shows
+an amber callout per such provider with the callback to register
+(`callbackUrl(publicUrl, id)`) and "set up for <host>" on its row; the setup
+checklist's sign-in step names them. A passed test clears it. `save` writes it: a new OpenID
 Connect or GitHub provider **off**, local accounts on; an edit keeps the switch
 and moves `changed_at`, so the last test reads stale ("changed since its last
 test"). `remove` deletes it. A provider of the file is always on. `views()`

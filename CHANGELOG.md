@@ -9,6 +9,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **A sign-in provider says when it was set up for another address.** After a
+  restore on a new host, the sign-in page tells, under "Continue with
+  <provider>", that the provider was set up for the former address and signs
+  people in here once an administrator has registered this one at the
+  provider (and to use the email and password meanwhile, with local
+  accounts); Settings → Sign-in shows the callback to register and the setup
+  checklist names the provider. A provider's state records the address at
+  its save and at every passed test. ADR
+  backup-carries-the-sign-in-configuration, amendment 2026-10-23.
+
 ## [2.0.0-alpha.7] - 2026-10-23
 
 ### Changed

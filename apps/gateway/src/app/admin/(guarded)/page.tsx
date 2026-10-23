@@ -51,7 +51,7 @@ import {
   stepsDone,
   TERMS,
 } from '@/lib/vocabulary';
-import { isOperator } from '@/server/auth';
+import { isOperator, setUpElsewhere, type SignInProviderView } from '@/server/auth';
 import { oauthClientChecklist } from '@/server/now';
 import { OWNERLESS_CONNECTIONS_PAGE } from '@/server/connections';
 import {
@@ -121,6 +121,19 @@ interface Step {
   readonly action?: { readonly label: string; readonly href: string };
   /** Counted in "n of m done". A reminder that appears only when it needs someone is not. */
   readonly counted: boolean;
+}
+
+/** A provider set up for another address (a restore on a new host): one sentence, or nothing. */
+function elsewhereWords(
+  providers: readonly Pick<SignInProviderView, 'name' | 'kind' | 'registeredFor'>[],
+  publicUrl: URL,
+): string {
+  const moved = providers.flatMap((provider) => {
+    const host = setUpElsewhere(provider, publicUrl);
+    return host ? [`${provider.name} (set up for ${host})`] : [];
+  });
+  if (moved.length === 0) return '';
+  return ` ${listOf(moved)} ${moved.length === 1 ? 'needs' : 'need'} this address registered at the provider before anyone signs in through ${moved.length === 1 ? 'it' : 'them'}.`;
 }
 
 function listOf(names: readonly string[]): string {
@@ -243,7 +256,7 @@ export default async function SetupPage({ searchParams }: Props) {
           : 'Sign-in',
       description:
         providers.length > 0
-          ? 'People sign in through these providers; teams come from your directory. No password is stored here.'
+          ? `People sign in through these providers; teams come from your directory. No password is stored here.${elsewhereWords(providers, root.config.publicUrl)}`
           : 'Nobody can sign in yet: add your company’s directory (OpenID Connect) or GitHub.',
       action:
         providers.length > 0 ? undefined : { label: 'Set up sign-in', href: ADMIN_PAGES.signIn },

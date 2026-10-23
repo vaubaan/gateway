@@ -35,6 +35,8 @@ import {
   testPassedSinceSaved,
   type ProviderState,
   type SignInProviderView,
+  callbackUrl,
+  setUpElsewhere,
 } from '@/server/auth';
 import { isOpenProvider, issuerKey } from '@/server/config';
 
@@ -78,9 +80,22 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
   const administrators = await root.auth.administrators.current();
   const users = await root.store.users.list();
   const states = await Promise.all(providers.map((p) => root.auth.providers.state(p.id)));
+  const publicUrl = root.config.publicUrl;
+  // Providers whose callback is registered for another address (a restore on a new host).
+  const elsewhere = providers
+    .map((provider) => ({ provider, host: setUpElsewhere(provider, publicUrl) }))
+    .filter(
+      (entry): entry is { provider: SignInProviderView; host: string } => entry.host !== null,
+    );
   const rows: Row[] = providers.map((provider, index) => ({
     provider,
-    state: states[index] ?? { enabled: true, changedAt: null, test: null, waiver: null },
+    state: states[index] ?? {
+      enabled: true,
+      changedAt: null,
+      test: null,
+      waiver: null,
+      registeredFor: null,
+    },
     people: users.filter(
       (user) => user.issuer !== null && issuerKey(user.issuer) === issuerKey(provider.issuer),
     ).length,
@@ -133,6 +148,11 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
               off{testPassedSinceSaved(state) ? ': test passed' : ': test it first'}
             </span>
           )}
+          {setUpElsewhere(provider, publicUrl) && (
+            <span className={styles.sub} data-testid={`elsewhere-${provider.id}`}>
+              set up for {setUpElsewhere(provider, publicUrl)}
+            </span>
+          )}
           {state.waiver && (
             <span className={styles.sub} data-testid={`waiver-${provider.id}`}>
               second factor waived
@@ -173,8 +193,21 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
         }
       />
 
-      {(saved || removed || enabled || disabled || problems.length > 0) && (
+      {(saved || removed || enabled || disabled || problems.length > 0 || elsewhere.length > 0) && (
         <div className={styles.notes}>
+          {elsewhere.map(({ provider, host }) => (
+            <Callout
+              key={provider.id}
+              tone="warn"
+              title={`${provider.name} was set up for ${host}`}
+              testId={`set-up-elsewhere-${provider.id}`}
+            >
+              Its callback is registered at {provider.name} under that address, so nobody can sign
+              in through it here yet. At {provider.name}, register the callback{' '}
+              <Mono>{callbackUrl(publicUrl, provider.id).href}</Mono> for this gateway, then test
+              the sign-in: a passed test records this address.
+            </Callout>
+          ))}
           {saved && (
             <Callout tone="ok" title="Saved" testId="idp-saved">
               The client secret is encrypted at rest. A new provider is off until a test passes: use

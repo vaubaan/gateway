@@ -60,6 +60,8 @@ export type SignInProviderView = SignInProviderWithoutSecret & {
    * administrator enabled it after a passed test (local accounts: when added).
    */
   readonly enabled: boolean;
+  /** The public address the provider was set up for; `ProviderState.registeredFor`. */
+  readonly registeredFor: string | null;
 };
 
 /** What a test of a provider beside the session found (`/auth/test/<id>`). */
@@ -104,6 +106,15 @@ export interface ProviderState {
    * says `mfa`; `null` when the instance asks its own. Never for an administrator.
    */
   readonly waiver: 'always' | 'amr' | null;
+  /**
+   * The public address (origin) the provider was set up for: written at its save and
+   * again when a test passes, since the provider's callback is registered at the
+   * identity provider per public URL. `null` for a provider of the file, and for a
+   * local one. When it differs from the instance's address — a restore on another
+   * host — the sign-in page and Settings say so (ADR
+   * backup-carries-the-sign-in-configuration, amendment 2026-10-23).
+   */
+  readonly registeredFor: string | null;
 }
 
 /** A provider with its secret, for a sign-in. */
@@ -289,10 +300,29 @@ function viewOf(
   provider: SignInProvider,
   source: SignInProviderSource,
   enabled = true,
+  registeredFor: string | null = null,
 ): SignInProviderView {
-  if (provider.kind === 'local') return { ...provider, source, enabled };
+  if (provider.kind === 'local') return { ...provider, source, enabled, registeredFor: null };
   const { clientSecret: _secret, ...rest } = provider;
-  return { ...rest, source, enabled };
+  return { ...rest, source, enabled, registeredFor };
+}
+
+/**
+ * The host a redirecting provider was set up for, when it is not this instance's: its
+ * callback is registered at the identity provider under that address, so a sign-in
+ * through it fails here until the operator registers this one. `null` otherwise.
+ */
+export function setUpElsewhere(
+  provider: Pick<SignInProviderView, 'kind' | 'registeredFor'>,
+  publicUrl: URL,
+): string | null {
+  if (provider.kind === 'local' || provider.registeredFor === null) return null;
+  if (provider.registeredFor === publicUrl.origin) return null;
+  try {
+    return new URL(provider.registeredFor).host;
+  } catch {
+    return provider.registeredFor;
+  }
 }
 
 const STATE_PREFIX = 'sign_in_state.';
@@ -300,14 +330,23 @@ function stateKey(id: string): string {
   return `${STATE_PREFIX}${id}`;
 }
 
+const NO_STATE: ProviderState = {
+  enabled: true,
+  changedAt: null,
+  test: null,
+  waiver: null,
+  registeredFor: null,
+};
+
 function parseState(raw: string | null): ProviderState {
-  if (!raw) return { enabled: true, changedAt: null, test: null, waiver: null };
+  if (!raw) return NO_STATE;
   try {
     const value = JSON.parse(raw) as {
       enabled?: unknown;
       changed_at?: unknown;
       test?: unknown;
       waiver?: unknown;
+      registered_for?: unknown;
     };
     return {
       waiver: value.waiver === 'always' || value.waiver === 'amr' ? value.waiver : null,
@@ -317,9 +356,10 @@ function parseState(raw: string | null): ProviderState {
         typeof value.test === 'object' && value.test !== null
           ? (value.test as ProviderTestRecord)
           : null,
+      registeredFor: typeof value.registered_for === 'string' ? value.registered_for : null,
     };
   } catch {
-    return { enabled: true, changedAt: null, test: null, waiver: null };
+    return NO_STATE;
   }
 }
 
@@ -329,6 +369,7 @@ function serializeState(state: ProviderState): string {
     changed_at: state.changedAt,
     ...(state.test ? { test: state.test } : {}),
     ...(state.waiver ? { waiver: state.waiver } : {}),
+    ...(state.registeredFor ? { registered_for: state.registeredFor } : {}),
   });
 }
 
@@ -366,9 +407,11 @@ function sameGroup(a: AdminGroup | null, b: AdminGroup | null): boolean {
 
 export class SignInProvidersService {
   private readonly file: readonly SignInProvider[];
+  /** The instance's address: what a saved or tested provider is recorded as set up for. */
+  private readonly publicUrl: URL;
 
   constructor(
-    config: Pick<InstanceConfig, 'idp' | 'signIn'>,
+    config: Pick<InstanceConfig, 'idp' | 'signIn' | 'publicUrl'>,
     /**
      * The groups designated without a provider (a bare `admin.group` carried over from
      * the configuration): they name the group of the one provider, so a change of the
@@ -381,6 +424,7 @@ export class SignInProvidersService {
     private readonly options: SignInProvidersOptions = {},
   ) {
     this.file = fileSignInProviders(config);
+    this.publicUrl = config.publicUrl;
   }
 
   /** Every provider, the file's first, without secrets. */
@@ -389,7 +433,10 @@ export class SignInProvidersService {
     const fileIds = new Set(this.file.map((p) => p.id));
     const fromStore = (await this.storedProviders(false)).filter((p) => !fileIds.has(p.id));
     const stored: SignInProviderView[] = [];
-    for (const p of fromStore) stored.push(viewOf(p, 'store', (await this.state(p.id)).enabled));
+    for (const p of fromStore) {
+      const state = await this.state(p.id);
+      stored.push(viewOf(p, 'store', state.enabled, state.registeredFor));
+    }
     return [...fromFile, ...stored];
   }
 
@@ -431,7 +478,9 @@ export class SignInProvidersService {
   /** Records the outcome of a test beside the session; returns it. */
   async recordTest(id: string, test: ProviderTestRecord): Promise<void> {
     const current = parseState(await this.store.get(stateKey(id)));
-    await this.store.set(stateKey(id), serializeState({ ...current, test }));
+    // A test that passed proves the callback is registered for this address.
+    const registeredFor = test.outcome === 'passed' ? this.publicUrl.origin : current.registeredFor;
+    await this.store.set(stateKey(id), serializeState({ ...current, test, registeredFor }));
   }
 
   /**
@@ -499,6 +548,9 @@ export class SignInProvidersService {
         changedAt: this.clock.now().toISOString(),
         test: current.test,
         waiver: current.waiver,
+        // The callback the administrator registers at the identity provider is this
+        // instance's: the provider is set up for this address until a test says otherwise.
+        registeredFor: result.saved.kind === 'local' ? null : this.publicUrl.origin,
       }),
     );
     return result;
