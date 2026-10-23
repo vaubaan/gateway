@@ -15,6 +15,12 @@
  * line — the key, the permissions touched and what is left, the fingerprint,
  * what the agent was told — is in its detail, opened by `?open=<id>` so that
  * a line can be linked.
+ *
+ * The list grows as the reader scrolls (`LoadEarlier`): `?lines=<n>` asks for
+ * that many lines from the same position (`lines.ts`), read by the same
+ * search and rendered here like the first page. Every link of the page that
+ * keeps the position keeps `lines` too, so opening a line's detail keeps the
+ * lines already loaded.
  */
 import Link from 'next/link';
 
@@ -60,6 +66,7 @@ import {
 } from '@/lib/vocabulary';
 import {
   AUDIT_DECISIONS,
+  AUDIT_PAGE_SIZE,
   AUDIT_KINDS,
   AUDIT_PARAMS,
   auditQueryString,
@@ -75,6 +82,8 @@ import { riskExplainer } from '@/server/providers/reference';
 
 import styles from './activity.module.css';
 import { changeLines, type ChangeNames } from './change-lines';
+import { LINES_PARAM, linesValue, moreLines, parseLines } from './lines';
+import { LoadEarlier } from './load-earlier';
 import { When } from './when';
 
 export const dynamic = 'force-dynamic';
@@ -94,13 +103,27 @@ function first(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
-/** `/activity` with these filters, at this position, with this line open. */
-function hrefOf(raw: Raw, cursor: string | undefined, open: string | null): string {
+/** Where in the record a link of the page leads: the first page and nothing open by default. */
+interface At {
+  readonly cursor?: string;
+  /** How many lines are shown (`lines.ts`). */
+  readonly lines?: number;
+  readonly open?: string | null;
+  /** Scroll to the open line (`false`: the address changes in place, the reader stays put). */
+  readonly anchor?: boolean;
+}
+
+/** `/activity` with these filters, at this position, with this many lines, with this line open. */
+function hrefOf(raw: Raw, at: At = {}): string {
+  const { cursor, lines, open, anchor = true } = at;
   const params = new URLSearchParams(auditQueryString(raw, null));
   if (cursor) params.set(AUDIT_PARAMS.cursor, cursor);
+  const shown = lines === undefined ? null : linesValue(lines, AUDIT_PAGE_SIZE);
+  if (shown) params.set(LINES_PARAM, shown);
   if (open) params.set(OPEN_PARAM, open);
   const query = params.toString();
-  return `${ROUTES.activity}${query ? `?${query}` : ''}${open ? `#${rowAnchor(open)}` : ''}`;
+  const hash = open && anchor ? `#${rowAnchor(open)}` : '';
+  return `${ROUTES.activity}${query ? `?${query}` : ''}${hash}`;
 }
 
 function rowAnchor(id: string): string {
@@ -498,8 +521,10 @@ export default async function ActivityPage({ searchParams }: Props) {
   const query = parseAuditQuery(params);
   const { raw } = query;
   const opened = first(params[OPEN_PARAM]);
+  const lines = parseLines(first(params[LINES_PARAM]), AUDIT_PAGE_SIZE);
   const [page, options] = await Promise.all([
-    root.audit.query.search(principal, query.filters, query.cursor),
+    // The same search as one page, longer: the lines already shown and the next ones.
+    root.audit.query.search(principal, query.filters, query.cursor, lines),
     root.audit.query.filterOptions(principal),
   ]);
   const explain = riskExplainer(root.registry);
@@ -519,6 +544,7 @@ export default async function ActivityPage({ searchParams }: Props) {
       ? ACTIVITY_SCOPE.administrator
       : ACTIVITY_SCOPE.installer
     : ACTIVITY_SCOPE.person;
+  const nextLines = moreLines(lines, AUDIT_PAGE_SIZE);
   const filtered = Object.keys(raw).some((key) => key !== 'cursor');
   const moreSet = Boolean(raw.user ?? raw.holder ?? raw.agent ?? raw.kind) || current === null;
 
@@ -579,7 +605,7 @@ export default async function ActivityPage({ searchParams }: Props) {
             entry={entry}
             you={you}
             open={open}
-            detailHref={hrefOf(raw, raw.cursor, open ? null : entry.id)}
+            detailHref={hrefOf(raw, { cursor: raw.cursor, lines, open: open ? null : entry.id })}
           />
         );
       },
@@ -613,7 +639,7 @@ export default async function ActivityPage({ searchParams }: Props) {
             options={(Object.keys(ACTIVITY_PERIODS) as Period[]).map((key) => ({
               value: key,
               label: ACTIVITY_PERIODS[key],
-              href: hrefOf({ ...raw, from: ranges[key].from, to: ranges[key].to }, undefined, null),
+              href: hrefOf({ ...raw, from: ranges[key].from, to: ranges[key].to }),
             }))}
           />
           <Select
@@ -794,21 +820,34 @@ export default async function ActivityPage({ searchParams }: Props) {
         />
       </div>
 
+      {page.next && nextLines !== null && (
+        <LoadEarlier
+          href={hrefOf(raw, { cursor: raw.cursor, lines: nextLines, open: opened, anchor: false })}
+        />
+      )}
+      {page.next && nextLines === null && (
+        // The ceiling of one address: the earlier lines start a list of their own.
+        <p className={styles.end} data-testid="continue-earlier">
+          <Link href={`${ROUTES.activity}?${auditQueryString(raw, page.next)}`}>
+            {ACTIVITY_WORDS.continueEarlier}
+          </Link>
+        </p>
+      )}
+      {!page.next && page.entries.length > 0 && (
+        <p className={styles.end} data-testid="no-earlier">
+          {ACTIVITY_WORDS.noEarlier}
+        </p>
+      )}
+
       <Hint>
-        {formatNumber(page.entries.length)} {page.entries.length === 1 ? 'line' : 'lines'}, newest
-        first
+        <span data-testid="lines-shown">
+          {formatNumber(page.entries.length)} {page.entries.length === 1 ? 'line' : 'lines'}
+        </span>
+        , newest first
         {query.cursor && (
           <>
             {' · '}
-            <Link href={hrefOf(raw, undefined, null)}>{ACTIVITY_WORDS.newest}</Link>
-          </>
-        )}
-        {page.next && (
-          <>
-            {' · '}
-            <Link href={`${ROUTES.activity}?${auditQueryString(raw, page.next)}`}>
-              {ACTIVITY_WORDS.earlier}
-            </Link>
+            <Link href={hrefOf(raw)}>{ACTIVITY_WORDS.newest}</Link>
           </>
         )}
         {' · '}Arguments are never stored; a line’s detail shows their fingerprint and the
