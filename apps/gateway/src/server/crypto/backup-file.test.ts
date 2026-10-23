@@ -124,9 +124,9 @@ describe('the encrypted backup file', () => {
         const plain = randomBytes(size);
         const { sealed, back } = await roundTrip(plain, keys, keys, format);
         expect(back.equals(plain)).toBe(true);
-        expect(readFileSync(sealed).includes(plain.subarray(0, Math.min(size, 16)))).toBe(
-          size === 0,
-        );
+        // The clear text does not show through. Only from 8 bytes on: a shorter
+        // run is found by chance in random ciphertext (one byte in ~100: ~1 in 3).
+        if (size >= 8) expect(readFileSync(sealed).includes(plain.subarray(0, 16))).toBe(false);
       },
     );
 
