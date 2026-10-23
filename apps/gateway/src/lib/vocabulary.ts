@@ -662,7 +662,12 @@ export const ACTIVITY_WORDS = {
   mission: 'Mission',
   detail: 'detail',
   hideDetail: 'hide detail',
-  earlier: 'Earlier',
+  /** The end of the list: one page more, also loaded as the reader scrolls there. */
+  loadEarlier: 'Load earlier',
+  loadingEarlier: 'Loading…',
+  noEarlier: 'No earlier activity',
+  /** Past the ceiling of one address: the next lines start a fresh list. */
+  continueEarlier: 'Continue with earlier lines',
   newest: 'Newest',
   apply: 'Apply',
   clear: 'Clear',

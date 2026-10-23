@@ -34,6 +34,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Encryption, `store_bytes` in the `/healthz` `backup` object); the
   `x-amz-meta-sha256` of the object is still the hash of the uploaded bytes.
   ADR scheduled-encrypted-backup-to-object-storage, amendment 2026-10-23.
+- **Activity loads earlier lines as you scroll.** The record showed 50 lines
+  and hid the rest behind a small "Earlier" link. Reaching the end of the list
+  now appends the next 50 to the same table, with the filters kept, up to
+  1,000 lines per address; a "Load earlier" button does the same without
+  JavaScript or from the keyboard, and the end of the record says "No earlier
+  activity". The detail of a line loaded later opens without losing the lines
+  already loaded, and `?cursor=` links still open the record at a position.
 
 ## [2.0.0-alpha.4] - 2026-10-23
 

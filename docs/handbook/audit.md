@@ -2,7 +2,7 @@
 title: Audit — search, mission session view, retention, administrative entries
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-23
 tracks:
   - apps/gateway/src/server/budget/retention.ts
   - apps/gateway/src/server/audit/
@@ -14,6 +14,7 @@ tracks:
   - apps/gateway/migrations/0010_mission_members_and_token_holders.sql
   - apps/gateway/tests/integration/audit/
   - apps/gateway/tests/e2e/v5/audit-session.spec.ts
+  - apps/gateway/tests/e2e/v5/activity-scroll.spec.ts
   - packages/gateway-core/src/audit.ts
   - apps/gateway/src/server/compose/root.ts
 ---
@@ -214,8 +215,37 @@ in the detail of a line, in mono.
   person opened, it names the ids of an entry this service already returned to
   the reader (an account, a resource, a person by their email, a team) and
   reveals nothing the entry does not hold.
-- **Paging**: "Earlier" follows `page.next`; "Newest" returns to the first
-  page.
+- **Paging: the list grows as you scroll** (ADR
+  [activity-list-grows-through-the-address](../decisions/activity-list-grows-through-the-address.md)).
+  The page shows `?lines=<n>` lines
+  (`activity/lines.ts`, pure: whole pages of `AUDIT_PAGE_SIZE`, one page when
+  absent or unreadable, held at `MAX_PAGES` = 20 pages, i.e. 1,000 lines) and
+  reads them in one call, `search(principal, filters, cursor, lines)`: the same
+  search, the same scope, from the same position (the newest line, or
+  `?cursor=`), with a longer page. Under the table, while `page.next` is set,
+  `LoadEarlier` (`activity/load-earlier.tsx`, the only client part) is a
+  "Load earlier" link to the same address with one page more, and a sentinel
+  watched by an `IntersectionObserver` (600 px ahead of the window) that
+  follows it on its own: `router.replace(href, { scroll: false })` in a
+  transition ("Loading…" in a polite live region while it runs). The server
+  renders the whole list again — rows are keyed by entry id, so the lines
+  already shown keep their place and their state, and the next page is
+  appended under them; when the sentinel is still in view after a load, the
+  next one follows. Without JavaScript or the observer, or with a keyboard,
+  the link is a plain link to the longer list. There is no endpoint of its
+  own: nothing reads the record but the page's server render, so the scope is
+  exactly the first page's. At the end of the record the page says "No earlier
+  activity"; at the ceiling it offers "Continue with earlier lines", a fresh
+  list from `page.next` (`?cursor=`). The counts above the table and "N lines"
+  in the hint are of the lines loaded. Every link that keeps the position
+  keeps `lines` — a line's detail (`?open=`) opens and closes over the lines
+  already loaded, and loading more keeps the open line open (its address
+  without the `#entry-` anchor, so the window does not jump); the period
+  segments, "Apply", "Clear" and "Newest" start again from one page. "Newest"
+  appears when the page was opened at a `?cursor=`. Replacing the address
+  means Back leaves the page rather than unloading pages one by one; a reload
+  or a shared link renders the same lines (newer entries written since appear
+  on top).
 
 ### Token holders
 
@@ -239,7 +269,8 @@ Unlike the agent label it is not a claim of the caller.
 
 Order is `ts DESC, id DESC`. `AuditQueryService.search(viewer, filters, cursor, pageSize
 = AUDIT_PAGE_SIZE /* 50 */)` asks the store for one row more than the page; when it comes
-back, `next` is the `(ts, id)` of the last entry shown, and the "Earlier" link carries it as
+back, `next` is the `(ts, id)` of the last entry shown; a link that continues from it
+("Continue with earlier lines", at the ceiling of the growing list) carries it as
 `cursor` (`encodeCursor`: base64url of `<ts>|<id>`). The store resumes with
 `ts < ? OR (ts = ? AND id < ?)`: an entry written while paging does not shift the
 following pages, and entries with the same timestamp are neither repeated nor skipped.
@@ -616,6 +647,9 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
+- `src/app/(app)/activity/lines.test.ts` (6) — `?lines=`: one page when absent or
+  unreadable, whole pages (a partial one rounded up), held at the ceiling; one page more,
+  none past the ceiling; the first page left out of the address.
 - `src/app/(app)/missions/[id]/session/event-words.test.ts` (8) — what a row of the
   timeline says, kind by kind, in the words of the interface.
 - `tests/integration/audit/audit-query.test.ts` (35) — visibility (creator, connection
@@ -664,6 +698,12 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   column of the record on screen at 1280 px with a detail open and no sideways scroll;
   every column of the mission's timeline on screen at 1280 px; 404 for a mission that
   is not the user's.
+- `tests/e2e/v5/activity-scroll.spec.ts` (3) — the Activity page past 50 lines: scrolling
+  appends the next pages to the same table with the first line unchanged and every line
+  once, up to "No earlier activity", the hint counting the rows; a line loaded later
+  opens its detail without losing the lines loaded; the `kind` filter kept from page to
+  page; `?cursor=` as an entry point with "Newest", growing from there; without
+  JavaScript, "Load earlier" as a plain link.
 - `tests/e2e/v5/approve-action.spec.ts` (its first test of 2) asserts the rest of this
   page in a browser: the permission reading "ask me first" and "runs freely until" while
   the gate is open, and no switch there; what the `gate-opened` and `gate-changed` events
