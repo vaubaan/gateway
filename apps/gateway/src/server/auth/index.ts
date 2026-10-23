@@ -285,6 +285,7 @@ export {
   type SignInProviderView,
   type ProviderState,
   type ProviderTestRecord,
+  setUpElsewhere,
   testPassedSinceSaved,
 } from './sign-in-providers';
 export {

@@ -1124,7 +1124,10 @@ interpreted as markup.
   administrator, **Administration**: a setup checklist of what the instance
   still needs; **sign-in** — the list of sign-in providers, each with its
   kind (OpenID Connect, GitHub, local accounts), its admission rule and
-  the address to register at it, and whether it is on; an administrator
+  the address to register at it, whether it is on, and — after a restore
+  on another address — that it was set up for the former one, with the
+  callback to register before anyone signs in through it (the sign-in
+  page says the same under its button); an administrator
   adds, edits, tests, switches on and off and removes one, its secret never
   shown back, and a provider set by the configuration file is shown
   read-only and always on; local accounts are added in one step, on, and

@@ -4,9 +4,14 @@ import type { SignInProvider } from '../config/sign-in';
 import type { AdminRule, IdpConfig } from '../config/types';
 import { openTestStore, type TestStore } from '../store/testing';
 import { IdpSettingsService } from './idp-settings';
-import { SignInProvidersService, type SignInProviderInput } from './sign-in-providers';
+import {
+  setUpElsewhere,
+  SignInProvidersService,
+  type SignInProviderInput,
+} from './sign-in-providers';
 
 const CLOCK = { now: () => new Date('2026-10-14T10:00:00Z') };
+const PUBLIC_URL = new URL('https://gateway.test');
 const GITHUB: SignInProviderInput = {
   id: 'github',
   kind: 'github',
@@ -45,13 +50,43 @@ describe('SignInProvidersService', () => {
     const idp = options.file?.idp ?? null;
     const legacy = new IdpSettingsService(idp, t.store.config);
     return new SignInProvidersService(
-      { idp, signIn: options.file?.signIn ?? [] },
+      { idp, signIn: options.file?.signIn ?? [], publicUrl: PUBLIC_URL },
       async () => (options.rule?.group ? [options.rule.group] : []),
       legacy,
       t.store.config,
       CLOCK,
     );
   }
+
+  it('records the address a provider was set up for, and a passed test moves it', async () => {
+    const s = service();
+    await s.save(GITHUB, 'create');
+    expect((await s.state('github')).registeredFor).toBe('https://gateway.test');
+    expect(setUpElsewhere((await s.views())[0]!, PUBLIC_URL)).toBeNull();
+    // The same store under another address: a restore on a new host.
+    const moved = new SignInProvidersService(
+      { idp: null, signIn: [], publicUrl: new URL('https://restored.example') },
+      async () => [],
+      new IdpSettingsService(null, t.store.config),
+      t.store.config,
+      CLOCK,
+    );
+    const view = (await moved.views())[0]!;
+    expect(view.registeredFor).toBe('https://gateway.test');
+    expect(setUpElsewhere(view, new URL('https://restored.example'))).toBe('gateway.test');
+    // A failed test changes nothing; a passed one proves the callback works here.
+    const base = { at: '2026-10-23T10:00:00Z', by: 'user:ops', sessionId: 's1' };
+    await moved.recordTest('github', { ...base, outcome: 'failed', error: 'idp-error' });
+    expect((await moved.state('github')).registeredFor).toBe('https://gateway.test');
+    await moved.recordTest('github', { ...base, outcome: 'passed' });
+    expect((await moved.state('github')).registeredFor).toBe('https://restored.example');
+    expect(
+      setUpElsewhere((await moved.views())[0]!, new URL('https://restored.example')),
+    ).toBeNull();
+    // Local accounts are set up nowhere.
+    await s.save({ ...GITHUB, id: 'local', kind: 'local', name: 'Local' }, 'create');
+    expect((await s.state('local')).registeredFor).toBeNull();
+  });
 
   it('saves a GitHub provider with github.com as issuer, its secret sealed and never in a view', async () => {
     const s = service();
@@ -168,7 +203,7 @@ describe('SignInProvidersService — what an OpenID Connect issuer must be', () 
 
   function service(): SignInProvidersService {
     return new SignInProvidersService(
-      { idp: null, signIn: [] },
+      { idp: null, signIn: [], publicUrl: PUBLIC_URL },
       async () => [],
       new IdpSettingsService(null, t.store.config),
       t.store.config,

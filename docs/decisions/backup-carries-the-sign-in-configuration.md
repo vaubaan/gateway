@@ -72,6 +72,25 @@ administrator, the boot applies its carried rule with the configuration's —
 both groups, every email — as designations, then deletes the key; a store that
 already names administrators drops the key unread. D1, D2, D3 and D5 hold.
 
+### Amendment 2026-10-23 — a provider remembers the address it was set up for
+
+The consequence below ("provided the identity provider accepts the new host's
+callback address") was met in the dark: the owner restored the dogfood's backup
+on a throwaway host, chose "Continue with GitHub", and GitHub refused the
+callback on its own page, with nothing on the instance saying why. The
+identity provider does not redirect back on a callback it does not know, so no
+page of the instance can explain after the fact; it has to be said before.
+
+A stored provider's state now carries `registered_for`: the instance's public
+address at its save, and again when a test passes (the proof that the callback
+is registered there). When that address is not the instance's, the sign-in
+page says under the provider's button that it was set up for the former host
+and signs people in here once an administrator registers this address at the
+provider — and to use the email and password meanwhile when local accounts
+exist —, Settings → Sign-in shows the callback to register, and the setup
+checklist names the provider. A provider of the file carries no address: the
+operator configures it for the host it runs on. D1–D5 hold.
+
 ## Consequences
 
 - A restore on a fresh host signs people in as before, with the old host's

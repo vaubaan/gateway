@@ -24,6 +24,7 @@ import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Avatar, Button, ButtonLink, Callout, StatusMark } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';
 import { ACTIONS, ROLE_WORDS, ROUTES } from '@/lib/vocabulary';
+import { setUpElsewhere } from '@/server/auth';
 import {
   isLoginErrorCode,
   LOGIN_ERROR_MESSAGES,
@@ -157,18 +158,30 @@ export default async function LoginPage({ searchParams }: Props) {
             />
           )}
           <div className={styles.act} data-testid="sign-in-providers">
-            {redirecting.map((provider, index) => (
-              <ButtonLink
-                key={provider.id}
-                href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
-                variant={index === 0 && !local ? 'primary' : 'secondary'}
-                size="lg"
-                // A plain link: a prefetch of /auth/login would start a sign-in.
-                external
-              >
-                Continue with {provider.name}
-              </ButtonLink>
-            ))}
+            {redirecting.map((provider, index) => {
+              const elsewhere = setUpElsewhere(provider, root.config.publicUrl);
+              return (
+                <div key={provider.id} className={styles.act}>
+                  <ButtonLink
+                    href={`${signInStartPath(provider.id)}?return_to=${encodeURIComponent(returnTo)}`}
+                    variant={index === 0 && !local ? 'primary' : 'secondary'}
+                    size="lg"
+                    // A plain link: a prefetch of /auth/login would start a sign-in.
+                    external
+                  >
+                    Continue with {provider.name}
+                  </ButtonLink>
+                  {/* A restore on another host: the provider's callback is registered for the old one. */}
+                  {elsewhere && (
+                    <p className={styles.muted} data-testid={`set-up-elsewhere-${provider.id}`}>
+                      {provider.name} was set up for {elsewhere}. It signs you in here once an
+                      administrator has registered this address at {provider.name}
+                      {local ? '; meanwhile, use your email address and password' : ''}.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
             {bootstrap.status === 'active' && (
               <Link href="/admin/bootstrap" data-testid="bootstrap-link">
                 Set up this gateway with the install token
