@@ -679,6 +679,12 @@ together make a decision reproducible. The other fields of an entry
 upstream outcome) are defined in
 [vaubaan-gateway](./vaubaan-gateway.md) §8.
 
+The snapshot is part of every entry, but it is stored once per distinct
+set of accepted risks: entries made under the same set refer to it. The
+remaining budget an entry records is that of the risks the call touched.
+(Product owner's decision of 2026-10-23; ADR
+[audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md).)
+
 The audit carries no field for scope caps: none is applied (§4bis).
 
 ## 13. Reading older documents

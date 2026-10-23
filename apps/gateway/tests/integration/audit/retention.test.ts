@@ -141,8 +141,9 @@ describe('audit retention sweeper', () => {
     expect(await t.store.audit.getById(recentCall.id)).toEqual(recentCall);
     expect(await t.store.audit.getById(recentAct.id)).toEqual(recentAct);
     expect(count('audit')).toBe(3);
-    // Two risk rows per call entry (accepted snapshot of two risks): only the kept calls' remain.
-    expect(count('audit_risks')).toBe(4);
+    // One risk row per call entry (the risk it touched): only the kept calls' remain; their
+    // accepted set is shared and stays, referenced.
+    expect(count('audit_risks')).toBe(2);
     expect(
       t.store.db
         .prepare<[string], { n: number }>(

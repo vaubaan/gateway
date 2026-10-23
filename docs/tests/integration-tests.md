@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-23
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -311,6 +311,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`                                                                                                                                      |         3 |
 | `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                                                                                                                        |        20 |
 | `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                                                                                                                      |        10 |
+| `apps/gateway/tests/integration/store/audit-risk-sets.test.ts`                                                                                                                                           |         9 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                                                                                                                                                     |        15 |
 | `apps/gateway/tests/integration/store/config.test.ts`                                                                                                                                                    |         7 |
 | `apps/gateway/tests/integration/store/connections-shares.test.ts`                                                                                                                                        |        14 |
@@ -525,7 +526,7 @@ this table says where each requirement lives, and what is not written yet.
 | `scripts/lockfile-gate.test.mjs`                                                                                                                                                                         |        12 |
 | `scripts/release-lib.test.mjs`                                                                                                                                                                           |        55 |
 | `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                                                                                                     |         6 |
-| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro tests on 2026-10-23) | **11949** |
+| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23) | **11958** |
 
 The table is generated from the JSON reports of one run of each project
 (`npx vitest run --project shared --reporter=json`, then `--project isolated`).
@@ -1990,7 +1991,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
-- **`integration/store/schema.test.ts`** (6) — the 32 tables exist (`git_pending_refs` since 0015); every table is `STRICT`; the store satisfies the composition root's
+- **`integration/store/schema.test.ts`** (6) — the tables exist (`git_pending_refs` since 0015, `audit_risk_sets` and `audit_risk_set_members` since 0022); every table is `STRICT`; the store satisfies the composition root's
   `Store` port (`kind`, `ping()`, `close()`); boot against an empty file sets WAL,
   `foreign_keys`, `synchronous=NORMAL` and reopens without re-migrating;
   two writers on one file serialize under `BEGIN IMMEDIATE` (second gets
@@ -2001,16 +2002,31 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   ones apart, `since` inclusive and `until` exclusive, an open span, another
   mission and administrative entries left out; `search` by agent label
   matches no administrative entry. And: gateway-core
-  `CallAuditEntry` round-trips through `audit` + `audit_risks` rows
-  (accepted snapshot, touched, remaining budget), a touched-but-not-accepted
-  risk is kept, `AdminAuditEntry` round-trips, **`UPDATE` aborts**
-  (decision, latency, risk rows), **`DELETE` aborts** outside the purge
-  path, `purgeOlderThan` removes only older rows and closes the window,
+  `CallAuditEntry` round-trips through `audit` + one `audit_risks` row per
+  touched risk (accepted, touched, remaining budget) + the accepted set, a
+  touched-but-not-accepted risk is kept, `AdminAuditEntry` round-trips,
+  **`UPDATE` aborts** (decision, latency, risk rows, sets and their members),
+  **`DELETE` aborts** outside the purge path (sets and members included), `purgeOlderThan` removes only older rows and closes the window,
   a recent row cannot be deleted even inside a window, retention default
   90 days from the clock, filters (mission, kind, range, limit),
   `countAllowedTouches` for the counters-vs-audit check, schema `CHECK`s
   refuse incomplete entries, `SqliteAuditWriter` implements gateway-core's
   `AuditWriter` and propagates failures.
+- **`integration/store/audit-risk-sets.test.ts`** (9) — **the accepted
+  snapshot stored once per distinct set** (migration 0022, ADR
+  audit-risk-snapshot-stored-once): the set id is content-addressed (order and
+  duplicates do not change it); **a 100-risk mission writes its set once and
+  each further call costs its touched rows only (2 rows, no set row)**, the
+  record still carrying the 100-risk snapshot and the touched risks' remaining
+  budget; missions accepting the same risks share a set, others get their own;
+  no remaining budget is stored for an untouched risk; a refused call keeps its
+  refused risk and an empty snapshot is an empty set; **the purge removes the
+  sets no remaining entry refers to, inside its window**, and keeps the
+  referenced ones; **deleting a referenced set or its members aborts even inside
+  a purge window**; **an entry written before 0022 (no set id, full rows) reads
+  its snapshot, touched risks and remaining budget from its rows** and ages out
+  with the retention; a set whose member count disagrees with `risk_count` is
+  refused on read.
 - **`integration/store/audit-guarded-append.test.ts`** (10) —
   **`appendUnlessLatest`, one entry for a change two writers observed**: it
   writes when the object has no earlier entry of the guarded acts; holds
@@ -3977,7 +3993,7 @@ itself are asserted in "Scenarios — Execution door".
   with the same number of days, logs what it removed, **the two purges fail apart**, and
   the composition root wires it.
 - **`retention.test.ts`** (10) — **the purge removes the entries older than N days and
-  nothing else**: older call and act gone with their risk rows, the entry exactly N days
+  nothing else**: older call and act gone with their risk rows (one per touched risk), the entry exactly N days
   old and the recent ones intact, seven other tables unchanged; **the triggers still
   forbid `UPDATE` and `DELETE`** on `audit` and `audit_risks` afterwards and the purge
   window is closed; idempotent; the configured number of days is honoured; boot sweep,

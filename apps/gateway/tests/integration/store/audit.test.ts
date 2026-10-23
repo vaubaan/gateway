@@ -42,7 +42,8 @@ function callEntry(ts: string, decision: 'allowed' | 'refused' = 'allowed'): Cal
     refusal_code: decision === 'refused' ? 'budget-exhausted' : null,
     refusal_reason: decision === 'refused' ? 'quota for github.write-feature-branch is 0' : null,
     approval_id: null,
-    remaining_budget: { [READ]: 9, [WRITE]: 4 },
+    // What the budget stage writes: the remaining budget of the touched risks.
+    remaining_budget: { [WRITE]: 4 },
     agent_label: 'orchestrator',
     upstream_latency_ms: 120,
     upstream_error: null,
@@ -73,7 +74,7 @@ describe('audit repository', () => {
 
   afterEach(() => store.close());
 
-  it('appends a call entry and reads it back unchanged, with per-risk rows', async () => {
+  it('appends a call entry and reads it back unchanged, with a row per touched risk', async () => {
     const entry = callEntry('2026-10-13T09:00:00.000Z');
     const record = await store.audit.append(entry);
     expect(record.kind).toBe('call');
@@ -81,10 +82,7 @@ describe('audit repository', () => {
     const { id, risks, ...roundTrip } = record;
     expect(roundTrip).toEqual(entry);
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(risks).toEqual([
-      { riskId: READ, accepted: true, touched: false, remaining: 9 },
-      { riskId: WRITE, accepted: true, touched: true, remaining: 4 },
-    ]);
+    expect(risks).toEqual([{ riskId: WRITE, accepted: true, touched: true, remaining: 4 }]);
     expect(await store.audit.getById(id)).toEqual(record);
   });
 
@@ -98,9 +96,9 @@ describe('audit repository', () => {
     });
     if (record.kind !== 'call') throw new Error('expected a call record');
     expect(record.risks).toEqual([
-      { riskId: READ, accepted: true, touched: false, remaining: null },
       { riskId: 'github.merge-protected', accepted: false, touched: true, remaining: null },
     ]);
+    expect(record.accepted_risks_snapshot).toEqual([READ]);
     expect(record.remaining_budget).toBeNull();
   });
 
@@ -123,6 +121,12 @@ describe('audit repository', () => {
     expect(() =>
       store.db.prepare('UPDATE audit_risks SET remaining = 0 WHERE audit_id = ?').run(record.id),
     ).toThrow(/append-only/);
+    expect(() => store.db.prepare('UPDATE audit_risk_sets SET risk_count = 0').run()).toThrow(
+      /append-only/,
+    );
+    expect(() =>
+      store.db.prepare("UPDATE audit_risk_set_members SET risk_id = 'github.other'").run(),
+    ).toThrow(/append-only/);
   });
 
   it('rejects a DELETE outside the retention purge', async () => {
@@ -134,6 +138,10 @@ describe('audit repository', () => {
     expect(() =>
       store.db.prepare('DELETE FROM audit_risks WHERE audit_id = ?').run(record.id),
     ).toThrow(/retention purge/);
+    expect(() => store.db.prepare('DELETE FROM audit_risk_set_members').run()).toThrow(
+      /retention purge/,
+    );
+    expect(() => store.db.prepare('DELETE FROM audit_risk_sets').run()).toThrow(/retention purge/);
     expect((await store.audit.list()).map((r) => r.id)).toEqual([record.id]);
   });
 
@@ -185,7 +193,7 @@ describe('audit repository', () => {
           'SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?',
         )
         .get(recent.id)?.n,
-    ).toBe(2);
+    ).toBe(1);
   });
 
   it('computes the retention cutoff from the clock, default 90 days', async () => {
