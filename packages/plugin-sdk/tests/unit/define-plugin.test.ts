@@ -62,6 +62,17 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('icon is optional, and the path data of one SVG path when present', () => {
+    expect(pluginIssues({ ...acmePlugin, icon: 'M12 2 22 22H2Z' })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, icon: 'm4.5 3.25h15a1 1 0 0 1 1 1v15z' })).toEqual([]);
+    const issue = 'icon: expected the path data of one SVG path (`M…`) when present';
+    expect(pluginIssues({ ...acmePlugin, icon: '' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, icon: '   ' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, icon: '<svg><path d="M0 0"/></svg>' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, icon: 'url(javascript:alert(1))' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, icon: 'M0 0"/><script>' })).toEqual([issue]);
+  });
+
   test('secretArguments is optional; it names declared arguments of declared tools', () => {
     const tool = 'acme__update_thing';
     expect(pluginIssues({ ...acmePlugin, secretArguments: { [tool]: ['name'] } })).toEqual([]);

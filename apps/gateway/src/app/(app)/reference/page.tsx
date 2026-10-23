@@ -35,7 +35,7 @@ export default async function ReferencePage() {
             <Row
               key={card.id}
               testId={`provider-${card.id}`}
-              lead={<ServiceMark name={card.name} />}
+              lead={<ServiceMark name={card.name} icon={card.icon} />}
               title={
                 <>
                   {card.name}

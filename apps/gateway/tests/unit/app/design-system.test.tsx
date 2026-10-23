@@ -45,6 +45,7 @@ import {
   SecretBox,
   Section,
   serviceLetters,
+  ServiceMark,
   SeverityChip,
   Skeleton,
   StatusMark,
@@ -334,6 +335,27 @@ describe('marks', () => {
       <KeyHolder name="github-actions" kind="machine" qualifier="· machine key" />,
     );
     expect(text(holder)).toBe('GAgithub-actions · machine key');
+  });
+
+  it('shows a service by the icon its plugin declares, in one ink, and by two letters without one', () => {
+    const withIcon = renderToStaticMarkup(<ServiceMark name="GitHub" icon="M12 2 22 22H2Z" />);
+    expect(withIcon).toContain('<path d="M12 2 22 22H2Z" fill="currentColor"');
+    expect(withIcon).toContain('viewBox="0 0 24 24"');
+    expect(withIcon).toMatch(/class="[^"]*serviceIcon/);
+    expect(withIcon).not.toContain('data-hue');
+    expect(withIcon).toContain('aria-hidden="true"');
+    expect(text(withIcon)).toBe('');
+
+    const fallback = renderToStaticMarkup(<ServiceMark name="Acme Cloud" />);
+    expect(text(fallback)).toBe('AC');
+    expect(fallback).toContain(`data-hue="${hueOf('Acme Cloud')}"`);
+    expect(fallback).not.toContain('<svg');
+    expect(renderToStaticMarkup(<ServiceMark name="Acme Cloud" icon={null} />)).toBe(fallback);
+
+    const large = renderToStaticMarkup(
+      <ServiceMark name="GitHub" icon="M12 2 22 22H2Z" size="lg" />,
+    );
+    expect(large).toMatch(/class="[^"]*serviceLg/);
   });
 
   it('prints an id as the protocol spells it, wrapping between its words', () => {

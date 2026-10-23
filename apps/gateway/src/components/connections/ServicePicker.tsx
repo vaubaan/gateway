@@ -55,7 +55,7 @@ export function ServicePicker({
   return (
     <PickGrid label="Services" testId="service-picker">
       {ordered.map((provider) => {
-        const lead = <ServiceMark name={provider.displayName} />;
+        const lead = <ServiceMark name={provider.displayName} icon={provider.icon} />;
         if (!provider.configured) {
           return (
             <PickCard

@@ -38,7 +38,7 @@ export function ReferenceFrame({
               items: cards.map((card) => ({
                 label: card.name,
                 href: providerPath(card.id),
-                lead: <ServiceMark name={card.name} />,
+                lead: <ServiceMark name={card.name} icon={card.icon} />,
               })),
             },
           ]}

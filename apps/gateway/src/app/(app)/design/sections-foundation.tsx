@@ -32,7 +32,7 @@ import {
 import { ACTIONS, qualifiers, ROLE_WORDS } from '@/lib/vocabulary';
 
 import styles from './design.module.css';
-import { GallerySection, Line, Pile, Specimen } from './specimen';
+import { type GalleryIcons, GallerySection, Line, Pile, Specimen } from './specimen';
 
 const COLOURS: readonly { token: string; use: string }[] = [
   { token: '--paper', use: 'the page' },
@@ -178,7 +178,7 @@ export function TokenSections() {
   );
 }
 
-export function PageFrameSections() {
+export function PageFrameSections({ icons }: { icons: GalleryIcons }) {
   return (
     <>
       <GallerySection
@@ -228,7 +228,7 @@ export function PageFrameSections() {
             <PageHeader
               level={2}
               crumbs={[{ label: 'Accounts', href: '#page-header' }, { label: 'GitHub · acme' }]}
-              mark={<ServiceMark name="GitHub" size="lg" />}
+              mark={<ServiceMark name="GitHub" icon={icons.github} size="lg" />}
               title="GitHub · acme"
               lede="GitHub App on the acme organisation · owned by the Platform team · checked 2 min ago"
               primary={<Button variant="primary">{ACTIONS.giveAccess}</Button>}
@@ -326,7 +326,7 @@ export function PageFrameSections() {
                           label: 'GitHub',
                           href: '#section',
                           current: false,
-                          lead: <ServiceMark name="GitHub" />,
+                          lead: <ServiceMark name="GitHub" icon={icons.github} />,
                         },
                       ],
                     },
@@ -393,7 +393,7 @@ export function ButtonSections() {
   );
 }
 
-export function MarkSections() {
+export function MarkSections({ icons }: { icons: GalleryIcons }) {
   return (
     <>
       <GallerySection
@@ -536,14 +536,19 @@ export function MarkSections() {
             </Pile>
           )}
         </Specimen>
-        <Specimen name="Service, key, agent, id">
+        <Specimen
+          name="Service, key, agent, id"
+          note="the icon a plugin declares, monochrome; two letters on a hue when it declares none"
+        >
           {() => (
             <Line>
-              <ServiceMark name="GitHub" />
-              <ServiceMark name="Supabase" />
-              <ServiceMark name="Stripe" />
-              <ServiceMark name="Upstash Redis" />
-              <ServiceMark name="GitHub" size="lg" />
+              <ServiceMark name="GitHub" icon={icons.github} />
+              <ServiceMark name="Supabase" icon={icons.supabase} />
+              <ServiceMark name="Stripe" icon={icons.stripe} />
+              <ServiceMark name="Upstash Redis" icon={icons['upstash-redis']} />
+              <ServiceMark name="Acme Cloud" />
+              <ServiceMark name="GitHub" icon={icons.github} size="lg" />
+              <ServiceMark name="Acme Cloud" size="lg" />
               <KeyMark>vbn_live_XU2O…6uT</KeyMark>
               <AgentLabel>claude-code</AgentLabel>
               <Mono>github.merge-protected</Mono>

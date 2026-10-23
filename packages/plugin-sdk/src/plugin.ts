@@ -131,6 +131,17 @@ export interface ProviderPlugin {
   readonly id: string;
   /** Label shown in the UI (`GitHub`, `Cloudflare DNS`). */
   readonly displayName: string;
+  /**
+   * The brand icon of the service : the `d` of one SVG path on a 24×24 grid,
+   * drawn to be filled with `currentColor`. The web interface shows it
+   * monochrome, in one ink on a neutral fill, beside the service's name
+   * (ADR service-icons-declared-by-the-plugin). Vendor the path in the
+   * plugin (Simple Icons, CC0 1.0, is the usual source ; say so in a
+   * comment) ; never a runtime dependency on an icon package. Optional in
+   * the contract — a plugin without one is shown by two letters of its name ;
+   * every plugin shipped with the gateway declares one (structural test).
+   */
+  readonly icon?: string;
   /** Semver of the plugin. Reported by telemetry ; bump on every published change. */
   readonly version: string;
   /** One-line description for the providers page. */

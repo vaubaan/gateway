@@ -2,7 +2,7 @@
 title: Web app — route map, layouts, shell, design system
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-23
 tracks:
   - apps/gateway/src/app/layout.tsx
   - apps/gateway/src/app/(app)/page.tsx
@@ -765,14 +765,14 @@ tints in both themes.
 
 **Marks**
 
-| Export                                         | What it is                                                                                                                                                                                                                            |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `StatusMark`, `Dot`, `Tag`, `EnvTag`           | a pill with a dot for an exception (`tone`: `neutral`, `info`, `ok`, `warn`, `bad`); the dot alone; a squared tag for a fact that is not a state; an environment label (`null` → "no label", dashed)                                  |
-| `BadgeTone`, `toneOfBadge`                     | the tone names of the first interface (`success`, `warning`, `danger`) and their mapping to the new ones; `Callout` still accepts them                                                                                                |
-| `Avatar`, `AvatarStack`, `KeyHolder`           | a person (round), a machine key (`kind="machine"`: dashed square, no hue), a team; three sizes; the hue comes from the name (`hueOf`), the letters from `initialsOf`; the name and its qualifiers                                     |
-| `ServiceMark`, `KeyMark`, `AgentLabel`, `Mono` | the two letters of a service (from its display name, never from a list of services); a masked key in mono; the label an agent gave itself; an identifier in mono that wraps between its words                                         |
-| `SeverityChip`, `GateMark`, `WhyCells`         | one severity word; "runs freely" / "ask me first" / "not included" with a dot; the six cells of the risk model in words                                                                                                               |
-| `Icon`, `IconName`                             | sixteen-pixel line icons on a 24-unit grid, drawn in `Icon.tsx`: the seven of the navigation, `search`, `sun`, `moon`, `system`, `check`, `cross`, `alert`, `info`, `key`, `copy`, `chevron`, `more`, `signout`; always `aria-hidden` |
+| Export                                         | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `StatusMark`, `Dot`, `Tag`, `EnvTag`           | a pill with a dot for an exception (`tone`: `neutral`, `info`, `ok`, `warn`, `bad`); the dot alone; a squared tag for a fact that is not a state; an environment label (`null` → "no label", dashed)                                                                                                                                                                                                                                                                                                                                 |
+| `BadgeTone`, `toneOfBadge`                     | the tone names of the first interface (`success`, `warning`, `danger`) and their mapping to the new ones; `Callout` still accepts them                                                                                                                                                                                                                                                                                                                                                                                               |
+| `Avatar`, `AvatarStack`, `KeyHolder`           | a person (round), a machine key (`kind="machine"`: dashed square, no hue), a team; three sizes; the hue comes from the name (`hueOf`), the letters from `initialsOf` — the hues are for people, a service shows its icon; the name and its qualifiers                                                                                                                                                                                                                                                                                |
+| `ServiceMark`, `KeyMark`, `AgentLabel`, `Mono` | a service: the icon its plugin declares (`icon`, the `d` of a 24-unit path from the registry — `ProviderCard.icon`, `ConnectableProvider.icon`, `ConnectionView.providerIcon`), filled with `currentColor` in `--ink-2` on `--fill`, 14 px in the 20 px mark (22 in 34 for `lg`), never a hue; without an icon, two letters of its name on a hue (never from a list of services; ADR service-icons-declared-by-the-plugin); a masked key in mono; the label an agent gave itself; an identifier in mono that wraps between its words |
+| `SeverityChip`, `GateMark`, `WhyCells`         | one severity word; "runs freely" / "ask me first" / "not included" with a dot; the six cells of the risk model in words                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `Icon`, `IconName`                             | sixteen-pixel line icons on a 24-unit grid, drawn in `Icon.tsx`: the seven of the navigation, `search`, `sun`, `moon`, `system`, `check`, `cross`, `alert`, `info`, `key`, `copy`, `chevron`, `more`, `signout`; always `aria-hidden`                                                                                                                                                                                                                                                                                                |
 
 **Permissions, answers, states**
 
@@ -962,8 +962,9 @@ model has one plane.
 
 **The frame** (`reference/frame.tsx`, `ReferenceFrame`): the services as a
 local navigation, a row of tabs under the path bar (`SubNav`: "All services",
-then one entry per plugin with its `ServiceMark`), then the `PageHeader` of
-the place ("Reference", on the wide measure) and the content.
+then one entry per plugin with its `ServiceMark`, the icon from
+`ProviderCard.icon`), then the `PageHeader` of the place ("Reference", on the
+wide measure) and the content.
 
 **The index** (`reference/page.tsx`) is a quiet list, one row per service: its
 mark, its name (a link; "experimental" and the community validation tag where

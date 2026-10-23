@@ -718,7 +718,7 @@ export function AccountView({
           { label: PAGES.accounts.title, href: ROUTES.accounts },
           { label: connection.displayName },
         ]}
-        mark={<ServiceMark name={detail.providerLabel} size="lg" />}
+        mark={<ServiceMark name={detail.providerLabel} icon={detail.providerIcon} size="lg" />}
         title={connection.displayName}
         status={
           ACCOUNT_STATES[connection.status].tone !== null || revoked ? (

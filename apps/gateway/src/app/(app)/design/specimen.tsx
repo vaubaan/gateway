@@ -72,3 +72,10 @@ export function Line({ children }: { children: React.ReactNode }) {
 export function Pile({ children }: { children: React.ReactNode }) {
   return <div className={styles.pile}>{children}</div>;
 }
+
+/**
+ * The marks of the shipped services, by provider id (`ProviderPlugin.icon`),
+ * read from the registry by the server page: the gallery shows real icons
+ * beside the lettered fallback, without a list of its own.
+ */
+export type GalleryIcons = Readonly<Record<string, string>>;

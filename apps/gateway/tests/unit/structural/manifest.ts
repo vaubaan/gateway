@@ -757,6 +757,25 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'shipped-plugin-icons',
+    statement:
+      'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid, drawn monochrome): no service of the repository falls back to two letters, and the interface keeps no provider → icon list of its own.',
+    source: 'ADR service-icons-declared-by-the-plugin; style-guide §5 "Service mark"',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-icons.test.ts`,
+        tests: [
+          'declares an icon: the path data of one SVG path',
+          'draws it on the 24-unit grid: no coordinate far outside it',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/define-plugin.test.ts',
+        tests: ['icon is optional, and the path data of one SVG path when present'],
+      },
+    ],
+  },
+  {
     id: 'cookies-host-prefixed',
     statement:
       'The session and pending sign-in cookies carry the __Host- prefix with what it requires (Secure, Path=/, no Domain), HttpOnly and SameSite=Lax.',

@@ -17,6 +17,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyResend } from './classify.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
+import { RESEND_ICON } from './icon.ts';
 import { resendToolTitles } from './tool-titles.ts';
 import { resendTools } from './tools.ts';
 
@@ -27,7 +28,8 @@ export const resendCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url))
 export const resendPlugin = definePlugin({
   id: 'resend',
   displayName: 'Resend',
-  version: '0.4.0',
+  icon: RESEND_ICON,
+  version: '0.4.1',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',

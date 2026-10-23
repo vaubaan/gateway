@@ -161,7 +161,7 @@ else.
 | Exceptions | `warn…`, `bad…`, `ok…` — each with `-soft` and `-line`; `on-warn`                         | needs you; stopped, refused, limit reached; done (checklists only)                                                           |
 | Code       | `code-bg`, `code-ink`, `code-dim`, `code-key`, `code-string`, `code-btn`, `code-btn-line` | code blocks, dark in both themes                                                                                             |
 | Overlay    | `scrim`, `shadow-overlay`, `knob`                                                         | what floats above the page                                                                                                   |
-| Marks      | `hue-0` … `hue-5`, `on-hue`                                                               | the mark of a person or a service; never a status                                                                            |
+| Marks      | `hue-0` … `hue-5`, `on-hue`                                                               | the mark of a person (and of a service whose plugin declares no icon); never a status                                        |
 | Focus      | `focus-ring`                                                                              | a gap in the colour of the page, then the accent                                                                             |
 
 `ink-4` is below AA on purpose and carries no information: a placeholder, a
@@ -184,8 +184,8 @@ names, and what reads them, do not change.
 
 Two weights: regular (400) and strong (600). Two families: a sans-serif for all
 interface text and a monospace for identifiers and code, both bundled with the
-application. The letters inside a mark (an avatar, a service mark, a step
-number) are sized with the mark and are not text sizes.
+application. The letters inside a mark (an avatar, a step number, the lettered
+fallback of a service mark) are sized with the mark and are not text sizes.
 
 ### 3.3 Space, radius, motion
 
@@ -258,6 +258,7 @@ side): a theme applies to an element and everything inside it.
 | **Meter**                     | shown only near a limit — the caller gives the threshold; a dash below it; red and "limit reached" at the limit                                                                                |
 | **Status mark**               | a pill with a dot for an exception; a dot beside a word that says the state; a squared tag for a fact that is not a state (an environment)                                                     |
 | **Avatar, key holder**        | a person is a round mark with initials, a machine key a dashed square, a team a squared mark; the name, then what they are here, in words; a masked key in mono with a key                     |
+| **Service mark**              | the brand icon its plugin declares, monochrome in the secondary ink on a neutral fill — never coloured, never a status; its name beside it; two letters of the name when it declares no icon   |
 | **Identifier**                | mono, as the protocol spells it; wraps between its words, never inside one                                                                                                                     |
 | **Permission row**            | what it allows in words, its id in mono, one severity word, limits per day and per minute, runs freely or ask me first, and "why?" — the reason, the six words, the tools, the reference       |
 | **Can / Asks first / Cannot** | the summary of a mission in three lines, a fourth when one limit is near; says how many permissions it sums up; never replaces the explicit list                                               |

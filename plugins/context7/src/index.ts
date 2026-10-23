@@ -21,6 +21,7 @@ import { classifyContext7 } from './classify.ts';
 import { CONTEXT7_MANUAL_REVOCATION, context7CredentialSpec } from './credential.ts';
 import { context7DataModel } from './data-model.ts';
 import { discoverContext7Resources, executeContext7 } from './execute.ts';
+import { CONTEXT7_ICON } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { context7ToolTitles, context7Tools } from './tools.ts';
 
@@ -31,8 +32,9 @@ export const context7Catalog = loadCatalogFile(catalogPathNextTo(import.meta.url
 export const context7Plugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Context7',
+  icon: CONTEXT7_ICON,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.0',
+  version: '0.1.1',
   description:
     'Look up current library documentation with Context7, through the official Context7 MCP server.',
   summary:

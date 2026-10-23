@@ -17,6 +17,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyStripe } from './classify.ts';
 import { stripeDataModel } from './data-model.ts';
 import { discoverStripeResources, executeStripe } from './execute.ts';
+import { STRIPE_ICON } from './icon.ts';
 import { stripeToolTitles } from './tool-titles.ts';
 import { stripeTools } from './tools.ts';
 
@@ -31,7 +32,8 @@ const KEY_HELP =
 export const stripePlugin = definePlugin({
   id: 'stripe',
   displayName: 'Stripe',
-  version: '0.4.0',
+  icon: STRIPE_ICON,
+  version: '0.4.1',
   description:
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
     'refunds, payouts, webhooks — test and live modes as separate resources.',

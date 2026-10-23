@@ -11,7 +11,7 @@ import { PAGES } from '@/lib/vocabulary';
 
 import { AccountSections } from './sections-accounts';
 import { ListSections, PermissionSections } from './sections-data';
-import { GallerySection } from './specimen';
+import { GallerySection, type GalleryIcons } from './specimen';
 import { FormSections, OverlaySections, StateSections } from './sections-feedback';
 import {
   ButtonSections,
@@ -93,7 +93,7 @@ export const GALLERY_SECTIONS: readonly {
   },
 ];
 
-export function Gallery() {
+export function Gallery({ icons }: { icons: GalleryIcons }) {
   return (
     <>
       <PageHeader title={PAGES.design.title} lede={PAGES.design.lede} width="wide" />
@@ -121,17 +121,17 @@ export function Gallery() {
             its count in amber when something waits.
           </Callout>
         </GallerySection>
-        <PageFrameSections />
+        <PageFrameSections icons={icons} />
         <ButtonSections />
-        <MarkSections />
-        <ListSections />
+        <MarkSections icons={icons} />
+        <ListSections icons={icons} />
         <PermissionSections />
         <StateSections />
         <OverlaySections />
         <FormSections />
         <WaitingSections />
         <MissionSections />
-        <AccountSections />
+        <AccountSections icons={icons} />
       </SubNavFrame>
     </>
   );

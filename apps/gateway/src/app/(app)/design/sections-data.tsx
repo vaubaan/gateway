@@ -57,7 +57,7 @@ import {
 } from '@/lib/vocabulary';
 
 import styles from './design.module.css';
-import { GallerySection, Pile, Specimen } from './specimen';
+import { type GalleryIcons, GallerySection, Pile, Specimen } from './specimen';
 
 interface Person {
   readonly id: string;
@@ -199,7 +199,7 @@ const CALL_COLUMNS: readonly Column<Call>[] = [
   },
 ];
 
-export function ListSections() {
+export function ListSections({ icons }: { icons: GalleryIcons }) {
   return (
     <>
       <GallerySection
@@ -263,7 +263,7 @@ export function ListSections() {
           {() => (
             <Rows label="Accounts">
               <Row
-                lead={<ServiceMark name="GitHub" />}
+                lead={<ServiceMark name="GitHub" icon={icons.github} />}
                 title="GitHub · acme"
                 description="4 repositories · 5 missions · you own it with Platform"
                 end={
@@ -273,7 +273,7 @@ export function ListSections() {
                 }
               />
               <Row
-                lead={<ServiceMark name="Stripe" />}
+                lead={<ServiceMark name="Stripe" icon={icons.stripe} />}
                 title="Stripe · Acme payments"
                 description="Needs reconnecting · Bob owns it"
                 aside={<StatusMark tone="bad">Needs reconnecting</StatusMark>}

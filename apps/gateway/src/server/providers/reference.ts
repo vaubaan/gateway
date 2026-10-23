@@ -58,6 +58,8 @@ export interface ProviderCard {
   readonly version: string;
   /** One line: what it connects to. */
   readonly description: string | null;
+  /** The path data of the service's monochrome mark (`ProviderPlugin.icon`); `null` when it declares none. */
+  readonly icon: string | null;
   readonly experimental: boolean;
   /** The primary way of connecting. */
   readonly credential_kind: CredentialKind;
@@ -89,6 +91,7 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     name: plugin.displayName,
     version: plugin.version,
     description: plugin.description ?? null,
+    icon: plugin.icon ?? null,
     experimental: plugin.experimental === true,
     credential_kind: plugin.credential.kind,
     counts: countsOf(registered, risks),

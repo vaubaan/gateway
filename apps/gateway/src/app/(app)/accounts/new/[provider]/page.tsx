@@ -230,7 +230,7 @@ export default async function ConnectOneAccountPage({
                 { label: name },
               ]
         }
-        mark={<ServiceMark name={name} size="lg" />}
+        mark={<ServiceMark name={name} icon={provider.icon} size="lg" />}
         title={
           reconnect
             ? `Reconnect ${reconnect.connection.displayName}`

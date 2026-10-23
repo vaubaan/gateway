@@ -16,6 +16,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyTemplate } from './classify.ts';
 import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
+import { _TEMPLATE_ICON } from './icon.ts';
 import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
 import { templateTools, templateToolTitles } from './tools.ts';
 
@@ -28,6 +29,7 @@ export const templateCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url
 export const templatePlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Template provider',
+  icon: _TEMPLATE_ICON,
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.1.0',
   description: 'Scaffold plugin. Copy it to start a real one.',

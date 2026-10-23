@@ -48,6 +48,7 @@ import {
   UPSTASH_MANAGEMENT_API,
   UPSTASH_REST_HOST_SUFFIX,
 } from './execute.ts';
+import { UPSTASH_REDIS_ICON } from './icon.ts';
 import { upstashRedisToolTitles } from './tool-titles.ts';
 import { upstashRedisTools } from './tools.ts';
 
@@ -60,7 +61,8 @@ export const upstashRedisCatalog = loadCatalogFile(UPSTASH_REDIS_CATALOG_PATH);
 export const upstashRedisPlugin = definePlugin({
   id: 'upstash-redis',
   displayName: 'Upstash Redis',
-  version: '3.1.0',
+  icon: UPSTASH_REDIS_ICON,
+  version: '3.1.1',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:

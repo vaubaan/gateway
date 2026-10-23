@@ -157,6 +157,8 @@ export interface ReceivedShare {
   readonly share: ShareRecord;
   readonly connection: Pick<ConnectionRecord, 'id' | 'displayName' | 'provider' | 'status'>;
   readonly providerLabel: string;
+  /** The service's mark (`ProviderPlugin.icon`); `null` when the plugin declares none or is gone. */
+  readonly providerIcon: string | null;
   readonly ownerLabel: string;
   /** How it reaches the user: `you`, or the group it was made to. */
   readonly via: string;
@@ -490,6 +492,7 @@ export class ShareService {
         share,
         connection,
         providerLabel: registered?.plugin.displayName ?? connection.provider,
+        providerIcon: registered?.plugin.icon ?? null,
         ownerLabel: await principalLabel(this.deps.store, connection.owner),
         via:
           share.target.kind === 'user'
