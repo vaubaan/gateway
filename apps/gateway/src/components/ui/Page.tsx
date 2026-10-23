@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { formatNumber } from '@/lib/vocabulary';
 
 import styles from './Page.module.css';
+import { TrailSetter } from './Trail';
 
 export type PageWidth = 'narrow' | 'default' | 'wide';
 
@@ -82,10 +83,12 @@ export function PageHeader({
   level?: 1 | 2;
 }) {
   const Title = level === 1 ? 'h1' : 'h2';
+  const label = title;
   const hasActions = Boolean(primary) || Boolean(secondary) || Boolean(more);
   return (
     <header className={styles.header} data-page-width={level === 1 ? width : undefined}>
-      {crumbs && crumbs.length > 0 && <Crumbs items={crumbs} />}
+      {/* The page's place, for the path bar of the shell: its crumbs, then its title. */}
+      {level === 1 && <TrailSetter items={[...(crumbs ?? []), { label }]} />}
       <div className={styles.headerRow}>
         <div className={styles.headerText}>
           <Title className={styles.title}>

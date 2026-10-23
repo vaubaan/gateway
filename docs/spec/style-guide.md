@@ -9,7 +9,9 @@ date: 2026-10-13
 > **Status:** current. The visual and verbal vocabulary of the web interface
 > ([vaubaan-gateway](./vaubaan-gateway.md) §4.2) and the rules a screen must
 > follow. Rewritten for the redesign decided on 2026-10-13 (ADR
-> [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md)).
+> [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md);
+> skin and shell amended on 2026-10-23, ADR
+> [shadcn-near-default-skin-and-path-bar](../decisions/shadcn-near-default-skin-and-path-bar.md)).
 > How it is built is in the handbook [web-app](../handbook/web-app.md); every
 > component can be seen, in every state and both themes, on the gallery page of
 > a running gateway (`/design`).
@@ -92,8 +94,9 @@ sentence that says so, and where to go.
 - **No design-tool source of truth.** The tokens in the code are the reference.
 - **No local redefinition of a token.** If a need has no token, a token is
   added.
-- **No side sheet that stays open**, no top bar, no status footer in the
-  navigation.
+- **No side sheet that stays open**, no status footer in the navigation. The
+  one bar above the page is the path bar (§4): the path, the theme and the
+  person, nothing else.
 
 ## 2. Words
 
@@ -164,14 +167,20 @@ else.
 `ink-4` is below AA on purpose and carries no information: a placeholder, a
 disabled mark.
 
+The values are shadcn/ui's near-default **slate** neutrals with a **sky**
+accent, in both themes: the neutrals from slate 50 to 950, the accent on sky
+700 in light (sky 500 is below AA on white) and sky 400 in dark, the
+exceptions on amber, red and green. A skin is a change of these values; the
+names, and what reads them, do not change.
+
 ### 3.2 Type
 
 | Token        | Size  | Use                                                     |
 | ------------ | ----- | ------------------------------------------------------- |
-| `text-title` | 20 px | the page title; the one statement of a request          |
-| `text-base`  | 14 px | body text; section headings, in the strong weight       |
-| `text-sm`    | 13 px | rows, tables, controls, ledes                           |
-| `text-xs`    | 12 px | captions, chips, table heads, identifiers under a label |
+| `text-title` | 18 px | the page title; the one statement of a request          |
+| `text-base`  | 13 px | body text, rows, tables, controls; section headings     |
+| `text-sm`    | 12 px | ledes, hints, the secondary line of a row               |
+| `text-xs`    | 11 px | captions, chips, table heads, identifiers under a label |
 
 Two weights: regular (400) and strong (600). Two families: a sans-serif for all
 interface text and a monospace for identifiers and code, both bundled with the
@@ -183,10 +192,11 @@ number) are sized with the mark and are not text sizes.
 - **Space**: a 4 px base — 2, 4, 8, 12, 16, 20, 24, 32, 40, 48.
 - **Rhythm of a page**: a column of 1120 px (860 px for one object or a form,
   1240 px for a table), 44 px of side padding, **36 px between two regions**,
-  11 px above and below a row, a navigation of 220 px (56 px collapsed).
-- **Controls**: three heights — 26, 30 and 36 px.
+  a row of 36 px, a navigation of 220 px (56 px collapsed), a path bar of
+  44 px.
+- **Controls**: three heights — 28, 32 and 36 px.
 - **Radius**: 4 px (tags, checkboxes, inline code), 6 px (buttons, inputs,
-  navigation entries), 10 px (the one filled box, callouts, dialogs, code
+  navigation entries), 8 px (the one filled box, callouts, dialogs, code
   blocks), full (pills, avatars, dots).
 - **Motion**: 100 ms and 150 ms, one ease-out, on colour, background, border
   colour, opacity and transform only.
@@ -210,9 +220,18 @@ side): a theme applies to an element and everything inside it.
 - **A side navigation**, a fill without a border: the product and where this
   gateway lives; **Now**, **Waiting for you** with its count, **Missions**,
   **Accounts**, **Activity**, **Reference**; then, after a hairline,
-  **Settings**. At its foot, the person — their name, and behind it what they
-  are here and "Sign out" — and the theme toggle. The count of what waits is the
-  one coloured mark of the navigation.
+  **Settings**. The count of what waits is the one coloured mark of the
+  navigation.
+- **A path bar above the page**, 44 px, a hairline under it, sticky: on the
+  left the **path** — this gateway (its mark and its name, leading home), the
+  section, then the page's crumbs and its title, the last one strong and not a
+  link; on the right the theme toggle and the person — their name, and behind
+  it what they are here and "Sign out". The bar holds nothing else: no search,
+  no action of the page.
+- **A local navigation is a row of tabs under the path**, as wide as the page
+  column: Settings ("You", then "Administration") and the Reference (every
+  service). A group's name is a quiet word before its entries; the current
+  entry is the strong word with a rule under it. No local column.
 - **It is navigation, not a status panel**: no health line, no version string.
   The build is said once, quietly, where a page ends.
 - **The current section** is marked by a fill and the strong weight, not by a
@@ -223,8 +242,8 @@ side): a theme applies to an element and everything inside it.
   behind "More".
 - **One home**: the root. The brand and the sign-in both lead there.
 - **Administration is part of Settings**: the same shell and the same global
-  navigation, with a local navigation beside the page. No label is used for two
-  things.
+  navigation, with the local navigation of Settings under the path. No label is
+  used for two things.
 - **A page column** of one of three measures, chosen by the page.
 
 ## 5. Components

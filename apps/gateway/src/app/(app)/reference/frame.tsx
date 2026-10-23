@@ -1,7 +1,7 @@
 /**
- * The frame of the Reference: the title of the place, and the services as a
- * local navigation beside the content. The list is the plugin registry's
- * (`providerCards`); nothing is enumerated here.
+ * The frame of the Reference: the services as a local navigation — a row of
+ * tabs under the path bar — then the title of the place and the content. The
+ * list is the plugin registry's (`providerCards`); nothing is enumerated here.
  */
 import { PageHeader, ServiceMark, SubNav, SubNavFrame } from '@/components/ui';
 import { count, PAGES, REFERENCE_WORDS, ROUTES, TERMS } from '@/lib/vocabulary';
@@ -25,30 +25,28 @@ export function ReferenceFrame({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <SubNavFrame
+      nav={
+        <SubNav
+          label={REFERENCE_WORDS.services}
+          groups={[
+            {
+              items: [{ label: 'All services', href: ROUTES.reference, exact: true }],
+            },
+            {
+              label: REFERENCE_WORDS.services,
+              items: cards.map((card) => ({
+                label: card.name,
+                href: providerPath(card.id),
+                lead: <ServiceMark name={card.name} />,
+              })),
+            },
+          ]}
+        />
+      }
+    >
       <PageHeader title={PAGES.reference.title} lede={PAGES.reference.lede} width="wide" />
-      <SubNavFrame
-        nav={
-          <SubNav
-            label={REFERENCE_WORDS.services}
-            groups={[
-              {
-                items: [{ label: 'All services', href: ROUTES.reference, exact: true }],
-              },
-              {
-                label: REFERENCE_WORDS.services,
-                items: cards.map((card) => ({
-                  label: card.name,
-                  href: providerPath(card.id),
-                  lead: <ServiceMark name={card.name} />,
-                })),
-              },
-            ]}
-          />
-        }
-      >
-        {children}
-      </SubNavFrame>
-    </>
+      {children}
+    </SubNavFrame>
   );
 }

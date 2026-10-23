@@ -98,7 +98,7 @@ h3.sectionTitle {
   gap: var(--space-3);
   min-width: 0;
   color: var(--ink-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-align: right;
 }
 .sectionNote a {
@@ -112,7 +112,7 @@ h3.sectionTitle {
   gap: var(--space-1) 18px;
   margin: 0;
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-variant-numeric: tabular-nums;
 }
 .summaryCentered {

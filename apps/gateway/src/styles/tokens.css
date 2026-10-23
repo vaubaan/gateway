@@ -1,8 +1,10 @@
 /**
- * Vaubaan design tokens — the quiet control room.
+ * Vaubaan design tokens — the quiet control room, in shadcn's near-default
+ * slate and sky (ADR shadcn-near-default-skin-and-path-bar).
  *
- * Spec: docs/spec/style-guide.md. Decision: docs/decisions/
- * interface-redesign-vocabulary-and-design-system.md.
+ * Spec: docs/spec/style-guide.md. Decisions: docs/decisions/
+ * interface-redesign-vocabulary-and-design-system.md (the names and what
+ * reads them), shadcn-near-default-skin-and-path-bar.md (the values).
  *
  * One layer of named decisions. A component reads these and nothing else: no
  * raw colour, no raw type size, no raw radius.
@@ -22,10 +24,10 @@
   --font-mono:
     var(--font-geist-mono), ui-monospace, 'SF Mono', Menlo, 'Liberation Mono', Consolas, monospace;
 
-  --text-xs: 0.75rem; /* 12 px — meta, captions, chips */
-  --text-sm: 0.8125rem; /* 13 px — rows, tables, controls */
-  --text-base: 0.875rem; /* 14 px — body, section headings */
-  --text-title: 1.25rem; /* 20 px — the page title, the one statement of a request */
+  --text-xs: 0.6875rem; /* 11 px — meta, captions, chips, table heads */
+  --text-sm: 0.75rem; /* 12 px — ledes, hints, the second line of a row */
+  --text-base: 0.8125rem; /* 13 px — body, rows, tables, controls, section headings */
+  --text-title: 1.125rem; /* 18 px — the page title, the one statement of a request */
 
   --weight-regular: 400;
   --weight-strong: 600;
@@ -59,21 +61,23 @@
   --section-gap: 36px;
   --side-width: 220px;
   --side-width-collapsed: 56px;
+  /* The bar above the page: the path, the theme, the person. */
+  --bar-height: 44px;
 
-  /* A quiet list row and a table cell. */
-  --row-y: 11px;
-  --cell-y: 9px;
+  /* A quiet list row and a table cell: a row is 36 px. */
+  --row-y: 8px;
+  --cell-y: 8px;
   --cell-x: 10px;
 
   /* The three heights of a control. */
-  --control-sm: 26px;
-  --control-md: 30px;
+  --control-sm: 28px;
+  --control-md: 32px;
   --control-lg: 36px;
 
   /* ───── Radius ───── */
   --radius-sm: 4px; /* tags, checkboxes, inline code */
   --radius-md: 6px; /* buttons, inputs, navigation entries */
-  --radius-lg: 10px; /* the one filled box of a page, callouts, dialogs, code blocks */
+  --radius-lg: 8px; /* the one filled box of a page, callouts, dialogs, code blocks */
   --radius-full: 999px; /* pills, avatars, dots */
 
   /* ───── Motion ───── */
@@ -91,106 +95,106 @@
   --on-hue: #ffffff;
 }
 
-/* ───── Light (default) ───── */
+/* ───── Light (default): slate, sky ───── */
 :root,
 [data-theme='light'] {
   color-scheme: light;
 
   /* Paper */
   --paper: #ffffff; /* the page */
-  --paper-side: #f6f6f4; /* the side navigation, a dialog foot, a group row */
+  --paper-side: #f8fafc; /* the side navigation, a dialog foot, a group row */
   --paper-raised: #ffffff; /* controls, the rail card, dialogs */
-  --fill: #f3f3f0; /* the current navigation entry, a neutral pill, inline code */
-  --hover: #fafaf8;
+  --fill: #f1f5f9; /* the current navigation entry, a neutral pill, inline code */
+  --hover: #f8fafc;
 
   /* Hairlines */
-  --line: #e6e5e1;
-  --line-strong: #d2d1cc;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
 
   /* Ink */
-  --ink: #1b1c1e;
-  --ink-2: #4f5156;
-  --ink-3: #6a6d74;
-  --ink-4: #a4a6ab; /* placeholders and disabled marks only: below AA on purpose */
+  --ink: #0f172a;
+  --ink-2: #334155;
+  --ink-3: #475569;
+  --ink-4: #94a3b8; /* placeholders and disabled marks only: below AA on purpose */
 
-  /* The one accent: the primary action and links */
-  --accent: #2f55c7;
-  --accent-ink: #2448b0;
-  --accent-soft: #eef2fc;
-  --accent-line: #c9d5f5;
+  /* The one accent: the primary action and links (sky 700: sky 500 is below AA on white) */
+  --accent: #0369a1;
+  --accent-ink: #075985;
+  --accent-soft: #f0f9ff;
+  --accent-line: #bae6fd;
   --on-accent: #ffffff;
 
   /* Exceptions: a status is coloured only when it differs from normal */
-  --ok: #1c7c4a;
-  --ok-soft: #e7f4ec;
-  --ok-line: #bfe3cc;
-  --warn: #a35e00; /* needs you */
-  --warn-soft: #fbf2df;
-  --warn-line: #eed9ae;
+  --ok: #15803d;
+  --ok-soft: #f0fdf4;
+  --ok-line: #bbf7d0;
+  --warn: #b45309; /* needs you */
+  --warn-soft: #fffbeb;
+  --warn-line: #fde68a;
   --on-warn: #ffffff;
-  --bad: #b3261e; /* stopped, refused, limit reached */
-  --bad-soft: #fbebe9;
-  --bad-line: #f3c9c4;
+  --bad: #b91c1c; /* stopped, refused, limit reached */
+  --bad-soft: #fef2f2;
+  --bad-line: #fecaca;
 
   /* Code blocks keep a dark surface in both themes */
-  --code-bg: #1e1f22;
-  --code-ink: #e7e7e4;
-  --code-dim: #8b8e95;
-  --code-key: #9cc4ff;
-  --code-string: #c8e6a8;
-  --code-btn: #2a2b2f;
-  --code-btn-line: #3a3b40;
+  --code-bg: #0f172a;
+  --code-ink: #e2e8f0;
+  --code-dim: #94a3b8;
+  --code-key: #7dd3fc;
+  --code-string: #bbf7d0;
+  --code-btn: #1e293b;
+  --code-btn-line: #334155;
 
   /* Overlays */
-  --scrim: rgba(20, 20, 22, 0.38);
-  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  --scrim: rgba(15, 23, 42, 0.4);
+  --shadow-overlay: 0 24px 64px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.06);
   --knob: #ffffff;
 
   --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
 }
 
-/* ───── Dark, chosen ───── */
+/* ───── Dark, chosen: slate, sky ───── */
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --paper: #0f1115;
-  --paper-side: #15181d;
-  --paper-raised: #15181d;
-  --fill: #1c2026;
-  --hover: #1a1d23;
+  --paper: #020817;
+  --paper-side: #0f172a;
+  --paper-raised: #0f172a;
+  --fill: #1e293b;
+  --hover: #0f172a;
 
-  --line: #272b32;
-  --line-strong: #363b44;
+  --line: #1e293b;
+  --line-strong: #334155;
 
-  --ink: #e8e9ec;
-  --ink-2: #b9bcc4;
-  --ink-3: #8a8f99;
-  --ink-4: #5e636c;
+  --ink: #f8fafc;
+  --ink-2: #cbd5e1;
+  --ink-3: #94a3b8;
+  --ink-4: #475569;
 
-  --accent: #7fa3ff;
-  --accent-ink: #9db8ff;
-  --accent-soft: #1e2433;
-  --accent-line: #364467;
-  --on-accent: #0f1115;
+  --accent: #38bdf8;
+  --accent-ink: #7dd3fc;
+  --accent-soft: #0c2a44;
+  --accent-line: #075985;
+  --on-accent: #020817;
 
-  --ok: #4cc38a;
-  --ok-soft: #182a25;
-  --ok-line: #244f3e;
-  --warn: #e9b04a;
-  --warn-soft: #30291d;
-  --warn-line: #66512a;
-  --on-warn: #0f1115;
-  --bad: #f0655f;
-  --bad-soft: #2f1d1f;
-  --bad-line: #693333;
+  --ok: #4ade80;
+  --ok-soft: #052e16;
+  --ok-line: #166534;
+  --warn: #fbbf24;
+  --warn-soft: #422006;
+  --warn-line: #92400e;
+  --on-warn: #020817;
+  --bad: #f87171;
+  --bad-soft: #450a0a;
+  --bad-line: #991b1b;
 
-  --code-bg: #0b0c0f;
-  --code-ink: #e2e3e6;
-  --code-dim: #7e838c;
-  --code-key: #9cc4ff;
-  --code-string: #b8dd98;
-  --code-btn: #1c2026;
-  --code-btn-line: #363b44;
+  --code-bg: #0b1120;
+  --code-ink: #e2e8f0;
+  --code-dim: #94a3b8;
+  --code-key: #7dd3fc;
+  --code-string: #bbf7d0;
+  --code-btn: #1e293b;
+  --code-btn-line: #334155;
 
   --scrim: rgba(0, 0, 0, 0.6);
   --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -204,44 +208,44 @@
   :root:not([data-theme]) {
     color-scheme: dark;
 
-    --paper: #0f1115;
-    --paper-side: #15181d;
-    --paper-raised: #15181d;
-    --fill: #1c2026;
-    --hover: #1a1d23;
+    --paper: #020817;
+    --paper-side: #0f172a;
+    --paper-raised: #0f172a;
+    --fill: #1e293b;
+    --hover: #0f172a;
 
-    --line: #272b32;
-    --line-strong: #363b44;
+    --line: #1e293b;
+    --line-strong: #334155;
 
-    --ink: #e8e9ec;
-    --ink-2: #b9bcc4;
-    --ink-3: #8a8f99;
-    --ink-4: #5e636c;
+    --ink: #f8fafc;
+    --ink-2: #cbd5e1;
+    --ink-3: #94a3b8;
+    --ink-4: #475569;
 
-    --accent: #7fa3ff;
-    --accent-ink: #9db8ff;
-    --accent-soft: #1e2433;
-    --accent-line: #364467;
-    --on-accent: #0f1115;
+    --accent: #38bdf8;
+    --accent-ink: #7dd3fc;
+    --accent-soft: #0c2a44;
+    --accent-line: #075985;
+    --on-accent: #020817;
 
-    --ok: #4cc38a;
-    --ok-soft: #182a25;
-    --ok-line: #244f3e;
-    --warn: #e9b04a;
-    --warn-soft: #30291d;
-    --warn-line: #66512a;
-    --on-warn: #0f1115;
-    --bad: #f0655f;
-    --bad-soft: #2f1d1f;
-    --bad-line: #693333;
+    --ok: #4ade80;
+    --ok-soft: #052e16;
+    --ok-line: #166534;
+    --warn: #fbbf24;
+    --warn-soft: #422006;
+    --warn-line: #92400e;
+    --on-warn: #020817;
+    --bad: #f87171;
+    --bad-soft: #450a0a;
+    --bad-line: #991b1b;
 
-    --code-bg: #0b0c0f;
-    --code-ink: #e2e3e6;
-    --code-dim: #7e838c;
-    --code-key: #9cc4ff;
-    --code-string: #b8dd98;
-    --code-btn: #1c2026;
-    --code-btn-line: #363b44;
+    --code-bg: #0b1120;
+    --code-ink: #e2e8f0;
+    --code-dim: #94a3b8;
+    --code-key: #7dd3fc;
+    --code-string: #bbf7d0;
+    --code-btn: #1e293b;
+    --code-btn-line: #334155;
 
     --scrim: rgba(0, 0, 0, 0.6);
     --shadow-overlay: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);

@@ -43,6 +43,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   JavaScript or from the keyboard, and the end of the record says "No earlier
   activity". The detail of a line loaded later opens without losing the lines
   already loaded, and `?cursor=` links still open the record at a position.
+- **The interface takes a shadcn-near-default skin and a path bar.** Slate
+  neutrals, a sky accent, 13 px text, 36 px rows, in both themes; the values
+  of the tokens change, not their names. Above every page, a bar says where it
+  is — this gateway, the section, the page's crumbs and title — and holds the
+  theme toggle and the person, which leave the side navigation. The local
+  navigation of Settings and of the Reference is a row of tabs under the bar,
+  not a column. ADR shadcn-near-default-skin-and-path-bar.
 
 ### Changed
 

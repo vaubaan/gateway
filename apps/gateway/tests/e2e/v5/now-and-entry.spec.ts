@@ -193,14 +193,14 @@ test('the pages a handler answers itself follow the theme the person chose', asy
   expect(await paper()).toBe('rgb(255, 255, 255)');
   // The system asks for dark: the page follows it.
   await page.emulateMedia({ colorScheme: 'dark' });
-  expect(await paper()).toBe('rgb(15, 17, 21)');
+  expect(await paper()).toBe('rgb(2, 8, 23)');
   await page.emulateMedia({ colorScheme: 'light' });
 
   // The person chose dark in the application: the document arrives dark, with no script.
   await context.addCookies([{ name: 'vaubaan_theme', value: 'dark', url: PUBLIC_URL }]);
   const dark = await page.goto(address);
   expect(await dark?.text()).toMatch(/<html lang="en" data-theme="dark">/);
-  expect(await paper()).toBe('rgb(15, 17, 21)');
+  expect(await paper()).toBe('rgb(2, 8, 23)');
   expect(await page.locator('script').count()).toBe(0);
   await snap(page, 'request-forbidden-dark');
 

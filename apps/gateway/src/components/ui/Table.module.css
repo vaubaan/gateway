@@ -10,7 +10,7 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .table th {
   padding: 6px var(--cell-x);

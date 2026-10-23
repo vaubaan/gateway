@@ -1,4 +1,5 @@
-/* The application shell: a side navigation that is a fill, not a box; then the page. */
+/* The application shell: a side navigation that is a fill, not a box; then a
+   bar with the path above the page; then the page. */
 
 .app {
   display: grid;
@@ -67,7 +68,7 @@
   line-height: 1.2;
 }
 .brandName {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--weight-strong);
 }
 .brandInstance {
@@ -104,7 +105,7 @@
   padding: 0 var(--space-2);
   border-radius: var(--radius-md);
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   transition: background var(--duration-fast) var(--ease-out);
 }
 .navLink:hover {
@@ -162,26 +163,103 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── The person and the theme ────────────────────────────────────────────── */
+/* ── The bar above the page: the path, the theme, the person ─────────────── */
 
-.foot {
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--bar-height);
+  padding: 0 var(--space-5) 0 var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.path {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  /* A long path scrolls inside the bar; the page never scrolls sideways. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pathList {
   display: flex;
   align-items: center;
+  gap: var(--space-half);
+  margin: 0;
+  padding: 0;
+  color: var(--ink-3);
+  font-size: var(--text-base);
+  list-style: none;
+  white-space: nowrap;
+}
+.pathItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-half);
+}
+.pathLink,
+.pathCurrent {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+}
+.pathLink {
+  color: var(--ink-3);
+}
+.pathLink:hover {
+  background: var(--fill);
+  color: var(--ink);
+  text-decoration: none;
+}
+.pathCurrent {
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+}
+.pathSep {
+  flex: none;
+  color: var(--ink-4);
+}
+/* The mark of this gateway, first in the path. */
+.pathMark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+}
+.barEnd {
+  display: flex;
+  flex: none;
+  align-items: center;
   gap: var(--space-1);
-  margin-top: auto;
-  padding-top: var(--space-2);
+  margin-left: auto;
 }
 .user {
   position: relative;
-  flex: 1;
   min-width: 0;
 }
 .userButton {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  width: 100%;
-  padding: 6px var(--space-2);
+  max-width: 240px;
+  height: var(--control-md);
+  padding: 0 var(--space-2) 0 var(--space-1);
   border: 0;
   border-radius: var(--radius-md);
   background: none;
@@ -208,17 +286,17 @@
   white-space: nowrap;
 }
 .userName {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .userDetail {
   color: var(--ink-3);
   font-size: var(--text-xs);
 }
-/* An overlay, opening upwards: one of the few places where a shadow is allowed. */
+/* An overlay, opening under the bar: one of the few places where a shadow is allowed. */
 .userPanel {
   position: absolute;
-  bottom: calc(100% + var(--space-1));
-  left: 0;
+  top: calc(100% + var(--space-1));
+  right: 0;
   z-index: 50;
   display: flex;
   flex-wrap: wrap;
@@ -266,6 +344,9 @@
   min-width: 0;
   min-height: 100vh;
 }
+.main > .page {
+  flex: 1 0 auto;
+}
 .page {
   width: 100%;
   max-width: var(--page-max);
@@ -306,8 +387,7 @@
     padding: var(--space-1);
   }
   .brandText,
-  .navLabel,
-  .userText {
+  .navLabel {
     /* Still read by assistive technology; the title of each control says it on hover. */
     position: absolute;
     width: 1px;
@@ -332,13 +412,17 @@
     margin: 0;
     padding: 0 var(--space-1);
   }
-  .foot {
-    flex-direction: column;
-    gap: var(--space-2);
+  .userText {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .userButton {
-    justify-content: center;
-    padding: var(--space-1);
+    padding: 0 var(--space-1);
   }
   .page {
     padding: var(--space-6) var(--space-6) var(--space-12);
@@ -349,43 +433,26 @@
 }
 
 /*
- * A phone: who and where at the top (the brand, the person, the theme), and
- * the navigation as a bar at the bottom of the screen — an icon AND a word per
- * entry, because a finger has no tooltip. Four entries and "More"; the others
- * open in a sheet above the bar.
+ * A phone: where at the top (the path bar: this gateway, the path, the theme,
+ * the person), and the navigation as a bar at the bottom of the screen — an
+ * icon AND a word per entry, because a finger has no tooltip. Four entries and
+ * "More"; the others open in a sheet above the bar. The brand of the side
+ * column is not drawn: the path says this gateway.
  */
 @media (max-width: 640px) {
   .app {
     --phone-bar: 56px;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr;
   }
   .side {
-    position: sticky;
-    z-index: 40;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-1);
-    width: 100%;
-    height: auto;
-    padding: var(--space-2) var(--space-3);
-    border-bottom: 1px solid var(--line);
+    position: static;
+    display: contents;
   }
   .brand {
-    margin: 0;
-    margin-right: auto;
-  }
-  /* The brand has the room again: its name is drawn. */
-  .brandText {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip-path: none;
-  }
-  .brandInstance {
     display: none;
+  }
+  .bar {
+    padding: 0 var(--space-3);
   }
 
   .nav {
@@ -488,20 +555,7 @@
     background: var(--fill);
   }
 
-  .foot {
-    flex: none;
-    flex-direction: row;
-    margin: 0;
-    padding: 0;
-  }
-  .user {
-    flex: none;
-  }
   .userPanel {
-    top: calc(100% + var(--space-1));
-    right: 0;
-    bottom: auto;
-    left: auto;
     min-width: 0;
   }
   .main {
