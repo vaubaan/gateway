@@ -164,10 +164,13 @@ change that removes it.
 
 ## Backups
 
-- **The scheduled backup has met no real bucket yet.** It speaks S3 through its
-  own SigV4 client, held to AWS's documented examples and to an in-process fake;
-  Tigris, Cloudflare R2, MinIO and AWS have not been tried. Check the first run
-  on Settings → Encryption. → [store, "Scheduled backup"](store.md#scheduled-backup)
+- **The scheduled backup has met one real service: Cloudflare R2.** On
+  2026-10-23 two instances on 2.0.0-alpha.4 backed up to R2 (endpoint
+  `https://<account>.r2.cloudflarestorage.com`, region `auto`, path-style, one
+  key scoped to one bucket): the self-check passed and the object was in the
+  bucket at the reported size. Tigris, MinIO and AWS have not been tried, nor
+  the multipart upload (stores above 64 MiB) against a real service. Check the
+  first run on Settings → Encryption. → [store, "Scheduled backup"](store.md#scheduled-backup)
 - **A run holds the server for the length of the copy.** `VACUUM INTO` runs on the
   server's own handle and blocks its event loop while it copies: unnoticed for a
   store of megabytes, seconds for a large one. The volume also needs room for the
