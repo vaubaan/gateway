@@ -389,7 +389,7 @@ rules commit may bring new findings: triage them in the same pull request.
 ## Docker image
 
 `deploy/docker/Dockerfile` is a multi-stage build (`manifests` → `deps` →
-`build` → `runner`) on `node:22.23.3-bookworm-slim`, pinned by digest (glibc,
+`build` → `runner`) on `node:22.23.4-bookworm-slim`, pinned by digest (glibc,
 for the prebuilt `argon2` and `better-sqlite3` addons). The runner stage copies the Next.js
 standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. The base image is named,
