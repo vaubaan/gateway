@@ -13,7 +13,7 @@
 # digest is present the registry ignores the tag: bump both together
 # (deploy/README.md, "What the image contains").
 # ---------------------------------------------------------------------------
-FROM node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS base
+FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS base
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NPM_CONFIG_UPDATE_NOTIFIER=false
 WORKDIR /app
