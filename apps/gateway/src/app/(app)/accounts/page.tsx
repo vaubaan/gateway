@@ -5,12 +5,15 @@
  *
  * An account is a connection; an access is a share. What was a page of its own
  * ("Shares received") is the second region here: one place answers "which
- * accounts can my missions use, and how far".
+ * accounts can my missions use, and how far". For an administrator, the
+ * accounts whose owners all left are the last region, when there are any
+ * (ADR ownerless-accounts-live-on-the-accounts-page).
  */
 import Link from 'next/link';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/account.module.css';
+import { OwnerlessAccounts } from '@/components/connections/OwnerlessAccounts';
 import { AccountState, NoticeBanner } from '@/components/connections/parts';
 import { PermissionList } from '@/components/connections/PermissionList';
 import { ServicePicker } from '@/components/connections/ServicePicker';
@@ -84,11 +87,14 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
   const notice = await takeNotice(root, principal.sessionId, params);
   const now = new Date();
 
-  const [owned, received, providers, mine] = await Promise.all([
+  const [owned, received, providers, mine, ownerless, ownerTeams] = await Promise.all([
     root.connections.service.listFor(actor),
     root.shares.service.received(actor),
     root.connections.service.providers(),
     root.missions.service.list(actor.user),
+    // The administrator's only act on an account: name an owner where none is left.
+    principal.isOperator ? root.connections.service.listOwnerless() : [],
+    principal.isOperator ? root.connections.service.reassignTargets() : [],
   ]);
   const yours = await Promise.all(owned.map((view) => ownedRow(root, actor, view)));
   const totals = new Map(
@@ -315,6 +321,8 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
           <Link href={PROVIDERS_PATH}>{PAGES.reference.title}</Link>.
         </Hint>
       </Section>
+
+      {principal.isOperator && <OwnerlessAccounts ownerless={ownerless} teams={ownerTeams} />}
     </>
   );
 }

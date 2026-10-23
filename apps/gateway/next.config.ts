@@ -132,6 +132,9 @@ export const LEGACY_REDIRECTS: readonly {
   // Connected apps ("delegations") are a page of Settings.
   { source: '/delegations', destination: '/settings/connected-apps' },
   { source: '/delegations/:id/revoke', destination: '/settings/connected-apps/:id/revoke' },
+  // The accounts without owner are the last region of Accounts (ADR
+  // ownerless-accounts-live-on-the-accounts-page); the reassign action stays under /admin.
+  { source: '/admin/connections', destination: '/accounts#without-owner' },
 ];
 
 const nextConfig: NextConfig = {

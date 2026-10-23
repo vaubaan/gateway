@@ -126,6 +126,7 @@ export default async function RegisteredAppsPage({
   const params = await searchParams;
   const views = await root.oauth.clients.list();
   const registration = root.config.oauth.clientRegistration;
+  const door = root.oauth.endpoints.resource;
   const decided = firstParam(params.decided);
   const unfolded = firstParam(params[APP_PARAM]);
   const now = new Date();
@@ -264,6 +265,8 @@ export default async function RegisteredAppsPage({
           />
         )}
         <Hint>
+          An app registers itself the first time somebody points an MCP client at{' '}
+          <Mono>{door}</Mono>; there is nothing to create here.{' '}
           {POLICY[registration.policy] ?? registration.policy}
           {registration.policy === 'operator-approved' &&
             (registration.autoApproveLoopback

@@ -71,8 +71,17 @@ export function connectPagePath(providerId: string): string {
 export function providerAppActionPath(providerId: string): string {
   return `${PROVIDER_APP_ACTION_PATH}/${encodeURIComponent(providerId)}`;
 }
-/** Administration → Connections: the connections that have no owner left. */
-export const OWNERLESS_CONNECTIONS_PAGE = '/admin/connections';
+/**
+ * Where the connections that have no owner left are listed: the last region
+ * of the Accounts page, shown to an administrator (ADR
+ * ownerless-accounts-live-on-the-accounts-page).
+ */
+export const OWNERLESS_CONNECTIONS_PAGE = `${CONNECTIONS_PATH}#without-owner`;
+/** The HTTP action that names a new owner for a connection that has none (operator). */
+export const REASSIGN_ACTION_PATH = '/admin/connections';
+export function REASSIGN_PATH(connectionId: string): string {
+  return `${REASSIGN_ACTION_PATH}/${encodeURIComponent(connectionId)}/reassign`;
+}
 export const NOTICE_PARAM = 'notice';
 /** Form inputs carrying a `CredentialField` value are named `field.<name>`. */
 export const FIELD_PREFIX = 'field.';

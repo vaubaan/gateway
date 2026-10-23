@@ -129,7 +129,6 @@ describe('the Administration surface authorizes in every page and route', () => 
   it('finds the pages and the routes of the surface', () => {
     expect(PAGES.map((p) => p.name).sort()).toEqual(
       [
-        'connections/page.tsx',
         'encryption/page.tsx',
         'first-administrator/page.tsx',
         'groups/page.tsx',

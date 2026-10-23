@@ -150,6 +150,8 @@ export {
   NEW_CONNECTION_PATH,
   NOTICE_PARAM,
   OWNERLESS_CONNECTIONS_PAGE,
+  REASSIGN_ACTION_PATH,
+  REASSIGN_PATH,
   type ConnectionHandlers,
 } from './handlers';
 export {

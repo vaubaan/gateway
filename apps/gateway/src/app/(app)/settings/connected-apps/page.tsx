@@ -7,6 +7,10 @@
  * A connected app is a delegation held by an OAuth client. `?app=<id>` unfolds
  * the facts of one: the id the app registered under, where it receives its
  * access, when it last renewed.
+ *
+ * Nothing is created here: an app connects itself when its MCP client is
+ * pointed at the management door, and the person consents. The page's one
+ * action leads to the region that says how.
  */
 import Link from 'next/link';
 
@@ -14,7 +18,9 @@ import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/settings/settings.module.css';
 import {
+  ButtonLink,
   Callout,
+  CodeBlock,
   ConfirmSubmit,
   DataTable,
   EmptyState,
@@ -46,6 +52,8 @@ export const dynamic = 'force-dynamic';
 
 /** The query parameter that unfolds the facts of one app. */
 const APP_PARAM = 'app';
+/** The region that says how an app connects. */
+const CONNECT_ANCHOR = 'connect';
 const SECONDS_PER_DAY = 86_400;
 const SECONDS_PER_HOUR = 3_600;
 
@@ -286,6 +294,11 @@ export default async function ConnectedAppsPage({
       <PageHeader
         title={SETTINGS_PAGES.connectedApps.title}
         lede={SETTINGS_PAGES.connectedApps.lede}
+        primary={
+          <ButtonLink href={`#${CONNECT_ANCHOR}`} variant="primary" external>
+            {SETTINGS_ACTIONS.connectApp}
+          </ButtonLink>
+        }
       />
 
       {(firstParam(params.revoked) ||
@@ -350,7 +363,7 @@ export default async function ConnectedAppsPage({
       <Section first>
         {views.length === 0 ? (
           <EmptyState title="You connected no app." testId="no-app">
-            Point an MCP client at <Mono>{door}</Mono>: it sends you here to sign in and consent.
+            An app connects itself, below: it sends you here to sign in and consent.
           </EmptyState>
         ) : (
           <>
@@ -389,10 +402,37 @@ export default async function ConnectedAppsPage({
               A connected app reads your accounts and missions, prepares missions in your name,
               replaces the key of the missions it prepared and can stop any of your missions. It
               never answers a request, touches an account or calls a service. A consent lasts{' '}
-              {lifetime} at most; apps connect through <Mono>{door}</Mono>.
+              {lifetime} at most.
             </Hint>
           </>
         )}
+      </Section>
+
+      <Section
+        title={SETTINGS_ACTIONS.connectApp}
+        note="Nothing is created here: the app registers itself, then asks you."
+        id={CONNECT_ANCHOR}
+        testId="connect-app"
+      >
+        <KeyValue
+          items={[
+            { term: 'Address', value: <Mono>{door}</Mono> },
+            {
+              term: 'Claude Code',
+              value: (
+                <CodeBlock label="Claude Code command">{`claude mcp add --transport http vaubaan-manage ${door}`}</CodeBlock>
+              ),
+            },
+            {
+              term: 'Any MCP client',
+              value: 'Add an HTTP server at this address; it discovers the sign-in by itself.',
+            },
+            {
+              term: 'Then',
+              value: `The app sends you here to sign in and consent, and appears above. It then prepares missions in your name, for ${lifetime} at most; you can disconnect it at any time.`,
+            },
+          ]}
+        />
       </Section>
     </>
   );

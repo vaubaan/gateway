@@ -5,7 +5,7 @@
  * configuration holds.
  *
  * Each line is read from the service that owns the fact: sign-in from the
- * identity-provider settings, the OAuth clients from `ProviderAppsService`, the
+ * identity-provider settings, the declared OAuth clients from `ProviderAppsService`, the
  * accounts without owner from `ConnectionService.listOwnerless`, the apps that
  * wait from the client registry, telemetry from its overview, the name from
  * `InstanceNameService`. Nothing is decided here.
@@ -53,7 +53,7 @@ import {
 } from '@/lib/vocabulary';
 import { isOperator } from '@/server/auth';
 import { oauthClientChecklist } from '@/server/now';
-import { connectPagePath } from '@/server/connections';
+import { OWNERLESS_CONNECTIONS_PAGE } from '@/server/connections';
 import {
   INSTANCE_NAME_MAX_LENGTH,
   INSTANCE_NAME_PROBLEMS,
@@ -181,8 +181,7 @@ export default async function SetupPage({ searchParams }: Props) {
   const fresh =
     handover && (await signedInFreshly(root.auth.sessions, await headers(), new Date()));
 
-  const { registered, missing, keyed } = oauthClientChecklist(apps);
-  const needApp = [...registered, ...missing];
+  const { registered, missing } = oauthClientChecklist(apps);
   const waiting = clients.filter((view) => view.status === 'pending');
   const administrators = users.filter(
     (view) =>
@@ -260,40 +259,26 @@ export default async function SetupPage({ searchParams }: Props) {
       ),
       description: 'What agents and the setup kit point at.',
     },
-    {
-      key: 'oauth-clients',
-      counted: true,
-      state:
-        needApp.length === 0 || missing.length === 0
-          ? 'done'
-          : registered.length === 0
-            ? 'todo'
-            : 'partial',
-      partial: `${registered.length}/${needApp.length}`,
-      title: SECTIONS.oauthClients,
-      description: (
-        <>
-          {registered.length > 0 &&
-            `${listOf(registered.map((app) => app.displayName))} ${registered.length === 1 ? 'is' : 'are'} declared. `}
-          {missing.length > 0 && (
-            <>
-              <strong>{listOf(missing.map((app) => app.displayName))}</strong>{' '}
-              {missing.length === 1 ? 'is' : 'are'} not: nobody can connect{' '}
-              {missing.length === 1 ? 'an account of it' : 'their accounts'} until{' '}
-              {missing.length === 1 ? 'it is' : 'they are'}.{' '}
-            </>
-          )}
-          {keyed.length > 0 &&
-            `${listOf(keyed.map((app) => app.displayName))} connect with a key and need none.`}
-        </>
-      ),
-      action: missing[0]
-        ? {
-            label: `${SETTINGS_ACTIONS.declare} ${missing[0].displayName}`,
-            href: connectPagePath(missing[0].providerId),
-          }
-        : undefined,
-    },
+    // A service that needs an OAuth client is declared on its connect page, when
+    // somebody wants it (spec §7.2); the list is not a step of the setup. Once one
+    // is declared, the checklist says so (ADR setup-checklist-lists-only-what-is-needed).
+    ...(registered.length > 0
+      ? [
+          {
+            key: 'oauth-clients',
+            counted: true,
+            state: 'done' as CheckState,
+            title: SECTIONS.oauthClients,
+            description: (
+              <>
+                {`${listOf(registered.map((app) => app.displayName))} ${registered.length === 1 ? 'is' : 'are'} declared.`}
+                {missing.length > 0 &&
+                  ` ${listOf(missing.map((app) => app.displayName))} ${missing.length === 1 ? 'is' : 'are'} not: declare ${missing.length === 1 ? 'it' : 'them'} from Accounts if your colleagues use ${missing.length === 1 ? 'it' : 'them'}.`}
+              </>
+            ),
+          },
+        ]
+      : []),
     ...(firstAdministrator !== null
       ? [
           {
@@ -344,7 +329,7 @@ export default async function SetupPage({ searchParams }: Props) {
             state: 'todo' as const,
             title: SETTINGS_PAGES.ownerless.title,
             description: `${count(ownerless.length, TERMS.connection)} ${ownerless.length === 1 ? 'has' : 'have'} no owner left: nobody can reconnect ${ownerless.length === 1 ? 'it' : 'them'} or give access.`,
-            action: { label: SETTINGS_ACTIONS.nameOwner, href: ADMIN_PAGES.ownerlessAccounts },
+            action: { label: SETTINGS_ACTIONS.nameOwner, href: OWNERLESS_CONNECTIONS_PAGE },
           },
         ]
       : []),

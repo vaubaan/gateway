@@ -341,7 +341,6 @@ test('Settings leads a person to their own pages and an administrator to the gat
     'Sign-in',
     'People',
     'Teams',
-    'Accounts without owner',
     'Telemetry',
     'Registered apps',
     'Encryption',
@@ -377,18 +376,20 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await expect(checklist.getByTestId('setup-sign-in')).toContainText('Sign-in through');
   await expect(checklist.getByTestId('setup-sign-in')).toContainText('done');
   await expect(checklist.getByTestId('setup-address')).toContainText('gateway.e2e.test');
-  // What is left names the service, and its button leads to the connect page that fixes it.
-  const apps = checklist.getByTestId('setup-oauth-clients');
-  await expect(apps).toContainText('nobody can connect');
+  // A service that needs an OAuth client is not a step while none is declared: nobody
+  // asked for it. The administrator declares it from Accounts, when somebody wants it.
+  await expect(checklist.getByTestId('setup-oauth-clients')).toHaveCount(0);
   // The one thing left to do carries the page's one primary action.
   await expect(checklist.locator('a[class*="primary"]')).toHaveCount(1);
-  await expect(apps.locator('a[class*="primary"]')).toHaveText(/^Declare /);
-  await apps.getByRole('link', { name: /^Declare / }).click();
+  await ops.goto('/accounts');
+  const gmail = ops.getByTestId('service-gmail');
+  await expect(gmail).toContainText('needs its OAuth client · declare it');
+  await gmail.click();
   await expect(ops).toHaveURL(/\/accounts\/new\/gmail$/);
   // The OAuth client is declared on the service's connect page, by an administrator.
   await expect(ops.getByTestId('oauth-client-missing')).toBeVisible();
   await expect(ops.getByTestId('oauth-client-form-gmail')).toBeVisible();
-  await ops.goBack();
+  await ops.goto('/admin');
   // The rule is readable by who it names: the listed email, and who it resolves to today.
   const rule = ops.getByTestId('administrators');
   await expect(rule).toContainText(E2E_OPERATOR.email);

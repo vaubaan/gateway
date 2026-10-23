@@ -437,17 +437,21 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   // ── The administrator names a new owner ─────────────────────────────────
   // Setup says so, and leads there.
   await ops.goto('/admin');
+  // …to the last region of Accounts, which only an administrator sees.
   await ops.getByTestId('setup-ownerless').getByRole('link', { name: 'Name an owner' }).click();
-  await expect(ops).toHaveURL(/\/admin\/connections$/);
+  await expect(ops).toHaveURL(/\/accounts#without-owner$/);
   await expect(ops.getByRole('heading', { name: 'Accounts without owner' })).toBeVisible();
   const ownerless = ops.getByRole('row').filter({ hasText: connectionName });
   await expect(ownerless).toContainText(`the ${group} team`);
   await expect(ownerless).toContainText('Needs an owner');
-  await snap(ops, 'admin-connections-without-owner');
+  await snap(ops, 'accounts-without-owner');
   await ops.getByLabel(/^Email/).fill(E2E_SHARE_OWNER.email);
   await ops.getByRole('button', { name: 'Name an owner' }).click();
   await expect(ops.getByText(`${connectionName} has a new owner`)).toBeVisible();
-  await expect(ops.getByText('Every account has an owner.')).toBeVisible();
+  // Every account has an owner again: the region is gone, the old address lands on Accounts.
+  await expect(ops.getByTestId('ownerless-accounts-section')).toHaveCount(0);
+  await ops.goto('/admin/connections');
+  await expect(ops).toHaveURL(/\/accounts#without-owner$/);
 
   await ines.goto(`/accounts/${connectionId}`);
   await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();

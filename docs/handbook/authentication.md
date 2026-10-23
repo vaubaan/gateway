@@ -1294,9 +1294,11 @@ token is active, the setup page creates another administrator's account.
   says what a fresh install needs, what is done and what is left, each line
   read from the service that owns the fact: sign-in (`auth.idp.current()`),
   the public address (always done: it is the configuration's), OAuth clients
-  (`providerApps.list()`: the services that sign people in through one, the
-  missing ones named, and a "Declare <service>" button that opens the
-  service's connect page), administrators
+  (`providerApps.list()`: only once one is declared — the step then says
+  which, and names a service still missing without alarm; while none is, the
+  step is absent, and the connect page of the service says what it needs, ADR
+  [setup-checklist-lists-only-what-is-needed](../decisions/setup-checklist-lists-only-what-is-needed.md)),
+  administrators
   (who matches the rule today), telemetry (`telemetry.overview()`), and — only
   when they need someone — accounts without owner
   (`connections.service.listOwnerless()`) and apps waiting for approval
@@ -1332,8 +1334,8 @@ token is active, the setup page creates another administrator's account.
   (`AdminShell`, `SettingsFrame` and `settingsNav` in `components/shell/`,
   handbook [web-app](web-app.md), "The shell"). Under "Administration" it lists
   Setup (`/admin`), Sign-in (`/admin/identity-provider`), People
-  (`/admin/users`, below), Teams and Accounts without owner (`/admin/groups`,
-  `/admin/connections`, handbook [authority](authority.md)), Telemetry
+  (`/admin/users`, below), Teams (`/admin/groups`, handbook
+  [authority](authority.md)), Telemetry
   (`/admin/telemetry`, handbook [telemetry](telemetry.md)), Registered apps
   (`/admin/oauth-clients`, handbook [management-door](management-door.md)) and
   Encryption (`/admin/encryption`, below).
