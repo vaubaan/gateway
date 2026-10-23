@@ -1,13 +1,21 @@
 /**
  * The scheduled backup (ADR scheduled-encrypted-backup-to-object-storage) against real
  * SQLite files and an in-process S3-compatible server that checks every signature:
- * the upload, what it reports, the restore of what was uploaded (file, URL, after a
- * rotation), the self-check refusing a copy the keys do not open, an upload refused by
+ * the upload (format v2: compressed, then encrypted), what it reports, the restore of
+ * what was uploaded (file, URL, after a rotation, a v1 object, the size cap), the self-check refusing a copy the keys do not open, an upload refused by
  * the storage, multipart, the retention, no overlap, and the schedule. Every key and
  * credential is generated here; none is real.
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -25,6 +33,11 @@ import { backupStatusStore } from '../../../src/server/backup/status';
 import { loadInstanceConfig, secretValues, type InstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../../src/server/config/testing';
 import { createEncryptor } from '../../../src/server/crypto';
+import {
+  BACKUP_FORMAT_V1,
+  BACKUP_FORMAT_V2,
+  encryptBackupFile,
+} from '../../../src/server/crypto/backup-file';
 import { healthResponse } from '../../../src/server/http/healthz';
 import { createLogger, createRedactor } from '../../../src/server/logging';
 import { RestoreError, restoreStore } from '../../../src/server/restore/restore';
@@ -154,6 +167,8 @@ describe('the scheduled backup', () => {
     expect(object).toBeDefined();
     if (!object) return;
     expect(object.body.subarray(0, 14).toString()).toBe('VAUBAAN-BACKUP');
+    // Format v2: the store compressed, then encrypted.
+    expect(object.body[14]).toBe(BACKUP_FORMAT_V2);
     expect(object.body.includes(Buffer.from('SQLite format 3'))).toBe(false);
     expect(object.body.includes(Buffer.from(SECRET))).toBe(false);
     expect(object.metadata.sha256).toBe(sha256(object.body));
@@ -161,11 +176,14 @@ describe('the scheduled backup', () => {
       objectKey: key,
       bytes: object.body.length,
       sha256: sha256(object.body),
+      storeBytes: expect.any(Number) as number,
       keyVersion: 1,
       sealedKeyVersions: [1],
       selfCheck: 'passed',
     });
     expect(s3.operations).toEqual(['PutObject']);
+    // The store compresses: the object is several times smaller than the copy it holds.
+    expect(status.latest?.storeBytes).toBeGreaterThan(object.body.length * 3);
 
     // Nothing left on the volume but the store.
     expect(readdirSync(join(dir, 'data')).filter((f) => !f.startsWith('gateway.db'))).toEqual([]);
@@ -198,7 +216,13 @@ describe('the scheduled backup', () => {
       configured: true,
       last_outcome: 'ok',
       schedule: { every_seconds: 86_400, at: '03:00', keep: 0 },
-      latest: { object_key: key, sha256: sha256(object.body), self_check: 'passed' },
+      latest: {
+        object_key: key,
+        bytes: object.body.length,
+        store_bytes: status.latest?.storeBytes,
+        sha256: sha256(object.body),
+        self_check: 'passed',
+      },
     });
     for (const secret of [SECRET_ACCESS_KEY, ACCESS_KEY_ID, BUCKET, s3.endpoint, KEY_V1]) {
       expect(text).not.toContain(secret);
@@ -249,7 +273,12 @@ describe('the scheduled backup', () => {
         {},
       );
       expect(report.installed).toBe(true);
-      expect(report.encryption).toEqual({ keyVersion: 1, sealedKeyVersions: [1] });
+      expect(report.encryption).toEqual({
+        format: BACKUP_FORMAT_V2,
+        storeBytes: expect.any(Number) as number,
+        keyVersion: 1,
+        sealedKeyVersions: [1],
+      });
       expect(report.sha256).toBe(sha);
       const restored = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
       try {
@@ -298,6 +327,61 @@ describe('the scheduled backup', () => {
       expect(err).toBeInstanceOf(RestoreError);
       expect((err as RestoreError).kind).toBe('verify');
       expect((err as RestoreError).message).toContain('master key version 1');
+      expect(readdirSync(join(dir, 'new'))).toEqual([]);
+    });
+
+    it('from a v1 file (2.0.0-alpha.4 and before: not compressed), the same way', async () => {
+      // A v1 object, as the instance uploaded it before the format v2: the store copy
+      // encrypted without compression.
+      const copy = join(dir, 'copy.sqlite');
+      store.backupTo(copy);
+      const file = join(dir, 'v1.vbk');
+      await encryptBackupFile(copy, file, configFor().encryption, [1], {
+        format: BACKUP_FORMAT_V1,
+      });
+      const body = readFileSync(file);
+      expect(body[14]).toBe(BACKUP_FORMAT_V1);
+      const { report, target, encryptor } = await restoreInto(
+        { kind: 'file', path: file },
+        sha256(body),
+        {},
+      );
+      expect(report.installed).toBe(true);
+      expect(report.encryption).toEqual({
+        format: BACKUP_FORMAT_V1,
+        storeBytes: null,
+        keyVersion: 1,
+        sealedKeyVersions: [1],
+      });
+      const restored = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
+      try {
+        expect(await restored.config.getSecret('idp.client_secret')).toBe(SECRET);
+      } finally {
+        await restored.close();
+      }
+    });
+
+    it('is refused when the store it holds is above restore.max_mb, before it is decompressed', async () => {
+      const { file, sha } = await uploaded();
+      mkdirSync(join(dir, 'new'), { recursive: true });
+      const target = join(dir, 'new', 'gateway.db');
+      const config = configFor({ VAUBAAN_STORE_PATH: target });
+      const err = await restoreStore({
+        source: { kind: 'file', path: file },
+        sha256: sha,
+        // Above the object's size, below the store it decompresses to.
+        maxBytes: statSync(file).size + 1,
+        storePath: target,
+        encryptor: await createEncryptor(config.encryption),
+        keyVersions: [1],
+        masterKeys: config.encryption,
+      }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(RestoreError);
+      expect((err as RestoreError).kind).toBe('verify');
+      expect((err as RestoreError).message).toMatch(/holds a store of \d+ bytes, above the cap/);
       expect(readdirSync(join(dir, 'new'))).toEqual([]);
     });
 
@@ -357,8 +441,9 @@ describe('the scheduled backup', () => {
   });
 
   it('uploads in parts above the single-PUT size, and the parts restore', async () => {
+    // The copy is compressed (format v2): parts small enough that it takes several.
     const service = await serviceFor(configFor(), {
-      upload: { singlePutMaxBytes: 1024, partBytes: 16 * 1024 },
+      upload: { singlePutMaxBytes: 1024, partBytes: 2 * 1024 },
     });
     const status = await service.runOnce();
     expect(status.lastOutcome).toBe('ok');

@@ -20,6 +20,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   bytes. Entries written by an earlier version are not rewritten (the audit is
   immutable): they read as before and leave with the retention. Schema
   migration 0022. ADR audit-risk-snapshot-stored-once.
+- **The scheduled backup is compressed before it is encrypted.** Backups are
+  now written in format `vaubaan-backup` v2: the store copy goes through
+  Brotli (quality 4, from Node's own `zlib`), then is encrypted exactly as
+  before (AES-256-GCM in 1 MiB chunks, a key derived from the master key, here
+  with its own HKDF label). On a store made mostly of activity rows the object
+  is about four times smaller (22.9 MB → 5.4 MB in 0.3 s). The header declares
+  the store's size: the restore refuses one above `restore.max_mb` before
+  decompressing anything, and stops a file that decompresses past its declared
+  size. `restore` (the command and the first boot) reads both v1 and v2
+  backups; a v2 backup does not restore on 2.0.0-alpha.4 or earlier. The
+  backup report gains the store's size beside the object's (Settings →
+  Encryption, `store_bytes` in the `/healthz` `backup` object); the
+  `x-amz-meta-sha256` of the object is still the hash of the uploaded bytes.
+  ADR scheduled-encrypted-backup-to-object-storage, amendment 2026-10-23.
 
 ## [2.0.0-alpha.4] - 2026-10-23
 

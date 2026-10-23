@@ -230,8 +230,11 @@ function BackupSection({ view }: { view: BackupView }) {
             value: latest ? (
               <span data-testid="backup-latest">
                 <LocalDate ts={latest.at} /> · <Mono>{latest.objectKey}</Mono> ·{' '}
-                {formatNumber(latest.bytes)} bytes · encrypted under key version {latest.keyVersion}{' '}
-                · checked before upload
+                {formatNumber(latest.bytes)} bytes
+                {latest.storeBytes === undefined
+                  ? ''
+                  : ` (a store of ${formatNumber(latest.storeBytes)} bytes, compressed)`}{' '}
+                · encrypted under key version {latest.keyVersion} · checked before upload
                 <span className={styles.sub}>
                   SHA-256 <Mono>{latest.sha256}</Mono>
                 </span>

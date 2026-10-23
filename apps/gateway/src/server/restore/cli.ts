@@ -272,7 +272,11 @@ function renderReport(report: RestoreReport, hashExpected: boolean): string {
   const lines = [renderFindings(report, hashExpected).trimEnd()];
   if (report.encryption) {
     lines.push(
-      `restore: an encrypted backup, opened with master key version ${report.encryption.keyVersion}`,
+      `restore: an encrypted backup (format ${report.encryption.format}${
+        report.encryption.storeBytes === null
+          ? ''
+          : `, compressed, a store of ${report.encryption.storeBytes} bytes`
+      }), opened with master key version ${report.encryption.keyVersion}`,
     );
   }
   if (!report.installed) {

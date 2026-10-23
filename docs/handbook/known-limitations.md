@@ -2,7 +2,7 @@
 title: Known limitations — what has not been done, and what is not there
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-23
 tracks:
   - apps/gateway/src/server/execution/tools.ts
   - apps/gateway/src/server/execution/scope-caps.ts
@@ -173,8 +173,16 @@ change that removes it.
   first run on Settings → Encryption. → [store, "Scheduled backup"](store.md#scheduled-backup)
 - **A run holds the server for the length of the copy.** `VACUUM INTO` runs on the
   server's own handle and blocks its event loop while it copies: unnoticed for a
-  store of megabytes, seconds for a large one. The volume also needs room for the
-  store twice more during a run. → [store, "Scheduled backup"](store.md#scheduled-backup)
+  store of megabytes, seconds for a large one. The volume also needs room, during a
+  run, for the store once more (the plain copy) and for its compressed, encrypted
+  backup — about a quarter of the store on a store mostly made of activity rows; the
+  restore's self-check writes the store once more while the plain copy is already
+  gone. → [store, "Scheduled backup"](store.md#scheduled-backup)
+- **A backup of format v2 does not restore on an older image.** Since 2026-10-23
+  the scheduled backup compresses the copy (format v2); 2.0.0-alpha.4 and earlier
+  read format 1 only and refuse it by its number. Restore with an image at least
+  as new as the one that made the backup (the rule the schema already imposes);
+  newer images read both formats. → [store, "Scheduled backup"](store.md#scheduled-backup)
 - **No "back up now" button, no weekly schedule.** A run happens at the slots
   (every 1 to 24 hours) and once a minute after a start that missed one; the
   `backup` command still makes a plain copy by hand.

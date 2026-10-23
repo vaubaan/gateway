@@ -12,6 +12,10 @@ extends:
 
 # The instance backs itself up on a schedule to S3-compatible storage, encrypted under its master key and checked before upload
 
+> Amended 2026-10-23: the copy is compressed with Brotli before it is encrypted,
+> file format `vaubaan-backup` v2 (see
+> [the amendment](#amendment-2026-10-23--the-copy-is-compressed-before-it-is-encrypted-format-v2)).
+
 ## Context
 
 The image ships `backup` (a consistent `VACUUM INTO` copy beside the store)
@@ -71,8 +75,10 @@ source instance, configured like every other one.
    record (`backup.status`) removed, so that a restored instance does not
    report the source's backups as its own. `integrity_check` must be `ok`.
 
-4. **Encryption — file format `vaubaan-backup` v1.** The copy is encrypted
-   whole, in streamed chunks, before anything else reads it:
+4. **Encryption — file format `vaubaan-backup` v1** (since 2026-10-23 the
+   writer writes v2, the copy compressed first: see the amendment; v1 is
+   still read). The copy is encrypted whole, in streamed chunks, before
+   anything else reads it:
 
    - file key = `HKDF-SHA-256(ikm = master key of version K, salt = 32 random
 bytes of this file, info = "vaubaan/backup-file/v1", 32 bytes)`, K the
@@ -197,3 +203,124 @@ bytes of this file, info = "vaubaan/backup-file/v1", 32 bytes)`, K the
   backups that the retention deletes at once.
 - **Upload first, check after.** A copy that does not restore would replace,
   through the retention, one that does.
+
+## Amendment 2026-10-23 — the copy is compressed before it is encrypted (format v2)
+
+Refines D4 (the file format), D8 (the report) and D9 (the restore); changes
+none of the other decisions.
+
+### Context
+
+The scheduled backup runs live since 2026-10-23 against Cloudflare R2: the
+dogfood instance uploads 15.3 MB per copy. Copies are full, and encrypted, so
+the storage cannot compress them; managed plans keep 7, 30 or 90 of them. A
+store is mostly activity rows — JSON with repeated keys, tool names, user
+identifiers — which compress well. The product owner approved compressing
+(2026-10-23). Compression must happen before encryption (ciphertext does not
+compress), within the rules of the crypto module (ciphers and key derivation
+only under `server/crypto/`), and without a new dependency.
+
+**Measurement** (2026-10-23, Node 22, one core of the development machine): a
+store built with the store's own writers — 40 000 activity rows (UUIDs, SHA-256
+fingerprints, timestamps: more entropy than real rows, so the ratio is a floor),
+50 sealed secrets — `VACUUM INTO` copy of 22.9 MB:
+
+| Codec (`node:zlib`)  |    Ratio | Compressed |        Compress |      Decompress |
+| -------------------- | -------: | ---------: | --------------: | --------------: |
+| gzip level 1         |     3.55 |     6.4 MB |          0.17 s |          0.06 s |
+| gzip level 6         |     3.83 |     6.0 MB |          0.32 s |          0.06 s |
+| gzip level 9         |     3.99 |     5.7 MB |          1.03 s |          0.04 s |
+| Brotli quality 3     |     4.05 |     5.6 MB |          0.19 s |          0.06 s |
+| **Brotli quality 4** | **4.24** | **5.4 MB** | **0.27–0.32 s** | **0.04–0.06 s** |
+| Brotli quality 5     |     4.28 |     5.3 MB |          0.70 s |          0.08 s |
+| Brotli quality 9     |     4.38 |     5.2 MB |          2.08 s |          0.07 s |
+| Brotli quality 11    |     5.16 |     4.4 MB |          41.0 s |          0.08 s |
+| zstd level 3         |     3.94 |     5.8 MB |          0.10 s |          0.03 s |
+| zstd level 9         |     4.10 |     5.6 MB |          0.37 s |          0.04 s |
+
+On that ratio the dogfood's 15.3 MB copy would be about 3.6 MB.
+
+### Decision
+
+1. **Codec: Brotli, quality 4** (`BACKUP_BROTLI_QUALITY`), from `node:zlib`, no
+   new dependency. At the time of gzip level 6 it is 10 % smaller; quality 5
+   and above cost two to a hundred and fifty times the time for files 1 to
+   18 % smaller. Brotli is RFC 7932, and its `brotli` command-line decoder is
+   packaged widely, so a v2 file still opens with standard tools (AES-GCM,
+   HKDF, Brotli) given this format. The size hint is the store's size.
+2. **Format `vaubaan-backup` v2.** Header = `"VAUBAAN-BACKUP"` ‖ format
+   **`0x02`** ‖ K (u32 BE) ‖ salt (32) ‖ chunk size (u32 BE) ‖ **store size
+   (u64 BE: the copy before compression)** ‖ n (u8) ‖ n × u32 BE. The body is
+   the Brotli stream of the copy, sealed exactly as v1: 1 MiB chunks of
+   AES-256-GCM, STREAM nonces, the whole header as associated data, the last
+   chunk of the file marked final. File key = `HKDF-SHA-256(master key of
+version K, salt, "vaubaan/backup-file/v2", 32)`: a **distinct info**. The
+   version byte is in the associated data, so a v2 file presented as v1 (or
+   the reverse) already fails a tag; the distinct info adds that the two
+   formats never share a key, whatever the parsing of the header, at no cost.
+   The format byte names the codec: another codec would be another version.
+3. **Streaming.** The writer reads the copy through the Brotli compressor and
+   seals its output chunk by chunk (one chunk held, sealed once more data
+   follows so that the last one carries the final flag); the store is never
+   held in memory, once or twice. The reader opens each chunk — its tag
+   checked — before the decompressor sees it, and writes what comes out.
+4. **Decompression bounds.** The store size is in the header, so it is
+   authenticated with every chunk. The reader refuses a declared size above
+   its cap before reading any chunk (`maxStoreBytes`; the restore passes
+   `restore.max_mb`, so that cap keeps its meaning: the largest store a
+   restore writes, whether it arrives plain, as v1 or as v2). While
+   decompressing it counts the output and stops as soon as it passes the
+   declared size — a bomb writes at most the declared size —, and refuses a
+   content that ends short of it or is not Brotli. Since only chunks that
+   opened are decompressed, only a holder of the key can craft such a file;
+   the bound is there for that holder's mistakes and for the disk.
+5. **Self-check, unchanged:** the restore's dry run reads the very bytes that
+   will be uploaded, now decompressing them. `x-amz-meta-sha256` stays the
+   SHA-256 of the uploaded (compressed, encrypted) object, and so does the
+   hash a restore is given.
+6. **Restore reads v1 and v2** (the command and the first boot, through
+   `restoreStore`); the writer writes v2 only (v1 stays writable for the
+   compatibility tests). The report's `encryption` gains the format and the
+   declared store size.
+7. **Report.** The backup record gains `storeBytes` (the copy before
+   compression) beside `bytes` (the object); `/healthz` `latest` gains
+   `store_bytes` (`null` for a record written before v2); Settings →
+   Encryption shows both. Still no endpoint, bucket or credential.
+
+### Consequences
+
+- Stored and transferred bytes drop about four-fold on a store of activity
+  rows (more on real rows), for each of the 7 to 90 copies a plan keeps; the
+  upload is shorter, and a store up to about four times 64 MiB still goes in
+  one PUT.
+- A run costs a fraction of a second more of CPU per 20 MB (Brotli 4 runs
+  off the event loop, in the zlib thread pool), and the self-check about
+  60 ms of decompression.
+- A v2 backup does not restore on 2.0.0-alpha.4 or earlier: they refuse
+  format 2 by its number. Restoring needs an image at least as new as the one
+  that made the backup — already the rule for the schema.
+- Bucket-side tools that inspected sizes see smaller objects; the store size
+  is in the report instead.
+
+### Rejected alternatives
+
+- **zstd (`node:zlib`).** Faster at a similar ratio, but in Node 22 (the
+  image pins 22.23.4) its API is documented as Stability 1 — Experimental
+  (added in 22.15.0): a backup format must not rest on an API that may change.
+  Worth revisiting when the image moves to a Node where it is stable — as v3.
+- **gzip / deflate.** Universal, but 10 % larger at the same time at level 6,
+  and still larger at level 9 for three times the time.
+- **Brotli at quality 11 (or 9 and above).** 18 % smaller than quality 4 at
+  quality 11, for forty seconds on 23 MB, during which the run holds the
+  copy on the volume; quality 9 gains 3 % for seven times the time.
+- **Compressing each chunk separately.** Every chunk would restart the
+  dictionary (worse ratio), and the chunks would no longer be of a fixed
+  plaintext size; one stream then fixed-size sealing keeps the v1 sealing
+  untouched.
+- **Keeping v1's HKDF info.** Safe (the version byte is authenticated), but
+  a distinct info costs nothing and keeps the two formats' keys apart.
+- **No declared size, a ratio cap instead** (refuse more than N × the
+  file). A legitimate store's ratio is not bounded (empty pages, repeated
+  rows), and a cap on a ratio cannot be checked before decompressing; an
+  authenticated declared size is exact.
+- **Leaving compression to the storage.** It sees ciphertext.
