@@ -842,7 +842,8 @@ apps/gateway/src/server/backup/
   index.ts        createBackupModule() → root.backup
   cli.ts, main.ts the `backup` command (above)
 apps/gateway/src/server/crypto/
-  backup-file.ts  the encrypted file, format vaubaan-backup v1: encryptBackupFile / decryptBackupFile
+  backup-file.ts  the encrypted file, format vaubaan-backup v2 (reads v1 too): encryptBackupFile /
+                  decryptBackupFile
                   (in the crypto module, like every cipher and key derivation)
 ```
 
@@ -861,8 +862,10 @@ and waits for a run in progress.
 
 1. **copy** — `writeStoreCopy` through the server's own handle (`store.backupTo`);
    `integrity_check` must be `ok`. A `:memory:` store fails here.
-2. **encrypt** — `encryptBackupFile` under the current master key; the plain copy is
-   removed at once; the SHA-256 of the encrypted file is computed.
+2. **encrypt** — `encryptBackupFile` under the current master key: the copy is streamed
+   through Brotli (quality 4) and the compressed bytes sealed chunk by chunk (format
+   v2, below); the plain copy is removed at once; the SHA-256 of the encrypted file is
+   computed.
 3. **self-check** — `restoreStore({ dryRun: true })` on the encrypted file with that
    SHA-256: decrypted into a temporary file, `integrity_check`, the migrations compared
    with the image's, every sealed blob opened with the instance's keys (the restore's
@@ -877,18 +880,33 @@ and waits for a run in progress.
    Anything else under the prefix is left alone. A failure here is recorded as
    `pruneError` and does not fail the run.
 
-**The file format** (`crypto/backup-file.ts`): header `"VAUBAAN-BACKUP"` ‖ `0x01` ‖ key version K
-(u32 BE) ‖ salt (32 random bytes) ‖ chunk size (u32 BE, 1 MiB) ‖ n (u8) ‖ n sealed key
-versions (u32 BE); then chunks of AES-256-GCM (`ciphertext ‖ tag`), nonce = chunk index
-(u64 BE) ‖ final flag (u32 BE), associated data = the header; file key =
-`HKDF-SHA-256(master key of version K, salt, "vaubaan/backup-file/v1")`. The last chunk
-of the file carries the final flag. A reordered, dropped, appended or truncated chunk,
-or an edited header, fails a tag (`BackupCipherError`, one fixed message).
+**The file format** (`crypto/backup-file.ts`), v2 since 2026-10-23 (ADR amendment):
+header `"VAUBAAN-BACKUP"` ‖ `0x02` ‖ key version K (u32 BE) ‖ salt (32 random bytes) ‖
+chunk size (u32 BE, 1 MiB) ‖ store size (u64 BE: the copy before compression) ‖ n (u8)
+‖ n sealed key versions (u32 BE); then the store copy **compressed with Brotli** (RFC
+7932, quality `BACKUP_BROTLI_QUALITY` = 4, `node:zlib`) and cut into chunks of
+AES-256-GCM (`ciphertext ‖ tag`), nonce = chunk index (u64 BE) ‖ final flag (u32 BE),
+associated data = the header; file key = `HKDF-SHA-256(master key of version K, salt,
+"vaubaan/backup-file/v2")`. The last chunk of the file carries the final flag. A
+reordered, dropped, appended or truncated chunk, an edited header, or the version byte
+swapped (v2 read as v1 or the reverse: other header, other key) fails a tag
+(`BackupCipherError`, one fixed message). Format v1 (2.0.0-alpha.4) is the same
+without the store size and without compression, key info `"vaubaan/backup-file/v1"`:
+the reader takes both; the writer writes v2 (v1 only when a test asks for it).
+Streaming both ways: the writer holds one chunk and Brotli's window, the reader opens
+a chunk (its tag checked) before the decompressor sees it. **Decompression bounds**:
+a declared store size above the reader's cap (`maxStoreBytes`: the restore passes
+`restore.max_mb`) is refused before any chunk is read; the output is counted and the
+run stops as soon as it passes the declared size (a bomb writes at most that much),
+and a content that ends short of it, or is not Brotli, is refused. On a store of
+22.9 MB with 40 000 activity rows, Brotli 4 gives 5.4 MB (×4.2) in about 0.3 s, and
+decompresses in about 60 ms (the ADR amendment has the measurement).
 
 **The record** (`status.ts`): `lastAttemptAt`, `lastOutcome` (`ok` / `failed`),
 `lastError` (`stage`: `copy`, `encrypt`, `self-check`, `upload`; `message`), `latest`
 (the last backup uploaded: `at`, `objectKey`, `bytes` and `sha256` of the encrypted
-object, `keyVersion`, `sealedKeyVersions`, `schemaVersion`, `selfCheck: 'passed'`) and
+object, `storeBytes` — the store copy it holds, before compression; absent from a
+record written before the format v2 —, `keyVersion`, `sealedKeyVersions`, `schemaVersion`, `selfCheck: 'passed'`) and
 `pruneError`. A failed run keeps `latest`. Messages are the code's own: the stage's
 sentence, a restore check, an `S3Error` (`<operation>: the storage answered <status>
 <S3 code>`, or `no answer from the storage (<network code>)`), or `unexpected failure
@@ -899,13 +917,15 @@ sentence, a restore check, an `S3Error` (`<operation>: the storage answered <sta
 - `GET /healthz`: a `backup` object (`BackupService.health()`): `{ configured: false }`,
   or `configured`, `schedule` (`every_seconds`, `at`, `keep`), `next_run_at`, `running`,
   `last_attempt_at`, `last_outcome`, `last_error`, `prune_error`, `latest` (`at`,
-  `object_key`, `bytes`, `sha256`, `key_version`, `sealed_key_versions`,
-  `schema_version`, `self_check`). No endpoint, bucket, credential or URL. An external
-  checker compares `latest.bytes` and `latest.sha256` with the object in the bucket
-  (its `x-amz-meta-sha256`, or its bytes).
+  `object_key`, `bytes`, `store_bytes` — `null` for a record older than the format v2
+  —, `sha256`, `key_version`, `sealed_key_versions`, `schema_version`, `self_check`).
+  No endpoint, bucket, credential or URL. An external checker compares `latest.bytes`
+  and `latest.sha256` with the object in the bucket (its `x-amz-meta-sha256`, the
+  hash of the uploaded encrypted bytes, or its bytes).
 - Settings → Encryption, section "Scheduled backup" (`data-testid="backup-status"`):
   off and how to turn it on, or the destination (bucket, endpoint host, prefix), the
-  schedule, the next run, the latest backup and the latest failure
+  schedule, the next run, the latest backup (its size, and the store's before
+  compression) and the latest failure
   (`data-testid="backup-failed"`).
 - The activity: `backup-made` / `backup-failed`, actor `schedule` ("The backup
   schedule"), object `instance-config` / `backup` (handbook [audit](audit.md)).
@@ -946,14 +966,19 @@ store's directory (mode `0600`, created exclusively), hashed on the way and cut 
 the body is read). The download has `DOWNLOAD_TIMEOUT_MS` (30 min). The temporary file
 and any `-wal`/`-shm` SQLite left beside it are removed whatever happens.
 
-**An encrypted backup** (one the scheduled backup uploaded) is recognised by its header
-once acquired. Its SHA-256 — the encrypted object's — is checked first; then it is
-opened (`decryptBackupFile`) with the instance's master key of the version the header
-names into `.<store file>.restore-<random>.plain.tmp`, and that file is what the steps
-below read and the install renames. A version without a key is refused naming it; a
-wrong key or an altered file fails its first bad chunk. The report's `encryption` says
-the version (the command prints "an encrypted backup, opened with master key version
-K"). `masterKeys` (the configuration's `encryption` block) is passed by the command,
+**An encrypted backup** (one the scheduled backup uploaded, format v2 or v1) is
+recognised by its header once acquired. Its SHA-256 — the encrypted object's — is
+checked first; then it is opened (`decryptBackupFile`) with the instance's master key
+of the version the header names into `.<store file>.restore-<random>.plain.tmp`
+(decompressed on the way for a v2), and that file is what the steps below read and
+the install renames. A version without a key is refused naming it; a wrong key or an
+altered file fails its first bad chunk. `restore.max_mb` caps the store as well as
+the download: a v2 whose header declares a larger store is refused before anything is
+decompressed ("the backup holds a store of N bytes, above the cap of M bytes",
+exit 65), so the cap means the same for a plain copy, a v1 and a v2. The report's
+`encryption` says the format, the declared store size and the key version (the
+command prints "an encrypted backup (format 2, compressed, a store of N bytes),
+opened with master key version K"). `masterKeys` (the configuration's `encryption` block) is passed by the command,
 the first boot and the scheduled backup's self-check.
 
 **Verify, in order, on the temporary copy:**
@@ -1005,12 +1030,17 @@ The Docker smoke test runs the command and the first-boot restore in the image
 
 ## Tests
 
-- `src/server/crypto/backup-file.test.ts` (21) — round trips at 0, 1, a chunk minus one, a
-  chunk, a chunk plus one and several chunks; the header (key version, chunk size, sealed
-  versions); a SQLite file is not an encrypted backup; two encryptions differ; the
-  previous key opens a backup made under it; a missing version refused by name; a wrong
-  key; a flipped bit, an edited header, the last chunk cut off, a cut chunk, two chunks
-  swapped, a chunk appended, the header alone — each refused.
+- `src/server/crypto/backup-file.test.ts` (55) — in both formats: round trips at 0, 1, a
+  chunk minus one, a chunk, a chunk plus one and several chunks; the header (format, key
+  version, chunk size, store size, sealed versions); two encryptions differ; the previous
+  key opens a backup made under it; a missing version refused by name; a wrong key; a
+  flipped bit, a flipped tag, an edited header, the last chunk cut off, a cut chunk, two
+  chunks swapped, a chunk appended, the header alone, the version byte swapped — each
+  refused. v2: the default, compressing; every size up to five chunks (compressed sizes
+  on a boundary); 4 MiB in 1 MiB chunks; the store-size cap; a decompression bomb
+  stopped at the declared size; short or non-Brotli content; a key of the v1 info. A v1
+  fixture of 2.0.0-alpha.4 opens; an unknown format is refused; a SQLite file is not an
+  encrypted backup.
 - `src/server/backup/s3/sigv4.test.ts` (6) — the S3 documentation's GET Object, PUT
   Object and GET Bucket examples and the IAM signing-key example, signature for
   signature; RFC 3986 encoding of a key and of the query.
@@ -1021,13 +1051,14 @@ The Docker smoke test runs the command and the first-boot restore in the image
   midnight and the year's end; the object key.
 - `src/server/config/backup.test.ts` (19) — the `backup.*` keys (handbook
   [configuration](configuration.md)).
-- `tests/integration/backup/scheduled-backup.test.ts` (17), against an in-process S3
-  server that verifies every signature (`fake-s3.ts`) — an upload: encrypted (no SQLite
-  header, no secret in clear), `x-amz-meta-sha256`, the record, the audit entry, nothing
-  left on the volume, `/healthz` with no endpoint, bucket or credential, no secret in
-  the log; the uploaded object restored from a file, from a presigned URL, after a
-  rotation with the previous key, refused without the key (naming the version) and
-  with a wrong SHA-256; a copy whose secrets do not open is not uploaded (stage
+- `tests/integration/backup/scheduled-backup.test.ts` (19), against an in-process S3
+  server that verifies every signature (`fake-s3.ts`) — an upload: format v2, encrypted
+  (no SQLite header, no secret in clear) and several times smaller than the store,
+  `x-amz-meta-sha256`, the record with the store size, the audit entry, nothing left on
+  the volume, `/healthz` with no endpoint, bucket or credential, no secret in the log;
+  the uploaded object restored from a file, from a presigned URL, after a rotation with
+  the previous key, refused without the key (naming the version), with a wrong SHA-256
+  and above `restore.max_mb` (before decompressing); a v1 object restored; a copy whose secrets do not open is not uploaded (stage
   `self-check`); a 403 from the storage and a wrong secret recorded, the latest good
   backup kept; multipart, and an aborted multipart; the retention keeps the newest of
   its own naming and touches nothing else, and its failure does not fail the backup;

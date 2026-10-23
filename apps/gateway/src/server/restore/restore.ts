@@ -104,6 +104,10 @@ export interface VerificationReport {
 
 /** What an encrypted backup's header said (`null` for a plain store copy). */
 export interface RestoreEncryption {
+  /** The file format: 1 (the store as is) or 2 (the store compressed with Brotli). */
+  readonly format: number;
+  /** The size of the store it held, as a v2 header declares it; `null` for a v1 file. */
+  readonly storeBytes: number | null;
   /** The master key version the file was encrypted under. */
   readonly keyVersion: number;
   /** The versions its sealed secrets are under, as the backup named them. */
@@ -229,10 +233,17 @@ async function openIfEncrypted(
     );
   }
   try {
-    const header = await decryptBackupFile(temp, plainTemp, options.masterKeys);
+    const header = await decryptBackupFile(temp, plainTemp, options.masterKeys, {
+      maxStoreBytes: options.maxBytes,
+    });
     return {
       copy: plainTemp,
-      encryption: { keyVersion: header.keyVersion, sealedKeyVersions: header.sealedKeyVersions },
+      encryption: {
+        format: header.format,
+        storeBytes: header.storeBytes,
+        keyVersion: header.keyVersion,
+        sealedKeyVersions: header.sealedKeyVersions,
+      },
     };
   } catch (err) {
     if (err instanceof BackupCipherError) throw new RestoreError('verify', err.message, partial);

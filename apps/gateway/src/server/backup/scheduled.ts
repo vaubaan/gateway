@@ -4,8 +4,8 @@
  *
  *   copy       `VACUUM INTO` a temporary file of the store's directory, the sign-in
  *              configuration carried in, `integrity_check` ok (`writeStoreCopy`);
- *   encrypt    the copy under a key derived from the master key (`crypto/backup-file.ts`), then the
- *              plain copy is removed;
+ *   encrypt    the copy, compressed then encrypted under a key derived from the master key
+ *              (`crypto/backup-file.ts`, format v2), then the plain copy is removed;
  *   self-check the restore's own dry run on the encrypted bytes, with their SHA-256:
  *              opened, integrity checked, migrations compared, every sealed blob opened;
  *   upload     to the bucket (one PUT up to 64 MiB, multipart above);
@@ -86,6 +86,8 @@ export type BackupHealth =
         readonly at: string;
         readonly object_key: string;
         readonly bytes: number;
+        /** The store the object holds, before compression; `null` in a record older than it. */
+        readonly store_bytes: number | null;
         readonly sha256: string;
         readonly key_version: number;
         readonly sealed_key_versions: readonly number[];
@@ -197,6 +199,7 @@ export class BackupService {
         at: latest.at,
         object_key: latest.objectKey,
         bytes: latest.bytes,
+        store_bytes: latest.storeBytes ?? null,
         sha256: latest.sha256,
         key_version: latest.keyVersion,
         sealed_key_versions: latest.sealedKeyVersions,
@@ -334,6 +337,7 @@ export class BackupService {
         at: startedAt.toISOString(),
         objectKey,
         bytes: sealed.bytes,
+        storeBytes: sealed.storeBytes,
         sha256,
         keyVersion: sealed.header.keyVersion,
         sealedKeyVersions: copy.sealedKeyVersions,
@@ -352,6 +356,7 @@ export class BackupService {
       const after = {
         object_key: objectKey,
         bytes: latest.bytes,
+        store_bytes: latest.storeBytes,
         sha256,
         key_version: latest.keyVersion,
         sealed_key_versions: latest.sealedKeyVersions,

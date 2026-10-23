@@ -17,8 +17,13 @@ export interface BackupRecord {
   /** When the run started (ISO 8601, UTC). */
   readonly at: string;
   readonly objectKey: string;
-  /** Size of the uploaded (encrypted) object. */
+  /** Size of the uploaded (compressed, encrypted) object. */
   readonly bytes: number;
+  /**
+   * Size of the store copy it holds, before compression. Absent from a record written
+   * before the format v2 (2026-10-23).
+   */
+  readonly storeBytes?: number;
   /** SHA-256 of the uploaded (encrypted) object: what a restore is given. */
   readonly sha256: string;
   /** The master key version the object is encrypted under. */
