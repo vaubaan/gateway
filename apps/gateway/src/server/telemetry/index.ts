@@ -5,9 +5,10 @@
  * collector. Built once by the composition root as `root.telemetry`.
  * Handbook: docs/handbook/telemetry.md. ADR: telemetry-collector-shape.
  *
- * Off by default, and inert until the operator turns it on AND a real
- * collector URL is configured: while `telemetry.collector_url` is the
- * placeholder default nothing leaves the instance.
+ * Off by default, and inert until the operator turns it on: while telemetry
+ * is disabled nothing leaves the instance, not even a statistics request.
+ * Once on, reports go to `telemetry.collector_url` — by default the
+ * project's published collector.
  */
 import type { AuditWriter, CacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
@@ -15,7 +16,6 @@ import {
   collectorEndpoint,
   createDecisionReport,
   createPluginReport,
-  isPlaceholderCollector,
   serializeBatch,
   TelemetryClient,
   type QueueStats,
@@ -26,7 +26,6 @@ import {
 } from '@vaubaan/telemetry';
 
 import type { Authenticator } from '../auth/authenticator';
-import { DEFAULT_TELEMETRY_COLLECTOR_URL } from '../config/telemetry-default';
 import type { BuildInfo, InstanceConfig } from '../config';
 import type { TelemetrySink } from '../execution/telemetry-sink';
 import type { Logger } from '../logging';
@@ -75,8 +74,6 @@ export interface TelemetryOverview {
   readonly collectorUrl: string;
   /** The configured URL carries the collector's public key. */
   readonly collectorKeySet: boolean;
-  /** The collector URL is still the placeholder default: nothing is sent. */
-  readonly placeholderCollector: boolean;
   /** What an enabled instance sends (`telemetry.level`). */
   readonly level: TelemetryLevel;
   /** The exact request body of one report of each kind the level sends, as this instance would send it. */
@@ -150,8 +147,6 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
   const logger = deps.logger.child({ component: 'telemetry' });
   const clock = deps.clock ?? systemClock;
   const { collectorUrl } = deps.config.telemetry;
-  const placeholderUrl = new URL(DEFAULT_TELEMETRY_COLLECTOR_URL);
-  const placeholderCollector = isPlaceholderCollector(collectorUrl, placeholderUrl);
   const outbound = deps.fetch ?? ((input, init) => fetch(input, init));
 
   // The settings and the client refer to each other: the client asks the
@@ -170,7 +165,6 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
   const client = new TelemetryClient({
     isEnabled: () => settings.enabledNow(),
     collectorUrl,
-    placeholderUrl,
     fetch: outbound,
     logger,
     queue: deps.queue,
@@ -180,7 +174,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
   logger.info('telemetry', {
     enabled: initial.enabled,
     source: initial.source,
-    collector: placeholderCollector ? 'placeholder (nothing is sent)' : 'configured',
+    collector: collectorEndpoint(collectorUrl).url.href,
   });
 
   const { level } = deps.config.telemetry;
@@ -281,7 +275,6 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         client: client.state,
         collectorUrl: endpoint.url.href,
         collectorKeySet: endpoint.key !== null,
-        placeholderCollector,
         level,
         samplePayload,
         queue: client.stats,

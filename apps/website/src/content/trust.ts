@@ -94,9 +94,9 @@ Vaubaan Gateway is pre-release software that holds your cloud credentials so tha
 
 ## What leaves an instance
 
-**Nothing, by default.** Community telemetry is off on a new instance (\`telemetry.enabled\`, default \`false\`). And today nothing leaves even when it is turned on: the built-in collector address is still gated as a placeholder, and the gateway sends nothing to it until a release publishes it ([telemetry handbook](${gh('docs/handbook/telemetry.md')}), [known limitations](/docs/known-limitations)). An administrator who turns telemetry on sees the exact body of a report on Settings → Administration → Telemetry before anything is sent.
+**Nothing, by default.** Community telemetry is off on a new instance (\`telemetry.enabled\`, default \`false\`), and while it is off the instance makes no request to the collector at all. An administrator who considers turning it on sees the exact body of a report on Settings → Administration → Telemetry before anything is sent. Once it is on, reports go to the project's collector at \`https://telemetry.vaubaan.com/v1/reports\`, or to the collector \`telemetry.collector_url\` names instead ([telemetry handbook](${gh('docs/handbook/telemetry.md')})).
 
-When an operator turns it on and points the instance at a collector, the instance sends one of two levels (\`telemetry.level\`; the default level of an enabled instance is \`usage-stats\`):
+When an operator turns it on, the instance sends one of two levels (\`telemetry.level\`; the default level of an enabled instance is \`usage-stats\`):
 
 **Level \`plugin-health\`** — one report per call a plugin executed, exactly seven fields:
 

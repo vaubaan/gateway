@@ -88,7 +88,6 @@ export {
   collectorEndpoint,
   collectorHeaders,
   DEFAULT_SEND_TIMEOUT_MS,
-  isPlaceholderCollector,
   TELEMETRY_USER_AGENT,
   TelemetryClient,
   type CollectorEndpoint,

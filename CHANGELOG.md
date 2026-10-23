@@ -9,6 +9,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The project's telemetry collector is published, and the placeholder gate
+  is gone.** `https://telemetry.vaubaan.com/v1/reports` now answers, and an
+  instance whose administrator turns telemetry on sends its reports there
+  (or to `telemetry.collector_url` when set) instead of reading "On, but
+  nothing is sent". Telemetry stays off by default; while it is off nothing is
+  sent and no statistics are read. The client has two gates, disabled and
+  sending: the `placeholder-collector` state, `isPlaceholderCollector` and the
+  `placeholderUrl` option of `@vaubaan/telemetry` are removed. ADR
+  telemetry-collector-shape, amendment of 2026-10-23.
+
 ## [2.0.0-alpha.6] - 2026-10-23
 
 ### Changed

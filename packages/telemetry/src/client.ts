@@ -1,13 +1,11 @@
 /**
  * Telemetry client: the only code path by which a report leaves an instance.
  *
- * Three gates stand before the network, checked when a report is recorded
+ * Two gates stand before the network, checked when a report is recorded
  * AND again when a batch is about to be sent:
  *
- *   1. `isEnabled()` is false (the default)          → nothing is queued, nothing is sent
- *   2. the collector URL is the placeholder default  → nothing is queued, nothing is sent;
- *      (no collector exists behind it yet)             one warning, once per process
- *   3. otherwise                                     → queued, sent in batches
+ *   1. `isEnabled()` is false (the default) → nothing is queued, nothing is sent
+ *   2. otherwise                            → queued, sent in batches to the collector URL
  *
  * Switching telemetry off empties the queue: a report recorded while it was
  * on never leaves after the operator turned it off.
@@ -46,8 +44,6 @@ export interface TelemetryClientOptions {
   readonly isEnabled: () => boolean;
   /** The collector URL in use (instance configuration). */
   readonly collectorUrl: URL;
-  /** The placeholder default: while the URL in use points at it (same origin and path), nothing is sent. */
-  readonly placeholderUrl: URL;
   readonly fetch: typeof fetch;
   readonly logger: TelemetryLogger;
   readonly sendTimeoutMs?: number;
@@ -55,7 +51,7 @@ export interface TelemetryClientOptions {
 }
 
 /** Why the client is, or is not, sending. */
-export type TelemetryClientState = 'disabled' | 'placeholder-collector' | 'sending';
+export type TelemetryClientState = 'disabled' | 'sending';
 
 export interface CollectorEndpoint {
   /** The URL requests go to: the configured one without its key parameter. */
@@ -82,48 +78,29 @@ export function collectorHeaders(key: string | null): Record<string, string> {
   return headers;
 }
 
-/** Where a URL points, whatever it carries: origin and path, trailing slashes dropped. */
-function locationOf(url: URL): string {
-  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
-}
-
-/**
- * True while the collector URL in use points at the placeholder default (no
- * collector behind it). Compared by origin and path, never by the full text:
- * the default with a key or any other query appended, a fragment, or a
- * trailing slash is still the placeholder, and nothing is sent to it.
- */
-export function isPlaceholderCollector(collectorUrl: URL, placeholderUrl: URL): boolean {
-  return locationOf(collectorUrl) === locationOf(placeholderUrl);
-}
-
 export class TelemetryClient {
   private readonly queue: ReportQueue;
   private readonly endpoint: CollectorEndpoint;
-  private readonly placeholder: boolean;
   private readonly sendTimeoutMs: number;
-  // single-process only: "once per process" log latches. Per-process by nature (each
-  // process warns once); nothing to share, so no interface replaces them.
-  private placeholderLogged = false;
+  // single-process only: a "once per process" log latch. Per-process by nature (each
+  // process warns once); nothing to share, so no interface replaces it.
   private rejectionLogged = false;
 
   constructor(private readonly options: TelemetryClientOptions) {
     this.endpoint = collectorEndpoint(options.collectorUrl);
-    this.placeholder = isPlaceholderCollector(options.collectorUrl, options.placeholderUrl);
     this.sendTimeoutMs = options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS;
     this.queue = new ReportQueue({ ...options.queue, send: (batch) => this.send(batch) });
   }
 
   get state(): TelemetryClientState {
-    if (!this.options.isEnabled()) return 'disabled';
-    return this.placeholder ? 'placeholder-collector' : 'sending';
+    return this.options.isEnabled() ? 'sending' : 'disabled';
   }
 
   get stats(): QueueStats {
     return this.queue.stats;
   }
 
-  /** Queues a report when telemetry is on and a real collector is configured. Never throws. */
+  /** Queues a report when telemetry is on. Never throws. */
   record(report: TelemetryReport): void {
     if (!this.gateOpen()) return;
     this.queue.push(report);
@@ -143,17 +120,9 @@ export class TelemetryClient {
     this.queue.stop();
   }
 
-  /** The gates of the header; empties the queue when one is closed. */
+  /** The gates of the header; empties the queue when telemetry is off. */
   private gateOpen(): boolean {
-    const state = this.state;
-    if (state === 'sending') return true;
-    if (state === 'placeholder-collector' && !this.placeholderLogged) {
-      this.placeholderLogged = true;
-      this.options.logger.warn(
-        'telemetry is enabled but the collector URL is still the placeholder default: ' +
-          'nothing is sent. Set telemetry.collector_url to a real collector to contribute reports.',
-      );
-    }
+    if (this.state === 'sending') return true;
     if (this.queue.stats.queued > 0) this.queue.clear();
     return false;
   }

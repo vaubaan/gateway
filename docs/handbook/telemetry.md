@@ -2,7 +2,7 @@
 title: Community telemetry — the report, the queue, the toggle, the validation badge
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-10-23
 tracks:
   - packages/telemetry/src/
   - apps/gateway/src/server/telemetry/
@@ -28,11 +28,14 @@ test), §4.3 (opt-in and collector URL), §8 (the toggle is audited). Decision:
 [telemetry-collector-shape](../decisions/telemetry-collector-shape.md). The
 collector itself: [`deploy/collector/README.md`](../../deploy/collector/README.md).
 
-**Off at installation.** And even when enabled, **nothing leaves the instance
-while `telemetry.collector_url` points at the placeholder default** — no
-collector exists behind it yet. "Points at" is origin and path: the default
-with a key or any other query appended, a fragment or a trailing slash is
-still the placeholder.
+**Off at installation**, and while it is off nothing leaves the instance —
+no report and no statistics request. Once an administrator (or the
+configuration) turns it on, reports go to `telemetry.collector_url`, which
+defaults to the project's published collector,
+`https://telemetry.vaubaan.com/v1/reports` (ADR
+[telemetry-collector-shape](../decisions/telemetry-collector-shape.md),
+amendment of 2026-10-23: the placeholder gate that refused to send to the
+default URL is gone).
 
 ## Layout
 
@@ -45,7 +48,7 @@ packages/telemetry/src/            @vaubaan/telemetry — no I/O but the injecte
                                    constructors, countBucket
   wire.ts                          the request body: serializeBatch (instance), parseBatch (collector)
   queue.ts                         ReportQueue: bounded, batched, backoff; ReportBuffer port
-  client.ts                        TelemetryClient: the three gates, the POST, the collector headers
+  client.ts                        TelemetryClient: the two gates, the POST, the collector headers
 apps/gateway/src/server/
   execution/telemetry-sink.ts      TelemetrySink port + NOOP_TELEMETRY_SINK (owned by the pipeline)
   execution/upstream-stage.ts      the one hook: report(call, outcome)
@@ -58,7 +61,7 @@ apps/gateway/src/server/
     settings.ts                    TelemetrySettingsService: configuration vs operator toggle
     stats.ts                       PluginStatsReader: validation status from plugin_stats, cached
     handlers.ts                    POST /api/admin/telemetry
-  config/telemetry-default.ts      the single default URL of the code base (placeholder)
+  config/telemetry-default.ts      the single default URL of the code base (the project's collector)
 apps/gateway/src/app/
   admin/(guarded)/telemetry/page.tsx   Settings → Telemetry (/admin/telemetry)
   api/admin/telemetry/route.ts         one-line adapter over the handler
@@ -219,17 +222,12 @@ errors without logging them (they may carry provider text).
 
 ## The client and the queue
 
-`TelemetryClient.record(report)` passes three gates, checked again by `send`
+`TelemetryClient.record(report)` passes two gates, checked again by `send`
 before every batch:
 
 1. `isEnabled()` false → `state: 'disabled'`, nothing queued;
-2. the collector URL points at the placeholder (`isPlaceholderCollector`:
-   same origin and same path, trailing slashes dropped; the query — the
-   `apikey` included — and the fragment are ignored, so the default URL with
-   a key appended never sends) → `state: 'placeholder-collector'`, nothing
-   queued, one `warn` per process: "telemetry is enabled but the collector
-   URL is still the placeholder default: nothing is sent…";
-3. otherwise `state: 'sending'`: the report is queued.
+2. otherwise `state: 'sending'`: the report is queued and sent to the
+   collector URL in use — the default one included.
 
 A closed gate empties the queue, so a report recorded while telemetry was on
 never leaves after it was switched off (`settings.onChange` also calls
@@ -287,15 +285,15 @@ redirect to `/admin/telemetry?problem=locked|invalid`.
 
 `/admin/telemetry` renders `root.telemetry.overview()`: "on" or "off" beside
 the title, then the state and its source, where reports go (without the key;
-whether a key is set), whether reports actually leave (`disabled` / no
-collector / yes), the counters since start, the button that turns it on or
+whether a key is set), whether reports actually leave ("no: telemetry is off" /
+"yes"), the counters since start, the button that turns it on or
 off (replaced by "set in the mounted configuration" when locked), and **the
 exact request body of one report** in a code block
 (`data-testid="telemetry-sample"`) — `serializeReports` applied to a report
 built from the first tool of the first registered plugin, through
 `serializeBatch`, so what the
-administrator reads is produced by the code that sends. A note explains the
-"on, but the collector is the placeholder" case. The setup checklist
+administrator reads is produced by the code that sends. A note appears only
+when a change was refused ("Not changed"). The setup checklist
 (`/admin`) carries a line for it, "Review" while it is off.
 
 ## The validation badge
@@ -330,19 +328,18 @@ telemetry:
 or `VAUBAAN_TELEMETRY_COLLECTOR_URL` / `VAUBAAN_TELEMETRY_ENABLED`. The URL
 must be https. The last path segment is the reports resource; `plugin_stats`
 is read beside it. The project's collector is `https://telemetry.vaubaan.com/v1/reports`,
-which is also the default URL — still gated as the placeholder until a
-release publishes it. To run your own, deploy `apps/website` with its three
+which is also the default URL: an instance that turns telemetry on without
+setting `collector_url` contributes to it. To run your own, deploy `apps/website` with its three
 `COLLECTOR_*` variables in front of a Postgres where `deploy/collector/schema.sql`
 is applied — see its README. To never send anything whatever
 Settings → Telemetry says, set `telemetry.enabled: false`.
 
 ## How to debug
 
-- **On, but nothing arrives** → Settings → Telemetry, "Sending": "no: no
-  collector is configured" (and the note "On, but nothing is sent") means the URL is still the placeholder (boot log
-  line `telemetry` has `collector: "placeholder (nothing is sent)"`; one
-  `warn` appears at the first report). Appending a key or a slash to the
-  default URL does not make it a collector: it is compared by origin and path.
+- **On, but nothing arrives** → Settings → Telemetry, "Sending" says "yes"
+  and "Reports go to" names the URL in use (the boot log line `telemetry`
+  has `collector: "<url without its key>"`). Reports leave in batches at most
+  every 60 seconds; check the counters below, then the next two entries.
 - **Queued grows, sent stays 0** → the collector is unreachable or answers
   408/429/5xx; `debug` log `telemetry: the collector could not be reached`.
   Retries back off up to one hour.
@@ -364,9 +361,8 @@ statistics unavailable` names a failure.
 - `packages/telemetry/src/report.test.ts`, `usage.test.ts`, `wire.test.ts`,
   `queue.test.ts`, `client.test.ts` — shapes and vocabularies of the three
   report kinds, buckets, the body both ends share; batching, overflow, backoff, single flight;
-  disabled → zero calls; placeholder → zero calls and one warning, also with
-  a key, another query, trailing slashes or a fragment appended (another
-  path, host, port or scheme is not the placeholder); headers.
+  disabled → zero calls; enabled → sent to the configured collector without
+  a warning; headers.
 - `apps/gateway/src/server/telemetry/outcome.test.ts`, `settings.test.ts`,
   `stats.test.ts` — the classification table, precedence, the reader.
 - `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts` — spec
@@ -379,9 +375,10 @@ statistics unavailable` names a failure.
 - `apps/website/tests/unit/collector/` — the endpoint: storage per table,
   nothing of the request added, whole-batch refusal, statuses, the stats
   query it passes on, host gate, configuration.
-- `apps/gateway/tests/integration/telemetry/telemetry.test.ts` — default and
-  placeholder silence on a real root (the default URL with a key or a
-  trailing slash included), the toggle and its audit entry, what is reported
+- `apps/gateway/tests/integration/telemetry/telemetry.test.ts` — silence
+  while disabled on a real root (the default URL included), reports sent to
+  the default collector URL once enabled by the configuration or by the
+  operator, the toggle and its audit entry, what is reported
   (a provider failure thrown with its status is `upstream-error` /
   `http_500`, with `upstream_error` in the audit), the badge.
 - `apps/gateway/tests/integration/execution/streaming.test.ts` — no report

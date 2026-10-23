@@ -88,6 +88,10 @@ Off by default, and nothing is sent even when enabled while the collector URL
 is the placeholder. The collector is not deployed and is not worked on before
 the pilot has run. [Known limitations](../handbook/known-limitations.md).
 
+> Later (2026-10-23): the collector is published and the placeholder gate is
+> lifted; telemetry stays off by default. See the amendment of
+> [[telemetry-collector-shape]].
+
 ### D10. Release settings and governance: nothing now (question 18)
 
 The placeholders stay.

@@ -64,20 +64,11 @@ export default async function TelemetryPage({ searchParams }: Props) {
         status={<Tag>{state.enabled ? 'on' : 'off'}</Tag>}
       />
 
-      {(problem || (state.enabled && overview.placeholderCollector)) && (
+      {problem && (
         <div className={styles.notes}>
-          {problem && (
-            <Callout tone="bad" title="Not changed">
-              {PROBLEMS[problem]}
-            </Callout>
-          )}
-          {state.enabled && overview.placeholderCollector && (
-            <Callout tone="warn" title="On, but nothing is sent">
-              The collector address is still the placeholder: nothing listens behind it, so this
-              gateway sends nothing. Set <Mono>telemetry.collector_url</Mono> (or{' '}
-              <Mono>VAUBAAN_TELEMETRY_COLLECTOR_URL</Mono>) to a real collector to contribute.
-            </Callout>
-          )}
+          <Callout tone="bad" title="Not changed">
+            {PROBLEMS[problem]}
+          </Callout>
         </div>
       )}
 
@@ -100,19 +91,13 @@ export default async function TelemetryPage({ searchParams }: Props) {
               value: (
                 <>
                   <Mono>{overview.collectorUrl}</Mono>
-                  {overview.placeholderCollector && ' · the placeholder'}
                   {overview.collectorKeySet && ' · with a public key, sent as a header'}
                 </>
               ),
             },
             {
               term: 'Sending',
-              value:
-                overview.client === 'sending'
-                  ? 'yes'
-                  : overview.client === 'disabled'
-                    ? 'no: telemetry is off'
-                    : 'no: no collector is configured',
+              value: overview.client === 'sending' ? 'yes' : 'no: telemetry is off',
             },
             {
               term: 'Since start',

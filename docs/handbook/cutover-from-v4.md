@@ -492,15 +492,15 @@ cutover; each is a default that can be changed, most in one place.
 
 ### Platform
 
-| Question                                                            | Current behaviour                                                                  |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| SQLite `synchronous=NORMAL`: acceptable for a quota store?          | `NORMAL`: a power loss (not a process crash) can lose the last transactions.       |
-| `store.path` unreadable at boot: exit 78 or 1?                      | 1.                                                                                 |
-| An explicit `store.migrations_dir` key for hosted builds?           | None: the directory is fixed at build time.                                        |
-| Repositories returning persistence records rather than domain types | Records; services map them.                                                        |
-| Should `BearerKind` and `Door` move to the shared package?          | They live in gateway-core.                                                         |
-| Default telemetry collector host                                    | A provisional placeholder under the product's domain; telemetry is off by default. |
-| Image size                                                          | About 456 MB (Debian slim, traced `node_modules`).                                 |
+| Question                                                            | Current behaviour                                                                                                                       |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite `synchronous=NORMAL`: acceptable for a quota store?          | `NORMAL`: a power loss (not a process crash) can lose the last transactions.                                                            |
+| `store.path` unreadable at boot: exit 78 or 1?                      | 1.                                                                                                                                      |
+| An explicit `store.migrations_dir` key for hosted builds?           | None: the directory is fixed at build time.                                                                                             |
+| Repositories returning persistence records rather than domain types | Records; services map them.                                                                                                             |
+| Should `BearerKind` and `Door` move to the shared package?          | They live in gateway-core.                                                                                                              |
+| Default telemetry collector host                                    | A provisional placeholder under the product's domain (published as the project's collector on 2026-10-23); telemetry is off by default. |
+| Image size                                                          | About 456 MB (Debian slim, traced `node_modules`).                                                                                      |
 
 ## References
 

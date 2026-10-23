@@ -4,8 +4,9 @@
  * execution door, and the collector replaced by an injected `fetch` the tests
  * assert on. Nothing here reaches a network.
  *
- * What is pinned: off by default and silent; silent too while the collector
- * URL is the placeholder default, even when enabled; the operator's toggle
+ * What is pinned: off by default and silent, the default collector URL
+ * included; once enabled, reports go to the collector URL in use — the
+ * project's published collector by default; the operator's toggle
  * (stored in `instance_config`, audited, read-only when the mounted
  * configuration decides); what a report is emitted for; the validation badge.
  */
@@ -89,8 +90,8 @@ describe('community telemetry', () => {
       // The plugin-health reports sent, without their duration bucket (checked, then
       // dropped: a duration is not something a test can pin).
       reports: () =>
-        collector.mock.calls.flatMap(([url, init]) => {
-          if (!new URL(String(url)).pathname.endsWith('/plugin_reports')) return [];
+        collector.mock.calls.flatMap(([, init]) => {
+          if ((init as RequestInit).method !== 'POST') return [];
           const body = JSON.parse(String((init as RequestInit).body)) as {
             plugin_health?: Record<string, unknown>[];
           };
@@ -100,8 +101,8 @@ describe('community telemetry', () => {
           });
         }),
       bodies: () =>
-        collector.mock.calls.flatMap(([url, init]) =>
-          new URL(String(url)).pathname.endsWith('/plugin_reports')
+        collector.mock.calls.flatMap(([, init]) =>
+          (init as RequestInit).method === 'POST'
             ? [
                 JSON.parse(String((init as RequestInit).body)) as Record<
                   string,
@@ -206,9 +207,14 @@ describe('community telemetry', () => {
     });
   });
 
-  describe('placeholder collector URL', () => {
-    it('enabled by the configuration: zero network calls, and one warning in the log', async () => {
-      const r = await open({ VAUBAAN_TELEMETRY_ENABLED: 'true' });
+  describe("the default collector URL (the project's published collector)", () => {
+    const reportsUrl = (r: Rig) =>
+      r.collector.mock.calls
+        .map(([url, init]) => ({ url: String(url), method: (init as RequestInit).method }))
+        .filter((call) => call.method === 'POST');
+
+    it('disabled (the default): zero network calls to it', async () => {
+      const r = await open();
       const { instance } = r;
       expect(instance.root.config.telemetry.collectorUrl.href).toBe(
         new URL(DEFAULT_TELEMETRY_COLLECTOR_URL).href,
@@ -219,54 +225,48 @@ describe('community telemetry', () => {
       }
       await r.drain();
       await instance.root.telemetry.stats.refresh();
-      expect(await instance.root.telemetry.stats.statusFor('depot')).toBeNull();
 
       expect(r.collector).not.toHaveBeenCalled();
-      const warnings = r.logs.filter(
-        (entry) => entry.level === 'warn' && String(entry.msg).includes('placeholder'),
-      );
-      expect(warnings).toHaveLength(1);
       expect(await instance.root.telemetry.overview()).toMatchObject({
-        state: { enabled: true, source: 'config' },
-        client: 'placeholder-collector',
-        placeholderCollector: true,
+        state: { enabled: false, source: 'default' },
+        client: 'disabled',
         queue: { queued: 0, delivered: 0 },
       });
     });
 
-    it.each([
-      ['with a collector key appended', `${DEFAULT_TELEMETRY_COLLECTOR_URL}?apikey=pk_public`],
-      ['with a trailing slash', `${DEFAULT_TELEMETRY_COLLECTOR_URL}/`],
-    ])('the default URL %s is still the placeholder: zero network calls', async (_name, url) => {
-      const r = await open({
-        VAUBAAN_TELEMETRY_ENABLED: 'true',
-        VAUBAAN_TELEMETRY_COLLECTOR_URL: url,
-      });
+    it('enabled by the configuration: reports are sent to it, without a warning', async () => {
+      const r = await open({ VAUBAAN_TELEMETRY_ENABLED: 'true' });
       const { instance } = r;
       const mission = await r.mission();
-      for (let i = 0; i < 60; i += 1) {
-        await instance.call(mission, 'depot__read_item', { space: 'scratch', item: `i${i}` });
-      }
+      await instance.call(mission, 'depot__read_item', { space: 'scratch' });
       await r.drain();
-      await instance.root.telemetry.stats.refresh();
-      expect(await instance.root.telemetry.stats.statusFor('depot')).toBeNull();
 
-      expect(r.collector).not.toHaveBeenCalled();
+      const posts = reportsUrl(r);
+      expect(posts.length).toBeGreaterThan(0);
+      for (const post of posts) expect(post.url).toBe(DEFAULT_TELEMETRY_COLLECTOR_URL);
+      expect(r.reports()).toEqual([
+        expect.objectContaining({ plugin: 'depot', tool: 'depot__read_item', outcome: 'success' }),
+      ]);
+      expect(
+        r.logs.filter((entry) => entry.level === 'warn' && entry.component === 'telemetry'),
+      ).toHaveLength(0);
       expect(await instance.root.telemetry.overview()).toMatchObject({
-        client: 'placeholder-collector',
-        placeholderCollector: true,
-        queue: { queued: 0, delivered: 0 },
+        state: { enabled: true, source: 'config' },
+        client: 'sending',
+        collectorUrl: DEFAULT_TELEMETRY_COLLECTOR_URL,
+        queue: { queued: 0, delivered: 1 },
       });
     });
 
-    it('enabled by the operator: still zero network calls', async () => {
+    it('enabled by the operator: reports are sent to it', async () => {
       const r = await open();
       expect((await r.toggle('true')).headers.get('location')).toBe(TELEMETRY_PAGE);
       const mission = await r.mission();
       await r.instance.call(mission, 'depot__read_item', { space: 'scratch' });
       await r.drain();
-      expect(r.collector).not.toHaveBeenCalled();
-      expect((await r.instance.root.telemetry.overview()).client).toBe('placeholder-collector');
+
+      expect(reportsUrl(r).map((post) => post.url)).toContain(DEFAULT_TELEMETRY_COLLECTOR_URL);
+      expect((await r.instance.root.telemetry.overview()).client).toBe('sending');
     });
   });
 
