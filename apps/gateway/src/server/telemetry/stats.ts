@@ -57,7 +57,7 @@ type Snapshot =
   | { readonly ok: false };
 
 export interface PluginStatsDeps {
-  /** Telemetry is enabled and the collector is not the placeholder. */
+  /** Telemetry is enabled: an instance that does not contribute makes no request. */
   readonly isActive: () => boolean;
   /** The collector URL in use (reports endpoint). */
   readonly collectorUrl: URL;

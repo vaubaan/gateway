@@ -94,7 +94,7 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     {
       question: 'Does it send anything to the project?',
       answer:
-        'Not by default. Community telemetry is off on a new instance, and today nothing is sent even when it is turned on, because the project’s collector is not published yet. The trust center lists the exact fields an instance would send.',
+        'Not by default. Community telemetry is off on a new instance. If an administrator turns it on, after seeing the exact body of a report, anonymous reports go to the project’s collector at telemetry.vaubaan.com. The trust center lists every field an instance sends.',
     },
     {
       question: 'What does it cost?',

@@ -101,6 +101,9 @@ empties the queue. The placeholder stays in `telemetry-default.ts` as the single
 URL of the code base; publishing the real collector is a one-line change there in a
 release. Until then an operator who wants to contribute sets `telemetry.collector_url`.
 
+> Superseded on the placeholder gate by the amendment of 2026-10-23 below: the collector
+> is published, the client has two gates (disabled, sending).
+
 The validation status is read from the collector under the same gates: an instance that
 does not contribute makes no request at all to the collector.
 
@@ -169,7 +172,8 @@ Positive:
   1 200 random outcomes through the real pipeline and searches the wire for every argument,
   hash, ref and identifier it planted.
 - An instance installed today sends nothing even if its operator enables telemetry, until
-  a collector exists and its URL is configured or released.
+  a collector exists and its URL is configured or released. (Lifted on 2026-10-23: the
+  collector is published, see the amendment.)
 - The collector needs no code, no function and no secret: a SQL file and a public key.
 - The gateway has no dependency on the collector: a dead collector costs a queue of 1 000
   small objects and an absent badge.
@@ -191,6 +195,35 @@ Negative:
   delays everyone's reports (they are retried, then dropped after the queue fills).
 - **Day-granular arrival dates** make the 90-day window approximate by up to a day.
 - **The proxy of D9 is one more thing to operate**, and it does not exist yet.
+
+## Amendment (2026-10-23) — the collector is published, the placeholder gate is lifted
+
+**Context.** The project's collector now answers at the default URL,
+`https://telemetry.vaubaan.com/v1/reports`: a Vercel function of the website
+([[telemetry-two-levels-behind-a-vercel-collector]] D4), which parses a batch with the
+same `parseBatch` of `@vaubaan/telemetry` the gateway serializes with, so the wire contract
+is one module. The gate of D4 kept refusing to send to it: an administrator who turned
+telemetry on saw "On, but nothing is sent", and the spec of the site
+([website](../spec/website.md) §4) expects the gate to go when the collector launches.
+
+**What changes.** The client has two gates, checked when a report is recorded and again
+before a batch is sent: telemetry disabled → nothing queued, nothing sent, no request to
+the collector at all (statistics included); otherwise queue and send to the collector URL
+in use — the default one included. The notion of a placeholder is removed from the code:
+no `placeholderUrl` option, no `isPlaceholderCollector`, no `placeholder-collector` state,
+no warning. `telemetry-default.ts` keeps the single default URL of the code base, now the
+project's published collector; `telemetry.collector_url` still overrides it.
+
+**What does not change.** Telemetry is off by default (`telemetry.enabled` false) and the
+operator decides (D5). An administrator sees the exact body of a report on Admin →
+Telemetry before turning it on. Switching off empties the queue. D6 (batching, retry)
+holds.
+
+**Rejected alternative: keep the gate and require operators to set the URL.** Every
+operator who wants to contribute would copy the URL of the project's collector into their
+configuration, by hand, to reach the very collector the default names; a toggle that says
+"On" and sends nothing misleads the administrator who just consented. The gate was a guard
+against posting to a host nobody runs; that host now runs the project's collector.
 
 ## Rejected alternatives
 

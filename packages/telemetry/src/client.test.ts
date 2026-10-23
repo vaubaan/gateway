@@ -1,15 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  collectorEndpoint,
-  isPlaceholderCollector,
-  TELEMETRY_USER_AGENT,
-  TelemetryClient,
-} from './client.ts';
+import { collectorEndpoint, TELEMETRY_USER_AGENT, TelemetryClient } from './client.ts';
 import { createPluginReport, PLUGIN_REPORT_KEYS } from './report.ts';
 import type { TelemetryReport } from './wire.ts';
 
-const PLACEHOLDER = new URL('https://placeholder.example.com/v1/reports');
 const COLLECTOR = new URL('https://collector.example.net/rest/v1/plugin_reports?apikey=pk_public');
 
 function report(tool = 'depot__read_item'): TelemetryReport {
@@ -46,7 +40,6 @@ function rig(options: {
   const client = new TelemetryClient({
     isEnabled: typeof enabled === 'function' ? enabled : () => enabled,
     collectorUrl: options.collectorUrl ?? COLLECTOR,
-    placeholderUrl: PLACEHOLDER,
     fetch: fetchMock,
     logger,
     // No timer fires on its own in these tests: every send is an explicit flush.
@@ -67,60 +60,16 @@ describe('TelemetryClient: the gates before the network', () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it('enabled with the placeholder collector URL: zero network calls, one warning', async () => {
-    const { client, fetchMock, logger } = rig({ enabled: true, collectorUrl: PLACEHOLDER });
-    for (let n = 0; n < 120; n += 1) client.record(report());
+  it('enabled: queues and sends to the configured collector, without a warning', async () => {
+    const { client, sent, logger } = rig({ enabled: true });
+    client.record(report());
     await client.flush();
 
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(client.state).toBe('placeholder-collector');
-    expect(client.stats.queued).toBe(0);
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(String(logger.warn.mock.calls[0]?.[0])).toMatch(/placeholder/);
-  });
-
-  it('compares the placeholder as a URL, not as text', () => {
-    expect(isPlaceholderCollector(new URL(PLACEHOLDER.href), PLACEHOLDER)).toBe(true);
-    expect(
-      isPlaceholderCollector(
-        new URL('HTTPS://PLACEHOLDER.example.com:443/v1/reports'),
-        PLACEHOLDER,
-      ),
-    ).toBe(true);
-    expect(isPlaceholderCollector(COLLECTOR, PLACEHOLDER)).toBe(false);
-  });
-
-  it.each([
-    ['a public key appended', '?apikey=pk_public'],
-    ['another query', '?select=*'],
-    ['a trailing slash', '/'],
-    ['a trailing slash and a key', '/?apikey=pk_public'],
-    ['several trailing slashes', '///'],
-    ['a fragment', '#reports'],
-  ])('the placeholder with %s is still the placeholder: nothing leaves', async (_name, suffix) => {
-    const collectorUrl = new URL(`${PLACEHOLDER.href}${suffix}`);
-    expect(isPlaceholderCollector(collectorUrl, PLACEHOLDER)).toBe(true);
-
-    const { client, fetchMock, logger } = rig({ enabled: true, collectorUrl });
-    for (let n = 0; n < 120; n += 1) client.record(report());
-    await client.flush();
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(client.state).toBe('placeholder-collector');
-    expect(client.stats.queued).toBe(0);
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-  });
-
-  it('another path, another host or another scheme is not the placeholder', () => {
-    for (const other of [
-      `${PLACEHOLDER.href}/v2`,
-      `${PLACEHOLDER.origin}/`,
-      PLACEHOLDER.href.replace('https://', 'http://'),
-      `https://collector.${PLACEHOLDER.host}${PLACEHOLDER.pathname}`,
-      `${PLACEHOLDER.origin}:8443${PLACEHOLDER.pathname}`,
-    ]) {
-      expect(isPlaceholderCollector(new URL(other), PLACEHOLDER), other).toBe(false);
-    }
+    expect(client.state).toBe('sending');
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.url).toBe('https://collector.example.net/rest/v1/plugin_reports');
+    expect(sent[0]?.init.method).toBe('POST');
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('a report queued while enabled never leaves once telemetry is switched off', async () => {

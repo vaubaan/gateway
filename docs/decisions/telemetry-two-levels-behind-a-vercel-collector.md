@@ -90,8 +90,10 @@ instance and parses on the collector. No key, no cookie, no referrer,
 redirects refused, the constant user agent. The validation status is read at
 `GET https://telemetry.vaubaan.com/v1/plugin_stats`, which accepts the query
 the gateway's client already builds for the view (`select`, `tool=is.null`,
-`plugin=in.(…)`) and nothing else. Batching, backoff and the three gates of
-[[telemetry-collector-shape]] D4 and D6 are unchanged. The PostgREST insert
+`plugin=in.(…)`) and nothing else. Batching, backoff and the gates of
+[[telemetry-collector-shape]] D4 and D6 are unchanged (the placeholder gate of
+D4 was lifted on 2026-10-23 when this collector was published; see the
+amendment there). The PostgREST insert
 and the `apikey` query parameter of D7 are retired.
 
 ### D4 — The collector is a Vercel function that forwards to Supabase

@@ -4071,14 +4071,10 @@ Unit, beside the code (`packages/telemetry/src/`, 95):
   retried after 100, 200, 400, 800 ms then the cap; a full batch does not
   shorten the wait; a `send` that throws is a retry; a refused batch is
   dropped, never resent; the delay formula with jitter; `clear()`, `stop()`.
-- **`client.test.ts`** (24) — **disabled → zero network calls** (120 reports
-  recorded, the injected `fetch` never called, no warning); **enabled with
-  the placeholder collector URL → zero network calls** and exactly one
-  warning; **the placeholder compared by origin and path**: with a public
-  key appended, another query, one or several trailing slashes, a trailing
-  slash and a key, or a fragment it is still the placeholder and nothing
-  leaves, while another path, another host or another scheme is not the
-  placeholder; a report queued while enabled
+- **`client.test.ts`** (16) — **disabled → zero network calls** (120 reports
+  recorded, the injected `fetch` never called, no warning); **enabled → one
+  `POST` to the configured collector**, the key removed from the URL, no
+  warning; a report queued while enabled
   never leaves once telemetry is switched off; the request (JSON array of
   six-key objects, the public key moved from the URL to `apikey` /
   `Authorization`, `Prefer: return=minimal`, redirects refused, no
@@ -4151,17 +4147,19 @@ Structural (`apps/gateway/tests/unit/structural/`, 10):
   full client batch; the thresholds published in the README are the ones of
   the SQL function; the README documents every field and closed value.
 
-Integration (`apps/gateway/tests/integration/telemetry/telemetry.test.ts`, 22;
+Integration (`apps/gateway/tests/integration/telemetry/telemetry.test.ts`, 21;
 the rig runs at `plugin-health` unless a scenario asks for `usage-stats`):
 
 - **Disabled by default** — 61 calls, a failing one included, a flush and a
   statistics refresh: the injected collector `fetch` is never called;
   `telemetry.enabled: false` in the configuration keeps it off and the toggle
   answers `?problem=locked`, storing and auditing nothing.
-- **Placeholder collector URL** — enabled by the configuration, then by the
-  operator: zero network calls, one `warn` naming the placeholder, state
-  `placeholder-collector`; the default URL with a collector key appended, or
-  with a trailing slash, is still the placeholder.
+- **The default collector URL (the project's published collector)** —
+  disabled (the default): 60 calls, a flush and a statistics refresh, and the
+  injected `fetch` is never called; enabled by the configuration: the report
+  is `POST`ed to `DEFAULT_TELEMETRY_COLLECTOR_URL`, state `sending`, no
+  telemetry `warn`; enabled by the operator's toggle: sent to it as well. The
+  network is never reached: the collector is an injected `fetch`.
 - **The operator's toggle** — stored as `telemetry.enabled` in
   `instance_config`; only calls made after the opt-in are reported; **one
   `config-changed` entry on `instance-config:telemetry` per change** with
