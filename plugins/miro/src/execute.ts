@@ -127,22 +127,58 @@ function contentBlock(block: unknown): McpToolContent {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * The page size of discovery : the maximum `board_search_boards` accepts
+ * (`limit`, 1–50, default 20 — captured 2026-10-23).
+ */
+export const DISCOVERY_PAGE_SIZE = 50;
+
+/**
  * The boards of the team the person chose when they authorized the gateway,
- * from Miro's `board_search_boards` (no arguments : every board). The answer
- * is read leniently — its shape is not documented — and strictly at once :
- * a board is an object whose id passes the board grammar and whose link (or
- * `type`) says it is a board, or a board URL in the text ; nothing else.
+ * from Miro's `board_search_boards` (no query : every board), page by page
+ * (`limit` / `offset`) while Miro says `has_more`, up to the ceiling. Its
+ * answer (captured schema : `{ data: [{ name, miro_url, … }], total,
+ * has_more }`) is read leniently and strictly at once : a board is an object
+ * whose link is a board URL (and whose id, when it has one, is that
+ * board's), or a board URL in a text that is not JSON ; nothing else.
  *
  * Also compares Miro's live `tools/list` with the plugin's model and logs
  * the differences (names only) : the signal to capture the tool list again.
  */
 export async function discoverMiroResources(ctx: ConnectionContext): Promise<readonly Resource[]> {
   const token = tokenOf(ctx);
+  const found = new Map<string, Resource>();
+  for (let offset = 0; found.size <= MAX_DISCOVERED_BOARDS; offset += DISCOVERY_PAGE_SIZE) {
+    const answer = await searchBoards(ctx, token, offset);
+    const before = found.size;
+    for (const board of boardsIn(answer)) {
+      if (!found.has(board.ref)) found.set(board.ref, board);
+    }
+    // A page that adds nothing ends it too : a server that ignores `offset`
+    // would otherwise be asked for the same page until the ceiling.
+    if (!hasMore(answer) || found.size === before) break;
+  }
+  const boards = [...found.values()];
+  if (boards.length > MAX_DISCOVERED_BOARDS) {
+    ctx.logger?.warn('discovery stopped at the board ceiling', {
+      found: boards.length,
+      kept: MAX_DISCOVERED_BOARDS,
+    });
+  }
+  await reportDrift(ctx, token);
+  return boards.slice(0, MAX_DISCOVERED_BOARDS);
+}
+
+/** One page of `board_search_boards`. */
+async function searchBoards(
+  ctx: ConnectionContext,
+  token: string,
+  offset: number,
+): Promise<McpToolResult> {
   let result: unknown;
   try {
     result = await mcpRequest(ctx, token, 'tools/call', {
       name: UPSTREAM_TOOL.boardSearchBoards,
-      arguments: {},
+      arguments: { limit: DISCOVERY_PAGE_SIZE, offset },
     });
   } catch (err) {
     if (err instanceof UpstreamAuthError && err.upstreamStatus === 403) {
@@ -154,15 +190,24 @@ export async function discoverMiroResources(ctx: ConnectionContext): Promise<rea
   if (answer.isError === true) {
     throw new Error(`${PROVIDER_ID}: ${UPSTREAM_TOOL.boardSearchBoards} failed: ${textOf(answer)}`);
   }
-  const boards = boardsIn(answer);
-  if (boards.length > MAX_DISCOVERED_BOARDS) {
-    ctx.logger?.warn('discovery stopped at the board ceiling', {
-      found: boards.length,
-      kept: MAX_DISCOVERED_BOARDS,
-    });
-  }
-  await reportDrift(ctx, token);
-  return boards.slice(0, MAX_DISCOVERED_BOARDS);
+  return answer;
+}
+
+/** Whether Miro says another page follows (`has_more: true`, structured or as JSON text). */
+export function hasMore(result: McpToolResult): boolean {
+  const says = (value: unknown): boolean =>
+    typeof value === 'object' &&
+    value !== null &&
+    (value as Record<string, unknown>).has_more === true;
+  if (says(result.structuredContent)) return true;
+  return result.content.some((block) => {
+    if (block.type !== 'text') return false;
+    try {
+      return says(JSON.parse(block.text));
+    } catch {
+      return false;
+    }
+  });
 }
 
 function textOf(result: McpToolResult): string {
@@ -177,7 +222,10 @@ interface FoundBoard {
   readonly name: string | null;
 }
 
-const BOARD_LINK = /https:\/\/miro\.com\/app\/board\/([A-Za-z0-9_-]{1,62}={0,2})\//g;
+// The id ends where a character of the grammar stops : Miro writes board URLs
+// with and without the trailing slash.
+const BOARD_LINK =
+  /https:\/\/miro\.com\/app\/board\/([A-Za-z0-9_-]{1,62}={0,2})(?![A-Za-z0-9_=-])/g;
 const ALL_DIGITS = /^[0-9]+$/;
 
 /** The boards an answer of `board_search_boards` names, deduplicated, in order. */
@@ -226,15 +274,36 @@ export function boardsIn(result: McpToolResult): Resource[] {
   return resources;
 }
 
-/** An object that describes a board : an id of the board grammar, and a board link or `type: board`. */
+/** An item's link : a board URL that points at one of its items. */
+const ITEM_LINK = /[?&#](moveToWidget|focusWidget)=/;
+
+/**
+ * An object that describes a board : either an id of the board grammar with
+ * that board's link (or `type: board`), or — Miro's `BoardSummary`, which
+ * has no id — no id and the link of one board, not of an item of it.
+ */
 function boardObject(o: Record<string, unknown>): FoundBoard | null {
-  const id = o.id;
-  if (typeof id !== 'string' || !MIRO_BOARD_ID.test(id) || ALL_DIGITS.test(id)) return null;
   const links = [o.viewLink, o.url, o.link, o.boardUrl, o.miro_url].filter(
     (v): v is string => typeof v === 'string',
   );
-  const linked = links.some((link) => boardIdOfUrl(link.split(/[?#]/)[0]) === id);
-  if (!linked && o.type !== 'board') return null;
+  let id: string;
+  if (o.id !== undefined) {
+    const own = o.id;
+    if (typeof own !== 'string' || !MIRO_BOARD_ID.test(own) || ALL_DIGITS.test(own)) return null;
+    const linked = links.some((link) => boardIdOfUrl(link.split(/[?#]/)[0]) === own);
+    if (!linked && o.type !== 'board') return null;
+    id = own;
+  } else {
+    const boards = new Set(
+      links
+        .filter((link) => !ITEM_LINK.test(link))
+        .map((link) => boardIdOfUrl(link.split(/[?#]/)[0]))
+        .filter((board): board is string => board !== null),
+    );
+    const [only] = boards;
+    if (boards.size !== 1 || only === undefined) return null;
+    id = only;
+  }
   const name = [o.name, o.title].find((v): v is string => typeof v === 'string' && v.trim() !== '');
   return { id, name: name?.trim().slice(0, 200) ?? null };
 }

@@ -53,14 +53,13 @@ change that removes it.
   recorded; Resend, Upstash Redis, Stripe, Gmail, SSH, Miro, Notion and
   Context7 have no live run at all, and Railway only the token check below. →
   [connections, "Tests"](connections.md#tests)
-- **Miro's tool arguments are modelled, not captured.** The Miro plugin
-  rewraps Miro's MCP server, whose `tools/list` needs a signed-in account:
-  the tool names are Miro's, the argument names (the board locator
-  `miro_url` included) a reading of Miro's documentation. Until a capture,
-  a call may fail at Miro, or a real argument be refused as undeclared; the
-  first discovery of every Miro account logs the differences. The capture is
-  one command with a Miro account. →
-  [miro, "The tool list: modelled, then captured"](providers/miro.md#65-the-tool-list-modelled-then-captured)
+- **Miro's tool calls have not run live.** The sign-in and Miro's tool list
+  were verified against a real Miro account on 2026-10-23 (the list is
+  captured verbatim); what Miro answers to each call — discovery's board
+  list included — is still known from its schemas and tested against mocks
+  only. Every discovery logs a difference between Miro's live tool list and
+  the captured one. →
+  [miro, "The tool list: captured"](providers/miro.md#65-the-tool-list-captured)
 - **One live check is still to do on Railway**: whether Railway's API
   accepts the token obtained for its MCP server (L3). The two GitHub checks
   (L1, L2) concerned the GitHub App's installation callback and are moot

@@ -10,10 +10,12 @@ import { CredentialRefusal, UpstreamAuthError, UpstreamHttpError } from '@vaubaa
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
+  DISCOVERY_PAGE_SIZE,
   MCP_SERVER_REFUSED,
   boardsIn,
   discoverMiroResources,
   executeMiro,
+  hasMore,
   toolDrift,
 } from '../../src/execute.ts';
 import { MIRO_MCP_URL, TOOL } from '../../src/identity.ts';
@@ -58,6 +60,43 @@ describe('execute — one tools/call to Miro’s MCP server', () => {
     const fetch = mockFetch([mcpRoute(() => textResult('board created'))]);
     await executeMiro(context(fetch, []), TOOL.boardCreate, { name: 'Retro' });
     expect(rpcOf(fetch.calls[0]!).params?.arguments).toEqual({ name: 'Retro' });
+    await executeMiro(context(fetch, [workshop]), TOOL.canvasComposerSkill, {});
+    expect(rpcOf(fetch.calls[1]!).params?.arguments).toEqual({});
+  });
+
+  test('a tool whose locator has another name gets the board there : content_item_url', async () => {
+    const fetch = mockFetch([mcpRoute(() => textResult('{"entries":[],"has_more":false}'))]);
+    await executeMiro(context(fetch), TOOL.contentItemListRoles, { board: BOARD, limit: 10 });
+    expect(rpcOf(fetch.calls[0]!).params).toEqual({
+      name: 'content_item_list_roles',
+      arguments: { limit: 10, content_item_url: BOARD_URL },
+    });
+  });
+
+  test("Miro's own arguments go as written ; its telemetry fields never leave", async () => {
+    const fetch = mockFetch([mcpRoute(() => textResult('ok'))]);
+    await executeMiro(context(fetch), TOOL.prototypeCreate, {
+      board: BOARD,
+      html_contents: ['<p>Home</p>'],
+      device_type: 'mobile',
+      x: 10,
+    });
+    const sent = rpcOf(fetch.calls[0]!).params?.arguments ?? {};
+    expect(sent).toEqual({
+      html_contents: ['<p>Home</p>'],
+      device_type: 'mobile',
+      x: 10,
+      miro_url: BOARD_URL,
+    });
+    expect(sent).not.toHaveProperty('invocation_source');
+    expect(sent).not.toHaveProperty('is_repository');
+    const refused = await executeMiro(context(fetch), TOOL.prototypeCreate, {
+      board: BOARD,
+      html_contents: ['<p/>'],
+      is_repository: true,
+    });
+    expect(refused.isError).toBe(true);
+    expect(fetch.calls).toHaveLength(1);
   });
 
   test('an SSE answer is read ; Miro’s isError, images and structured content pass through', async () => {
@@ -195,16 +234,75 @@ describe('discovery — the boards of the team, from board_search_boards', () =>
         metadata: { url: 'https://miro.com/app/board/o9J_kzlUDmo=/' },
       },
     ]);
-    expect(rpcOf(fetch.calls[0]!).params).toEqual({ name: 'board_search_boards', arguments: {} });
+    expect(rpcOf(fetch.calls[0]!).params).toEqual({
+      name: 'board_search_boards',
+      arguments: { limit: DISCOVERY_PAGE_SIZE, offset: 0 },
+    });
+    expect(fetch.calls.filter((c) => rpcOf(c).method === 'tools/call')).toHaveLength(1);
   });
 
-  test('a text answer : the board links it holds', () => {
+  test("Miro's captured shape : board summaries without an id, page after page while has_more", async () => {
+    const page = (offset: number) => {
+      const boards =
+        offset === 0
+          ? [
+              {
+                name: 'Workshop',
+                miro_url: 'https://miro.com/app/board/uXjVOD6LSME=',
+                owner: 'Ada',
+              },
+              { name: 'Item link', miro_url: `${BOARD_URL}?moveToWidget=${ITEM}` },
+            ]
+          : [{ name: 'Retro', miro_url: 'https://miro.com/app/board/o9J_kzlUDmo=/' }];
+      const body = { data: boards, total: 2, has_more: offset === 0 };
+      return { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body };
+    };
+    const fetch = mockFetch([
+      mcpRoute((call) => {
+        const rpc = rpcOf(call);
+        if (rpc.method === 'tools/list') return { tools: UPSTREAM_TOOL_LIST.tools };
+        return page(Number(rpc.params?.arguments?.offset ?? 0));
+      }),
+    ]);
+    const boards = await discoverMiroResources(context(fetch));
+    expect(boards).toEqual([
+      { provider: 'miro', ref: BOARD, displayName: 'Workshop', metadata: { url: BOARD_URL } },
+      {
+        provider: 'miro',
+        ref: 'o9J_kzlUDmo~',
+        displayName: 'Retro',
+        metadata: { url: 'https://miro.com/app/board/o9J_kzlUDmo=/' },
+      },
+    ]);
+    const searches = fetch.calls.filter((c) => rpcOf(c).method === 'tools/call');
+    expect(searches.map((c) => rpcOf(c).params?.arguments)).toEqual([
+      { limit: 50, offset: 0 },
+      { limit: 50, offset: 50 },
+    ]);
+  });
+
+  test('a server that ignores offset is not asked again for the same page', async () => {
+    const body = { data: [{ name: 'Workshop', miro_url: BOARD_URL }], total: 99, has_more: true };
+    const fetch = mockFetch([
+      mcpRoute((call) =>
+        rpcOf(call).method === 'tools/list'
+          ? { tools: UPSTREAM_TOOL_LIST.tools }
+          : { content: [{ type: 'text', text: JSON.stringify(body) }] },
+      ),
+    ]);
+    expect(await discoverMiroResources(context(fetch))).toHaveLength(1);
+    expect(fetch.calls.filter((c) => rpcOf(c).method === 'tools/call')).toHaveLength(2);
+    expect(hasMore(textResult(JSON.stringify(body)))).toBe(true);
+    expect(hasMore(textResult('has_more: true'))).toBe(false);
+  });
+
+  test('a text answer : the board links it holds, with or without the trailing slash', () => {
     const boards = boardsIn(
       textResult(
-        `Found 2 boards:\n- Workshop ${BOARD_URL}\n- Retro https://miro.com/app/board/o9J_kzlUDmo=/?share=1`,
+        `Found 3 boards:\n- Workshop ${BOARD_URL}\n- Retro https://miro.com/app/board/o9J_kzlUDmo=/?share=1\n- Plan https://miro.com/app/board/uXjVOakxTk0=`,
       ),
     );
-    expect(boards.map((b) => b.ref)).toEqual([BOARD, 'o9J_kzlUDmo~']);
+    expect(boards.map((b) => b.ref)).toEqual([BOARD, 'o9J_kzlUDmo~', 'uXjVOakxTk0~']);
     expect(boards[0]?.displayName).toBe(BOARD_ID);
   });
 
@@ -228,16 +326,19 @@ describe('discovery — the boards of the team, from board_search_boards', () =>
       tools: [
         ...UPSTREAM_TOOL_LIST.tools.filter((t) => t.name !== 'table_update_view'),
         { name: 'board_delete', inputSchema: { type: 'object', properties: {} } },
-      ].map((t) =>
-        t.name === 'canvas_search'
-          ? { ...t, inputSchema: { type: 'object', properties: { board_url: {}, query: {} } } }
-          : t,
-      ),
+      ].map((t) => {
+        if (t.name !== 'canvas_search') return t;
+        // Miro renames the locator and drops one argument.
+        const rest: Record<string, unknown> = { ...t.inputSchema.properties };
+        delete rest.miro_url;
+        delete rest.cursor;
+        return { ...t, inputSchema: { type: 'object', properties: { board_url: {}, ...rest } } };
+      }),
     };
     expect(toolDrift(live)).toEqual({
       gone: ['table_update_view'],
       unmodelled: ['board_delete'],
-      arguments: { canvas_search: ['+board_url', '-miro_url', '-result_mode'] },
+      arguments: { canvas_search: ['+board_url', '-miro_url', '-cursor'] },
     });
     const warn = vi.fn();
     const fetch = mockFetch([

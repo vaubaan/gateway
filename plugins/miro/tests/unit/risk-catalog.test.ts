@@ -77,10 +77,19 @@ describe('risks touched, tool by tool', () => {
   test('a new board touches board-create alone', () => {
     expect(risksOf(TOOL.boardCreate)).toEqual(['miro.board-create']);
   });
+
+  test("the board's own details, its access and its walkthroughs have risks of their own", () => {
+    expect(risksOf(TOOL.boardGetSpace)).toEqual(['miro.read-board-details']);
+    expect(risksOf(TOOL.boardUpdateMetadata)).toEqual(['miro.board-details-write']);
+    expect(risksOf(TOOL.contentItemListRoles)).toEqual(['miro.read-board-access']);
+    expect(risksOf(TOOL.boardShare)).toEqual(['miro.board-share']);
+    expect(risksOf(TOOL.boardRoleUpdate)).toEqual(['miro.board-share']);
+    expect(risksOf(TOOL.createBoardcast)).toEqual(['miro.boardcast-create']);
+  });
 });
 
-describe('the catalog keeps the ids of catalog 1', () => {
-  test('no risk of catalog 1 was renamed or removed', () => {
+describe('the catalog keeps the ids of catalogs 1 and 2', () => {
+  test('no risk of catalog 1 or 2 was renamed or removed', () => {
     const ids = miroCatalog.catalog.risks.map((r) => r.id);
     for (const id of [
       'miro.read-boards',
@@ -93,7 +102,10 @@ describe('the catalog keeps the ids of catalog 1', () => {
     ]) {
       expect(ids).toContain(id);
     }
-    expect(miroCatalog.catalog.catalog_version).toBe(2);
+    for (const id of ['miro.read-format-guide', 'miro.board-create']) {
+      expect(ids, 'catalog 2').toContain(id);
+    }
+    expect(miroCatalog.catalog.catalog_version).toBe(3);
   });
 });
 
@@ -111,7 +123,24 @@ describe('presets', () => {
       'miro.read-boards',
       'miro.read-board-content',
       'miro.read-format-guide',
+      'miro.read-board-details',
     ]);
+  });
+
+  test('sharing a board is in facilitator alone, behind an approval', () => {
+    for (const id of ['read-only', 'scribe']) {
+      const ids = preset(id).entries.map((e) => e.risk_id);
+      for (const risk of [
+        'miro.board-share',
+        'miro.read-board-access',
+        'miro.board-details-write',
+        'miro.boardcast-create',
+      ]) {
+        expect(ids, `${id} ${risk}`).not.toContain(risk);
+      }
+    }
+    const share = preset('facilitator').entries.find((e) => e.risk_id === 'miro.board-share');
+    expect(share?.gate).toBe('approval');
   });
 
   test('scribe never deletes, so it cannot update the canvas', () => {
@@ -122,12 +151,17 @@ describe('presets', () => {
     expect(ids).toContain('miro.bulk-create');
   });
 
-  test('facilitator asks first for every deletion and every new board, runs everything else freely', () => {
-    const asks = new Set(['miro.item-delete', 'miro.frame-delete', 'miro.board-create']);
+  test('facilitator asks first for every deletion, every new board and every share, runs everything else freely', () => {
+    const asks = new Set([
+      'miro.item-delete',
+      'miro.frame-delete',
+      'miro.board-create',
+      'miro.board-share',
+    ]);
     for (const entry of preset('facilitator').entries) {
       expect(entry.gate, entry.risk_id).toBe(asks.has(entry.risk_id) ? 'approval' : 'auto');
     }
-    expect(preset('facilitator').entries).toHaveLength(8);
+    expect(preset('facilitator').entries).toHaveLength(13);
   });
 
   test('every named risk has a per-minute ceiling', () => {

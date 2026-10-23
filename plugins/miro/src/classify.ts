@@ -26,6 +26,10 @@
  *   4. **No board, no resource.** A new board (`board.W`) and the format
  *      guides of the canvas tools (`format-guide.R`, Miro's documentation,
  *      nothing of the customer's) name no board.
+ *   5. **The board itself.** Its details (title, description, icon, the
+ *      space it is in) are `board[<ref>].metadata`, who can open it and with
+ *      which role `board[<ref>].access`, a narrated walkthrough
+ *      `board[<ref>].boardcast` : each its own risk, never `content-write`.
  */
 
 import {
@@ -115,6 +119,22 @@ export function slicesOf(call: MiroCall): Slice[] {
     case UPSTREAM_TOOL.commentReply:
     case UPSTREAM_TOOL.commentResolve:
       return [slice('W', [...root, name('comment'), comment])];
+
+    case UPSTREAM_TOOL.boardGetSpace:
+      return [slice('R', [...root, name('metadata')])];
+
+    case UPSTREAM_TOOL.boardUpdateMetadata:
+      return [slice('W', [...root, name('metadata')])];
+
+    case UPSTREAM_TOOL.contentItemListRoles:
+      return [slice('R', [...root, name('access')])];
+
+    case UPSTREAM_TOOL.boardShare:
+    case UPSTREAM_TOOL.boardRoleUpdate:
+      return [slice('W', [...root, name('access')])];
+
+    case UPSTREAM_TOOL.createBoardcast:
+      return [slice('W', [...root, name('boardcast')])];
 
     default:
       throw new Error(`${PROVIDER_ID}: '${call.tool}' has no slice mapping`);

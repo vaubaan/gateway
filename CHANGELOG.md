@@ -69,6 +69,25 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   button now leads to Miro); their missions keep their permissions and
   presets, and their agents read the new tool list (the 30 tools of the REST
   plugin are gone).
+- **The Miro tools follow Miro's real tool list** (plugin 0.3.0, catalog 3).
+  The sign-in and Miro's tool list were verified against a real Miro account
+  on 2026-10-23 (the tool calls themselves have not run live yet): the
+  plugin's list is now Miro's, captured, and every tool takes Miro's own
+  argument names (`canvas_search` searches by `patterns`, `table_create`
+  takes `table_title`, `prototype_create` takes its screens as
+  `html_contents`, `table_update_view` a `layout`…), with the optional ones
+  Miro added. The fields in which Miro asks an agent to describe its own
+  environment (`invocation_source`, `is_repository`) are never offered to
+  agents nor sent. Six tools are added on a board of the mission: the space
+  it is in, its title and description, who can open it, sharing it,
+  changing someone's role on it, and a narrated walkthrough (boardcast). Each
+  has a new permission; **sharing a board is its own permission, in the
+  facilitator preset only, and asks first**; read-only and scribe never see
+  who can open a board and never share one. Discovery now lists every board
+  of the team, page by page (it would have stopped at 20, and read none from
+  Miro's answer). Tools that hand out an upload address, and the space,
+  section, blog-post, move and restore tools, stay out. ADR
+  miro-rewraps-the-official-mcp-server, amendment 2026-10-23.
 - **A service whose sign-in accepts dynamic client registration needs
   nothing from an administrator.** The gateway registers its own OAuth client
   there (named after the instance's host), keeps it sealed in the instance
