@@ -10,7 +10,7 @@
   gap: 14px;
   padding: var(--row-y) 0;
   border-bottom: 1px solid var(--line);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .lead {
   display: inline-flex;

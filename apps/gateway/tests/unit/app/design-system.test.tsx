@@ -59,7 +59,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/design' }));
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
 
 describe('PageHeader', () => {
-  it('renders the title as the one h1, the lede, the crumbs and the actions', () => {
+  it('renders the title as the one h1, the lede and the actions; the crumbs go to the path bar', () => {
     const html = renderToStaticMarkup(
       <PageHeader
         title="Accounts"
@@ -70,9 +70,11 @@ describe('PageHeader', () => {
       />,
     );
     expect(html.match(/<h1/g)).toHaveLength(1);
-    expect(html).toContain('aria-label="Breadcrumb"');
-    expect(html).toContain('<a href="/">Home</a>');
-    expect(html).toContain('<span aria-current="page">Accounts</span>');
+    expect(html).toContain('A cloud account connected once.');
+    // The crumbs are not drawn in the header: the path bar of the shell says them
+    // (ADR shadcn-near-default-skin-and-path-bar).
+    expect(html).not.toContain('aria-label="Breadcrumb"');
+    expect(html).not.toContain('Home');
     // Secondary actions come before the primary one.
     expect(html.indexOf('Refresh')).toBeLessThan(html.indexOf('Connect an account'));
   });

@@ -7,7 +7,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--paper-side);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .icon {
   display: inline-flex;

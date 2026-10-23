@@ -137,3 +137,4 @@ export { MoreMenu, MenuItem } from './Menu.tsx';
 export { ChoiceRow, ChoiceChip } from './Choice.tsx';
 export { SecretBox } from './Secret.tsx';
 export { FormWithRail, FormStep, FormColumns } from './Form.tsx';
+export { TrailProvider, TrailSetter, textOf, useTrail, type TrailItem } from './Trail';

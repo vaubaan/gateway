@@ -114,10 +114,10 @@ describe('the design tokens', () => {
     const sizes = [...BASE.keys()].filter((name) => name.startsWith('--text-'));
     expect(sizes).toEqual(['--text-xs', '--text-sm', '--text-base', '--text-title']);
     expect(sizes.map((name) => BASE.get(name))).toEqual([
+      '0.6875rem',
       '0.75rem',
       '0.8125rem',
-      '0.875rem',
-      '1.25rem',
+      '1.125rem',
     ]);
     const weights = [...BASE.keys()].filter((name) => name.startsWith('--weight-'));
     expect(weights.map((name) => BASE.get(name))).toEqual(['400', '600']);

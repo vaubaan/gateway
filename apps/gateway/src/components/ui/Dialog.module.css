@@ -50,13 +50,13 @@
 .description {
   margin-top: 6px;
   color: var(--ink-2);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .body {
   min-height: 0;
   padding: 0 var(--space-5) 14px;
   overflow-y: auto;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 .bodyDivided {
   padding-top: 14px;
@@ -88,7 +88,7 @@
   padding: 10px var(--space-3);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   cursor: pointer;
 }
 .optionOn {
@@ -125,7 +125,7 @@
 .error {
   margin: var(--space-2) 0 0;
   color: var(--bad);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
 }
 
 @media (max-width: 720px) {

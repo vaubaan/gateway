@@ -293,28 +293,44 @@ authority is recomputed on every request.
 
 `AppShell({ principal, instance, children })` (server component,
 `AppShell.tsx`) is the frame of every page a signed-in person sees: a side
-navigation, then the page. `AdminShell` is the same shell with the local
-navigation of Settings beside the page — one navigation, one person control
-and one footer for the whole product.
+navigation, then a bar with the path above the page, then the page (ADR
+[shadcn-near-default-skin-and-path-bar](../decisions/shadcn-near-default-skin-and-path-bar.md)).
+`AdminShell` is the same shell with the local navigation of Settings as a row
+of tabs under the bar — one navigation, one person control and one footer for
+the whole product.
 
 ```
 <ToastProvider>
-  <div.app>
-    <a.skip href="#main">           "Skip to the page", shown on focus
-    <aside.side>
-      <Link.brand href="/">         the mark, "Vaubaan", the name of the gateway
-      <nav aria-label="Main">       NavLinks: a <ul> of seven entries
-      <div.foot>                    UserMenu, ThemeToggle
-    <div.main>
-      <main#main.page>              the page column
-      <BuildFooter>
+  <TrailProvider>                   what the page declares for the path (components/ui/Trail.tsx)
+    <div.app>
+      <a.skip href="#main">         "Skip to the page", shown on focus
+      <aside.side>
+        <Link.brand href="/">       the mark, "Vaubaan", the name of the gateway
+        <nav aria-label="Main">     NavLinks: a <ul> of seven entries
+      <div.main>
+        <PathBar>                   nav aria-label="Path": this gateway › section › crumbs › title;
+                                    at its end ThemeToggle, UserMenu (data-testid="path-bar")
+        <main#main.page>            the page column
+        <BuildFooter>
 ```
+
+**The path bar** (`PathBar.tsx`, client): 44 px (`--bar-height`), sticky, a
+hairline under it. The path is an `<ol>`: this gateway (its initial as a mark,
+its name, a link home), the section the route is in (`sectionOf`, a link),
+then what the page published — `PageHeader` renders a `TrailSetter` with its
+`crumbs` and its `title` (level 1 only), and the bar reads it with `useTrail`.
+Two neighbours that say the same thing (the text of their labels, `textOf`)
+are said once, so the home reads "<gateway> › Now" and a mission
+"<gateway> › Missions › <name>". The last item carries `aria-current="page"`
+and is not a link. Before hydration the trail is empty and the bar says the
+gateway and the section. The header no longer draws its crumbs: the bar does.
 
 **The side navigation.** Seven entries, from `NAV_ORDER` and `NAV`
 (`lib/vocabulary.ts`): **Now** (`/`), **Waiting for you** (`/waiting`),
 **Missions**, **Accounts**, **Activity**, **Reference**, then **Settings**
 after a hairline. Every principal sees the seven. A feature adds no entry:
-seven is the budget (style guide §1).
+seven is the budget (style guide §1). Its foot is empty: the person and the
+theme are at the end of the path bar.
 
 - `NavLinks` (client, `usePathname`) renders them from `NavItem`s
   (`{ key, href, label, count?, ruleBefore? }`) with the icon of each entry
@@ -401,7 +417,7 @@ order a gateway is set up. No label is used for two things. The accounts
 without owner are not an entry: they are the last region of Accounts, for an
 administrator (ADR
 [ownerless-accounts-live-on-the-accounts-page](../decisions/ownerless-accounts-live-on-the-accounts-page.md)). `SettingsFrame({ principal, children })`
-renders it beside its children (`SubNavFrame` + `SubNav`); the
+renders it as a row of tabs above its children (`SubNavFrame` + `SubNav`); the
 `admin/(guarded)` layout (through `AdminShell`), the layout of connected
 apps and the Settings page use it. Each page under it opens with a
 `PageHeader` whose title is its entry (`SETTINGS_PAGES` in
@@ -420,9 +436,13 @@ Administration and to the interface reference
 the page stays open to every session by its address, and is listed for
 administrators only.
 
-On a phone the local navigation (`SubNav`) is one labelled row of chips per
-group — the label above, each entry a target a finger can hit — instead of a
-wrapping line of words.
+The local navigation (`SubNav`) is a row of tabs under the path bar, as wide
+as the page column and sticky under the bar: each group's name is a quiet
+word before its entries, the current entry the strong word with a rule under
+it. The row is rendered by the page frame, on the server, so nothing shifts
+after hydration (ADR shadcn-near-default-skin-and-path-bar). On a phone it is
+one labelled row of chips per group — the label above, each entry a target a
+finger can hit — and not sticky.
 
 `BuildFooter` (server component) is one quiet line where the page ends:
 `Vaubaan Gateway <version> · <commit>`, the build stamps of
@@ -630,14 +650,18 @@ One layer of named decisions (spec [style-guide](../spec/style-guide.md) §3).
 
 - `:root` holds what does not depend on the theme: the two font tokens
   (`--font-sans`, `--font-mono`, over the variables of the `geist` package),
-  four sizes (`--text-xs` 12 px, `--text-sm` 13, `--text-base` 14,
-  `--text-title` 20), two weights (`--weight-regular`, `--weight-strong`),
+  four sizes (`--text-xs` 11 px, `--text-sm` 12, `--text-base` 13,
+  `--text-title` 18), two weights (`--weight-regular`, `--weight-strong`),
   `--leading`, `--measure` (680 px, the cap of a line of prose), the space
   scale (`--space-half`, `--space-1` … `--space-12`), the page rhythm
   (`--page-max`, `--page-max-narrow`, `--page-max-wide`, `--page-pad-x`,
-  `--section-gap`, `--side-width`, `--side-width-collapsed`, `--row-y`,
-  `--cell-y`, `--cell-x`), three control heights, four radii, two durations and
-  one easing, and the six mark hues (`--hue-0` … `--hue-5`, `--on-hue`).
+  `--section-gap`, `--side-width`, `--side-width-collapsed`, `--bar-height`,
+  `--row-y`, `--cell-y`, `--cell-x`), three control heights (28, 32, 36 px),
+  four radii, two durations and one easing, and the six mark hues (`--hue-0`
+  … `--hue-5`, `--on-hue`). The values are shadcn/ui's near-default slate
+  neutrals with a sky accent (ADR
+  [shadcn-near-default-skin-and-path-bar](../decisions/shadcn-near-default-skin-and-path-bar.md)):
+  a skin is a change of values here, never of names.
 - `:root, [data-theme='light']` holds the light colours; `[data-theme='dark']`
   the dark ones; and `@media (prefers-color-scheme: dark)` repeats the dark
   values for `:root:not([data-theme])`. The dark values are written twice
@@ -706,7 +730,7 @@ each one is in its file header and on the gallery.
 | `PageHeader`, `Crumbs`                                      | crumbs, the `h1`, a one-sentence `lede`, `primary` (one action), `secondary` (a tuple of one or two: the type refuses a third), `more`, `mark` and `status` beside the title, `width` (`narrow`, `default`, `wide`: the measure of the page column), `level={2}` inside another page |
 | `Section`, `SectionHeading`                                 | a `<section>` named by its heading; `title`, `count`, `note` (a sentence or a link on the right); `first` removes the gap above the first region                                                                                                                                     |
 | `SummaryLine`, `KeyValue`, `Stats`, `Hint`                  | counts that lead elsewhere (an item with `href` is a link); a definition list; labelled figures (a `tone` only on the exception); quiet text under a list                                                                                                                            |
-| `SubNav`, `SubNavFrame`                                     | client. The local navigation of a page that is a small place of its own, and the grid that lays it beside the content; an item is current by path, or by `current` when the page navigates by fragment                                                                               |
+| `SubNav`, `SubNavFrame`                                     | client. The local navigation of a page that is a small place of its own — a row of tabs under the path bar — and the frame that lays it above the content; an item is current by path, or by `current` when the page navigates by fragment                                           |
 | `Card`, `CardHeader`, `CardTitle`, `CardBody`, `CardFooter` | the one bordered box of a page (the rail)                                                                                                                                                                                                                                            |
 | `Container`, `Stack`                                        | the column of a page outside the shell; a vertical flex with a `gap`                                                                                                                                                                                                                 |
 
@@ -936,10 +960,10 @@ anchor), the tools the plugin declares for it (`declared_tools`, from
 reference has `plane_filters` (slug, description, counts), empty when the
 model has one plane.
 
-**The frame** (`reference/frame.tsx`, `ReferenceFrame`): the `PageHeader` of
-the place ("Reference", on the wide measure) and the services as a local
-navigation beside the content (`SubNav`: "All services", then one entry per
-plugin with its `ServiceMark`).
+**The frame** (`reference/frame.tsx`, `ReferenceFrame`): the services as a
+local navigation, a row of tabs under the path bar (`SubNav`: "All services",
+then one entry per plugin with its `ServiceMark`), then the `PageHeader` of
+the place ("Reference", on the wide measure) and the content.
 
 **The index** (`reference/page.tsx`) is a quiet list, one row per service: its
 mark, its name (a link; "experimental" and the community validation tag where

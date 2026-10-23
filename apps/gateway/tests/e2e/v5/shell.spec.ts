@@ -36,7 +36,9 @@ const ENTRIES = [
   'Settings',
 ];
 
-test('one home, seven entries, the person and the theme at the foot', async ({ page }) => {
+test('one home, seven entries, the path above the page, the person and the theme at its end', async ({
+  page,
+}) => {
   // No session: the home sends the visitor to the sign-in.
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
@@ -49,19 +51,39 @@ test('one home, seven entries, the person and the theme at the foot', async ({ p
   await expect(nav.getByRole('link', { name: 'Now' })).toHaveAttribute('aria-current', 'page');
   await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
 
-  // The navigation is a column beside the page, not a bar above it.
+  // The navigation is a column beside the page; above the page, a bar with the path.
   const side = await page.locator('aside').boundingBox();
   const main = await page.locator('main').boundingBox();
   expect(side?.width).toBe(220);
   expect(main?.x).toBeGreaterThanOrEqual(220);
+  const path = page.getByRole('navigation', { name: 'Path' });
+  const bar = await page.getByTestId('path-bar').boundingBox();
+  expect(bar?.height).toBe(44);
+  expect(bar?.y).toBe(0);
+  // The path: this gateway, then the section — said once when the page is the
+  // section, a link when the page is its own (the first run says "Welcome");
+  // the last word is not a link.
+  await expect(path.getByRole('link').first()).toContainText('gateway.e2e.test');
+  await expect(path).toContainText('Now');
+  await expect(path.locator('[aria-current="page"]')).toHaveCount(1);
+  // The theme and the person are at the end of the bar.
+  await expect(page.getByTestId('path-bar').getByTestId('theme-toggle')).toBeVisible();
+  await expect(page.getByTestId('path-bar').getByTestId('user-menu')).toBeVisible();
 
-  // Every entry leads to a page inside the same shell, and is then the current one.
+  // Every entry leads to a page inside the same shell, and is then the current one;
+  // the path says the section once, as the page.
   for (const entry of ENTRIES.slice(1)) {
     await nav.getByRole('link', { name: entry }).click();
     await expect(nav.getByRole('link', { name: entry })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
+    await expect(path.locator('[aria-current="page"]')).toHaveText(entry);
+    await expect(path.getByRole('link')).toHaveCount(1);
   }
+  // A page under a section: the section is a link, the page is the last word.
+  await page.goto('/missions/new');
+  await expect(path.getByRole('link', { name: 'Missions' })).toBeVisible();
+  await expect(path.locator('[aria-current="page"]')).toHaveText('New mission');
   await page.getByRole('link', { name: /^Vaubaan/ }).click();
   await expect(page).toHaveURL(new RegExp(`^${PUBLIC_URL}/$`));
 
@@ -207,7 +229,7 @@ test('the theme has three states, is kept across a reload and is rendered by the
   const paper = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(await paper()).toBe('rgb(255, 255, 255)');
   await page.emulateMedia({ colorScheme: 'dark' });
-  expect(await paper()).toBe('rgb(15, 17, 21)');
+  expect(await paper()).toBe('rgb(2, 8, 23)');
   await page.emulateMedia({ colorScheme: 'light' });
 
   await toggle.click();
@@ -215,7 +237,7 @@ test('the theme has three states, is kept across a reload and is rendered by the
   await toggle.click();
   await expect(html).toHaveAttribute('data-theme', 'dark');
   await expect(toggle).toHaveAttribute('aria-label', 'Theme: Dark. Switch to System.');
-  expect(await paper()).toBe('rgb(15, 17, 21)');
+  expect(await paper()).toBe('rgb(2, 8, 23)');
 
   // Kept: the choice is a cookie, and the server writes the attribute itself —
   // the document arrives dark, before any script runs.
@@ -423,7 +445,7 @@ test('the gallery shows every component in both themes', async ({ page }) => {
   for (const pair of islands) {
     expect(pair).toEqual([
       ['light', 'rgb(255, 255, 255)'],
-      ['dark', 'rgb(15, 17, 21)'],
+      ['dark', 'rgb(2, 8, 23)'],
     ]);
   }
 
