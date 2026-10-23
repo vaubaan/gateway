@@ -9,6 +9,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The audit stores the accepted-risk snapshot once per distinct set and the
+  remaining budget of the touched risks only — about 98% fewer audit rows per
+  call.** A call entry still carries the mission's accepted risks at call time,
+  but entries under the same accepted risks share one stored copy, and its
+  per-risk rows are the risks the call touched. On a mission holding about 100
+  risks a call wrote about 17 KB of audit rows; it now writes a couple of hundred
+  bytes. Entries written by an earlier version are not rewritten (the audit is
+  immutable): they read as before and leave with the retention. Schema
+  migration 0022. ADR audit-risk-snapshot-stored-once.
+
 ## [2.0.0-alpha.4] - 2026-10-23
 
 ### Added

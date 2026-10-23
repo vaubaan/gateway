@@ -5,7 +5,14 @@
  * `@vaubaan/gateway-core`'s `AuditEntry`. The schema's triggers abort every
  * UPDATE and every DELETE that happens outside a purge window; `purgeOlderThan` opens
  * that window inside its own transaction.
+ *
+ * A call entry's accepted-risk snapshot is stored once per distinct set
+ * (`audit_risk_sets`, content-addressed) and its `audit_risks` rows are the risks the
+ * call touched only (ADR audit-risk-snapshot-stored-once). Entries written before
+ * migration 0022 carry no set and read their snapshot from their own rows.
  */
+
+import { createHash } from 'node:crypto';
 
 import type {
   AdminAct,
@@ -40,14 +47,17 @@ import { ADMIN_ACTS, ADMIN_OBJECT_TYPES, AUDIT_DECISIONS, AUDIT_KINDS } from './
 
 export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
 
-/** One `audit_risks` row: a risk's place in the call entry. */
+/**
+ * One `audit_risks` row: a risk the call touched — or, on an entry written before
+ * migration 0022, any risk of its accepted snapshot.
+ */
 export interface AuditRiskRow {
   readonly riskId: RiskId;
   /** In the mission's accepted risks at call time (snapshot). */
   readonly accepted: boolean;
   /** Touched by this call. */
   readonly touched: boolean;
-  /** Remaining budget after the call, when known. */
+  /** Remaining budget after the call, when known (touched risks only from 0022 on). */
   readonly remaining: number | null;
 }
 
@@ -272,6 +282,7 @@ interface AuditRow {
   before_json: string | null;
   after_json: string | null;
   delegated_client_id: string | null;
+  accepted_set_id: string | null;
 }
 
 interface RiskRow {
@@ -312,6 +323,7 @@ const AUDIT_COLUMNS = [
   'before_json',
   'after_json',
   'delegated_client_id',
+  'accepted_set_id',
 ] as const satisfies readonly (keyof AuditRow)[];
 type AuditColumn = (typeof AUDIT_COLUMNS)[number];
 const COLUMNS = AUDIT_COLUMNS.join(', ');
@@ -323,7 +335,7 @@ function toParams(values: Partial<Record<AuditColumn, string | number | null>>):
   return AUDIT_COLUMNS.map((column) => values[column] ?? null);
 }
 
-function callParams(id: string, e: CallAuditEntry): SqlParams {
+function callParams(id: string, e: CallAuditEntry, acceptedSetId: string): SqlParams {
   return toParams({
     id,
     ts: e.ts,
@@ -347,6 +359,7 @@ function callParams(id: string, e: CallAuditEntry): SqlParams {
     upstream_error: e.upstream_error,
     client_ip: e.client_ip,
     client_user_agent: e.client_user_agent,
+    accepted_set_id: acceptedSetId,
   });
 }
 
@@ -393,17 +406,36 @@ function riskToRecord(row: RiskRow): AuditRiskRow {
   };
 }
 
-/** One row per risk in the accepted snapshot or touched by the call. */
+/**
+ * One row per risk the call touched (a refused call's refused risk is one of them),
+ * with its place in the snapshot and its remaining budget. An untouched risk has no
+ * row: its remaining budget did not change, and its acceptance is in the set.
+ */
 function riskRows(e: CallAuditEntry): AuditRiskRow[] {
   const accepted = new Set(e.accepted_risks_snapshot);
-  const touched = new Set(e.risks_touched);
-  const all = [...new Set([...e.accepted_risks_snapshot, ...e.risks_touched])].sort();
-  return all.map((riskId) => ({
+  return [...new Set(e.risks_touched)].sort().map((riskId) => ({
     riskId,
     accepted: accepted.has(riskId),
-    touched: touched.has(riskId),
+    touched: true,
     remaining: e.remaining_budget?.[riskId] ?? null,
   }));
+}
+
+/** A distinct accepted set: its sorted members and its content address. */
+interface AcceptedSet {
+  readonly id: string;
+  readonly riskIds: readonly RiskId[];
+}
+
+/**
+ * The content address of an accepted set: SHA-256 (hex) of its sorted, distinct risk
+ * ids joined by a line feed (a risk id never holds one). The same set has the same id
+ * whatever the mission, the call or the order the snapshot listed it in.
+ */
+export function acceptedSetOf(snapshot: readonly RiskId[]): AcceptedSet {
+  const riskIds = [...new Set(snapshot)].sort();
+  const id = createHash('sha256').update(riskIds.join('\n'), 'utf8').digest('hex');
+  return { id, riskIds };
 }
 
 const REQUESTS_OF_MISSION = 'SELECT id FROM requests WHERE mission_id';
@@ -593,6 +625,20 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   const insertRisk = db.prepare<[string, string, number, number, number | null]>(
     'INSERT INTO audit_risks (audit_id, risk_id, accepted, touched, remaining) VALUES (?, ?, ?, ?, ?)',
   );
+  // `ON CONFLICT DO NOTHING`: the set is content-addressed, a second writer of the same
+  // set has nothing to add. Same statement on Postgres.
+  const insertSet = db.prepare<[string, number]>(
+    'INSERT INTO audit_risk_sets (id, risk_count) VALUES (?, ?) ON CONFLICT (id) DO NOTHING',
+  );
+  const insertSetMember = db.prepare<[string, string]>(
+    'INSERT INTO audit_risk_set_members (set_id, risk_id) VALUES (?, ?)',
+  );
+  const membersOf = db.prepare<[string], { risk_id: string }>(
+    'SELECT risk_id FROM audit_risk_set_members WHERE set_id = ? ORDER BY risk_id',
+  );
+  const setSize = db.prepare<[string], { risk_count: number }>(
+    'SELECT risk_count FROM audit_risk_sets WHERE id = ?',
+  );
   const byId = db.prepare<[string], AuditRow>(`SELECT ${COLUMNS} FROM audit WHERE id = ?`);
   const risksOf = db.prepare<[string], RiskRow>(
     'SELECT risk_id, accepted, touched, remaining FROM audit_risks WHERE audit_id = ? ORDER BY risk_id',
@@ -610,6 +656,13 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     'DELETE FROM audit_risks WHERE audit_id IN (SELECT id FROM audit WHERE ts < ?)',
   );
   const purge = db.prepare<[string]>('DELETE FROM audit WHERE ts < ?');
+  // The sets no remaining entry references, once the old entries are gone (same window).
+  const UNREFERENCED =
+    'NOT IN (SELECT accepted_set_id FROM audit WHERE accepted_set_id IS NOT NULL)';
+  const purgeSetMembers = db.prepare<[]>(
+    `DELETE FROM audit_risk_set_members WHERE set_id ${UNREFERENCED}`,
+  );
+  const purgeSets = db.prepare<[]>(`DELETE FROM audit_risk_sets WHERE id ${UNREFERENCED}`);
   const labelsOf = db.prepare<[string], { label: string; calls: number; last_seen: string }>(
     `SELECT agent_label AS label, COUNT(*) AS calls, MAX(ts) AS last_seen FROM audit
      WHERE kind = 'call' AND mission_id = ? AND agent_label IS NOT NULL
@@ -699,10 +752,36 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     };
   }
 
+  /** The members of a stored set, checked against the count written with it. */
+  function acceptedSetMembers(setId: string): RiskId[] {
+    const size = requireRow(setSize.get(setId), 'audit_risk_sets', setId).risk_count;
+    const members = membersOf.all(setId).map((m) => m.risk_id);
+    if (members.length !== size) {
+      throw new InvariantError(
+        `audit_risk_sets ${setId}: ${members.length} members stored, ${size} expected`,
+      );
+    }
+    return members;
+  }
+
+  /** Writes the set unless it is already stored; returns its id. Inside the append's transaction. */
+  function storeAcceptedSet(set: AcceptedSet): string {
+    if (insertSet.run(set.id, set.riskIds.length).changes === 1) {
+      for (const riskId of set.riskIds) insertSetMember.run(set.id, riskId);
+    }
+    return set.id;
+  }
+
   function toCallRecord(row: AuditRow): AuditCallRecord {
-    // perf: one query per call entry; a Postgres port reads a page's risks in one statement.
+    // perf: up to three small queries per call entry (rows, set size, members); a Postgres
+    // port reads a page's risks and sets in one statement each.
     const risks = risksOf.all(row.id).map(riskToRecord);
     const remaining = risks.filter((r) => r.remaining !== null);
+    // An entry written before migration 0022 has no set: its snapshot is its own rows.
+    const accepted =
+      row.accepted_set_id === null
+        ? risks.filter((r) => r.accepted).map((r) => r.riskId)
+        : acceptedSetMembers(row.accepted_set_id);
     const refusalCode = row.refusal_code;
     if (refusalCode !== null && !isRefusalCode(refusalCode)) {
       throw new InvariantError(`audit.refusal_code: unexpected value '${refusalCode}'`);
@@ -726,7 +805,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       arguments_hash: requireColumn(row.arguments_hash, 'audit.arguments_hash'),
       slices_executed: parseSlices(row.slices_json),
       risks_touched: risks.filter((r) => r.touched).map((r) => r.riskId),
-      accepted_risks_snapshot: risks.filter((r) => r.accepted).map((r) => r.riskId),
+      accepted_risks_snapshot: accepted,
       decision: parseEnum(
         AUDIT_DECISIONS,
         requireColumn(row.decision, 'audit.decision'),
@@ -756,7 +835,10 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       openWindow.run(cutoff);
       try {
         purgeRisks.run(cutoff);
-        return purge.run(cutoff).changes;
+        const purged = purge.run(cutoff).changes;
+        purgeSetMembers.run();
+        purgeSets.run();
+        return purged;
       } finally {
         closeWindow.run();
       }
@@ -766,9 +848,12 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   return {
     async append(entry) {
       const id = ctx.newId();
-      const params = entry.kind === 'call' ? callParams(id, entry) : adminParams(id, entry);
       const risks = entry.kind === 'call' ? riskRows(entry) : [];
       withImmediateTransaction(db, () => {
+        const params =
+          entry.kind === 'call'
+            ? callParams(id, entry, storeAcceptedSet(acceptedSetOf(entry.accepted_risks_snapshot)))
+            : adminParams(id, entry);
         insert.run(...params);
         for (const r of risks) {
           insertRisk.run(id, r.riskId, r.accepted ? 1 : 0, r.touched ? 1 : 0, r.remaining);

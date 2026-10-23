@@ -1626,9 +1626,16 @@ For a call: timestamp, mission, the token used and its holder (member
 or named token), connection used and resource ref, tool,
 argument hash, slices executed, risks touched, snapshot of accepted
 risks, decision and refusal reason, approval consumed if any, remaining
-budget per risk after the call, agent label, upstream latency, client
-origin. The detailed shape of the risk-related fields is that
-of [gateway-risk-model](./gateway-risk-model.md) §12.
+budget after the call for each risk the call touched, agent label,
+upstream latency, client origin. The detailed shape of the risk-related
+fields is that of [gateway-risk-model](./gateway-risk-model.md) §12.
+
+> Amended on 2026-10-23 (product owner's decision; ADR
+> [audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md)):
+> the remaining budget is recorded for the risks the call touched only — an
+> untouched risk's remaining did not change. The snapshot of accepted risks
+> stays on every entry; the instance stores each distinct snapshot once and
+> the entries refer to it.
 
 For an administrative act: timestamp, user, act (connection, share,
 revocation, issuance, extension, reset, approval, rotation, change of

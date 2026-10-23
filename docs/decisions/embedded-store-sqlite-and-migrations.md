@@ -81,7 +81,10 @@ does not say:
   enforced, so a quota can never be stored as text.
 - **Enumerations are rows**: `share_restrictions(share_id, risk_id)`,
   `mission_policy(mission_id, risk_id, quota, rate_limit, rate_window_seconds, gate)`,
-  `audit_risks(audit_id, risk_id, accepted, touched, remaining)`. A `CHECK` on
+  `audit_risks(audit_id, risk_id, accepted, touched, remaining)` _(changed
+  2026-10-23 by [audit-risk-snapshot-stored-once](./audit-risk-snapshot-stored-once.md):
+  the touched risks only, the accepted snapshot in `audit_risk_set_members`, once
+  per distinct set)_. A `CHECK` on
   `risk_id` forbids the empty string and the `*` character, and the repositories check
   every `risk_id` against the loaded catalog (`CatalogIndex`) before writing. The
   "never a sentinel" structural test is therefore a `SELECT … WHERE risk_id NOT IN
@@ -182,7 +185,10 @@ composite foreign keys, `CHECK` constraints and `NOT LIKE` are accepted as writt
 - `SqliteAuditWriter` implements `@vaubaan/gateway-core`'s `AuditWriter` (P0.5) and
   `AuditRepo.append` takes gateway-core's `AuditEntry` as is: `risks_touched`,
   `accepted_risks_snapshot` and `remaining_budget` are unfolded into `audit_risks`
-  rows and folded back on read, so a record round-trips the entry. The entry shape
+  rows and folded back on read, so a record round-trips the entry. _(Changed
+  2026-10-23 by [audit-risk-snapshot-stored-once](./audit-risk-snapshot-stored-once.md):
+  the snapshot goes to a set stored once, the rows and the remaining budget cover
+  the touched risks.)_ The entry shape
   has one owner, gateway-core; the store has no audit type of its own.
 - The returned `Store` satisfies the composition root's `Store` port
   (`compose/ports.ts`: `kind`, `ping()`, `close()`), so the root can inject

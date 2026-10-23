@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-23
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -30,7 +30,8 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2 (domain), §3 (budget,
 requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). Decisions:
 [embedded-store-sqlite-and-migrations](../decisions/embedded-store-sqlite-and-migrations.md),
 [users-keyed-by-issuer-and-subject](../decisions/users-keyed-by-issuer-and-subject.md),
-[one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md).
+[one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md),
+[audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md).
 
 ## Layout
 
@@ -79,6 +80,12 @@ apps/gateway/migrations/
   0018_mission_reaches_the_whole_connection.sql
                                   mission_connections (and mission_resources) rebuilt: the
                                   resource scope `connection` (schema version 18)
+  0019_local_accounts.sql         local accounts (schema version 19; see below)
+  0020_administrators.sql         administrators (schema version 20; see below)
+  0021_user_second_factors.sql    second factors (schema version 21; see below)
+  0022_audit_risk_sets.sql        audit_risk_sets / audit_risk_set_members, audit.accepted_set_id:
+                                  the accepted snapshot stored once per distinct set
+                                  (schema version 22; see Audit)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -225,9 +232,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0021_user_second_factors.sql`)
+## Schema (`0001_schema.sql` … `0022_audit_risk_sets.sql`)
 
-Schema version 19. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 22. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -294,7 +301,7 @@ connections repository joins the connection and applies it (`effectiveResourceEn
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details; `events.agent_label` (`0008`) is a copy of the label of a call event, made at insert, for the per-label timeline                                                                                                                                                   |
 | Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, `risk_ids_json` (every gated risk of the call) and the encrypted `args_blob` (NULL on decision and on expiry); one approval per request, bound to `(mission, tool, fingerprint)` and listing the risks it covers, consumed via `consumed_at`                                                        |
 | Git remote  | `git_pending_refs`                                                                                                         | temporary refs at the provider and their deadline (migration `0015`)                                                                                                                                                                                                                                                                                                                                                |
-| Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Audit       | `audit`, `audit_risks`, `audit_risk_sets`, `audit_risk_set_members`, `audit_purge_guard`                                   | see below                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 SQLite-only constructs are marked `-- sqlite:` in the file (`STRICT`, `RAISE(ABORT)`);
 the ADR lists the Postgres replacement for each. Three more are SQLite-only and carry no
@@ -450,9 +457,23 @@ the shape, `packages/gateway-core/src/audit.ts`):
   `tool`, `arguments_hash`, `slices_executed` (stored as a JSON snapshot), `decision`,
   `refusal_code`, `refusal_reason`, `approval_id`, `agent_label`,
   `upstream_latency_ms`, `upstream_error`, `client_ip`, `client_user_agent`;
-  `accepted_risks_snapshot`, `risks_touched` and `remaining_budget` are unfolded into
-  one `audit_risks` row per risk (`accepted`, `touched`, `remaining`) and folded back
-  on read, so the record round-trips the entry (plus `id` and the raw `risks` rows);
+  `risks_touched` and `remaining_budget` are unfolded into one `audit_risks` row per
+  **touched** risk (`accepted`, `touched`, `remaining`; the refused risk of a refused
+  call is a touched one), and `accepted_risks_snapshot` into a **set stored once**
+  (migration `0022`, ADR
+  [audit-risk-snapshot-stored-once](../decisions/audit-risk-snapshot-stored-once.md)):
+  `audit_risk_sets(id, risk_count)` + `audit_risk_set_members(set_id, risk_id)`, the id
+  being the SHA-256 (hex) of the sorted distinct ids joined by `\n` (`acceptedSetOf`).
+  The append inserts the set with `ON CONFLICT (id) DO NOTHING` and its members only when
+  it is new, in the entry's transaction, and writes its id in `audit.accepted_set_id`;
+  missions with the same accepted risks share it. A remaining budget the entry carries
+  for an untouched risk is not stored. The read folds everything back — the snapshot from
+  the set (its member count checked against `risk_count`, `InvariantError` otherwise) —,
+  so the record round-trips the entry (plus `id` and the raw `risks` rows). An entry
+  written before `0022` has no set id and full rows (one per snapshot risk): its snapshot
+  is read from its rows, as before; it is never rewritten and ages out with the
+  retention. For a 100-risk mission a call costs its touched rows (about 190 B each)
+  instead of 100 rows (about 17 KB);
 - `AdminAuditEntry` — `user_id`, `act`, `object: { type, id }`, `before`/`after`
   (JSON), `delegated_client_id`.
 
@@ -491,12 +512,16 @@ holder** — `(token_kind, token_holder)`, the calls written before tokens had a
 search takes `tokenHolders: { kind, holders[] }` (calls only; an empty list matches
 nothing, and a kind is never crossed: a token named like a user's id is not that member).
 
-Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
+Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks`/
+`audit_risk_sets`/`audit_risk_set_members` aborts;
 a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a
 cutoff newer than the entry (migration `0002` made the `audit_risks` trigger look up
-its parent entry's `ts`; in `0001` any risk row could go while a window was open).
+its parent entry's `ts`; in `0001` any risk row could go while a window was open); a
+`DELETE` on a set or its members aborts unless the window is open **and** no `audit` row
+refers to the set (index `audit_accepted_set`, partial on `accepted_set_id IS NOT NULL`).
 `store.audit.purgeOlderThan(cutoff)` is the only path that opens the window, inside
-its own transaction;
+its own transaction: risk rows, then entries older than the cutoff, then the members
+and sets no remaining entry refers to;
 `purgeByRetention(days = DEFAULT_AUDIT_RETENTION_DAYS)` (90, exported) computes the
 cutoff from the clock.
 `countAllowedTouches(mission, risk, since, until)` serves the structural check
