@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.4] - 2026-10-23
+
 ### Added
 
 - **Scheduled, encrypted backup to S3-compatible storage.** Set the
@@ -108,6 +110,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   token every team-level read, and the connection used to fail on reading the
   team; it now lists the projects the token reaches. The `team_id` field is
   still the id of the team that owns them.
+
+### Security
+
+- **Fresher base images.** The image is built on `node:22.23.4-bookworm-slim`
+  (was 22.23.3), whose Debian layer carries the seven `perl-base` fixes of
+  `deb12u4`; their reviewed exceptions are gone from the image scan. The
+  Caddy of `deploy/compose.yaml` stays 2.11.7, at its rebuilt digest.
 
 ## [2.0.0-alpha.3] - 2026-10-21
 
@@ -1376,7 +1385,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.3...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.4...HEAD
+[2.0.0-alpha.4]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.3...v2.0.0-alpha.4
 [2.0.0-alpha.3]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.2...v2.0.0-alpha.3
 [2.0.0-alpha.2]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.1...v2.0.0-alpha.2
 [2.0.0-alpha.1]: https://github.com/vaubaan/gateway/compare/v4-final...v2.0.0-alpha.1
