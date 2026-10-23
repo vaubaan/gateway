@@ -354,8 +354,8 @@ The admin rule counts **IdP-claimed** groups only (`currentAuthority` in
   and turns `unowned` back to `active` (an `expired` one stays `expired` for
   its new owner to reconnect); entry `connection-reassigned`.
   `ConnectionService.reassignTargets()` lists the groups `reassign` accepts —
-  the ones that have a member — for the form of Settings → Accounts without
-  owner (`/admin/connections`).
+  the ones that have a member — for the form of the "Accounts without owner"
+  region of Accounts (`/accounts#without-owner`, an administrator).
 - `ownerActRefusal(connection)` (`connections/service.ts`) is the one
   statement of "a revoked or unowned connection takes no owner act":
   `connection-revoked`, `connection-unowned` or `null`. The connection
@@ -632,7 +632,7 @@ and audit acts keep the protocol's names ([connections](connections.md),
 | `POST /accounts/<id>/transfer`                                                  | `connections.handlers.transfer` (`group_id`)                                                                                                                                                                                                                                                                                                                                                                                                                                                      | user     |
 | `/admin/groups`                                                                 | Teams: one row per group (who keeps it, its members, what it owns); a local team shows its members, "Add someone" and "Remove" (asked first); "Add a local team" is folded under the list                                                                                                                                                                                                                                                                                                         | operator |
 | `POST /admin/groups/create`, `…/<id>/members`, `…/<id>/members/<userId>/remove` | `groups.handlers.*`                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | operator |
-| `/admin/connections`                                                            | Accounts without owner: one row per account with who owned it and its state, and under it the form that names an owner (a person by email, or a team that has members: `reassignTargets`)                                                                                                                                                                                                                                                                                                         | operator |
+| `/accounts#without-owner` (`/admin/connections` redirects there)                | Accounts without owner, the last region of Accounts for an administrator, shown when there is at least one (`components/connections/OwnerlessAccounts.tsx`): one row per account with who owned it and its state, and under it the form that names an owner (a person by email, or a team that has members: `reassignTargets`)                                                                                                                                                                    | operator |
 | `POST /admin/connections/<id>/reassign`                                         | `connections.handlers.reassign` (`owner_kind`, `owner_email` / `owner_group`)                                                                                                                                                                                                                                                                                                                                                                                                                     | operator |
 
 **The dialog and the presets.** A preset button ticks the explicit ids the
@@ -732,7 +732,8 @@ A page that catches a service error matches it by shape (`isShareError(err,
   them): env-scoped entries are shared as `provider[env].name`.
 - **A connection vanished from its owners' list.** Its status is `unowned`
   (or its owner group is empty, or its owner user was deactivated):
-  Settings → Accounts without owner (`/admin/connections`) lists it.
+  the "Accounts without owner" region of Accounts (`/accounts#without-owner`,
+  an administrator) lists it, and Setup points there.
   Log line `connection has no owner left`.
 - **A user in the admin group is not an operator.** A local group holds the
   rule's name, so the IdP claim is skipped (log: `IdP group claim collides

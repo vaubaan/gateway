@@ -239,7 +239,7 @@ describe('share, transfer, groups and reassignment over HTTP', () => {
         ops,
       );
       expect(reassigned).toMatchObject({
-        path: '/admin/connections',
+        path: '/accounts',
         notice: { tone: 'success', title: 'Depot main has a new owner' },
       });
       expect(await rig.root.store.connections.getById(rig.connection.id)).toMatchObject({

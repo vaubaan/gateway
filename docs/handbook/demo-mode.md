@@ -221,8 +221,8 @@ The list the command prints (`tour.ts`), without the values of the run
 13. **Settings**, as Alice (she administers the gateway): Connected apps
     ("Claude Code (demo)"); under Administration, Setup (a checklist of what
     is left), Sign-in, People, Teams ("GitHub admins", "Contractors"),
-    Accounts without owner, Telemetry (off),
-    Registered apps. Settings also holds the theme (System, Light, Dark) and
+    Telemetry (off), Registered apps; the accounts without owner, when there
+    are any, are the last region of Accounts. Settings also holds the theme (System, Light, Dark) and
     the interface reference (`/design`).
 14. **Sign in as Carol**: she sees the GitHub account owned by the team
     "GitHub admins", which Alice transferred to it, and her own Stripe

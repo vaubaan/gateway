@@ -151,7 +151,10 @@ describe('the routes follow the words', () => {
       ':path*': 'github',
     };
     for (const { source, destination } of LEGACY_REDIRECTS) {
-      const target = destination.replace(/:[a-z]+\*?/g, (param) => concrete[param] ?? 'x');
+      // A destination may name a region of its page by a fragment.
+      const target = destination
+        .split('#')[0]!
+        .replace(/:[a-z]+\*?/g, (param) => concrete[param] ?? 'x');
       // `/accounts/new/github`, `/reference/github`, `/waiting/<id>`…
       const probe = target.startsWith('/waiting/') ? '/waiting/[id]' : target;
       const path = probe
@@ -172,6 +175,7 @@ describe('the routes follow the words', () => {
     expect(byOld.get('/shares')).toBe(ROUTES.accounts);
     expect(byOld.get('/delegations')).toBe(ROUTES.connectedApps);
     expect(byOld.get('/delegations/:id/revoke')).toBe(`${ROUTES.connectedApps}/:id/revoke`);
+    expect(byOld.get('/admin/connections')).toBe(`${ROUTES.accounts}#without-owner`);
   });
 
   it('never redirects the callback a provider was given: it is part of the protocol', () => {
@@ -195,7 +199,9 @@ describe('the routes follow the words', () => {
     }
     // Nothing under /api, /mcp, /r or /oauth is touched.
     for (const { source } of LEGACY_REDIRECTS) {
-      expect(source).toMatch(/^\/(connections|requests|audit|providers|shares|delegations)\b/);
+      expect(source).toMatch(
+        /^\/(admin\/connections|connections|requests|audit|providers|shares|delegations)\b/,
+      );
     }
   });
 });

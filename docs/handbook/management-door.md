@@ -1110,8 +1110,12 @@ stored states and audit acts keep the protocol's names.
   person to stop those they do not recognise and replace the key of those
   they keep; amber, "A token of <app> was held by two parties", once none of
   them still runs. Another person's delegation id answers
-  `?problem=not-found`. With no delegation the page is one sentence and the
-  address of the management door.
+  `?problem=not-found`. With no delegation the list is one sentence.
+  **Connect an app**, the page's one primary action, leads to the last
+  region (`#connect`, `connect-app`): nothing is created here — the address
+  of the management door, the Claude Code command that adds it
+  (`claude mcp add --transport http vaubaan-manage <door>`), what any MCP
+  client does, and what follows (sign-in, consent, the app appears above).
 - **`/admin/oauth-clients`** ("Registered apps", administrators): one row per
   client — its name with when it registered, its state
   (`REGISTERED_APP_STATES`: "Waiting for your approval" in amber, "approved",
@@ -1120,7 +1124,9 @@ stored states and audit acts keep the protocol's names.
   ("a server" marked), its home page. Row actions: **Approve**
   (`POST /admin/oauth-clients/<id>`, `action=approve`) and **Disable**, asked
   first — "everyone who had connected it loses it at once" — then
-  `action=disable`. The policy in force is stated under the list.
+  `action=disable`. Under the list: an app registers itself the first time
+  somebody points an MCP client at the door, nothing is created here; then
+  the policy in force.
 
 ## Configuration
 

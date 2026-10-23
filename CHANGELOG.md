@@ -44,6 +44,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   activity". The detail of a line loaded later opens without losing the lines
   already loaded, and `?cursor=` links still open the record at a position.
 
+### Changed
+
+- **The accounts without owner are the last region of Accounts**, for an
+  administrator, shown only when at least one account needs an owner. Settings
+  loses the "Accounts without owner" entry; `/admin/connections` redirects to
+  `/accounts#without-owner`, and the setup checklist still leads there when it
+  matters. ADR ownerless-accounts-live-on-the-accounts-page.
+- **The setup checklist no longer asks for a service nobody uses.** While no
+  OAuth client is declared, the "OAuth clients" step is absent instead of
+  reading "Gmail is not: nobody can connect…" for good; once one is declared,
+  the step lists it, done. The connect page of the service keeps saying what
+  it needs. ADR setup-checklist-lists-only-what-is-needed.
+- **Connected apps says how an app connects.** The page's one action, "Connect
+  an app", leads to a region with the management door's address, the Claude
+  Code command and what follows (sign-in, consent); Registered apps says that
+  apps register themselves and nothing is created there.
+
 ## [2.0.0-alpha.4] - 2026-10-23
 
 ### Added

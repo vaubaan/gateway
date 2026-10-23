@@ -6,6 +6,8 @@
  * Until the settings pages are redesigned the entries lead to the pages that
  * exist today (`/delegations`, `/admin/**`), under the words of the redesign:
  * no label is used for two things (the audit found "Connections" twice).
+ * The accounts without owner are not an entry: they are the last region of
+ * Accounts, for an administrator (ADR ownerless-accounts-live-on-the-accounts-page).
  */
 import type { SubNavGroup } from '@/components/ui';
 import { capitalize, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
@@ -15,7 +17,6 @@ export const ADMIN_PAGES = {
   signIn: '/admin/identity-provider',
   people: '/admin/users',
   teams: '/admin/groups',
-  ownerlessAccounts: '/admin/connections',
   telemetry: '/admin/telemetry',
   registeredApps: '/admin/oauth-clients',
   encryption: '/admin/encryption',
@@ -40,7 +41,6 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
         { label: 'Sign-in', href: ADMIN_PAGES.signIn },
         { label: capitalize(TERMS.user.many), href: ADMIN_PAGES.people },
         { label: capitalize(TERMS.group.many), href: ADMIN_PAGES.teams },
-        { label: 'Accounts without owner', href: ADMIN_PAGES.ownerlessAccounts },
         { label: 'Telemetry', href: ADMIN_PAGES.telemetry },
         { label: 'Registered apps', href: ADMIN_PAGES.registeredApps },
         { label: 'Encryption', href: ADMIN_PAGES.encryption },

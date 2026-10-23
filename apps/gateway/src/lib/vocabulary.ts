@@ -844,6 +844,7 @@ export const SETTINGS_ACTIONS = {
   approve: 'Approve',
   disable: 'Disable',
   revokeApp: 'Disconnect',
+  connectApp: 'Connect an app',
   turnOn: 'Turn telemetry on',
   turnOff: 'Turn telemetry off',
   testSignIn: 'Test the sign-in',

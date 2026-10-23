@@ -1160,15 +1160,18 @@ interpreted as markup.
   send it again, send a password reset, and reset a person's second
   factor — each asked first and audited); the page says
   that one person signing in through two providers is two people; teams (the
-  local ones are kept here); accounts without owner (name a new owner — the
-  administrator's only act on an account); registered apps (the OAuth
+  local ones are kept here); registered apps (the OAuth
   clients of the management door: approve, disable); telemetry; and **the
   instance's name**, on the setup page, which an administrator sets or
   clears (clearing it brings back the host). The OAuth client a service
   needs before anyone connects it (§4.3) is not a page of Administration:
   the administrator declares it on that service's connect page, the one
-  place to authorize a service (§7.2); the setup checklist names the
-  services whose client is missing and leads there. Acts that stop,
+  place to authorize a service (§7.2); the setup checklist lists a declared
+  client and says nothing of a service nobody asked for — the connect page
+  does, when somebody wants that service. The accounts without owner are
+  not a page of Administration either: an administrator finds them as the
+  last region of Accounts, when there are any, and names a new owner there
+  (the administrator's only act on an account). Acts that stop,
   remove or hand over something are asked first. The public URL, the retention and the
   other keys of §4.3 are set in the instance configuration and shown in the
   interface, not edited there — except the instance's name and the

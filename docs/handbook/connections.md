@@ -99,8 +99,10 @@ apps/gateway/src/app/(app)/accounts/
   [id]/share/give-access-dialog.tsx  the dialog (client)
   [id]/shares/route.ts               POST /accounts/<id>/shares            → root.shares.handlers.share
   [id]/shares/[shareId]/revoke/route.ts  POST /accounts/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
+apps/gateway/src/components/connections/
+  OwnerlessAccounts.tsx              the "Accounts without owner" region of /accounts, an administrator (handbook authority)
 apps/gateway/src/app/admin/(guarded)/connections/
-  page.tsx                           /admin/connections   "Accounts without owner" (handbook authority)
+  (no page: /admin/connections redirects to /accounts#without-owner, next.config.ts LEGACY_REDIRECTS)
   [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
 apps/gateway/src/app/admin/(guarded)/provider-apps/
   [provider]/route.ts                POST /admin/provider-apps/<provider>   → handlers.saveProviderApp (no page: the form is on the connect page)

@@ -134,7 +134,7 @@ external`), never prefetched.
 | `/accounts/<id>/share`, `POST /accounts/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                                        | `(app)/accounts/[id]/share/`, `shares/`, `transfer/`                                                                                           | [authority](authority.md)                                                                    |
 | `/admin/users`, `POST /admin/users/<id>/deactivate`, `…/<id>/reactivate`, `POST /admin/users/invitations`, `…/invitations/remove` | `admin/(guarded)/users/**`                                                                                                                     | [authentication](authentication.md)                                                          |
 | `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                                  | `admin/(guarded)/groups/**`                                                                                                                    | [authority](authority.md)                                                                    |
-| `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                                     | `admin/(guarded)/connections/**`                                                                                                               | [authority](authority.md)                                                                    |
+| `POST /admin/connections/<id>/reassign` (`/admin/connections` itself redirects to `/accounts#without-owner`, `LEGACY_REDIRECTS`)  | `admin/(guarded)/connections/[id]/reassign/`, `components/connections/OwnerlessAccounts.tsx`                                                   | [authority](authority.md)                                                                    |
 | `POST /accounts/connect/<provider>`, `GET /connections/callback/<provider>`                                                       | `(app)/accounts/connect/`, `(app)/connections/callback/`                                                                                       | [connections](connections.md)                                                                |
 | `POST /accounts/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                              | `(app)/accounts/[id]/**/route.ts`                                                                                                              | [connections](connections.md)                                                                |
 | `/missions`, `/missions/new`, `/missions/<id>`                                                                                    | `(app)/missions/page.tsx`, `(app)/missions/new/page.tsx`, `(app)/missions/[id]/page.tsx`                                                       | [missions](missions.md)                                                                      |
@@ -396,9 +396,11 @@ apps (`/settings/connected-apps`) — and, for an administrator
 (`isOperatorPrincipal(principal)`, `components/auth/principal.ts`),
 **Administration** — Setup (`/admin`), Sign-in (`/admin/identity-provider`),
 People (`/admin/users`), Teams
-(`/admin/groups`), Accounts without owner (`/admin/connections`), Telemetry,
-Registered apps (`/admin/oauth-clients`), in the order a gateway is set up.
-No label is used for two things. `SettingsFrame({ principal, children })`
+(`/admin/groups`), Telemetry, Registered apps (`/admin/oauth-clients`), in the
+order a gateway is set up. No label is used for two things. The accounts
+without owner are not an entry: they are the last region of Accounts, for an
+administrator (ADR
+[ownerless-accounts-live-on-the-accounts-page](../decisions/ownerless-accounts-live-on-the-accounts-page.md)). `SettingsFrame({ principal, children })`
 renders it beside its children (`SubNavFrame` + `SubNav`); the
 `admin/(guarded)` layout (through `AdminShell`), the layout of connected
 apps and the Settings page use it. Each page under it opens with a
@@ -406,8 +408,7 @@ apps and the Settings page use it. Each page under it opens with a
 `lib/vocabulary.ts`) and shares `components/settings/settings.module.css`;
 what each one shows is in the handbook of its feature
 ([authentication](authentication.md): Setup, Sign-in, People;
-[authority](authority.md): Teams,
-Accounts without owner; [telemetry](telemetry.md);
+[authority](authority.md): Teams; [telemetry](telemetry.md);
 [management-door](management-door.md): Connected apps, Registered apps).
 
 `/settings` (`(app)/settings/page.tsx`, `requirePrincipal()`) holds the theme
@@ -682,7 +683,7 @@ view it already loads. A page never spells the condition again.
 | a revoked or unowned connection takes no owner act (spec §2.3) | `ownerActRefusal(connection)` (`connections/service.ts`)     | `ShareContext.unshareable` (the "Give access" dialog prints `SHARE_ERROR_MESSAGES[unshareable]`; the account page hides "Give access", the actions of each access row and "Reconnect") |
 | the same, for a transfer                                       | `ConnectionService.transferTargets` returns no group         | the transfer of ownership is offered when a target is listed                                                                                                                           |
 | the gates of a revoked or orphaned mission are not edited      | `gateEditBlockedBy(mission)` (`missions/mission-service.ts`) | `MissionDetail.gates_editable`                                                                                                                                                         |
-| a group without member is not named owner                      | `ConnectionService.reassignTargets()`                        | the team list of Settings → Accounts without owner                                                                                                                                     |
+| a group without member is not named owner                      | `ConnectionService.reassignTargets()`                        | the team list of the "Accounts without owner" region of Accounts                                                                                                                       |
 
 `share`, `transfer`, the reconnection, `setGate` and `reassign` refuse on the
 same functions, and `tests/integration/authority/rules-read-by-pages.test.ts`
