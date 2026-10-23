@@ -83,16 +83,18 @@ export const SAMPLES: ToolSamples = {
   [TOOL.listBoards]: [{ args: {} }, { args: {}, resources: [workshop, retro] }],
   [TOOL.boardCreate]: [{ args: { name: 'Retro 2026-11', description: 'Sprint retro' } }],
   [TOOL.canvasSearch]: [
-    { args: { board: BOARD, query: 'pricing', result_mode: 'overview' } },
-    { args: { board: OTHER_BOARD, query: 'x' }, expectDenied: true },
+    { args: { board: BOARD, result_mode: 'matches', patterns: ['pricing'] } },
+    { args: { board: OTHER_BOARD, result_mode: 'overview' }, expectDenied: true },
   ],
-  [TOOL.canvasReadAsSvg]: [{ args: { board: BOARD_URL, item_id: ITEM } }],
+  [TOOL.canvasReadAsSvg]: [{ args: { board: BOARD_URL, item_id: ITEM, widget_ids: [ITEM] } }],
   [TOOL.canvasCreateFromSvg]: [{ args: { board: BOARD, svg } }],
   [TOOL.canvasUpdateFromSvg]: [{ args: { board: BOARD, item_id: ITEM, svg } }],
   [TOOL.canvasComposerSkill]: [{ args: {} }],
-  [TOOL.canvasFormatSkill]: [{ args: { format: 'flowchart' } }],
-  [TOOL.commentListComments]: [{ args: { board: BOARD } }],
-  [TOOL.commentCreate]: [{ args: { board: BOARD, item_id: ITEM, content: 'Looks good' } }],
+  [TOOL.canvasFormatSkill]: [{ args: { format_name: 'diagramming', notation: 'flowchart' } }],
+  [TOOL.commentListComments]: [{ args: { board: BOARD, resolved: false, limit: 20 } }],
+  [TOOL.commentCreate]: [
+    { args: { board: BOARD, item_id: ITEM, content: 'Looks good', x: 0, y: 0 } },
+  ],
   [TOOL.commentReply]: [{ args: { board: BOARD, comment_id: COMMENT, content: 'Agreed' } }],
   [TOOL.commentResolve]: [{ args: { board: BOARD, comment_id: COMMENT, resolved: true } }],
   [TOOL.imageGetData]: [{ args: { board: BOARD, item_id: ITEM } }],
@@ -101,14 +103,58 @@ export const SAMPLES: ToolSamples = {
     { args: { board: BOARD, image_url: 'https://example.com/logo.png', title: 'Logo' } },
   ],
   [TOOL.prototypeRead]: [{ args: { board: BOARD } }],
-  [TOOL.prototypeCreate]: [{ args: { board: BOARD, screens: [{ html: '<p>Home</p>' }] } }],
+  [TOOL.prototypeCreate]: [
+    { args: { board: BOARD, html_contents: ['<p>Home</p>'], device_type: 'mobile' } },
+  ],
   [TOOL.tableCreate]: [
-    { args: { board: BOARD, title: 'Backlog', columns: [{ name: 'Task', type: 'text' }] } },
+    {
+      args: {
+        board: BOARD,
+        table_title: 'Backlog',
+        columns: [{ column_type: 'text', column_title: 'Task' }],
+      },
+    },
   ],
-  [TOOL.tableListRows]: [{ args: { board: BOARD, item_id: ITEM, filter: { Status: 'Open' } } }],
+  [TOOL.tableListRows]: [
+    { args: { board: BOARD, item_id: ITEM, filter_by: '{"Status": ["Open"]}', limit: 50 } },
+  ],
   [TOOL.tableSyncRows]: [
-    { args: { board: BOARD, item_id: ITEM, rows: [{ Task: 'Ship' }], key_column: 'Task' } },
+    {
+      args: {
+        board: BOARD,
+        item_id: ITEM,
+        rows: [{ cells: [{ columnTitle: 'Task', value: 'Ship' }] }],
+      },
+    },
   ],
-  [TOOL.tableUpdateHistory]: [{ args: { board: BOARD, item_id: ITEM } }],
-  [TOOL.tableUpdateView]: [{ args: { board: BOARD, item_id: ITEM, view: { sort: 'Task' } } }],
+  [TOOL.tableUpdateHistory]: [{ args: { board: BOARD, item_id: ITEM, row_id: '3' } }],
+  [TOOL.tableUpdateView]: [
+    { args: { board: BOARD, item_id: ITEM, layout: 'kanban', group_by_column: 'Status' } },
+  ],
+  [TOOL.boardGetSpace]: [{ args: { board: BOARD } }],
+  [TOOL.boardUpdateMetadata]: [{ args: { board: BOARD, title: 'Workshop — final' } }],
+  [TOOL.contentItemListRoles]: [{ args: { board: BOARD, limit: 50 } }],
+  [TOOL.boardShare]: [
+    {
+      args: {
+        board: BOARD,
+        subject_id: 'ada@example.com',
+        subject_type: 'user',
+        role: 'viewer',
+      },
+    },
+  ],
+  [TOOL.boardRoleUpdate]: [
+    {
+      args: {
+        board: BOARD,
+        subject_id: '3074457350000000000',
+        subject_type: 'user',
+        role: 'editor',
+      },
+    },
+  ],
+  [TOOL.createBoardcast]: [
+    { args: { board: BOARD, screens: [{ x: 0, y: 0, text: 'Here is the plan.' }] } },
+  ],
 };

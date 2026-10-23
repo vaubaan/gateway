@@ -106,426 +106,426 @@ this table says where each requirement lives, and what is not written yet.
 
 ## Coverage
 
-| Suite                                                                                                                                                                     |     Tests |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
-| `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                                                                                |         8 |
-| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                    |         9 |
-| `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                                                                                  |         2 |
-| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                                                                                |        12 |
-| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                                                                              |        46 |
-| `apps/gateway/src/components/auth/principal.test.ts`                                                                                                                      |         2 |
-| `apps/gateway/src/components/auth/setup-link.test.ts`                                                                                                                     |         2 |
-| `apps/gateway/src/components/connections/shape.test.ts`                                                                                                                   |         5 |
-| `apps/gateway/src/lib/dates.test.ts`                                                                                                                                      |         8 |
-| `apps/gateway/src/server/audit/filters.test.ts`                                                                                                                           |        24 |
-| `apps/gateway/src/server/auth/administrators.test.ts`                                                                                                                     |         8 |
-| `apps/gateway/src/server/auth/restored-admin-rule.test.ts`                                                                                                                |         1 |
-| `apps/gateway/src/server/auth/admission.test.ts`                                                                                                                          |         6 |
-| `apps/gateway/src/server/auth/bootstrap.test.ts`                                                                                                                          |         3 |
-| `apps/gateway/src/server/auth/claims.test.ts`                                                                                                                             |        22 |
-| `apps/gateway/src/server/auth/github.test.ts`                                                                                                                             |         9 |
-| `apps/gateway/src/server/auth/guard.test.ts`                                                                                                                              |        10 |
-| `apps/gateway/src/server/auth/handlers.test.ts`                                                                                                                           |         9 |
-| `apps/gateway/src/server/auth/idp-settings.test.ts`                                                                                                                       |         8 |
-| `apps/gateway/src/server/auth/origin.test.ts`                                                                                                                             |         5 |
-| `apps/gateway/src/server/auth/relying-party.test.ts`                                                                                                                      |         5 |
-| `apps/gateway/src/server/auth/session-service.test.ts`                                                                                                                    |        12 |
-| `apps/gateway/src/server/auth/sign-in-providers.test.ts`                                                                                                                  |        10 |
-| `apps/gateway/src/server/auth/verified-email.test.ts`                                                                                                                     |         5 |
-| `apps/gateway/src/server/authority/authority-service.test.ts`                                                                                                             |        20 |
-| `apps/gateway/src/server/authority/mission-grounds.test.ts`                                                                                                               |        34 |
-| `apps/gateway/src/server/backup/carry-sign-in.test.ts`                                                                                                                    |         3 |
-| `apps/gateway/src/server/backup/cli.test.ts`                                                                                                                              |         3 |
-| `apps/gateway/src/server/compose/boot-config.test.ts`                                                                                                                     |        10 |
-| `apps/gateway/src/server/compose/compose.test.ts`                                                                                                                         |        17 |
-| `apps/gateway/src/server/compose/restored-admin-rule.test.ts`                                                                                                             |         1 |
-| `apps/gateway/src/server/compose/sealed-keys-check.test.ts`                                                                                                               |         2 |
-| `apps/gateway/src/server/compose/self-resources-check.test.ts`                                                                                                            |         2 |
-| `apps/gateway/src/server/config/duration.test.ts`                                                                                                                         |         2 |
-| `apps/gateway/src/server/config/instance-name.test.ts`                                                                                                                    |        11 |
-| `apps/gateway/src/server/config/keys-doc.test.ts`                                                                                                                         |        53 |
-| `apps/gateway/src/server/config/load.property.test.ts`                                                                                                                    |         7 |
-| `apps/gateway/src/server/config/load.test.ts`                                                                                                                             |        62 |
-| `apps/gateway/src/server/config/master-key-absent.test.ts`                                                                                                                |        11 |
-| `apps/gateway/src/server/config/secret-env.test.ts`                                                                                                                       |         5 |
-| `apps/gateway/src/server/config/sign-in.test.ts`                                                                                                                          |        19 |
-| `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                                                                                           |        15 |
-| `apps/gateway/src/server/connections/credentials.test.ts`                                                                                                                 |        15 |
-| `apps/gateway/src/server/connections/discovery-after-call.test.ts`                                                                                                        |        11 |
-| `apps/gateway/src/server/connections/failure-reason.test.ts`                                                                                                              |        14 |
-| `apps/gateway/src/server/connections/input.test.ts`                                                                                                                       |        25 |
-| `apps/gateway/src/server/connections/mapping.test.ts`                                                                                                                     |         3 |
-| `apps/gateway/src/server/connections/oauth2.test.ts`                                                                                                                      |        28 |
-| `apps/gateway/src/server/connections/oauth2-clients.test.ts`                                                                                                              |        14 |
-| `apps/gateway/src/server/connections/pending.test.ts`                                                                                                                     |         7 |
-| `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                                                         |        16 |
-| `apps/gateway/src/server/connections/service.test.ts`                                                                                                                     |        24 |
-| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                                                                                           |         8 |
-| `apps/gateway/src/server/connections/token-connections.test.ts`                                                                                                           |         8 |
-| `apps/gateway/src/server/crypto/aead.test.ts`                                                                                                                             |        12 |
-| `apps/gateway/src/server/crypto/master-key-file.test.ts`                                                                                                                  |         7 |
-| `apps/gateway/src/server/crypto/password.test.ts`                                                                                                                         |         4 |
-| `apps/gateway/src/server/crypto/totp.test.ts`                                                                                                                             |         5 |
-| `apps/gateway/src/server/execution/classify-connection.test.ts`                                                                                                           |         4 |
-| `apps/gateway/src/server/execution/execution.test.ts`                                                                                                                     |        23 |
-| `apps/gateway/src/server/execution/unbound-tools.test.ts`                                                                                                                 |         4 |
-| `apps/gateway/src/server/groups/service.test.ts`                                                                                                                          |        15 |
-| `apps/gateway/src/server/http/client-ip-edge.test.ts`                                                                                                                     |         5 |
-| `apps/gateway/src/server/http/client-ip.test.ts`                                                                                                                          |        11 |
-| `apps/gateway/src/server/http/document.test.ts`                                                                                                                           |         6 |
-| `apps/gateway/src/server/http/doors.property.test.ts`                                                                                                                     |         7 |
-| `apps/gateway/src/server/http/healthz.test.ts`                                                                                                                            |         4 |
-| `apps/gateway/src/server/http/security-headers.test.ts`                                                                                                                   |         6 |
-| `apps/gateway/src/server/import-v4/bundle.test.ts`                                                                                                                        |        26 |
-| `apps/gateway/src/server/import-v4/risk-translation.test.ts`                                                                                                              |        21 |
-| `apps/gateway/src/server/instance/settings.test.ts`                                                                                                                       |         6 |
-| `apps/gateway/src/server/logging/console-guard.test.ts`                                                                                                                   |         3 |
-| `apps/gateway/src/server/logging/logging.test.ts`                                                                                                                         |         6 |
-| `apps/gateway/src/server/mail/index.test.ts`                                                                                                                              |         2 |
-| `apps/gateway/src/server/management/door.test.ts`                                                                                                                         |         4 |
-| `apps/gateway/src/server/management/hard-deny.test.ts`                                                                                                                    |        16 |
-| `apps/gateway/src/server/management/output-schemas.test.ts`                                                                                                               |        10 |
-| `apps/gateway/src/server/management/tools.test.ts`                                                                                                                        |        35 |
-| `apps/gateway/src/server/missions/assumed-envs.test.ts`                                                                                                                   |         2 |
-| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                                                                                  |        22 |
-| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                                                                                   |        21 |
-| `apps/gateway/src/server/missions/everything-i-hold.test.ts`                                                                                                              |        16 |
-| `apps/gateway/src/server/missions/git-view.test.ts`                                                                                                                       |         3 |
-| `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                                                                                  |         4 |
-| `apps/gateway/src/server/missions/preview.test.ts`                                                                                                                        |        50 |
-| `apps/gateway/src/server/missions/short-id.test.ts`                                                                                                                       |         2 |
-| `apps/gateway/src/server/missions/summary.test.ts`                                                                                                                        |         8 |
-| `apps/gateway/src/server/missions/token-name.test.ts`                                                                                                                     |        23 |
-| `apps/gateway/src/server/missions/token.test.ts`                                                                                                                          |        10 |
-| `apps/gateway/src/server/now/derive.test.ts`                                                                                                                              |         5 |
-| `apps/gateway/src/server/oauth-as/authorization.test.ts`                                                                                                                  |        41 |
-| `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`                                                                                                       |        91 |
-| `apps/gateway/src/server/oauth-as/clients.test.ts`                                                                                                                        |        40 |
-| `apps/gateway/src/server/oauth-as/delegation-lifetime.test.ts`                                                                                                            |         5 |
-| `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                                                                                    |        28 |
-| `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                                                                                      |        15 |
-| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                                                                                          |        13 |
-| `apps/gateway/src/server/oauth-as/pending-registrations.test.ts`                                                                                                          |         2 |
-| `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                                                                                           |        13 |
-| `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                                                                                   |        52 |
-| `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                                                                                        |         6 |
-| `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                                                                                  |        66 |
-| `apps/gateway/src/server/provider-apps/service.test.ts`                                                                                                                   |        12 |
-| `apps/gateway/src/server/providers/planes.test.ts`                                                                                                                        |         9 |
-| `apps/gateway/src/server/providers/reference.test.ts`                                                                                                                     |        20 |
-| `apps/gateway/src/server/requests/approval.test.ts`                                                                                                                       |        33 |
-| `apps/gateway/src/server/requests/asker.test.ts`                                                                                                                          |         4 |
-| `apps/gateway/src/server/requests/claim.test.ts`                                                                                                                          |        38 |
-| `apps/gateway/src/server/requests/client-ip.test.ts`                                                                                                                      |         2 |
-| `apps/gateway/src/server/requests/events.test.ts`                                                                                                                         |         7 |
-| `apps/gateway/src/server/requests/provider-pages.test.ts`                                                                                                                 |         2 |
-| `apps/gateway/src/server/requests/state.test.ts`                                                                                                                          |         9 |
-| `apps/gateway/src/server/requests/sweeper.test.ts`                                                                                                                        |         4 |
-| `apps/gateway/src/server/reseal/cli.test.ts`                                                                                                                              |         8 |
-| `apps/gateway/src/server/restore/cli.test.ts`                                                                                                                             |         7 |
-| `apps/gateway/src/server/shares/errors.test.ts`                                                                                                                           |         4 |
-| `apps/gateway/src/server/shares/restriction.test.ts`                                                                                                                      |         8 |
-| `apps/gateway/src/server/shares/service.test.ts`                                                                                                                          |        24 |
-| `apps/gateway/src/server/store/membership.test.ts`                                                                                                                        |        12 |
-| `apps/gateway/src/server/store/mission-reach.test.ts`                                                                                                                     |         3 |
-| `apps/gateway/src/server/store/repositories/sealed-blobs.test.ts`                                                                                                         |         7 |
-| `apps/gateway/src/server/store/resource-env.test.ts`                                                                                                                      |         5 |
-| `apps/gateway/src/server/telemetry/outcome.test.ts`                                                                                                                       |        30 |
-| `apps/gateway/src/server/telemetry/settings.test.ts`                                                                                                                      |         7 |
-| `apps/gateway/src/server/telemetry/stats.test.ts`                                                                                                                         |        11 |
-| `apps/gateway/src/server/telemetry/usage.test.ts`                                                                                                                         |         6 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                                                                                            |        73 |
-| `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                                                                                |        35 |
-| `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                                                                                         |         3 |
-| `apps/gateway/tests/integration/audit/mission-session.test.ts`                                                                                                            |        21 |
-| `apps/gateway/tests/integration/audit/retention.test.ts`                                                                                                                  |        10 |
-| `apps/gateway/tests/integration/audit/session-history-retention.test.ts`                                                                                                  |        11 |
-| `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                                                                                             |        12 |
-| `apps/gateway/tests/integration/auth/local-accounts.test.ts`                                                                                                              |        17 |
-| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                                                                                  |        22 |
-| `apps/gateway/tests/integration/auth/sign-in-limits.test.ts`                                                                                                              |         4 |
-| `apps/gateway/tests/integration/auth/sign-in-providers.test.ts`                                                                                                           |        18 |
-| `apps/gateway/tests/integration/auth/sign-out-everywhere.test.ts`                                                                                                         |         3 |
-| `apps/gateway/tests/integration/authority/close-orphaned.test.ts`                                                                                                         |        11 |
-| `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                                                                                     |         1 |
-| `apps/gateway/tests/integration/authority/handlers.test.ts`                                                                                                               |        11 |
-| `apps/gateway/tests/integration/authority/missions-on-connection.test.ts`                                                                                                 |         8 |
-| `apps/gateway/tests/integration/authority/ownership.test.ts`                                                                                                              |        13 |
-| `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                                                                                    |         7 |
-| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                                                                                       |        19 |
-| `apps/gateway/tests/integration/authority/share-restores.test.ts`                                                                                                         |        11 |
-| `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                                                                                      |         6 |
-| `apps/gateway/tests/integration/budget/session-service.test.ts`                                                                                                           |        20 |
-| `apps/gateway/tests/integration/compose/boot.test.ts`                                                                                                                     |         4 |
-| `apps/gateway/tests/integration/compose/master-key-generation.test.ts`                                                                                                    |         5 |
-| `apps/gateway/tests/integration/compose/setup-mode-restore.test.ts`                                                                                                       |         8 |
-| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                                                                                         |         5 |
-| `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                                                                                  |         5 |
-| `apps/gateway/tests/integration/connections/repository-status.test.ts`                                                                                                    |         6 |
-| `apps/gateway/tests/integration/connections/token-connect.test.ts`                                                                                                        |         1 |
-| `apps/gateway/tests/integration/demo/build-stamp.test.ts`                                                                                                                 |        10 |
-| `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                                                                                                 |        13 |
-| `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                                                                                  |        17 |
-| `apps/gateway/tests/integration/demo/demo-vercel.test.ts`                                                                                                                 |         3 |
-| `apps/gateway/tests/integration/execution/agent-label.test.ts`                                                                                                            |         6 |
-| `apps/gateway/tests/integration/execution/approval-door.test.ts`                                                                                                          |         8 |
-| `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                                                                                      |         4 |
-| `apps/gateway/tests/integration/execution/discovery-after-call.test.ts`                                                                                                   |         8 |
-| `apps/gateway/tests/integration/execution/door-http.test.ts`                                                                                                              |        22 |
-| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                                                                               |        26 |
-| `apps/gateway/tests/integration/execution/self-resources.test.ts`                                                                                                         |         5 |
-| `apps/gateway/tests/integration/execution/streaming.test.ts`                                                                                                              |        13 |
-| `apps/gateway/tests/integration/execution/team-door.test.ts`                                                                                                              |        11 |
-| `apps/gateway/tests/integration/git/git-remote-base-merge.test.ts`                                                                                                        |         1 |
-| `apps/gateway/tests/integration/git/git-remote-base.test.ts`                                                                                                              |         5 |
-| `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                                                                                            |        10 |
-| `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                                                                                            |        13 |
-| `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                                                                                          |        37 |
-| `apps/gateway/tests/integration/git/git-remote-workflows.test.ts`                                                                                                         |         8 |
-| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                                                                                   |        17 |
-| `apps/gateway/tests/integration/import-v4/import-v4.test.ts`                                                                                                              |        15 |
-| `apps/gateway/tests/integration/instance/instance-name.test.ts`                                                                                                           |         7 |
-| `apps/gateway/tests/integration/instance/master-key-handover.test.ts`                                                                                                     |         8 |
-| `apps/gateway/tests/integration/management/hard-deny.test.ts`                                                                                                             |         6 |
-| `apps/gateway/tests/integration/management/management-door.test.ts`                                                                                                       |        37 |
-| `apps/gateway/tests/integration/management/output-schemas.test.ts`                                                                                                        |         9 |
-| `apps/gateway/tests/integration/missions/gate.test.ts`                                                                                                                    |        20 |
-| `apps/gateway/tests/integration/missions/limits.test.ts`                                                                                                                  |        21 |
-| `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                                                                                        |         8 |
-| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                                                                                       |        36 |
-| `apps/gateway/tests/integration/missions/permissions.test.ts`                                                                                                             |        20 |
-| `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                                                                                       |         6 |
-| `apps/gateway/tests/integration/missions/team.test.ts`                                                                                                                    |        34 |
-| `apps/gateway/tests/integration/now/now.test.ts`                                                                                                                          |        12 |
-| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                                                                                   |        19 |
-| `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                                                                                            |        66 |
-| `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                                                                                         |         4 |
-| `apps/gateway/tests/integration/oauth-as/routes.test.ts`                                                                                                                  |        16 |
-| `apps/gateway/tests/integration/requests/approval-access.test.ts`                                                                                                         |        29 |
-| `apps/gateway/tests/integration/requests/approval.test.ts`                                                                                                                |        51 |
-| `apps/gateway/tests/integration/requests/request-handlers.test.ts`                                                                                                        |        14 |
-| `apps/gateway/tests/integration/requests/request-service.test.ts`                                                                                                         |        36 |
-| `apps/gateway/tests/integration/restore/restore.test.ts`                                                                                                                  |        22 |
-| `apps/gateway/tests/integration/standalone-import-v4.test.ts`                                                                                                             |         2 |
-| `apps/gateway/tests/integration/standalone-native-addons.test.ts`                                                                                                         |         3 |
-| `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`                                                                                                       |         3 |
-| `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                                                                                         |        20 |
-| `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                                                                                       |        10 |
-| `apps/gateway/tests/integration/store/audit.test.ts`                                                                                                                      |        15 |
-| `apps/gateway/tests/integration/store/config.test.ts`                                                                                                                     |         7 |
-| `apps/gateway/tests/integration/store/connections-shares.test.ts`                                                                                                         |        14 |
-| `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                                                                               |        14 |
-| `apps/gateway/tests/integration/store/delegations.test.ts`                                                                                                                |        20 |
-| `apps/gateway/tests/integration/store/identities.test.ts`                                                                                                                 |        11 |
-| `apps/gateway/tests/integration/store/missions.test.ts`                                                                                                                   |        22 |
-| `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                                                                                              |        16 |
-| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                                                                                      |        13 |
-| `apps/gateway/tests/integration/store/permission-migration.test.ts`                                                                                                       |         1 |
-| `apps/gateway/tests/integration/store/request-covers-the-call-migration.test.ts`                                                                                          |         1 |
-| `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                                                                                         |        14 |
-| `apps/gateway/tests/integration/store/schema.test.ts`                                                                                                                     |         6 |
-| `apps/gateway/tests/integration/store/sessions.test.ts`                                                                                                                   |        11 |
-| `apps/gateway/tests/integration/store/sign-in-providers-store.test.ts`                                                                                                    |         4 |
-| `apps/gateway/tests/integration/store/token-holders.test.ts`                                                                                                              |         4 |
-| `apps/gateway/tests/integration/store/users-issuer.test.ts`                                                                                                               |        14 |
-| `apps/gateway/tests/integration/store/web-sessions.test.ts`                                                                                                               |         8 |
-| `apps/gateway/tests/integration/store/whole-connection-migration.test.ts`                                                                                                 |         1 |
-| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                                                                                              |        22 |
-| `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                                                                                         |        90 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                                                                                           |       161 |
-| `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                                                                                       |         3 |
-| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                                                                                      |        33 |
-| `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                                                                                       |        76 |
-| `apps/gateway/tests/unit/app/field.test.tsx`                                                                                                                              |         8 |
-| `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                                                                                    |        30 |
-| `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                                                                                |        23 |
-| `apps/gateway/tests/unit/components/success-tone.test.ts`                                                                                                                 |         2 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                                                                                              |       504 |
-| `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                                                                                    |        20 |
-| `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                                                                                     |         9 |
-| `apps/gateway/tests/unit/server/budget/live-policy.test.ts`                                                                                                               |         3 |
-| `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                                                                                             |         7 |
-| `apps/gateway/tests/unit/server/budget/period.test.ts`                                                                                                                    |         8 |
-| `apps/gateway/tests/unit/server/config/self-resources.test.ts`                                                                                                            |         4 |
-| `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                                                                                 |         3 |
-| `apps/gateway/tests/unit/server/git/command-list.test.ts`                                                                                                                 |         3 |
-| `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                                                                                                        |         8 |
-| `apps/gateway/tests/unit/server/requests/masked-arguments.test.ts`                                                                                                        |         4 |
-| `apps/gateway/tests/unit/server/store/db.test.ts`                                                                                                                         |         2 |
-| `apps/gateway/tests/unit/server/store/ids.test.ts`                                                                                                                        |         6 |
-| `apps/gateway/tests/unit/server/store/migrate.test.ts`                                                                                                                    |         9 |
-| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`                                                                                                    |        27 |
-| `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                                                                                           |         5 |
-| `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                                                                                        |        16 |
-| `apps/gateway/tests/unit/structural/deployed-commit.test.ts`                                                                                                              |        15 |
-| `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                                                                                     |        10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                                                                                        |       115 |
-| `apps/gateway/tests/unit/structural/module-mocks-isolated.test.ts`                                                                                                        |         2 |
-| `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                                                                                         |         3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                                                                                          |       560 |
-| `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                                                                                       |        10 |
-| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                                                                                      |        33 |
-| `apps/gateway/tests/unit/structural/resource-creating-tools.test.ts`                                                                                                      |        15 |
-| `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                                                                                              |        71 |
-| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                                                                                   |        15 |
-| `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                                                                                       |         3 |
-| `apps/gateway/tests/unit/structural/upload-ignore-files.test.ts`                                                                                                          |         3 |
-| `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                                                                                        |         4 |
-| `apps/website/tests/unit/collector/reports.test.ts`                                                                                                                       |         6 |
-| `apps/website/tests/unit/collector/stats-and-config.test.ts`                                                                                                              |        12 |
-| `apps/website/tests/unit/site/plugins.test.ts`                                                                                                                            |         4 |
-| `apps/website/tests/unit/site/site.test.ts`                                                                                                                               |        10 |
-| `apps/website/tests/unit/site/sources-agree.test.ts`                                                                                                                      |         6 |
-| `apps/website/tests/unit/site/units.test.ts`                                                                                                                              |        15 |
-| `packages/gateway-core/tests/unit/audit.test.ts`                                                                                                                          |         2 |
-| `packages/gateway-core/tests/unit/authenticate.test.ts`                                                                                                                   |        11 |
-| `packages/gateway-core/tests/unit/cache.test.ts`                                                                                                                          |         7 |
-| `packages/gateway-core/tests/unit/errors.test.ts`                                                                                                                         |        34 |
-| `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                                                                                    |        12 |
-| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                                                                                       |        39 |
-| `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                                                                                   |         9 |
-| `packages/gateway-core/tests/unit/token-holder.test.ts`                                                                                                                   |         3 |
-| `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                                                                                        |        10 |
-| `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                                                                                   |        31 |
-| `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                                                                                     |         4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                                                                                    |        34 |
-| `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                                                                                           |         8 |
-| `packages/plugin-sdk/tests/unit/git-pack.test.ts`                                                                                                                         |         9 |
-| `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                                                                                |         4 |
-| `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                                                                                         |        32 |
-| `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                                                                                  |         9 |
-| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                                                                                         |        11 |
-| `packages/plugin-sdk/tests/unit/slices.test.ts`                                                                                                                           |        21 |
-| `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                                                                                        |         9 |
-| `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                                                                                      |        14 |
-| `packages/plugin-sdk/tests/unit/token-guide.test.ts`                                                                                                                      |         4 |
-| `packages/policy-engine/tests/unit/budget.test.ts`                                                                                                                        |        25 |
-| `packages/policy-engine/tests/unit/qualify.test.ts`                                                                                                                       |        33 |
-| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`                                                                                                                |        20 |
-| `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                                                                                   |         9 |
-| `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                                                                                  |        33 |
-| `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                                                                                     |        23 |
-| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                                                                                 |        35 |
-| `packages/shared/src/api-key.test.ts`                                                                                                                                     |        12 |
-| `packages/shared/src/data-model.test.ts`                                                                                                                                  |         4 |
-| `packages/shared/src/mcp.test.ts`                                                                                                                                         |        10 |
-| `packages/shared/src/risk-id.test.ts`                                                                                                                                     |        20 |
-| `packages/shared/src/session-events.test.ts`                                                                                                                              |        30 |
-| `packages/shared/src/wildcard.test.ts`                                                                                                                                    |        18 |
-| `packages/telemetry/src/client.test.ts`                                                                                                                                   |        24 |
-| `packages/telemetry/src/queue.test.ts`                                                                                                                                    |        12 |
-| `packages/telemetry/src/report.test.ts`                                                                                                                                   |        26 |
-| `packages/telemetry/src/usage.test.ts`                                                                                                                                    |        24 |
-| `packages/telemetry/src/wire.test.ts`                                                                                                                                     |         9 |
-| `plugins/_template/tests/unit/plugin.test.ts`                                                                                                                             |        26 |
-| `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                                                                                      |        33 |
-| `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                                                                                    |         9 |
-| `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                                                                                   |        59 |
-| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                                                                                        |        51 |
-| `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                                                                                  |        38 |
-| `plugins/context7/tests/unit/classify.test.ts`                                                                                                                            |        14 |
-| `plugins/context7/tests/unit/data-model.test.ts`                                                                                                                          |         2 |
-| `plugins/context7/tests/unit/execute.test.ts`                                                                                                                             |        25 |
-| `plugins/context7/tests/unit/plugin.test.ts`                                                                                                                              |        12 |
-| `plugins/context7/tests/unit/risk-catalog.test.ts`                                                                                                                        |         5 |
-| `plugins/fly/tests/unit/classify.test.ts`                                                                                                                                 |        34 |
-| `plugins/fly/tests/unit/execute.test.ts`                                                                                                                                  |        32 |
-| `plugins/fly/tests/unit/identifiers.test.ts`                                                                                                                              |         5 |
-| `plugins/fly/tests/unit/plugin.test.ts`                                                                                                                                   |         8 |
-| `plugins/fly/tests/unit/risk-catalog.test.ts`                                                                                                                             |         6 |
-| `plugins/github/tests/unit/classify.test.ts`                                                                                                                              |        64 |
-| `plugins/github/tests/unit/credential.test.ts`                                                                                                                            |         9 |
-| `plugins/github/tests/unit/data-model.test.ts`                                                                                                                            |         1 |
-| `plugins/github/tests/unit/execute.test.ts`                                                                                                                               |        15 |
-| `plugins/github/tests/unit/git-inspect.test.ts`                                                                                                                           |        19 |
-| `plugins/github/tests/unit/git-moves.test.ts`                                                                                                                             |        11 |
-| `plugins/github/tests/unit/injection.test.ts`                                                                                                                             |       403 |
-| `plugins/github/tests/unit/job-logs.test.ts`                                                                                                                              |        22 |
-| `plugins/github/tests/unit/plugin.test.ts`                                                                                                                                |        15 |
-| `plugins/github/tests/unit/risk-catalog.test.ts`                                                                                                                          |        76 |
-| `plugins/gmail/tests/unit/classify.test.ts`                                                                                                                               |       108 |
-| `plugins/gmail/tests/unit/data-model.test.ts`                                                                                                                             |         5 |
-| `plugins/gmail/tests/unit/injection.test.ts`                                                                                                                              |       190 |
-| `plugins/gmail/tests/unit/plugin.test.ts`                                                                                                                                 |        27 |
-| `plugins/gmail/tests/unit/q-parser.test.ts`                                                                                                                               |        32 |
-| `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                           |        45 |
-| `plugins/miro/tests/unit/classify.test.ts`                                                                                                                                |        13 |
-| `plugins/miro/tests/unit/execute.test.ts`                                                                                                                                 |        11 |
-| `plugins/miro/tests/unit/identifiers.test.ts`                                                                                                                             |         6 |
-| `plugins/miro/tests/unit/plugin.test.ts`                                                                                                                                  |        16 |
-| `plugins/miro/tests/unit/risk-catalog.test.ts`                                                                                                                            |        10 |
-| `plugins/notion/tests/unit/ancestry.test.ts`                                                                                                                              |        20 |
-| `plugins/notion/tests/unit/boundaries.test.ts`                                                                                                                            |        34 |
-| `plugins/notion/tests/unit/classify.test.ts`                                                                                                                              |        21 |
-| `plugins/notion/tests/unit/data-model.test.ts`                                                                                                                            |         3 |
-| `plugins/notion/tests/unit/discovery.test.ts`                                                                                                                             |         9 |
-| `plugins/notion/tests/unit/execute.test.ts`                                                                                                                               |        18 |
-| `plugins/notion/tests/unit/identifiers.test.ts`                                                                                                                           |        26 |
-| `plugins/notion/tests/unit/plugin.test.ts`                                                                                                                                |         8 |
-| `plugins/notion/tests/unit/risk-catalog.test.ts`                                                                                                                          |         5 |
-| `plugins/railway/tests/unit/classify.test.ts`                                                                                                                             |        22 |
-| `plugins/railway/tests/unit/credential.test.ts`                                                                                                                           |        14 |
-| `plugins/railway/tests/unit/data-model.test.ts`                                                                                                                           |         1 |
-| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                                                                                 |       294 |
-| `plugins/railway/tests/unit/plugin.test.ts`                                                                                                                               |        31 |
-| `plugins/railway/tests/unit/policy.test.ts`                                                                                                                               |        39 |
-| `plugins/railway/tests/unit/risk-catalog.test.ts`                                                                                                                         |        19 |
-| `plugins/resend/tests/unit/addresses.test.ts`                                                                                                                             |        13 |
-| `plugins/resend/tests/unit/classify.test.ts`                                                                                                                              |        64 |
-| `plugins/resend/tests/unit/data-model.test.ts`                                                                                                                            |         6 |
-| `plugins/resend/tests/unit/identifiers.test.ts`                                                                                                                           |        58 |
-| `plugins/resend/tests/unit/mission-evaluation.test.ts`                                                                                                                    |        15 |
-| `plugins/resend/tests/unit/plugin.test.ts`                                                                                                                                |        44 |
-| `plugins/resend/tests/unit/risk-catalog.test.ts`                                                                                                                          |        33 |
-| `plugins/ssh/tests/unit/adversarial.test.ts`                                                                                                                              |       181 |
-| `plugins/ssh/tests/unit/classify.test.ts`                                                                                                                                 |        95 |
-| `plugins/ssh/tests/unit/data-model.test.ts`                                                                                                                               |         2 |
-| `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                                                                                         |        37 |
-| `plugins/ssh/tests/unit/injection.test.ts`                                                                                                                                |        87 |
-| `plugins/ssh/tests/unit/plugin.test.ts`                                                                                                                                   |       300 |
-| `plugins/ssh/tests/unit/shell.property.test.ts`                                                                                                                           |         3 |
-| `plugins/stripe/tests/unit/classify.test.ts`                                                                                                                              |        48 |
-| `plugins/stripe/tests/unit/data-model.test.ts`                                                                                                                            |         8 |
-| `plugins/stripe/tests/unit/execute.test.ts`                                                                                                                               |        23 |
-| `plugins/stripe/tests/unit/identifiers.test.ts`                                                                                                                           |        59 |
-| `plugins/stripe/tests/unit/plugin.test.ts`                                                                                                                                |        32 |
-| `plugins/stripe/tests/unit/policy.test.ts`                                                                                                                                |        30 |
-| `plugins/stripe/tests/unit/risk-catalog.test.ts`                                                                                                                          |        20 |
-| `plugins/supabase/tests/unit/classify.test.ts`                                                                                                                            |       134 |
-| `plugins/supabase/tests/unit/credential.test.ts`                                                                                                                          |         5 |
-| `plugins/supabase/tests/unit/data-model.test.ts`                                                                                                                          |         1 |
-| `plugins/supabase/tests/unit/execute.test.ts`                                                                                                                             |        42 |
-| `plugins/supabase/tests/unit/identifier-injection.test.ts`                                                                                                                |      1337 |
-| `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                                                                                  |        39 |
-| `plugins/supabase/tests/unit/plugin.test.ts`                                                                                                                              |        22 |
-| `plugins/supabase/tests/unit/query-sql.test.ts`                                                                                                                           |       118 |
-| `plugins/supabase/tests/unit/redact.test.ts`                                                                                                                              |         8 |
-| `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                                                                                        |        46 |
-| `plugins/supabase/tests/unit/sql.property.test.ts`                                                                                                                        |         3 |
-| `plugins/upstash-redis/tests/unit/classify.test.ts`                                                                                                                       |        31 |
-| `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                                                                                  |       105 |
-| `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                                                                                     |         1 |
-| `plugins/upstash-redis/tests/unit/execute.test.ts`                                                                                                                        |        33 |
-| `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                                                                                    |        42 |
-| `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                                                                                         |        27 |
-| `plugins/upstash-redis/tests/unit/policy.test.ts`                                                                                                                         |        25 |
-| `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`                                                                                                                   |        49 |
-| `plugins/vercel/tests/unit/binding.test.ts`                                                                                                                               |        50 |
-| `plugins/vercel/tests/unit/classify.test.ts`                                                                                                                              |        43 |
-| `plugins/vercel/tests/unit/data-model.test.ts`                                                                                                                            |         1 |
-| `plugins/vercel/tests/unit/env-redaction.test.ts`                                                                                                                         |         4 |
-| `plugins/vercel/tests/unit/firewall.test.ts`                                                                                                                              |        11 |
-| `plugins/vercel/tests/unit/identifier-injection.test.ts`                                                                                                                  |       315 |
-| `plugins/vercel/tests/unit/plugin.test.ts`                                                                                                                                |        49 |
-| `plugins/vercel/tests/unit/project-redaction.test.ts`                                                                                                                     |         5 |
-| `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                                                                                          |        55 |
-| `plugins/vercel/tests/unit/team-pin.test.ts`                                                                                                                              |        99 |
-| `scripts/audit-gate.test.mjs`                                                                                                                                             |        29 |
-| `scripts/export-v4.test.mjs`                                                                                                                                              |        16 |
-| `scripts/lockfile-gate.test.mjs`                                                                                                                                          |        12 |
-| `scripts/release-lib.test.mjs`                                                                                                                                            |        55 |
-| `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                                                                      |         6 |
-| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22) | **11936** |
+| Suite                                                                                                                                                                                                    |     Tests |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
+| `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                                                                                                               |         8 |
+| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                                                   |         9 |
+| `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                                                                                                                 |         2 |
+| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                                                                                                               |        12 |
+| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                                                                                                             |        46 |
+| `apps/gateway/src/components/auth/principal.test.ts`                                                                                                                                                     |         2 |
+| `apps/gateway/src/components/auth/setup-link.test.ts`                                                                                                                                                    |         2 |
+| `apps/gateway/src/components/connections/shape.test.ts`                                                                                                                                                  |         5 |
+| `apps/gateway/src/lib/dates.test.ts`                                                                                                                                                                     |         8 |
+| `apps/gateway/src/server/audit/filters.test.ts`                                                                                                                                                          |        24 |
+| `apps/gateway/src/server/auth/administrators.test.ts`                                                                                                                                                    |         8 |
+| `apps/gateway/src/server/auth/restored-admin-rule.test.ts`                                                                                                                                               |         1 |
+| `apps/gateway/src/server/auth/admission.test.ts`                                                                                                                                                         |         6 |
+| `apps/gateway/src/server/auth/bootstrap.test.ts`                                                                                                                                                         |         3 |
+| `apps/gateway/src/server/auth/claims.test.ts`                                                                                                                                                            |        22 |
+| `apps/gateway/src/server/auth/github.test.ts`                                                                                                                                                            |         9 |
+| `apps/gateway/src/server/auth/guard.test.ts`                                                                                                                                                             |        10 |
+| `apps/gateway/src/server/auth/handlers.test.ts`                                                                                                                                                          |         9 |
+| `apps/gateway/src/server/auth/idp-settings.test.ts`                                                                                                                                                      |         8 |
+| `apps/gateway/src/server/auth/origin.test.ts`                                                                                                                                                            |         5 |
+| `apps/gateway/src/server/auth/relying-party.test.ts`                                                                                                                                                     |         5 |
+| `apps/gateway/src/server/auth/session-service.test.ts`                                                                                                                                                   |        12 |
+| `apps/gateway/src/server/auth/sign-in-providers.test.ts`                                                                                                                                                 |        10 |
+| `apps/gateway/src/server/auth/verified-email.test.ts`                                                                                                                                                    |         5 |
+| `apps/gateway/src/server/authority/authority-service.test.ts`                                                                                                                                            |        20 |
+| `apps/gateway/src/server/authority/mission-grounds.test.ts`                                                                                                                                              |        34 |
+| `apps/gateway/src/server/backup/carry-sign-in.test.ts`                                                                                                                                                   |         3 |
+| `apps/gateway/src/server/backup/cli.test.ts`                                                                                                                                                             |         3 |
+| `apps/gateway/src/server/compose/boot-config.test.ts`                                                                                                                                                    |        10 |
+| `apps/gateway/src/server/compose/compose.test.ts`                                                                                                                                                        |        17 |
+| `apps/gateway/src/server/compose/restored-admin-rule.test.ts`                                                                                                                                            |         1 |
+| `apps/gateway/src/server/compose/sealed-keys-check.test.ts`                                                                                                                                              |         2 |
+| `apps/gateway/src/server/compose/self-resources-check.test.ts`                                                                                                                                           |         2 |
+| `apps/gateway/src/server/config/duration.test.ts`                                                                                                                                                        |         2 |
+| `apps/gateway/src/server/config/instance-name.test.ts`                                                                                                                                                   |        11 |
+| `apps/gateway/src/server/config/keys-doc.test.ts`                                                                                                                                                        |        53 |
+| `apps/gateway/src/server/config/load.property.test.ts`                                                                                                                                                   |         7 |
+| `apps/gateway/src/server/config/load.test.ts`                                                                                                                                                            |        62 |
+| `apps/gateway/src/server/config/master-key-absent.test.ts`                                                                                                                                               |        11 |
+| `apps/gateway/src/server/config/secret-env.test.ts`                                                                                                                                                      |         5 |
+| `apps/gateway/src/server/config/sign-in.test.ts`                                                                                                                                                         |        19 |
+| `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                                                                                                                          |        15 |
+| `apps/gateway/src/server/connections/credentials.test.ts`                                                                                                                                                |        15 |
+| `apps/gateway/src/server/connections/discovery-after-call.test.ts`                                                                                                                                       |        11 |
+| `apps/gateway/src/server/connections/failure-reason.test.ts`                                                                                                                                             |        14 |
+| `apps/gateway/src/server/connections/input.test.ts`                                                                                                                                                      |        25 |
+| `apps/gateway/src/server/connections/mapping.test.ts`                                                                                                                                                    |         3 |
+| `apps/gateway/src/server/connections/oauth2.test.ts`                                                                                                                                                     |        28 |
+| `apps/gateway/src/server/connections/oauth2-clients.test.ts`                                                                                                                                             |        14 |
+| `apps/gateway/src/server/connections/pending.test.ts`                                                                                                                                                    |         7 |
+| `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                                                                                        |        16 |
+| `apps/gateway/src/server/connections/service.test.ts`                                                                                                                                                    |        24 |
+| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                                                                                                                          |         8 |
+| `apps/gateway/src/server/connections/token-connections.test.ts`                                                                                                                                          |         8 |
+| `apps/gateway/src/server/crypto/aead.test.ts`                                                                                                                                                            |        12 |
+| `apps/gateway/src/server/crypto/master-key-file.test.ts`                                                                                                                                                 |         7 |
+| `apps/gateway/src/server/crypto/password.test.ts`                                                                                                                                                        |         4 |
+| `apps/gateway/src/server/crypto/totp.test.ts`                                                                                                                                                            |         5 |
+| `apps/gateway/src/server/execution/classify-connection.test.ts`                                                                                                                                          |         4 |
+| `apps/gateway/src/server/execution/execution.test.ts`                                                                                                                                                    |        23 |
+| `apps/gateway/src/server/execution/unbound-tools.test.ts`                                                                                                                                                |         4 |
+| `apps/gateway/src/server/groups/service.test.ts`                                                                                                                                                         |        15 |
+| `apps/gateway/src/server/http/client-ip-edge.test.ts`                                                                                                                                                    |         5 |
+| `apps/gateway/src/server/http/client-ip.test.ts`                                                                                                                                                         |        11 |
+| `apps/gateway/src/server/http/document.test.ts`                                                                                                                                                          |         6 |
+| `apps/gateway/src/server/http/doors.property.test.ts`                                                                                                                                                    |         7 |
+| `apps/gateway/src/server/http/healthz.test.ts`                                                                                                                                                           |         4 |
+| `apps/gateway/src/server/http/security-headers.test.ts`                                                                                                                                                  |         6 |
+| `apps/gateway/src/server/import-v4/bundle.test.ts`                                                                                                                                                       |        26 |
+| `apps/gateway/src/server/import-v4/risk-translation.test.ts`                                                                                                                                             |        21 |
+| `apps/gateway/src/server/instance/settings.test.ts`                                                                                                                                                      |         6 |
+| `apps/gateway/src/server/logging/console-guard.test.ts`                                                                                                                                                  |         3 |
+| `apps/gateway/src/server/logging/logging.test.ts`                                                                                                                                                        |         6 |
+| `apps/gateway/src/server/mail/index.test.ts`                                                                                                                                                             |         2 |
+| `apps/gateway/src/server/management/door.test.ts`                                                                                                                                                        |         4 |
+| `apps/gateway/src/server/management/hard-deny.test.ts`                                                                                                                                                   |        16 |
+| `apps/gateway/src/server/management/output-schemas.test.ts`                                                                                                                                              |        10 |
+| `apps/gateway/src/server/management/tools.test.ts`                                                                                                                                                       |        35 |
+| `apps/gateway/src/server/missions/assumed-envs.test.ts`                                                                                                                                                  |         2 |
+| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                                                                                                                 |        22 |
+| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                                                                                                                  |        21 |
+| `apps/gateway/src/server/missions/everything-i-hold.test.ts`                                                                                                                                             |        16 |
+| `apps/gateway/src/server/missions/git-view.test.ts`                                                                                                                                                      |         3 |
+| `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                                                                                                                 |         4 |
+| `apps/gateway/src/server/missions/preview.test.ts`                                                                                                                                                       |        50 |
+| `apps/gateway/src/server/missions/short-id.test.ts`                                                                                                                                                      |         2 |
+| `apps/gateway/src/server/missions/summary.test.ts`                                                                                                                                                       |         8 |
+| `apps/gateway/src/server/missions/token-name.test.ts`                                                                                                                                                    |        23 |
+| `apps/gateway/src/server/missions/token.test.ts`                                                                                                                                                         |        10 |
+| `apps/gateway/src/server/now/derive.test.ts`                                                                                                                                                             |         5 |
+| `apps/gateway/src/server/oauth-as/authorization.test.ts`                                                                                                                                                 |        41 |
+| `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`                                                                                                                                      |        91 |
+| `apps/gateway/src/server/oauth-as/clients.test.ts`                                                                                                                                                       |        40 |
+| `apps/gateway/src/server/oauth-as/delegation-lifetime.test.ts`                                                                                                                                           |         5 |
+| `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                                                                                                                   |        28 |
+| `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                                                                                                                     |        15 |
+| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                                                                                                                         |        13 |
+| `apps/gateway/src/server/oauth-as/pending-registrations.test.ts`                                                                                                                                         |         2 |
+| `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                                                                                                                          |        13 |
+| `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                                                                                                                  |        52 |
+| `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                                                                                                                       |         6 |
+| `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                                                                                                                 |        66 |
+| `apps/gateway/src/server/provider-apps/service.test.ts`                                                                                                                                                  |        12 |
+| `apps/gateway/src/server/providers/planes.test.ts`                                                                                                                                                       |         9 |
+| `apps/gateway/src/server/providers/reference.test.ts`                                                                                                                                                    |        20 |
+| `apps/gateway/src/server/requests/approval.test.ts`                                                                                                                                                      |        33 |
+| `apps/gateway/src/server/requests/asker.test.ts`                                                                                                                                                         |         4 |
+| `apps/gateway/src/server/requests/claim.test.ts`                                                                                                                                                         |        38 |
+| `apps/gateway/src/server/requests/client-ip.test.ts`                                                                                                                                                     |         2 |
+| `apps/gateway/src/server/requests/events.test.ts`                                                                                                                                                        |         7 |
+| `apps/gateway/src/server/requests/provider-pages.test.ts`                                                                                                                                                |         2 |
+| `apps/gateway/src/server/requests/state.test.ts`                                                                                                                                                         |         9 |
+| `apps/gateway/src/server/requests/sweeper.test.ts`                                                                                                                                                       |         4 |
+| `apps/gateway/src/server/reseal/cli.test.ts`                                                                                                                                                             |         8 |
+| `apps/gateway/src/server/restore/cli.test.ts`                                                                                                                                                            |         7 |
+| `apps/gateway/src/server/shares/errors.test.ts`                                                                                                                                                          |         4 |
+| `apps/gateway/src/server/shares/restriction.test.ts`                                                                                                                                                     |         8 |
+| `apps/gateway/src/server/shares/service.test.ts`                                                                                                                                                         |        24 |
+| `apps/gateway/src/server/store/membership.test.ts`                                                                                                                                                       |        12 |
+| `apps/gateway/src/server/store/mission-reach.test.ts`                                                                                                                                                    |         3 |
+| `apps/gateway/src/server/store/repositories/sealed-blobs.test.ts`                                                                                                                                        |         7 |
+| `apps/gateway/src/server/store/resource-env.test.ts`                                                                                                                                                     |         5 |
+| `apps/gateway/src/server/telemetry/outcome.test.ts`                                                                                                                                                      |        30 |
+| `apps/gateway/src/server/telemetry/settings.test.ts`                                                                                                                                                     |         7 |
+| `apps/gateway/src/server/telemetry/stats.test.ts`                                                                                                                                                        |        11 |
+| `apps/gateway/src/server/telemetry/usage.test.ts`                                                                                                                                                        |         6 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                                                                                                                           |        73 |
+| `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                                                                                                               |        35 |
+| `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                                                                                                                        |         3 |
+| `apps/gateway/tests/integration/audit/mission-session.test.ts`                                                                                                                                           |        21 |
+| `apps/gateway/tests/integration/audit/retention.test.ts`                                                                                                                                                 |        10 |
+| `apps/gateway/tests/integration/audit/session-history-retention.test.ts`                                                                                                                                 |        11 |
+| `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                                                                                                                            |        12 |
+| `apps/gateway/tests/integration/auth/local-accounts.test.ts`                                                                                                                                             |        17 |
+| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                                                                                                                 |        22 |
+| `apps/gateway/tests/integration/auth/sign-in-limits.test.ts`                                                                                                                                             |         4 |
+| `apps/gateway/tests/integration/auth/sign-in-providers.test.ts`                                                                                                                                          |        18 |
+| `apps/gateway/tests/integration/auth/sign-out-everywhere.test.ts`                                                                                                                                        |         3 |
+| `apps/gateway/tests/integration/authority/close-orphaned.test.ts`                                                                                                                                        |        11 |
+| `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                                                                                                                    |         1 |
+| `apps/gateway/tests/integration/authority/handlers.test.ts`                                                                                                                                              |        11 |
+| `apps/gateway/tests/integration/authority/missions-on-connection.test.ts`                                                                                                                                |         8 |
+| `apps/gateway/tests/integration/authority/ownership.test.ts`                                                                                                                                             |        13 |
+| `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                                                                                                                   |         7 |
+| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                                                                                                                      |        19 |
+| `apps/gateway/tests/integration/authority/share-restores.test.ts`                                                                                                                                        |        11 |
+| `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                                                                                                                     |         6 |
+| `apps/gateway/tests/integration/budget/session-service.test.ts`                                                                                                                                          |        20 |
+| `apps/gateway/tests/integration/compose/boot.test.ts`                                                                                                                                                    |         4 |
+| `apps/gateway/tests/integration/compose/master-key-generation.test.ts`                                                                                                                                   |         5 |
+| `apps/gateway/tests/integration/compose/setup-mode-restore.test.ts`                                                                                                                                      |         8 |
+| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                                                                                                                        |         5 |
+| `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                                                                                                                 |         5 |
+| `apps/gateway/tests/integration/connections/repository-status.test.ts`                                                                                                                                   |         6 |
+| `apps/gateway/tests/integration/connections/token-connect.test.ts`                                                                                                                                       |         1 |
+| `apps/gateway/tests/integration/demo/build-stamp.test.ts`                                                                                                                                                |        10 |
+| `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                                                                                                                                |        13 |
+| `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                                                                                                                 |        17 |
+| `apps/gateway/tests/integration/demo/demo-vercel.test.ts`                                                                                                                                                |         3 |
+| `apps/gateway/tests/integration/execution/agent-label.test.ts`                                                                                                                                           |         6 |
+| `apps/gateway/tests/integration/execution/approval-door.test.ts`                                                                                                                                         |         8 |
+| `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                                                                                                                     |         4 |
+| `apps/gateway/tests/integration/execution/discovery-after-call.test.ts`                                                                                                                                  |         8 |
+| `apps/gateway/tests/integration/execution/door-http.test.ts`                                                                                                                                             |        22 |
+| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                                                                                                              |        26 |
+| `apps/gateway/tests/integration/execution/self-resources.test.ts`                                                                                                                                        |         5 |
+| `apps/gateway/tests/integration/execution/streaming.test.ts`                                                                                                                                             |        13 |
+| `apps/gateway/tests/integration/execution/team-door.test.ts`                                                                                                                                             |        11 |
+| `apps/gateway/tests/integration/git/git-remote-base-merge.test.ts`                                                                                                                                       |         1 |
+| `apps/gateway/tests/integration/git/git-remote-base.test.ts`                                                                                                                                             |         5 |
+| `apps/gateway/tests/integration/git/git-remote-limits.test.ts`                                                                                                                                           |        10 |
+| `apps/gateway/tests/integration/git/git-remote-review.test.ts`                                                                                                                                           |        13 |
+| `apps/gateway/tests/integration/git/git-remote-security.test.ts`                                                                                                                                         |        37 |
+| `apps/gateway/tests/integration/git/git-remote-workflows.test.ts`                                                                                                                                        |         8 |
+| `apps/gateway/tests/integration/git/git-remote.test.ts`                                                                                                                                                  |        17 |
+| `apps/gateway/tests/integration/import-v4/import-v4.test.ts`                                                                                                                                             |        15 |
+| `apps/gateway/tests/integration/instance/instance-name.test.ts`                                                                                                                                          |         7 |
+| `apps/gateway/tests/integration/instance/master-key-handover.test.ts`                                                                                                                                    |         8 |
+| `apps/gateway/tests/integration/management/hard-deny.test.ts`                                                                                                                                            |         6 |
+| `apps/gateway/tests/integration/management/management-door.test.ts`                                                                                                                                      |        37 |
+| `apps/gateway/tests/integration/management/output-schemas.test.ts`                                                                                                                                       |         9 |
+| `apps/gateway/tests/integration/missions/gate.test.ts`                                                                                                                                                   |        20 |
+| `apps/gateway/tests/integration/missions/limits.test.ts`                                                                                                                                                 |        21 |
+| `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                                                                                                                       |         8 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                                                                                                                      |        36 |
+| `apps/gateway/tests/integration/missions/permissions.test.ts`                                                                                                                                            |        20 |
+| `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                                                                                                                      |         6 |
+| `apps/gateway/tests/integration/missions/team.test.ts`                                                                                                                                                   |        34 |
+| `apps/gateway/tests/integration/now/now.test.ts`                                                                                                                                                         |        12 |
+| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                                                                                                                  |        19 |
+| `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                                                                                                                           |        66 |
+| `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                                                                                                                        |         4 |
+| `apps/gateway/tests/integration/oauth-as/routes.test.ts`                                                                                                                                                 |        16 |
+| `apps/gateway/tests/integration/requests/approval-access.test.ts`                                                                                                                                        |        29 |
+| `apps/gateway/tests/integration/requests/approval.test.ts`                                                                                                                                               |        51 |
+| `apps/gateway/tests/integration/requests/request-handlers.test.ts`                                                                                                                                       |        14 |
+| `apps/gateway/tests/integration/requests/request-service.test.ts`                                                                                                                                        |        36 |
+| `apps/gateway/tests/integration/restore/restore.test.ts`                                                                                                                                                 |        22 |
+| `apps/gateway/tests/integration/standalone-import-v4.test.ts`                                                                                                                                            |         2 |
+| `apps/gateway/tests/integration/standalone-native-addons.test.ts`                                                                                                                                        |         3 |
+| `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`                                                                                                                                      |         3 |
+| `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                                                                                                                        |        20 |
+| `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                                                                                                                      |        10 |
+| `apps/gateway/tests/integration/store/audit.test.ts`                                                                                                                                                     |        15 |
+| `apps/gateway/tests/integration/store/config.test.ts`                                                                                                                                                    |         7 |
+| `apps/gateway/tests/integration/store/connections-shares.test.ts`                                                                                                                                        |        14 |
+| `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                                                                                                              |        14 |
+| `apps/gateway/tests/integration/store/delegations.test.ts`                                                                                                                                               |        20 |
+| `apps/gateway/tests/integration/store/identities.test.ts`                                                                                                                                                |        11 |
+| `apps/gateway/tests/integration/store/missions.test.ts`                                                                                                                                                  |        22 |
+| `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                                                                                                                             |        16 |
+| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                                                                                                                     |        13 |
+| `apps/gateway/tests/integration/store/permission-migration.test.ts`                                                                                                                                      |         1 |
+| `apps/gateway/tests/integration/store/request-covers-the-call-migration.test.ts`                                                                                                                         |         1 |
+| `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                                                                                                                        |        14 |
+| `apps/gateway/tests/integration/store/schema.test.ts`                                                                                                                                                    |         6 |
+| `apps/gateway/tests/integration/store/sessions.test.ts`                                                                                                                                                  |        11 |
+| `apps/gateway/tests/integration/store/sign-in-providers-store.test.ts`                                                                                                                                   |         4 |
+| `apps/gateway/tests/integration/store/token-holders.test.ts`                                                                                                                                             |         4 |
+| `apps/gateway/tests/integration/store/users-issuer.test.ts`                                                                                                                                              |        14 |
+| `apps/gateway/tests/integration/store/web-sessions.test.ts`                                                                                                                                              |         8 |
+| `apps/gateway/tests/integration/store/whole-connection-migration.test.ts`                                                                                                                                |         1 |
+| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                                                                                                                             |        22 |
+| `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                                                                                                                        |        90 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                                                                                                                          |       161 |
+| `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                                                                                                                      |         3 |
+| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                                                                                                                     |        33 |
+| `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                                                                                                                      |        76 |
+| `apps/gateway/tests/unit/app/field.test.tsx`                                                                                                                                                             |         8 |
+| `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                                                                                                                   |        30 |
+| `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                                                                                                               |        23 |
+| `apps/gateway/tests/unit/components/success-tone.test.ts`                                                                                                                                                |         2 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                                                                                                                             |       504 |
+| `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                                                                                                                   |        20 |
+| `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                                                                                                                    |         9 |
+| `apps/gateway/tests/unit/server/budget/live-policy.test.ts`                                                                                                                                              |         3 |
+| `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                                                                                                                            |         7 |
+| `apps/gateway/tests/unit/server/budget/period.test.ts`                                                                                                                                                   |         8 |
+| `apps/gateway/tests/unit/server/config/self-resources.test.ts`                                                                                                                                           |         4 |
+| `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                                                                                                                |         3 |
+| `apps/gateway/tests/unit/server/git/command-list.test.ts`                                                                                                                                                |         3 |
+| `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                                                                                                                                       |         8 |
+| `apps/gateway/tests/unit/server/requests/masked-arguments.test.ts`                                                                                                                                       |         4 |
+| `apps/gateway/tests/unit/server/store/db.test.ts`                                                                                                                                                        |         2 |
+| `apps/gateway/tests/unit/server/store/ids.test.ts`                                                                                                                                                       |         6 |
+| `apps/gateway/tests/unit/server/store/migrate.test.ts`                                                                                                                                                   |         9 |
+| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`                                                                                                                                   |        27 |
+| `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                                                                                                                          |         5 |
+| `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                                                                                                                       |        16 |
+| `apps/gateway/tests/unit/structural/deployed-commit.test.ts`                                                                                                                                             |        15 |
+| `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                                                                                                                    |        10 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                                                                                                                       |       115 |
+| `apps/gateway/tests/unit/structural/module-mocks-isolated.test.ts`                                                                                                                                       |         2 |
+| `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                                                                                                                        |         3 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                                                                                                                         |       560 |
+| `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                                                                                                                      |        10 |
+| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                                                                                                                     |        33 |
+| `apps/gateway/tests/unit/structural/resource-creating-tools.test.ts`                                                                                                                                     |        15 |
+| `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                                                                                                                             |        71 |
+| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                                                                                                                  |        15 |
+| `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                                                                                                                      |         3 |
+| `apps/gateway/tests/unit/structural/upload-ignore-files.test.ts`                                                                                                                                         |         3 |
+| `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                                                                                                                       |         4 |
+| `apps/website/tests/unit/collector/reports.test.ts`                                                                                                                                                      |         6 |
+| `apps/website/tests/unit/collector/stats-and-config.test.ts`                                                                                                                                             |        12 |
+| `apps/website/tests/unit/site/plugins.test.ts`                                                                                                                                                           |         4 |
+| `apps/website/tests/unit/site/site.test.ts`                                                                                                                                                              |        10 |
+| `apps/website/tests/unit/site/sources-agree.test.ts`                                                                                                                                                     |         6 |
+| `apps/website/tests/unit/site/units.test.ts`                                                                                                                                                             |        15 |
+| `packages/gateway-core/tests/unit/audit.test.ts`                                                                                                                                                         |         2 |
+| `packages/gateway-core/tests/unit/authenticate.test.ts`                                                                                                                                                  |        11 |
+| `packages/gateway-core/tests/unit/cache.test.ts`                                                                                                                                                         |         7 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                                                                                                                                                        |        34 |
+| `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                                                                                                                   |        12 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                                                                                                                      |        39 |
+| `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                                                                                                                  |         9 |
+| `packages/gateway-core/tests/unit/token-holder.test.ts`                                                                                                                                                  |         3 |
+| `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                                                                                                                       |        10 |
+| `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                                                                                                                  |        31 |
+| `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                                                                                                                    |         4 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                                                                                                                   |        34 |
+| `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                                                                                                                          |         8 |
+| `packages/plugin-sdk/tests/unit/git-pack.test.ts`                                                                                                                                                        |         9 |
+| `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                                                                                                               |         4 |
+| `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                                                                                                                        |        32 |
+| `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                                                                                                                 |         9 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                                                                                                                        |        11 |
+| `packages/plugin-sdk/tests/unit/slices.test.ts`                                                                                                                                                          |        21 |
+| `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                                                                                                                       |         9 |
+| `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                                                                                                                     |        14 |
+| `packages/plugin-sdk/tests/unit/token-guide.test.ts`                                                                                                                                                     |         4 |
+| `packages/policy-engine/tests/unit/budget.test.ts`                                                                                                                                                       |        25 |
+| `packages/policy-engine/tests/unit/qualify.test.ts`                                                                                                                                                      |        33 |
+| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`                                                                                                                                               |        20 |
+| `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                                                                                                                  |         9 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                                                                                                                 |        33 |
+| `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                                                                                                                    |        23 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                                                                                                                |        35 |
+| `packages/shared/src/api-key.test.ts`                                                                                                                                                                    |        12 |
+| `packages/shared/src/data-model.test.ts`                                                                                                                                                                 |         4 |
+| `packages/shared/src/mcp.test.ts`                                                                                                                                                                        |        10 |
+| `packages/shared/src/risk-id.test.ts`                                                                                                                                                                    |        20 |
+| `packages/shared/src/session-events.test.ts`                                                                                                                                                             |        30 |
+| `packages/shared/src/wildcard.test.ts`                                                                                                                                                                   |        18 |
+| `packages/telemetry/src/client.test.ts`                                                                                                                                                                  |        24 |
+| `packages/telemetry/src/queue.test.ts`                                                                                                                                                                   |        12 |
+| `packages/telemetry/src/report.test.ts`                                                                                                                                                                  |        26 |
+| `packages/telemetry/src/usage.test.ts`                                                                                                                                                                   |        24 |
+| `packages/telemetry/src/wire.test.ts`                                                                                                                                                                    |         9 |
+| `plugins/_template/tests/unit/plugin.test.ts`                                                                                                                                                            |        26 |
+| `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                                                                                                                     |        33 |
+| `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                                                                                                                   |         9 |
+| `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                                                                                                                  |        59 |
+| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                                                                                                                       |        51 |
+| `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                                                                                                                 |        38 |
+| `plugins/context7/tests/unit/classify.test.ts`                                                                                                                                                           |        14 |
+| `plugins/context7/tests/unit/data-model.test.ts`                                                                                                                                                         |         2 |
+| `plugins/context7/tests/unit/execute.test.ts`                                                                                                                                                            |        25 |
+| `plugins/context7/tests/unit/plugin.test.ts`                                                                                                                                                             |        12 |
+| `plugins/context7/tests/unit/risk-catalog.test.ts`                                                                                                                                                       |         5 |
+| `plugins/fly/tests/unit/classify.test.ts`                                                                                                                                                                |        34 |
+| `plugins/fly/tests/unit/execute.test.ts`                                                                                                                                                                 |        32 |
+| `plugins/fly/tests/unit/identifiers.test.ts`                                                                                                                                                             |         5 |
+| `plugins/fly/tests/unit/plugin.test.ts`                                                                                                                                                                  |         8 |
+| `plugins/fly/tests/unit/risk-catalog.test.ts`                                                                                                                                                            |         6 |
+| `plugins/github/tests/unit/classify.test.ts`                                                                                                                                                             |        64 |
+| `plugins/github/tests/unit/credential.test.ts`                                                                                                                                                           |         9 |
+| `plugins/github/tests/unit/data-model.test.ts`                                                                                                                                                           |         1 |
+| `plugins/github/tests/unit/execute.test.ts`                                                                                                                                                              |        15 |
+| `plugins/github/tests/unit/git-inspect.test.ts`                                                                                                                                                          |        19 |
+| `plugins/github/tests/unit/git-moves.test.ts`                                                                                                                                                            |        11 |
+| `plugins/github/tests/unit/injection.test.ts`                                                                                                                                                            |       403 |
+| `plugins/github/tests/unit/job-logs.test.ts`                                                                                                                                                             |        22 |
+| `plugins/github/tests/unit/plugin.test.ts`                                                                                                                                                               |        15 |
+| `plugins/github/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |        76 |
+| `plugins/gmail/tests/unit/classify.test.ts`                                                                                                                                                              |       108 |
+| `plugins/gmail/tests/unit/data-model.test.ts`                                                                                                                                                            |         5 |
+| `plugins/gmail/tests/unit/injection.test.ts`                                                                                                                                                             |       190 |
+| `plugins/gmail/tests/unit/plugin.test.ts`                                                                                                                                                                |        27 |
+| `plugins/gmail/tests/unit/q-parser.test.ts`                                                                                                                                                              |        32 |
+| `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                                                          |        45 |
+| `plugins/miro/tests/unit/classify.test.ts`                                                                                                                                                               |        17 |
+| `plugins/miro/tests/unit/execute.test.ts`                                                                                                                                                                |        15 |
+| `plugins/miro/tests/unit/identifiers.test.ts`                                                                                                                                                            |         6 |
+| `plugins/miro/tests/unit/plugin.test.ts`                                                                                                                                                                 |        19 |
+| `plugins/miro/tests/unit/risk-catalog.test.ts`                                                                                                                                                           |        12 |
+| `plugins/notion/tests/unit/ancestry.test.ts`                                                                                                                                                             |        20 |
+| `plugins/notion/tests/unit/boundaries.test.ts`                                                                                                                                                           |        34 |
+| `plugins/notion/tests/unit/classify.test.ts`                                                                                                                                                             |        21 |
+| `plugins/notion/tests/unit/data-model.test.ts`                                                                                                                                                           |         3 |
+| `plugins/notion/tests/unit/discovery.test.ts`                                                                                                                                                            |         9 |
+| `plugins/notion/tests/unit/execute.test.ts`                                                                                                                                                              |        18 |
+| `plugins/notion/tests/unit/identifiers.test.ts`                                                                                                                                                          |        26 |
+| `plugins/notion/tests/unit/plugin.test.ts`                                                                                                                                                               |         8 |
+| `plugins/notion/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |         5 |
+| `plugins/railway/tests/unit/classify.test.ts`                                                                                                                                                            |        22 |
+| `plugins/railway/tests/unit/credential.test.ts`                                                                                                                                                          |        14 |
+| `plugins/railway/tests/unit/data-model.test.ts`                                                                                                                                                          |         1 |
+| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                                                                                                                |       294 |
+| `plugins/railway/tests/unit/plugin.test.ts`                                                                                                                                                              |        31 |
+| `plugins/railway/tests/unit/policy.test.ts`                                                                                                                                                              |        39 |
+| `plugins/railway/tests/unit/risk-catalog.test.ts`                                                                                                                                                        |        19 |
+| `plugins/resend/tests/unit/addresses.test.ts`                                                                                                                                                            |        13 |
+| `plugins/resend/tests/unit/classify.test.ts`                                                                                                                                                             |        64 |
+| `plugins/resend/tests/unit/data-model.test.ts`                                                                                                                                                           |         6 |
+| `plugins/resend/tests/unit/identifiers.test.ts`                                                                                                                                                          |        58 |
+| `plugins/resend/tests/unit/mission-evaluation.test.ts`                                                                                                                                                   |        15 |
+| `plugins/resend/tests/unit/plugin.test.ts`                                                                                                                                                               |        44 |
+| `plugins/resend/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |        33 |
+| `plugins/ssh/tests/unit/adversarial.test.ts`                                                                                                                                                             |       181 |
+| `plugins/ssh/tests/unit/classify.test.ts`                                                                                                                                                                |        95 |
+| `plugins/ssh/tests/unit/data-model.test.ts`                                                                                                                                                              |         2 |
+| `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                                                                                                                        |        37 |
+| `plugins/ssh/tests/unit/injection.test.ts`                                                                                                                                                               |        87 |
+| `plugins/ssh/tests/unit/plugin.test.ts`                                                                                                                                                                  |       300 |
+| `plugins/ssh/tests/unit/shell.property.test.ts`                                                                                                                                                          |         3 |
+| `plugins/stripe/tests/unit/classify.test.ts`                                                                                                                                                             |        48 |
+| `plugins/stripe/tests/unit/data-model.test.ts`                                                                                                                                                           |         8 |
+| `plugins/stripe/tests/unit/execute.test.ts`                                                                                                                                                              |        23 |
+| `plugins/stripe/tests/unit/identifiers.test.ts`                                                                                                                                                          |        59 |
+| `plugins/stripe/tests/unit/plugin.test.ts`                                                                                                                                                               |        32 |
+| `plugins/stripe/tests/unit/policy.test.ts`                                                                                                                                                               |        30 |
+| `plugins/stripe/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |        20 |
+| `plugins/supabase/tests/unit/classify.test.ts`                                                                                                                                                           |       134 |
+| `plugins/supabase/tests/unit/credential.test.ts`                                                                                                                                                         |         5 |
+| `plugins/supabase/tests/unit/data-model.test.ts`                                                                                                                                                         |         1 |
+| `plugins/supabase/tests/unit/execute.test.ts`                                                                                                                                                            |        42 |
+| `plugins/supabase/tests/unit/identifier-injection.test.ts`                                                                                                                                               |      1337 |
+| `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                                                                                                                 |        39 |
+| `plugins/supabase/tests/unit/plugin.test.ts`                                                                                                                                                             |        22 |
+| `plugins/supabase/tests/unit/query-sql.test.ts`                                                                                                                                                          |       118 |
+| `plugins/supabase/tests/unit/redact.test.ts`                                                                                                                                                             |         8 |
+| `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                                                                                                                       |        46 |
+| `plugins/supabase/tests/unit/sql.property.test.ts`                                                                                                                                                       |         3 |
+| `plugins/upstash-redis/tests/unit/classify.test.ts`                                                                                                                                                      |        31 |
+| `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                                                                                                                 |       105 |
+| `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                                                                                                                    |         1 |
+| `plugins/upstash-redis/tests/unit/execute.test.ts`                                                                                                                                                       |        33 |
+| `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                                                                                                                   |        42 |
+| `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                                                                                                                        |        27 |
+| `plugins/upstash-redis/tests/unit/policy.test.ts`                                                                                                                                                        |        25 |
+| `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`                                                                                                                                                  |        49 |
+| `plugins/vercel/tests/unit/binding.test.ts`                                                                                                                                                              |        50 |
+| `plugins/vercel/tests/unit/classify.test.ts`                                                                                                                                                             |        43 |
+| `plugins/vercel/tests/unit/data-model.test.ts`                                                                                                                                                           |         1 |
+| `plugins/vercel/tests/unit/env-redaction.test.ts`                                                                                                                                                        |         4 |
+| `plugins/vercel/tests/unit/firewall.test.ts`                                                                                                                                                             |        11 |
+| `plugins/vercel/tests/unit/identifier-injection.test.ts`                                                                                                                                                 |       315 |
+| `plugins/vercel/tests/unit/plugin.test.ts`                                                                                                                                                               |        49 |
+| `plugins/vercel/tests/unit/project-redaction.test.ts`                                                                                                                                                    |         5 |
+| `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |        55 |
+| `plugins/vercel/tests/unit/team-pin.test.ts`                                                                                                                                                             |        99 |
+| `scripts/audit-gate.test.mjs`                                                                                                                                                                            |        29 |
+| `scripts/export-v4.test.mjs`                                                                                                                                                                             |        16 |
+| `scripts/lockfile-gate.test.mjs`                                                                                                                                                                         |        12 |
+| `scripts/release-lib.test.mjs`                                                                                                                                                                           |        55 |
+| `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                                                                                                     |         6 |
+| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro tests on 2026-10-23) | **11949** |
 
 The table is generated from the JSON reports of one run of each project
 (`npx vitest run --project shared --reporter=json`, then `--project isolated`).
@@ -1182,39 +1182,52 @@ groupings reported, never read as a conjunction), `injection.test.ts`
 segment with no dot, separator or escape; `labelRef` is a label id or a
 label name, never a dot segment), `data-model` (5).
 
-**Miro** (56; plugin 0.2.0, a rewrap of Miro's MCP server — ADR
-[[miro-rewraps-the-official-mcp-server]]) — `plugin.test.ts` (16): kit (22
-tools, the eight named risks touched, no fallback hit,
+**Miro** (69; plugin 0.3.0, a rewrap of Miro's MCP server — ADR
+[[miro-rewraps-the-official-mcp-server]], amendment 2026-10-23) —
+`plugin.test.ts` (19): kit (28 tools, the thirteen named risks touched, no
+fallback hit,
 `assertIdentifiersRefused` with no path identifier: every call is a JSON-RPC
 body to one URL), identity, version, catalog path, no environment anywhere,
 **the credential: `oauth2` against Miro's MCP authorization server with a
 client the gateway registers (`clientRegistration`), PKCE, the MCP server as
 the resource, `boards:read boards:write` only, nothing to declare**, the tool
-surface built from `upstream-tools.json` (**modelled, `captured_at: null`**),
-every upstream tool offered or left out with a reason, **the gateway's schema
-takes `board` / `item_id`, never `miro_url`**, and the module refusing an
-unmodelled tool, **an argument that may name another board** and a board
-tool without the locator. `classify` (13): the slices of every tool (reads
-on the item or `*`, comments, **an update of the canvas touching both
-deletion leaves**, bulk creations, a new board and the format guides naming
-no board), a board given as a URL is the same board; refusals: unknown and
-left-out tools, **`miro_url` sent by the agent**, a board outside the
-mission, hostile board URLs (another host, http, a user, a port, extra path,
-a dot segment), item and comment grammars, required and typed arguments.
+surface built from `upstream-tools.json` (**captured 2026-10-23, 51 tools,
+no drift against itself**), every upstream tool offered (27) or left out
+(24, every upload-URL tool among them) with a reason, **Miro's telemetry
+fields `invocation_source` / `is_repository` declared by every upstream tool
+and by no gateway tool**, the withheld arguments absent and
+`prototype_create` requiring `html_contents`, **the gateway's schema takes
+`board` / `item_id`, never `miro_url` nor `content_item_url`**, and the
+module refusing an unmodelled tool, **an argument that may name another
+board**, a board tool without the locator and an argument the gateway requires that Miro no longer takes. `classify` (17): the slices of
+every tool (reads on the item or `*`, comments, **an update of the canvas
+touching both deletion leaves**, bulk creations, a new board and the format
+guides naming no board, **the board's details, its access and its
+boardcasts**), a board given as a URL is the same board; refusals: unknown
+and left-out tools, **`miro_url` sent by the agent**, **the telemetry fields
+and withheld arguments**, a board outside the mission (**a share
+included**), hostile board URLs (another host, http, a user, a port, extra
+path, a dot segment), item and comment grammars, required and typed
+arguments, `null` only where Miro declares it nullable.
 `identifiers` (6): the grammars, **what classify refuses execute does not
 send**, the URL sent built from the classified ref and item whatever the
-agent's URL carried. `execute` (11): the `tools/call` sent (upstream name,
-declared arguments, `miro_url` written by the gateway, bearer), SSE, Miro's
+agent's URL carried. `execute` (15): the `tools/call` sent (upstream name,
+declared arguments, `miro_url` — or `content_item_url` — written by the
+gateway, bearer, **no telemetry field**, nothing for a refused call), SSE, Miro's
 result passed through (`isError`, images, structured content), `list_boards`
 without a request, 401 / 403 / 5xx / error frame, **the session fallback
 (`initialize` once on a 400, then the call with `Mcp-Session-Id`)**,
-discovery from JSON (owners and items ignored) and from text, **Miro
+discovery from JSON (owners and items ignored; **Miro's captured board
+summaries, without an id, page after page while `has_more`**; a server that
+ignores `offset` asked once more only) and from text, **Miro
 refusing its MCP server (403) told in the plugin's words
 (`CredentialRefusal`)**, a 401 kept a plain rejection, the drift of the live
-tool list logged by name. `risk-catalog` (10): the risks of every tool, the
-ids of catalog 1 kept, the presets (`scribe` never deletes so never updates
-the canvas; `facilitator` asks first for deletions and new boards), a
-ceiling per risk.
+tool list logged by name. `risk-catalog` (12): the risks of every tool
+(**the board's details, access, share and boardcast each on its own
+risk**), the ids of catalogs 1 and 2 kept, the presets (`scribe` never
+deletes so never updates the canvas; **`board-share` in `facilitator` only,
+behind an approval, never in `read-only` / `scribe`**; `facilitator` asks
+first for deletions, new boards and shares), a ceiling per risk.
 
 **Structural — `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`**
 (one per shipped plugin, and the cases of the check itself) — ADR [[scope-caps-not-enforced-in-v5-0]]: the v5.0 door has no cap
@@ -5190,14 +5203,14 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 
 ## Known gaps
 
-- **Miro against a real account** — no Miro account was available on
-  2026-10-21: the OAuth flow at `mcp.miro.com`, the consent page, the token
-  lifetime, `tools/list` and every tool call ran against mocks only; the
-  argument names of `plugins/miro/src/upstream-tools.json` are modelled from
-  Miro's documentation (`captured_at: null`). Unauthenticated probes checked
-  the metadata documents and one registration. The capture
-  (`npm run capture-upstream-tools --workspace @vaubaan/plugin-miro`) and a
-  first connection are the next live steps (handbook providers/miro §6.5).
+- **Miro tool calls against a real account** — on 2026-10-23 the capture
+  script ran against the product owner's Miro account: the OAuth flow
+  (registration, PKCE, a 3599 s access token, a refresh token) works and
+  `plugins/miro/src/upstream-tools.json` is Miro's `tools/list`, verbatim.
+  No tool call has run live yet: what Miro answers to each (discovery's
+  `board_search_boards` included, read from its captured `outputSchema`)
+  is tested against mocks only. A first connection through the gateway and
+  one call per risk are the next live steps (handbook providers/miro §6.5).
 
 - **The collector's SQL against PostgREST** — `schema.sql` is checked as text
   here and was applied by hand to a local PostgreSQL 17 (insert as `anon`,

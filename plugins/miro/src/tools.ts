@@ -7,24 +7,29 @@
  *            docs/decisions/rewrap-official-mcps.md.
  * Handbook : docs/handbook/providers/miro.md §0, §2, §6.5.
  *
- * `upstream-tools.json` is Miro's `tools` array of `tools/list` — today
- * MODELLED from Miro's documentation (its `captured_at` is null: listing the
- * tools needs a Miro account), tomorrow captured verbatim by
- * `npm run capture-upstream-tools --workspace @vaubaan/plugin-miro`.
+ * `upstream-tools.json` is Miro's `tools/list`, captured verbatim on
+ * 2026-10-23 by `npm run capture-upstream-tools --workspace
+ * @vaubaan/plugin-miro` (51 tools).
  *
- * The gateway's declaration of a tool is Miro's, with one change : the
- * locator. Miro's tools take the board as a URL (`miro_url`) ; the gateway's
- * take `board` (a board of the mission : its ref or its URL) and, where the
- * tool acts on one item, `item_id`, and the executor writes `miro_url`
- * itself from what was classified. Every other argument is Miro's own,
- * forwarded as declared ; one the schema does not declare is refused.
+ * The gateway's declaration of a tool is Miro's, with these changes :
+ *   - the locator. Miro's tools take the board as a URL (`miro_url`, or
+ *     `content_item_url` for one tool) ; the gateway's take `board` (a board
+ *     of the mission : its ref or its URL) and, where the tool acts on one
+ *     item, `item_id`, and the executor writes the URL itself from what was
+ *     classified ;
+ *   - Miro's telemetry of the agent's host (`TELEMETRY_ARGUMENTS`) and the
+ *     arguments the gateway withholds (`WITHHELD_ARGUMENTS`) are not
+ *     declared, so never sent ;
+ *   - a note appended to Miro's description where the gateway differs.
+ * Every other argument is Miro's own, forwarded as declared ; one the schema
+ * does not declare is refused.
  *
  * The module refuses to load when the upstream file
  *   - lists a tool that is neither offered (`LOCATOR`) nor left out
  *     (`LEFT_OUT_UPSTREAM_TOOLS`) — a new Miro tool waits for its model ;
- *   - gives an offered tool an argument whose name looks like a locator
- *     (`…url`, `…_id`, `board…`) the model does not know : it could aim the
- *     call at another board than the classified one.
+ *   - gives an offered tool a declared argument whose name looks like a
+ *     locator (`…url`, `…_id`, `board…`) the model does not know : it could
+ *     aim the call at another board than the classified one.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
@@ -32,13 +37,18 @@ import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 import { MIRO_COMMENT_ID, MIRO_ITEM_ID } from './identifiers.ts';
 import {
   BOARD_ARGUMENT,
-  BOARD_LOCATOR,
+  BOARD_NOTE,
+  DESCRIPTION_NOTES,
   ITEM_ARGUMENT,
   LEFT_OUT_UPSTREAM_TOOLS,
   LOCATOR,
   MODELLED_LOCATING_ARGUMENTS,
   PROVIDER_ID,
+  REQUIRED_BY_THE_GATEWAY,
+  TELEMETRY_ARGUMENTS,
   TOOL,
+  WITHHELD_ARGUMENTS,
+  locatorArgumentOf,
   toolNameOf,
   type Locator,
 } from './identity.ts';
@@ -99,11 +109,25 @@ export function readUpstreamToolList(raw: unknown): UpstreamToolList {
 /** A name that may carry a location : a URL, an id, a board. */
 const LOOKS_LOCATING = /(url|urls|_id|_ids)$|board/i;
 
-/** The arguments of an offered tool that the model does not know and that look like locators. */
+/**
+ * Whether the gateway offers an argument of an upstream tool : not the
+ * locator (the gateway writes it), not Miro's telemetry, not withheld.
+ */
+export function isOfferedArgument(upstream: string, name: string): boolean {
+  return (
+    name !== locatorArgumentOf(upstream) &&
+    !TELEMETRY_ARGUMENTS.has(name) &&
+    WITHHELD_ARGUMENTS[upstream]?.[name] === undefined
+  );
+}
+
+/** The offered arguments of a tool that the model does not know and that look like locators. */
 export function unmodelledLocators(tool: UpstreamTool): string[] {
   return Object.keys(tool.inputSchema.properties).filter(
     (name) =>
-      name !== BOARD_LOCATOR && LOOKS_LOCATING.test(name) && !MODELLED_LOCATING_ARGUMENTS.has(name),
+      isOfferedArgument(tool.name, name) &&
+      LOOKS_LOCATING.test(name) &&
+      !MODELLED_LOCATING_ARGUMENTS.has(name),
   );
 }
 
@@ -125,6 +149,7 @@ function itemProperty(required: boolean): Readonly<Record<string, unknown>> {
 
 /** The gateway's schema of an offered tool : Miro's, with `board` / `item_id` for `miro_url`. */
 function gatewaySchema(tool: UpstreamTool, locator: Locator): McpToolDeclaration['inputSchema'] {
+  const offered = (name: string): boolean => isOfferedArgument(tool.name, name);
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
   if (locator !== 'none') {
@@ -136,15 +161,22 @@ function gatewaySchema(tool: UpstreamTool, locator: Locator): McpToolDeclaration
     if (locator === 'board-item-required') required.push(ITEM_ARGUMENT);
   }
   for (const [name, schema] of Object.entries(tool.inputSchema.properties)) {
-    if (name === BOARD_LOCATOR) continue;
+    if (!offered(name)) continue;
     if (name in properties) {
       throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' declares '${name}' itself`);
     }
     properties[name] =
       name === 'comment_id' ? { ...schema, pattern: MIRO_COMMENT_ID.source } : { ...schema };
   }
-  for (const name of tool.inputSchema.required ?? []) {
-    if (name !== BOARD_LOCATOR) required.push(name);
+  for (const name of [
+    ...(tool.inputSchema.required ?? []),
+    ...(REQUIRED_BY_THE_GATEWAY[tool.name] ?? []),
+  ]) {
+    if (!offered(name)) continue;
+    if (!(name in properties)) {
+      throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' no longer takes '${name}'`);
+    }
+    if (!required.includes(name)) required.push(name);
   }
   return {
     type: 'object',
@@ -170,9 +202,10 @@ export function declarationsOf(list: UpstreamToolList): {
           `${PROVIDER_ID}: upstream tool '${tool.name}' takes ${unknown.join(', ')}, which may name another board: model it first`,
         );
       }
-      if (LOCATOR[tool.name] !== 'none' && !(BOARD_LOCATOR in tool.inputSchema.properties)) {
+      const locatorArgument = locatorArgumentOf(tool.name);
+      if (LOCATOR[tool.name] !== 'none' && !(locatorArgument in tool.inputSchema.properties)) {
         throw new Error(
-          `${PROVIDER_ID}: upstream tool '${tool.name}' has no '${BOARD_LOCATOR}' argument: model its locator first`,
+          `${PROVIDER_ID}: upstream tool '${tool.name}' has no '${locatorArgument}' argument: model its locator first`,
         );
       }
     }
@@ -189,12 +222,22 @@ export function declarationsOf(list: UpstreamToolList): {
     }
     offered.push({
       name,
-      description: tool.description,
+      description: descriptionOf(tool, locator),
       inputSchema: gatewaySchema(tool, locator),
     });
     upstreamOf.set(name, tool);
   }
   return { offered, upstreamOf };
+}
+
+/** Miro's description, and what differs through the gateway. */
+function descriptionOf(tool: UpstreamTool, locator: Locator): string {
+  const note = DESCRIPTION_NOTES[tool.name];
+  const notes = [
+    ...(locator === 'none' ? [] : [BOARD_NOTE]),
+    ...(note === undefined ? [] : [note]),
+  ];
+  return notes.length === 0 ? tool.description : `${tool.description}\n\n${notes.join(' ')}`;
 }
 
 const LIST_BOARDS_DECLARATION: McpToolDeclaration = {

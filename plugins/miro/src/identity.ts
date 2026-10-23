@@ -42,11 +42,84 @@ export const MIRO_BOARD_URL_BASE = 'https://miro.com/app/board/';
  * The argument through which Miro's MCP tools are told which board (and, with
  * `moveToWidget`, which item) they act on. The gateway never forwards the
  * agent's value : it builds the URL itself from the `board` and `item_id` it
- * classified (`call.ts`). ⚠ The name is modelled from Miro's documentation
- * ("tools accept full Miro board URLs") ; the first `tools/list` capture
- * confirms or corrects it (handbook §6.5).
+ * classified (`call.ts`). Confirmed by the capture of 2026-10-23.
  */
 export const BOARD_LOCATOR = 'miro_url';
+
+/**
+ * The tools whose locator has another name than `miro_url` : Miro's
+ * `content_item_list_roles` takes a board (or a space) as
+ * `content_item_url`. The gateway writes it the same way, from the
+ * classified board.
+ */
+const LOCATOR_ARGUMENT: Readonly<Record<string, string>> = {
+  content_item_list_roles: 'content_item_url',
+};
+
+/** The name of the argument through which an upstream tool is told its board. */
+export function locatorArgumentOf(upstream: string): string {
+  return LOCATOR_ARGUMENT[upstream] ?? BOARD_LOCATOR;
+}
+
+/**
+ * Arguments every Miro tool declares that describe the agent's own
+ * environment to Miro (captured 2026-10-23, "you must populate this
+ * field", neither required) : `invocation_source` ('skill' | 'ui' | unset)
+ * and `is_repository` (whether the agent runs in a source-control working
+ * directory). Telemetry of the agent's host, not an argument of the task :
+ * never offered to agents, never sent — Miro applies its defaults.
+ */
+export const TELEMETRY_ARGUMENTS: ReadonlySet<string> = new Set([
+  'invocation_source',
+  'is_repository',
+]);
+
+/**
+ * Arguments of an offered tool the gateway does not offer, each with the
+ * reason. An agent that sends one is refused (undeclared argument) ; the
+ * executor never sends it.
+ */
+export const WITHHELD_ARGUMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  board_create: {
+    parent_space_url:
+      'names a space of the team : spaces are outside the resource model, the board goes where Miro puts a new board',
+  },
+  image_create: {
+    image_token: 'comes from image_get_upload_url, which is not offered',
+  },
+  prototype_create: {
+    html_tokens: 'come from prototype_get_upload_url, which is not offered',
+    image_tokens: 'come from image_get_upload_url, which is not offered',
+  },
+};
+
+/**
+ * Arguments the gateway requires where Miro's schema does not : for
+ * `prototype_create`, Miro wants exactly one of `html_tokens` and
+ * `html_contents` ; with the tokens withheld, the HTML is the one input.
+ */
+export const REQUIRED_BY_THE_GATEWAY: Readonly<Record<string, readonly string[]>> = {
+  prototype_create: ['html_contents'],
+};
+
+/**
+ * What the gateway adds to Miro's description of a tool, for what differs
+ * through it. Miro's descriptions speak of `miro_url` and `moveToWidget` ;
+ * the board-located tools get `BOARD_NOTE` too.
+ */
+export const DESCRIPTION_NOTES: Readonly<Record<string, string>> = {
+  board_create:
+    'Through this gateway the board is created where Miro puts a new board (parent_space_url is not offered).',
+  image_create:
+    'Through this gateway give image_url, a public http(s) address: image_token and image_get_upload_url are not offered.',
+  prototype_create:
+    'Through this gateway give the screens as html_contents: html_tokens, image_tokens and the upload URLs are not offered, so images in the HTML must be http(s) URLs.',
+  table_create:
+    'Through this gateway the table is always created on the board you name: no new board is created.',
+};
+
+export const BOARD_NOTE =
+  'Through this gateway, name the board with board (a board of the mission) and, to target an item or a frame, its id with item_id: the gateway writes miro_url (and moveToWidget) itself.';
 
 /**
  * Arguments of an upstream tool whose name looks like a locator (`…url`,
@@ -56,8 +129,20 @@ export const BOARD_LOCATOR = 'miro_url';
  * module at import (`tools.ts`) until it is modelled.
  */
 export const MODELLED_LOCATING_ARGUMENTS: ReadonlySet<string> = new Set([
+  // The public image a new image item is made from : fetched by Miro, not a board.
   'image_url',
+  // A comment thread of the classified board (grammar in identifiers.ts).
   'comment_id',
+  // Items of the classified board : canvas_read_as_svg's selection, an earlier
+  // search result of canvas_search, a screen of prototype_read, a row of the
+  // table item. Miro resolves them inside the board of miro_url.
+  'widget_ids',
+  'target_id',
+  'screen_id',
+  'row_id',
+  // The person or group board_share / board_role_update grant a role to : not a
+  // board ; what sharing allows is the risk `board-share`.
+  'subject_id',
 ]);
 
 /**
@@ -90,20 +175,56 @@ export const UPSTREAM_TOOL = {
   tableUpdateHistory: 'table_get_latest_update_history',
   tableUpdateView: 'table_update_view',
   userWhoAmI: 'user_who_am_i',
+  boardUpdateMetadata: 'board_update_metadata',
+  boardGetSpace: 'board_get_space',
+  contentItemListRoles: 'content_item_list_roles',
+  boardShare: 'board_share',
+  boardRoleUpdate: 'board_role_update',
+  createBoardcast: 'create_boardcast',
 } as const;
 
 export type UpstreamToolName = (typeof UPSTREAM_TOOL)[keyof typeof UPSTREAM_TOOL];
 
+const UPLOAD_URL = 'hands the agent a presigned upload URL, a credential of its own (spec §2.4)';
+const SPACE = 'acts on a space of the team : spaces are outside the resource model (one board)';
+const BLOG_POST = 'acts on the blog posts of a space : outside the resource model (one board)';
+
 /**
- * Upstream tools the gateway does not offer to agents, each with the reason.
- * `board_search_boards` serves discovery only.
+ * Upstream tools the gateway does not offer to agents, each with the reason
+ * (captured list of 2026-10-23). `board_search_boards` serves discovery only.
  */
 export const LEFT_OUT_UPSTREAM_TOOLS: Readonly<Record<string, string>> = {
   [UPSTREAM_TOOL.boardSearchBoards]:
     "lists every board the person can open in the team, beyond the mission's ; discovery uses it, agents get list_boards",
-  [UPSTREAM_TOOL.imageGetUploadUrl]:
-    'hands the agent a presigned upload URL, a credential of its own (spec §2.4)',
+  [UPSTREAM_TOOL.imageGetUploadUrl]: UPLOAD_URL,
+  canvas_get_html_upload_url: UPLOAD_URL,
+  prototype_get_upload_url: UPLOAD_URL,
   [UPSTREAM_TOOL.userWhoAmI]: "reads the connecting person's own profile ; no task needs it",
+  user_search_organization_users:
+    'searches the people of the whole organisation (names, emails) : no resource of the mission bounds it',
+  get_brand_context:
+    "reads the organisation's brand theme and guidelines : no resource of the mission bounds it",
+  board_create_format:
+    'creates a new content item (embed, table, kanban, document…) in a space, not on a board of the mission',
+  board_move:
+    'moves a board into another space or folder : the destination is outside the resource model',
+  board_move_to_team:
+    'moves a board to another team : it leaves the account that reaches it, and its new team is outside the mission',
+  board_restore:
+    'restores boards from the trash by URL : a board in the trash is not a resource of the mission',
+  space_create: SPACE,
+  space_update_metadata: SPACE,
+  space_list: SPACE,
+  space_list_boards: SPACE,
+  space_list_children: SPACE,
+  space_share: SPACE,
+  space_role_update: SPACE,
+  section_create: SPACE,
+  section_delete: SPACE,
+  section_update_metadata: SPACE,
+  blog_post_create: BLOG_POST,
+  blog_post_list: BLOG_POST,
+  blog_post_update: BLOG_POST,
 };
 
 /** How a tool is told where it acts (`tools.ts` builds the gateway's schema from it). */
@@ -140,6 +261,12 @@ export const LOCATOR: Readonly<Record<string, Locator>> = {
   [UPSTREAM_TOOL.tableSyncRows]: 'board-item-required',
   [UPSTREAM_TOOL.tableUpdateHistory]: 'board-item-required',
   [UPSTREAM_TOOL.tableUpdateView]: 'board-item-required',
+  [UPSTREAM_TOOL.boardUpdateMetadata]: 'board',
+  [UPSTREAM_TOOL.boardGetSpace]: 'board',
+  [UPSTREAM_TOOL.contentItemListRoles]: 'board',
+  [UPSTREAM_TOOL.boardShare]: 'board',
+  [UPSTREAM_TOOL.boardRoleUpdate]: 'board',
+  [UPSTREAM_TOOL.createBoardcast]: 'board',
 };
 
 /** The gateway's own arguments that locate a call : the board, and an item of it. */
@@ -175,4 +302,10 @@ export const TOOL = {
   tableSyncRows: toolNameOf(UPSTREAM_TOOL.tableSyncRows),
   tableUpdateHistory: toolNameOf(UPSTREAM_TOOL.tableUpdateHistory),
   tableUpdateView: toolNameOf(UPSTREAM_TOOL.tableUpdateView),
+  boardGetSpace: toolNameOf(UPSTREAM_TOOL.boardGetSpace),
+  boardUpdateMetadata: toolNameOf(UPSTREAM_TOOL.boardUpdateMetadata),
+  contentItemListRoles: toolNameOf(UPSTREAM_TOOL.contentItemListRoles),
+  boardShare: toolNameOf(UPSTREAM_TOOL.boardShare),
+  boardRoleUpdate: toolNameOf(UPSTREAM_TOOL.boardRoleUpdate),
+  createBoardcast: toolNameOf(UPSTREAM_TOOL.createBoardcast),
 } as const;

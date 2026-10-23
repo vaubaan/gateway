@@ -9,7 +9,9 @@
  * comments live under a board ; `delete` is a verb leaf under the entities
  * that can be deleted, `bulk-create` a verb leaf under the item collection.
  * `format-guide` is Miro's documentation of the canvas formats, served by its
- * MCP server : nothing of the customer's.
+ * MCP server : nothing of the customer's. `metadata`, `access` and
+ * `boardcast` (0.3.0) are the board's own details, who can open it, and the
+ * narrated walkthroughs recorded on it.
  *
  * `connector`, `tag` and `tag-link` have no tool of their own since the
  * plugin rewraps Miro's MCP server (connectors are drawn as SVG lines, as
@@ -65,6 +67,27 @@ export const miroDataModel: DataModel = {
           parent: 'board',
           cardinalities: ['one', 'unbounded'],
           description: 'A comment thread on the board or on one of its items.',
+        },
+        {
+          name: 'metadata',
+          parent: 'board',
+          cardinalities: ['one'],
+          description:
+            "The board's own details : its title, description and icon, and the space it is in.",
+        },
+        {
+          name: 'access',
+          parent: 'board',
+          cardinalities: ['one'],
+          description:
+            'Who can open the board — people and groups, each with a role from viewer to owner.',
+        },
+        {
+          name: 'boardcast',
+          parent: 'board',
+          cardinalities: ['one', 'unbounded'],
+          description:
+            'A boardcast : a narrated, replayable walkthrough of the board (a talktrack), with a playback link.',
         },
         {
           name: 'tag-link',

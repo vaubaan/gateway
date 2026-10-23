@@ -9,8 +9,9 @@
  * `readMiroCall(tool, args, resources)` checks the tool, the closed argument
  * surface, the board (a board of the mission), the item and the comment
  * through their grammars, the type of every other argument, and returns
- * what to send — the upstream tool and its arguments, `miro_url` written by
- * the gateway from the classified board and item — or the sentence refusing
+ * what to send — the upstream tool and its arguments, the board URL
+ * (`miro_url`) written by the gateway from the classified board and item —
+ * or the sentence refusing
  * the call. `classify` turns a `MiroCall` into slices, `execute` into the
  * upstream request ; neither reads `args` past it, so what is classified is
  * what is sent. Pure : no network, no credential, no clock.
@@ -21,12 +22,12 @@ import { declaredArgumentsOf, undeclaredArgumentDenial, type Resource } from '@v
 import { boardOf, boardUrlOf, commentId, itemId } from './identifiers.ts';
 import {
   BOARD_ARGUMENT,
-  BOARD_LOCATOR,
   ITEM_ARGUMENT,
   LOCATOR,
   PROVIDER_ID,
   TOOL,
   TOOL_PREFIX,
+  locatorArgumentOf,
 } from './identity.ts';
 import { miroTools, upstreamToolOf } from './tools.ts';
 
@@ -55,6 +56,10 @@ export type MiroCall =
 export type MiroCallOutcome = { readonly call: MiroCall } | { readonly denied: string };
 
 const KNOWN_TOOLS: ReadonlySet<string> = new Set(miroTools.map((t) => t.name));
+/** The gateway's declaration of each tool : what an agent may send. */
+const DECLARATION_OF = new Map(miroTools.map((t) => [t.name, t] as const));
+/** The gateway's own locating arguments, never forwarded as such. */
+const GATEWAY_LOCATORS: ReadonlySet<string> = new Set([BOARD_ARGUMENT, ITEM_ARGUMENT]);
 /** `execute` forwards the declared arguments : the surface is closed. */
 const DECLARED_ARGUMENTS = declaredArgumentsOf(miroTools);
 
@@ -90,9 +95,14 @@ export function resolveBoard(
   return { board: ref };
 }
 
-/** The JSON type an argument's schema names, checked loosely (the value itself is Miro's to read). */
+/**
+ * The JSON type an argument's schema names, checked loosely (the value itself
+ * is Miro's to read). `null` passes where Miro's schema says `nullable`.
+ */
 function typeIssue(name: string, schema: unknown, value: unknown): string | null {
-  const type = (schema as { readonly type?: unknown } | null)?.type;
+  const declared = schema as { readonly type?: unknown; readonly nullable?: unknown } | null;
+  const type = declared?.type;
+  if (value === null && declared?.nullable === true) return null;
   const ok = (() => {
     switch (type) {
       case 'string':
@@ -135,9 +145,11 @@ export function readMiroCall(
   }
 
   const upstream = tool.slice(TOOL_PREFIX.length);
-  const declaration = upstreamToolOf(tool);
+  const declaration = DECLARATION_OF.get(tool);
   const locator = LOCATOR[upstream];
-  if (!declaration || !locator) return { denied: `unknown tool '${tool}'` };
+  if (!declaration || !upstreamToolOf(tool) || !locator) {
+    return { denied: `unknown tool '${tool}'` };
+  }
 
   let board: string | null = null;
   let item: string | null = null;
@@ -158,8 +170,10 @@ export function readMiroCall(
 
   let comment: string | null = null;
   const forwarded: Record<string, unknown> = {};
-  for (const [name, schema] of Object.entries(declaration.inputSchema.properties)) {
-    if (name === BOARD_LOCATOR) continue;
+  // The gateway's declaration : Miro's offered arguments, without the
+  // locator, the telemetry and the withheld ones (tools.ts).
+  for (const [name, schema] of Object.entries(declaration.inputSchema.properties ?? {})) {
+    if (GATEWAY_LOCATORS.has(name)) continue;
     const value = args[name];
     if (value === undefined) {
       if (declaration.inputSchema.required?.includes(name)) {
@@ -175,7 +189,7 @@ export function readMiroCall(
     if (issue !== null) return { denied: issue };
     forwarded[name] = value;
   }
-  if (board !== null) forwarded[BOARD_LOCATOR] = boardUrlOf(board, item);
+  if (board !== null) forwarded[locatorArgumentOf(upstream)] = boardUrlOf(board, item);
 
   return { call: { kind: 'forward', tool, upstream, board, item, comment, arguments: forwarded } };
 }

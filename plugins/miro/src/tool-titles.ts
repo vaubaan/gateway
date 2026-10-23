@@ -30,4 +30,10 @@ export const miroToolTitles: Readonly<Record<string, string>> = {
   [TOOL.tableSyncRows]: "Add or update a table's rows",
   [TOOL.tableUpdateHistory]: "Read a table's latest changes",
   [TOOL.tableUpdateView]: "Change a table's view",
+  [TOOL.boardGetSpace]: 'Find the space of a board',
+  [TOOL.boardUpdateMetadata]: 'Rename a board or change its description',
+  [TOOL.contentItemListRoles]: 'See who can open a board',
+  [TOOL.boardShare]: 'Share a board with someone',
+  [TOOL.boardRoleUpdate]: "Change someone's role on a board",
+  [TOOL.createBoardcast]: 'Record a narrated walkthrough',
 };

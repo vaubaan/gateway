@@ -2,7 +2,7 @@
 title: Miro provider plugin
 status: current
 date: 2026-10-16
-last_synced: 2026-10-21
+last_synced: 2026-10-23
 tracks:
   - plugins/miro/src/
   - plugins/miro/scripts/
@@ -11,7 +11,7 @@ tracks:
 
 # Miro provider plugin
 
-`@vaubaan/plugin-miro` 0.2.0, tool prefix `miro__`. A **rewrap of Miro's
+`@vaubaan/plugin-miro` 0.3.0, tool prefix `miro__`. A **rewrap of Miro's
 official MCP server** (`https://mcp.miro.com/`), connected by **OAuth with a
 client the gateway registers itself** — no Miro app to create, nothing to
 paste. Decisions: ADR
@@ -22,18 +22,20 @@ paste. Decisions: ADR
 [miro-board-ref-tilde-spelling](../../decisions/miro-board-ref-tilde-spelling.md)
 (the board ref). Facts about Miro come from Miro's documentation
 (developers.miro.com, read through Context7 and directly), from Miro's
-`miroapp/miro-ai` repository, and from unauthenticated probes of
-`mcp.miro.com` on 2026-10-21 (see "Sources"). A fact nobody could check
-without a Miro account is marked **⚠ unverified**; the model fails closed
+`miroapp/miro-ai` repository, from unauthenticated probes of
+`mcp.miro.com` on 2026-10-21, and from the product owner's run of the
+capture script against a real Miro account on 2026-10-23 (see "Sources").
+A fact still not checked is marked **⚠ unverified**; the model fails closed
 when such a fact turns out worse than assumed.
 
-**What is not verified, in one paragraph.** No Miro account was available:
-the OAuth flow, the consent page, the token lifetime, `tools/list` and every
-tool call ran against mocks only. The **tool names** are Miro's (documented);
-the **argument names** in `src/upstream-tools.json` — the board locator
-`miro_url` included — are a model of the documentation, not a capture. The
-first person with a Miro account runs the capture (§6.5); the first discovery
-of every connection already logs any difference.
+**What is verified, and what is not.** On 2026-10-23 the capture script ran
+against a real Miro account: the OAuth flow works (dynamic registration,
+PKCE, an access token of 3599 s, a refresh token), and Miro's `tools/list`
+(51 tools) is now `src/upstream-tools.json`, verbatim — tool names, argument
+names, required arguments and the locator `miro_url` are Miro's. **The tool
+calls themselves have not run live**: what Miro answers to each, and
+discovery's reading of `board_search_boards`, are still tested against mocks
+only.
 
 ## 0. Why the MCP server, and not the REST API
 
@@ -60,15 +62,24 @@ miro-rewraps-the-official-mcp-server:
    `miro_url` itself (§2, §5.1).
 3. **`list_boards` is local**: answered from the mission's boards, never
    from Miro's `board_search_boards`, which names every board of the team.
-4. **Three upstream tools left out**: `board_search_boards` (discovery only),
-   `image_get_upload_url` (a presigned upload URL is a credential handed to
-   the agent), `user_who_am_i` (no task needs the person's profile).
+4. **Upstream tools left out** with their reason (§5.5): `board_search_boards`
+   (discovery only), every tool that hands out an upload URL (a presigned
+   upload URL is a credential handed to the agent), the space, section and
+   blog-post tools, the board moves and restore, the organisation-wide reads.
 5. **An update of the canvas may delete**: `canvas_update_from_svg` touches
    `item-delete` and `frame-delete` on every call (§5.2).
 6. **Catalog 2 keeps every id of catalog 1** and adds `read-format-guide` and
    `board-create`.
-7. **The tool list is modelled until captured**, with three safeguards
-   (§6.5).
+7. **The tool list is captured** (2026-10-23), with three safeguards against
+   the next change at Miro (§6.5).
+
+Added on 2026-10-23 (0.3.0, catalog 3, amendment of the same ADR): the
+tools aligned on the captured schemas; **Miro's telemetry fields
+`invocation_source` and `is_repository` are never offered nor sent**;
+six tools added on one board of the mission — its space, its details, who
+can open it, sharing it, changing a role on it, a narrated walkthrough —
+each with a risk of its own (`board-share`: an exfiltration path, in
+`facilitator` only, behind an approval).
 
 Kept from 0.1.0 (product owner, 2026-10-16): **no environment** (no entity
 `envScopable`, no env-scoped risk; deletions are held by the gate of the
@@ -92,7 +103,10 @@ board[<board ref>]            the resource
   ├─ connector[<id>]          (catalog 1; lines are drawn as items since 0.2.0)
   │    └─ delete
   ├─ tag[<tag id>]            (catalog 1; no tool since 0.2.0)
-  └─ comment[<comment id>]    a comment thread on the board or one of its items
+  ├─ comment[<comment id>]    a comment thread on the board or one of its items
+  ├─ metadata                 the board's title, description, icon, and its space (0.3.0)
+  ├─ access                   who can open the board, each with a role (0.3.0)
+  └─ boardcast                a narrated walkthrough recorded on the board (0.3.0)
 format-guide                  the SVG and typed-format specifications of the canvas tools
 ```
 
@@ -105,36 +119,81 @@ the catalog's patterns name them, and a risk is never narrowed silently.
 `B` = the board ref the `board` argument resolved to (a board of the
 mission, §5.1); `I` = `item_id` when given, else `*`; `K` = `comment_id`.
 Every tool's other arguments are Miro's own, forwarded as declared
-(`src/upstream-tools.json`).
+(`src/upstream-tools.json`), except Miro's telemetry fields and the
+withheld arguments (§2, "Arguments the gateway does not offer").
 
-| Tool                                     | Locator                     | Slice(s)                                                             |
-| ---------------------------------------- | --------------------------- | -------------------------------------------------------------------- |
-| `miro__list_boards`                      | — (the mission's boards)    | `miro.board[B1,B2,…].R`, answered by the gateway                     |
-| `miro__board_create`                     | none                        | `miro.board.W`                                                       |
-| `miro__canvas_search`                    | `board`, `item_id?`         | `miro.board[B].item[I].R`                                            |
-| `miro__canvas_read_as_svg`               | `board`, `item_id?`         | `miro.board[B].item[I].R`                                            |
-| `miro__canvas_create_from_svg`           | `board`, `item_id?` (frame) | `miro.board[B].item.W`, `miro.board[B].item.bulk-create.W`           |
-| `miro__canvas_update_from_svg`           | `board`, `item_id?`         | `miro.board[B].item[I].W`, `…item[*].delete.W`, `…frame[*].delete.W` |
-| `miro__canvas_get_canvas_composer_skill` | none                        | `miro.format-guide.R`                                                |
-| `miro__canvas_load_format_skill`         | none                        | `miro.format-guide.R`                                                |
-| `miro__comment_list_comments`            | `board`, `item_id?`         | `miro.board[B].comment[*].R`                                         |
-| `miro__comment_create`                   | `board`, `item_id?`         | `miro.board[B].comment.W`                                            |
-| `miro__comment_reply`                    | `board`                     | `miro.board[B].comment[K].W`                                         |
-| `miro__comment_resolve`                  | `board`                     | `miro.board[B].comment[K].W`                                         |
-| `miro__image_get_data`                   | `board`, **`item_id`**      | `miro.board[B].item[I].R`                                            |
-| `miro__image_get_url`                    | `board`, **`item_id`**      | `miro.board[B].item[I].R`                                            |
-| `miro__image_create`                     | `board`, `item_id?` (frame) | `miro.board[B].item.W`                                               |
-| `miro__prototype_read`                   | `board`, `item_id?`         | `miro.board[B].item[I].R`                                            |
-| `miro__prototype_create`                 | `board`, `item_id?` (frame) | `miro.board[B].item.W`, `miro.board[B].item.bulk-create.W`           |
-| `miro__table_create`                     | `board`, `item_id?` (frame) | `miro.board[B].item.W`                                               |
-| `miro__table_list_rows`                  | `board`, **`item_id`**      | `miro.board[B].item[I].R`                                            |
-| `miro__table_sync_rows`                  | `board`, **`item_id`**      | `miro.board[B].item[I].W`                                            |
-| `miro__table_get_latest_update_history`  | `board`, **`item_id`**      | `miro.board[B].item[I].R`                                            |
-| `miro__table_update_view`                | `board`, **`item_id`**      | `miro.board[B].item[I].W`                                            |
+| Tool                                     | Locator                      | Slice(s)                                                             |
+| ---------------------------------------- | ---------------------------- | -------------------------------------------------------------------- |
+| `miro__list_boards`                      | — (the mission's boards)     | `miro.board[B1,B2,…].R`, answered by the gateway                     |
+| `miro__board_create`                     | none                         | `miro.board.W`                                                       |
+| `miro__canvas_search`                    | `board`, `item_id?`          | `miro.board[B].item[I].R`                                            |
+| `miro__canvas_read_as_svg`               | `board`, `item_id?`          | `miro.board[B].item[I].R`                                            |
+| `miro__canvas_create_from_svg`           | `board`, `item_id?` (frame)  | `miro.board[B].item.W`, `miro.board[B].item.bulk-create.W`           |
+| `miro__canvas_update_from_svg`           | `board`, `item_id?`          | `miro.board[B].item[I].W`, `…item[*].delete.W`, `…frame[*].delete.W` |
+| `miro__canvas_get_canvas_composer_skill` | none                         | `miro.format-guide.R`                                                |
+| `miro__canvas_load_format_skill`         | none                         | `miro.format-guide.R`                                                |
+| `miro__comment_list_comments`            | `board`, `item_id?`          | `miro.board[B].comment[*].R`                                         |
+| `miro__comment_create`                   | `board`, `item_id?`          | `miro.board[B].comment.W`                                            |
+| `miro__comment_reply`                    | `board`                      | `miro.board[B].comment[K].W`                                         |
+| `miro__comment_resolve`                  | `board`                      | `miro.board[B].comment[K].W`                                         |
+| `miro__image_get_data`                   | `board`, **`item_id`**       | `miro.board[B].item[I].R`                                            |
+| `miro__image_get_url`                    | `board`, **`item_id`**       | `miro.board[B].item[I].R`                                            |
+| `miro__image_create`                     | `board`, `item_id?` (frame)  | `miro.board[B].item.W`                                               |
+| `miro__prototype_read`                   | `board`, `item_id?`          | `miro.board[B].item[I].R`                                            |
+| `miro__prototype_create`                 | `board`, `item_id?` (frame)  | `miro.board[B].item.W`, `miro.board[B].item.bulk-create.W`           |
+| `miro__table_create`                     | `board`, `item_id?` (frame)  | `miro.board[B].item.W`                                               |
+| `miro__table_list_rows`                  | `board`, **`item_id`**       | `miro.board[B].item[I].R`                                            |
+| `miro__table_sync_rows`                  | `board`, **`item_id`**       | `miro.board[B].item[I].W`                                            |
+| `miro__table_get_latest_update_history`  | `board`, **`item_id`**       | `miro.board[B].item[I].R`                                            |
+| `miro__table_update_view`                | `board`, **`item_id`**       | `miro.board[B].item[I].W`                                            |
+| `miro__board_get_space`                  | `board`                      | `miro.board[B].metadata.R`                                           |
+| `miro__board_update_metadata`            | `board`                      | `miro.board[B].metadata.W`                                           |
+| `miro__content_item_list_roles`          | `board` → `content_item_url` | `miro.board[B].access.R`                                             |
+| `miro__board_share`                      | `board`                      | `miro.board[B].access.W`                                             |
+| `miro__board_role_update`                | `board`                      | `miro.board[B].access.W`                                             |
+| `miro__create_boardcast`                 | `board`                      | `miro.board[B].boardcast.W`                                          |
 
 Creating into a frame emits no frame slice: `item_id` names where the new
-items go, not an item that changes. The table tools are marked "deprecating
-soon" by Miro; they stay while Miro serves them.
+items go, not an item that changes. Ids of items inside the classified board
+(`widget_ids` of `canvas_read_as_svg`, `target_id` of `canvas_search`,
+`screen_id` of `prototype_read`, `row_id` of a table) are Miro's arguments,
+resolved by Miro inside the board of `miro_url`; the slice names the board
+and, when given, `item_id`. `content_item_list_roles` takes its board as
+`content_item_url`: the gateway writes that argument the same way
+(`locatorArgumentOf`).
+
+### Arguments the gateway does not offer
+
+- **Miro's telemetry of the agent's host.** Every Miro tool declares
+  `invocation_source` ("you must populate this field": `skill` when a Miro
+  AI skill asked for the call, `ui` from Miro's MCP UI, unset otherwise) and
+  `is_repository` ("true when the folder you are operating in is a
+  source-control repository"). Neither is required; both describe the
+  agent's environment, not the task. They are not in the gateway's schemas,
+  an agent that sends one is refused, and the executor never sends them:
+  Miro applies its defaults (`TELEMETRY_ARGUMENTS`).
+- **Withheld arguments** (`WITHHELD_ARGUMENTS`): `board_create`'s
+  `parent_space_url` (a space, outside the resource model);
+  `image_create`'s `image_token` and `prototype_create`'s `html_tokens` /
+  `image_tokens` (they come from the upload-URL tools, which are left out).
+  `prototype_create` therefore **requires `html_contents`**
+  (`REQUIRED_BY_THE_GATEWAY`): Miro wants exactly one of the tokens and the
+  inline HTML, and calls the inline HTML a fallback; images in it must be
+  http(s) URLs, which Miro fetches itself.
+- **`miro_url` of a tool with no board.** `canvas_get_canvas_composer_skill`
+  declares an optional `miro_url` (no description); the gateway classifies
+  the guide as Miro's documentation, with no board, and sends none.
+- `table_create` without `miro_url` would create a new board: the gateway
+  always writes it, so a table is always created on the board named.
+
+Miro's descriptions speak of `miro_url` and `moveToWidget`: the gateway
+appends a sentence to each board tool's description ("name the board with
+board … the gateway writes miro_url itself"), and to the tools above what
+differs through it (`BOARD_NOTE`, `DESCRIPTION_NOTES`). A `null` passes
+where Miro's schema says `nullable`.
+
+The table tools are marked "deprecating soon" by Miro; they stay while Miro
+serves them.
 
 ### Undeclared arguments
 
@@ -146,34 +205,54 @@ required and for their JSON type; their values are Miro's to read.
 
 ## 3. Catalog and presets
 
-`src/risk-catalog.yaml`, catalog 2 (2026-10-21). Eight named risks and the
-fallback; no env-scoped risk.
+`src/risk-catalog.yaml`, catalog 3 (2026-10-23). Thirteen named risks and
+the fallback; no env-scoped risk. Catalog 3 keeps every id of catalog 2 and
+adds the last five rows before the fallback.
 
-| Risk                  | Matches                                              | Vector (rev / blast / data / visibility / persistence) | Ceiling / min |
-| --------------------- | ---------------------------------------------------- | ------------------------------------------------------ | ------------- |
-| `read-boards`         | `board[*].R`                                         | reversible / single / metadata / internal / stateless  | 10            |
-| `read-board-content`  | `board[**].{item,connector,tag,comment}[**].R`       | reversible / single / pii / internal / stateless       | 120           |
-| `read-format-guide`   | `format-guide.R`                                     | reversible / single / metadata / internal / stateless  | 30            |
-| `content-write`       | `board[**].{item,frame,connector,tag,comment}[**].W` | reversible / single / data / team / session            | 60            |
-| `bulk-create`         | `board[**].item.bulk-create.W`                       | costly / bulk / data / team / session                  | 10            |
-| `item-delete`         | `board[**].{item,connector}[**].delete.W`            | costly / single / data / team / session                | 20            |
-| `frame-delete`        | `board[**].frame[**].delete.W`                       | irreversible / bulk / data / team / session            | 20            |
-| `board-create`        | `board.W`                                            | costly / single / data / team / session                | 5             |
-| `uncategorized-write` | `**.W` (fallback, in no preset)                      | costly / bulk / data / team / session                  | —             |
+| Risk                  | Matches                                              | Vector (rev / blast / data / visibility / persistence)  | Ceiling / min |
+| --------------------- | ---------------------------------------------------- | ------------------------------------------------------- | ------------- |
+| `read-boards`         | `board[*].R`                                         | reversible / single / metadata / internal / stateless   | 10            |
+| `read-board-content`  | `board[**].{item,connector,tag,comment}[**].R`       | reversible / single / pii / internal / stateless        | 120           |
+| `read-format-guide`   | `format-guide.R`                                     | reversible / single / metadata / internal / stateless   | 30            |
+| `content-write`       | `board[**].{item,frame,connector,tag,comment}[**].W` | reversible / single / data / team / session             | 60            |
+| `bulk-create`         | `board[**].item.bulk-create.W`                       | costly / bulk / data / team / session                   | 10            |
+| `item-delete`         | `board[**].{item,connector}[**].delete.W`            | costly / single / data / team / session                 | 20            |
+| `frame-delete`        | `board[**].frame[**].delete.W`                       | irreversible / bulk / data / team / session             | 20            |
+| `board-create`        | `board.W`                                            | costly / single / data / team / session                 | 5             |
+| `read-board-details`  | `board[*].metadata.R`                                | reversible / single / metadata / internal / stateless   | 30            |
+| `read-board-access`   | `board[*].access.R`                                  | reversible / single / pii / internal / stateless        | 30            |
+| `board-details-write` | `board[*].metadata.W`                                | reversible / single / metadata / team / session         | 10            |
+| `board-share`         | `board[*].access.W`                                  | irreversible / single / pii / public / posture          | 5             |
+| `boardcast-create`    | `board[*].boardcast.W`                               | costly / single / data / team / session (cost moderate) | 5             |
+| `uncategorized-write` | `**.W` (fallback, in no preset)                      | costly / bulk / data / team / session                   | —             |
 
 Writes are layered: `content-write`'s recursive patterns match the deletion
 and bulk leaves too, so a mission needs `content-write` for any change and
 the specific risk on top. `read-board-content` is `pii`: comments and items
-carry who wrote them.
+carry who wrote them. The board's own details, its access and its
+walkthroughs are **not** under `content-write` (its patterns name the
+board's content only): each has its own risk.
 
-| Preset        | Risks                                                    | Gates                                                     |
-| ------------- | -------------------------------------------------------- | --------------------------------------------------------- |
-| `read-only`   | `read-boards`, `read-board-content`, `read-format-guide` | all `auto`                                                |
-| `scribe`      | + `content-write`, `bulk-create`                         | all `auto`; never deletes, so it cannot update the canvas |
-| `facilitator` | + `item-delete`, `frame-delete`, `board-create`          | deletions and new boards `approval`; the rest `auto`      |
+`board-share` covers `board_share` and `board_role_update`: whoever is named
+(a person by email or user id, or a group), with a role up to `owner`, reads
+everything on the board from then on, may change it, share it further or
+take it over, and may be outside the company where Miro's sharing settings
+allow it. Access can be taken back at Miro; what was read cannot — the
+vector says `irreversible`, `public`, `posture`. `read-board-access` is
+`pii`: the list carries colleagues' emails. `boardcast-create`'s `cost` is
+`moderate` because its voice is generated by Miro (⚠ whether it draws on
+the plan's AI credits is not documented).
 
-In `facilitator`, every `canvas_update_from_svg` asks first (one request
-covers the call: ADR one-approval-request-covers-the-call).
+| Preset        | Risks                                                                                                                          | Gates                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `read-only`   | `read-boards`, `read-board-content`, `read-format-guide`, `read-board-details`                                                 | all `auto`                                                   |
+| `scribe`      | + `content-write`, `bulk-create`                                                                                               | all `auto`; never deletes, so it cannot update the canvas    |
+| `facilitator` | + `item-delete`, `frame-delete`, `board-create`, `read-board-access`, `board-details-write`, `boardcast-create`, `board-share` | deletions, new boards and shares `approval`; the rest `auto` |
+
+In `facilitator`, every `canvas_update_from_svg` and every share asks first
+(one request covers the call: ADR one-approval-request-covers-the-call).
+`read-only` and `scribe` never see who can open a board, never rename it and
+never share it.
 
 ### Rate limits
 
@@ -184,9 +263,10 @@ the limits are known.
 
 ## 4. Coverage
 
-`assertCatalogCoverage` over `SAMPLES` (`tests/unit/fixtures.ts`): every one
-of the 22 tools classifies to slices the catalog covers, the eight named
-risks are touched, the fallback never (`plugin.test.ts`).
+`assertCatalogCoverage` over `SAMPLES` (`tests/unit/fixtures.ts`, written
+with the captured argument names): every one of the 28 tools classifies to
+slices the catalog covers, the thirteen named risks are touched, the
+fallback never (`plugin.test.ts`).
 
 ## 5. Edge cases
 
@@ -232,11 +312,29 @@ itself (base64), passed through as an MCP image block.
 
 ### 5.5 Tools left out
 
-`LEFT_OUT_UPSTREAM_TOOLS` (`src/identity.ts`), refused as unknown tools:
-`board_search_boards` (every board of the team, beyond the mission's — used
-by discovery only), `image_get_upload_url` (a presigned upload URL handed to
-the agent is a credential, spec §2.4; `image_create` takes an image URL
-instead), `user_who_am_i` (the connecting person's profile).
+`LEFT_OUT_UPSTREAM_TOOLS` (`src/identity.ts`), refused as unknown tools —
+24 of Miro's 51:
+
+- `board_search_boards` — every board of the team, beyond the mission's;
+  used by discovery only.
+- `image_get_upload_url`, `canvas_get_html_upload_url`,
+  `prototype_get_upload_url` — a presigned upload URL handed to the agent is
+  a credential (spec §2.4). `image_create` takes an image URL instead,
+  `prototype_create` inline HTML.
+- `user_who_am_i` (the connecting person's profile),
+  `user_search_organization_users` (names and emails of the whole
+  organisation), `get_brand_context` (the organisation's brand theme): reads
+  no resource of the mission bounds.
+- `board_create_format` — creates a content item in a space, not on a board.
+- `board_move` (into another space or folder), `board_move_to_team` (the
+  board leaves the team the account reaches), `board_restore` (boards in the
+  trash, by URL: not resources of the mission).
+- `space_create`, `space_update_metadata`, `space_list`,
+  `space_list_boards`, `space_list_children`, `space_share`,
+  `space_role_update`, `section_create`, `section_delete`,
+  `section_update_metadata`, `blog_post_create`, `blog_post_list`,
+  `blog_post_update` — spaces, their sections and blog posts are outside the
+  resource model (one resource is one board).
 
 ### 5.6 One connection is one team
 
@@ -286,15 +384,24 @@ An account connected with 0.1.0 (`api-key`) runs nothing after the upgrade
 
 ### 6.2 Discovery
 
-`discoverMiroResources`: one `tools/call` of `board_search_boards` with no
-argument. The answer's shape is ⚠ undocumented, so `boardsIn` reads it
-leniently and strictly at once: JSON text (or `structuredContent`) is walked
-for objects whose `id` passes the board grammar (not all digits: user and
-team ids are numeric) and whose `viewLink` / `url` / `link` / `boardUrl` /
-`miro_url` is that board's URL, or whose `type` is `board`; a text that is
-not JSON gives the board URLs it contains. One resource per board: `ref` the
-id with `=` as `~`, `displayName` the name (else the id), `metadata.url`. At
-most 500 boards (`MAX_DISCOVERED_BOARDS`, a warning past it).
+`discoverMiroResources`: `board_search_boards` without a query, page by page
+— `limit: 50` (Miro's maximum; its default is 20), `offset` 0, 50, … — while
+the answer says `has_more: true` and the page added a board, up to the
+ceiling. The captured `outputSchema` describes the answer as
+`{ data: [{ name, miro_url, description, team_name, owner, … }], total,
+has_more }`: a board summary has **no id**, only its URL. `boardsIn` reads
+it leniently and strictly at once: JSON text (or `structuredContent`) is
+walked for objects that either have an `id` passing the board grammar (not
+all digits: user and team ids are numeric) with that board's `viewLink` /
+`url` / `link` / `boardUrl` / `miro_url` (or `type: board`), or have no `id`
+and the link of exactly one board — not an item's link (`moveToWidget`,
+`focusWidget`); a text that is not JSON gives the board URLs it contains,
+with or without the trailing slash. One resource per board: `ref` the id
+with `=` as `~`, `displayName` the name (else the id), `metadata.url`. At
+most 500 boards (`MAX_DISCOVERED_BOARDS`, a warning past it). Version 0.2.0
+called it once with no argument and read boards by `id` only: against the
+captured shape it would have found at most 20 boards, and none from a JSON
+answer (⚠ the live answer itself is still to be seen).
 
 A `403` at that call — what Miro is ⚠ assumed to answer when the
 organisation has not enabled its MCP server — is a `CredentialRefusal` with
@@ -338,69 +445,87 @@ Every request goes to one constant URL; no identifier reaches a URL path.
 
 ### 6.4 Code map
 
-| File                                | What is in it                                                                          |
-| ----------------------------------- | -------------------------------------------------------------------------------------- |
-| `src/identity.ts`                   | ids, Miro's URLs and OAuth endpoints, upstream names, locators, tools left out, `TOOL` |
-| `src/identifiers.ts`                | the grammars, `boardOf`, `boardUrlOf`                                                  |
-| `src/upstream-tools.json`           | Miro's `tools/list` (modelled until captured)                                          |
-| `src/tools.ts`                      | the gateway's declarations built from it; the refusals of an unmodelled tool / locator |
-| `src/call.ts`                       | `readMiroCall`: the one reader of a call                                               |
-| `src/classify.ts`                   | the slices                                                                             |
-| `src/mcp.ts`                        | the JSON-RPC client                                                                    |
-| `src/execute.ts`                    | execution, discovery, `boardsIn`, `toolDrift`                                          |
-| `src/credential.ts`                 | the `oauth2` spec                                                                      |
-| `src/risk-catalog.yaml`             | catalog 2                                                                              |
-| `scripts/capture-upstream-tools.ts` | the capture of `tools/list` (§6.5)                                                     |
+| File                                | What is in it                                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `src/identity.ts`                   | ids, Miro's URLs and OAuth endpoints, upstream names, locators, tools and arguments left out, `TOOL` |
+| `src/identifiers.ts`                | the grammars, `boardOf`, `boardUrlOf`                                                                |
+| `src/upstream-tools.json`           | Miro's `tools/list`, captured 2026-10-23                                                             |
+| `src/tools.ts`                      | the gateway's declarations built from it; the refusals of an unmodelled tool / locator               |
+| `src/call.ts`                       | `readMiroCall`: the one reader of a call                                                             |
+| `src/classify.ts`                   | the slices                                                                                           |
+| `src/mcp.ts`                        | the JSON-RPC client                                                                                  |
+| `src/execute.ts`                    | execution, discovery, `boardsIn`, `toolDrift`                                                        |
+| `src/credential.ts`                 | the `oauth2` spec                                                                                    |
+| `src/risk-catalog.yaml`             | catalog 3                                                                                            |
+| `scripts/capture-upstream-tools.ts` | the capture of `tools/list` (§6.5)                                                                   |
 
-### 6.5 The tool list: modelled, then captured
+### 6.5 The tool list: captured
 
-`src/upstream-tools.json` holds `{ source, captured_at, tools }`. Today
-`captured_at` is `null`: the names are Miro's documented tools, the argument
-names a model. Three safeguards:
+`src/upstream-tools.json` holds `{ source, captured_at, tools }`: Miro's
+`tools/list`, captured verbatim on 2026-10-23 (51 tools; `title`,
+`annotations`, `outputSchema` and `_meta` are kept, the gateway reads
+`name`, `description` and `inputSchema`). Version 0.2.0 shipped a model of
+Miro's documentation (`captured_at: null`); against the capture its names of
+`canvas_search` (`query` → `patterns`), `canvas_load_format_skill`
+(`format` → `format_name`), `prototype_create` (`screens` →
+`html_contents`), `table_create` (`title` → `table_title`),
+`table_list_rows` (`filter` → `filter_by`), `table_sync_rows`
+(`key_column`, absent) and `table_update_view` (`view` → `layout` and
+per-layout options) were wrong, and many optional arguments were missing;
+0.3.0 aligns on the capture. Three safeguards for the next change at Miro:
 
 1. **The capture**, with a Miro account:
    `npm run capture-upstream-tools --workspace @vaubaan/plugin-miro`. It
    registers a throw-away client at Miro with a loopback redirect
-   (⚠ that Miro accepts `http://127.0.0.1:<port>` is assumed, as for every
-   desktop MCP client), prints the authorization address, receives the code,
+   (`http://127.0.0.1:<port>`, accepted on 2026-10-23), prints the
+   authorization address, receives the code,
    exchanges it with PKCE, runs `tools/list`, writes the file verbatim and
    prints the differences with the previous model. The token never leaves
    the process. Then run the tests, align `LOCATOR` / `call.ts` /
    `classify.ts` where they differ, bump the version.
 2. **The module refuses to load** a list with a tool neither offered
-   (`LOCATOR`) nor left out, an offered board tool without `miro_url`, or an
-   argument whose name looks like a locator (`…url`, `…_id`, `board…`) that
-   is not modelled (`MODELLED_LOCATING_ARGUMENTS`: `image_url`,
-   `comment_id`): it could aim the call at another board.
+   (`LOCATOR`) nor left out, an offered board tool without its locator
+   argument (`miro_url`, or `content_item_url` for
+   `content_item_list_roles`), or an offered argument whose name looks like
+   a locator (`…url`, `…_id`, `board…`) that is not modelled
+   (`MODELLED_LOCATING_ARGUMENTS`: `image_url`, `comment_id`, `widget_ids`,
+   `target_id`, `screen_id`, `row_id`, `subject_id`): it could aim the call
+   at another board. Telemetry and withheld arguments are not offered, so
+   not checked.
 3. **Every discovery compares** the live `tools/list` with the model and
    logs `Miro's MCP tools differ from the plugin's model; capture them
-again` with the tool and argument names that differ.
-
-Until the capture, a modelled argument that is not Miro's makes the call
-fail at Miro (or a real argument be refused by the gateway as undeclared).
+again` with the tool and argument names that differ. Against the list of
+   2026-10-23 it logs nothing (`plugin.test.ts`).
 
 ### 6.6 Tests
 
 `tests/unit/` (mockFetch only, no network):
 
 - `plugin.test.ts` — the SDK kit (well-formed, presets, no wildcard, catalog
-  coverage with the eight risks, identifier proof), names, titles, version,
-  no environment, the credential spec, the tool surface built from the
-  upstream list and its refusals (an unmodelled tool, a locating argument, a
-  missing locator).
+  coverage with the thirteen risks, identifier proof), names, titles,
+  version, no environment, the credential spec, the tool surface built from
+  the captured list (51 tools, no drift against itself, 27 offered and 24
+  left out, the telemetry fields and withheld arguments never declared,
+  `prototype_create` requiring `html_contents`) and its refusals (an
+  unmodelled tool, a locating argument, a missing locator, a required
+  argument Miro no longer takes).
 - `classify.test.ts` — every tool's slices; refusals: unknown and left-out
-  tools, `miro_url` sent by the agent, a board outside the mission, hostile
-  board URLs (another host, http, a user, a port, extra path, a dot
-  segment), item and comment grammars, required and typed arguments.
+  tools, `miro_url` sent by the agent, the telemetry fields and withheld
+  arguments, a board outside the mission (sharing included), hostile board
+  URLs (another host, http, a user, a port, extra path, a dot segment), item
+  and comment grammars, required and typed arguments, `null` where Miro
+  declares it nullable.
 - `identifiers.test.ts` — the grammars; what classify refuses execute does
   not send; the URL sent is the gateway's, whatever the agent's URL carried.
-- `execute.test.ts` — what is sent (upstream name, arguments, `miro_url`,
-  bearer); SSE; pass-through of Miro's result; `list_boards` without a
+- `execute.test.ts` — what is sent (upstream name, arguments, `miro_url` or
+  `content_item_url`, bearer, never a telemetry field); SSE; pass-through of Miro's result; `list_boards` without a
   request; failures by status and error frame; the session fallback;
-  discovery from JSON and from text, the `403` refusal in the plugin's
-  words, the drift log.
-- `risk-catalog.test.ts` — risks per tool, the ids of catalog 1 kept, the
-  presets and their gates, a ceiling per risk.
+  discovery from JSON (with ids, and Miro's captured board summaries without
+  one), page after page while `has_more`, a server that ignores `offset`,
+  from text, the `403` refusal in the plugin's words, the drift log.
+- `risk-catalog.test.ts` — risks per tool, the ids of catalogs 1 and 2 kept,
+  the presets and their gates (`board-share` in `facilitator` only, behind
+  an approval), a ceiling per risk.
 
 The host side (registration, reuse, refresh with the registered client) is
 tested in `apps/gateway/src/server/connections/oauth2-clients.test.ts`.
@@ -422,3 +547,6 @@ tested in `apps/gateway/src/server/connections/oauth2-clients.test.ts`.
 - Probes of 2026-10-21 (unauthenticated): `POST https://mcp.miro.com/` →
   `401`, `WWW-Authenticate: Bearer resource_metadata=…`; the two
   `.well-known` documents quoted in §6.1; one `POST /register` → `201`.
+- The capture of 2026-10-23 (the product owner's Miro account, the capture
+  script): registration, PKCE, an access token of 3599 s with a refresh
+  token, and `tools/list` — 51 tools, `src/upstream-tools.json`.

@@ -48,22 +48,20 @@ describe('slices, tool by tool', () => {
   });
 
   test('reads under the board, on the item when one is named', () => {
-    expect(slicesOf(TOOL.canvasSearch, { board: BOARD, query: 'x' })).toEqual([
+    expect(slicesOf(TOOL.canvasSearch, { board: BOARD, result_mode: 'overview' })).toEqual([
       `miro.board[${BOARD}].item[*].R`,
     ]);
     expect(slicesOf(TOOL.canvasReadAsSvg, { board: BOARD, item_id: ITEM })).toEqual([
       `miro.board[${BOARD}].item[${ITEM}].R`,
     ]);
-    for (const tool of [
-      TOOL.imageGetData,
-      TOOL.imageGetUrl,
-      TOOL.tableListRows,
-      TOOL.tableUpdateHistory,
-    ]) {
+    for (const tool of [TOOL.imageGetData, TOOL.imageGetUrl, TOOL.tableListRows]) {
       expect(slicesOf(tool, { board: BOARD, item_id: ITEM }), tool).toEqual([
         `miro.board[${BOARD}].item[${ITEM}].R`,
       ]);
     }
+    expect(slicesOf(TOOL.tableUpdateHistory, { board: BOARD, item_id: ITEM, row_id: '3' })).toEqual(
+      [`miro.board[${BOARD}].item[${ITEM}].R`],
+    );
     expect(slicesOf(TOOL.commentListComments, { board: BOARD })).toEqual([
       `miro.board[${BOARD}].comment[*].R`,
     ]);
@@ -103,24 +101,58 @@ describe('slices, tool by tool', () => {
     expect(slicesOf(TOOL.imageCreate, { board: BOARD, image_url: 'https://e.com/a.png' })).toEqual([
       `miro.board[${BOARD}].item.W`,
     ]);
-    expect(slicesOf(TOOL.tableCreate, { board: BOARD, columns: [] })).toEqual([
+    expect(slicesOf(TOOL.tableCreate, { board: BOARD, table_title: 'T', columns: [] })).toEqual([
       `miro.board[${BOARD}].item.W`,
     ]);
     expect(slicesOf(TOOL.tableSyncRows, { board: BOARD, item_id: ITEM, rows: [] })).toEqual([
       `miro.board[${BOARD}].item[${ITEM}].W`,
     ]);
-    expect(slicesOf(TOOL.commentCreate, { board: BOARD, content: 'Hi' })).toEqual([
+    expect(slicesOf(TOOL.commentCreate, { board: BOARD, content: 'Hi', x: 0, y: 0 })).toEqual([
       `miro.board[${BOARD}].comment.W`,
     ]);
-    expect(slicesOf(TOOL.commentResolve, { board: BOARD, comment_id: COMMENT })).toEqual([
-      `miro.board[${BOARD}].comment[${COMMENT}].W`,
+    expect(
+      slicesOf(TOOL.commentResolve, { board: BOARD, comment_id: COMMENT, resolved: true }),
+    ).toEqual([`miro.board[${BOARD}].comment[${COMMENT}].W`]);
+  });
+
+  test("the board's details, its access and its walkthroughs", () => {
+    expect(slicesOf(TOOL.boardGetSpace, { board: BOARD })).toEqual([
+      `miro.board[${BOARD}].metadata.R`,
     ]);
+    expect(slicesOf(TOOL.boardUpdateMetadata, { board: BOARD, title: 'T' })).toEqual([
+      `miro.board[${BOARD}].metadata.W`,
+    ]);
+    expect(slicesOf(TOOL.contentItemListRoles, { board: BOARD })).toEqual([
+      `miro.board[${BOARD}].access.R`,
+    ]);
+    const grant = {
+      board: BOARD,
+      subject_id: 'ada@example.com',
+      subject_type: 'user',
+      role: 'owner',
+    };
+    expect(slicesOf(TOOL.boardShare, grant)).toEqual([`miro.board[${BOARD}].access.W`]);
+    expect(slicesOf(TOOL.boardRoleUpdate, grant)).toEqual([`miro.board[${BOARD}].access.W`]);
+    expect(
+      slicesOf(TOOL.createBoardcast, { board: BOARD, screens: [{ x: 0, y: 0, text: 'Hi' }] }),
+    ).toEqual([`miro.board[${BOARD}].boardcast.W`]);
+  });
+
+  test('a board outside the mission is not shared', () => {
+    expect(
+      denial(TOOL.boardShare, {
+        board: OTHER_BOARD,
+        subject_id: 'ada@example.com',
+        subject_type: 'user',
+        role: 'viewer',
+      }),
+    ).toMatch(/not a board of this mission/);
   });
 
   test('a new board and the format guides name no board', () => {
     expect(slicesOf(TOOL.boardCreate, { name: 'New' }, [])).toEqual(['miro.board.W']);
     expect(slicesOf(TOOL.canvasComposerSkill, {}, [])).toEqual(['miro.format-guide.R']);
-    expect(slicesOf(TOOL.canvasFormatSkill, { format: 'kanban' }, [])).toEqual([
+    expect(slicesOf(TOOL.canvasFormatSkill, { format_name: 'tables' }, [])).toEqual([
       'miro.format-guide.R',
     ]);
   });
@@ -132,6 +164,16 @@ describe('refusals', () => {
     expect(denial('miro__board_search_boards', {})).toMatch(/unknown tool/);
     expect(denial('miro__image_get_upload_url', {})).toMatch(/unknown tool/);
     expect(denial('miro__user_who_am_i', {})).toMatch(/unknown tool/);
+    for (const name of [
+      'canvas_get_html_upload_url',
+      'prototype_get_upload_url',
+      'board_move_to_team',
+      'board_restore',
+      'space_share',
+      'user_search_organization_users',
+    ]) {
+      expect(denial(`miro__${name}`, {}), name).toMatch(/unknown tool/);
+    }
   });
 
   test('an argument the schema does not declare — miro_url above all : the gateway writes it', () => {
@@ -142,6 +184,35 @@ describe('refusals', () => {
       }),
     ).toMatch(/miro_url: not an argument/);
     expect(denial(TOOL.canvasSearch, { board: BOARD, team_id: '1' })).toMatch(/team_id/);
+  });
+
+  test("Miro's telemetry fields and the withheld arguments are refused, never forwarded", () => {
+    const search = { board: BOARD, result_mode: 'overview' };
+    expect(denial(TOOL.canvasSearch, { ...search, invocation_source: 'skill' })).toMatch(
+      /invocation_source: not an argument/,
+    );
+    expect(denial(TOOL.canvasSearch, { ...search, is_repository: true })).toMatch(
+      /is_repository: not an argument/,
+    );
+    expect(
+      denial(TOOL.prototypeCreate, { board: BOARD, html_contents: ['<p/>'], html_tokens: ['t'] }),
+    ).toMatch(/html_tokens: not an argument/);
+    expect(denial(TOOL.prototypeCreate, { board: BOARD })).toMatch(/html_contents: required/);
+    expect(denial(TOOL.imageCreate, { board: BOARD, image_token: 't' })).toMatch(
+      /image_token: not an argument/,
+    );
+    expect(
+      denial(TOOL.boardCreate, { name: 'X', parent_space_url: 'https://miro.com/app/x' }, []),
+    ).toMatch(/parent_space_url: not an argument/);
+  });
+
+  test('null passes where Miro declares the argument nullable, nowhere else', () => {
+    expect(
+      slicesOf(TOOL.canvasSearch, { board: BOARD, result_mode: 'overview', target_id: null }),
+    ).toEqual([`miro.board[${BOARD}].item[*].R`]);
+    expect(denial(TOOL.canvasSearch, { board: BOARD, result_mode: null })).toMatch(
+      /result_mode: expected string/,
+    );
   });
 
   test('a board outside the mission, or not a board at all', () => {
