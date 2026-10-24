@@ -53,6 +53,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   are removed, and an `oauth2` spec must declare `clientRegistration` (the
   gateway registers its own client, as for Miro).
 
+### Security
+
+- **nodemailer 10.1.7** (from 10.1.0): three address-parser advisories of
+  2026-10 (GHSA-85x2-q946-cp5h, GHSA-8c8m-p3m8-cjg8, GHSA-m943-m63m-w62w),
+  which the dependency audit gate reported.
+
 ## [2.0.0-alpha.7] - 2026-10-23
 
 ### Changed
