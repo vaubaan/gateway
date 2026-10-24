@@ -55,6 +55,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Railway 5.1.0, Resend 0.5.0, Upstash Redis 3.2.0. ADR
   created-resources-join-the-mission.
 
+- **A mission is edited after issuance by its creator, same key.** "Edit
+  mission" on the mission page opens the creation screen prefilled with the
+  mission: its name, end date, accounts, resources (a board created after
+  issuance can now be added), permissions with their limits, rate window and
+  "ask me first" all change in one edit; the period does not (duplicate the
+  mission for another one). Saving lists every change before → after with what
+  it means — a limit already used up, a permission removed and the requests it
+  closes, a resource no longer reached. The edit is judged by the creation's
+  own check on what moves only, applies at once to the same token, session and
+  counters, closes the claims and approval requests about a removed
+  permission, and leaves one `mission-changed` entry in the activity with each
+  section before and after. A connected app cannot edit a mission. API:
+  `POST /api/missions/:id/edit` and `…/edit/preview`. ADR
+  mission-editable-after-issuance, superseding
+  mission-limits-editable-after-issuance.
+
 ### Changed
 
 - **Gmail connects with an app password.** A person creates an app password
@@ -66,11 +82,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   owner reconnects it** with an app password (same account, resources and
   shares); its page and its discovery say so.
 
-- The `resource-not-in-mission` hint of a mission with an explicit list, the
-  setup kit, the issuance form's "Every resource known now", the management
-  door's instructions and Miro's refusal of an unknown board say that a
-  resource the mission creates through the gateway is reached at once, and
-  one created elsewhere is added by the mission's creator.
+- **The `resource-not-in-mission` hint and the "Every resource known now"
+  choice say both ways a resource joins a mission.** The hint of a mission
+  with an explicit list, the setup kit, the issuance form's "Every resource
+  known now", the management door's instructions and Miro's refusal of an
+  unknown board say that a resource the mission creates through the gateway
+  is reached at once, and that any other one is added to the same mission by
+  its creator with "Edit mission" (same key), instead of a new mission being
+  needed.
 
 ### Removed
 

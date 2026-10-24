@@ -786,6 +786,7 @@ export const ACT_WORDS = {
   'mission-resources-added': 'added resources to a mission',
   'permission-requested': 'requested missing permissions',
   'limits-changed': 'changed the limits of a mission',
+  'mission-changed': 'changed a mission',
   'mission-member-left': 'left a mission',
 } as const;
 
@@ -1153,11 +1154,22 @@ export const MISSION_ACTIONS = {
   hideEditor: 'Hide the permissions',
   change: 'Change',
   changeLimits: 'Change limits',
+  editMission: 'Edit mission',
+  saveChanges: 'Save changes',
   leave: 'Leave the mission',
 } as const;
 
 /** Sentences the mission pages share. */
 export const MISSION_WORDS = {
+  editLede:
+    'Change anything but how often the limits reset. Same key, same session, same counters: the next call of every holder sees the edited mission.',
+  editConfirm:
+    'Every change, before and after. It applies at once: the next call of every holder sees it, with the same key; what was used this period stays used.',
+  sameKeyAfterEdit: 'Same key for everyone on it; nothing to hand over again.',
+  nothingChangedYet: 'Nothing changed yet.',
+  periodFixed:
+    'How often the limits reset does not change on a running mission: its counters are kept per period. Duplicate the mission for another one.',
+  edited: 'Saved. The next call of every holder sees the edited mission, with the same key.',
   yours: 'Created by you',
   sharedWithYou: 'Shared with you',
   noneYet: 'No mission yet.',

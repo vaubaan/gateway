@@ -90,12 +90,17 @@ describe('management door — hard deny, by type', () => {
     expectTypeOf<Extract<Handed | Store['requests'], Forbidden>>().not.toBeNever();
   });
 
-  it('of the mission service the door holds seven methods: no gate or limits edit, no duplication, no token check', () => {
+  it('of the mission service the door holds seven methods: no edit of a mission, its gates or its limits, no duplication, no token check', () => {
     expectTypeOf<keyof ManagementMissions>().toEqualTypeOf<
       'issuanceContext' | 'preview' | 'issue' | 'rotate' | 'revoke' | 'list' | 'get'
     >();
     expectTypeOf<ManagementMissions>().not.toHaveProperty('setGate');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('setLimits');
+    // A connected app never changes a live mission (ADR mission-editable-after-issuance).
+    expectTypeOf<ManagementMissions>().not.toHaveProperty('edit');
+    expectTypeOf<ManagementMissions>().not.toHaveProperty('previewEdit');
+    expectTypeOf<ManagementMissions>().not.toHaveProperty('editView');
+    expectTypeOf<ManagementMissions>().not.toHaveProperty('changePermissions');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('duplicate');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('draftFrom');
     expectTypeOf<ManagementMissions>().not.toHaveProperty('verifyToken');

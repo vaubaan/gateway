@@ -674,4 +674,132 @@ describe('missions repository', () => {
       ['github.code-read', { quota: 3, rateLimit: 4, rateWindowSeconds: 60, gate: 'auto' }],
     ]);
   });
+
+  describe('edit (ADR mission-editable-after-issuance)', () => {
+    const summary = (closed: number) =>
+      ({
+        kind: 'mission-changed',
+        details: {
+          name_changed: true,
+          expiry_changed: false,
+          connections_added: 1,
+          connections_removed: 0,
+          resources_added: 1,
+          resources_removed: 0,
+          scopes_changed: 1,
+          permissions_added: ['supabase[staging].bulk-row-write'],
+          permissions_removed: ['github.merge-protected'],
+          limits: [],
+          gates: [],
+          requests_closed: closed,
+        },
+      }) as const;
+
+    it('makes the mission the edited state in one transaction, with an event per risk that moved', async () => {
+      const m = await create();
+      // A session, so the events have somewhere to go.
+      await store.sessions.decideAndDecrement(
+        { missionId: m.id, riskIds: ['github.code-read'], periodStart: m.periodAnchor },
+        () => ({ allow: true }),
+      );
+      const result = await store.missions.edit(m.id, {
+        actorUserId: creator,
+        unchanged: () => true,
+        name: 'Ship feature Y',
+        expiresAt: null,
+        connections: [
+          { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
+          { connectionId: otherConnection, resourceScope: 'connection', resourceIds: [] },
+        ],
+        policy: [
+          {
+            riskId: 'github.code-read',
+            quota: 50,
+            rateLimit: 30,
+            rateWindowSeconds: 120,
+            gate: 'approval',
+          },
+          {
+            riskId: 'supabase[staging].bulk-row-write',
+            quota: 5,
+            rateLimit: 5,
+            rateWindowSeconds: 60,
+            gate: 'auto',
+          },
+        ],
+        summary,
+      });
+      expect(result?.before.name).toBe('Ship feature X');
+      expect(result?.mission).toMatchObject({
+        name: 'Ship feature Y',
+        connections: [
+          { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
+          { connectionId: otherConnection, resourceScope: 'connection', resourceIds: [] },
+        ],
+      });
+      expect(result?.mission.policy.map((p) => p.riskId).sort()).toEqual([
+        'github.code-read',
+        'supabase[staging].bulk-row-write',
+      ]);
+      const session = await store.sessions.getByMission(m.id);
+      const events = session ? await store.sessions.listEvents(session.id) : [];
+      expect(events.map((e) => [e.kind, e.riskId])).toEqual(
+        expect.arrayContaining([
+          ['permission-removed', 'github.merge-protected'],
+          ['permission-added', 'supabase[staging].bulk-row-write'],
+          ['limits-changed', 'github.code-read'],
+          ['gate-changed', 'github.code-read'],
+          ['mission-changed', null],
+        ]),
+      );
+      const limits = events.find((e) => e.kind === 'limits-changed');
+      expect(limits?.details).toMatchObject({
+        quota: 50,
+        quota_before: 100,
+        rate_window_seconds: 120,
+        rate_window_seconds_before: 60,
+      });
+    });
+
+    it('writes nothing when the state it was judged against moved, or for anyone but the creator', async () => {
+      const m = await create();
+      const input = {
+        actorUserId: creator,
+        unchanged: () => false,
+        name: 'Never',
+        expiresAt: null,
+        connections: m.connections,
+        policy: m.policy,
+        summary,
+      };
+      expect(await store.missions.edit(m.id, input)).toBeNull();
+      expect(
+        await store.missions.edit(m.id, {
+          ...input,
+          unchanged: () => true,
+          actorUserId: 'someone-else',
+        }),
+      ).toBeNull();
+      expect((await store.missions.getById(m.id))?.name).toBe('Ship feature X');
+      await store.missions.setStatus(m.id, 'revoked');
+      expect(await store.missions.edit(m.id, { ...input, unchanged: () => true })).toBeNull();
+    });
+
+    it('refuses a policy the catalog does not know before it opens the transaction', async () => {
+      const m = await create();
+      await expect(
+        store.missions.edit(m.id, {
+          actorUserId: creator,
+          unchanged: () => true,
+          name: m.name,
+          expiresAt: null,
+          connections: m.connections,
+          policy: [
+            { riskId: 'github.nope', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
+          ],
+          summary,
+        }),
+      ).rejects.toThrow(UnknownRiskIdError);
+    });
+  });
 });

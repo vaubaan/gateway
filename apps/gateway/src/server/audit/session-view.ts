@@ -62,6 +62,7 @@ import {
 import type { AuthoritySubject } from '../authority';
 import type { MissionState } from '../budget';
 import type { MissionDetail, MissionRole, MissionService, SeverityLevel } from '../missions';
+import { missionChangeClauses } from '../missions/change-words';
 import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
 import type {
@@ -183,12 +184,26 @@ export interface SessionEventView {
     readonly quota_before: number;
     readonly rate_limit_max: number;
     readonly rate_limit_max_before: number;
+    /** Present when the window moved too (an edit of the mission). */
+    readonly rate_window_seconds?: number;
+    readonly rate_window_seconds_before?: number;
   } | null;
   /**
    * The refs of the resources a `resources-created` event says the mission created and
    * reaches (ADR created-resources-join-the-mission); `tool` is the creating call.
    */
   readonly created_refs: readonly string[] | null;
+  /** The limits and gate a `permission-added` event started with, or a `permission-removed` had. */
+  readonly permission: {
+    readonly quota: number;
+    readonly rate_limit_max: number;
+    readonly rate_window_seconds: number;
+    readonly gate: Gate;
+  } | null;
+  /** The clauses of a `mission-changed` event: "2 resources added", "quota of x 2 → 5". */
+  readonly mission_change: readonly string[] | null;
+  /** Why a closed request closed when nobody answered it as such (`mission-changed`). */
+  readonly request_reason: string | null;
   /** How many tokens a `revocation` retired. */
   readonly tokens_revoked: number | null;
   /** The token a `rotation` issued, or the one token a `revocation` retired. */
@@ -553,6 +568,9 @@ const NO_DETAIL = {
   gate_open_until: null,
   limits: null,
   created_refs: null,
+  permission: null,
+  mission_change: null,
+  request_reason: null,
   tokens_revoked: null,
   token_prefix: null,
   replaced_prefix: null,
@@ -596,6 +614,7 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
         request_id: parsed.details.request_id,
         request_kind: parsed.details.request_kind,
         request_state: 'state' in parsed.details ? parsed.details.state : null,
+        request_reason: 'state' in parsed.details ? (parsed.details.reason ?? null) : null,
         tool: 'tool' in parsed.details ? parsed.details.tool || null : null,
       };
     case 'reset':
@@ -647,6 +666,11 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
         tool: parsed.details.tool || null,
         created_refs: [...parsed.details.refs],
       };
+    case 'permission-added':
+    case 'permission-removed':
+      return { ...NO_DETAIL, permission: { ...parsed.details } };
+    case 'mission-changed':
+      return { ...NO_DETAIL, mission_change: missionChangeClauses(parsed.details) };
     case 'rotation':
       return {
         ...NO_DETAIL,

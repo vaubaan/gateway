@@ -171,6 +171,11 @@ export type AdminAct =
   | 'mission-resources-added'
   | 'permission-requested'
   | 'limits-changed'
+  /** The creator edited the mission (ADR mission-editable-after-issuance): `before` and
+   *  `after` hold the sections that moved — `name`, `expires_at`, `connections`,
+   *  `resources`, `permissions` — each in full; `after.requests_closed` lists the
+   *  requests the edit made moot. */
+  | 'mission-changed'
   | 'approval-granted'
   | 'request-refused'
   | 'delegation-granted'

@@ -41,8 +41,10 @@ function changed(ts: string, gate: 'auto' | 'approval', riskId = MERGE): GateEve
 }
 
 describe('openedGatesOf', () => {
-  it('reads the two event kinds that decide a gate, and nothing opens without an event', () => {
-    expect(GATE_EVENT_KINDS).toEqual(['gate-opened', 'gate-changed']);
+  it('reads the event kinds that decide a gate, and nothing opens without an event', () => {
+    // `permission-removed`: an edit of the mission removed the risk (ADR
+    // mission-editable-after-issuance); added again, it asks again.
+    expect(GATE_EVENT_KINDS).toEqual(['gate-opened', 'gate-changed', 'permission-removed']);
     expect(openedGatesOf([], TODAY)).toEqual(new Set());
   });
 

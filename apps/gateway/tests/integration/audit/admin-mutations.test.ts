@@ -705,6 +705,21 @@ const RULES: Readonly<Record<string, Rule>> = {
       }),
     writes: { act: 'permissions-changed', object: 'mission', actor: 'alice' },
   },
+  'MissionService.editView': READ,
+  'MissionService.previewEdit': READ,
+  'MissionService.edit': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: async (rig, mission: MissionRecord) => {
+      const view = await rig.root.missions.service.editView(rig.alice.user, mission.id);
+      return rig.root.missions.service.edit(rig.alice.user, mission.id, {
+        draft: { ...view?.draft, name: `${mission.name} (edited)` },
+        revision: view?.revision,
+      });
+    },
+    writes: { act: 'mission-changed', object: 'mission', actor: 'alice' },
+  },
   'MissionService.setLimits': {
     kind: 'mutation',
     target: missions,
@@ -1779,6 +1794,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'local-link-created',
       'local-password-changed',
       'local-password-changed',
+      'mission-changed',
       'mission-issued',
       'mission-issued',
       'mission-issued',

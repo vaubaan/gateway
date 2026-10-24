@@ -291,6 +291,9 @@ export type SessionEventKind =
   /** The mission created resources through a creating call and reaches them (ADR
    *  created-resources-join-the-mission). */
   | 'resources-created'
+  | 'permission-added'
+  | 'permission-removed'
+  | 'mission-changed'
   | 'rotation'
   | 'revocation';
 

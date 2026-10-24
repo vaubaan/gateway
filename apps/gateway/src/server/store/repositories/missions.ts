@@ -103,6 +103,23 @@ export interface AddedMissionResources {
 export type StoredMissionStatus = Exclude<MissionStatus, 'orphaned'>;
 
 export interface MissionsRepo {
+  /**
+   * The creator's edit of the whole mission after issuance (ADR
+   * mission-editable-after-issuance): the mission becomes `connections` and `policy`,
+   * named `name`, expiring at `expiresAt`. In one `BEGIN IMMEDIATE` transaction: the
+   * mission is read again, and nothing is written (`null`) unless `actorUserId` is its
+   * creator, its stored status is not `revoked` and `unchanged(mission)` holds — the
+   * edit was judged against that very state. Only the rows that move are written: a
+   * kept connection or resource row is not rewritten (it keeps its `source`), and a
+   * resource row the edit adds carries `source = 'edit'`. An expiry moved into the future
+   * (or removed) brings a mission stored `expired` back to `active`. Open claims and
+   * approval requests about a removed risk are closed (`refused`, `mission-changed`),
+   * unconsumed approvals covering one are retired, and, when the mission has a
+   * session, one event per risk that moved is recorded (`permission-added`,
+   * `permission-removed`, `limits-changed`, `gate-changed`), the closed requests'
+   * `request` events, then `summary(requestsClosed)`.
+   */
+  edit(id: string, edit: MissionEditInput): Promise<MissionEditResult | null>;
   changePermissions(
     id: string,
     policy: readonly MissionPolicyEntry[],
@@ -257,6 +274,28 @@ export interface MissionsRepo {
   getMember(missionId: string, userId: string): Promise<MissionMemberRecord | null>;
   /** The current members, in the order they were added. Never the creator. */
   listMembers(missionId: string): Promise<MissionMemberRecord[]>;
+}
+
+/** What `MissionsRepo.edit` makes of a mission. */
+export interface MissionEditInput {
+  readonly actorUserId: string;
+  /** The state the edit was judged against still stands; read inside the transaction. */
+  readonly unchanged: (current: MissionRecord) => boolean;
+  readonly name: string;
+  readonly expiresAt: Iso | null;
+  /** Every connection of the mission after the edit, with its selection. */
+  readonly connections: readonly MissionConnection[];
+  /** The whole policy after the edit. */
+  readonly policy: readonly MissionPolicyEntry[];
+  /** The session's summary event of the edit, given how many requests it closed. */
+  readonly summary: (requestsClosed: number) => NewEvent;
+}
+
+export interface MissionEditResult {
+  readonly before: MissionRecord;
+  readonly mission: MissionRecord;
+  /** The open requests the edit made moot, now closed. */
+  readonly closedRequests: readonly { readonly id: string; readonly kind: string }[];
 }
 
 /** The new limits of one accepted risk (`MissionsRepo.setLimits`). */
@@ -686,7 +725,230 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     }
   }
 
+  const renameStmt = db.prepare<[string, string]>('UPDATE missions SET name = ? WHERE id = ?');
+  // Every expression of an UPDATE reads the row as it was: `closed_at` sees the old status.
+  const reviveStmt = db.prepare<[string | null, string]>(
+    `UPDATE missions SET expires_at = ?,
+       status = CASE WHEN status = 'expired' THEN 'active' ELSE status END,
+       closed_at = CASE WHEN status = 'expired' THEN NULL ELSE closed_at END
+     WHERE id = ?`,
+  );
+  /** A resource row an edit adds: source `edit` (ADR mission-editable-after-issuance). */
+  const insertEditedResource = db.prepare<[string, string, string]>(
+    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, source)
+     VALUES (?, ?, ?, 'edit')`,
+  );
+  const rescopeStmt = db.prepare<[string, string, string]>(
+    'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
+  );
+  const deleteConnectionStmt = db.prepare<[string, string]>(
+    'DELETE FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
+  );
+  const deleteResourcesOfStmt = db.prepare<[string, string]>(
+    'DELETE FROM mission_resources WHERE mission_id = ? AND connection_id = ?',
+  );
+  const deleteResourceStmt = db.prepare<[string, string]>(
+    'DELETE FROM mission_resources WHERE mission_id = ? AND resource_id = ?',
+  );
+  const deleteLineStmt = db.prepare<[string, string]>(
+    'DELETE FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+  );
+  const updateLineStmt = db.prepare<[number, number, number, string, string, string]>(
+    `UPDATE mission_policy SET quota = ?, rate_limit = ?, rate_window_seconds = ?, gate = ?
+     WHERE mission_id = ? AND risk_id = ?`,
+  );
+  const openRequestsStmt = db.prepare<
+    [string],
+    { id: string; kind: string; risk_id: string; risk_ids_json: string | null }
+  >(
+    `SELECT id, kind, risk_id, risk_ids_json FROM requests
+     WHERE mission_id = ? AND state = 'open' AND kind IN ('claim', 'approval')`,
+  );
+  const closeRequestStmt = db.prepare<[string, string, string, string]>(
+    `UPDATE requests SET state = 'refused', decided_at = ?, decided_by_user_id = ?,
+       decision_json = ?, args_blob = NULL, key_version = NULL
+     WHERE id = ? AND state = 'open'`,
+  );
+  const retireApprovalsStmt = db.prepare<[string, string, string, string]>(
+    `UPDATE approvals SET consumed_at = ? WHERE mission_id = ? AND consumed_at IS NULL
+     AND (risk_id = ? OR EXISTS (SELECT 1 FROM json_each(approvals.risk_ids_json) WHERE value = ?))`,
+  );
+
+  function sameLimits(a: MissionPolicyEntry, b: MissionPolicyEntry): boolean {
+    return (
+      a.quota === b.quota &&
+      a.rateLimit === b.rateLimit &&
+      a.rateWindowSeconds === b.rateWindowSeconds
+    );
+  }
+
+  /** The rows of one connection that move, and nothing else. In-transaction. */
+  function writeSelection(
+    missionId: string,
+    old: MissionConnection | undefined,
+    c: MissionConnection,
+  ): void {
+    if (!old) {
+      insertConnection.run(missionId, c.connectionId, c.resourceScope);
+      for (const resourceId of c.resourceIds)
+        insertEditedResource.run(missionId, c.connectionId, resourceId);
+      return;
+    }
+    if (old.resourceScope !== c.resourceScope) {
+      rescopeStmt.run(c.resourceScope, missionId, c.connectionId);
+    }
+    const had = new Set(old.resourceIds);
+    const has = new Set(c.resourceIds);
+    for (const resourceId of old.resourceIds) {
+      if (!has.has(resourceId)) deleteResourceStmt.run(missionId, resourceId);
+    }
+    for (const resourceId of c.resourceIds) {
+      if (!had.has(resourceId)) insertEditedResource.run(missionId, c.connectionId, resourceId);
+    }
+  }
+
+  /** The open claims and approval requests about a removed risk, closed. In-transaction. */
+  function closeMootRequests(
+    missionId: string,
+    gone: ReadonlySet<RiskId>,
+    actorUserId: string,
+    now: Iso,
+    record: (event: NewEvent) => void,
+  ): { id: string; kind: string }[] {
+    const closed: { id: string; kind: string }[] = [];
+    if (gone.size === 0) return closed;
+    for (const row of openRequestsStmt.all(missionId)) {
+      const listed = row.risk_ids_json ? (JSON.parse(row.risk_ids_json) as string[]) : [];
+      const moot = [...new Set([row.risk_id, ...listed])].filter((r) => gone.has(r));
+      if (moot.length === 0) continue;
+      const decision = JSON.stringify({ resolution: 'mission-changed', removed: moot });
+      if (closeRequestStmt.run(now, actorUserId, decision, row.id).changes === 0) continue;
+      closed.push({ id: row.id, kind: row.kind });
+      record({
+        kind: 'request',
+        riskId: row.risk_id,
+        details: {
+          request_id: row.id,
+          request_kind: row.kind === 'claim' ? 'claim' : 'approval',
+          state: 'refused',
+          reason: 'mission-changed',
+        },
+      });
+    }
+    return closed;
+  }
+
   return {
+    async edit(id, input) {
+      validatePolicy(ctx, input.policy);
+      assertConnectionSelections(ctx, input.connections);
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const before = requireMission(id);
+        if (
+          before.creatorUserId !== input.actorUserId ||
+          before.status === 'revoked' ||
+          !input.unchanged(before)
+        ) {
+          return null;
+        }
+        if (before.name !== input.name) renameStmt.run(input.name, id);
+        if (before.expiresAt !== input.expiresAt) {
+          // An end moved into the future, or removed, brings an expired mission back.
+          if (input.expiresAt === null || input.expiresAt > now)
+            reviveStmt.run(input.expiresAt, id);
+          else setExpiry.run(input.expiresAt, now, id);
+        }
+
+        const was = new Map(before.connections.map((c) => [c.connectionId, c]));
+        const next = new Set(input.connections.map((c) => c.connectionId));
+        for (const c of before.connections) {
+          if (next.has(c.connectionId)) continue;
+          deleteResourcesOfStmt.run(id, c.connectionId);
+          deleteConnectionStmt.run(id, c.connectionId);
+        }
+        for (const c of input.connections) writeSelection(id, was.get(c.connectionId), c);
+
+        const session = sessions.sessionOfMission(id);
+        const record = (event: NewEvent): void => {
+          if (session) sessions.recordEvent(session.id, event, now);
+        };
+        const actorUserId = input.actorUserId;
+        const linesBefore = new Map(before.policy.map((p) => [p.riskId, p]));
+        const linesAfter = new Set(input.policy.map((p) => p.riskId));
+        const removed = before.policy.filter((p) => !linesAfter.has(p.riskId));
+        for (const p of removed) {
+          deleteLineStmt.run(id, p.riskId);
+          // An approval must not survive the removal and re-addition of its risk.
+          retireApprovalsStmt.run(now, id, p.riskId, p.riskId);
+          record({
+            kind: 'permission-removed',
+            riskId: p.riskId,
+            actorUserId,
+            details: {
+              quota: p.quota,
+              rate_limit_max: p.rateLimit,
+              rate_window_seconds: p.rateWindowSeconds,
+              gate: p.gate,
+            },
+          });
+        }
+        for (const p of input.policy) {
+          const old = linesBefore.get(p.riskId);
+          if (!old) {
+            insertPolicy.run(id, p.riskId, p.quota, p.rateLimit, p.rateWindowSeconds, p.gate);
+            record({
+              kind: 'permission-added',
+              riskId: p.riskId,
+              actorUserId,
+              details: {
+                quota: p.quota,
+                rate_limit_max: p.rateLimit,
+                rate_window_seconds: p.rateWindowSeconds,
+                gate: p.gate,
+              },
+            });
+            continue;
+          }
+          const limitsMove = !sameLimits(old, p);
+          if (!limitsMove && old.gate === p.gate) continue;
+          updateLineStmt.run(p.quota, p.rateLimit, p.rateWindowSeconds, p.gate, id, p.riskId);
+          if (limitsMove) {
+            const windowMoves = old.rateWindowSeconds !== p.rateWindowSeconds;
+            record({
+              kind: 'limits-changed',
+              riskId: p.riskId,
+              actorUserId,
+              details: {
+                quota: p.quota,
+                quota_before: old.quota,
+                rate_limit_max: p.rateLimit,
+                rate_limit_max_before: old.rateLimit,
+                ...(windowMoves
+                  ? {
+                      rate_window_seconds: p.rateWindowSeconds,
+                      rate_window_seconds_before: old.rateWindowSeconds,
+                    }
+                  : {}),
+              },
+            });
+          }
+          if (old.gate !== p.gate) {
+            record({
+              kind: 'gate-changed',
+              riskId: p.riskId,
+              actorUserId,
+              details: { gate: p.gate, gate_before: old.gate },
+            });
+          }
+        }
+        const gone = new Set(removed.map((p) => p.riskId));
+        const closed = closeMootRequests(id, gone, actorUserId, now, record);
+        touch.run(now, id);
+        record(input.summary(closed.length));
+        return { before, mission: requireMission(id), closedRequests: closed };
+      });
+    },
     async issuersOf(missionIds) {
       const issuers = new Map<string, MissionIssuerRecord>();
       const ids = [...new Set(missionIds)];

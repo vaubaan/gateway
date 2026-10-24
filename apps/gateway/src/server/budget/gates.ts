@@ -32,6 +32,8 @@ import type { CurrentPeriod } from './period.ts';
 export const GATE_EVENT_KINDS = [
   'gate-opened',
   'gate-changed',
+  // A permission removed by an edit ends its opening: added again, it asks again.
+  'permission-removed',
 ] as const satisfies readonly SessionEventKind[];
 
 /**
@@ -72,7 +74,7 @@ export function openedGatesOf(
     if (parsed.kind === 'gate-opened') {
       if (parsed.details.period_start !== period.start) continue;
       openedAt.set(event.riskId, Math.max(at, openedAt.get(event.riskId) ?? at));
-    } else if (parsed.kind === 'gate-changed') {
+    } else if (parsed.kind === 'gate-changed' || parsed.kind === 'permission-removed') {
       changedAt.set(event.riskId, Math.max(at, changedAt.get(event.riskId) ?? at));
     }
   }

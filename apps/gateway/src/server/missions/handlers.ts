@@ -12,6 +12,10 @@
  *   POST /api/missions/:id/gate       `{ risk_id, gate }`: the gate of one accepted risk
  *   POST /api/missions/:id/limits     `{ limits: [{ risk_id, quota, rate_limit: { max } }] }`:
  *                                     the limits of accepted risks (creator only)
+ *   POST /api/missions/:id/edit       `{ draft, revision }`: the whole mission edited after
+ *                                     issuance (creator only; ADR mission-editable-after-issuance)
+ *   POST /api/missions/:id/edit/preview  the same body: what the edit would change, or why
+ *                                     it would be refused (writes nothing)
  *
  * Every one is a mutation or reveals a secret: valid user session, origin
  * check, `Cache-Control: no-store` (spec §6). A mission always has an
@@ -41,6 +45,10 @@ export interface MissionHandlers {
    * { max } }] }`: the new quota and calls per rate window of risks the mission holds.
    */
   setLimits(request: Request, missionId: string): Promise<Response>;
+  /** `POST /api/missions/:id/edit` — body `{ draft, revision }`. */
+  edit(request: Request, missionId: string): Promise<Response>;
+  /** `POST /api/missions/:id/edit/preview` — the same body; writes nothing. */
+  previewEdit(request: Request, missionId: string): Promise<Response>;
 }
 
 const INVALID_LIMITS_EDIT = {
@@ -120,6 +128,21 @@ const REFUSALS = {
 } as const;
 
 const NOT_FOUND = { error: 'not-found', message: 'No such mission among yours.' };
+
+const CONFLICT = {
+  error: 'conflict',
+  message:
+    'The mission changed since you opened it: nothing was saved. Open it again and redo your change.',
+};
+
+/** The body of a request as JSON, or `undefined` when it is not JSON. */
+async function bodyOf(request: Request): Promise<unknown> {
+  try {
+    return (await request.json()) as unknown;
+  } catch {
+    return undefined;
+  }
+}
 
 export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers {
   /** The signed-in user behind a mutation, or the response that refuses it. */
@@ -260,7 +283,7 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           return json(422, {
             error: 'risk-not-in-policy',
             risk_ids: result.risk_ids,
-            message: `The mission does not hold ${result.risk_ids.join(', ')}: limits are changed on the permissions a mission holds. To add or remove one, create a mission or duplicate this one.`,
+            message: `The mission does not hold ${result.risk_ids.join(', ')}: limits are changed on the permissions a mission holds. To add or remove one, edit the mission.`,
           });
         case 'refused':
           return json(422, {
@@ -272,6 +295,65 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           return json(409, {
             error: 'mission-inactive',
             message: `The mission is ${result.state}; its limits are not changed.`,
+          });
+      }
+    },
+
+    async edit(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const raw = await bodyOf(request);
+      if (raw === undefined) {
+        return json(400, { error: 'invalid-edit', problems: ['the body is not JSON'] });
+      }
+      const result = await deps.service.edit(principal.user, missionId, raw);
+      if (result.ok) {
+        return json(200, {
+          mission: { id: result.mission.id, name: result.mission.name },
+          changes: result.changes,
+          requests_closed: result.requests_closed,
+        });
+      }
+      switch (result.reason) {
+        case 'not-found':
+          return json(404, NOT_FOUND);
+        case 'invalid-edit':
+          return json(400, { error: 'invalid-edit', problems: result.problems });
+        case 'inactive':
+          return json(409, {
+            error: 'mission-inactive',
+            message: `The mission is ${result.state}; it is not edited.`,
+          });
+        case 'conflict':
+          return json(409, CONFLICT);
+        case 'refused':
+          return json(422, {
+            error: 'refused',
+            issues: result.issues,
+            changes: result.changes,
+            message: result.issues.map((issue) => issue.message).join(' '),
+          });
+      }
+    },
+
+    async previewEdit(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const raw = await bodyOf(request);
+      if (raw === undefined) {
+        return json(400, { error: 'invalid-edit', problems: ['the body is not JSON'] });
+      }
+      const result = await deps.service.previewEdit(principal.user, missionId, raw);
+      if (result.reason === undefined) return json(200, { preview: result });
+      switch (result.reason) {
+        case 'not-found':
+          return json(404, NOT_FOUND);
+        case 'invalid-edit':
+          return json(400, { error: 'invalid-edit', problems: result.problems });
+        case 'inactive':
+          return json(409, {
+            error: 'mission-inactive',
+            message: `The mission is ${result.state}; it is not edited.`,
           });
       }
     },

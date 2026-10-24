@@ -141,6 +141,27 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.mission.id,
     ),
   ),
+  // A rename: the rightful caller reaches the edit, which saves it.
+  'missions.handlers.edit': json('user', 200, async (rig, headers) => {
+    const view = await rig.root.missions.service.editView(rig.seeded.ada, rig.mission.id);
+    return rig.root.missions.handlers.edit(
+      post(`/api/missions/${rig.mission.id}/edit`, headers, {
+        draft: { ...view?.draft, name: 'Renamed by its creator' },
+        revision: view?.revision,
+      }),
+      rig.mission.id,
+    );
+  }),
+  'missions.handlers.previewEdit': json('user', 200, async (rig, headers) => {
+    const view = await rig.root.missions.service.editView(rig.seeded.ada, rig.mission.id);
+    return rig.root.missions.handlers.previewEdit(
+      post(`/api/missions/${rig.mission.id}/edit/preview`, headers, {
+        draft: { ...view?.draft, name: 'Renamed by its creator' },
+        revision: view?.revision,
+      }),
+      rig.mission.id,
+    );
+  }),
   'missions.handlers.addMember': json('user', 201, (rig, headers) =>
     rig.root.missions.handlers.addMember(
       post(`/api/missions/${rig.mission.id}/members`, headers, { email: rig.seeded.bob.email }),

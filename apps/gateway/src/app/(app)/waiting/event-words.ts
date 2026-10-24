@@ -14,6 +14,7 @@
 import { parseEventDetails, type SessionEventDetails } from '@vaubaan/shared';
 
 import { GATE_WORDS, gateWordOf } from '@/lib/vocabulary';
+import { describeMissionChange } from '@/server/missions/change-words';
 
 /** What kind of line it is: it chooses the mark, and its word for assistive technology. */
 export type EventTone = 'ok' | 'bad' | 'warn' | 'neutral';
@@ -88,7 +89,9 @@ function worded(parsed: SessionEventDetails): EventWords {
           text:
             details.state === 'expired'
               ? 'The request expired without an answer'
-              : 'You refused the request',
+              : details.reason === 'mission-changed'
+                ? 'Closed: you removed the permission it was about'
+                : 'You refused the request',
         };
       }
       return {
@@ -157,6 +160,12 @@ function worded(parsed: SessionEventDetails): EventWords {
         text: 'Reached a resource it created with',
         tool: parsed.details.tool || null,
       };
+    case 'permission-added':
+      return { ...PLAIN, tone: 'neutral', text: 'You added this permission to the mission' };
+    case 'permission-removed':
+      return { ...PLAIN, tone: 'neutral', text: 'You removed this permission from the mission' };
+    case 'mission-changed':
+      return { ...PLAIN, tone: 'neutral', text: describeMissionChange(parsed.details) };
     case 'rotation':
       return {
         ...PLAIN,
@@ -185,6 +194,9 @@ const WITHOUT_DETAIL: Readonly<Record<string, Pick<EventWords, 'tone' | 'text'>>
   'gate-opened': { tone: 'neutral', text: 'You let a permission run freely until the reset' },
   'gate-changed': { tone: 'neutral', text: 'You changed what a permission asks' },
   'limits-changed': { tone: 'neutral', text: 'You changed the limits of a permission' },
+  'permission-added': { tone: 'neutral', text: 'You added a permission to the mission' },
+  'permission-removed': { tone: 'neutral', text: 'You removed a permission from the mission' },
+  'mission-changed': { tone: 'neutral', text: 'You changed the mission' },
   rotation: { tone: 'neutral', text: 'A key was replaced' },
   revocation: { tone: 'neutral', text: 'The mission was stopped' },
 };

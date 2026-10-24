@@ -584,8 +584,9 @@ Rules:
   created it, whatever the selection — the mission page marks it "created by
   this mission" and the audit records it (ADR
   created-resources-join-the-mission). Any other resource discovered on the
-  connection later is not covered until the creator adds it — unless the
-  creator chose, explicitly, **the whole connection**: then the mission reaches every resource of the
+  connection later is not covered until the creator adds it by editing the
+  mission (§3.2, "Editing a mission") — unless the creator chose, explicitly,
+  **the whole connection**: then the mission reaches every resource of the
   connection that discovery returns at the time of the call, known at
   issuance or discovered later, except the ones the owner hid and the
   instance's own; a resource discovery no longer returns is not reached.
@@ -666,19 +667,33 @@ The gate has a default value, `auto`.
   explicit list like any other, and adjusts it like any other.
 - **No infinite budget.** A quota is always a number. The absence of an
   expiry is allowed; the absence of a quota is not.
-- **Changing the limits.** The creator may change, per risk already in
-  the mission, its quota per period and its rate limit, up or down, at any
-  time while the mission is not revoked or orphaned. Adding or removing risks
-  follows the permission-edit rule below; never the period nor the rate window,
-  never on behalf of the creator by a delegation. A change is bounded
-  exactly as an issuance is — the creator's authority on the connection at
-  that instant, the catalog's ceilings, a quota that is a number — and is
-  checked by the same rule. It applies to the current period at once: what
-  was consumed stays consumed, and a quota lowered under it leaves the risk
-  `exhausted` until the next period. The decision of a call and its
-  decrement read the limits in force when they run: no call decided after
-  the change is allowed above the new limit. Every change is one
-  administrative act carrying the limits before and after.
+- **Editing a mission.** The creator may edit a mission at any time while
+  it is not revoked or orphaned, without limit on what moves: its name, its
+  expiry, its accounts (added or removed), per account the resources it
+  reaches (scope and selection), its permissions (added or removed) and, per
+  permission, its quota per period, its rate limit (calls and window) and its
+  gate. Never its period: the period is the key of the counters, and changing
+  it would either reset them silently or break their agreement with the
+  audit; a mission needing another period is duplicated. Never on behalf of
+  the creator by a delegation. An edit is judged by issuance's own check —
+  the creator's authority on each account at that instant, the catalog and
+  its ceilings, a quota that is a number, resources that exist and may be
+  reached — applied to **what the edit moves**: a refusal says, word for
+  word, what a creation asking for the same thing would be told, and a fact
+  unrelated to the change (a resource that went stale, an account that needs
+  reconnecting) does not refuse narrowing a mission. What the edit does not
+  move stays as it was. The edit applies at once, to the same token, the
+  same session and the same counters: what was consumed stays consumed, a
+  quota lowered under it leaves the risk `exhausted` until the next period, a
+  permission added starts at zero, a permission removed is refused from the
+  next decision; the decision of a call and its decrement read the limits and
+  gates in force when they run, so no call decided after the change is
+  allowed above the new limit nor on a removed permission. Requests that a
+  removal makes moot (a claim on that permission, an approval request that
+  lists it) are closed with that reason. An edit started from a mission that
+  changed meanwhile is refused rather than silently overwriting. Every edit
+  is one administrative act carrying, per section that moved, the state
+  before and after, and the mission's activity says it in words.
 - **One budget per mission, however many agents or tokens.** An
   orchestrator and its sub-agents present the same token; members each
   present their own; every action decrements the same counters.
@@ -702,7 +717,8 @@ The gate has a default value, `auto`.
 ### 3.3 bis Editing permissions and asking for a missing permission
 
 The creator, signed in through the human interface, may add and remove
-permissions on the mission's existing accounts and resources. Additions require
+permissions — part of editing the mission (§3.2), which also adds and removes
+accounts and resources. Additions require
 explicit limits and a gate, validated as at issuance against the creator's
 current authority. The change applies to every holder with the same keys,
 session and history. Consumed budget is never reset, including when a removed
@@ -748,8 +764,8 @@ For the claim, raised when a call touches a risk at zero quota:
   claimed risk back to zero for the current period and leaves the other
   risks as they are; "extend the quota" gives back a number of actions
   on that risk, at most what the period consumed on it. A larger quota,
-  or more room on another risk, is a change of the mission's limits by its
-  creator (§3.2), never an answer to a request.
+  or more room on another risk, is an edit of the mission by its creator
+  (§3.2), never an answer to a request.
 - The claim produces an event. The token does not change; the executor
   replays its call.
 - A refused or expired claim does not close the mission: the risk stays
@@ -1068,7 +1084,13 @@ interpreted as markup.
   what is left, where the creator changes "ask me first" and, through
   **Change limits**, the limits — the same table with only the limits
   editable, then a confirmation listing each change, before and after; its
-  activity. **Replace key asks first**
+  activity. **Edit mission** opens the creation screen prefilled with the
+  mission — name, accounts, resources, permissions with their limits and
+  whether they ask first, the end date; the period shown and fixed — and
+  saving confirms first: every change before and after, and what it means
+  (a new limit already used up, a permission removed and the requests it
+  closes, a resource that will no longer be reached, the same key for every
+  holder). **Replace key asks first**
   and states the one consequence: **the old key stops working at once** —
   there is no grace period; replacing a machine key is one act, so the
   machine is never left without a key nor with two. Stopping a mission,
@@ -1551,6 +1573,16 @@ default is "never". Before the mission exists, the creator reads and
 confirms the explicit list of its permissions with their limits. The key is
 revealed once. The setup kit is displayed.
 
+### 7.4 bis Edit a mission
+
+The task grew: a board was created after issuance, the agent needs one more
+permission, an account should be added or dropped, the mission should end
+later. The creator opens the mission, chooses "Edit mission", changes what
+is needed on the creation screen prefilled with the mission, reads the list
+of changes with their consequences, and saves. The agent keeps its key and
+its session; its next call sees the edited mission. The period does not
+change; a mission that needs another one is duplicated.
+
 ### 7.5 Execute
 
 The agent calls the gateway. On the first call, the session is born.
@@ -1585,9 +1617,9 @@ account; the missions that use it lose that account only and keep running
 on their others, those that used nothing else become `orphaned` and refuse
 everything, with the reason, and the confirmation says how many. The
 mission's page says which account it lost and whether it comes back (never,
-for a disconnected one); its creator issues a new mission to reach the
-account that replaced it. Nothing is ever added to a mission in a lost
-account's place.
+for a disconnected one); to reach the account that replaced it, its creator
+edits the mission to add it (§3.2) or issues a new one. Nothing is ever
+added to a mission in a lost account's place but by its creator's edit.
 When a connection is revoked, the owner is told what became of the
 access granted at the provider: withdrawn there too, or theirs to remove
 by hand, with the place to do it.
