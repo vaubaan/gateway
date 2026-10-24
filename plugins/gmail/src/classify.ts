@@ -213,7 +213,8 @@ export const MAX_LABEL_LENGTH = 225;
 export const MAX_PART_LENGTH = 32;
 
 const GMAIL_ID = new RegExp(`^[0-9a-f]{1,${MAX_GMAIL_ID_LENGTH}}$`);
-const PART_ID = /^[1-9][0-9]{0,3}(?:\.[1-9][0-9]{0,3})*$/;
+/** One number of a part number : 1 to 9999, no leading zero. */
+const PART_NUMBER = /^[1-9][0-9]{0,3}$/;
 /**
  * What a label name may hold : letters, marks and digits of any script, the
  * space, and common punctuation. Never a control character, a quote, a
@@ -242,9 +243,9 @@ export function gmailId(value: unknown): string | null {
  * `FETCH BODY[<part>]` ; shared with `execute`, like `gmailId`.
  */
 export function gmailPartId(value: unknown): string | null {
-  return typeof value === 'string' && value.length <= MAX_PART_LENGTH && PART_ID.test(value)
-    ? value
-    : null;
+  if (typeof value !== 'string' || value.length > MAX_PART_LENGTH) return null;
+  // Split on the dots, each number checked alone : no repeated group to backtrack in.
+  return value.split('.').every((n) => PART_NUMBER.test(n)) ? value : null;
 }
 
 /**
