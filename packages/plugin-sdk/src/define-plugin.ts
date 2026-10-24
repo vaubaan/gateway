@@ -261,11 +261,6 @@ function registrationIssues(spec: OAuth2CredentialSpec): string[] {
   if (!isHttpsUrl(registration.registrationUrl)) {
     issues.push('credential.clientRegistration.registrationUrl: expected an https URL');
   }
-  if (spec.appConfigFields !== undefined && spec.appConfigFields.length > 0) {
-    issues.push(
-      'credential.appConfigFields: a client the gateway registers itself has no setting to declare',
-    );
-  }
   return issues;
 }
 
@@ -565,7 +560,9 @@ function kindSpecIssues(spec: CredentialSpec): string[] {
       if (spec.clientAuthMethod === 'none' && !spec.pkce)
         issues.push('credential.pkce: a public client (clientAuthMethod none) must use PKCE');
       if (spec.revocation !== undefined) issues.push(...revocationIssues(spec));
-      if (spec.clientRegistration !== undefined) issues.push(...registrationIssues(spec));
+      // The only OAuth client the host knows is one it registers itself (ADR
+      // gmail-over-imap-with-an-app-password): no administrator declares one.
+      issues.push(...registrationIssues(spec));
       // `refreshable: true` needs no `refresh()` : the host performs the
       // standard refresh_token grant from the spec (ADR plugin-contract D2 as
       // as amended) ; `refresh` is an override for non-standard flows.

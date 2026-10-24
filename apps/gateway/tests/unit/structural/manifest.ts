@@ -414,7 +414,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'config-examples-match-the-loader',
     statement:
-      'The documented configuration is the accepted one: the handbook’s key table and the two deployment examples name exactly the keys and provider-app fields the loader and the shipped plugins take.',
+      'The documented configuration is the accepted one: the handbook’s key table names exactly the keys the loader takes, and the two deployment examples set none of the retired per-provider OAuth-client keys.',
     source: 'spec §4.3; ADR docker-image-and-config-format',
     proofs: [
       {
@@ -426,7 +426,7 @@ export const INVARIANTS: readonly Invariant[] = [
       },
       {
         file: `${STRUCTURAL}/example-config-providers.test.ts`,
-        tests: ['the two examples show the same providers', 'refuse an unknown provider'],
+        tests: ['%s', 'the check reads commented and active lines alike'],
       },
     ],
   },

@@ -201,35 +201,38 @@ function sensitiveLabelSlice(action: 'R' | 'W', label: string | null): Slice {
 
 // ─── Argument validation ───────────────────────────────────────────────────
 
-/** Longest thread or message id accepted (Gmail's are 16 hexadecimal digits). */
-export const MAX_GMAIL_ID_LENGTH = 64;
+/**
+ * Longest thread or message id accepted : the lower-case hexadecimal of a
+ * 64-bit `X-GM-THRID` / `X-GM-MSGID`, as the Gmail API prints it.
+ */
+export const MAX_GMAIL_ID_LENGTH = 16;
 /** Longest label accepted (Gmail caps a label name at 225 characters). */
 export const MAX_LABEL_LENGTH = 225;
 
-const GMAIL_ID = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_GMAIL_ID_LENGTH}}$`);
+const GMAIL_ID = new RegExp(`^[0-9a-f]{1,${MAX_GMAIL_ID_LENGTH}}$`);
 const LABEL_CHARS = /^[A-Za-z0-9_./-]+$/;
 /** What a bracket identifier of a slice may hold (the slice grammar of the policy engine). */
 const SLICE_IDENT = /^[A-Za-z0-9_./~-]+$/;
 
 /**
- * A Gmail thread or message id, or `null` : an opaque token of one path
- * segment — no dot, no separator, no escape, bounded. The id lands in a slice
- * today and in a request path (`users/me/threads/{id}`) once the plugin
- * executes, where `encodeURIComponent` would leave `.` and `..` for a URL
- * parser to remove ; a value outside the grammar is refused, never escaped.
- * The one check `classify` and the executor to come share.
+ * A Gmail thread or message id, or `null` : 1 to 16 lower-case hexadecimal
+ * digits, the Gmail API's spelling of the 64-bit `X-GM-THRID` / `X-GM-MSGID`
+ * the IMAP server numbers them with. The id lands in a slice and, converted
+ * to its decimal value, in an IMAP `SEARCH` ; a value outside the grammar is
+ * refused, never escaped or normalised. The one check `classify` and
+ * `execute` share (ADR plugin-identifiers-one-grammar-for-classify-and-execute).
  */
 export function gmailId(value: unknown): string | null {
   return typeof value === 'string' && GMAIL_ID.test(value) ? value : null;
 }
 
 /**
- * A label argument, or `null` : a system label id (`INBOX`), a user label id
- * (`Label_42`) or a label name without spaces, nested with `/`
- * (`Legal/Contracts`), bounded. No segment is empty, `.` or `..` : whatever
- * the executor to come does with the value — a request body, or a path
- * segment (`users/me/labels/{id}`) — no URL parser can read a dot segment in
- * it. Shared with that executor, like `gmailId`.
+ * A label argument, or `null` : a system label id (`INBOX`) or a user label
+ * name without spaces, nested with `/` (`Legal/Contracts`), bounded — over
+ * IMAP a user label is addressed by its name, as `list_labels` returns it.
+ * No segment is empty, `.` or `..`, and no character outside the set below
+ * (no space, quote, backslash, bracket or control character) can reach the
+ * `STORE` command. Shared with `execute`, like `gmailId`.
  */
 export function labelRef(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > MAX_LABEL_LENGTH) return null;
@@ -267,11 +270,23 @@ function isLabelOrNested(candidate: string, parent: string): boolean {
 const DELETING_LABELS: ReadonlySet<string> = new Set(['TRASH', 'SPAM']);
 
 /**
- * System label ids a write may name. A user label is addressed by an opaque
- * id (`Label_42`) the classifier cannot map to a name, so only these ids are
- * known not to be one of the owner's sensitive labels.
+ * A label a write may name, or `null` : `labelRef`, and never `TRASH` or
+ * `SPAM` in any case. The one check of a written label, for `classify` and
+ * `execute`.
  */
-const SYSTEM_LABEL_IDS: ReadonlySet<string> = new Set([
+export function writableLabel(value: unknown): string | null {
+  const label = labelRef(value);
+  return label !== null && !DELETING_LABELS.has(label.toUpperCase()) ? label : null;
+}
+
+/**
+ * System label ids a write may name. Any other value is a user label name,
+ * which may be, or be nested under, one of the owner's sensitive labels ;
+ * only these ids are known not to be one. `execute` writes four of them
+ * (`INBOX`, `STARRED`, `IMPORTANT`, `UNREAD`) and refuses the others, which
+ * IMAP does not expose as writable labels.
+ */
+export const SYSTEM_LABEL_IDS: ReadonlySet<string> = new Set([
   'INBOX',
   'STARRED',
   'UNREAD',

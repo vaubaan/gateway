@@ -5,7 +5,7 @@
  * configuration holds.
  *
  * Each line is read from the service that owns the fact: sign-in from the
- * identity-provider settings, the declared OAuth clients from `ProviderAppsService`, the
+ * identity-provider settings, the
  * accounts without owner from `ConnectionService.listOwnerless`, the apps that
  * wait from the client registry, telemetry from its overview, the name from
  * `InstanceNameService`. Nothing is decided here.
@@ -52,7 +52,6 @@ import {
   TERMS,
 } from '@/lib/vocabulary';
 import { isOperator, setUpElsewhere, type SignInProviderView } from '@/server/auth';
-import { oauthClientChecklist } from '@/server/now';
 import { OWNERLESS_CONNECTIONS_PAGE } from '@/server/connections';
 import {
   INSTANCE_NAME_MAX_LENGTH,
@@ -175,12 +174,11 @@ export default async function SetupPage({ searchParams }: Props) {
   const notice = await takeNotice(root, principal.sessionId, params);
   const nameProblem = isNameProblem(params[NAME_PROBLEM_PARAM]) ? params[NAME_PROBLEM_PARAM] : null;
   const keyProblem = isKeyProblem(params[KEY_PROBLEM_PARAM]) ? params[KEY_PROBLEM_PARAM] : null;
-  const [providers, rule, bootstrap, apps, ownerless, clients, telemetry, users, identity, key] =
+  const [providers, rule, bootstrap, ownerless, clients, telemetry, users, identity, key] =
     await Promise.all([
       root.auth.providers.views(),
       root.auth.administrators.current(),
       root.auth.bootstrap.state(),
-      root.providerApps.list(),
       root.connections.service.listOwnerless(),
       root.oauth.clients.list(),
       root.telemetry.overview(),
@@ -194,7 +192,6 @@ export default async function SetupPage({ searchParams }: Props) {
   const fresh =
     handover && (await signedInFreshly(root.auth.sessions, await headers(), new Date()));
 
-  const { registered, missing } = oauthClientChecklist(apps);
   const waiting = clients.filter((view) => view.status === 'pending');
   const administrators = users.filter(
     (view) =>
@@ -272,26 +269,6 @@ export default async function SetupPage({ searchParams }: Props) {
       ),
       description: 'What agents and the setup kit point at.',
     },
-    // A service that needs an OAuth client is declared on its connect page, when
-    // somebody wants it (spec §7.2); the list is not a step of the setup. Once one
-    // is declared, the checklist says so (ADR setup-checklist-lists-only-what-is-needed).
-    ...(registered.length > 0
-      ? [
-          {
-            key: 'oauth-clients',
-            counted: true,
-            state: 'done' as CheckState,
-            title: SECTIONS.oauthClients,
-            description: (
-              <>
-                {`${listOf(registered.map((app) => app.displayName))} ${registered.length === 1 ? 'is' : 'are'} declared.`}
-                {missing.length > 0 &&
-                  ` ${listOf(missing.map((app) => app.displayName))} ${missing.length === 1 ? 'is' : 'are'} not: declare ${missing.length === 1 ? 'it' : 'them'} from Accounts if your colleagues use ${missing.length === 1 ? 'it' : 'them'}.`}
-              </>
-            ),
-          },
-        ]
-      : []),
     ...(firstAdministrator !== null
       ? [
           {

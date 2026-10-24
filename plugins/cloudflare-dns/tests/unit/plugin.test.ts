@@ -131,7 +131,6 @@ describe('cloudflare-dns plugin — structural kit', () => {
       resources: [exampleCom],
       context: (fetch, resources) => ({
         credential: { kind: 'api-key', fields: { api_token: 'cf_token' }, metadata: {} },
-        appConfig: {},
         fetch,
         resources,
       }),
@@ -392,7 +391,7 @@ describe('executeCloudflareDns with mockFetch', () => {
   const ctx = (
     fetch: typeof globalThis.fetch,
     resources: readonly Resource[] = [exampleCom],
-  ): ExecuteContext => ({ credential, appConfig: {}, fetch, resources });
+  ): ExecuteContext => ({ credential, fetch, resources });
   const text = (r: { content: readonly unknown[] }) => (r.content[0] as { text: string }).text;
   /** The message of a call the executor declined : an `isError` result, never a throw. */
   const refusalOf = (r: { content: readonly unknown[]; isError?: boolean }): string => {
@@ -836,7 +835,6 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
     token = 'cf_token_0123456789abcdef',
   ): ConnectionContext => ({
     credential: { kind: 'api-key', fields: { api_token: token }, metadata: {} },
-    appConfig: {},
     fetch,
   });
   const zone = (i: number, account = 'acct1') => ({

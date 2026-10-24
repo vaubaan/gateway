@@ -64,9 +64,9 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // ── 2. Connect GitHub with a fine-grained token ───────────────────────────
   await page.getByRole('link', { name: 'Connect an account' }).click();
   await expect(page).toHaveURL(/\/accounts#connect$/);
-  // A service whose OAuth client nobody declared is listed, and says so;
-  // every other one says what to paste.
-  await expect(page.getByTestId('service-gmail')).toContainText('needs its OAuth client');
+  // Every service says how it is connected; none waits for an administrator
+  // (Gmail takes an app password, ADR gmail-over-imap-with-an-app-password).
+  await expect(page.getByTestId('service-gmail')).toContainText('paste:');
   await expect(page.getByTestId('service-railway')).toContainText('workspace token');
   await page.getByTestId('service-github').getByRole('link').click();
   await expect(

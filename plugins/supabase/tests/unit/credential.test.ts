@@ -24,7 +24,6 @@ const REF = 'tlqgxnezmthbpzhdwxgi';
 function ctx(fetch: MockFetch): ConnectionContext {
   return {
     credential: { kind: 'api-key', fields: { access_token: PAT }, metadata: {} },
-    appConfig: {},
     fetch,
   };
 }

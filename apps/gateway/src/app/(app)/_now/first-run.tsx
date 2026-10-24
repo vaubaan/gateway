@@ -22,20 +22,12 @@ import {
 } from '@/components/ui';
 import { ADMIN_PAGES } from '@/components/shell/settings-nav';
 import { ACTIONS, count, FIRST_RUN, PAGES, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
-import { connectPagePath } from '@/server/connections';
 import type { NowView, SetupView } from '@/server/now';
 
 import styles from './now.module.css';
 
-function listed(names: readonly string[]): string {
-  if (names.length <= 1) return names.join('');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-}
-
-/** The checklist of an administrator. `primary` says whether its open step takes the page's one accent. */
-function Setup({ setup, primary }: { setup: SetupView; primary: boolean }) {
-  const { company_apps: apps } = setup;
-  const [firstMissing] = apps.missing;
+/** The checklist of an administrator; its open step (sign-in) takes the page's one accent. */
+function Setup({ setup }: { setup: SetupView }) {
   return (
     <Section
       title={FIRST_RUN.setUp}
@@ -61,35 +53,6 @@ function Setup({ setup, primary }: { setup: SetupView; primary: boolean }) {
             ) : (
               <ButtonLink href={ADMIN_PAGES.signIn} size="sm" variant="primary">
                 Set up sign-in
-              </ButtonLink>
-            )
-          }
-        />
-        <Row
-          lead={
-            <CheckMark
-              state={
-                apps.missing.length === 0 ? 'done' : apps.registered.length > 0 ? 'partial' : 'todo'
-              }
-              partial={`${apps.registered.length}/${apps.registered.length + apps.missing.length}`}
-            />
-          }
-          title={SECTIONS.oauthClients}
-          description={
-            apps.missing.length === 0
-              ? 'Every service that signs people in through an OAuth client of your company has one.'
-              : `Declare your company’s OAuth client for ${listed(apps.missing.map((app) => app.name))} on its connect page, so that people can connect those accounts by signing in. Services that take a key need nothing.`
-          }
-          end={
-            firstMissing === undefined ? (
-              FIRST_RUN.done
-            ) : (
-              <ButtonLink
-                href={connectPagePath(firstMissing.id)}
-                size="sm"
-                variant={primary && setup.sign_in ? 'primary' : 'secondary'}
-              >
-                Declare {firstMissing.name}
               </ButtonLink>
             )
           }
@@ -126,8 +89,7 @@ export function FirstRun({
 }) {
   const [shared] = view.shared_accounts;
   const hasAccount = view.totals.accounts > 0 || shared !== undefined;
-  const setupOpen =
-    setup !== null && (setup.sign_in === null || setup.company_apps.missing.length > 0);
+  const setupOpen = setup !== null && setup.sign_in === null;
   // One accent on the page: what is left to set up first, then the next step.
   const stepsTakeAccent = !setupOpen;
   return (
@@ -146,7 +108,7 @@ export function FirstRun({
         <ModelDiagram nodes={FIRST_RUN.model} label={FIRST_RUN.modelLabel} />
       </div>
 
-      {setup && <Setup setup={setup} primary={setupOpen} />}
+      {setup && <Setup setup={setup} />}
 
       <Section
         title={setup ? FIRST_RUN.thenLikeEveryone : FIRST_RUN.getStarted}

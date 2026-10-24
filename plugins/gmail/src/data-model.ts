@@ -45,8 +45,8 @@ export const gmailDataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The Gmail account / OAuth-authenticated user backing the bearer used by ' +
-            'Vaubaan. Singleton per connection (one connection = one Gmail account ; a mission ' +
+            'The Gmail or Google Workspace account whose app password Vaubaan signs in ' +
+            'with over IMAP. Singleton per connection (one connection = one Gmail account ; a mission ' +
             'with several mailboxes is denied until multi-account is decided).',
         },
         {
@@ -96,9 +96,9 @@ export const gmailDataModel: DataModel = {
           parent: 'mailbox',
           cardinalities: ['bounded'],
           description:
-            'An unsent message held by Gmail in the drafts folder. Bounded (dozens at ' +
-            'most in practice). NOT a child of `thread` — drafts have their own id ' +
-            'space on the Gmail API.',
+            'An unsent message held by Gmail in the drafts folder (the IMAP folder ' +
+            'whose special use is `\\Drafts`). Bounded (dozens at most in practice). ' +
+            'NOT a child of `thread` : a draft is created alone and never sent.',
         },
         // ─── Synthetic risk-zone markers (NOT real Gmail entities) ──────────
         {

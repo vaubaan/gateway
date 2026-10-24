@@ -35,27 +35,27 @@ interface speaks to people in other words. §4.2, §4.4 and §7 describe what a
 person sees and does, and use the interface's; a reader of the API, of a
 refusal or of the database finds the same thing under the protocol's name:
 
-| The interface says                               | The protocol and this spec say                                                        |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| account                                          | connection                                                                            |
-| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction                     |
-| "Shared with you"                                | shares received; missions one is a member of                                          |
-| permission (its id stays visible, in mono)       | risk, `RiskId`                                                                        |
-| limits, per period and per minute                | budget: quota and rate limit                                                          |
-| runs freely / ask me first                       | gate `auto` / `approval`                                                              |
-| key, your key                                    | mission token, member token                                                           |
-| machine key                                      | named token                                                                           |
-| Replace key                                      | rotate                                                                                |
-| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                   |
-| connected app                                    | delegation, held by an OAuth client                                                   |
-| Activity                                         | audit; the session of a mission                                                       |
-| teammate                                         | mission member                                                                        |
-| team                                             | group                                                                                 |
-| administrator                                    | operator                                                                              |
-| service; OAuth client; Reference                 | provider; provider app (the OAuth client of a provider); the reference of each plugin |
-| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)                         |
-| setup kit                                        | bootstrap kit                                                                         |
-| mission, preset, resource, environment           | the same                                                                              |
+| The interface says                               | The protocol and this spec say                                                                |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| account                                          | connection                                                                                    |
+| access — "Who has access", "Give access"         | share; the list of permissions an access holds is its restriction                             |
+| "Shared with you"                                | shares received; missions one is a member of                                                  |
+| permission (its id stays visible, in mono)       | risk, `RiskId`                                                                                |
+| limits, per period and per minute                | budget: quota and rate limit                                                                  |
+| runs freely / ask me first                       | gate `auto` / `approval`                                                                      |
+| key, your key                                    | mission token, member token                                                                   |
+| machine key                                      | named token                                                                                   |
+| Replace key                                      | rotate                                                                                        |
+| Waiting for you (a yes to give, a limit reached) | request: approval request, claim; the request inbox                                           |
+| connected app                                    | delegation, held by an OAuth client                                                           |
+| Activity                                         | audit; the session of a mission                                                               |
+| teammate                                         | mission member                                                                                |
+| team                                             | group                                                                                         |
+| administrator                                    | operator                                                                                      |
+| service; OAuth client; Reference                 | provider; the OAuth client the instance registers at a provider; the reference of each plugin |
+| stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)                                 |
+| setup kit                                        | bootstrap kit                                                                                 |
+| mission, preset, resource, environment           | the same                                                                                      |
 
 The page paths follow the interface's words (`/accounts`, `/waiting`,
 `/activity`, `/reference`, `/settings`); the paths that belong to a protocol do
@@ -69,8 +69,7 @@ company registered at a provider).
   domain: there is no tenant, no org, no project. Everything the
   instance holds belongs to the company that runs it.
 - **Operator** — the person or team that installs, configures and
-  maintains the instance (sign-in providers, the OAuth client of a
-  provider that connects that way, master key, telemetry). The operator is not an identity of the domain; they have
+  maintains the instance (sign-in providers, master key, telemetry). The operator is not an identity of the domain; they have
   access to the configuration, not to other people's missions. During the
   setup, the operator is whoever holds the bootstrap token (the setup
   link). Afterwards, the operators are the **administrators** of the
@@ -149,11 +148,12 @@ company registered at a provider).
   Supabase, Railway, Stripe, Cloudflare…). Static, described by its risk
   catalog.
 - **Connection** — a provider authenticated into the instance by a user,
-  through the provider's own authorization flow with the app the company
-  registered there, or — for a provider whose plugin offers it — with a
-  token the user created at the provider and pasted (often on one shared
-  service account per provider: the instance decides who may do what, and
-  the audit says who did). Both ways coexist; neither replaces the other.
+  with a key the user created at the provider and pasted — a token, or for
+  Gmail an app password (often on one shared service account per provider:
+  the instance decides who may do what, and the audit says who did) — or,
+  for a provider that offers no such key (Miro), through the provider's own
+  authorization flow with a client the instance registered there itself.
+  Each plugin declares one of these ways.
   The connection holds the long-lived credentials, encrypted at rest. It has an **owner**: a
   principal, user or group. By default the user who created it; they may
   transfer ownership to a group they belong to, for instance "GitHub
@@ -379,7 +379,7 @@ coding agents. v4 was a SaaS; v5 is a product you install.
 
 ```
 Instance                          (one company, one trust domain)
-├── Configuration                 (IdP, OAuth clients of providers, master key, telemetry, public URL)
+├── Configuration                 (IdP, master key, telemetry, public URL; OAuth clients the instance registered)
 ├── Users[]                       (identified by the IdP)
 │     └── Delegations[]           (agent authorized to manage the user's missions; delegated token)
 ├── Groups[]                      (IdP claims or local table)
@@ -1166,12 +1166,9 @@ interpreted as markup.
   local ones are kept here); registered apps (the OAuth
   clients of the management door: approve, disable); telemetry; and **the
   instance's name**, on the setup page, which an administrator sets or
-  clears (clearing it brings back the host). The OAuth client a service
-  needs before anyone connects it (§4.3) is not a page of Administration:
-  the administrator declares it on that service's connect page, the one
-  place to authorize a service (§7.2); the setup checklist lists a declared
-  client and says nothing of a service nobody asked for — the connect page
-  does, when somebody wants that service. The accounts without owner are
+  clears (clearing it brings back the host). No service needs anything
+  declared by an administrator before someone connects it (§4.3, §7.2), so
+  the setup checklist has no step per service. The accounts without owner are
   not a page of Administration either: an administrator finds them as the
   last region of Accounts, when there are any, and names a new owner there
   (the administrator's only act on an account). Acts that stop,
@@ -1212,25 +1209,22 @@ a mounted file, never committing anything:
   mail — the links that create a local account or reset its password.
   Without it, local accounts still work: the links are shown to the
   administrator to hand over;
-- for a provider that connects through the service's own sign-in only
-  (`oauth2`: a service that offers no key a person can use — Gmail, Miro),
-  its **OAuth client**, from one of two sources:
-  - **declared by an administrator** when the service requires it (Gmail):
-    the company registers the gateway at the service, then enters the
-    client's identifier and secret here or on the service's connect page
-    (§7.2);
-  - **registered by the gateway itself** when the service accepts dynamic
-    client registration (RFC 7591; Miro's MCP server): the instance registers
-    its own client the first time someone connects, keeps it with its secret
-    encrypted under the master key, reuses it for every connection, and
-    registers again when the service rejects it or the instance's public
-    URL changed. Nothing is entered here (ADR
-    [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)).
-
-  Either way each instance has its own client; the instance never uses one
-  shared with another instance. Every other provider needs nothing here:
-  people connect it with a key they make at the service (ADR
-  [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md));
+- **nothing per provider.** People connect a provider with a key they make
+  at the service (ADR
+  [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)).
+  A provider that connects through the service's own sign-in only
+  (`oauth2`: a service that offers no key a person can use — Miro) gets an
+  **OAuth client registered by the gateway itself** through dynamic client
+  registration (RFC 7591): the instance registers its own client the first
+  time someone connects, keeps it with its secret encrypted under the master
+  key, reuses it for every connection, and registers again when the service
+  rejects it or the instance's public URL changed (ADR
+  [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)).
+  Each instance has its own client, never one shared with another instance.
+  No OAuth client is declared by an administrator: the configuration keys
+  `providers.<id>.*` of earlier versions are no longer read, and an instance
+  that still sets them starts and logs a warning naming them (ADR
+  [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md));
 
 - the operator's **bootstrap token**, the secret of the setup link: it
   opens the setup until the setup ends. Required while the configuration
@@ -1316,11 +1310,11 @@ same for any agent, with no value of any mission.
   restriction; project-scoped root token → mission.
 - **Provider plugins** — one per provider. Two responsibilities: classify
   `(tool, arguments) → slices`, execute the tool with an ephemeral
-  credential. They also declare how to obtain and refresh a credential
-  from the app registered by the company — and may declare other ways to
-  connect, such as a token pasted by hand, each with its own form, check,
-  resource discovery, the tools it cannot run, and a guide for the person
-  (where to create it, which permissions to grant, the expiry to choose) —
+  credential. They also declare their one way of connecting — a key pasted
+  by hand (a token, an app password) with its form, check and a guide for
+  the person (where to create it, which permissions to grant, the expiry to
+  choose), a key pair the instance generates, or the service's own sign-in
+  with a client the instance registers itself, and how to refresh it —,
   how to withdraw the grant at
   the provider when a connection is revoked (or, failing that, where a
   person removes it by hand), how to discover resources and which of
@@ -1335,9 +1329,11 @@ same for any agent, with no value of any mission.
   authorization: shares and missions are local, and admission is the
   instance's (allowed domains, invitations).
 - **Providers** — a key a person makes at the provider and pastes, or,
-  where the provider offers none, the company's own OAuth client. The
-  authorization flow runs between the user, the provider and the
-  instance; no third party.
+  where the provider offers none, an OAuth client the instance registers
+  there itself. The authorization flow runs between the user, the provider
+  and the instance; no third party. Gmail is reached over IMAP
+  (`imap.gmail.com`, TLS) with the mailbox's app password; nothing is ever
+  sent by mail.
 - **Community collector** — receives plugin reports from consenting
   instances, publishes aggregated statistics. See §9.
 - **MCP clients** — Claude Code, Cursor, Continue, scripts. The gateway
@@ -1449,10 +1445,6 @@ same for any agent, with no value of any mission.
   last credit produce exactly one allow and one refusal.
 - **Anti-replay and anti-redirect** on provider authorization flows:
   single-use nonce, return URL limited to the instance's public URL.
-- **Declaring the OAuth client of a service** is an administrator's act,
-  on the service's connect page: its secret goes straight to the
-  encrypted settings, is never shown back and never logged; the audit
-  records who changed which client (its identifier), never a secret.
 - **A pasted token is checked at the service before it is stored**, and a
   call the service refuses for a permission the token lacks is reported as
   such, naming what the token needs; the gateway sends the token as it
@@ -1492,9 +1484,9 @@ invite the addresses an open provider should admit, and **finish the
 setup**: an explicit step, allowed once the key was handed over and an
 administrator has a way in, that revokes the bootstrap token — no sign-in
 revokes it by itself. Nothing else stands between them and the first
-account: a service that signs people in through an OAuth client (Gmail) is
-declared on its connect page the first time someone opens it; every other
-service is connected with a key.
+account: every service is connected with a key a person makes, or through
+the service's sign-in with a client the instance registers itself; no
+service asks an administrator to declare anything first.
 
 ### 7.2 Connect an account
 
@@ -1505,22 +1497,23 @@ the simplest way the service offers (ADR
 a key the person makes at the service and pastes, whenever the service
 lets a person make one, with a guide derived from the plugin — where to
 create it, which permissions to grant for the plugin's tools, the expiry
-to choose, and that a shared service account is fine; or, for a service
-that offers no such key (Gmail, Miro), the service's own sign-in: the person
-is sent to the service, consents and comes back. That second way needs an
-OAuth client at the service. Where the service accepts dynamic client
-registration (Miro), the gateway registers its own the first time someone
-connects and nobody declares anything: the page says there is nothing to
-create or paste. Otherwise (Gmail) the company's OAuth client is declared
-at the service once; an administrator does so on the same page, before
-anyone connects, and the page tells everyone else who to ask until then.
-A refusal the gateway reports on this page is in its own words or in the
+to choose, and that a shared service account is fine (Gmail's key is an
+app password the person creates in their Google Account, which IMAP signs
+in with); or, for a service that offers no such key (Miro), the service's
+own sign-in: the person is sent to the service, consents and comes back.
+That second way needs an OAuth client at the service, which the gateway
+registers itself the first time someone connects (dynamic client
+registration): nobody declares anything, and the page says there is
+nothing to create or paste. A service that offers neither a key nor
+dynamic client registration is not connectable. A refusal the gateway reports on this page is in its own words or in the
 plugin's — never the service's text. A pasted token is checked at the
 service before it is stored (who it acts as, its expiry when the service
 says), is never shown back, and its expiry is shown on the account's page
 ahead of it; a token the service rejects makes the account "needs
 reconnecting". An account connected a way the service's plugin no longer
-offers (an earlier build) runs nothing until its owner reconnects it.
+offers (an earlier build — a Gmail account connected by OAuth) runs
+nothing, and its page and its discovery say so, until its owner reconnects
+it; reconnecting keeps the account, its resources and its shares.
 Removing an account withdraws the grant at the service where the service
 offers a way for it, and otherwise says where to delete the key there.
 The connection — the account — is created, encrypted, under their name. The plugin discovers its resources; the owner labels their
@@ -1773,10 +1766,12 @@ automated suite. Trust comes from usage.
     verdict computed as a sign-in would, the result usable by the tester's
     session only; a provider saved off and switched on only after a test
     passed since its last save, refused at sign-in while off;
-  - the OAuth client of a service (§4.3, §7.2): declared on the connect
-    page by an administrator only, the file winning over the page, the
-    secret sealed and never echoed, an audit entry without a secret, the
-    page saying who to ask until it is declared.
+  - the OAuth client of a service (§4.3, §7.2): registered by the instance
+    itself, its secret sealed and never echoed; an `oauth2` plugin that
+    declares no registration is refused at startup;
+  - Gmail over IMAP (§5): the app password checked by an IMAP sign-in
+    before it is stored, folders found by their special use, ids and labels
+    taken from the classifier's grammar, a draft appended and never sent.
 - **Integration**, on an ephemeral instance with embedded store and
   simulated IdP: connection, share, issuance, claim, approval and
   replay, revocation flows, the git remote with the real `git` client
@@ -1878,16 +1873,18 @@ automated suite. Trust comes from usage.
   [security-headers-set-by-the-application](../decisions/security-headers-set-by-the-application.md)).
 - One place to authorize a service: a key the person makes and pastes
   wherever the service offers one that works; the service's sign-in only
-  where it offers none (Gmail, Miro). Its OAuth client is either declared
-  by an administrator on the service's connect page (Gmail), or registered
-  by the gateway itself where the service accepts dynamic client
-  registration (RFC 7591; Miro, 2026-10-21, ADR
+  where it offers none (Miro). Its OAuth client is registered by the
+  gateway itself through dynamic client registration (RFC 7591; Miro,
+  2026-10-21, ADR
   [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)).
   The GitHub App, its manifest flow and the OAuth apps of Supabase and
   Railway were removed on 2026-10-20 (ADR
   [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)).
-  Every instance has its own OAuth client, declared or registered, never a
-  shared one.
+  Gmail moved from an OAuth client declared by an administrator to an app
+  password over IMAP on 2026-10-24, and the declared OAuth client left the
+  gateway with it (ADR
+  [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)).
+  Every instance has its own OAuth client, never a shared one.
 
 ### 11.2 Open questions
 

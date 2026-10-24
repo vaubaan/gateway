@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: How an instance reads its configuration — environment variables and a YAML file — and how to set sign-in providers, the admin rule and company apps.
+description: How an instance reads its configuration — environment variables and a YAML file — and how to set sign-in providers and the admin rule.
 ---
 
 An instance is configured by environment variables, by a YAML file, or both; the configuration is read once at start, and anything required and missing stops the instance with a message naming every key. Every key, with its variable, type, default and accepted values: [configuration keys](/docs/configuration/keys).
@@ -34,12 +34,9 @@ A provider where anyone can open an account (GitHub, personal Google or Microsof
 
 Administrators are named by the configuration only: `admin.group` (a group of the identity provider, written `<provider>:<group>` once there are several providers) or `admin.emails` (verified addresses), or both. An administrator configures the instance, approves connected apps, keeps local teams and deactivates people; they do not answer another person's requests nor create missions on accounts they do not hold.
 
-## Company apps
+## Services
 
-A service that works through an app — the GitHub App, a Supabase OAuth app, a Railway OAuth app — needs **your company's own app**, registered once per instance: this gateway never uses an app shared with another one.
-
-- **From the interface**: Settings → Administration → Company apps. For GitHub, "Create the GitHub App" creates it at GitHub from the page and stores its id, key and secrets encrypted: nothing to copy. For the others, register the app at the service with the callback the page shows, then enter its client id and secret there.
-- **From the configuration**: `providers.<id>.<field>` (`VAUBAAN_PROVIDER_<ID>_<FIELD>`), with the fields `client_id`, `client_secret`, `app_id`, `app_slug`, `private_key`. The app is then read-only in the interface.
+Nothing is configured per service. People connect an account with a key they create at the service, and a service that signs people in through its own authorization (Miro) gets an OAuth client the gateway registers there itself. The keys `providers.<id>.*` (`VAUBAAN_PROVIDER_<ID>_<FIELD>`) of earlier versions are no longer read: an instance that still sets them starts and logs a warning naming each one, and they can be removed.
 
 Each service's steps: [connect a provider](/docs/providers).
 

@@ -761,6 +761,17 @@ export function AccountView({
               it.
             </Callout>
           )}
+          {detail.wayRetired && !revoked && (
+            <Callout
+              tone="bad"
+              title="This account needs reconnecting"
+              testId="account-way-retired"
+            >
+              It was connected a way {detail.providerLabel} no longer offers on this gateway. Every
+              call of the missions that use it is refused until an owner reconnects it; reconnecting
+              keeps the account, its resources and who has access.
+            </Callout>
+          )}
           {connection.status === 'unowned' && (
             <Callout tone="warn" title="This account has no owner" testId="account-unowned">
               Nobody can reconnect it or give access to it until an administrator names a new owner.
@@ -820,7 +831,7 @@ export function AccountView({
               },
               {
                 term: 'Credential',
-                value: `${credentialKindLabel(detail.credentialKind)} · encrypted at rest, never shown`,
+                value: `${credentialKindLabel(detail.credentialKind, detail.wayRetired)} · encrypted at rest, never shown`,
               },
               ...(detail.credentialKind === 'api-key' &&
               (detail.tokenAccount || detail.tokenExpiresAt)

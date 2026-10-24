@@ -68,7 +68,6 @@ function ctx(fetch: MockFetch, resources: readonly Resource[] = [database]): Exe
       fields: { email: 'ops@acme.com', api_key: 'upstash_key_123' },
       metadata: {},
     },
-    appConfig: {},
     fetch,
     resources,
   };

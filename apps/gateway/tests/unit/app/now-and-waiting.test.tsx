@@ -813,7 +813,6 @@ describe('the home, when nothing waits', () => {
 describe('the first run', () => {
   const setup: SetupView = {
     sign_in: 'login.acme.example',
-    company_apps: { registered: [], missing: [{ id: 'gmail', name: 'Gmail' }] },
     telemetry: { enabled: false, decided: false },
   };
 
@@ -882,21 +881,26 @@ describe('the first run', () => {
     expect(text(html)).toContain('Alice never sees it');
   });
 
-  it('an administrator also reads what is left to set up, and that step takes the accent', () => {
+  it('an administrator also reads what is left to set up, and an open step takes the accent', () => {
     const html = renderToStaticMarkup(
       <FirstRun view={model({ first_run: true })} name="Dan" setup={setup} />,
     );
     inOrder(text(html), [
       'Set up this gateway',
       'Sign-in through login.acme.example',
-      'OAuth clients',
-      'Declare your company’s OAuth client for Gmail',
       'Telemetry',
       'Then, like everyone',
       'Connect an account',
     ]);
+    // No service asks an administrator to declare anything (ADR gmail-over-imap-with-an-app-password).
+    expect(text(html)).not.toContain('OAuth client');
     expect(html.match(/v_primary/g)).toHaveLength(1);
-    expect(text(html)).toContain('Declare Gmail');
+
+    const open = renderToStaticMarkup(
+      <FirstRun view={model({ first_run: true })} name="Dan" setup={{ ...setup, sign_in: null }} />,
+    );
+    expect(open.match(/v_primary/g)).toHaveLength(1);
+    expect(text(open)).toContain('Set up sign-in');
   });
 });
 

@@ -398,19 +398,17 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await expect(checklist.getByTestId('setup-sign-in')).toContainText('Sign-in through');
   await expect(checklist.getByTestId('setup-sign-in')).toContainText('done');
   await expect(checklist.getByTestId('setup-address')).toContainText('gateway.e2e.test');
-  // A service that needs an OAuth client is not a step while none is declared: nobody
-  // asked for it. The administrator declares it from Accounts, when somebody wants it.
+  // No service needs an OAuth client declared by an administrator: no step for it.
   await expect(checklist.getByTestId('setup-oauth-clients')).toHaveCount(0);
   // The one thing left to do carries the page's one primary action.
   await expect(checklist.locator('a[class*="primary"]')).toHaveCount(1);
   await ops.goto('/accounts');
   const gmail = ops.getByTestId('service-gmail');
-  await expect(gmail).toContainText('needs its OAuth client · declare it');
-  await gmail.click();
+  await expect(gmail).not.toContainText('OAuth client');
+  await gmail.getByRole('link').click();
   await expect(ops).toHaveURL(/\/accounts\/new\/gmail$/);
-  // The OAuth client is declared on the service's connect page, by an administrator.
-  await expect(ops.getByTestId('oauth-client-missing')).toBeVisible();
-  await expect(ops.getByTestId('oauth-client-form-gmail')).toBeVisible();
+  // Its connect page is the connect form, with nothing for an administrator to declare.
+  await expect(ops.getByTestId('oauth-client-missing')).toHaveCount(0);
   await ops.goto('/admin');
   // The rule is readable by who it names: the listed email, and who it resolves to today.
   const rule = ops.getByTestId('administrators');

@@ -47,7 +47,7 @@ export function providerFailureReason(err: unknown): string {
         : '';
     return `the registration endpoint answered HTTP ${err.status}${code}`;
   }
-  if (err instanceof OAuth2ClientMissing) return 'no OAuth client is declared for this service';
+  if (err instanceof OAuth2ClientMissing) return 'no OAuth client is registered for this service';
   if (err instanceof ConnectError) return err.code;
   if (err instanceof ProviderUnreachableError) return 'the provider could not be reached';
   if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {

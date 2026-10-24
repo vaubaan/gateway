@@ -1,12 +1,15 @@
 # `@vaubaan/plugin-gmail`
 
-Vaubaan Gateway provider plugin for [Gmail](https://developers.google.com/workspace/gmail/api).
-**Experimental, classifier-only.** The plugin models the risks of reading,
-drafting and labelling in a mailbox and discovers the connected mailbox, but
-it exposes **no tool** (`tools` is empty) and `execute` answers a structured
-`not_implemented` error for every call. Written against
-`@vaubaan/plugin-sdk` only. Maintainer handbook:
+Vaubaan Gateway provider plugin for Gmail. **Experimental.** The plugin
+models the risks of reading, drafting and labelling in a mailbox, and
+executes its ten tools over **IMAP** (`imap.gmail.com:993`, implicit TLS),
+signed in with the mailbox's **app password**. It never sends mail: a draft
+is saved in the Drafts folder, and the plugin ships no SMTP client. Written
+against `@vaubaan/plugin-sdk` and [`imapflow`](https://imapflow.com) (MIT).
+Maintainer handbook:
 [`docs/handbook/providers/gmail.md`](../../docs/handbook/providers/gmail.md).
+Decision: ADR
+[`gmail-over-imap-with-an-app-password`](../../docs/decisions/gmail-over-imap-with-an-app-password.md).
 
 ## Data model
 
@@ -27,7 +30,8 @@ on the sender, the risk of a draft on its recipients. The four synthetic
 entities are markers the classifier emits; the catalog matches them.
 
 The **resource** a connection exposes is the authenticated **mailbox**
-(`ref` = the lower-cased address, from `GET /gmail/v1/users/me/profile`).
+(`ref` = the lower-cased address of the credential, checked by an IMAP
+sign-in).
 Its `metadata` carries the zoning configuration the owner edits:
 
 | Key                   | Type       | Drives                                                   |
@@ -43,7 +47,7 @@ sender is `unknown` and every recipient but the mailbox itself is external,
 so every such draft is refused — the safest reading. A mission must hold exactly one Gmail resource; two or more is
 denied as ambiguous (no tool argument selects a mailbox).
 
-## Tools (modelled, not exposed)
+## Tools
 
 | Tool                                                                                             | Slices → risk(s)                                                                                                                                                                                           |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,22 +81,47 @@ refuses the call:
   object, a bare word) refuses the call. A recipient outside the internal
   domains and the allowlists refuses the draft.
 - **Label writes.** `thread_id`, `message_id` (message tools) and `label` are
-  required and validated. A user label id cannot be mapped to a name, so on a
-  mailbox with sensitive labels only system label ids (`INBOX`, `STARRED`,
-  `UNREAD`, `IMPORTANT`…) are plain `label-write`.
-- **Identifiers.** A thread or message id is one opaque token
-  (`gmailId`: `[A-Za-z0-9_-]`, at most 64 characters); a label is an id or a
+  required and validated. A user label is addressed by its name, as
+  `list_labels` returns it; on a mailbox with sensitive labels, only system
+  label ids (`INBOX`, `STARRED`, `UNREAD`, `IMPORTANT`…) and names that are
+  not, and are not under, a sensitive label are plain `label-write`.
+- **Identifiers.** A thread or message id is the lower-case hexadecimal of
+  Gmail's 64-bit `X-GM-THRID` / `X-GM-MSGID`, the Gmail API's spelling
+  (`gmailId`: `[0-9a-f]`, 1 to 16 characters); a label is a system id or a
   name without spaces (`labelRef`: at most 225 characters, `/` for nesting,
-  no empty, `.` or `..` segment). Anything else is refused, never escaped.
-  Both functions are exported for the executor to come, which must take its
-  path segments from them and from nothing else.
+  no empty, `.` or `..` segment; `writableLabel` also refuses `TRASH` and
+  `SPAM`). Anything else is refused, never escaped. `execute` takes its ids
+  and labels from these functions and from nothing else.
 
 Any other tool name is `denied`.
 
-The declarations live in `gmailClassifiedToolDeclarations` (argument names
-`q`, `id`, `thread_id`, `message_id`, `label`, `to`/`cc`/`bcc`); the execution phase
-moves them into `gmailTools` and maps them onto the official Gmail MCP
-server (`gmailmcp.googleapis.com`).
+The declarations live in `gmailClassifiedToolDeclarations`, which
+`gmailTools` exposes (argument names `q`, `max_results`, `id`, `thread_id`,
+`message_id`, `label`, `to`/`cc`/`bcc`, `subject`, `body`).
+
+## Execution over IMAP
+
+One IMAP session per call, with a 60-second deadline and the call's abort
+signal; every argument is checked first, so a refused call opens no
+connection. Folders are found by their SPECIAL-USE (`\All`, `\Drafts`),
+never by name: Gmail localizes them.
+
+| Tool                    | IMAP                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `search_threads`        | `X-GM-RAW <q>` in All Mail, newest first, grouped by thread; `max_results` 10 by default, 50 at most        |
+| `get_thread`            | the thread's messages (`X-GM-THRID`), newest 50, headers, labels and a plain-text body of 20 000 bytes each |
+| `list_drafts`           | the Drafts folder, newest 50                                                                                |
+| `create_draft`          | a plain-text RFC 5322 message appended to Drafts with `\Draft`; never sent                                  |
+| `list_labels`           | `INBOX`, `STARRED`, `IMPORTANT`, `UNREAD`, then the user labels (folders without a special use)             |
+| `label_*` / `unlabel_*` | `STORE ±X-GM-LABELS` (`UNREAD`: `∓\Seen`); a label that does not exist is never created                     |
+| `describe_zones`        | synthetic: the resource's zoning metadata, no connection                                                    |
+
+`SENT`, `DRAFT`, `CHAT` and the `CATEGORY_*` tabs cannot be written over IMAP
+and are refused. The subject of a draft holds no line break or control
+character (refused), its recipients are the addresses the classifier parsed,
+and its body is base64: nothing the agent writes can add a header.
+The transport is an interface (`GmailTransport`, `src/transport.ts`):
+`createGmailPlugin({ transport })` runs the plugin over a fake one.
 
 ## Catalog and presets
 
@@ -106,7 +135,7 @@ SDK coverage kit showed the v4 catalog left two slices uncovered or on the
 fallback: `draft-write` is the one id v5 adds, for the containment slice of
 a draft (the zone risk carries the exfiltration axis), and `read-mailbox`,
 an existing id, also matches the thread containment slice of `get_thread`.
-Plugin version 0.3.0.
+Plugin version 0.4.0.
 
 | Preset      | Grants                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -119,32 +148,29 @@ vector — never acceptable: the classifier refuses the draft, and the entry
 is kept `deprecated` because ids are never deleted),
 `gmail.bulk-label-write` (no modelled tool can touch it) and the fallback.
 
-## Credential — how the company registers its app
+## Credential — an app password
 
-1. Google Cloud Console → **APIs & Services → Credentials → Create
-   credentials → OAuth client ID**, type _Web application_. Enable the
-   **Gmail API** on the project and configure the OAuth consent screen
-   (internal user type for a Workspace organisation).
-2. Authorised redirect URI: the instance callback,
-   `<public_url>/connections/callback/gmail`.
-3. Copy the client id and secret into the instance configuration under the
-   Gmail provider app (`appConfig.client_id` / `appConfig.client_secret`).
+A person connects the mailbox alone, on its connect page:
 
-The gateway runs the authorization-code flow declared by
-`gmailCredentialSpec`: `https://accounts.google.com/o/oauth2/v2/auth` and
-`https://oauth2.googleapis.com/token`, PKCE S256, `client_secret_post`,
-`access_type=offline` + `prompt=consent` (a refresh token on every connect),
-`include_granted_scopes=true`. Scopes are **`gmail.readonly` and
-`gmail.compose` only**: no `gmail.modify` (needed upstream by the `label_*`
-tools, but it also unlocks sending), no `gmail.send`. Widening them is an
-incremental-authorization decision for the execution phase.
+1. In the Google Account of the mailbox, turn on 2-Step Verification
+   (Security); Google offers app passwords only then.
+2. Open <https://myaccount.google.com/apppasswords>, create an app password
+   named "Vaubaan Gateway", copy the 16 letters.
+3. Paste the address and the app password (spaces or not).
 
-The plugin implements no provider-specific refresh: Google's refresh is the
-standard `refresh_token` grant the host performs from the spec.
+The gateway signs in over IMAP before storing anything (`verify`). An app
+password has no scopes: it opens the whole mailbox over IMAP, and what an
+agent may do is decided by its mission. It does not expire. A Google
+Workspace administrator can turn app passwords off; IMAP must be on in
+Gmail's settings. To withdraw access, delete the app password at the same
+page: the gateway cannot do it.
+
+A Gmail account connected by OAuth in an earlier build runs nothing until
+its owner reconnects it with an app password.
 
 ## Development
 
 ```
-npx vitest run plugins/gmail       # 407 tests, no network
+npx vitest run plugins/gmail       # 444 tests, no network
 npx tsc -p plugins/gmail/tsconfig.json --noEmit
 ```

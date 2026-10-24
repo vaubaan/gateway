@@ -17,12 +17,12 @@
  *
  * Refresh is generic for `oauth2` (ADR plugin-contract-and-credential-spec D2,
  * amended): the host performs the standard `refresh_token` grant from the spec
- * with the service's OAuth client (declared by an administrator, or registered
- * by the gateway itself — `OAuth2Clients`), rotates the refresh token and
+ * with the OAuth client the gateway registered at the service
+ * (`OAuth2Clients`), rotates the refresh token and
  * seals the result. A registered client the provider rejects (`invalid_client`)
  * is forgotten, so the reconnect registers a new one. A plugin's own `refresh()` is called instead only when it
  * declares one (non-standard flow). The OAuth client secret never reaches a
- * plugin: `appConfig` is `ProviderAppsService.pluginAppConfig()`.
+ * plugin.
  */
 import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
@@ -30,12 +30,10 @@ import {
   type ConnectionContext,
   type CredentialSecret,
   type PluginRegistry,
-  type ProviderAppConfig,
   type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
-import type { ProviderAppsService } from '../provider-apps';
 import type { ConnectionsRepo } from '../store';
 import type { Clock } from '../store/clock';
 import type { ConnectionRecord, ProviderGrantOutcome } from '../store/types';
@@ -61,15 +59,12 @@ export interface ResolvedCredential {
   readonly plugin: ProviderPlugin;
   /** Decrypted, in memory only; the caller drops it after the upstream call. */
   readonly credential: CredentialSecret;
-  /** The company's app for this provider as a plugin may see it (no OAuth client secret). */
-  readonly appConfig: ProviderAppConfig;
 }
 
 export interface CredentialBrokerDeps {
   readonly connections: ConnectionsRepo;
   readonly registry: PluginRegistry;
-  readonly providerApps: ProviderAppsService;
-  /** The OAuth client of an `oauth2` service: declared, or registered by the gateway. */
+  /** The OAuth client of an `oauth2` service, registered by the gateway. */
   readonly clients: Pick<OAuth2Clients, 'forTokenRequest' | 'rejected'>;
   readonly fetch: typeof fetch;
   readonly clock: Clock;
@@ -184,12 +179,7 @@ export class CredentialBroker {
       const sealed = await this.deps.connections.getCredential(connectionId);
       if (sealed === null) return null;
       const credential = parseSecret(sealed);
-      return {
-        connection,
-        plugin: registered.plugin,
-        credential,
-        appConfig: await this.deps.providerApps.pluginAppConfig(connection.provider),
-      };
+      return { connection, plugin: registered.plugin, credential };
     } catch (err) {
       this.deps.logger.warn('credential not readable for the provider-side revocation', {
         connection_id: connectionId,
@@ -274,7 +264,6 @@ export class CredentialBroker {
   contextOf(resolved: ResolvedCredential, signal?: AbortSignal): ConnectionContext {
     return {
       credential: resolved.credential,
-      appConfig: resolved.appConfig,
       fetch: this.deps.fetch,
       ...(signal ? { signal } : {}),
       logger: pluginLogger(this.deps.logger, resolved.plugin.id),
@@ -292,12 +281,7 @@ export class CredentialBroker {
     const sealed = await this.deps.connections.getCredential(connectionId);
     if (sealed === null) throw new ConnectionUnavailableError(connectionId, connection.status);
     const credential = parseSecret(sealed);
-    return {
-      connection,
-      plugin: registered.plugin,
-      credential,
-      appConfig: await this.deps.providerApps.pluginAppConfig(connection.provider),
-    };
+    return { connection, plugin: registered.plugin, credential };
   }
 
   private expiresSoon(credential: CredentialSecret): boolean {
@@ -388,9 +372,9 @@ export class CredentialBroker {
     try {
       client = await this.deps.clients.forTokenRequest(plugin, spec);
     } catch (err) {
-      // A registered client was forgotten after the provider rejected it: the grant
+      // The registered client was forgotten after the provider rejected it: the grant
       // of this connection belonged to it and can never be refreshed again.
-      if (err instanceof OAuth2ClientMissing && spec.clientRegistration !== undefined) {
+      if (err instanceof OAuth2ClientMissing) {
         throw new UpstreamAuthError(
           `${plugin.displayName} no longer accepts the client this connection was made with; reconnect it`,
           HTTP_UNAUTHORIZED,

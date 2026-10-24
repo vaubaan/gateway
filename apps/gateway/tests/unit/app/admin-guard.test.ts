@@ -191,44 +191,10 @@ describe('the Administration surface authorizes in every page and route', () => 
     request: Request,
     context: { params: Promise<Record<string, string>> },
   ) => Promise<Response>;
-  type RouteModule = { POST?: RouteHandler; GET?: RouteHandler };
   const PARAMS = { provider: 'acme', id: 'no-such-id', userId: 'no-such-user' };
 
-  // A route that only answers GET is a provider's redirect back (the company
-  // app's return): it refuses by sending the browser away, never by acting.
-  const GET_ONLY = ROUTES.filter(
-    ({ path }) => !/export async function POST/.test(readFileSync(path, 'utf8')),
-  );
-  const POSTS = ROUTES.filter((route) => !GET_ONLY.includes(route));
-
-  describe.each(GET_ONLY)('GET route $name', ({ path }) => {
-    async function get(): Promise<Response> {
-      const route = (await import(/* @vite-ignore */ path)) as RouteModule;
-      if (!route.GET) throw new Error(`${path} exports neither POST nor GET`);
-      return route.GET(
-        new Request(`${PUBLIC_URL}/admin/provider-apps/acme/created?state=x&code=y`, {
-          headers: new Headers(request.headers),
-        }),
-        { params: Promise.resolve(PARAMS) },
-      );
-    }
-
-    it('sends a visitor with no session to the sign-in and a non-operator away', async () => {
-      const anonymous = await get();
-      expect(anonymous.status).toBe(303);
-      expect(anonymous.headers.get('location')).toBe('/login');
-      await signInUser('dev', ['developers']);
-      const user = await get();
-      expect(user.status).toBe(303);
-      expect(user.headers.get('location')).toBe('/admin/provider-apps');
-    });
-
-    it('sends a bootstrap session whose token was revoked to the sign-in', async () => {
-      await signInBootstrap();
-      await root.auth.bootstrap.revoke();
-      expect((await get()).headers.get('location')).toBe('/login');
-    });
-  });
+  // Every route of Administration answers POST: none is a provider's redirect back any more.
+  const POSTS = ROUTES;
 
   describe.each(POSTS)('route $name', ({ path }) => {
     async function post(): Promise<Response> {
@@ -237,7 +203,7 @@ describe('the Administration surface authorizes in every page and route', () => 
       headers.set('origin', PUBLIC_URL);
       headers.set('content-type', 'application/x-www-form-urlencoded');
       return route.POST(
-        new Request(`${PUBLIC_URL}/admin/provider-apps/acme`, {
+        new Request(`${PUBLIC_URL}/admin/route`, {
           method: 'POST',
           headers,
           body: '',

@@ -6,9 +6,16 @@ author: drafted by the coding agent on the product owner's request of 2026-10-21
 extends:
   - one-place-to-authorize-services-token-first
   - plugin-contract-and-credential-spec
+amended-by:
+  - gmail-over-imap-with-an-app-password
 ---
 
 # An OAuth service that accepts dynamic client registration gets a client the gateway registers itself
+
+> **Amended on 2026-10-24** by [gmail-over-imap-with-an-app-password](gmail-over-imap-with-an-app-password.md): the declared client this ADR places beside
+> the registered one is removed with Gmail's OAuth way. A client the gateway
+> registers itself is the only OAuth client left, and an `oauth2` spec must
+> declare `clientRegistration`.
 
 ## Context
 

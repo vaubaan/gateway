@@ -5,14 +5,14 @@
  * mocked provider (`mockFetch`, which rejects any other request), and the
  * host-agnostic handlers driven with web-standard `Request`s.
  *
- *   operator declares the OAuth client → user connects → the connection row
- *   is encrypted (the database is scanned for every secret in clear) →
+ *   the gateway registers its OAuth client → user connects → the connection
+ *   row and the client secret are encrypted (the database is scanned for every secret in clear) →
  *   resources are discovered → owner edits survive a refresh → revoke →
  *   state `revoked`.
  */
 import { createRegistry, type Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
@@ -26,7 +26,7 @@ import {
   OAUTH_SPEC,
   SSH_KEY_SPEC,
 } from '../../../src/server/connections/testing';
-import { providerAppKey } from '../../../src/server/provider-apps';
+import { registeredClientKey } from '../../../src/server/connections/oauth2-clients';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR = 'ops@example.com';
@@ -41,7 +41,7 @@ interface Session {
   readonly userId: string | null;
 }
 
-describe('connections: provider app, connect, resources, revoke', () => {
+describe('connections: registered client, connect, resources, revoke', () => {
   let root: GatewayRoot;
   let provider: MockFetch;
   let upstream: Resource[];
@@ -54,6 +54,18 @@ describe('connections: provider app, connect, resources, revoke', () => {
       { provider: 'oauthco', ref: 'proj-b', displayName: 'Project B' },
     ];
     provider = mockFetch([
+      {
+        method: 'POST',
+        url: OAUTH_SPEC.clientRegistration.registrationUrl,
+        status: 201,
+        body: {
+          client_id: 'company-client-id',
+          client_secret: CLIENT_SECRET,
+          token_endpoint_auth_method: 'client_secret_basic',
+          redirect_uris: [`${PUBLIC_URL}/connections/callback/oauthco`],
+        },
+        times: 1,
+      },
       {
         method: 'POST',
         url: OAUTH_SPEC.tokenUrl,
@@ -151,16 +163,6 @@ describe('connections: provider app, connect, resources, revoke', () => {
     );
   }
 
-  async function registerOAuthApp(operator: Session): Promise<Response> {
-    return root.connections.handlers.saveProviderApp(
-      post('/admin/provider-apps/oauthco', operator, {
-        'field.client_id': 'company-client-id',
-        'field.client_secret': CLIENT_SECRET,
-      }),
-      'oauthco',
-    );
-  }
-
   /** Every value of every table, as text, to look for a secret stored in clear. */
   function databaseDump(): string {
     const { db } = root.store;
@@ -180,30 +182,9 @@ describe('connections: provider app, connect, resources, revoke', () => {
     return parts.join('\n');
   }
 
-  it('runs the whole OAuth path: app registered, connection encrypted, resources curated, revoked', async () => {
-    const operator = await signIn(OPERATOR);
+  it('runs the whole OAuth path: client registered, connection encrypted, resources curated, revoked', async () => {
     const alice = await signIn('alice@example.com');
     const handlers = root.connections.handlers;
-
-    // ── Operator declares the OAuth client, from the service's connect page ──
-    expect((await registerOAuthApp(alice)).status).toBe(403); // not an operator
-    expect((await registerOAuthApp({ ...operator, cookie: '' })).status).toBe(401);
-    const saved = await registerOAuthApp(operator);
-    expect(location(saved).pathname).toBe('/accounts/new/oauthco');
-    expect(await noticeOf(saved, operator)).toMatchObject({ tone: 'success' });
-    expect(await root.providerApps.status('oauthco')).toMatchObject({
-      configured: true,
-      source: 'store',
-      values: { client_id: 'company-client-id' },
-      secretsSet: ['client_secret'],
-    });
-    const configAudit = (await root.store.audit.list({ kind: 'admin' })).at(-1);
-    expect(configAudit).toMatchObject({
-      act: 'config-changed',
-      object: { type: 'instance-config', id: 'provider-app:oauthco' },
-      user_id: operator.userId,
-    });
-    expect(JSON.stringify(configAudit)).not.toContain(CLIENT_SECRET);
 
     // ── User connects ───────────────────────────────────────────────────────
     const started = await handlers.connect(
@@ -227,8 +208,9 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect(await noticeOf(landed, alice)).toMatchObject({ tone: 'success', title: 'Connected' });
     expect(await noticeOf(landed, alice)).toBeNull(); // read once
 
-    // The exchange used the company client, with the redirect URI on public_url.
-    const exchange = provider.calls[0]!;
+    // The gateway registered its client first, then exchanged with it, the redirect URI on public_url.
+    expect(provider.calls[0]!.url).toBe(OAUTH_SPEC.clientRegistration.registrationUrl);
+    const exchange = provider.calls[1]!;
     expect(exchange.headers.authorization).toBe(
       `Basic ${Buffer.from(`company-client-id:${CLIENT_SECRET}`).toString('base64')}`,
     );
@@ -251,6 +233,11 @@ describe('connections: provider app, connect, resources, revoke', () => {
     for (const secret of [ACCESS_TOKEN, REFRESH_TOKEN, CLIENT_SECRET]) {
       expect(dump).not.toContain(secret);
     }
+    // The registered client's secret is sealed like any other secret.
+    expect(await root.store.config.get(registeredClientKey('oauthco', 'client_secret'))).toBeNull();
+    expect(await root.store.config.getSecret(registeredClientKey('oauthco', 'client_secret'))).toBe(
+      CLIENT_SECRET,
+    );
     expect(dump).toContain('company-client-id'); // the dump does see clear values
     // Only the instance, with the master key and the connection id, opens it.
     expect(parseSecret((await root.store.connections.getCredential(connectionId))!)).toMatchObject({
@@ -302,7 +289,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     const replay = await handlers.callback(get(callbackQuery, alice), 'oauthco');
     expect(location(replay).pathname).toBe('/accounts');
     expect((await noticeOf(replay, alice))?.lines[0]).toContain('already used');
-    expect(provider.calls).toHaveLength(1);
+    expect(provider.calls).toHaveLength(2); // the registration and the one exchange
     expect(await root.store.connections.list()).toHaveLength(1);
 
     const bob = await signIn('bob@example.com');
@@ -351,7 +338,6 @@ describe('connections: provider app, connect, resources, revoke', () => {
     ).toEqual([
       // The boot applied the configuration's admin rule while the store named nobody.
       'administrators-seeded',
-      'config-changed',
       'connection-created',
       'resource-edited',
       'resources-discovered',
@@ -433,7 +419,7 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect((await root.store.connections.getResource(live.id))!.env).toBe('live');
   });
 
-  it('guards every entry point: session, origin, bootstrap operator, unconfigured app, foreign return URL', async () => {
+  it('guards every entry point: session, origin, bootstrap operator, foreign return URL', async () => {
     const alice = await signIn('alice@example.com');
     const bootstrap = await bootstrapSession();
     const handlers = root.connections.handlers;
@@ -448,9 +434,6 @@ describe('connections: provider app, connect, resources, revoke', () => {
     expect(
       (await handlers.connect(post('/accounts/connect/keyco', bootstrap), 'keyco')).status,
     ).toBe(403);
-    // …but may declare OAuth clients while the token is active.
-    expect(location(await registerOAuthApp(bootstrap)).pathname).toBe('/accounts/new/oauthco');
-    await root.providerApps.clear('oauthco');
 
     // The provider's redirect arriving without a session goes to sign-in.
     const anonymous = await handlers.callback(
@@ -459,14 +442,6 @@ describe('connections: provider app, connect, resources, revoke', () => {
     );
     expect(location(anonymous).pathname).toBe('/login');
 
-    const unconfigured = await handlers.connect(
-      post('/accounts/connect/oauthco', alice),
-      'oauthco',
-    );
-    expect(location(unconfigured).pathname).toBe('/accounts/new/oauthco');
-    expect((await noticeOf(unconfigured, alice))?.lines[0]).toContain('administrator must declare');
-
-    await root.providerApps.save('oauthco', { client_id: 'cid', client_secret: CLIENT_SECRET });
     const foreign = await handlers.connect(
       post('/accounts/connect/oauthco', alice, { return_to: 'https://evil.example.net/x' }),
       'oauthco',
@@ -486,44 +461,5 @@ describe('connections: provider app, connect, resources, revoke', () => {
 
     expect(await root.store.connections.list()).toEqual([]);
     expect(provider.calls).toHaveLength(0);
-    // The stored client secret is sealed like any other secret.
-    expect(databaseDump()).not.toContain(CLIENT_SECRET);
-    expect(await root.store.config.get(providerAppKey('oauthco', 'client_secret'))).toBeNull();
-  });
-
-  it('reports an unknown provider as unknown, and a failure to read the app settings as a failure', async () => {
-    const operator = await signIn(OPERATOR);
-    const handlers = root.connections.handlers;
-    const adminEntries = async () => (await root.store.audit.list({ kind: 'admin' })).length;
-    const before = await adminEntries();
-
-    const unknown = await handlers.saveProviderApp(
-      post('/admin/provider-apps/nope', operator, { 'field.client_id': 'x' }),
-      'nope',
-    );
-    expect(location(unknown).pathname).toBe('/accounts/new');
-    expect(await noticeOf(unknown, operator)).toMatchObject({
-      tone: 'danger',
-      title: 'Not saved',
-      lines: ['This service is not available on this gateway.'],
-    });
-
-    // The store failing is not "provider unknown": the error reaches the caller.
-    const status = vi
-      .spyOn(root.providerApps, 'status')
-      .mockRejectedValueOnce(new Error('store unavailable'));
-    await expect(
-      handlers.saveProviderApp(
-        post('/admin/provider-apps/oauthco', operator, {
-          'field.client_id': 'company-client-id',
-          'field.client_secret': CLIENT_SECRET,
-        }),
-        'oauthco',
-      ),
-    ).rejects.toThrow('store unavailable');
-    status.mockRestore();
-
-    expect((await root.providerApps.status('oauthco')).configured).toBe(false);
-    expect(await adminEntries()).toBe(before);
   });
 });

@@ -31,7 +31,6 @@ const ctx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
     fields: { email: 'ops@acme.com', api_key: 'upstash_key_123' },
     metadata: {},
   },
-  appConfig: {},
   fetch,
   resources: [database],
 });

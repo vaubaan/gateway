@@ -7,9 +7,19 @@ supersedes:
   - company-apps-kept-where-they-add-something
   - token-connections-beside-the-integration-app
   - company-app-created-from-a-manifest
+amended-by:
+  - gmail-over-imap-with-an-app-password
 ---
 
 # One place to authorize a service; the service's page guides to the simplest way, a pasted token whenever the service offers one
+
+> **Amended on 2026-10-24** by [gmail-over-imap-with-an-app-password](gmail-over-imap-with-an-app-password.md): Gmail no longer keeps the OAuth way. It
+> connects with a Google app password over IMAP, a key a person makes alone,
+> which puts it on the simple path this ADR prefers. With Gmail gone, no
+> service needs an OAuth client declared by an administrator, and that way is
+> removed from the gateway; the rule of the amendment of 2026-10-21 now reads:
+> a key a person can make, whenever the service offers one that works;
+> otherwise the service's sign-in, with a client the gateway registers itself.
 
 > **Accepted** on 2026-10-20 by the product owner. It supersedes the
 > proposal of 2026-10-16, [token-connections-beside-the-integration-app](token-connections-beside-the-integration-app.md)

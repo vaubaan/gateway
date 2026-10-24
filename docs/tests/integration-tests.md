@@ -88,12 +88,12 @@ this table says where each requirement lives, and what is not written yet.
 | Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions) (fingerprint, lookup, consumption), [Approval gate](#scenarios--approval-gate) (decision, gate opening, erasure)                                                             |
 | Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                                                                                              |
 | Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door), [Authorization server](#scenarios--authorization-server-of-the-management-door)                                                             |
-| Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                                                                                                      |
+| Integration — connection                                                 | [Connections](#scenarios--connections-resources-oauth-clients)                                                                                                                                                                      |
 | Integration — share                                                      | [Authority, shares, groups](#scenarios--authority-shares-groups)                                                                                                                                                                    |
 | Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                                                                                                    |
 | Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                                                                                                      |
 | Integration — approval and replay                                        | [Approval gate](#scenarios--approval-gate)                                                                                                                                                                                          |
-| Integration — revocation flows, `orphaned` states                        | [Authority, shares, groups](#scenarios--authority-shares-groups), [Missions](#scenarios--missions), [Connections](#scenarios--connections-resources-provider-apps)                                                                  |
+| Integration — revocation flows, `orphaned` states                        | [Authority, shares, groups](#scenarios--authority-shares-groups), [Missions](#scenarios--missions), [Connections](#scenarios--connections-resources-oauth-clients)                                                                  |
 | Integration — OAuth delegation, issuance by an MCP client                | [Authorization server](#scenarios--authorization-server-of-the-management-door) (delegation by the official MCP client); [Management door tools](#scenarios--management-door-tools) (issuance within the authority, refusal beyond) |
 | Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                                                                                            |
 | Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                                                                                              |
@@ -153,6 +153,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                                                                                                                |        15 |
 | `apps/gateway/src/server/connections/discovery-after-call.test.ts`                                                                                                                                       |        11 |
 | `apps/gateway/src/server/connections/failure-reason.test.ts`                                                                                                                                             |        14 |
+| `apps/gateway/src/server/connections/gmail-oauth-account.test.ts`                                                                                                                                        |         1 |
 | `apps/gateway/src/server/connections/input.test.ts`                                                                                                                                                      |        25 |
 | `apps/gateway/src/server/connections/mapping.test.ts`                                                                                                                                                    |         3 |
 | `apps/gateway/src/server/connections/oauth2.test.ts`                                                                                                                                                     |        28 |
@@ -161,7 +162,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                                                                                        |        16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                                                                                                                    |        24 |
 | `apps/gateway/src/server/connections/shipped-providers.test.ts`                                                                                                                                          |         8 |
-| `apps/gateway/src/server/connections/token-connections.test.ts`                                                                                                                                          |         8 |
+| `apps/gateway/src/server/connections/token-connections.test.ts`                                                                                                                                          |         9 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                                                                                                                                                            |        12 |
 | `apps/gateway/src/server/crypto/master-key-file.test.ts`                                                                                                                                                 |         7 |
 | `apps/gateway/src/server/crypto/password.test.ts`                                                                                                                                                        |         4 |
@@ -210,7 +211,6 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                                                                                                                  |        52 |
 | `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                                                                                                                       |         6 |
 | `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                                                                                                                 |        66 |
-| `apps/gateway/src/server/provider-apps/service.test.ts`                                                                                                                                                  |        12 |
 | `apps/gateway/src/server/providers/planes.test.ts`                                                                                                                                                       |         9 |
 | `apps/gateway/src/server/providers/reference.test.ts`                                                                                                                                                    |        20 |
 | `apps/gateway/src/server/requests/approval.test.ts`                                                                                                                                                      |        33 |
@@ -335,6 +335,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                                                                                                                        |        90 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                                                                                                                                                          |       161 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                                                                                                                      |         3 |
+| `apps/gateway/tests/unit/app/credential-kind-label.test.ts`                                                                                                                                              |         2 |
 | `apps/gateway/tests/unit/app/design-system.test.tsx`                                                                                                                                                     |        34 |
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                                                                                                                      |        76 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                                                                                                                             |         8 |
@@ -348,7 +349,6 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                                                                                                                            |         7 |
 | `apps/gateway/tests/unit/server/budget/period.test.ts`                                                                                                                                                   |         8 |
 | `apps/gateway/tests/unit/server/config/self-resources.test.ts`                                                                                                                                           |         4 |
-| `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                                                                                                                |         3 |
 | `apps/gateway/tests/unit/server/git/command-list.test.ts`                                                                                                                                                |         3 |
 | `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                                                                                                                                       |         8 |
 | `apps/gateway/tests/unit/server/requests/masked-arguments.test.ts`                                                                                                                                       |         4 |
@@ -359,7 +359,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                                                                                                                          |         5 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                                                                                                                       |        16 |
 | `apps/gateway/tests/unit/structural/deployed-commit.test.ts`                                                                                                                                             |        15 |
-| `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                                                                                                                    |        10 |
+| `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                                                                                                                    |         3 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                                                                                                                       |       118 |
 | `apps/gateway/tests/unit/structural/module-mocks-isolated.test.ts`                                                                                                                                       |         2 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                                                                                                                        |         3 |
@@ -447,10 +447,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |        76 |
 | `plugins/gmail/tests/unit/classify.test.ts`                                                                                                                                                              |       108 |
 | `plugins/gmail/tests/unit/data-model.test.ts`                                                                                                                                                            |         5 |
-| `plugins/gmail/tests/unit/injection.test.ts`                                                                                                                                                             |       190 |
-| `plugins/gmail/tests/unit/plugin.test.ts`                                                                                                                                                                |        27 |
+| `plugins/gmail/tests/unit/execute.test.ts`                                                                                                                                                               |        25 |
+| `plugins/gmail/tests/unit/injection.test.ts`                                                                                                                                                             |       194 |
+| `plugins/gmail/tests/unit/plugin.test.ts`                                                                                                                                                                |        26 |
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                                                                                                                              |        32 |
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                                                          |        45 |
+| `plugins/gmail/tests/unit/transport.test.ts`                                                                                                                                                             |         9 |
 | `plugins/miro/tests/unit/classify.test.ts`                                                                                                                                                               |        17 |
 | `plugins/miro/tests/unit/execute.test.ts`                                                                                                                                                                |        15 |
 | `plugins/miro/tests/unit/identifiers.test.ts`                                                                                                                                                            |         6 |
@@ -1163,26 +1165,50 @@ stays a plain `Error`, and so does an answer whose fields are absent or
 odd) or an `Error` carrying Context7's text; the abort signal reaches both
 requests; discovery and `verify` on `GET /v2/usage`. `risk-catalog` (5), `data-model` (2).
 
-**Gmail** (407, experimental) — `plugin.test.ts` (27): kit, the experimental
-shape (`experimental: true`, version below 1.0, no tool exposed), coverage
-through a tool-exposing variant of the plugin
-(`draft-to-zone-external-unbounded` and `bulk-label-write` knowingly
-unreached), mailbox selection (none, foreign, ambiguous), `oauth2`
-credential spec (Google, PKCE, `client_secret_post`, offline consent, no
-plugin `refresh`), `discoverResources` and the structured `not_implemented`
-answer of `execute` against `mockFetch`, presets `read-only` / `developer`.
-`risk-catalog` (45): loaded catalog lint, pattern parsing, per-tool
-coverage, `risksTouchedBy` spot checks. `classify` (108): a search bounded
-by a positive `from:` is its zone, **a no-reply or alerts local part makes a
-sender `automated` only on a domain or an address the owner listed** (on a
-domain nobody listed the local part is chosen by the sender: `unknown`), **a query the parser cannot bound is the
-unknown zone plus the bulk marker**, sensitive labels fail closed on reads,
-a draft to an external recipient or to a recipient that cannot be parsed is
-refused, label tools need well-formed ids. `q-parser` (32, unions and
-groupings reported, never read as a conjunction), `injection.test.ts`
-(190: hostile values over the identifier positions; `gmailId` is one path
-segment with no dot, separator or escape; `labelRef` is a label id or a
-label name, never a dot segment), `data-model` (5).
+**Gmail** (444, experimental, plugin 0.4.0, over IMAP with an app password —
+ADR [[gmail-over-imap-with-an-app-password]]) — `plugin.test.ts` (26): kit, the
+ten exposed tools (none sends), coverage (`draft-to-zone-external-unbounded`
+and `bulk-label-write` knowingly unreached), **the identifier kit against the
+fake transport: whatever `classify` refuses opens no IMAP session**, mailbox
+selection (none, foreign, ambiguous), the `api-key` credential (address and
+app password, the guide with no permission and no expiry, the password with or
+without Google's spaces), `verify` and discovery (lower-cased address, a
+refused sign-in as `UpstreamAuthError`, an All Mail hidden from IMAP named, an
+`oauth2` secret refused before any command, the signal and the 60 s deadline
+reaching the transport), presets `read-only` / `developer`. `execute.test.ts`
+(25) against `fakeGmail()` (`tests/unit/fake-imap.ts`, localized folder names):
+`X-GM-RAW` in the `\All` folder found by special use, grouped by thread,
+`max_results` bounds; `get_thread` with a capped text body; drafts appended to
+`\Drafts` with `\Draft`, never sent, **a subject with a line break or a
+recipient that is not one address refused before any connection**, the body
+in base64; `list_labels` without system folders, the system container found as
+the parent of `\All`; label writes (`X-GM-LABELS`, `UNREAD` as `\Seen`, a
+missing label never created, `TRASH` / `SPAM` / `SENT` / `CATEGORY_*` refused, a
+message outside its thread refused); a mailbox that is not the credential's
+refused. `transport.test.ts` (9): `imapflowTransport` over a fake client
+(injected factory): `imap.gmail.com:993` over TLS, bounded timeouts, no logger;
+a refused sign-in named without the password; abort and deadline close the
+connection; a special use only as the server reports it; the commands of
+`search`, `fetch`, `store`, `append`. `risk-catalog` (45): loaded catalog lint,
+pattern parsing, per-tool coverage, `risksTouchedBy` spot checks. `classify`
+(108): a search bounded by a positive `from:` is its zone, **a no-reply or
+alerts local part makes a sender `automated` only on a domain or an address
+the owner listed**, **a query the parser cannot bound is the unknown zone plus
+the bulk marker**, sensitive labels fail closed on reads, a draft to an
+external recipient or to a recipient that cannot be parsed is refused, label
+tools need well-formed ids. `q-parser` (32), `injection.test.ts` (194: hostile
+values over the identifier positions, to `classify` and to `execute`, which
+opens no session for any of them; a query is one `X-GM-RAW` criterion;
+`gmailId` is 1 to 16 lower-case hexadecimal digits; `labelRef` is a label id
+or a label name, never a dot segment), `data-model` (5). Not covered: a real
+Gmail account.
+
+`apps/gateway/src/server/connections/gmail-oauth-account.test.ts` (1): **a
+Gmail account connected by OAuth in an earlier build**, with the shipped
+plugin over a fake transport: its page says the way is retired, its discovery
+records the reason without calling the plugin, every Gmail tool is refused with
+the same sentence, and reconnecting with an app password keeps the account
+(signed in over IMAP first; nothing over HTTP).
 
 **Miro** (69; plugin 0.3.0, a rewrap of Miro's MCP server — ADR
 [[miro-rewraps-the-official-mcp-server]], amendment 2026-10-23) —
@@ -1359,9 +1385,10 @@ enforced limits is pinned to what the code enforces today.
   neither → error naming both variables, non-email); IdP block optional
   → bootstrap required, configured → bootstrap optional with default
   claim mapping, partial block names the missing sub-keys, https issuer,
-  claim mapping and allowed domains; provider apps from
-  `VAUBAAN_PROVIDER_<ID>_<FIELD>[_FILE]` including hyphenated ids, unknown
-  field refused in env and YAML; YAML `${VAR}` / `${file:}` resolution,
+  claim mapping and allowed domains; **the retired per-provider OAuth
+  clients** (`providers.<id>.*` in YAML, `VAUBAAN_PROVIDER_*` in the
+  environment) read by nothing, listed in `retiredKeys` and taken out of the
+  environment; YAML `${VAR}` / `${file:}` resolution,
   **file wins over env key by key**, unset reference and missing secret
   file named, missing / invalid / non-mapping file, empty file,
   `previous_keys` duplicate version, `*_FILE` alone and both-set error; a
@@ -1500,10 +1527,9 @@ enforced limits is pinned to what the code enforces today.
   alone over the `:memory:` store (schema version 11, the shipped registry); the store
   receives the root's encryptor and a `RegistryCatalogIndex` (base ids,
   env-qualified ids within `acceptable_in_envs`, unknown provider,
-  wildcard refused) and is closed with the root; with an injected empty
-  registry, provider apps are a warning; with plugins registered, a
-  provider app for an unknown plugin is a `ConfigError` naming
-  `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78); `checkProviderApps` passes on matching or absent apps; no secret in
+  wildcard refused) and is closed with the root; **a retired
+  `VAUBAAN_PROVIDER_*` variable does not stop the boot: one warning per
+  variable, naming it, never its value**; no secret in
   the boot log; `getRoot` builds once and shares the promise, forgets a
   failed build; `bootOrExit` exits 78 naming the key, 1 on other failures,
   nothing on success; `MemoryRateLimiter` window and reset,
@@ -1544,13 +1570,10 @@ enforced limits is pinned to what the code enforces today.
   `.github/workflows`; only `telemetry-default.ts` and
   `deploy/config/*.example*` are exempt.
 - **`apps/gateway/tests/unit/structural/example-config-providers.test.ts`**
-  (10) — the deployment examples show the provider apps the shipped plugins
-  take, and nothing else: every provider block of `gateway.example.yaml` and
-  every `VAUBAAN_PROVIDER_*` variable of `.env.example` is one a plugin
-  declares, the two examples show the same providers, commented and active
-  lines are read alike; the checks themselves refuse a provider that takes
-  no app, an unknown provider, an undeclared field and a missing required
-  one.
+  (3) — neither deployment example sets a retired key: no `providers:` block
+  in `gateway.example.yaml`, no `VAUBAAN_PROVIDER_*` line in `.env.example`;
+  commented and active lines are read alike (ADR
+  [[gmail-over-imap-with-an-app-password]]).
 - **`apps/gateway/tests/integration/standalone-native-addons.test.ts`** (3)
   — reads the build output and is skipped when `.next/standalone` is
   absent (CI builds before testing): the `/healthz` route handler trace lists
@@ -1722,7 +1745,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   then, table-driven over the 32 mutating handlers (missions preview / issue
   / rotate / revoke / gate edit, member add / remove, token generate /
   create named / revoke, request decide, connection connect /
-  discover / revoke / resource edit / transfer / reassign, provider app,
+  discover / revoke / resource edit / transfer / reassign,
   share create / revoke, group create / add member / remove member, user
   deactivate / reactivate, OAuth
   consent answer / client decision / delegation revocation, telemetry
@@ -2287,7 +2310,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   per period; a credit event whose details are malformed is skipped without
   throwing.
 
-## Scenarios — Connections, resources, provider apps
+## Scenarios — Connections, resources, OAuth clients
 
 > Covers: spec §0 (Connection, Resource), §2.3 connection states, §4.2
 > Connections and Administration, §6 (encryption at rest, anti-replay and
@@ -2297,8 +2320,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > request no route covers; plugins are `fixturePlugin()` (one
 > `CredentialSpec` per kind) except in `shipped-providers.test.ts`.
 
-Unit, co-located under `apps/gateway/src/server/connections/` and
-`apps/gateway/src/server/provider-apps/` (182):
+Unit, co-located under `apps/gateway/src/server/connections/`:
 
 - **`oauth2.test.ts`** (28) — authorization URL (code flow, state, S256
   challenge, RFC 7636 appendix B vector, resource indicator, extra
@@ -2319,7 +2341,7 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
     endpoint called once); a state that is unknown, absent, **of another
     user**, or of another provider is refused; **a foreign return URL is
     refused at the start** (`https://evil…`, `//evil…`, `/\evil…`) and one
-    inside `public_url` is honoured; `app-not-configured`; a provider
+    inside `public_url` is honoured; a provider
     denial consumes the state; a failed exchange shows the provider's
     wording; a failed first discovery keeps the connection; the per-user
     rate limit (10 per minute, other users unaffected, window reset);
@@ -2351,8 +2373,8 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
     (`envSource: connection-default`) while a plugin label is kept; naming
     the default's label on one resource pins it as the resource's own and
     it survives a change of the default; blank clears it.
-- **`credentials.test.ts`** (15) — `resolve` hands the decrypted secret
-  and an app config without the client secret; a token inside the 60 s
+- **`credentials.test.ts`** (15) — `resolve` hands the decrypted secret,
+  never the client secret; a token inside the 60 s
   skew is refreshed, the rotated refresh token is persisted (sealed again)
   and presented at the next refresh; **an `unowned` connection is served**
   (its missions keep running, spec §2.3; a forced refresh keeps it
@@ -2360,7 +2382,8 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
   expired or revoked one is refused without decrypting anything;
   no expiry / no refresh token → used as is; concurrent refreshes run one
   grant; `invalid_grant` → `expired` + `UpstreamAuthError`; 503 → still
-  `active`; missing app configuration → still `active`; api key and
+  `active`; the registered client gone → `expired` (its grant belonged to
+  it); api key and
   oauth2 without refresh token → `expired`; a revocation during the
   refresh is never undone; a plugin `refresh()` replaces the generic
   grant; a rejecting plugin refresh expires, any other failure does not.
@@ -2388,32 +2411,15 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
   (`toolTitles`, eight words at most, not the description again; `toolTitleOf`
   reads it through the registry and answers `null` for an unknown tool or
   provider), and the declaration `tools/list` returns is unchanged; every
-  provider-app field is expressible in the mounted configuration; every
-  plugin says where a person removes the grant by hand; the provider-side
-  withdrawal is declared by Gmail only; **every shipped token way guides the
-  person** (a label, a token page, steps, a check at paste, a secret field);
-  **one way per service** — a key offered at once, OAuth (`usesApp`) only
-  where no key exists, Gmail the one `oauth2` plugin, offered once its client
-  is declared; a valid https authorization redirect with state, PKCE,
-  resource indicator and extra parameters for each `oauth2` plugin.
-- **`provider-apps/service.test.ts`** (12) — fields per credential kind
-  (`client_id` / `client_secret` for `oauth2`, the plugin's extras after
-  them, nothing for a key); one entry per plugin, `needsApp` for `oauth2`
-  only; a secret sealed under `instance_config:provider_apps.<id>.<field>`
-  and never returned; blank keeps the stored secret; every problem at once;
-  the client secret goes to the host only; missing fields named, with the
-  file and the connect page as the places to set them; **the mounted
-  configuration wins** and makes the page read-only; an incomplete file
-  block is not completed from the store; the fields of a provider are saved
-  in one transaction (a failed write keeps the previous client whole);
-  clear, one provider at a time.
-- **`apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`**
-  (3) — the OAuth-client handler when the audit fails: a saved client whose
-  audit entry cannot be written stands and is logged at `error` (no error
-  line when the audit works); a body that is not a form answers 400 on every
-  form handler and writes nothing.
-
-Integration:
+  plugin says where a person removes the grant by hand; no shipped plugin
+  declares a provider-side withdrawal; **every shipped token way guides the
+  person** (a label, a token page, steps, a check at paste, a secret field;
+  Gmail's app password among them); **one way per service** — a key offered
+  at once, OAuth only where no key exists, Miro the one `oauth2` plugin, with
+  a registration endpoint; a valid https authorization redirect with state,
+  PKCE, resource indicator and extra parameters for each `oauth2` plugin,
+  from a seeded registered client.
+  Integration:
 
 - **`tests/integration/store/connections-shares.test.ts`** (three of its 14
   cases) —
@@ -2447,11 +2453,8 @@ Integration:
   in nothing that is kept, no connection exists) — `buildRoot` over the
   `:memory:` store with the **real encryptor**, a fixture registry and a
   mocked provider, driven through the HTTP handlers:
-  1. the operator declares the OAuth client from the service's connect page
-     (`POST /admin/provider-apps/<id>`, back to `/accounts/new/<id>`; 403
-     for a non-operator, 401 without a session, audit entry without the
-     secret) → the user starts
-     the flow → the callback arrives on the internal host and lands on
+  1. the user starts the flow and the gateway registers its OAuth client at
+     the service (RFC 7591), its secret sealed in `instance_config` → the callback arrives on the internal host and lands on
      `/accounts/<id>?notice=<id>` (no message in the URL; the notice
      is read once) → **the credential blob and a dump of every table
      contain neither the access token, the refresh token nor the client
@@ -2460,21 +2463,18 @@ Integration:
      one resource upstream and drops another (marked stale) → the
      replayed callback is refused → a stranger and a cross-origin request
      cannot revoke → revoke: `revoked`, blob NULL, resources kept, audit
-     `config-changed` / `connection-created` / `connection-revoked`;
+     `connection-created` / `resource-edited` / `resources-discovered` /
+     `connection-revoked`;
   2. an API key and an SSH private key are absent from the dump; a
      plugin-set label is marked and its edit refused;
-  3. guards: no session, no origin, bootstrap operator on a user endpoint
-     (while they may declare an OAuth client), callback without a session →
-     `/login`, an undeclared client ("administrator must declare", back on
-     the connect page), foreign `return_to`, unknown provider, a notice
-     unreadable from another session;
-  4. an unknown provider is reported as unknown, and a failure to read the
-     app settings as a failure.
+  3. guards: no session, no origin, bootstrap operator on a user endpoint,
+     callback without a session → `/login`, foreign `return_to`, unknown
+     provider, a notice unreadable from another session.
 
 - **`tests/integration/connections/token-connect.test.ts`** (1; ADR
   one-place-to-authorize-services-token-first) — `buildRoot` with the real
   encryptor and the **real GitHub plugin**, GitHub mocked: the token is the
-  one way offered (`api-key`, no `usesApp`, configured at once); a classic
+  one way offered (`api-key`, no redirect); a classic
   token is refused by its shape before GitHub is asked (back on the connect
   page with a notice); a fine-grained token is checked (`GET /user`, the
   expiry header), its repositories discovered (`/user/repos`), and it is in
@@ -2483,13 +2483,16 @@ Integration:
   call `connection-unavailable`; revoking it asks GitHub nothing and says
   where to delete the token.
 - Unit, beside the code: `src/server/connections/token-connections.test.ts`
-  (7: the token offered at once with the plugin's guide and nothing for an
-  administrator to declare, a pasted token's check and what is kept, a
+  (9: the token offered at once with the plugin's guide, a pasted token's check and what is kept, a
   rejected or expired token storing nothing, **a refusal the plugin wrote
   (`CredentialRefusal`) shown in its words, a quoted provider body never**,
   **an account made a way the
   plugin no longer offers** — an `oauth2` secret of an earlier build — read
-  with no withdrawal and reconnected with a token on the same id, and **an
+  with no withdrawal and reconnected with a token on the same id, **the same
+  account (a stored `oauth2` secret, as a Gmail account connected by OAuth)
+  flagged `wayRetired`, its "Refresh" and its discovery after a call
+  recording the reconnect sentence without calling the plugin, revoked
+  with nothing withdrawn**, and **an
   `app-install` account of the removed GitHub App** — a blob that no longer
   decodes — reconnected with a token on the same id without the blob being
   read; no refresh for a token, no withdrawal for a token),
@@ -2519,9 +2522,8 @@ Execution door".
   secret, reuses the client**; two concurrent connects share one
   registration; registers again for a new callback; **forgets a rejected
   client only if it is still the current one**; never registers for a token
-  request, leaves a declared client alone. End to end on a fixture plugin:
-  offered at once with nothing to declare (`registersItself`, `usesApp`
-  false); registers, redirects with PKCE, the resource and the scopes,
+  request. End to end on a fixture plugin:
+  offered at once with nothing to declare; registers, redirects with PKCE, the resource and the scopes,
   exchanges with the registered client; **refreshes with it and forgets it
   on `invalid_client`** (the connection `expired`), **another account of
   the forgotten client then needs reconnecting rather than a retry**; a
@@ -3601,7 +3603,7 @@ they live: `admin-mutations.test.ts` and the guard suites under
 [Human authentication](#scenarios--human-authentication),
 `pipeline.test.ts` under [Execution door](#scenarios--execution-door),
 `reassign-and-settle.test.ts` under
-[Connections](#scenarios--connections-resources-provider-apps). The request
+[Connections](#scenarios--connections-resources-oauth-clients). The request
 and budget suites build `RequestService` with `alwaysGrounded`.
 
 ## Scenarios — Requests
@@ -4006,7 +4008,7 @@ itself are asserted in "Scenarios — Execution door".
   stops it; default 90 days.
 - **`admin-mutations.test.ts`** (52) — **structural: every administrative mutation writes an
   admin audit entry.** The public methods of every class under
-  `server/{connections,provider-apps,missions,auth,requests,telemetry,authority,shares,groups,users,oauth-as,management}`
+  `server/{connections,missions,auth,requests,telemetry,authority,shares,groups,users,oauth-as,management}`
   are enumerated from the source with the TypeScript parser; each must be classified (read,
   mutation, exempt with a reason), with no unclassified method and no stale rule. Each of the
   45 mutations is driven on an ephemeral instance, must go through the method under test (spy)

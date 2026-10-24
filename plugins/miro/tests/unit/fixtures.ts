@@ -40,7 +40,6 @@ export function context(
       scopes: ['boards:read', 'boards:write'],
       metadata: {},
     },
-    appConfig: {},
     fetch,
     resources,
   };

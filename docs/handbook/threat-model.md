@@ -26,7 +26,7 @@ tracks:
   - apps/gateway/src/proxy.ts
   - deploy/docker/entrypoint.sh
   - apps/gateway/src/server/users/
-  - apps/gateway/src/server/provider-apps/service.ts
+  - apps/gateway/src/server/connections/oauth2-clients.ts
   - apps/gateway/src/server/shares/service.ts
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/oauth-as/delegations.ts
@@ -231,7 +231,7 @@ code.
 | A local group grants operator rights; an IdP claim joins a local group of the same name   | the admin rule counts IdP-sourced groups only; a claim that collides with a local group is skipped                                                                                                                                                             | `tests/integration/auth/oidc-login.test.ts`                                                                                                                                                                                                           |
 | The connect flow is replayed, or its return URL leaves the instance                       | single-use `state` bound to the session; return URL limited to `public_url`; per-user rate limit                                                                                                                                                               | `tests/integration/connections/connect-flow.test.ts`, `src/connections/pending.test.ts`, `src/connections/service.test.ts`                                                                                                                            |
 | A provider credential is read from the store, or moved to another connection's row        | sealed per row with the row id as associated data; the record never exposes the ciphertext                                                                                                                                                                     | `src/crypto/aead.test.ts`, `tests/integration/store/connections-shares.test.ts`                                                                                                                                                                       |
-| The OAuth client secret of a service leaks through the page, the audit or the logs        | sealed as the form's secrets, never echoed; the audit carries the non-secret values and the names of the secrets set; the host alone reads it (`hostAppConfig`), a plugin never (`pluginAppConfig`)                                                            |
+| The OAuth client secret of a service leaks through the page, the audit or the logs        | the client is registered by the gateway itself and its secret sealed in `instance_config`, never shown, never logged; the host alone reads it (`OAuth2Clients`), a plugin never (no app configuration reaches it)                                              |
 
 ### The v4 import (one-shot)
 

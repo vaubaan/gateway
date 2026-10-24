@@ -600,7 +600,7 @@ describe('discoverResources', () => {
 describe('the token check at paste', () => {
   const verify = (body: unknown, status = 200, fields: Record<string, string> = {}) => {
     const fetch = mockFetch([{ url: `${API}/tokens/current`, status, body }]);
-    return verifyFlyToken({ credential: credential(fields), appConfig: {}, fetch });
+    return verifyFlyToken({ credential: credential(fields), fetch });
   };
 
   test('a token of the named organization is accepted and shown as that organization', async () => {

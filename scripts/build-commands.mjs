@@ -14,7 +14,7 @@
  *
  * - The native addons stay external: they are already in the standalone
  *   `node_modules` because the server needs them (better-sqlite3, argon2,
- *   ssh2 — `next.config.ts`).
+ *   ssh2 — `next.config.ts`), and imapflow, external there too.
  * - Everything else (workspace packages as TypeScript, zod, libsodium, …) is
  *   bundled, so the command does not depend on what Next's tracer chose to
  *   copy.
@@ -45,8 +45,8 @@ const COMMANDS = [
   { entry: 'src/server/restore/main.ts', out: 'restore.mjs' },
 ];
 
-/** Native addons the standalone output already carries; never bundled. */
-const EXTERNAL = ['better-sqlite3', 'argon2', 'ssh2', 'cpu-features'];
+/** Native addons, and imapflow, that the standalone output already carries; never bundled. */
+const EXTERNAL = ['better-sqlite3', 'argon2', 'ssh2', 'cpu-features', 'imapflow'];
 
 if (!existsSync(standaloneApp)) {
   console.error(

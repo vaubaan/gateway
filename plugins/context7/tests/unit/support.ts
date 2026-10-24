@@ -25,7 +25,6 @@ export const index: Resource = {
 export function ctx(fetch: MockFetch, resources: readonly Resource[] = [index]): ExecuteContext {
   return {
     credential: { kind: 'api-key', fields: { [API_KEY_FIELD]: KEY }, metadata: {} },
-    appConfig: {},
     fetch,
     resources,
   };

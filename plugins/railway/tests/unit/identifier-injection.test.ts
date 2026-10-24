@@ -58,7 +58,6 @@ const execCtx = (
   resources: readonly Resource[] = [project],
 ): ExecuteContext => ({
   credential: { kind: 'api-key', fields: { api_token: 'rlwy_at' }, metadata: {} },
-  appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   resources,
 });

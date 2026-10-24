@@ -67,6 +67,25 @@ export function connectionCredentialKind(
 export type StoredCredentialKind = CredentialKind | (string & {});
 
 /**
+ * Whether an account was made a way its plugin no longer declares (the GitHub
+ * App of earlier builds, a Gmail account connected by OAuth before Gmail moved
+ * to an app password): such an account runs nothing, discovers nothing, and is
+ * reconnected the way the service now offers. A connection whose kind is not
+ * known reads as the plugin's.
+ */
+export function isRetiredWay(
+  storedKind: StoredCredentialKind | null,
+  pluginKind: CredentialKind,
+): boolean {
+  return storedKind !== null && storedKind !== pluginKind;
+}
+
+/** The one sentence a retired way is refused with: by a call, by a discovery. */
+export function retiredWayReason(providerLabel: string, storedKind: StoredCredentialKind): string {
+  return `this account was connected a way ${providerLabel} no longer offers on this gateway (${storedKind}); its owner reconnects it from Accounts.`;
+}
+
+/**
  * The non-secret fields of the form a connection was made with
  * (`metadata.fields`, the visible values only; secrets live in the sealed
  * credential). Shown on the account page and handed to the plugin's

@@ -7,12 +7,10 @@
  * `oauth2`, the fields for `ssh-key`. `?connection=<id>` turns it into
  * "reconnect" for an existing account.
  *
- * A service that signs people in through an OAuth client (`oauth2`) needs it
- * declared once: an administrator does so here, on the same page, before
- * anyone connects (`OAuthClientForm`); afterwards the form stays one
- * disclosure away for them. A service that lets the gateway register its own
- * client (`registersItself`, Miro) needs nothing: the button leads straight
- * to the service (ADR oauth-client-registered-by-the-gateway).
+ * A service that signs people in (`oauth2`, Miro) needs nothing declared:
+ * the gateway registers its own client there, and the button leads straight
+ * to the service (ADRs oauth-client-registered-by-the-gateway,
+ * gmail-over-imap-with-an-app-password).
  *
  * A field says the shape it expects before the person types (its placeholder
  * and the line under it are the plugin's); the how-to is folded by default.
@@ -24,7 +22,6 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { OAuthClientForm } from '@/components/connections/OAuthClientForm';
 import { CredentialFieldInputs, NoticeBanner } from '@/components/connections/parts';
 import { TokenGuide } from '@/components/connections/TokenGuide';
 import {
@@ -75,9 +72,7 @@ function ledeOf(provider: ConnectableProvider): string {
   const name = provider.displayName;
   switch (provider.kind) {
     case 'oauth2':
-      return provider.registersItself
-        ? `You sign in at ${name} and allow this gateway; there is nothing to create or paste, and the gateway never sees your password.`
-        : `You sign in at ${name} and allow your company’s OAuth client; the gateway never sees your password.`;
+      return `You sign in at ${name} and allow this gateway; there is nothing to create or paste, and the gateway never sees your password.`;
     case 'api-key':
       return provider.label
         ? `Create a ${provider.label} at ${name} and paste it here.`
@@ -92,18 +87,11 @@ function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconne
   const name = provider.displayName;
   return (
     <div className={styles.prose}>
-      {provider.kind === 'oauth2' && provider.registersItself && (
+      {provider.kind === 'oauth2' && (
         <p>
           “Continue” sends you to {name}. You sign in there and allow this gateway, which registered
           itself as an app at {name} the first time someone connected; {name} then sends you back
           here with a credential, which is encrypted and kept under your name.
-        </p>
-      )}
-      {provider.kind === 'oauth2' && !provider.registersItself && (
-        <p>
-          “Continue” sends you to {name}. You sign in there and allow the OAuth client your company
-          declared; {name} then sends you back here with a credential, which is encrypted and kept
-          under your name.
         </p>
       )}
       {provider.kind === 'api-key' && (
@@ -198,14 +186,6 @@ export default async function ConnectOneAccountPage({
   }
   const returnTo = firstParam(query.return_to);
   const redirectFlow = provider.redirects;
-  // The OAuth client of a service that signs people in: declared here by an administrator.
-  const oauthClient =
-    provider.usesApp && principal.isOperator
-      ? {
-          app: await root.providerApps.status(provider.id),
-          callbackUrl: service.callbackUrl(provider.id).href,
-        }
-      : null;
   // The form is the last step after the guide's one or two.
   const pasteStep = provider.guide && provider.guide.permissions.length > 0 ? 3 : 2;
   // The server refuses to reconnect an account without owner (`connection-unowned`).
@@ -245,23 +225,6 @@ export default async function ConnectOneAccountPage({
           It cannot be reconnected until an administrator names a new owner. The missions that use
           it keep running meanwhile.
         </Callout>
-      ) : !provider.configured ? (
-        oauthClient ? (
-          <Section title={`Declare the OAuth client of ${name}`} testId="oauth-client-missing">
-            <Hint>
-              {name} signs people in through an OAuth client your company declares there once; the
-              gateway offers no simpler way for it. Register it at {name} with the redirect address
-              below, then enter what {name} gave you. Everyone can then connect their {name}{' '}
-              accounts here.
-            </Hint>
-            <OAuthClientForm app={oauthClient.app} callbackUrl={oauthClient.callbackUrl} />
-          </Section>
-        ) : (
-          <Callout tone="warn" title={`${name} is not ready yet`} testId="oauth-client-missing">
-            An administrator declares your company’s OAuth client for {name} once, on this page;
-            everyone can then connect their {name} accounts.
-          </Callout>
-        )
       ) : (
         <Guided
           guide={provider.guide ? <TokenGuide service={name} provider={provider} /> : null}
@@ -340,20 +303,6 @@ export default async function ConnectOneAccountPage({
             )}
           </form>
         </Guided>
-      )}
-
-      {oauthClient && provider.configured && !unowned && (
-        <Section title={`The OAuth client of ${name}`}>
-          <Disclosure
-            id={`account-connect:oauth-client:${provider.id}`}
-            show="Show its settings"
-            hide="Hide its settings"
-            remember={false}
-            testId="oauth-client-settings"
-          >
-            <OAuthClientForm app={oauthClient.app} callbackUrl={oauthClient.callbackUrl} />
-          </Disclosure>
-        </Section>
       )}
 
       {!reconnect && (

@@ -26,7 +26,7 @@ export function connectionCtx(
   fetch: MockFetch,
   overrides: Partial<ConnectionContext> = {},
 ): ConnectionContext {
-  return { credential: tokenCredential, appConfig: {}, fetch, ...overrides };
+  return { credential: tokenCredential, fetch, ...overrides };
 }
 
 export function executeCtx(

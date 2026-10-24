@@ -33,7 +33,6 @@ const credential: CredentialSecret = {
 
 const execCtx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
   credential,
-  appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   resources: [project],
 });

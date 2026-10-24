@@ -1,13 +1,12 @@
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ConfigError, loadInstanceConfig } from '../config';
+import { loadInstanceConfig } from '../config';
 import { validEnv } from '../config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
-import { silentLogger } from '../logging';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
-import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
+import { RegistryCatalogIndex } from './registry';
 import { buildRoot, getRoot, NO_TRUSTED_PROXY_WARNING, resetRoot, type RootDeps } from './root';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
 import { fakePlugin, memoryStoreDeps } from './testing';
@@ -29,11 +28,10 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(22);
+    expect(root.store.schemaVersion).toBe(23);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);
-    expect((await root.providerApps.list()).map((a) => a.providerId)).toEqual(root.registry.ids);
     expect((await root.connections.service.providers()).map((p) => p.id)).toEqual(
       root.registry.ids,
     );
@@ -76,53 +74,30 @@ describe('buildRoot', () => {
     expect(closed).toBe(true);
   });
 
-  it('warns on provider apps while no plugin is registered', async () => {
+  it('starts with the retired OAuth-client keys still set, and warns once per key without its value', async () => {
+    // ADR gmail-over-imap-with-an-app-password: `providers.<id>.*` is no longer read.
     const lines: string[] = [];
     const root = await buildRoot({
       ...quiet,
       loadConfig: () =>
         loadInstanceConfig({
           env: validEnv({
-            VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: '1',
-            VAUBAAN_PROVIDER_NOPE_CLIENT_ID: 'x',
+            VAUBAAN_PROVIDER_GMAIL_CLIENT_ID: 'cid-0123456789',
+            VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET: 'csecret-0123456789',
           }),
         }),
       logWrite: (_lvl, line) => lines.push(line),
-      buildRegistry: buildEmptyRegistry,
     });
-    const warnings = lines.filter(
-      (l) => l.includes('"level":"warn"') && !l.includes(NO_TRUSTED_PROXY_WARNING),
-    );
-    expect(warnings).toHaveLength(2);
-    expect(warnings.join('\n')).toContain('providers.github');
-    expect(warnings.join('\n')).toContain('providers.nope');
+    expect(root.config.retiredKeys).toEqual([
+      'VAUBAAN_PROVIDER_GMAIL_CLIENT_ID',
+      'VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET',
+    ]);
+    const retired = lines.filter((l) => l.includes('configuration key no longer read'));
+    expect(retired).toHaveLength(2);
+    expect(retired.join('\n')).toContain('VAUBAAN_PROVIDER_GMAIL_CLIENT_ID');
+    expect(lines.join('\n')).not.toContain('csecret-0123456789');
+    expect(lines.join('\n')).not.toContain('cid-0123456789');
     await root.close();
-  });
-
-  it('refuses a provider app for an unknown plugin once plugins are registered', async () => {
-    const deps: RootDeps = {
-      ...quiet,
-      loadConfig: () =>
-        loadInstanceConfig({
-          env: validEnv({
-            VAUBAAN_PROVIDER_ACME_CLIENT_ID: 'ok',
-            VAUBAAN_PROVIDER_NOPE_CLIENT_ID: 'x',
-          }),
-        }),
-      buildRegistry: async () => new PluginRegistry([fakePlugin()]),
-    };
-    const err = await buildRoot(deps).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ConfigError);
-    const message = (err as ConfigError).message;
-    expect(message).toContain(
-      "providers.nope: no registered plugin has id 'nope' (registered: acme)",
-    );
-    expect(message).toContain('VAUBAAN_PROVIDER_NOPE_*');
-    expect(message).not.toContain('providers.acme');
-
-    let code: number | null = null;
-    await bootOrExit(deps, { stderr: () => undefined, exit: (c) => (code = c) });
-    expect(code).toBe(EXIT_CONFIG_ERROR);
   });
 
   it('warns at boot when trusted_proxies is empty, naming the key and what it costs; says nothing once it is set', async () => {
@@ -165,27 +140,6 @@ describe('buildRoot', () => {
     expect(all).toContain('composition root ready');
     expect(all).not.toContain(env.VAUBAAN_MASTER_KEY);
     expect(all).not.toContain(env.VAUBAAN_BOOTSTRAP_TOKEN);
-  });
-});
-
-describe('checkProviderApps', () => {
-  const logger = silentLogger;
-
-  it('passes when every provider app names a registered plugin', () => {
-    const { config } = loadInstanceConfig({
-      env: validEnv({ VAUBAAN_PROVIDER_ACME_CLIENT_ID: 'ok' }),
-    });
-    expect(() =>
-      checkProviderApps(config, new PluginRegistry([fakePlugin()]), logger),
-    ).not.toThrow();
-  });
-
-  it('passes when no provider app is configured, whatever the registry', () => {
-    const { config } = loadInstanceConfig({ env: validEnv() });
-    expect(() => checkProviderApps(config, new PluginRegistry([]), logger)).not.toThrow();
-    expect(() =>
-      checkProviderApps(config, new PluginRegistry([fakePlugin()]), logger),
-    ).not.toThrow();
   });
 });
 

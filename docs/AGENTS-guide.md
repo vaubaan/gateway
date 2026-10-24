@@ -134,7 +134,7 @@ apps/gateway/                    the deployable (@vaubaan/gateway-app)
     config/ compose/             configuration, composition root
     store/ crypto/               embedded database, migrations, encryption at rest
     auth/ users/ groups/ authority/  sign-in, deactivation, groups, who may accept what
-    connections/ provider-apps/  connections, resources, the company's provider apps
+    connections/                 connections, resources, the OAuth clients the gateway registers
     shares/ missions/ providers/ shares, issuance and its preview, the provider reference
     execution/ budget/           the execution door, counters and rate windows
     requests/                    claims and approvals

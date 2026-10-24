@@ -61,7 +61,7 @@ function oauthHarness(
 }
 
 async function connect(h: ConnectionsHarness) {
-  await h.providerApps.save('oauthco', { client_id: 'cid', client_secret: 'csecret-PLAINTEXT' });
+  await h.seedClient('oauthco', 'cid', 'csecret-PLAINTEXT');
   const alice = await h.actor('alice@example.com');
   const started: StartResult = await h.service.start(alice, 'oauthco');
   if (started.kind !== 'redirect') throw new Error('expected a redirect');
@@ -225,7 +225,7 @@ describe('revoking a connection withdraws the grant at the provider', () => {
       expect(seen[0]?.credential).toMatchObject({ kind: 'oauth2', refreshToken: 'rt-PLAINTEXT' });
       expect(seen[0]?.signal).toBeInstanceOf(AbortSignal);
       // The plugin still never sees the OAuth client secret.
-      expect(JSON.stringify(seen[0]?.appConfig)).not.toContain('csecret-PLAINTEXT');
+      expect(JSON.stringify(seen[0])).not.toContain('csecret-PLAINTEXT');
       expect(revocationCalls(h)).toHaveLength(0);
     });
 

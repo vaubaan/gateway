@@ -20,6 +20,38 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   checklist names the provider. A provider's state records the address at
   its save and at every passed test. ADR
   backup-carries-the-sign-in-configuration, amendment 2026-10-23.
+- **Gmail's tools run, over IMAP.** The Gmail plugin (0.4.0, still
+  experimental) exposes its ten tools: search threads with Gmail's own
+  syntax, read a thread, list and create drafts, list labels, add and remove
+  labels. Drafts are saved, never sent: the plugin reaches Gmail over IMAP
+  and ships no SMTP client. Thread and message ids are the Gmail API's
+  (hexadecimal); a user label is addressed by its name. The risk catalog and
+  its presets are unchanged. ADR gmail-over-imap-with-an-app-password.
+
+### Changed
+
+- **Gmail connects with an app password.** A person creates an app password
+  named "Vaubaan Gateway" in the Google Account of the mailbox (2-Step
+  Verification on) and pastes it with the address; the gateway signs in over
+  IMAP before storing it. No Google Cloud project, consent screen or
+  redirect URI any more: the `redirect_uri_mismatch` of the OAuth way is
+  gone with it. **A Gmail account connected by OAuth runs nothing until its
+  owner reconnects it** with an app password (same account, resources and
+  shares); its page and its discovery say so.
+
+### Removed
+
+- **OAuth clients declared by an administrator.** Gmail was their only user:
+  the OAuth client form of a connect page, the setup checklist's "OAuth
+  clients" step, the management door's `setup.company_apps`, the route
+  `POST /admin/provider-apps/<provider>`, the stored `provider_apps.*`
+  settings (deleted by a migration), and the configuration keys
+  `providers.<id>.*` / `VAUBAAN_PROVIDER_<ID>_<FIELD>`, which are no longer
+  read: an instance that still sets them starts and logs a warning naming
+  each one. In the plugin SDK, `appConfigFields`, `ProviderAppConfig`,
+  `ConnectionContext.appConfig`, `CLIENT_ID_FIELD` and `CLIENT_SECRET_FIELD`
+  are removed, and an `oauth2` spec must declare `clientRegistration` (the
+  gateway registers its own client, as for Miro).
 
 ## [2.0.0-alpha.7] - 2026-10-23
 

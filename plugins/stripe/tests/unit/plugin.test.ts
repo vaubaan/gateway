@@ -131,7 +131,6 @@ describe('stripe plugin — structural kit', () => {
           fields: { test_key: 'sk_test_abc', live_key: 'sk_live_xyz' },
           metadata: {},
         },
-        appConfig: {},
         fetch,
         resources,
       }),
@@ -271,7 +270,6 @@ describe('executeStripe with mockFetch', () => {
     resources: readonly Resource[] = both,
   ): ExecuteContext => ({
     credential,
-    appConfig: {},
     fetch,
     resources,
   });
@@ -390,7 +388,6 @@ describe('discoverStripeResources with mockFetch', () => {
     fields: Record<string, string>,
   ): ConnectionContext => ({
     credential: { kind: 'api-key', fields, metadata: {} },
-    appConfig: {},
     fetch,
   });
   const account = (name: string | null, display: string | null = null) => ({
@@ -485,7 +482,6 @@ describe('discoverStripeResources with mockFetch', () => {
         scopes: [],
         metadata: {},
       },
-      appConfig: {},
       fetch,
     };
     await expect(stripePlugin.discoverResources(oauth)).rejects.toMatchObject({

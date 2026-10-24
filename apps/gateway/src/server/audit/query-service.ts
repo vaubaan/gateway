@@ -610,7 +610,7 @@ async function objectLabel(
     case 'delegation':
       return names.delegation(object.id);
     case 'instance-config':
-      // The id is the name: `idp`, `telemetry`, `bootstrap`, `provider-app:<id>`.
+      // The id is the name: `idp`, `telemetry`, `bootstrap`; `provider-app:<id>` in entries of earlier builds.
       return null;
   }
 }

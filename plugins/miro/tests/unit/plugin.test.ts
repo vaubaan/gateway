@@ -119,10 +119,10 @@ describe('miro credential — OAuth with a client the gateway registers itself',
     });
   });
 
-  test('nothing to declare : no app setting, and no revocation endpoint (Miro publishes none)', () => {
+  test('nothing to declare : the gateway registers its client, and no revocation endpoint (Miro publishes none)', () => {
     const spec = miroPlugin.credential;
     if (spec.kind !== 'oauth2') throw new Error('expected oauth2');
-    expect(spec.appConfigFields).toBeUndefined();
+    expect(spec.clientRegistration.registrationUrl).toMatch(/^https:\/\//);
     expect(spec.revocation).toBeUndefined();
     expect(miroPlugin.manualRevocation).toMatch(/Vaubaan Gateway/);
   });

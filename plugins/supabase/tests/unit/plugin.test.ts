@@ -56,7 +56,6 @@ const connCtx = (
   overrides: Partial<ConnectionContext> = {},
 ): ConnectionContext => ({
   credential: tokenSecret(),
-  appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   ...overrides,
 });

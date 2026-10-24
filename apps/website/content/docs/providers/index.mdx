@@ -1,14 +1,14 @@
 ---
 title: Connect a provider
-description: How an account of a service is connected to an instance — a company app or a token — and one page per service, generated from its plugin.
+description: How an account of a service is connected to an instance — a key pasted by hand, or the service's sign-in — and one page per service, generated from its plugin.
 ---
 
-Connecting a provider means giving the instance, once, a credential for an account at a service — through your company's app at that service, or with a token created by hand — so that missions can then use that account's resources without the agent ever holding the credential.
+Connecting a provider means giving the instance, once, a credential for an account at a service — a key created by hand, or the service's own sign-in — so that missions can then use that account's resources without the agent ever holding the credential. Each service has one way.
 
 ## The two ways
 
-- **Through your company's app** (GitHub App, Supabase or Railway OAuth app). An administrator registers the app once, under Settings → Administration → Company apps or in the configuration (`providers.<id>.*`); then anyone connects an account in one click from Accounts → Connect an account. Tokens obtained this way are short-lived or refreshed by the instance. For GitHub, the app is created from the page itself.
-- **With a token pasted by hand.** The connect page says which token to create at the service, which permissions to tick and what expiry to choose, and the instance checks it with the service before storing anything. A token pasted by hand is a long-lived secret that acts as a person or a service account: its reach is what was ticked at the service, and removing the account here deletes nothing there (accepted risk A30 of the [threat model](https://github.com/vaubaan/gateway/blob/main/docs/handbook/threat-model.md#accepted-risks)).
+- **The service's sign-in** (Miro). The person is sent to the service, allows the gateway and comes back; the gateway registers its own client at the service the first time someone connects, so nobody declares anything. Tokens obtained this way are short-lived and refreshed by the instance.
+- **With a key pasted by hand** (a token; for Gmail, an app password). The connect page says which token to create at the service, which permissions to tick and what expiry to choose, and the instance checks it with the service before storing anything. A token pasted by hand is a long-lived secret that acts as a person or a service account: its reach is what was ticked at the service, and removing the account here deletes nothing there (accepted risk A30 of the [threat model](https://github.com/vaubaan/gateway/blob/main/docs/handbook/threat-model.md#accepted-risks)).
 
 After connecting, the owner labels resources with their environment (`staging`, `prod`) on the account's page, and can give access to a teammate or a team.
 

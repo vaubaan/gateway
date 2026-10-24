@@ -10,15 +10,14 @@
  * port of the root:
  *   - `RegistryCatalogIndex` answers the store's "does this RiskId exist?"
  *     from the loaded catalogs, env-qualified ids included;
- *   - `checkProviderApps` compares the `providers.<id>` blocks of the
- *     configuration with the registered ids.
+ *   - `checkSelfResources` compares the configured self resources with the
+ *     registered ids.
  */
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { findRiskEntry, isAcceptableInEnv, isEnvScopedEntry } from '@vaubaan/policy-engine';
 import { baseRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
 
-import { ConfigError, providerEnvName, type ConfigIssue, type InstanceConfig } from '../config';
-import type { Logger } from '../logging';
+import { ConfigError, type InstanceConfig } from '../config';
 import type { CatalogIndex } from '../store';
 
 /** A registry with no plugin — tests of the root that need no provider. */
@@ -47,38 +46,6 @@ export class RegistryCatalogIndex implements CatalogIndex {
     if (parsed.env === null) return true;
     return isEnvScopedEntry(entry) && isAcceptableInEnv(entry, parsed.env);
   }
-}
-
-/**
- * Every `providers.<id>` block must name a registered plugin. While the
- * registry is empty (no plugin shipped yet) the mismatch is only logged;
- * once plugins are registered it is a configuration error, reported like
- * any other invalid key (exit 78 at boot).
- */
-export function checkProviderApps(
-  config: InstanceConfig,
-  registry: PluginRegistry,
-  logger: Logger,
-): void {
-  const unknown = [...config.providers.keys()].filter((id) => !registry.has(id));
-  if (unknown.length === 0) return;
-
-  if (registry.size === 0) {
-    for (const id of unknown) {
-      logger.warn('provider app configured but no plugin is registered yet', {
-        key: `providers.${id}`,
-      });
-    }
-    return;
-  }
-
-  const known = registry.ids.join(', ');
-  const issues: ConfigIssue[] = unknown.map((id) => ({
-    path: `providers.${id}`,
-    env: [providerEnvName(id, '*')],
-    message: `no registered plugin has id '${id}' (registered: ${known})`,
-  }));
-  throw new ConfigError(issues);
 }
 
 /**

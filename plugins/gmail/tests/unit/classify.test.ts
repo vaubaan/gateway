@@ -207,8 +207,8 @@ describe('classifyGmail — sensitive labels fail closed on reads', () => {
   });
 
   test('get_thread always carries the marker when the mailbox declares sensitive labels', () => {
-    expect(classify('gmail__get_thread', { id: 't_xyz' })).toEqual([
-      'gmail.mailbox.thread[t_xyz].message[*].R',
+    expect(classify('gmail__get_thread', { id: '1a2b3c' })).toEqual([
+      'gmail.mailbox.thread[1a2b3c].message[*].R',
       fromZone('unknown'),
       sensitiveR('*'),
     ]);
@@ -217,8 +217,8 @@ describe('classifyGmail — sensitive labels fail closed on reads', () => {
 
 describe('classifyGmail — get_thread (worst case : the sender is unknown before the fetch)', () => {
   test('emits the containment slice and from-zone[unknown].R', () => {
-    expect(classify('gmail__get_thread', { id: 't_xyz' }, plainMailbox)).toEqual([
-      'gmail.mailbox.thread[t_xyz].message[*].R',
+    expect(classify('gmail__get_thread', { id: '1a2b3c' }, plainMailbox)).toEqual([
+      'gmail.mailbox.thread[1a2b3c].message[*].R',
       fromZone('unknown'),
     ]);
   });
@@ -328,8 +328,8 @@ describe('classifyGmail — create_draft refuses a recipient it cannot parse', (
 });
 
 describe('classifyGmail — label_message / unlabel_message', () => {
-  const args = { thread_id: 't1', message_id: 'm1', label: 'IMPORTANT' };
-  const SLICE = 'gmail.mailbox.thread[t1].message[m1].label.W';
+  const args = { thread_id: 'aa01', message_id: 'bb02', label: 'IMPORTANT' };
+  const SLICE = 'gmail.mailbox.thread[aa01].message[bb02].label.W';
 
   test('label_message → thread[T].message[M].label.W', () => {
     expect(classify('gmail__label_message', args)).toEqual([SLICE]);
@@ -354,11 +354,11 @@ describe('classifyGmail — label_message / unlabel_message', () => {
 
 describe('classifyGmail — label_thread / unlabel_thread', () => {
   const TOOLS = ['gmail__label_thread', 'gmail__unlabel_thread'] as const;
-  const SLICE = 'gmail.mailbox.thread[t1].label.W';
+  const SLICE = 'gmail.mailbox.thread[aa01].label.W';
 
   test.each(TOOLS)('%s on a system label → thread[T].label.W', (tool) => {
-    expect(classify(tool, { thread_id: 't1', label: 'STARRED' })).toEqual([SLICE]);
-    expect(classify(tool, { thread_id: 't1', label: 'INBOX' })).toEqual([SLICE]);
+    expect(classify(tool, { thread_id: 'aa01', label: 'STARRED' })).toEqual([SLICE]);
+    expect(classify(tool, { thread_id: 'aa01', label: 'INBOX' })).toEqual([SLICE]);
   });
 
   test.each(TOOLS)('%s without a thread id → denied, never thread[*]', (tool) => {
@@ -368,8 +368,8 @@ describe('classifyGmail — label_thread / unlabel_thread', () => {
   });
 
   test.each(TOOLS)('%s without a label → denied', (tool) => {
-    expect(denial(tool, { thread_id: 't1' })).toMatch(/^label: /);
-    expect(denial(tool, { thread_id: 't1', label: 7 })).toMatch(/^label: /);
+    expect(denial(tool, { thread_id: 'aa01' })).toMatch(/^label: /);
+    expect(denial(tool, { thread_id: 'aa01', label: 7 })).toMatch(/^label: /);
   });
 
   test.each([
@@ -379,16 +379,16 @@ describe('classifyGmail — label_thread / unlabel_thread', () => {
     ['gmail__unlabel_thread', 'TRASH'],
     ['gmail__label_message', 'Spam'],
   ])('%s with %s → denied (a deletion is not a label write)', (tool, label) => {
-    expect(denial(tool, { thread_id: 't1', message_id: 'm1', label })).toMatch(/^label: /);
+    expect(denial(tool, { thread_id: 'aa01', message_id: 'bb02', label })).toMatch(/^label: /);
   });
 
   test.each(TOOLS)('%s on a sensitive label adds sensitive-label[L].W', (tool) => {
-    expect(classify(tool, { thread_id: 't1', label: 'LEGAL' })).toEqual([
+    expect(classify(tool, { thread_id: 'aa01', label: 'LEGAL' })).toEqual([
       SLICE,
       sensitiveW('LEGAL'),
     ]);
-    expect(classify(tool, { thread_id: 't1', label: 'hr' })).toEqual([SLICE, sensitiveW('HR')]);
-    expect(classify(tool, { thread_id: 't1', label: 'legal/contracts' })).toEqual([
+    expect(classify(tool, { thread_id: 'aa01', label: 'hr' })).toEqual([SLICE, sensitiveW('HR')]);
+    expect(classify(tool, { thread_id: 'aa01', label: 'legal/contracts' })).toEqual([
       SLICE,
       sensitiveW('LEGAL'),
     ]);
@@ -397,12 +397,12 @@ describe('classifyGmail — label_thread / unlabel_thread', () => {
   test.each(TOOLS)(
     '%s on a user label id the classifier cannot resolve is treated as sensitive',
     (tool) => {
-      expect(classify(tool, { thread_id: 't1', label: 'Label_42' })).toEqual([
+      expect(classify(tool, { thread_id: 'aa01', label: 'Label_42' })).toEqual([
         SLICE,
         sensitiveW('*'),
       ]);
       // A system label spelled in another case is not a system label id.
-      expect(classify(tool, { thread_id: 't1', label: 'Important' })).toEqual([
+      expect(classify(tool, { thread_id: 'aa01', label: 'Important' })).toEqual([
         SLICE,
         sensitiveW('*'),
       ]);
@@ -412,7 +412,9 @@ describe('classifyGmail — label_thread / unlabel_thread', () => {
   test.each(TOOLS)(
     '%s on a user label when no sensitive label is declared → label.W only',
     (tool) => {
-      expect(classify(tool, { thread_id: 't1', label: 'Label_42' }, plainMailbox)).toEqual([SLICE]);
+      expect(classify(tool, { thread_id: 'aa01', label: 'Label_42' }, plainMailbox)).toEqual([
+        SLICE,
+      ]);
     },
   );
 });

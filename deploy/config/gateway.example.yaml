@@ -184,21 +184,6 @@
 #   emails:
 #     - ops@example.com
 
-# The OAuth client your company declared at a provider that signs people in
-# through its own consent screen, keyed by plugin id. Only a provider whose
-# plugin offers no key a person can make needs one (Gmail today); every
-# other provider is connected with a key pasted on its connect page and has
-# no block here. The same client can be declared from the provider's connect
-# page instead; a block here wins over it and makes it read-only there.
-# Allowed fields: client_id, client_secret.
-# env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GMAIL_CLIENT_ID,
-#      VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET_FILE (a hyphen in the plugin id
-#      becomes an underscore)
-# providers:
-#   gmail:
-#     client_id: 123456789012-abcdefghijklmnop.apps.googleusercontent.com
-#     client_secret: ${file:/run/secrets/gmail_client_secret}
-
 # REQUIRED while no sign-in provider is configured. At least 32 characters; lets the
 # operator sign in at /admin/bootstrap and configure the IdP from the Admin
 # page. Revoked automatically (flag in the database) after the first operator

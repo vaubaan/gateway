@@ -248,7 +248,6 @@ describe('assertNoWildcard / assertPresetsValid / assertPluginWellFormed', () =>
 describe('mockFetch', () => {
   const ctx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
     credential: { kind: 'api-key', fields: { api_key: 'secret-k' }, metadata: {} },
-    appConfig: {},
     fetch,
     resources: [staging],
   });

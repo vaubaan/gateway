@@ -58,7 +58,6 @@ describe('notion plugin — structural kit', () => {
       ],
       context: (fetch, resources) => ({
         credential: { kind: 'api-key', fields: { [API_TOKEN_FIELD]: TOKEN }, metadata: {} },
-        appConfig: {},
         fetch,
         resources,
       }),

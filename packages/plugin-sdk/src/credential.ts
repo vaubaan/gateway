@@ -23,7 +23,7 @@ import type { CredentialKind } from '@vaubaan/shared';
 import type { ConnectionContext } from './plugin.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Form fields — shared by api-key forms, ssh-key forms and OAuth client configuration
+// Form fields — shared by api-key and ssh-key forms
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface CredentialField {
@@ -40,9 +40,6 @@ export interface CredentialField {
   /** Regex source the value must match (validated by the host before any call). */
   readonly pattern?: string;
 }
-
-/** The company's OAuth client for a provider, as the operator configured it (`oauth2` only). */
-export type ProviderAppConfig = Readonly<Record<string, string>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CredentialSpec — one variant per kind
@@ -121,10 +118,11 @@ export interface ApiKeyCredentialSpec {
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';
 
 /**
- * Authorization-code flow run by the host. The OAuth client is either the
- * company's own, declared once by an administrator (`appConfigFields`, Gmail),
- * or one the gateway registers itself at the provider (`clientRegistration`,
- * Miro's MCP server). The plugin never sees the client secret.
+ * Authorization-code flow run by the host, with an OAuth client the gateway
+ * registers itself at the provider (`clientRegistration`, Miro's MCP server).
+ * No administrator declares a client (ADR gmail-over-imap-with-an-app-password):
+ * a provider that offers neither a key a person can make nor dynamic client
+ * registration cannot be connected. The plugin never sees the client secret.
  */
 export interface OAuth2CredentialSpec {
   readonly kind: 'oauth2';
@@ -137,11 +135,11 @@ export interface OAuth2CredentialSpec {
    * instance settings), reuses it for every connection of the instance, and
    * registers again when the provider rejects it or the instance's callback
    * address changed. Nobody declares anything: no administrator step, no
-   * secret to paste. Absent: an administrator declares the company's client
-   * (`client_id`, `client_secret`, `appConfigFields`). ADR
-   * oauth-client-registered-by-the-gateway.
+   * secret to paste. Required: it is the only OAuth client the host knows
+   * (ADRs oauth-client-registered-by-the-gateway,
+   * gmail-over-imap-with-an-app-password).
    */
-  readonly clientRegistration?: OAuth2ClientRegistration;
+  readonly clientRegistration: OAuth2ClientRegistration;
   readonly scopes: readonly string[];
   /** RFC 7636. Always true for a public client (`clientAuthMethod: 'none'`). */
   readonly pkce: boolean;
@@ -161,13 +159,6 @@ export interface OAuth2CredentialSpec {
   readonly refreshable: boolean;
   /** Extra static query parameters (`access_type=offline`, `prompt=consent`). */
   readonly extraAuthorizationParams?: Readonly<Record<string, string>>;
-  /**
-   * Provider-specific operator settings beyond `client_id` / `client_secret`,
-   * which the host asks for whenever the client is declared by an
-   * administrator. Not allowed with `clientRegistration`: nobody declares
-   * anything then.
-   */
-  readonly appConfigFields?: readonly CredentialField[];
   /**
    * How the provider withdraws the grant when a connection is revoked (spec
    * vaubaan-gateway §2.3). Declarative : the host sends the request, because
@@ -213,14 +204,6 @@ export interface OAuth2Revocation {
 
 export const OAUTH2_REVOCATION_FORMATS = ['token-form', 'client-credentials-json'] as const;
 export type OAuth2RevocationFormat = (typeof OAUTH2_REVOCATION_FORMATS)[number];
-
-/**
- * App-config keys of the OAuth client. The host asks for them for every
- * `oauth2` spec. The secret is used by the host only : it is removed from the
- * `appConfig` a plugin receives.
- */
-export const CLIENT_ID_FIELD = 'client_id';
-export const CLIENT_SECRET_FIELD = 'client_secret';
 
 /**
  * The instance generates a key pair ; the operator installs the public key

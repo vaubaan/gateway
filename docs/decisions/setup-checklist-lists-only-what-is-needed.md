@@ -2,9 +2,15 @@
 title: The setup checklist has no step for a service nobody asked for
 status: accepted
 date: 2026-10-23
+amended-by:
+  - gmail-over-imap-with-an-app-password
 ---
 
 # The setup checklist has no step for a service nobody asked for
+
+> **Amended on 2026-10-24** by [gmail-over-imap-with-an-app-password](gmail-over-imap-with-an-app-password.md): no OAuth client is declared by an
+> administrator any more, so the checklist's "OAuth clients" step is removed,
+> and so is the management door's `setup.company_apps` (point 3).
 
 > Decided on the owner's review of the Settings pages (2026-10-23). Handbook:
 > [authentication](../handbook/authentication.md) ("/admin — Setup"). Spec:

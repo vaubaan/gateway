@@ -315,7 +315,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
         note={ACCOUNT_PAGES.connect.lede}
         id={CONNECT_ANCHOR}
       >
-        <ServicePicker providers={providers} administrator={principal.isOperator} />
+        <ServicePicker providers={providers} />
         <Hint>
           What an agent can then do on each service, permission by permission, is in the{' '}
           <Link href={PROVIDERS_PATH}>{PAGES.reference.title}</Link>.

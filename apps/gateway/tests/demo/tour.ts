@@ -113,7 +113,7 @@ Things to try
                              or …_bbbb… (acme-platform); the page lists the
                              permissions a real token would need
      Any value of the right shape is accepted; each field says its shape.
-     Gmail needs an OAuth client the demo does not declare: the picker says so.
+     Gmail signs in over IMAP with an app password, which the demo does not simulate.
   3. Read what a service allows: Reference -> GitHub. Its permissions compared
      across its presets ("why?" unfolds the reason and the six words behind a
      severity), its tools, how it is modelled. Supabase adds a filter by part

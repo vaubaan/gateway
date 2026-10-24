@@ -6,7 +6,7 @@
  * (`sources.ts`), the table `load.ts` reads its defaults and bounds from:
  *
  * - every key of `KEYS` has one row, and every row is a key of `KEYS` or the
- *   one `providers.<id>.<field>` family;
+ *   one `sign_in.<id>.<field>` family;
  * - the type, the default (or the requirement) and the bounds of a row are
  *   those of the key;
  * - the environment variables of a row are the ones that set the key.
@@ -23,21 +23,12 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  KEYS,
-  PROVIDER_ENV_PREFIX,
-  SIGN_IN_ENV_PREFIX,
-  SIGN_IN_FIELDS,
-  envNamesFor,
-  type KeySpec,
-} from './sources';
-import { PROVIDER_APP_FIELDS } from './types';
+import { KEYS, SIGN_IN_ENV_PREFIX, SIGN_IN_FIELDS, envNamesFor, type KeySpec } from './sources';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const HANDBOOK = 'docs/handbook/configuration.md';
 const SECTION = '## Configuration keys';
 const COLUMNS = ['Key', 'Type', 'Default', 'Bounds', 'Environment variable', 'Consumed by'];
-const PROVIDER_FAMILY = 'providers.<id>.<field>';
 const SIGN_IN_FAMILY = 'sign_in.<id>.<field>';
 const NONE = '—';
 
@@ -161,7 +152,7 @@ describe('the key table of the configuration handbook', () => {
   });
 
   it('has no row the loader does not accept', () => {
-    const known = new Set([...KEYS.map((k) => k.path), PROVIDER_FAMILY, SIGN_IN_FAMILY]);
+    const known = new Set([...KEYS.map((k) => k.path), SIGN_IN_FAMILY]);
     expect([...documented.keys()].filter((key) => !known.has(key))).toEqual([]);
   });
 
@@ -180,17 +171,6 @@ describe('the key table of the configuration handbook', () => {
       expect(row.consumedBy).not.toBe('');
     },
   );
-
-  it('documents the provider-app family with the fields the loader accepts', () => {
-    const row = documented.get(PROVIDER_FAMILY);
-    expect(row, `no row for ${PROVIDER_FAMILY}`).toBeDefined();
-    if (!row) return;
-    expect(row.type).toBe('string');
-    expect(row.default).toBe(NONE);
-    expect(row.bounds).toBe(PROVIDER_APP_FIELDS.join(', '));
-    expect(plain(row.env)).toContain(`${PROVIDER_ENV_PREFIX}<ID>_<FIELD>`);
-    expect(row.consumedBy).not.toBe('');
-  });
 
   it('documents the sign-in provider family with the fields and variables the loader accepts', () => {
     const row = documented.get(SIGN_IN_FAMILY);

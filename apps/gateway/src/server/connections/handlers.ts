@@ -1,6 +1,5 @@
 /**
- * Host-agnostic HTTP handlers of the Connections surface and of the OAuth
- * client an administrator declares for a service that connects that way
+ * Host-agnostic HTTP handlers of the Connections surface
  * (`Request → Response`, never `next`). The Next route handlers under
  * `src/app/**` are one-line adapters over these.
  *
@@ -13,8 +12,6 @@
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /connections/<id>/default-env               the owner's default environment label
  *                                                    for the unlabelled resources
- *   POST /admin/provider-apps/<provider>             save / clear the OAuth client of a service
- *                                                    (operator), from its connect page
  *
  * Every mutation requires a web session and passes the origin check (spec
  * §6). The callback is a top-level GET from the provider: it carries no
@@ -22,9 +19,6 @@
  * started the flow. Outcomes reach the next page as an opaque one-time notice
  * id, never as text in the URL.
  */
-import type { AuditWriter } from '@vaubaan/gateway-core';
-import type { PluginRegistry } from '@vaubaan/plugin-sdk';
-
 import {
   auditActorId,
   type Authenticator,
@@ -41,12 +35,6 @@ import {
 import { notAFormResponse, readForm } from '../auth/handlers';
 import { resolveReturnTo } from '../http/return-to';
 import { errorFields, type Logger } from '../logging';
-import {
-  ProviderAppError,
-  type ProviderAppsService,
-  type ProviderAppStatus,
-} from '../provider-apps';
-import { toIso, type Clock } from '../store/clock';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
@@ -60,16 +48,9 @@ import {
 } from './service';
 
 export const NEW_CONNECTION_PATH = `${CONNECTIONS_PATH}/new`;
-/** The HTTP action that saves or clears the OAuth client of a service (operator). */
-export const PROVIDER_APP_ACTION_PATH = '/admin/provider-apps';
-
-/** The connect page of a service: where its OAuth client is declared, and where a person connects. */
+/** The connect page of a service: where a person connects it. */
 export function connectPagePath(providerId: string): string {
   return `${NEW_CONNECTION_PATH}/${encodeURIComponent(providerId)}`;
-}
-/** The address the OAuth-client form of a service posts to. */
-export function providerAppActionPath(providerId: string): string {
-  return `${PROVIDER_APP_ACTION_PATH}/${encodeURIComponent(providerId)}`;
 }
 /**
  * Where the connections that have no owner left are listed: the last region
@@ -87,8 +68,6 @@ export const NOTICE_PARAM = 'notice';
 export const FIELD_PREFIX = 'field.';
 /** Form inputs carrying an editable metadata list are named `meta.<key>`. */
 export const METADATA_PREFIX = 'meta.';
-/** `action` value of the OAuth-client form besides the default save. */
-export const CLEAR_PROVIDER_APP_ACTION = 'clear';
 const LOGIN_PAGE = '/login';
 const SEE_OTHER = 303;
 const USER_REFUSALS: RefusalWording = {
@@ -101,13 +80,8 @@ export interface ConnectionHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
   readonly connections: ConnectionService;
-  /** Tells a provider this instance does not know from a failure of its app settings. */
-  readonly registry: Pick<PluginRegistry, 'has'>;
-  readonly providerApps: ProviderAppsService;
   readonly notices: NoticeStore;
-  readonly audit: AuditWriter;
   readonly logger: Logger;
-  readonly clock: Clock;
 }
 
 export interface ConnectionHandlers {
@@ -119,7 +93,6 @@ export interface ConnectionHandlers {
   reassign(request: Request, connectionId: string): Promise<Response>;
   updateResource(request: Request, connectionId: string, resourceId: string): Promise<Response>;
   setDefaultEnv(request: Request, connectionId: string): Promise<Response>;
-  saveProviderApp(request: Request, providerId: string): Promise<Response>;
 }
 
 export function createConnectionHandlers(deps: ConnectionHandlerDeps): ConnectionHandlers {
@@ -167,76 +140,6 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     const guard = await guardMutation(request, deps, 'user');
     if (!guard.ok) return { response: refusalResponse(guard, USER_REFUSALS) };
     return { principal: guard.principal, actor: actorOf(guard.principal) };
-  }
-
-  /**
-   * The one audit entry of a provider-app change: what the settings were, what
-   * they are. Written after the change is committed, so a failing write is
-   * logged and never reported to the operator as a failed save.
-   */
-  async function auditProviderApp(
-    principal: Principal,
-    providerId: string,
-    before: ProviderAppStatus,
-    after: ProviderAppStatus,
-  ): Promise<void> {
-    const actor = auditActorId(principal);
-    try {
-      await deps.audit.write({
-        kind: 'admin',
-        ts: toIso(deps.clock.now()),
-        user_id: actor,
-        act: 'config-changed',
-        object: { type: 'instance-config', id: `provider-app:${providerId}` },
-        before: auditView(before),
-        after: auditView(after),
-        delegated_client_id: null,
-      });
-    } catch (err) {
-      logger.error('audit entry not written for a saved configuration change', {
-        actor,
-        provider: providerId,
-        object: `provider-app:${providerId}`,
-        err,
-      });
-    }
-  }
-
-  /** Removes the stored OAuth client; the service refuses it when the mounted configuration sets it. */
-  async function clearProviderApp(providerId: string): Promise<ProviderAppChange> {
-    await deps.providerApps.clear(providerId);
-    const after = await deps.providerApps.status(providerId);
-    logger.info('provider app settings saved', { provider: providerId, cleared: true });
-    return {
-      after,
-      notice: {
-        tone: 'success',
-        title: `${after.displayName}: OAuth client removed`,
-        lines: ['Nobody can connect a new account of this service until it is declared again.'],
-      },
-    };
-  }
-
-  /** Stores the OAuth client from the form's `field.<name>` values. */
-  async function storeProviderApp(providerId: string, form: FormData): Promise<ProviderAppChange> {
-    await deps.providerApps.save(providerId, prefixedFields(form, FIELD_PREFIX));
-    const after = await deps.providerApps.status(providerId);
-    logger.info('provider app settings saved', { provider: providerId, cleared: false });
-    return {
-      after,
-      notice: {
-        tone: 'success',
-        title: `${after.displayName}: saved`,
-        lines: ['Secrets are encrypted at rest with the master key and never shown again.'],
-      },
-    };
-  }
-
-  /** The form's `action` picks the change; no action is a save. */
-  function applyProviderAppAction(providerId: string, form: FormData): Promise<ProviderAppChange> {
-    const action = stringField(form, 'action');
-    if (action === CLEAR_PROVIDER_APP_ACTION) return clearProviderApp(providerId);
-    return storeProviderApp(providerId, form);
   }
 
   return {
@@ -473,46 +376,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         );
       }
     },
-
-    async saveProviderApp(request, providerId) {
-      const guard = await guardMutation(request, deps, 'operator');
-      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
-
-      const form = await readForm(request);
-      if (!form) return notAFormResponse();
-      // Only a provider this instance does not know is reported as unknown; a failure
-      // to read its settings (the store, the configuration) is not, and propagates.
-      if (!deps.registry.has(providerId)) {
-        return redirectWithNotice(guard.principal, NEW_CONNECTION_PATH, {
-          tone: 'danger',
-          title: 'Not saved',
-          lines: [CONNECT_ERROR_MESSAGES['provider-unknown']],
-        });
-      }
-      const anchor = connectPagePath(providerId);
-      const before = await deps.providerApps.status(providerId);
-      try {
-        const change = await applyProviderAppAction(providerId, form);
-        await auditProviderApp(guard.principal, providerId, before, change.after);
-        return await redirectWithNotice(guard.principal, anchor, change.notice);
-      } catch (err) {
-        if (err instanceof ProviderAppError) {
-          return redirectWithNotice(guard.principal, anchor, {
-            tone: 'danger',
-            title: `${before.displayName}: not saved`,
-            lines: err.problems,
-          });
-        }
-        throw err;
-      }
-    },
   };
-}
-
-/** What a provider-app action changed, and what the operator is told. */
-interface ProviderAppChange {
-  readonly after: ProviderAppStatus;
-  readonly notice: Notice;
 }
 
 export function connectionPath(connectionId: string): string {
@@ -572,14 +436,6 @@ function discoveryNotice(outcome: DiscoveryRecord): Notice {
 
 function countLabel(count: number): string {
   return count === 1 ? '1 resource' : `${count} resources`;
-}
-
-function auditView(status: ProviderAppStatus): Record<string, unknown> {
-  return {
-    source: status.source,
-    values: status.values,
-    secrets_set: status.secretsSet,
-  };
 }
 
 function stringField(form: FormData, name: string): string {

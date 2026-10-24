@@ -86,6 +86,9 @@ apps/gateway/migrations/
   0022_audit_risk_sets.sql        audit_risk_sets / audit_risk_set_members, audit.accepted_set_id:
                                   the accepted snapshot stored once per distinct set
                                   (schema version 22; see Audit)
+  0023_provider_apps_removed.sql  deletes the `provider_apps.*` rows of `instance_config`: the
+                                  OAuth clients an administrator declared are no longer read
+                                  (schema version 23)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -232,9 +235,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0022_audit_risk_sets.sql`)
+## Schema (`0001_schema.sql` … `0023_provider_apps_removed.sql`)
 
-Schema version 22. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 23. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and

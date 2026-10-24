@@ -79,7 +79,6 @@ function recordingTransport(): SshTransport & { calls: { host: string; cmd: stri
 
 const ctx = (resources: readonly Resource[], host = HOST): ExecuteContext => ({
   credential: credentialFor(host),
-  appConfig: {},
   fetch: () => Promise.reject(new Error('ssh plugin must not use fetch')),
   resources,
 });

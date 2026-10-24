@@ -188,8 +188,8 @@ risks:
     label: 'Create / modify a draft addressed to self only'
     reason: >-
       A memo to oneself. No external leak as long as the draft is not sent ;
-      the official Google MCP server cannot send, so a draft is a terminal
-      action here.
+      the plugin cannot send (it reaches Gmail over IMAP, which has no send,
+      and ships no SMTP client), so a draft is a terminal action here.
     matches: 'gmail.mailbox.to-zone[self].W'
     vector:
       reversibility: reversible
