@@ -27,6 +27,7 @@ import {
   SSH_KEY_SPEC,
 } from '../../../src/server/connections/testing';
 import { registeredClientKey } from '../../../src/server/connections/oauth2-clients';
+import { agePastStaleGrace } from '../../../src/server/store/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR = 'ops@example.com';
@@ -273,6 +274,7 @@ describe('connections: registered client, connect, resources, revoke', () => {
       { provider: 'oauthco', ref: 'proj-a', displayName: 'Project A (renamed upstream)' },
       { provider: 'oauthco', ref: 'proj-c', displayName: 'Project C' },
     ];
+    agePastStaleGrace(root.store, connectionId); // proj-b was seen long ago
     const refreshed = await handlers.discover(
       post(`/accounts/${connectionId}/discover`, alice),
       connectionId,

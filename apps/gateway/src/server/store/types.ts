@@ -205,11 +205,24 @@ export interface MissionPolicyEntry {
 export const RESOURCE_SCOPES = ['all', 'selected', 'connection'] as const;
 export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
 
+/**
+ * Where a selected resource came from (`mission_resources.source`, migration 0024): stored
+ * at issuance, created by the mission itself (ADR created-resources-join-the-mission), or
+ * added by the creator after issuance ("Edit mission").
+ */
+export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit'] as const;
+export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
+
 export interface MissionConnection {
   readonly connectionId: string;
   readonly resourceScope: ResourceScope;
   /** Selected resource ids; empty when `resourceScope` is `all` or `connection`. */
   readonly resourceIds: readonly string[];
+  /**
+   * The source of each selected id that was not stored at issuance, keyed by resource id;
+   * absent when every id was (the store reads it, writers never pass it).
+   */
+  readonly resourceSources?: Readonly<Record<string, MissionResourceSource>>;
 }
 
 export interface MissionRecord {

@@ -184,6 +184,11 @@ export interface SessionEventView {
     readonly rate_limit_max: number;
     readonly rate_limit_max_before: number;
   } | null;
+  /**
+   * The refs of the resources a `resources-created` event says the mission created and
+   * reaches (ADR created-resources-join-the-mission); `tool` is the creating call.
+   */
+  readonly created_refs: readonly string[] | null;
   /** How many tokens a `revocation` retired. */
   readonly tokens_revoked: number | null;
   /** The token a `rotation` issued, or the one token a `revocation` retired. */
@@ -547,6 +552,7 @@ const NO_DETAIL = {
   gate_before: null,
   gate_open_until: null,
   limits: null,
+  created_refs: null,
   tokens_revoked: null,
   token_prefix: null,
   replaced_prefix: null,
@@ -635,6 +641,12 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
       };
     case 'limits-changed':
       return { ...NO_DETAIL, limits: { ...parsed.details } };
+    case 'resources-created':
+      return {
+        ...NO_DETAIL,
+        tool: parsed.details.tool || null,
+        created_refs: [...parsed.details.refs],
+      };
     case 'rotation':
       return {
         ...NO_DETAIL,

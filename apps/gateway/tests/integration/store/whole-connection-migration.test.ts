@@ -74,9 +74,9 @@ describe('mission selections written before migration 0018', () => {
         { mission_id: 'm', connection_id: 'fly', resource_scope: 'all' },
         { mission_id: 'm', connection_id: 'gh', resource_scope: 'selected' },
       ]);
-      expect(db.prepare('SELECT * FROM mission_resources').all()).toEqual([
-        { mission_id: 'm', connection_id: 'gh', resource_id: 'res-app' },
-      ]);
+      expect(
+        db.prepare('SELECT mission_id, connection_id, resource_id FROM mission_resources').all(),
+      ).toEqual([{ mission_id: 'm', connection_id: 'gh', resource_id: 'res-app' }]);
       expect(db.pragma('foreign_key_check')).toEqual([]);
 
       mission.run('m2', 'M2', AT, AT, AT);

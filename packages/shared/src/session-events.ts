@@ -193,6 +193,17 @@ export interface RevocationEventDetails {
   readonly holder?: string | null;
 }
 
+/**
+ * The mission created resources of one of its connections through a creating call
+ * and reaches them from now on (ADR created-resources-join-the-mission). `refs` are
+ * the resources' refs on the connection; `tool` the call that created them.
+ */
+export interface ResourcesCreatedEventDetails {
+  readonly tool: string;
+  readonly connection_id: string;
+  readonly refs: readonly string[];
+}
+
 /** The details of each event kind that has a writer. */
 export interface SessionEventDetailsByKind {
   readonly 'call-allowed': CallAllowedEventDetails;
@@ -204,6 +215,7 @@ export interface SessionEventDetailsByKind {
   readonly 'gate-opened': GateOpenedEventDetails;
   readonly 'gate-changed': GateChangedEventDetails;
   readonly 'limits-changed': LimitsChangedEventDetails;
+  readonly 'resources-created': ResourcesCreatedEventDetails;
   readonly rotation: RotationEventDetails;
   readonly revocation: RevocationEventDetails;
 }
@@ -349,6 +361,10 @@ function isLimitsChanged(d: Fields): d is Fields & LimitsChangedEventDetails {
   );
 }
 
+function isResourcesCreated(d: Fields): d is Fields & ResourcesCreatedEventDetails {
+  return isText(d.tool) && isText(d.connection_id) && isTextList(d.refs);
+}
+
 function isRotation(d: Fields): d is Fields & RotationEventDetails {
   return isText(d.token_prefix) && hasOptionalHolder(d) && isOptionalText(d.replaced_prefix);
 }
@@ -384,6 +400,8 @@ export function parseEventDetails(kind: string, details: unknown): SessionEventD
       return isGateChanged(details) ? { kind, details } : null;
     case 'limits-changed':
       return isLimitsChanged(details) ? { kind, details } : null;
+    case 'resources-created':
+      return isResourcesCreated(details) ? { kind, details } : null;
     case 'rotation':
       return isRotation(details) ? { kind, details } : null;
     case 'revocation':

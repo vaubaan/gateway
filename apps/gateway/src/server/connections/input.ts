@@ -5,7 +5,9 @@
  * show (a secret value is never echoed).
  */
 import { ENV_LABEL_PATTERN } from '@vaubaan/shared';
-import type { CredentialField } from '@vaubaan/plugin-sdk';
+import type { CredentialField, Resource } from '@vaubaan/plugin-sdk';
+
+import type { DiscoveredResource } from '../store/types';
 
 export const MAX_NAME_CHARS = 80;
 const MAX_FIELD_CHARS = 8192;
@@ -139,4 +141,33 @@ export function parseListValue(
     return { ok: false, problem: `at most ${MAX_LIST_ENTRIES} entries per list` };
   }
   return { ok: true, list };
+}
+
+/**
+ * What a plugin returned as resources (`discoverResources`, `createdResources`), as the
+ * store keeps them: a resource of another provider or without a ref is left out (and
+ * counted), a name is cleaned, a label the plugin sets must be a valid environment label
+ * (otherwise the resource is kept unlabelled and the owner decides). One rule for the
+ * discovery merge and for a created resource.
+ */
+export function usableResourcesOf(
+  providerId: string,
+  resources: readonly Resource[],
+): { readonly usable: DiscoveredResource[]; readonly unusable: number } {
+  const usable: DiscoveredResource[] = [];
+  let unusable = 0;
+  for (const r of resources) {
+    if (r.provider !== providerId || typeof r.ref !== 'string' || r.ref.length === 0) {
+      unusable += 1;
+      continue;
+    }
+    const label = typeof r.env === 'string' ? parseEnvLabel(r.env) : null;
+    usable.push({
+      ref: r.ref,
+      displayName: cleanName(r.displayName) ?? r.ref,
+      env: label?.ok ? label.env : null,
+      metadata: r.metadata ?? null,
+    });
+  }
+  return { usable, unusable };
 }

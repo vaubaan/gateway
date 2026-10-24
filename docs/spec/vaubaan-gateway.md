@@ -578,16 +578,22 @@ Rules:
   it may touch; by default, all the connection's resources known at
   issuance. A call whose arguments cite a resource outside the mission's
   selection is refused with `resource-not-in-mission`, before any risk is
-  evaluated. A resource discovered on the connection later is not covered
-  until the creator adds it — unless the creator chose, explicitly, **the
-  whole connection**: then the mission reaches every resource of the
+  evaluated. **What a mission creates, it reaches:** a resource the mission
+  itself creates through the gateway, with a tool its plugin declares as
+  creating one, joins the mission's selection right after the call that
+  created it, whatever the selection — the mission page marks it "created by
+  this mission" and the audit records it (ADR
+  created-resources-join-the-mission). Any other resource discovered on the
+  connection later is not covered until the creator adds it — unless the
+  creator chose, explicitly, **the whole connection**: then the mission reaches every resource of the
   connection that discovery returns at the time of the call, known at
   issuance or discovered later, except the ones the owner hid and the
   instance's own; a resource discovery no longer returns is not reached.
-  A resource created through the gateway is discovered right after the
-  call that created it, so such a mission reaches it from its next calls;
-  one created elsewhere waits for the owner's refresh (ADR
-  discovery-runs-after-a-creating-call).
+  A resource created through the gateway is recorded on the connection
+  right after the call that created it, and discovery runs again; a
+  resource first seen less than 15 minutes ago is not dropped by a
+  discovery that does not list it yet. One created elsewhere waits for the
+  owner's refresh (ADR discovery-runs-after-a-creating-call).
   That choice is never a default and never applied to a mission issued
   with another selection; the mission page and the bootstrap kit state it
   ("the whole account, including resources found later") with the

@@ -66,7 +66,7 @@ export const RESOURCE_CHOICES: readonly {
     label: 'Every resource known now',
     hint: 'found later: not reached',
     explanation:
-      'The resources listed today. One found later is not reached: a new mission would be needed.',
+      'The resources listed today, and the ones this mission creates. One found later is not reached: its creator adds it to the mission.',
   },
   {
     id: 'connection',

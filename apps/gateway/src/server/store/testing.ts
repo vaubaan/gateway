@@ -192,3 +192,14 @@ export async function makeUnowned(
   }
   return group;
 }
+
+/**
+ * Moves the `first_seen_at` of every resource row of a connection back past the stale
+ * grace (`FRESH_RESOURCE_STALE_GRACE_MS`, ADR created-resources-join-the-mission), so the
+ * next discovery that misses a ref marks it stale at once — what a row seen long ago gets.
+ */
+export function agePastStaleGrace(store: Pick<Store, 'db'>, connectionId: string): void {
+  store.db
+    .prepare('UPDATE connection_resources SET first_seen_at = ? WHERE connection_id = ?')
+    .run('2000-01-01T00:00:00.000Z', connectionId);
+}

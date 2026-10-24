@@ -2,7 +2,7 @@
 title: Resend provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-24
 tracks:
   - plugins/resend/src/index.ts
   - plugins/resend/src/resources.ts
@@ -73,6 +73,13 @@ discovers the account again, off the request path, so the new domain or
 segment is a resource at once — with empty zone lists, every recipient
 external until the owner fills them (ADR
 [discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)).
+Before the answer leaves, `createdResendResources` (`src/created.ts`, the
+plugin's `createdResources`, plugin 0.5.0) reads it from Resend's answer
+(`POST /domains`: `{ id, name, status, region, … }`; `POST /segments`:
+`{ object, id, name }`), the id through `pathIdent` and the domain through
+`domainName`, described as discovery does (`domain_id`, status, region, empty
+zone lists; `segment_id`), so the mission that created it reaches it at once
+(ADR [created-resources-join-the-mission](../../decisions/created-resources-join-the-mission.md)).
 
 ```mermaid
 flowchart LR

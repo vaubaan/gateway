@@ -150,6 +150,13 @@ function worded(parsed: SessionEventDetails): EventWords {
         tone: 'neutral',
         text: `You changed the limit of this permission from ${parsed.details.quota_before} to ${parsed.details.quota}`,
       };
+    case 'resources-created':
+      return {
+        ...PLAIN,
+        tone: 'neutral',
+        text: 'Reached a resource it created with',
+        tool: parsed.details.tool || null,
+      };
     case 'rotation':
       return {
         ...PLAIN,

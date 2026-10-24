@@ -37,6 +37,7 @@ import {
   UPSTASH_EMAIL_PATTERN,
   type UpstashAuth,
 } from './credential.ts';
+import { createdUpstashRedisResources } from './created.ts';
 import { upstashRedisDataModel } from './data-model.ts';
 import {
   buildCommand,
@@ -62,7 +63,7 @@ export const upstashRedisPlugin = definePlugin({
   id: 'upstash-redis',
   displayName: 'Upstash Redis',
   icon: UPSTASH_REDIS_ICON,
-  version: '3.1.1',
+  version: '3.2.0',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:
@@ -75,6 +76,9 @@ export const upstashRedisPlugin = definePlugin({
   // A database is what an Upstash connection lists : a created one is
   // discovered at once (ADR discovery-runs-after-a-creating-call).
   resourceCreatingTools: ['upstash_redis__create_database'],
+  // Read from the call's answer: the mission that created it reaches it at once
+  // (ADR created-resources-join-the-mission).
+  createdResources: createdUpstashRedisResources,
   dataModel: upstashRedisDataModel,
   catalog: upstashRedisCatalog.catalog,
   credential: upstashRedisCredential,

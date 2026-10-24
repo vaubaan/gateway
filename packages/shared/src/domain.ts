@@ -288,6 +288,9 @@ export type SessionEventKind =
   | 'gate-changed'
   | 'permissions-changed'
   | 'limits-changed'
+  /** The mission created resources through a creating call and reaches them (ADR
+   *  created-resources-join-the-mission). */
+  | 'resources-created'
   | 'rotation'
   | 'revocation';
 

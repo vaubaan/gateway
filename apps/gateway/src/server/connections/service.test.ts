@@ -709,11 +709,12 @@ describe('resources — discovery merge and owner edits', () => {
     await h.service.updateResource(alice, connection.id, a.id, { env: 'staging' });
 
     state.resources = [resource('keyco', 'proj-b')];
-    h.clock.advance(60_000);
+    // Past the grace a fresh row has (FRESH_RESOURCE_STALE_GRACE_MS, 15 minutes).
+    h.clock.advance(16 * 60_000);
     await h.service.discover(alice, connection.id);
     let rows = await h.store.connections.listResources(connection.id);
     expect(rows.map((r) => [r.ref, r.staleSince, r.env])).toEqual([
-      ['proj-a', '2026-10-13T09:01:00.000Z', 'staging'],
+      ['proj-a', '2026-10-13T09:16:00.000Z', 'staging'],
       ['proj-b', null, null],
     ]);
     expect(rows[0]!.id).toBe(a.id);
@@ -722,7 +723,7 @@ describe('resources — discovery merge and owner edits', () => {
     h.clock.advance(60_000);
     await h.service.discover(alice, connection.id);
     rows = await h.store.connections.listResources(connection.id);
-    expect(rows[0]!.staleSince).toBe('2026-10-13T09:01:00.000Z');
+    expect(rows[0]!.staleSince).toBe('2026-10-13T09:16:00.000Z');
 
     state.resources = [resource('keyco', 'proj-a'), resource('keyco', 'proj-b')];
     await h.service.discover(alice, connection.id);

@@ -223,10 +223,24 @@ function Action({ entry }: { entry: AuditEntryView }) {
       </span>
     );
   }
+  if (
+    entry.act === 'mission-resources-added' &&
+    causeOf(entry.after) === 'created-by-the-mission'
+  ) {
+    return (
+      <span>
+        {ACT_WORDS[entry.act]}
+        <span className={styles.quiet}> · {ACTIVITY_WORDS.createdByTheMission}</span>
+      </span>
+    );
+  }
   return <span>{ACT_WORDS[entry.act]}</span>;
 }
 
-/** `after.cause` of a `resources-discovered` entry: `by-owner` or `after-a-call`. */
+/**
+ * `after.cause` of an entry: `by-owner` or `after-a-call` for `resources-discovered`,
+ * `created-by-the-mission` for `mission-resources-added`.
+ */
 function causeOf(after: unknown): unknown {
   return typeof after === 'object' && after !== null
     ? (after as { cause?: unknown }).cause

@@ -28,6 +28,7 @@ import type { MissionsModule } from '../missions';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { ConnectionCredentialCache } from './credential-cache';
+import { CreatedResources } from './created-resources';
 import type { DelegatedTokenResolver } from './admission';
 import { ExecutionDoor } from './door';
 import { createResourceStage } from './resource-stage';
@@ -132,6 +133,15 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   };
   const pipeline = new CallPipeline(stages);
 
+  const createdResources = new CreatedResources({
+    registry: deps.registry,
+    store: deps.store,
+    audit: deps.store.auditWriter,
+    selfResources: deps.config.selfResources,
+    logger,
+    clock,
+  });
+
   const tokens = new TokenVerifier({
     missions: deps.missions.service,
     rateLimiter: deps.rateLimiter,
@@ -149,7 +159,13 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     webSessions: deps.auth.sessions,
     budget: deps.budget,
     pipeline,
-    afterCall: (ctx, call) => deps.connections.discoveryAfterCall.afterCall(ctx, call),
+    // What a creating call made joins the mission on the request path (local writes),
+    // then the connection's discovery runs off it (ADRs created-resources-join-the-mission,
+    // discovery-runs-after-a-creating-call).
+    afterCall: async (ctx, call) => {
+      const created = await createdResources.record(ctx, call);
+      deps.connections.discoveryAfterCall.afterCall(ctx, call, created);
+    },
     rateLimiter: deps.rateLimiter,
     logger,
     build: deps.build,
@@ -174,6 +190,11 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
 }
 
 export { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
+export {
+  CREATED_BY_THE_MISSION,
+  CreatedResources,
+  type CreatedResourcesDeps,
+} from './created-resources';
 export {
   CALL_REJECTED_RPC_CODE,
   ExecutionDoor,

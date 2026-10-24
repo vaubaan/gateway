@@ -29,6 +29,7 @@ and [`miro-board-ref-tilde-spelling`](../../docs/decisions/miro-board-ref-tilde-
 | `src/classify.ts`                   | The slices of a call                                                              |
 | `src/mcp.ts`                        | The JSON-RPC client of Miro's MCP server                                          |
 | `src/execute.ts`                    | Execution, discovery (`board_search_boards`), the drift check of the tool list    |
+| `src/created.ts`                    | The board `board_create` made, read from its answer (`createdResources`)          |
 | `src/credential.ts`                 | The `oauth2` spec with `clientRegistration`                                       |
 | `src/data-model.ts`                 | The `board` and `guide` planes                                                    |
 | `src/risk-catalog.yaml`             | Thirteen risks, the fallback, three presets (catalog 3)                           |

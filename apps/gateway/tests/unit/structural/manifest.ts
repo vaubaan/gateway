@@ -174,19 +174,24 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'resource-creating-tools-declared',
     statement:
-      'The tools after whose success the gateway runs a discovery are declared by their plugin, are MCP tools of it, and are exactly the reviewed table: nothing is inferred from a tool name.',
-    source: 'ADR discovery-runs-after-a-creating-call; spec §0 "Resource"',
+      'The tools after whose success the gateway runs a discovery are declared by their plugin, are MCP tools of it, and are exactly the reviewed table: nothing is inferred from a tool name. Every plugin that declares one reads what it created from the answer, so the mission that made the call reaches it.',
+    source:
+      'ADR discovery-runs-after-a-creating-call; ADR created-resources-join-the-mission; spec §0 "Resource", §3.1',
     proofs: [
       {
         file: `${STRUCTURAL}/resource-creating-tools.test.ts`,
         tests: [
           'declares exactly its creating tools, each one of its MCP tools',
+          'reads what its creating tools created (createdResources)',
           'every plugin named in the table is shipped',
         ],
       },
       {
         file: 'packages/plugin-sdk/tests/unit/define-plugin.test.ts',
-        tests: ['resourceCreatingTools is optional; it names MCP tools of the plugin, once each'],
+        tests: [
+          'resourceCreatingTools is optional; it names MCP tools of the plugin, once each',
+          'a plugin that declares resourceCreatingTools reads the created resource (createdResources)',
+        ],
       },
     ],
   },
