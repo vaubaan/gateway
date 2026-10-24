@@ -27,6 +27,7 @@ interface MockClient {
   append: ReturnType<typeof vi.fn>;
   messageFlagsAdd: ReturnType<typeof vi.fn>;
   messageFlagsRemove: ReturnType<typeof vi.fn>;
+  mailboxCreate: ReturnType<typeof vi.fn>;
   released: string[];
 }
 
@@ -86,6 +87,7 @@ function newClient(options: ImapFlowOptions): ImapFlow {
     append: vi.fn(async () => ({ destination: 'x', uid: 99 })),
     messageFlagsAdd: vi.fn(async () => true),
     messageFlagsRemove: vi.fn(async () => true),
+    mailboxCreate: vi.fn(async (path: string[]) => ({ path: path.join('/'), created: true })),
   };
   clients.push(client);
   return client as unknown as ImapFlow;
@@ -236,11 +238,30 @@ describe('imapflowTransport', () => {
         from: [{ name: 'A', address: 'a@x.com' }],
         to: [],
         cc: [],
-        text: 'Hello wo',
-        textTruncated: true,
+        body: { type: 'text/plain', content: 'Hello wo', truncated: true },
+        attachments: [],
       },
     ]);
     expect(clients[0]!.download).toHaveBeenCalledWith('3', '1', { uid: true, maxBytes: 9 });
+  });
+
+  test('download : one part by UID, read-only, capped ; a part the server lacks is null', async () => {
+    const part = await imapflowTransport.session(account, { timeoutMs: 60_000 }, (s) =>
+      s.download('ALL', 3, '2', 10),
+    );
+    expect(part).toEqual({ content: Buffer.from('Hello worl'), truncated: true });
+    const c = clients[0]!;
+    expect(c.getMailboxLock).toHaveBeenCalledWith('ALL', { readOnly: true });
+    expect(c.download).toHaveBeenCalledWith('3', '2', { uid: true, maxBytes: 11 });
+    expect(c.released).toEqual(['ALL']);
+  });
+
+  test('createMailbox : the segments, joined by imapflow with the server delimiter', async () => {
+    const created = await imapflowTransport.session(account, { timeoutMs: 60_000 }, (s) =>
+      s.createMailbox(['Projets', 'Été']),
+    );
+    expect(clients[0]!.mailboxCreate).toHaveBeenCalledWith(['Projets', 'Été']);
+    expect(created).toEqual({ path: 'Projets/Été', created: true });
   });
 
   test('store : X-GM-LABELS with useLabels, flags without ; append returns the UID', async () => {

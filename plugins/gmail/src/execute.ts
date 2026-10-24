@@ -30,7 +30,9 @@ import type {
 
 import { collectRecipients, type EmailAddress } from './address.ts';
 import {
+  creatableLabel,
   gmailId,
+  gmailPartId,
   readMailboxMetadata,
   selectMailbox,
   SYSTEM_LABEL_IDS,
@@ -43,12 +45,15 @@ import {
   type GmailAccount,
 } from './credential.ts';
 import { buildDraft, draftProblem, hasControlCharacter } from './draft.ts';
+import { htmlToText, MAX_HTML_BYTES } from './html.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 import {
   imapflowTransport,
   type GmailImapSession,
   type GmailTransport,
   type ImapAddress,
+  type ImapAttachment,
+  type ImapBody,
   type ImapMailbox,
   type ImapMessage,
   type ImapStore,
@@ -74,6 +79,8 @@ export const MAX_THREAD_MESSAGES = 50;
 export const MAX_TEXT_BYTES = 20_000;
 /** Newest drafts returned by `list_drafts`. */
 export const MAX_DRAFTS = 50;
+/** Largest attachment `get_attachment` returns, decoded, in bytes (5 MiB ; base64 adds a third). */
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 // ─── Ids ───────────────────────────────────────────────────────────────────
 
@@ -163,6 +170,27 @@ const formatAddress = (a: ImapAddress): string | null =>
 const addressList = (list: readonly ImapAddress[]): string[] =>
   list.map(formatAddress).filter((a): a is string => a !== null);
 
+/** The text of a body : as it is for text/plain, converted for text/html, capped either way. */
+function textOf(body: ImapBody | null): Record<string, unknown> {
+  if (body === null) return { text: null, text_format: null, text_truncated: false };
+  if (body.type === 'text/plain') {
+    return { text: body.content, text_format: 'plain', text_truncated: body.truncated };
+  }
+  const converted = htmlToText(body.content, MAX_TEXT_BYTES);
+  return {
+    text: converted.text,
+    text_format: 'html',
+    text_truncated: body.truncated || converted.truncated,
+  };
+}
+
+const attachmentView = (a: ImapAttachment): Record<string, unknown> => ({
+  part: a.part,
+  filename: a.filename,
+  mime_type: a.mimeType,
+  size: a.size,
+});
+
 function messageView(m: ImapMessage, withText: boolean): Record<string, unknown> {
   return {
     id: imapIdToHex(m.messageId),
@@ -173,7 +201,7 @@ function messageView(m: ImapMessage, withText: boolean): Record<string, unknown>
     cc: addressList(m.cc),
     subject: m.subject,
     labels: labelsOf(m),
-    ...(withText ? { text: m.text, text_truncated: m.textTruncated } : {}),
+    ...(withText ? { ...textOf(m.body), attachments: m.attachments.map(attachmentView) } : {}),
   };
 }
 
@@ -278,7 +306,12 @@ function planGetThread(args: Readonly<Record<string, unknown>>): Plan {
     const all = await folder(session, '\\All');
     const uids = await threadUids(session, all, id);
     const newest = uids.slice(-MAX_THREAD_MESSAGES);
-    const messages = [...(await session.fetch(all, newest, { bodyBytes: MAX_TEXT_BYTES }))]
+    const messages = [
+      ...(await session.fetch(all, newest, {
+        bodyBytes: MAX_TEXT_BYTES,
+        htmlBytes: MAX_HTML_BYTES,
+      })),
+    ]
       .filter((m) => m.threadId === id.decimal)
       .sort((a, b) => a.uid - b.uid);
     return ok({
@@ -287,6 +320,95 @@ function planGetThread(args: Readonly<Record<string, unknown>>): Plan {
       messages_in_thread: uids.length,
       truncated: uids.length > newest.length,
     });
+  };
+}
+
+/** The UID of a message of a thread in `\All`, or the refusal. */
+async function messageUid(
+  session: GmailImapSession,
+  all: string,
+  thread: { hex: string; decimal: string },
+  message: { hex: string; decimal: string },
+): Promise<number> {
+  const uids = await threadUids(session, all, thread);
+  // The message must belong to the thread the call was classified on.
+  const found = (await session.search(all, { messageId: message.decimal })).filter((uid) =>
+    uids.includes(uid),
+  );
+  if (found.length === 0) {
+    throw new GmailToolError('not_found', `no message ${message.hex} in thread ${thread.hex}.`);
+  }
+  return found[0]!;
+}
+
+function planGetAttachment(args: Readonly<Record<string, unknown>>): Plan {
+  const thread = imapIdArg(args, 'thread_id');
+  if (isRefusal(thread)) return thread;
+  const message = imapIdArg(args, 'message_id');
+  if (isRefusal(message)) return message;
+  const part = gmailPartId(args.part);
+  if (part === null) return fail('invalid_argument', 'part: missing or malformed.');
+  const tooLarge = (size: string) =>
+    fail(
+      'too_large',
+      `attachment ${part} is ${size}; get_attachment returns at most ${MAX_ATTACHMENT_BYTES} bytes (5 MiB).`,
+    );
+  return async (session) => {
+    const all = await folder(session, '\\All');
+    const uid = await messageUid(session, all, thread, message);
+    const [fetched] = await session.fetch(all, [uid], { bodyBytes: null, structure: true });
+    const attachment = fetched?.attachments.find((a) => a.part === part);
+    if (!attachment) {
+      return fail(
+        'not_found',
+        `message ${message.hex} has no attachment ${part} (get_thread lists them).`,
+      );
+    }
+    if (attachment.size > MAX_ATTACHMENT_BYTES) return tooLarge(`about ${attachment.size} bytes`);
+    const content = await session.download(all, uid, part, MAX_ATTACHMENT_BYTES);
+    if (content === null) return fail('not_found', `attachment ${part} could not be read.`);
+    if (content.truncated) return tooLarge(`larger than ${MAX_ATTACHMENT_BYTES} bytes`);
+    return ok({
+      thread_id: thread.hex,
+      message_id: message.hex,
+      part,
+      filename: attachment.filename,
+      mime_type: attachment.mimeType,
+      size: content.content.length,
+      content_base64: content.content.toString('base64'),
+    });
+  };
+}
+
+const sameName = (a: string, b: string): boolean =>
+  a.normalize('NFC').toLowerCase() === b.normalize('NFC').toLowerCase();
+
+function planCreateLabel(args: Readonly<Record<string, unknown>>): Plan {
+  const label = creatableLabel(args.name);
+  if (label === null) {
+    return fail(
+      'invalid_argument',
+      'name: missing or malformed, a system label, TRASH or SPAM, or under [Gmail]/.',
+    );
+  }
+  return async (session) => {
+    const mailboxes = await session.mailboxes();
+    const all = mailboxes.find((m) => m.specialUse === '\\All');
+    const container = all && all.parentPath !== '' ? all.parentPath : null;
+    const clash = mailboxes.find((m) => sameName(m.path, label));
+    if (clash && clash.specialUse !== null) {
+      return fail('invalid_argument', `'${label}' is a system folder of the mailbox.`);
+    }
+    if (clash) return fail('already_exists', `label '${clash.path}' already exists.`);
+    if (
+      container !== null &&
+      (sameName(label, container) || label.toLowerCase().startsWith(`${container.toLowerCase()}/`))
+    ) {
+      return fail('invalid_argument', `'${label}' is under the system folders of the mailbox.`);
+    }
+    const created = await session.createMailbox(label.split('/'));
+    if (!created.created) return fail('already_exists', `label '${created.path}' already exists.`);
+    return ok({ label: created.path, created: true });
   };
 }
 
@@ -365,14 +487,17 @@ async function labelChange(
   const system = SYSTEM_TO_IMAP[label];
   if (system !== undefined) return { op, labels: [system] };
   // A user label must exist and be one : a STORE would create a missing label, and
-  // a folder with a special use is a system folder under a localized name.
-  if (!userLabels(await session.mailboxes()).includes(label)) {
+  // a folder with a special use is a system folder under a localized name. The name
+  // stored is the server's own spelling of it.
+  const wanted = label.normalize('NFC');
+  const listed = userLabels(await session.mailboxes()).find((l) => l.normalize('NFC') === wanted);
+  if (listed === undefined) {
     throw new GmailToolError(
       'not_found',
       `no user label '${label}' (list_labels gives the names).`,
     );
   }
-  return { op, labels: [label] };
+  return { op, labels: [listed] };
 }
 
 function planLabelWrite(tool: string, args: Readonly<Record<string, unknown>>): Plan {
@@ -394,16 +519,10 @@ function planLabelWrite(tool: string, args: Readonly<Record<string, unknown>>): 
   return async (session) => {
     const all = await folder(session, '\\All');
     const change = await labelChange(session, label, adding);
-    let uids = await threadUids(session, all, thread);
-    if (message !== null) {
-      const found = await session.search(all, { messageId: message.decimal });
-      // The message must belong to the thread the call was classified on.
-      const inThread = found.filter((uid) => uids.includes(uid));
-      if (inThread.length === 0) {
-        return fail('not_found', `no message ${message.hex} in thread ${thread.hex}.`);
-      }
-      uids = inThread;
-    }
+    const uids =
+      message !== null
+        ? [await messageUid(session, all, thread, message)]
+        : await threadUids(session, all, thread);
     await session.store(all, uids, change);
     return ok({
       thread_id: thread.hex,
@@ -426,6 +545,10 @@ function planOf(
       return planSearchThreads(args);
     case 'gmail__get_thread':
       return planGetThread(args);
+    case 'gmail__get_attachment':
+      return planGetAttachment(args);
+    case 'gmail__create_label':
+      return planCreateLabel(args);
     case 'gmail__list_drafts':
       return listDrafts;
     case 'gmail__create_draft':

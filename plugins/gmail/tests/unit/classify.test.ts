@@ -347,7 +347,8 @@ describe('classifyGmail — label_message / unlabel_message', () => {
       expect(denial(tool, { ...args, message_id: undefined })).toMatch(/^message_id: /);
       expect(denial(tool, { ...args, message_id: 'm1].label.W' })).toMatch(/^message_id: /);
       expect(denial(tool, { ...args, label: undefined })).toMatch(/^label: /);
-      expect(denial(tool, { ...args, label: 'x y' })).toMatch(/^label: /);
+      expect(denial(tool, { ...args, label: ' x y' })).toMatch(/^label: /);
+      expect(denial(tool, { ...args, label: 'x\ny' })).toMatch(/^label: /);
     },
   );
 });

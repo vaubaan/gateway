@@ -4,14 +4,15 @@
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
  * Handbook : docs/handbook/providers/gmail.md.
  *
- * The plugin is **experimental** : the ten tools are exposed and execute
- * over IMAP (`execute.ts`, ADR gmail-over-imap-with-an-app-password) — nine
- * that read, draft and label a mailbox, plus one synthetic Vaubaan tool,
+ * The plugin is **experimental** : the twelve tools are exposed and execute
+ * over IMAP (`execute.ts`, ADR gmail-over-imap-with-an-app-password) — eleven
+ * that read (attachments included), draft, label and create labels, plus one
+ * synthetic Vaubaan tool,
  * `gmail__describe_zones`, which returns the mailbox zoning configuration
  * without any upstream call. No tool sends mail.
  *
  * Argument names are the ones the classifier reads (`q`, `id`,
- * `thread_id`, `message_id`, `label`, `to` / `cc` / `bcc`), and execute reads
+ * `thread_id`, `message_id`, `part`, `label`, `name`, `to` / `cc` / `bcc`), and execute reads
  * the same ones. The `required` lists mirror the classifier : it refuses a
  * call whose id or label is missing.
  */
@@ -20,14 +21,16 @@ import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 export const GMAIL_TOOL_PREFIX = 'gmail__';
 
-/** The ten tools the classifier knows. Any other name is `denied`. */
+/** The twelve tools the classifier knows. Any other name is `denied`. */
 export const GMAIL_CLASSIFIED_TOOLS = [
   'gmail__describe_zones',
   'gmail__search_threads',
   'gmail__get_thread',
+  'gmail__get_attachment',
   'gmail__list_drafts',
   'gmail__create_draft',
   'gmail__list_labels',
+  'gmail__create_label',
   'gmail__label_message',
   'gmail__unlabel_message',
   'gmail__label_thread',
@@ -52,7 +55,7 @@ const labelArg = {
   label: {
     type: 'string',
     description:
-      'A system label (INBOX, STARRED, IMPORTANT, UNREAD) or the name of a user label as list_labels returns it (no spaces). TRASH and SPAM are refused.',
+      'A system label (INBOX, STARRED, IMPORTANT, UNREAD) or the name of a user label exactly as list_labels returns it (spaces and accents allowed, "/" for nesting). TRASH and SPAM are refused.',
   },
 };
 const recipients = {
@@ -62,7 +65,7 @@ const recipients = {
     'Addresses, one per element, as `addr@example.com` or `Name <addr@example.com>`. An element that is not exactly one address refuses the call.',
 };
 
-/** Declarations of the ten tools, in `GMAIL_CLASSIFIED_TOOLS` order. */
+/** Declarations of the twelve tools, in `GMAIL_CLASSIFIED_TOOLS` order. */
 export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
     name: 'gmail__describe_zones',
@@ -89,7 +92,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
     name: 'gmail__get_thread',
     description:
-      'Read a thread: the headers, labels and plain-text body (capped) of its newest 50 messages. Classified as a read from an unknown sender, and of a sensitive label when the mailbox declares some (sender and labels are only known after the fetch).',
+      'Read a thread: the headers, labels, text body (capped; an HTML-only message is converted to text, links kept) and the list of attachments of its newest 50 messages. Classified as a read from an unknown sender, and of a sensitive label when the mailbox declares some (sender and labels are only known after the fetch).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -99,6 +102,24 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
         },
       },
       required: ['id'],
+    },
+  },
+  {
+    name: 'gmail__get_attachment',
+    description:
+      'Download one attachment of a message, base64-encoded, at most 5 MiB (a larger one is refused). The part comes from the attachments get_thread lists. Classified like get_thread: a read from an unknown sender, and of a sensitive label when the mailbox declares some.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...threadIdArg,
+        ...messageIdArg,
+        part: {
+          type: 'string',
+          description:
+            'The MIME part number get_thread lists for the attachment, such as "2" or "1.2".',
+        },
+      },
+      required: ['thread_id', 'message_id', 'part'],
     },
   },
   {
@@ -126,6 +147,22 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     name: 'gmail__list_labels',
     description: 'List the system and user labels of the mailbox.',
     inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'gmail__create_label',
+    description:
+      'Create a user label, nested with "/" (Clients/2026). Refused when it exists, when it names a system label or folder, or when it is under [Gmail]/. Deletes nothing and moves no message.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description:
+            'The label name: letters, digits, spaces and common punctuation, "/" for nesting, at most 225 characters.',
+        },
+      },
+      required: ['name'],
+    },
   },
   {
     name: 'gmail__label_message',

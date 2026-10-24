@@ -1,6 +1,6 @@
 # Gmail risk catalog — loaded by `@vaubaan/plugin-sdk` (`loadCatalogFile`) at
-# gateway boot. Experimental, classifier-only plugin : the risks below are
-# evaluated on every call, but no tool executes yet (see plugins/gmail/README.md).
+# gateway boot. Experimental plugin, executed over IMAP with an app password
+# (ADR gmail-over-imap-with-an-app-password ; plugins/gmail/README.md).
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps) ;
 #            docs/spec/vaubaan-gateway.md §3.2 (presets).
@@ -9,7 +9,7 @@
 #            docs/decisions/plugin-contract-and-credential-spec.md.
 # Handbook : docs/handbook/providers/gmail.md.
 #
-# 15 named risks + 1 fallback = 16. Ids are never renamed or deleted
+# 16 named risks + 1 fallback = 17. Ids are never renamed or deleted
 # (deprecate instead). Gmail has no native environment : the `mailbox`
 # entity is `envScopable` so an owner may still label a mailbox resource, but
 # no risk is env-scoped today.
@@ -26,9 +26,14 @@
 # `gmail.bulk-read` and `gmail.read-from-zone-unknown`). The amplitude of a
 # mission on these two risks is bounded by its quota and rate limit.
 
+# catalog_version 5 (2026-10-24) : `gmail.label-create`, the risk of the new
+# `gmail__create_label` tool — a write that adds a label to the mailbox,
+# matched by `mailbox.label[..].W`, which no entry matched before (it fell to
+# the fallback). In the `developer` preset beside `gmail.label-write`.
+# `get_attachment` needs no new risk : it is classified like `get_thread`.
 provider: gmail
-catalog_version: 4
-catalog_date: 2026-10-14
+catalog_version: 5
+catalog_date: 2026-10-24
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -265,6 +270,24 @@ risks:
       visibility: internal
       persistence: session
 
+  - id: gmail.label-create
+    label: 'Create a user label'
+    reason: >-
+      Adds a label (or a nested one, `Clients/2026`) to the mailbox. No
+      message moves and nothing is deleted ; the owner removes a label in
+      Gmail. The classifier refuses a system label id, `TRASH` / `SPAM` and
+      anything under `[Gmail]/`, and the executor a name that exists or is a
+      special-use folder. A name that is, or is nested under, a label the
+      owner declared sensitive also needs the fallback write permission.
+    matches: 'gmail.mailbox.label[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: session
+
   - id: gmail.bulk-label-write
     label: 'Bulk apply / remove labels across many threads'
     reason: >-
@@ -341,7 +364,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling; bulk reads ask first.
+    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts, single-thread labelling and new labels; bulk reads ask first.
     entries:
       - risk_id: gmail.read-mailbox
         quota: 5000
@@ -386,6 +409,10 @@ presets:
       - risk_id: gmail.label-write
         quota: 500
         rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: gmail.label-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
         gate: auto
       - risk_id: gmail.bulk-read
         quota: 20

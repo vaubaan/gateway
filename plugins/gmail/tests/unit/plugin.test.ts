@@ -94,6 +94,12 @@ const SAMPLES: ToolSamples = {
     { args: { q: 'is:unread' }, resources: [mailbox, otherMailbox], expectDenied: true },
   ],
   gmail__get_thread: [{ args: { id: THREAD } }, { args: {}, expectDenied: true }],
+  gmail__get_attachment: [
+    { args: { thread_id: THREAD, message_id: MESSAGE, part: '2' } },
+    { args: { thread_id: THREAD, message_id: MESSAGE, part: '1.2' } },
+    { args: { thread_id: THREAD, message_id: MESSAGE }, expectDenied: true },
+    { args: { thread_id: THREAD, message_id: MESSAGE, part: '0' }, expectDenied: true },
+  ],
   gmail__list_drafts: [{ args: {} }],
   gmail__create_draft: [
     { args: { to: [MAILBOX], subject: 's', body: 'b' } },
@@ -109,6 +115,12 @@ const SAMPLES: ToolSamples = {
     },
   ],
   gmail__list_labels: [{ args: {} }],
+  gmail__create_label: [
+    { args: { name: 'Clients 2026' } },
+    { args: { name: 'Projets/Été' } },
+    { args: { name: 'TRASH' }, expectDenied: true },
+    { args: { name: '[Gmail]/Archive' }, expectDenied: true },
+  ],
   gmail__label_message: [{ args: { thread_id: THREAD, message_id: MESSAGE, label: 'STARRED' } }],
   gmail__unlabel_message: [{ args: { thread_id: THREAD, message_id: MESSAGE, label: 'STARRED' } }],
   gmail__label_thread: [
@@ -130,15 +142,15 @@ describe('gmail plugin — SDK kit', () => {
     assertNoWildcard(gmailPlugin);
   });
 
-  test('is experimental, below 1.0, and exposes its ten tools', () => {
+  test('is experimental, below 1.0, and exposes its twelve tools', () => {
     expect(gmailPlugin.experimental).toBe(true);
-    expect(gmailPlugin.version).toBe('0.4.0');
+    expect(gmailPlugin.version).toBe('0.5.0');
     expect(gmailPlugin.description).toMatch(/experimental/i);
     expect(gmailPlugin.description).toMatch(/never sends/i);
     const names = gmailPlugin.tools.map((t) => t.name);
     expect(names).toEqual([...GMAIL_CLASSIFIED_TOOLS]);
     expect(gmailPlugin.tools).toBe(gmailClassifiedToolDeclarations);
-    expect(names).toHaveLength(10);
+    expect(names).toHaveLength(12);
     // No tool sends: IMAP cannot, and no SMTP client is shipped.
     expect(names.some((n) => /send/.test(n))).toBe(false);
     for (const t of gmailPlugin.tools) {
@@ -149,7 +161,7 @@ describe('gmail plugin — SDK kit', () => {
 
   test('every tool maps to slices the catalog covers', () => {
     const report = assertCatalogCoverage(gmailPlugin, SAMPLES, { resources: [mailbox] });
-    expect(report.toolsChecked).toBe(10);
+    expect(report.toolsChecked).toBe(12);
     // Untouched on purpose : the classifier refuses a draft to an external
     // recipient, and no modelled tool emits a bulk write. Every write of
     // these samples is covered by a specific entry, so the fallback is never
@@ -186,7 +198,7 @@ describe('gmail plugin — SDK kit', () => {
       },
       pathIdentifiers: { none: 'the upstream is IMAP, not an HTTP request' },
     });
-    expect(report.toolsChecked).toBe(10);
+    expect(report.toolsChecked).toBe(12);
     expect(report.pathIdentifiers).toEqual([]);
     expect(report.refusedByClassify).toBeGreaterThan(0);
     expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
@@ -429,7 +441,7 @@ describe('gmail presets', () => {
 
   test('ships read-only and developer', () => {
     expect(gmailPlugin.catalog.presets?.map((p) => p.id)).toEqual(['read-only', 'developer']);
-    expect(gmailPlugin.catalog.catalog_version).toBe(4);
+    expect(gmailPlugin.catalog.catalog_version).toBe(5);
   });
 
   test('read-only : reads only, no bulk read, no sensitive label, every entry auto', () => {

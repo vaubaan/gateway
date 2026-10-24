@@ -104,7 +104,7 @@ this table in the same commit.
 Versions shipped today (`version` in `src/index.ts`, equal to the plugin's
 `package.json`; what telemetry reports as `plugin_version`): `4.2.0` for
 supabase; `4.2.0` for railway; `3.2.0` for github; `3.0.0` for cloudflare-dns,
-upstash-redis and vercel; `2.0.0` for ssh; `0.4.0` for stripe; `0.3.0` for gmail and
+upstash-redis and vercel; `2.0.0` for ssh; `0.5.0` for gmail; `0.4.0` for stripe; `0.3.0` for
 resend; `0.2.0` for miro; `0.1.0` for context7, fly and notion. A version moves by a breaking step — major, or minor before 1.0 —
 when the classification becomes stricter or the executor refuses what it used
 to forward, because a call the previous version allowed is then refused: the

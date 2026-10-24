@@ -447,12 +447,13 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |        76 |
 | `plugins/gmail/tests/unit/classify.test.ts`                                                                                                                                                              |       108 |
 | `plugins/gmail/tests/unit/data-model.test.ts`                                                                                                                                                            |         5 |
+| `plugins/gmail/tests/unit/attachments-labels.test.ts`                                                                                                                                                    |        38 |
 | `plugins/gmail/tests/unit/execute.test.ts`                                                                                                                                                               |        25 |
-| `plugins/gmail/tests/unit/injection.test.ts`                                                                                                                                                             |       194 |
+| `plugins/gmail/tests/unit/injection.test.ts`                                                                                                                                                             |       281 |
 | `plugins/gmail/tests/unit/plugin.test.ts`                                                                                                                                                                |        26 |
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                                                                                                                              |        32 |
-| `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                                                          |        45 |
-| `plugins/gmail/tests/unit/transport.test.ts`                                                                                                                                                             |         9 |
+| `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                                                          |        48 |
+| `plugins/gmail/tests/unit/transport.test.ts`                                                                                                                                                             |        11 |
 | `plugins/miro/tests/unit/classify.test.ts`                                                                                                                                                               |        17 |
 | `plugins/miro/tests/unit/execute.test.ts`                                                                                                                                                                |        15 |
 | `plugins/miro/tests/unit/identifiers.test.ts`                                                                                                                                                            |         6 |
@@ -1165,9 +1166,9 @@ stays a plain `Error`, and so does an answer whose fields are absent or
 odd) or an `Error` carrying Context7's text; the abort signal reaches both
 requests; discovery and `verify` on `GET /v2/usage`. `risk-catalog` (5), `data-model` (2).
 
-**Gmail** (444, experimental, plugin 0.4.0, over IMAP with an app password —
+**Gmail** (574, experimental, plugin 0.5.0, catalog 5, over IMAP with an app password —
 ADR [[gmail-over-imap-with-an-app-password]]) — `plugin.test.ts` (26): kit, the
-ten exposed tools (none sends), coverage (`draft-to-zone-external-unbounded`
+twelve exposed tools (none sends), coverage (`draft-to-zone-external-unbounded`
 and `bulk-label-write` knowingly unreached), **the identifier kit against the
 fake transport: whatever `classify` refuses opens no IMAP session**, mailbox
 selection (none, foreign, ambiguous), the `api-key` credential (address and
@@ -1185,18 +1186,28 @@ in base64; `list_labels` without system folders, the system container found as
 the parent of `\All`; label writes (`X-GM-LABELS`, `UNREAD` as `\Seen`, a
 missing label never created, `TRASH` / `SPAM` / `SENT` / `CATEGORY_*` refused, a
 message outside its thread refused); a mailbox that is not the credential's
-refused. `transport.test.ts` (9): `imapflowTransport` over a fake client
+refused. `attachments-labels.test.ts` (38): an HTML-only message read as text
+(links kept, script, style and images dropped, the cap), `bodyPartOf` and
+`attachmentsOf`, attachments listed by `get_thread` and returned by
+`get_attachment` in base64, **refused above 5 MiB by the listed size before
+any download**, a part outside `gmailPartId` refused before any connection,
+`get_attachment` classified like `get_thread`; label names with spaces and
+accents stored as the server spells them (NFD vs NFC), sensitive matching
+folding case and blanks; `create_label` (CREATE from the segments, an existing
+name in any case or a special-use folder refused, the sensitive marker,
+`creatableLabel` refusals). `transport.test.ts` (11, with `download` and
+`createMailbox`): `imapflowTransport` over a fake client
 (injected factory): `imap.gmail.com:993` over TLS, bounded timeouts, no logger;
 a refused sign-in named without the password; abort and deadline close the
 connection; a special use only as the server reports it; the commands of
-`search`, `fetch`, `store`, `append`. `risk-catalog` (45): loaded catalog lint,
+`search`, `fetch`, `store`, `append`. `risk-catalog` (48): loaded catalog lint (17 entries, catalog 5),
 pattern parsing, per-tool coverage, `risksTouchedBy` spot checks. `classify`
 (108): a search bounded by a positive `from:` is its zone, **a no-reply or
 alerts local part makes a sender `automated` only on a domain or an address
 the owner listed**, **a query the parser cannot bound is the unknown zone plus
 the bulk marker**, sensitive labels fail closed on reads, a draft to an
 external recipient or to a recipient that cannot be parsed is refused, label
-tools need well-formed ids. `q-parser` (32), `injection.test.ts` (194: hostile
+tools need well-formed ids. `q-parser` (32), `injection.test.ts` (281: hostile
 values over the identifier positions, to `classify` and to `execute`, which
 opens no session for any of them; a query is one `X-GM-RAW` criterion;
 `gmailId` is 1 to 16 lower-case hexadecimal digits; `labelRef` is a label id

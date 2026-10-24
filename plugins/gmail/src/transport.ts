@@ -65,9 +65,29 @@ export interface ImapMessage {
   readonly from: readonly ImapAddress[];
   readonly to: readonly ImapAddress[];
   readonly cc: readonly ImapAddress[];
-  /** The text/plain part, decoded, at most the requested bytes ; `null` when not asked or absent. */
-  readonly text: string | null;
-  readonly textTruncated: boolean;
+  /**
+   * The body : the first inline text/plain part, else the first inline
+   * text/html part, decoded, at most the requested bytes ; `null` when not
+   * asked or absent.
+   */
+  readonly body: ImapBody | null;
+  /** The attachments, when the structure was asked ; `[]` otherwise. */
+  readonly attachments: readonly ImapAttachment[];
+}
+
+export interface ImapBody {
+  readonly type: 'text/plain' | 'text/html';
+  readonly content: string;
+  readonly truncated: boolean;
+}
+
+export interface ImapAttachment {
+  /** The MIME part number (`2`, `1.2`). */
+  readonly part: string;
+  readonly filename: string | null;
+  readonly mimeType: string;
+  /** Decoded size in bytes, estimated from the transfer size the server reports. */
+  readonly size: number;
 }
 
 /** What a search selects : Gmail's own syntax, a thread, a message, or every message. */
@@ -78,8 +98,18 @@ export type ImapSearch =
   | { readonly all: true };
 
 export interface ImapFetchOptions {
-  /** Bytes of the text/plain part to read per message ; `null` reads no body. */
+  /** Bytes of the body to read per message ; `null` reads no body. */
   readonly bodyBytes: number | null;
+  /** Bytes of an HTML body to read (converted to text afterwards) ; defaults to `bodyBytes`. */
+  readonly htmlBytes?: number;
+  /** Read the structure (the attachments) without a body ; implied by `bodyBytes`. */
+  readonly structure?: boolean;
+}
+
+/** One part of a message, decoded, at most the requested bytes. */
+export interface ImapPartContent {
+  readonly content: Buffer;
+  readonly truncated: boolean;
 }
 
 /** A change of labels (`X-GM-LABELS`) or of flags. */
@@ -102,6 +132,15 @@ export interface GmailImapSession {
   /** The UID of the new message when the server says it (UIDPLUS), else `null`. */
   append(path: string, message: string, flags: readonly string[]): Promise<number | null>;
   store(path: string, uids: readonly number[], change: ImapStore): Promise<void>;
+  /** One part of one message, decoded (transfer encoding removed) ; `null` when not found. */
+  download(
+    path: string,
+    uid: number,
+    part: string,
+    maxBytes: number,
+  ): Promise<ImapPartContent | null>;
+  /** `CREATE` of a mailbox (a Gmail label) from its segments ; `created: false` when it existed. */
+  createMailbox(segments: readonly string[]): Promise<{ path: string; created: boolean }>;
 }
 
 export interface GmailSessionOptions {
@@ -184,26 +223,68 @@ const decimal = (value: unknown): string | null =>
 const addresses = (list: readonly { name?: string; address?: string }[] | undefined) =>
   (list ?? []).map((a) => ({ name: a.name ?? null, address: a.address ?? null }));
 
-/** The first text/plain part that is not an attachment, as a part number to download. */
+const isAttachment = (node: MessageStructureObject): boolean =>
+  node.disposition?.toLowerCase() === 'attachment';
+
+function leaves(node: MessageStructureObject | undefined): MessageStructureObject[] {
+  if (!node) return [];
+  if (node.childNodes && node.childNodes.length > 0) return node.childNodes.flatMap(leaves);
+  return [node];
+}
+
+/** A leaf's part number : a message that is a single part has none, its body is part 1. */
+const partOf = (node: MessageStructureObject): string => node.part ?? '1';
+
+/** The first inline part of this type, or `null`. */
+function inlinePartOf(node: MessageStructureObject | undefined, type: string): string | null {
+  const found = leaves(node).find((n) => n.type?.toLowerCase() === type && !isAttachment(n));
+  return found ? partOf(found) : null;
+}
+
+/** The first inline text/plain part that is not an attachment, as a part number to download. */
 export function textPartOf(node: MessageStructureObject | undefined): string | null {
-  if (!node) return null;
-  if (node.childNodes && node.childNodes.length > 0) {
-    for (const child of node.childNodes) {
-      const found = textPartOf(child);
-      if (found !== null) return found;
-    }
-    return null;
-  }
-  if (node.type?.toLowerCase() !== 'text/plain') return null;
-  if (node.disposition?.toLowerCase() === 'attachment') return null;
-  // A message that is a single part has no part number : its body is part 1.
-  return node.part ?? '1';
+  return inlinePartOf(node, 'text/plain');
+}
+
+/** The body to read : text/plain first, else text/html ; `null` when the message has neither inline. */
+export function bodyPartOf(
+  node: MessageStructureObject | undefined,
+): { readonly part: string; readonly type: 'text/plain' | 'text/html' } | null {
+  const plain = inlinePartOf(node, 'text/plain');
+  if (plain !== null) return { part: plain, type: 'text/plain' };
+  const html = inlinePartOf(node, 'text/html');
+  return html !== null ? { part: html, type: 'text/html' } : null;
+}
+
+/** Bytes a base64 transfer encoding adds : 4 for every 3, plus line breaks. */
+const decodedSize = (node: MessageStructureObject): number => {
+  const size = typeof node.size === 'number' ? node.size : 0;
+  return node.encoding?.toLowerCase() === 'base64' ? Math.floor((size * 3) / 4) : size;
+};
+
+/**
+ * The attachments of a message : every leaf part marked `attachment`, or
+ * carrying a file name, but the body itself.
+ */
+export function attachmentsOf(node: MessageStructureObject | undefined): ImapAttachment[] {
+  const body = bodyPartOf(node)?.part ?? null;
+  return leaves(node)
+    .filter((n) => {
+      const filename = n.dispositionParameters?.filename ?? n.parameters?.name;
+      return partOf(n) !== body && (isAttachment(n) || typeof filename === 'string');
+    })
+    .map((n) => ({
+      part: partOf(n),
+      filename: n.dispositionParameters?.filename ?? n.parameters?.name ?? null,
+      mimeType: (n.type ?? 'application/octet-stream').toLowerCase(),
+      size: decodedSize(n),
+    }));
 }
 
 async function readCapped(
   stream: AsyncIterable<Buffer | string>,
   cap: number,
-): Promise<{ text: string; truncated: boolean }> {
+): Promise<{ bytes: Buffer; truncated: boolean }> {
   const chunks: Buffer[] = [];
   let size = 0;
   let truncated = false;
@@ -218,7 +299,7 @@ async function readCapped(
     chunks.push(buf);
     size += buf.length;
   }
-  return { text: Buffer.concat(chunks).toString('utf8'), truncated };
+  return { bytes: Buffer.concat(chunks), truncated };
 }
 
 class ImapflowSession implements GmailImapSession {
@@ -270,7 +351,7 @@ class ImapflowSession implements GmailImapSession {
           labels: true,
           threadId: true,
           internalDate: true,
-          bodyStructure: options.bodyBytes !== null,
+          bodyStructure: options.bodyBytes !== null || options.structure === true,
         },
         { uid: true },
       );
@@ -280,18 +361,24 @@ class ImapflowSession implements GmailImapSession {
         const messageId = decimal(m.emailId);
         const threadId = decimal(m.threadId);
         if (messageId === null || threadId === null) continue;
-        let text: string | null = null;
-        let textTruncated = false;
-        const part = options.bodyBytes !== null ? textPartOf(m.bodyStructure) : null;
-        if (part !== null && options.bodyBytes !== null) {
-          const download = await this.client.download(String(m.uid), part, {
+        let body: ImapBody | null = null;
+        const chosen = options.bodyBytes !== null ? bodyPartOf(m.bodyStructure) : null;
+        if (chosen !== null && options.bodyBytes !== null) {
+          const cap =
+            chosen.type === 'text/html'
+              ? (options.htmlBytes ?? options.bodyBytes)
+              : options.bodyBytes;
+          const download = await this.client.download(String(m.uid), chosen.part, {
             uid: true,
-            maxBytes: options.bodyBytes + 1,
+            maxBytes: cap + 1,
           });
           if (download.content) {
-            const read = await readCapped(download.content, options.bodyBytes);
-            text = read.text;
-            textTruncated = read.truncated;
+            const read = await readCapped(download.content, cap);
+            body = {
+              type: chosen.type,
+              content: read.bytes.toString('utf8'),
+              truncated: read.truncated,
+            };
           }
         }
         const date =
@@ -309,8 +396,8 @@ class ImapflowSession implements GmailImapSession {
           from: addresses(m.envelope?.from),
           to: addresses(m.envelope?.to),
           cc: addresses(m.envelope?.cc),
-          text,
-          textTruncated,
+          body,
+          attachments: m.bodyStructure ? attachmentsOf(m.bodyStructure) : [],
         });
       }
       return out;
@@ -323,6 +410,33 @@ class ImapflowSession implements GmailImapSession {
     const result = await this.client.append(path, message, [...flags]);
     if (!result) throw new Error(`gmail: the server did not store the message in ${path}.`);
     return typeof result.uid === 'number' ? result.uid : null;
+  }
+
+  async download(
+    path: string,
+    uid: number,
+    part: string,
+    maxBytes: number,
+  ): Promise<ImapPartContent | null> {
+    const lock = await this.client.getMailboxLock(path, { readOnly: true });
+    try {
+      const download = await this.client.download(String(uid), part, {
+        uid: true,
+        maxBytes: maxBytes + 1,
+      });
+      if (!download.content) return null;
+      const read = await readCapped(download.content, maxBytes);
+      return { content: read.bytes, truncated: read.truncated };
+    } finally {
+      lock.release();
+    }
+  }
+
+  async createMailbox(segments: readonly string[]): Promise<{ path: string; created: boolean }> {
+    // An array is joined with the server's delimiter ; imapflow encodes the name in
+    // modified UTF-7 and sends it quoted (never as a literal or a bare atom with a space).
+    const result = await this.client.mailboxCreate([...segments]);
+    return { path: result.path, created: result.created };
   }
 
   async store(path: string, uids: readonly number[], change: ImapStore): Promise<void> {

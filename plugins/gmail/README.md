@@ -2,10 +2,11 @@
 
 Vaubaan Gateway provider plugin for Gmail. **Experimental.** The plugin
 models the risks of reading, drafting and labelling in a mailbox, and
-executes its ten tools over **IMAP** (`imap.gmail.com:993`, implicit TLS),
+executes its twelve tools over **IMAP** (`imap.gmail.com:993`, implicit TLS),
 signed in with the mailbox's **app password**. It never sends mail: a draft
 is saved in the Drafts folder, and the plugin ships no SMTP client. Written
-against `@vaubaan/plugin-sdk` and [`imapflow`](https://imapflow.com) (MIT).
+against `@vaubaan/plugin-sdk`, [`imapflow`](https://imapflow.com) (MIT) and
+[`html-to-text`](https://github.com/html-to-text/node-html-to-text) (MIT).
 Maintainer handbook:
 [`docs/handbook/providers/gmail.md`](../../docs/handbook/providers/gmail.md).
 Decision: ADR
@@ -53,10 +54,11 @@ denied as ambiguous (no tool argument selects a mailbox).
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `gmail__describe_zones` (synthetic), `gmail__list_labels`                                        | `label[*].R` → `read-mailbox`                                                                                                                                                                              |
 | `gmail__search_threads`                                                                          | `read-mailbox` + one `read-from-zone-*` per `from:` zone; `read-from-zone-unknown` + `bulk-read` when the query is not bounded; `read-sensitive-label` for each sensitive label the query does not exclude |
-| `gmail__get_thread`                                                                              | `read-mailbox` + `read-from-zone-unknown` (+ `read-sensitive-label` when the mailbox declares sensitive labels) — worst case: sender and labels are unknown before the fetch                               |
+| `gmail__get_thread`, `gmail__get_attachment`                                                     | `read-mailbox` + `read-from-zone-unknown` (+ `read-sensitive-label` when the mailbox declares sensitive labels) — worst case: sender and labels are unknown before the fetch                               |
 | `gmail__list_drafts`                                                                             | `read-drafts`                                                                                                                                                                                              |
 | `gmail__create_draft`                                                                            | `draft-write` + `draft-to-zone-{self,internal,allowlist}` (worst recipient wins); **refused** when a recipient is external or does not parse                                                               |
 | `gmail__label_message`, `gmail__unlabel_message`, `gmail__label_thread`, `gmail__unlabel_thread` | `label-write` (+ the fallback `uncategorized-write` when the label is, or may be, a sensitive one); **refused** for `TRASH` / `SPAM` or a missing id                                                       |
+| `gmail__create_label`                                                                            | `label-create` (+ the fallback when the name is, or is under, a sensitive label); **refused** for a system label id, `TRASH` / `SPAM` or a name under `[Gmail]/`                                           |
 
 The classifier fails closed — what it cannot read costs the worst case or
 refuses the call:
@@ -87,17 +89,21 @@ refuses the call:
   not, and are not under, a sensitive label are plain `label-write`.
 - **Identifiers.** A thread or message id is the lower-case hexadecimal of
   Gmail's 64-bit `X-GM-THRID` / `X-GM-MSGID`, the Gmail API's spelling
-  (`gmailId`: `[0-9a-f]`, 1 to 16 characters); a label is a system id or a
-  name without spaces (`labelRef`: at most 225 characters, `/` for nesting,
-  no empty, `.` or `..` segment; `writableLabel` also refuses `TRASH` and
-  `SPAM`). Anything else is refused, never escaped. `execute` takes its ids
+  (`gmailId`: `[0-9a-f]`, 1 to 16 characters); an attachment's `part` a
+  MIME part number (`gmailPartId`: `2`, `1.2`); a label is a system id or a
+  name in any script with spaces and common punctuation (`labelRef`:
+  `Clients 2026`, `Factures payées`, `Projets/Été`; at most 225 characters,
+  `/` for nesting, no empty, `.` or `..` segment, no blank at either end, no
+  control character, quote, backslash, `*` `%`, brace or bracket;
+  `writableLabel` also refuses `TRASH` and `SPAM`, `creatableLabel` a system
+  id and `[Gmail]/`). Anything else is refused, never escaped. `execute` takes its ids
   and labels from these functions and from nothing else.
 
 Any other tool name is `denied`.
 
 The declarations live in `gmailClassifiedToolDeclarations`, which
 `gmailTools` exposes (argument names `q`, `max_results`, `id`, `thread_id`,
-`message_id`, `label`, `to`/`cc`/`bcc`, `subject`, `body`).
+`message_id`, `part`, `label`, `name`, `to`/`cc`/`bcc`, `subject`, `body`).
 
 ## Execution over IMAP
 
@@ -106,15 +112,17 @@ signal; every argument is checked first, so a refused call opens no
 connection. Folders are found by their SPECIAL-USE (`\All`, `\Drafts`),
 never by name: Gmail localizes them.
 
-| Tool                    | IMAP                                                                                                        |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `search_threads`        | `X-GM-RAW <q>` in All Mail, newest first, grouped by thread; `max_results` 10 by default, 50 at most        |
-| `get_thread`            | the thread's messages (`X-GM-THRID`), newest 50, headers, labels and a plain-text body of 20 000 bytes each |
-| `list_drafts`           | the Drafts folder, newest 50                                                                                |
-| `create_draft`          | a plain-text RFC 5322 message appended to Drafts with `\Draft`; never sent                                  |
-| `list_labels`           | `INBOX`, `STARRED`, `IMPORTANT`, `UNREAD`, then the user labels (folders without a special use)             |
-| `label_*` / `unlabel_*` | `STORE ±X-GM-LABELS` (`UNREAD`: `∓\Seen`); a label that does not exist is never created                     |
-| `describe_zones`        | synthetic: the resource's zoning metadata, no connection                                                    |
+| Tool                    | IMAP                                                                                                                                                                                                                                              |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_threads`        | `X-GM-RAW <q>` in All Mail, newest first, grouped by thread; `max_results` 10 by default, 50 at most                                                                                                                                              |
+| `get_thread`            | the thread's messages (`X-GM-THRID`), newest 50: headers, labels, attachments (part, file name, MIME type, size) and a body of 20 000 characters: the text/plain part, else the text/html part (200 000 bytes read) converted to text, links kept |
+| `get_attachment`        | one listed attachment, base64; refused above 5 MiB decoded                                                                                                                                                                                        |
+| `list_drafts`           | the Drafts folder, newest 50                                                                                                                                                                                                                      |
+| `create_draft`          | a plain-text RFC 5322 message appended to Drafts with `\Draft`; never sent                                                                                                                                                                        |
+| `list_labels`           | `INBOX`, `STARRED`, `IMPORTANT`, `UNREAD`, then the user labels (folders without a special use)                                                                                                                                                   |
+| `label_*` / `unlabel_*` | `STORE ±X-GM-LABELS` (`UNREAD`: `∓\Seen`); a label that does not exist is never created                                                                                                                                                           |
+| `create_label`          | `CREATE`; refused when the name exists (any case) or is a system folder                                                                                                                                                                           |
+| `describe_zones`        | synthetic: the resource's zoning metadata, no connection                                                                                                                                                                                          |
 
 `SENT`, `DRAFT`, `CHAT` and the `CATEGORY_*` tabs cannot be written over IMAP
 and are refused. The subject of a draft holds no line break or control
@@ -125,8 +133,9 @@ The transport is an interface (`GmailTransport`, `src/transport.ts`):
 
 ## Catalog and presets
 
-`src/risk-catalog.yaml` — fifteen risks plus the mandatory
-`gmail.uncategorized-write` fallback, `catalog_version: 3`. No risk is
+`src/risk-catalog.yaml` — sixteen risks plus the mandatory
+`gmail.uncategorized-write` fallback, `catalog_version: 5` (5 added
+`gmail.label-create`, in the `developer` preset). No risk is
 env-scoped (Gmail has no environment). No entry declares `caps` or
 `infra_limits`: the door enforces no stateless cap (ADR
 `scope-caps-not-enforced-in-v5-0`), so `gmail.read-from-zone-unknown` and
@@ -135,12 +144,12 @@ SDK coverage kit showed the v4 catalog left two slices uncovered or on the
 fallback: `draft-write` is the one id v5 adds, for the containment slice of
 a draft (the zone risk carries the exfiltration axis), and `read-mailbox`,
 an existing id, also matches the thread containment slice of `get_thread`.
-Plugin version 0.4.0.
+Plugin version 0.5.0.
 
 | Preset      | Grants                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `read-only` | Labels, drafts, searches and reads from automated, internal, allowlisted and unknown senders (unknown capped at 20/min). No write, no bulk read, no sensitive label. |
-| `developer` | Read-only + `draft-write` with drafts to self / internal / allowlist, and single-thread labels (`auto`); `bulk-read` under `approval`.                               |
+| `developer` | Read-only + `draft-write` with drafts to self / internal / allowlist, single-thread labels and new labels (`auto`); `bulk-read` under `approval`.                    |
 
 In no preset, on purpose: `gmail.read-sensitive-label` (PII, explicit
 acceptance), `gmail.draft-to-zone-external-unbounded` (the exfiltration
@@ -171,6 +180,6 @@ its owner reconnects it with an app password.
 ## Development
 
 ```
-npx vitest run plugins/gmail       # 444 tests, no network
+npx vitest run plugins/gmail       # 574 tests, no network
 npx tsc -p plugins/gmail/tsconfig.json --noEmit
 ```

@@ -20,13 +20,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   checklist names the provider. A provider's state records the address at
   its save and at every passed test. ADR
   backup-carries-the-sign-in-configuration, amendment 2026-10-23.
-- **Gmail's tools run, over IMAP.** The Gmail plugin (0.4.0, still
-  experimental) exposes its ten tools: search threads with Gmail's own
-  syntax, read a thread, list and create drafts, list labels, add and remove
-  labels. Drafts are saved, never sent: the plugin reaches Gmail over IMAP
-  and ships no SMTP client. Thread and message ids are the Gmail API's
-  (hexadecimal); a user label is addressed by its name. The risk catalog and
-  its presets are unchanged. ADR gmail-over-imap-with-an-app-password.
+- **Gmail's tools run, over IMAP.** The Gmail plugin (0.5.0, still
+  experimental) exposes twelve tools: search threads with Gmail's own
+  syntax, read a thread, download an attachment, list and create drafts,
+  list and create labels, add and remove labels. Drafts are saved, never
+  sent: the plugin reaches Gmail over IMAP and ships no SMTP client. Thread
+  and message ids are the Gmail API's (hexadecimal).
+  - A message without a plain-text part is read from its HTML, converted to
+    text with its links kept (`html-to-text`); the text is capped at 20 000
+    characters.
+  - Each message lists its attachments; `gmail__get_attachment` returns one
+    in base64, up to 5 MiB, and refuses a larger one.
+  - A user label is addressed by its name, spaces and accents included
+    (`Factures payées`, `Projets/Été`).
+  - `gmail__create_label` creates a user label, under the new risk
+    `gmail.label-create`, which is in the `developer` preset (catalog 5).
+
+  ADR gmail-over-imap-with-an-app-password and its amendment.
 
 ### Changed
 

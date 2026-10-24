@@ -47,8 +47,8 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
   test('the loaded catalog has the expected shape', () => {
     expect(parsedCatalog.provider).toBe('gmail');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
-    // Expect 15 named risks + 1 fallback = 16.
-    expect(parsedCatalog.risks.length).toBe(16);
+    // Expect 16 named risks + 1 fallback = 17 (catalog 5 added gmail.label-create).
+    expect(parsedCatalog.risks.length).toBe(17);
   });
 
   test('every entry declares the required fields', () => {
@@ -179,6 +179,8 @@ const FALLBACK_ID = 'gmail.uncategorized-write';
 const GMAIL_TOOLS = [
   'gmail__search_threads',
   'gmail__get_thread',
+  'gmail__get_attachment',
+  'gmail__create_label',
   'gmail__list_drafts',
   'gmail__create_draft',
   'gmail__list_labels',
@@ -208,6 +210,10 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
       ];
     case 'gmail__get_thread':
       return [{ id: '1a2b3c' }];
+    case 'gmail__get_attachment':
+      return [{ thread_id: 'aa01', message_id: 'bb02', part: '2' }];
+    case 'gmail__create_label':
+      return [{ name: 'Clients/2026' }, { name: 'Factures payées' }];
     case 'gmail__list_drafts':
       return [{}];
     case 'gmail__create_draft':

@@ -62,6 +62,13 @@ interface Position {
 const ids = { thread_id: '18c2a9f0e1d2b3a4', message_id: '18c2a9f0e1d2b3a5' };
 
 const POSITIONS: readonly Position[] = [
+  ...(['thread_id', 'message_id', 'part'] as const).map((key): Position => ({
+    name: `get_attachment.${key}`,
+    tool: 'gmail__get_attachment',
+    args: (v) => ({ ...ids, part: '2', [key]: v }),
+    accepted: [],
+    slice: () => '',
+  })),
   {
     name: 'get_thread.id',
     tool: 'gmail__get_thread',
@@ -88,8 +95,9 @@ const POSITIONS: readonly Position[] = [
       name: `${tool.slice('gmail__'.length)}.label`,
       tool,
       args: (v) => ({ ...ids, label: v }),
-      // A nested label name (`Legal/Contracts`) is the one legitimate use of `/`.
-      accepted: ['a/b'],
+      // A nested label name (`Legal/Contracts`) is the one legitimate use of `/` ;
+      // `?`, `=` and `#` are punctuation a label name may hold (it reaches no URL).
+      accepted: ['a/b', 'a?x=1#y'],
       slice: () => `gmail.mailbox.thread[${ids.thread_id}].message[${ids.message_id}].label.W`,
     },
   ]),
@@ -105,7 +113,7 @@ const POSITIONS: readonly Position[] = [
       name: `${tool.slice('gmail__'.length)}.label`,
       tool,
       args: (v) => ({ thread_id: ids.thread_id, label: v }),
-      accepted: ['a/b'],
+      accepted: ['a/b', 'a?x=1#y'],
       slice: () => `gmail.mailbox.thread[${ids.thread_id}].label.W`,
     },
   ]),
@@ -242,12 +250,22 @@ describe('labelRef — a label id or a label name, never a dot segment', () => {
     'v1.2',
     'a.b/c.d',
     'x'.repeat(MAX_LABEL_LENGTH),
+    'é'.repeat(MAX_LABEL_LENGTH),
+    'Clients 2026',
+    'Factures payées',
+    'Projets/Été',
+    'Équipe – Paris',
+    "L'équipe (RH)",
+    'Заказы',
+    '請求書/2026',
+    'a b',
+    'a?x=1#y',
   ])('accepts %j', (value) => {
     expect(labelRef(value)).toBe(value);
   });
 
   test.each([
-    ...HOSTILE.filter((v) => v !== 'a/b'),
+    ...HOSTILE.filter((v) => v !== 'a/b' && v !== 'a?x=1#y'),
     'x'.repeat(MAX_LABEL_LENGTH + 1),
     '/a',
     'a/',
@@ -255,8 +273,30 @@ describe('labelRef — a label id or a label name, never a dot segment', () => {
     'a/./b',
     'a/..',
     './a',
-    'a b',
+    'x'.repeat(MAX_LABEL_LENGTH) + 'é',
+    ' a',
+    'a ',
+    'a / b',
+    'a/ b',
+    'a\tb',
+    'a\r\nb',
+    'a\nA001 DELETE INBOX',
+    'a\u0085b',
+    'a\u009bb',
+    'a\u007fb',
+    'a\u200bb',
+    'a"b',
+    '"a"',
     'a\\b',
+    'a\\"',
+    'a{5}',
+    '{3}\r\nabc',
+    'a*',
+    'a%',
+    '[Gmail]/Corbeille',
+    'a<b>',
+    'a|b',
+    'a`b',
     'a\u0000',
     42,
     null,
@@ -275,4 +315,48 @@ describe('labelRef — a label id or a label name, never a dot segment', () => {
       }
     },
   );
+});
+
+describe('create_label.name — hostile values', () => {
+  test.each(HOSTILE.map((v) => [label(v), v] as const))('%s', async (_label, value) => {
+    const outcome = classifyGmail('gmail__create_label', { name: value }, [mailbox]);
+    const { transport, result } = await execute('gmail__create_label', { name: value });
+    if (value === 'a/b' || value === 'a?x=1#y') {
+      // A label name: classified as one, created from its segments, nothing else sent.
+      if ('denied' in outcome) throw new Error(`unexpected denial: ${outcome.denied}`);
+      expect(outcome.slices.map(serializeSlice)).toEqual([
+        value === 'a/b' ? 'gmail.mailbox.label[a/b].W' : 'gmail.mailbox.label[*].W',
+      ]);
+      expect(transport.calls.filter((c) => c.op === 'create')).toEqual([
+        { op: 'create', segments: value.split('/') },
+      ]);
+      expect(transport.ops()).not.toContain('store');
+      return;
+    }
+    expect(outcome).toHaveProperty('denied');
+    expect(result.isError).toBe(true);
+    expect(transport.calls).toEqual([]);
+  });
+
+  test.each([
+    'a"b',
+    'a\\b',
+    'a{5}',
+    '{3}\r\nabc',
+    'a\r\nA001 DELETE INBOX',
+    'TRASH',
+    'spam',
+    'INBOX',
+    'Inbox/Sub',
+    'CATEGORY_SOCIAL',
+    '[Gmail]',
+    '[Google Mail]/Sent',
+  ])('refuses %j before any connection', async (value) => {
+    expect(classifyGmail('gmail__create_label', { name: value }, [mailbox])).toHaveProperty(
+      'denied',
+    );
+    const { transport, result } = await execute('gmail__create_label', { name: value });
+    expect(result.isError).toBe(true);
+    expect(transport.calls).toEqual([]);
+  });
 });

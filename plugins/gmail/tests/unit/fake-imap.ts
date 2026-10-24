@@ -14,6 +14,8 @@ import type {
   GmailSessionOptions,
   GmailTransport,
   ImapAddress,
+  ImapBody,
+  ImapFetchOptions,
   ImapMailbox,
   ImapMessage,
   ImapSearch,
@@ -50,6 +52,10 @@ export interface FakeMessage {
   to: ImapAddress[];
   date: string;
   text: string | null;
+  /** An HTML body, used when `text` is null (an HTML-only message). */
+  html?: string | null;
+  /** Attachments : what the structure lists, and their decoded content. */
+  attachments?: { part: string; filename: string | null; mimeType: string; content: Buffer }[];
   /** What `X-GM-RAW` matches : a test-only list of query strings. */
   matches: string[];
   raw?: string;
@@ -61,7 +67,9 @@ export type FakeCall =
   | { op: 'search'; path: string; query: ImapSearch }
   | { op: 'fetch'; path: string; uids: readonly number[]; bodyBytes: number | null }
   | { op: 'append'; path: string; message: string; flags: readonly string[] }
-  | { op: 'store'; path: string; uids: readonly number[]; change: ImapStore };
+  | { op: 'store'; path: string; uids: readonly number[]; change: ImapStore }
+  | { op: 'download'; path: string; uid: number; part: string; maxBytes: number }
+  | { op: 'create'; segments: readonly string[] };
 
 export interface FakeGmail extends GmailTransport {
   readonly calls: FakeCall[];
@@ -114,8 +122,18 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
   const inFolder = (path: string) =>
     messages.filter((m) => m.folder === path || (path === ALL && m.folder !== DRAFTS));
 
-  const view = (m: FakeMessage, bodyBytes: number | null): ImapMessage => {
-    const text = bodyBytes === null || m.text === null ? null : m.text.slice(0, bodyBytes);
+  const view = (m: FakeMessage, options: ImapFetchOptions): ImapMessage => {
+    const { bodyBytes } = options;
+    let body: ImapBody | null = null;
+    if (bodyBytes !== null && m.text !== null) {
+      const content = m.text.slice(0, bodyBytes);
+      body = { type: 'text/plain', content, truncated: m.text.length > content.length };
+    } else if (bodyBytes !== null && typeof m.html === 'string') {
+      const cap = options.htmlBytes ?? bodyBytes;
+      const content = m.html.slice(0, cap);
+      body = { type: 'text/html', content, truncated: m.html.length > content.length };
+    }
+    const structure = bodyBytes !== null || options.structure === true;
     return {
       uid: m.uid,
       messageId: m.messageId,
@@ -127,8 +145,15 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
       from: m.from,
       to: m.to,
       cc: [],
-      text,
-      textTruncated: text !== null && m.text !== null && m.text.length > text.length,
+      body,
+      attachments: structure
+        ? (m.attachments ?? []).map((a) => ({
+            part: a.part,
+            filename: a.filename,
+            mimeType: a.mimeType,
+            size: a.content.length,
+          }))
+        : [],
     };
   };
 
@@ -154,7 +179,7 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
       calls.push({ op: 'fetch', path, uids, bodyBytes: options.bodyBytes });
       return inFolder(path)
         .filter((m) => uids.includes(m.uid))
-        .map((m) => view(m, options.bodyBytes));
+        .map((m) => view(m, options));
     },
     async append(path, raw, flags) {
       calls.push({ op: 'append', path, message: raw, flags });
@@ -168,6 +193,26 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
       });
       messages.push(m);
       return m.uid;
+    },
+    async download(path, uid, part, maxBytes) {
+      calls.push({ op: 'download', path, uid, part, maxBytes });
+      const m = inFolder(path).find((x) => x.uid === uid);
+      const a = m?.attachments?.find((x) => x.part === part);
+      if (!a) return null;
+      return {
+        content: a.content.subarray(0, maxBytes),
+        truncated: a.content.length > maxBytes,
+      };
+    },
+    async createMailbox(segments) {
+      calls.push({ op: 'create', segments });
+      const path = segments.join('/');
+      if (fake.folders.some((f) => f.path === path)) return { path, created: false };
+      fake.folders = [
+        ...fake.folders,
+        { path, specialUse: null, selectable: true, parentPath: segments.slice(0, -1).join('/') },
+      ];
+      return { path, created: true };
     },
     async store(path, uids, change) {
       calls.push({ op: 'store', path, uids, change });
