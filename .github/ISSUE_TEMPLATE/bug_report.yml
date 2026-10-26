@@ -87,4 +87,4 @@ body:
     attributes:
       label: Environment
       description: Operating system, Node.js version when running from source, browser for an interface problem, MCP client for an agent problem.
-      placeholder: Ubuntu 24.04, Node 22, Firefox, Claude Code
+      placeholder: Ubuntu 24.04, Node 26, Firefox, Claude Code

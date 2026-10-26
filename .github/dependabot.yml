@@ -27,6 +27,13 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore(deps)
+    ignore:
+      # The types of Node follow the runtime (the base image of
+      # deploy/docker/Dockerfile and node-version of the workflows), never run
+      # ahead of it: types of a newer major compile calls the runtime does not
+      # have. The major moves with the base image, by hand, in one pull request.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
     groups:
       npm-production:
         dependency-type: production

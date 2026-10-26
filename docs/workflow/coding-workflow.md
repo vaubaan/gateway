@@ -148,7 +148,7 @@ and `workflow_call` — the release pipeline calls this file as its gates
 group per workflow and ref with `cancel-in-progress` (`github.workflow` is
 the caller's name in a called run, so a release and the CI of the same ref
 never cancel each other); `permissions: contents: read`. Linux runners,
-Node 22. Every job that needs the dependencies goes through
+Node 26 (the runtime of the image). Every job that needs the dependencies goes through
 `.github/actions/setup`: `node_modules` is cached by the hash of
 `package-lock.json`; on a miss, `npm ci --no-audit --no-fund` installs
 exactly the lockfile, or fails. The jobs run in parallel: a run lasts as long
@@ -361,8 +361,9 @@ architecture.
 
 `.github/dependabot.yml`, read from the default branch (it starts at the
 cutover), proposes once a week, Monday morning: npm updates (minor and patch
-in two groups, production and development; each major alone), the Node base
-image of the Dockerfile (new digest of the pinned tag, or a new 22.x; never
+in two groups, production and development; each major alone, except
+`@types/node`, whose major follows the runtime), the Node base
+image of the Dockerfile (new digest of the pinned tag, or a new 26.x; never
 a new Node major: the ABI of the native addons), Caddy in the Compose file,
 and the actions (grouped; commit and version comment move together). Each
 waits a **cooldown** before it is proposed — 4 days for a patch or an
@@ -389,7 +390,7 @@ rules commit may bring new findings: triage them in the same pull request.
 ## Docker image
 
 `deploy/docker/Dockerfile` is a multi-stage build (`manifests` → `deps` →
-`build` → `runner`) on `node:22.23.4-bookworm-slim`, pinned by digest (glibc,
+`build` → `runner`) on `node:26.12.1-bookworm-slim`, pinned by digest (glibc,
 for the prebuilt `argon2` and `better-sqlite3` addons). The runner stage copies the Next.js
 standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. The base image is named,
@@ -652,7 +653,7 @@ The image is built on `node:<version>-bookworm-slim` pinned by digest
 digest does not receive the security fixes of its tag, so it is refreshed:
 Dependabot proposes the new digest or patch version every week (after the
 cutover, [Dependency updates](#dependency-updates)); by hand before every
-release, and when Node 22 or Debian publishes a security release — the
+release, and when Node 26 or Debian publishes a security release — the
 weekly image scan fails when a fixed vulnerability waits in the pinned image.
 
 0. To know whether a refresh is due without a new version: the same tag is
@@ -674,9 +675,13 @@ weekly image scan fails when a fixed vulnerability waits in the pinned image.
 4. Pull request `chore(deps): base image node <version>`, with a changelog
    bullet under `### Security` or `### Changed`.
 
-The base stays a Debian (glibc) image of the Node 22 line. Another Node
+The base stays a Debian (glibc) image of the Node 26 line (since 2026-10-26;
+Node 22 before, ADR docker-image-and-config-format, amendment 2026-10-26). Another Node
 major changes the ABI the prebuilt addons are downloaded for: it is a minor
-release at least, and both architectures must pass the smoke test first.
+release at least, and both architectures must pass the smoke test first. The
+Node major moves in one pull request with `node-version` of the workflows,
+`engines.node` and `@types/node` (whose majors Dependabot does not propose:
+types above the runtime would compile calls the runtime lacks).
 The actions of `ci.yml` and `release.yml` are refreshed the same way: the commit and the
 version comment change together.
 
