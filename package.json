@@ -37,7 +37,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@playwright/test": "1.64.1",
-    "@types/node": "20.19.41",
+    "@types/node": "26.6.5",
     "@vaubaan/harness": "^1.4.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
