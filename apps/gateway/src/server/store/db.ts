@@ -121,7 +121,7 @@ export function openCopyForWriting(path: string): StoreDb {
  */
 export function heldByAnotherConnection(path: string): boolean {
   const db = new BetterSqlite3(path, { fileMustExist: true, timeout: 0 });
-  let busy = false;
+  let busy: boolean;
   try {
     const row = db.pragma('wal_checkpoint(TRUNCATE)') as { busy?: number }[];
     busy = (row[0]?.busy ?? 0) !== 0;

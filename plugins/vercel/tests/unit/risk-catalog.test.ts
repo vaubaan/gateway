@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
-import yaml from 'js-yaml';
+import { CORE_SCHEMA, load } from 'js-yaml';
 import type { Resource, RiskCatalog, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
 import { matches, parseSlice } from '@vaubaan/policy-engine';
 
@@ -33,7 +33,8 @@ import { vercelTools } from '../../src/tools.ts';
 const here = dirname(fileURLToPath(import.meta.url));
 const yamlPath = resolve(here, '../../src/risk-catalog.yaml');
 const rawYaml = readFileSync(yamlPath, 'utf8');
-const parsedCatalog = yaml.load(rawYaml) as RiskCatalog;
+// The schema of the production loader (plugin-sdk catalog-loader): YAML 1.2 core, no custom tag.
+const parsedCatalog = load(rawYaml, { schema: CORE_SCHEMA }) as RiskCatalog;
 
 const resource: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
 

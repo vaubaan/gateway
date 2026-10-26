@@ -258,7 +258,7 @@ describe('the command list reader under fuzzing', () => {
         expect(list.pushCert || list.commands.length > 0).toBe(true);
       } catch (err) {
         if (!(err instanceof GitProtocolError || err instanceof PktLineError)) {
-          throw new Error(`input #${i} threw ${String(err)}`);
+          throw new Error(`input #${i} threw ${String(err)}`, { cause: err });
         }
       }
     }
