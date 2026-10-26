@@ -64,12 +64,14 @@ export async function restoreAtFirstBoot(ctx: FirstBootRestoreContext): Promise<
     });
   } catch (err) {
     if (err instanceof RestoreError) {
+      // eslint-disable-next-line preserve-caught-error -- its message is quoted; the rest of the error stays out of the boot log.
       throw new Error(
         `restore at first boot refused (${err.kind}): ${err.message}. No store was written; ` +
           'fix VAUBAAN_RESTORE_FROM / VAUBAAN_RESTORE_SHA256 or the master keys, and start again.',
       );
     }
-    // Never the original message: it could quote the URL.
+    // Never the original message, nor the error as a cause: it could quote the URL.
+    // eslint-disable-next-line preserve-caught-error -- withheld on purpose (above).
     throw new Error('restore at first boot failed: unexpected failure (details withheld)');
   }
 }

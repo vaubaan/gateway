@@ -95,7 +95,7 @@ export function createRecoveryHandlers(deps: RecoveryHandlerDeps): RecoveryHandl
       if (!(await admitted(request, 'recover', null, AUTH_LIMITS.bootstrapPerInstance))) {
         return json(429, { error: 'too-many-attempts' });
       }
-      let proof = '';
+      let proof: string;
       try {
         const body = (await request.json()) as { proof?: unknown };
         proof = typeof body.proof === 'string' ? body.proof : '';

@@ -76,7 +76,7 @@ export async function readJobLogs(
 
 /** The download location GitHub answered, when it is an https URL ; never quoted back. */
 function downloadUrlOf(location: string | null): string {
-  let url: URL | null = null;
+  let url: URL | null;
   try {
     url = location === null ? null : new URL(location);
   } catch {

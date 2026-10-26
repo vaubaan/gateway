@@ -127,7 +127,7 @@ describe('requests', () => {
         body: { id: 'app-acme', organization: { slug: 'elsewhere' } },
       },
     ];
-    ({ fetch, result } = run(moved, TOOL.stopMachine, { app: 'acme-gw', machine_id: 'm1' }));
+    ({ result } = run(moved, TOOL.stopMachine, { app: 'acme-gw', machine_id: 'm1' }));
     expect(await refusalText(result)).toMatch(/no longer the app/);
     const unrecorded = {
       ...acme,
@@ -379,17 +379,17 @@ describe('image changes', () => {
   });
 
   test('update_machine with a new image checks the snapshots ; with the same image it does not', async () => {
-    let { fetch, result } = run(
+    const refused = run(
       [appIdentityRoute(), machineRoute(mounted), snapshotsRoute(old())],
       TOOL.updateMachine,
       { app: 'acme-gw', machine_id: 'm1', config: { ...mounted, image: IMAGE } },
     );
-    expect(await refusalText(result)).toMatch(/no snapshot created/);
-    ({ fetch, result } = run(
+    expect(await refusalText(refused.result)).toMatch(/no snapshot created/);
+    const { fetch, result } = run(
       [appIdentityRoute(), machineRoute(mounted), update],
       TOOL.updateMachine,
       { app: 'acme-gw', machine_id: 'm1', config: { ...mounted, env: { A: '1' } } },
-    ));
+    );
     await textOf(result);
     expect(fetch.calls.at(-1)!.json).toEqual({
       config: { ...mounted, env: { A: '1' } },

@@ -85,8 +85,12 @@ type-check` at the root fans out to all of them.
   `noImplicitOverride`, `noFallthroughCasesInSwitch`,
   `useUnknownInCatchVariables`, ES2022, bundler resolution,
   `allowImportingTsExtensions` (packages import `./x.ts` directly).
-- `eslint.config.js` (flat config, ESLint 9): `recommendedTypeChecked`,
+- `eslint.config.js` (flat config, ESLint 10): `recommendedTypeChecked`,
   `no-floating-promises` and `no-misused-promises` as errors,
+  ESLint 10's recommended `preserve-caught-error` (a rethrown error carries
+  its `cause`, except where the cause is withheld on purpose — it could quote
+  an address or a URL — with a disable comment saying so) and
+  `no-useless-assignment`,
   `consistent-type-imports` (inline), `no-console` as a warning outside
   `scripts/` (`console.warn` / `console.error` allowed); `--max-warnings=0`
   makes warnings fail. Config files, Next
