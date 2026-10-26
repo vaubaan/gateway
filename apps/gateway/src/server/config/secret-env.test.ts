@@ -5,7 +5,7 @@ import { CONFIG_FILE_ENV, isSecretKeyPath, secretEnvVariables } from './sources'
 import { TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
 
 describe('secret variables leave the environment once loaded (H3)', () => {
-  it('names every secret key of the table, the sign-in and provider secrets, and their _FILE siblings', () => {
+  it('names every secret key of the table, the sign-in secrets, their _FILE siblings, and every retired provider variable', () => {
     const env = validEnv({
       VAUBAAN_MASTER_KEY_PREVIOUS: `1=${TEST_MASTER_KEY}`,
       VAUBAAN_SIGN_IN_GITHUB_KIND: 'github',
@@ -19,7 +19,9 @@ describe('secret variables leave the environment once loaded (H3)', () => {
       'VAUBAAN_BOOTSTRAP_TOKEN',
       'VAUBAAN_MASTER_KEY',
       'VAUBAAN_MASTER_KEY_PREVIOUS',
+      // Retired (no longer read): taken out of the environment whatever the field.
       'VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET',
+      'VAUBAAN_PROVIDER_GMAIL_CLIENT_ID',
       'VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET',
       'VAUBAAN_SIGN_IN_GITHUB_CLIENT_SECRET_FILE',
     ]);
@@ -31,8 +33,9 @@ describe('secret variables leave the environment once loaded (H3)', () => {
     expect(isSecretKeyPath('bootstrap_token')).toBe(true);
     expect(isSecretKeyPath('idp.client_secret')).toBe(true);
     expect(isSecretKeyPath('sign_in.entra.client_secret')).toBe(true);
+    // The retired block is never read; whatever it references is treated as a secret's.
     expect(isSecretKeyPath('providers.gmail.client_secret')).toBe(true);
-    expect(isSecretKeyPath('providers.gmail.client_id')).toBe(false);
+    expect(isSecretKeyPath('providers.gmail.client_id')).toBe(true);
     expect(isSecretKeyPath('sign_in.entra.client_id')).toBe(false);
     expect(isSecretKeyPath('public_url')).toBe(false);
   });

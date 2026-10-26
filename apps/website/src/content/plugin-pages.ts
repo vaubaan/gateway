@@ -159,9 +159,7 @@ export function pluginPageMarkdown(
 function credentialKindWords(c: CredentialInfo): string {
   switch (c.kind) {
     case 'oauth2':
-      return c.registersItself
-        ? 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)'
-        : "through your company's OAuth client at the service (one click once an administrator declared it)";
+      return 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)';
     case 'api-key':
       return `with a ${c.label ?? 'key'} pasted by hand`;
     case 'ssh-key':
@@ -189,9 +187,7 @@ function credentialMarkdown(c: CredentialInfo): string[] {
   if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
   if (c.fields.length > 0) {
     lines.push(
-      c.kind === 'oauth2'
-        ? 'What the administrator enters for the OAuth client:'
-        : 'What the connect page asks:',
+      'What the connect page asks:',
       '',
       ...c.fields.map(
         (f) =>
@@ -224,7 +220,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     '',
     '## How to connect',
     '',
-    'On the instance: Accounts → Connect an account, then pick the service. A service that signs people in through its own authorization (Gmail) needs its OAuth client declared once by an administrator, on the same page, or set in the configuration (`providers.<id>.*`, see [configuration keys](/docs/configuration/keys)). A service that accepts dynamic client registration (Miro) needs nothing: the gateway registers its own client there the first time someone connects. Every instance has its own client: this gateway never uses one shared with another instance.',
+    'On the instance: Accounts → Connect an account, then pick the service. Most services take a key the person creates at the service and pastes (a token, or for Gmail an app password); nobody declares anything beforehand. A service that signs people in through its own authorization (Miro) needs nothing either: the gateway registers its own client there the first time someone connects. Every instance has its own client: this gateway never uses one shared with another instance.',
     '',
   );
   plugin.credentials.forEach((c) => lines.push(...credentialMarkdown(c)));
@@ -235,7 +231,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     lines.push(
       '## Registration notes from the plugin',
       '',
-      `From the plugin's [README](${githubBlob(`${plugin.dir}/README.md`)}), written for the people who create the token or declare the OAuth client.`,
+      `From the plugin's [README](${githubBlob(`${plugin.dir}/README.md`)}), written for the people who create the key.`,
       '',
       // The README's own headings start at level 2; under this section they move one level down.
       readmeCredentialSections.replace(/^(#{2,5}) /gm, '#$1 '),

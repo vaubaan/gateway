@@ -116,14 +116,12 @@ const execCtx = (
   signal?: AbortSignal,
 ): ExecuteContext => ({
   credential,
-  appConfig: {},
   fetch: () => Promise.reject(new Error('ssh plugin must not use fetch')),
   resources,
   ...(signal ? { signal } : {}),
 });
 const connCtx = (): ConnectionContext => ({
   credential,
-  appConfig: {},
   fetch: () => Promise.reject(new Error('ssh plugin must not use fetch')),
 });
 

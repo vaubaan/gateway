@@ -8,7 +8,6 @@ import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
 import { silentLogger } from '../logging';
-import { ProviderAppsService } from '../provider-apps';
 import { openTestStore } from '../store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError } from './errors';
@@ -23,7 +22,6 @@ import {
 import {
   connectionsHarness,
   fixturePlugin,
-  OAUTH_SPEC,
   PUBLIC_URL,
   REGISTERED_OAUTH_SPEC,
   stateOf,
@@ -118,14 +116,7 @@ describe('OAuth2Clients — one registered client per instance and provider', ()
     const test = openTestStore();
     const fetch = mockFetch(routes);
     const plugin = fixturePlugin({ id: 'boardco', credential: SPEC });
-    const providerApps = new ProviderAppsService(
-      new Map(),
-      test.store.config,
-      // Only `hostAppConfig` is read, for a declared client.
-      { require: () => ({ plugin }) } as never,
-    );
     const subject = new OAuth2Clients({
-      providerApps,
       config: test.store.config,
       publicUrl: PUBLIC_URL,
       fetch,
@@ -188,13 +179,10 @@ describe('OAuth2Clients — one registered client per instance and provider', ()
     expect(fetch.calls).toHaveLength(2);
   });
 
-  it('never registers for a token request, and leaves a declared client alone', async () => {
+  it('never registers for a token request', async () => {
     const { subject, fetch, plugin } = clients([]);
     await expect(subject.forTokenRequest(plugin, SPEC)).rejects.toBeInstanceOf(OAuth2ClientMissing);
-    await expect(subject.forAuthorization(plugin, OAUTH_SPEC, CALLBACK)).rejects.toBeInstanceOf(
-      OAuth2ClientMissing,
-    );
-    await subject.rejected(plugin, OAUTH_SPEC, 'cid');
+    await subject.rejected(plugin, SPEC, 'cid');
     expect(fetch.calls).toHaveLength(0);
   });
 });
@@ -223,12 +211,8 @@ describe('a service whose client the gateway registers: connect, refresh, reconn
     expect(await h.service.provider('boardco')).toMatchObject({
       kind: 'oauth2',
       redirects: true,
-      registersItself: true,
-      usesApp: false,
-      configured: true,
       fields: [],
     });
-    expect(await h.providerApps.status('boardco')).toMatchObject({ needsApp: false, fields: [] });
   });
 
   it('registers, redirects with PKCE and the resource, exchanges with the registered client', async () => {

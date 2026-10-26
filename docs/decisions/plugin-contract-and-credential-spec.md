@@ -11,12 +11,21 @@ partially-supersedes:
   - oauth-app-install-per-provider
   - mint-install-token-credential
 amended-by:
+  - gmail-over-imap-with-an-app-password
   - plugin-catalog-path-and-standalone-tracing
   - fallback-risk-only-when-uncategorized
   - token-connections-beside-the-integration-app
 ---
 
 # Plugin contract, credential spec, presets and the single registry
+
+> **Amended on 2026-10-24** by [gmail-over-imap-with-an-app-password](gmail-over-imap-with-an-app-password.md) (D2): the `oauth2` spec loses
+> `appConfigFields` and must declare `clientRegistration` (the only OAuth
+> client the host knows is one it registers itself); `ProviderAppConfig`,
+> `ConnectionContext.appConfig`, `CLIENT_ID_FIELD` and `CLIENT_SECRET_FIELD`
+> leave the SDK. A plugin still never sees an OAuth client secret: it no longer
+> sees any app configuration at all. Gmail connects with an `api-key` spec (an
+> app password over IMAP).
 
 > Fixes the public API every provider plugin is written against
 > (`@vaubaan/plugin-sdk`), the way a plugin declares how its provider is

@@ -137,7 +137,7 @@ describe('a GitHub account connected with a token', () => {
 
     // The token is the one way: nothing to declare first.
     const offered = await root.connections.service.provider('github');
-    expect(offered).toMatchObject({ configured: true, kind: 'api-key', usesApp: false });
+    expect(offered).toMatchObject({ kind: 'api-key', redirects: false });
 
     // A classic token is refused by the field's shape, before GitHub is asked.
     const classic = await root.connections.handlers.connect(

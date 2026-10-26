@@ -29,14 +29,7 @@ import {
 } from './secret-refs';
 import { INSTANCE_NAME_MAX_LENGTH } from './instance-name';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
-import {
-  CLIENT_REGISTRATION_POLICIES,
-  LOG_LEVELS,
-  PROVIDER_APP_FIELDS,
-  isProviderAppField,
-  type ProviderAppField,
-  MAIL_TLS_MODES,
-} from './types';
+import { CLIENT_REGISTRATION_POLICIES, LOG_LEVELS, MAIL_TLS_MODES } from './types';
 
 export type RawTree = Record<string, unknown>;
 
@@ -76,7 +69,13 @@ export interface KeySpec {
 }
 
 export const CONFIG_FILE_ENV = 'VAUBAAN_CONFIG_FILE';
-export const PROVIDER_ENV_PREFIX = 'VAUBAAN_PROVIDER_';
+/**
+ * The prefix of the variables that declared an OAuth client per provider in
+ * earlier versions (`VAUBAAN_PROVIDER_<ID>_<FIELD>[_FILE]`). They are no longer
+ * read: the loader lists them as retired, and they are taken out of the process
+ * environment with the secrets, since one of them held a client secret.
+ */
+export const RETIRED_PROVIDER_ENV_PREFIX = 'VAUBAAN_PROVIDER_';
 export const SIGN_IN_ENV_PREFIX = 'VAUBAAN_SIGN_IN_';
 
 /**
@@ -401,8 +400,6 @@ export function isKeyRequired(spec: KeySpec, idpConfigured?: boolean): boolean {
   }
 }
 
-const SECRET_PROVIDER_FIELDS: ReadonlySet<ProviderAppField> = new Set(['client_secret']);
-
 /** Environment variable names that set a given YAML path (for error messages). */
 export function envNamesFor(path: string): string[] {
   const signInMatch = /^sign_in\.([^.]+)\.(.+)$/.exec(path);
@@ -412,15 +409,6 @@ export function envNamesFor(path: string): string[] {
     if (!spec) return [];
     const name = signInEnvName(id, spec.env);
     return spec.kind === 'secret' ? [name, `${name}_FILE`] : [name];
-  }
-  const providerMatch = /^providers\.([^.]+)\.([^.]+)$/.exec(path);
-  if (providerMatch) {
-    const [, id, field] = providerMatch;
-    const fieldName = field ?? '';
-    const name = providerEnvName(id ?? '', fieldName);
-    return isProviderAppField(fieldName) && SECRET_PROVIDER_FIELDS.has(fieldName)
-      ? [name, `${name}_FILE`]
-      : [name];
   }
   const spec = KEYS.find((k) => k.path === path);
   if (!spec) return [];
@@ -432,18 +420,15 @@ export function envNamesFor(path: string): string[] {
 /**
  * Whether a configuration path holds a secret: the keys whose variable accepts a
  * `_FILE` sibling, every entry of `encryption.previous_keys`, the secret fields of a
- * sign-in provider and of a provider app.
+ * sign-in provider, and anything under the retired `providers.` block (never read,
+ * but a `${NAME}` it references is treated as a secret's).
  */
 export function isSecretKeyPath(path: string): boolean {
   const signInMatch = /^sign_in\.([^.]+)\.(.+)$/.exec(path);
   if (signInMatch) {
     return SIGN_IN_FIELDS.some((f) => f.field === signInMatch[2] && f.kind === 'secret');
   }
-  const providerMatch = /^providers\.([^.]+)\.([^.]+)$/.exec(path);
-  if (providerMatch) {
-    const field = providerMatch[2] ?? '';
-    return isProviderAppField(field) && SECRET_PROVIDER_FIELDS.has(field);
-  }
+  if (path.startsWith(`${RETIRED_PROVIDERS_KEY}.`)) return true;
   if (path.startsWith('encryption.previous_keys.')) return true;
   const spec = KEYS.find((k) => k.path === path);
   return spec !== undefined && (spec.kind === 'secret' || spec.kind === 'secret-map');
@@ -452,7 +437,7 @@ export function isSecretKeyPath(path: string): boolean {
 /**
  * The variables of `env` that carry a secret or the path of one: the secret keys of
  * the table and their `_FILE` siblings, `VAUBAAN_SIGN_IN_<ID>_CLIENT_SECRET[_FILE]`,
- * `VAUBAAN_PROVIDER_<ID>_CLIENT_SECRET[_FILE]`. The variables a YAML
+ * and every retired `VAUBAAN_PROVIDER_*` variable. The variables a YAML
  * file references at a secret key are added by the loader (`FileSourceResult`).
  */
 export function secretEnvVariables(env: EnvSource): string[] {
@@ -467,14 +452,35 @@ export function secretEnvVariables(env: EnvSource): string[] {
     if (env[name] === undefined) continue;
     const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
     if (parseSignInEnvName(base)?.spec.kind === 'secret') out.add(name);
-    const provider = parseProviderEnvName(base);
-    if (provider && SECRET_PROVIDER_FIELDS.has(provider.field)) out.add(name);
+    if (name.startsWith(RETIRED_PROVIDER_ENV_PREFIX)) out.add(name);
   }
   return [...out].sort();
 }
 
-export function providerEnvName(providerId: string, field: string): string {
-  return `${PROVIDER_ENV_PREFIX}${providerId.toUpperCase().replace(/-/g, '_')}_${field.toUpperCase()}`;
+/** The top-level key of the retired per-provider OAuth clients (`providers.<id>.<field>`). */
+export const RETIRED_PROVIDERS_KEY = 'providers';
+
+/**
+ * The retired keys and variables a configuration still sets, sorted: every leaf
+ * under the file's `providers` block, and every `VAUBAAN_PROVIDER_*` variable.
+ * Never read; listed so the root can say they are ignored.
+ */
+export function retiredConfigKeys(tree: RawTree, env: EnvSource): string[] {
+  const out: string[] = [];
+  const walk = (node: unknown, path: string): void => {
+    if (isPlainObject(node) && Object.keys(node).length > 0) {
+      for (const [key, value] of Object.entries(node)) walk(value, `${path}.${key}`);
+      return;
+    }
+    out.push(path);
+  };
+  if (tree[RETIRED_PROVIDERS_KEY] !== undefined) {
+    walk(tree[RETIRED_PROVIDERS_KEY], RETIRED_PROVIDERS_KEY);
+  }
+  for (const name of Object.keys(env)) {
+    if (name.startsWith(RETIRED_PROVIDER_ENV_PREFIX) && env[name] !== undefined) out.push(name);
+  }
+  return out.sort();
 }
 
 /** `VAUBAAN_SIGN_IN_<ID>_<SUFFIX>`: a hyphen of the provider id becomes an underscore. */
@@ -498,7 +504,6 @@ export function readEnvSource(
     const value = readEnvValue(ctx, spec);
     if (value !== undefined) setPath(tree, spec.path, value);
   }
-  readProviderEnv(ctx, tree);
   readSignInEnv(ctx, tree);
   return tree;
 }
@@ -553,40 +558,8 @@ function parseSecretMap(ctx: SourceContext, raw: string, spec: KeySpec): RawTree
 }
 
 /**
- * `VAUBAAN_PROVIDER_<ID>_<FIELD>[_FILE]` → `providers.<id>.<field>`.
- * The field is matched as a suffix against the known field names so that
- * provider ids containing `-` (`cloudflare-dns` → `CLOUDFLARE_DNS`) parse
- * unambiguously. No provider list is involved: the id is whatever remains.
- */
-function readProviderEnv(ctx: SourceContext, tree: RawTree): void {
-  const seen = new Set<string>();
-  for (const name of Object.keys(ctx.env).sort()) {
-    if (!name.startsWith(PROVIDER_ENV_PREFIX) || ctx.env[name] === undefined) continue;
-    const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
-    if (seen.has(base)) continue;
-    seen.add(base);
-    const parsed = parseProviderEnvName(base);
-    if (!parsed) {
-      ctx.issues.add(
-        `providers`,
-        `${name} does not end with a known provider app field (${PROVIDER_APP_FIELDS.join(', ')})`,
-        [name],
-      );
-      continue;
-    }
-    const path = `providers.${parsed.providerId}.${parsed.field}`;
-    const value = SECRET_PROVIDER_FIELDS.has(parsed.field)
-      ? readEnvSecret(ctx, base, path)
-      : ctx.env[base];
-    if (value !== undefined) setPath(tree, path, value);
-  }
-}
-
-const FIELDS_LONGEST_FIRST = [...PROVIDER_APP_FIELDS].sort((a, b) => b.length - a.length);
-
-/**
- * `VAUBAAN_SIGN_IN_<ID>_<FIELD>[_FILE]` → `sign_in.<id>.<field>`. As for provider
- * apps, the field is matched as a suffix so that an id with a hyphen
+ * `VAUBAAN_SIGN_IN_<ID>_<FIELD>[_FILE]` → `sign_in.<id>.<field>`. The field is
+ * matched as a suffix so that an id with a hyphen
  * (`acme-entra` → `ACME_ENTRA`) parses unambiguously.
  */
 function readSignInEnv(ctx: SourceContext, tree: RawTree): void {
@@ -647,24 +620,6 @@ export function parseSignInEnvName(
   const idPart = rest.slice(0, -(spec.env.length + 1));
   if (idPart.length === 0) return null;
   return { providerId: idPart.toLowerCase().replace(/_/g, '-'), spec };
-}
-
-/**
- * `VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET` → `{ providerId: 'cloudflare-dns',
- * field: 'client_secret' }`; `null` when the name (without `_FILE`) does not end
- * with a known field or has no id part. Pure, so the hyphen and suffix rules can
- * be tested on their own.
- */
-export function parseProviderEnvName(
-  name: string,
-): { providerId: string; field: ProviderAppField } | null {
-  if (!name.startsWith(PROVIDER_ENV_PREFIX)) return null;
-  const rest = name.slice(PROVIDER_ENV_PREFIX.length);
-  const field = FIELDS_LONGEST_FIRST.find((f) => rest.endsWith(`_${f.toUpperCase()}`));
-  if (!field) return null;
-  const idPart = rest.slice(0, -(field.length + 1));
-  if (idPart.length === 0) return null;
-  return { providerId: idPart.toLowerCase().replace(/_/g, '-'), field };
 }
 
 /* ------------------------------------------------------------------------ */

@@ -22,7 +22,7 @@ export function ctx(
   fetch: typeof globalThis.fetch,
   resources: readonly Resource[] = [app],
 ): ExecuteContext {
-  return { credential, appConfig: {}, fetch, resources };
+  return { credential, fetch, resources };
 }
 
 /** One SSE frame carrying the JSON-RPC answer to the recorded request. */

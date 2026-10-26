@@ -4,7 +4,7 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests,telemetry,instance,authority,shares,groups,users,oauth-as,management}` are
+ * missions,auth,requests,telemetry,instance,authority,shares,groups,users,oauth-as,management}` are
  * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
@@ -34,6 +34,7 @@ import {
   SSH_KEY_SPEC,
   fixturePlugin,
   OAUTH_SPEC,
+  seedRegisteredClient,
   stateOf,
 } from '../../../src/server/connections/testing';
 import type { IssuedLink } from '../../../src/server/auth';
@@ -54,7 +55,6 @@ import type {
 const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/server');
 const SCANNED = [
   'connections',
-  'provider-apps',
   'missions',
   'auth',
   'requests',
@@ -226,7 +226,14 @@ async function openRig(): Promise<Rig> {
       return started.connection;
     },
     async registerOAuthApp() {
-      await root.providerApps.save('oauthco', { client_id: 'cid', client_secret: 'csecret' });
+      // The client the gateway would have registered at the provider (not what is audited here).
+      await seedRegisteredClient(root.store.config, {
+        providerId: 'oauthco',
+        clientId: 'cid',
+        clientSecret: 'csecret',
+        redirectUri: root.connections.service.callbackUrl('oauthco').href,
+        at: new Date(),
+      });
     },
     async issue() {
       const connection = await rig.connectByKey();
@@ -414,7 +421,6 @@ async function localAccount(rig: Rig): Promise<LocalAccountRecord> {
   });
 }
 const missions = (root: GatewayRoot) => root.missions.service;
-const providerApps = (root: GatewayRoot) => root.providerApps;
 const managementTools = (root: GatewayRoot) => root.management.tools;
 const team = (root: GatewayRoot) => root.missions.team;
 
@@ -613,47 +619,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   'NoticeStore.take': exempt(SESSION_STATE),
   'PendingShareStore.put': exempt(SESSION_STATE),
   'PendingShareStore.read': exempt(SESSION_STATE),
-
-  // ── provider apps (the entry is written by the Administration handler) ────
-  'ProviderAppsService.isReadOnly': READ,
-  'ProviderAppsService.list': READ,
-  'ProviderAppsService.status': READ,
-  'ProviderAppsService.hostAppConfig': READ,
-  'ProviderAppsService.pluginAppConfig': READ,
-  'ProviderAppsService.save': {
-    kind: 'mutation',
-    target: providerApps,
-    drive: async (rig) =>
-      rig.root.connections.handlers.saveProviderApp(
-        await rig.operatorPost('/admin/provider-apps/oauthco', {
-          'field.client_id': 'cid',
-          'field.client_secret': 'csecret',
-        }),
-        'oauthco',
-      ),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'provider-app:oauthco',
-      actor: 'operator',
-    },
-  },
-  'ProviderAppsService.clear': {
-    kind: 'mutation',
-    target: providerApps,
-    prepare: (rig) => rig.registerOAuthApp(),
-    drive: async (rig) =>
-      rig.root.connections.handlers.saveProviderApp(
-        await rig.operatorPost('/admin/provider-apps/oauthco', { action: 'clear' }),
-        'oauthco',
-      ),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'provider-app:oauthco',
-      actor: 'operator',
-    },
-  },
 
   // ── missions ──────────────────────────────────────────────────────────────
   'MissionService.permissionOptions': READ,
@@ -1784,8 +1749,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'administrator-granted',
       'administrator-revoked',
       'approval-granted',
-      'config-changed',
-      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

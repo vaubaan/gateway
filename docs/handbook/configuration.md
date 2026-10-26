@@ -83,12 +83,12 @@ apps/gateway/src/
       boot-config.ts            loadBootConfig(): the boot's loader; writes the master key file at the first start when told to
       ports.ts                  StoreLiveness, RateLimiter, SessionStore; re-exports gateway-core's CacheClient
       memory.ts                 MemoryRateLimiter, MemorySessionStore  // single-process only; tests
-      registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
+      registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkSelfResources()
       shipped-plugins.ts        SHIPPED_PLUGINS, buildShippedRegistry(): the plugins the image ships
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
       management.ts             wireManagementDoor(): the management door's ports as closures (handbook management-door)
       root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires authority/, auth/, missions/,
-                                rate-limit/, provider-apps/, connections/, shares/, groups/, requests/, audit/, budget/,
+                                rate-limit/, connections/, shares/, groups/, requests/, audit/, budget/,
                                 telemetry/, oauth-as/, users/, execution/ and the management door
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
       testing.ts                memoryStoreDeps, fakePlugin() — tests only
@@ -100,7 +100,6 @@ apps/gateway/src/
   proxy.ts                      Next proxy: the security headers and the CSP nonce (see "Security headers")
     auth/                       OIDC relying party, web session, bootstrap, administrators (handbook authentication)
     users/                      the operator's deactivation and reactivation of a user (handbook authentication)
-    provider-apps/              the OAuth client of a service that signs people in: file or its connect page (handbook connections)
     providers/                  the provider reference pages: links, planes, reference model (handbook web-app)
     connections/                connect flows, resources, credential broker (handbook connections)
     missions/                   issuance, tokens, bootstrap kit (handbook missions)
@@ -165,11 +164,10 @@ generated at the first start: the setup hands it over`, with the path
      `RootDeps.buildRegistry`, by default `buildShippedRegistry`: the
      plugins imported by `compose/shipped-plugins.ts`. A
      plugin that fails `definePlugin` or a duplicate id fails the boot;
-   - `checkProviderApps`: every `providers.<id>` must name a registered
-     plugin, otherwise a `ConfigError` naming `providers.<id>` and
-     `VAUBAAN_PROVIDER_<ID>_*` (exit 78). Only a root built with an
-     empty registry (tests, `buildEmptyRegistry`) downgrades the
-     mismatch to a warning;
+   - `logRetiredKeys`: one `warn` line per retired key or variable the
+     configuration still sets (`config.retiredKeys`: the `providers.<id>.*`
+     keys and the `VAUBAAN_PROVIDER_*` variables of earlier versions, see
+     "Retired keys"), naming it, never its value; the boot goes on;
    - the embedded store from `RootDeps.openStore`, by default
      `openEmbeddedStore`. When `restore.from` is set it first calls
      `restoreAtFirstBoot` (`restore/first-boot.ts`): with no store file yet (or an
@@ -204,8 +202,7 @@ generated at the first start: the setup hands it over`, with the path
      unless `RootDeps.rateLimiter` injects another one, the surface
      `RateLimiter` — and the `MemoryCacheClient` unless `RootDeps.cache`
      injects another one;
-   - `ProviderAppsService(config.providers, store.config, registry)` →
-     `root.providerApps`, then `createConnectionsModule()` →
+   - `createConnectionsModule()` →
      `root.connections` (`service`, `credentials`, `notices`,
      `handlers`; handbook [connections](connections.md)), with
      `RootDeps.providerFetch` for the outbound HTTP of the connect flows
@@ -403,7 +400,7 @@ environment every value still comes from the environment).
 
 The table below is the whole configuration surface: one row per entry of
 `KEYS` in `sources.ts`, the table the loader reads its defaults and bounds
-from, plus the `providers.<id>.<field>` and `sign_in.<id>.<field>` families. **It is machine-checked**:
+from, plus the `sign_in.<id>.<field>` family. **It is machine-checked**:
 `config/keys-doc.test.ts` parses it out of this file and fails when a key of
 the loader has no row, when a row is not a key of the loader, or when a type,
 a default, a bound or a variable differs from the loader's. To change a
@@ -435,7 +432,6 @@ default or a bound, change `KEYS` and this table together.
 | `sign_in.<id>.<field>`                            | string     | —                                          | `kind`, `name`, `issuer`, `client_id`, `client_secret`, `claims.sub`, `claims.email`, `claims.groups`, `claims.email_verified`, `allowed_email_domains`, `invitation_only`, `require_verified_email`; the id is a lower-case letter then letters, digits or hyphens (32 at most), not `idp` when the `idp` block is set; `kind` is `oidc` or `github`; `issuer` https, required for `oidc` and never a github.com address there (GitHub is not an OpenID Connect provider: `kind: github`), default `https://github.com` for `github`; no `claims` and no `require_verified_email` for `github`; `claims.email_verified` defaults to `email_verified` (Entra ID: `xms_edov`), `require_verified_email` to false (true: an unverified email is refused, as on an open provider); one issuer per provider; an open provider needs domains or `invitation_only` | `VAUBAAN_SIGN_IN_<ID>_<FIELD>` (`KIND`, `NAME`, `ISSUER`, `CLIENT_ID`, `CLIENT_SECRET` and its `_FILE`, `CLAIM_SUB`, `CLAIM_EMAIL`, `CLAIM_GROUPS`, `CLAIM_EMAIL_VERIFIED`, `ALLOWED_EMAIL_DOMAINS`, `INVITATION_ONLY`, `REQUIRE_VERIFIED_EMAIL`; `-` in the id ↔ `_` in the variable) | `auth/sign-in-providers.ts` (`SignInProvidersService`): one more sign-in provider, callback `<public_url>/auth/callback/<id>`                                                                                                                                                                                                                                                 |
 | `admin.group`                                     | string     | —                                          | —; optional, a **seed** of the administrators (ADR administrators-live-in-the-instance): applied once, while the store names no administrator, as a group designation; `<provider>:<group>` (a GitHub group is `org/team`); a bare name only while one sign-in provider is configured; changed later, it is shown in Administration → Users and applied only by an administrator                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `VAUBAAN_ADMIN_GROUP`                                                                                                                                                                                                                                                                  | `auth/administrators.ts` (`seedFromConfiguration`, `resolveGroupDesignation`), `groups/` (a local group cannot take a designated group's name)                                                                                                                                                                                                                                |
 | `admin.emails`                                    | list       | —                                          | —; optional; lower-cased; each entry contains `@`; a **seed**: applied once, while the store names no administrator — each address an administrator at its first sign-in through any provider (at once for a user already known by it)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `VAUBAAN_ADMIN_EMAILS`                                                                                                                                                                                                                                                                 | `auth/administrators.ts` (`seedFromConfiguration`)                                                                                                                                                                                                                                                                                                                            |
-| `providers.<id>.<field>`                          | string     | —                                          | `client_id`, `client_secret`; the field is one of these and its value is not empty; the id is a registered plugin (checked by the root)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `VAUBAAN_PROVIDER_<ID>_<FIELD>` (`_FILE` for `client_secret`; `-` in the id ↔ `_` in the variable)                                                                                                                                                                                     | `provider-apps/` (`ProviderAppsService`)                                                                                                                                                                                                                                                                                                                                      |
 | `bootstrap_token`                                 | secret     | required while no sign-in provider is set  | at least 32 characters; refused once `bootstrap.revoked_at` is set in the store                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `VAUBAAN_BOOTSTRAP_TOKEN`, `VAUBAAN_BOOTSTRAP_TOKEN_FILE`                                                                                                                                                                                                                              | `auth/` (`BootstrapService`)                                                                                                                                                                                                                                                                                                                                                  |
 | `mail.smtp_host`                                  | string     | —                                          | —; with `mail.from`, the whole `mail.*` block or none of it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `VAUBAAN_MAIL_SMTP_HOST`                                                                                                                                                                                                                                                               | `mail/` (`createLinkMailer`): the SMTP relay the instance sends the links of the local accounts through (ADR [local-accounts-sign-in-provider](../decisions/local-accounts-sign-in-provider.md)); absent, the links are handed over by an administrator                                                                                                                       |
 | `mail.smtp_port`                                  | integer    | `587`                                      | 1 to 65535                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `VAUBAAN_MAIL_SMTP_PORT`                                                                                                                                                                                                                                                               | `mail/`                                                                                                                                                                                                                                                                                                                                                                       |
@@ -510,10 +506,7 @@ be `<integer>=<key>`; a malformed entry is reported by position and its
 content is never echoed (a bare key pasted there carries `=` padding). A
 YAML scalar that still contains `${...}` after resolution (for example the
 Compose syntax `${VAR:-default}`) is an error naming the key, so an
-unsupported reference never becomes a literal secret. `parseProviderEnvName`
-is the pure parser of `VAUBAAN_PROVIDER_<ID>_<FIELD>` names;
-`PROVIDER_APP_FIELD_PROPERTY` maps each field to its `ProviderAppConfig`
-property exhaustively.
+unsupported reference never becomes a literal secret.
 
 Secret references in YAML: `${NAME}` is replaced by the environment
 variable (unset → error naming the key), `${file:/run/secrets/x}` by the
@@ -575,7 +568,7 @@ What the interface calls this instance (spec §4.2, §4.3), so that someone
 with several instances open can tell them apart. `InstanceNameService`
 (`server/instance/settings.ts`, `root.instance.name`) follows the rule of
 every setting the file and the Administration page share (telemetry's
-toggle, the sign-in providers, the OAuth clients):
+toggle, the sign-in providers):
 
 | `instance_name` in the file / environment | Stored (`instance_config` key `instance.name`) | Shown (`label`)        | `source`  | Field     |
 | ----------------------------------------- | ---------------------------------------------- | ---------------------- | --------- | --------- |
@@ -637,19 +630,23 @@ not carry that claim and the userinfo request fails, the sign-in is refused
 come from userinfo alone refuses sign-ins for the length of a userinfo
 outage. Open sessions are not affected.
 
-The provider list is **not** known to the loader: any `providers.<id>` is
-accepted structurally and the root compares ids with the `PluginRegistry`
-(`checkProviderApps`): a configuration error (exit 78) for an id no
-shipped plugin has. Which fields a service needs is the plugin's
-`CredentialSpec`: an OAuth client (`client_id`, `client_secret`) for a
-service that signs people in through its own authorization (Gmail today),
-nothing for a service that takes a key. A `providers.<id>` block is the
-whole client of that provider and makes the form on the service's connect
-page (`/accounts/new/<id>`) read-only for it (handbook
-[connections](connections.md), "The OAuth client of a service"); a block
-that lacks a required field does not fail the boot — the provider is shown
-incomplete and cannot be connected. A block for a service that needs no
-client is accepted and ignored by the connect flow.
+### Retired keys
+
+Nothing is configured per provider. The `providers.<id>.<field>` keys
+(`client_id`, `client_secret`) and the `VAUBAAN_PROVIDER_<ID>_<FIELD>[_FILE]`
+variables declared the OAuth client of a service that signed people in
+through a client of the company (Gmail, until it moved to an app password:
+ADR [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)).
+They are no longer read. `retiredConfigKeys` (`sources.ts`) lists the ones a
+configuration still sets — every leaf under the file's `providers` block and
+every `VAUBAAN_PROVIDER_*` variable — into `InstanceConfig.retiredKeys`, and
+the root logs one warning per entry (`logRetiredKeys`), naming it, never its
+value; the instance starts. Every `VAUBAAN_PROVIDER_*` variable is still taken
+out of `process.env` with the secrets (one of them held a client secret), and
+anything under the `providers` block counts as a secret path
+(`isSecretKeyPath`). The OAuth client the gateway registers itself at a
+service that accepts dynamic registration (Miro) is not configuration: it is
+kept in `instance_config` (handbook [connections](connections.md)).
 
 ## Fixed in code (not configurable)
 
@@ -1003,7 +1000,7 @@ shim `lib/crypto/index.ts` and the v4 `lib/` code that read their own
 `loadInstanceConfig()` returns `secretEnvNames`: the variables that carried a
 secret or its path — the `secret` / `secret-map` keys of the table and their
 `_FILE` siblings, `VAUBAAN_SIGN_IN_<ID>_CLIENT_SECRET[_FILE]`,
-`VAUBAAN_PROVIDER_<ID>_{CLIENT_SECRET,PRIVATE_KEY}[_FILE]`, and the variables
+every retired `VAUBAAN_PROVIDER_*` variable, and the variables
 the YAML file references with `${NAME}` at a secret key (`isSecretKeyPath`).
 `loadProcessConfig()`, the default loader of `buildRoot` and of the
 `import-v4` and `reseal` commands, deletes them from `process.env`
@@ -1049,8 +1046,8 @@ never reaches a log line, the store or a page: ADR
 need); the `globalThis` handle of `getRoot()` is per process by design
 (`// single-process only`: every replica builds its own root);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
-derives from one object; `GatewayRoot.auth` is the authentication module; `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
-provider-app settings and the connections module, which share the
+derives from one object; `GatewayRoot.auth` is the authentication module; `GatewayRoot.connections` is the
+connections module, which shares the
 root's `SessionStore` (keys `connect:<state>` and `notice:<id>` next to
 `session:` and `login:`) and its `RateLimiter` (key `connect:<userId>`);
 `GatewayRoot.budget` and `GatewayRoot.execution` are the budget's session
@@ -1128,12 +1125,9 @@ restore and removed again, the right key restoring the copy and the gateway
 serving), the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except
 `telemetry-default.ts` and `deploy/config/*.example*`),
-`apps/gateway/tests/unit/structural/example-config-providers.test.ts` (the
-`providers:` block of the example YAML and the `VAUBAAN_PROVIDER_*` lines of
-`.env.example`, commented or not, checked against the shipped plugins: no
-unknown provider, none that takes no app, no undeclared field, every
-required field shown, every non-experimental provider that takes an app
-present, the same providers in both files) and
+`apps/gateway/tests/unit/structural/example-config-providers.test.ts` (neither
+example sets a retired key: no `providers:` block in the YAML, no
+`VAUBAAN_PROVIDER_*` line in `.env.example`, commented or not) and
 `apps/gateway/tests/integration/standalone-native-addons.test.ts` (skipped
 without a build: the `/healthz` route trace lists the `argon2` and
 `better-sqlite3` binaries, and both load from the standalone

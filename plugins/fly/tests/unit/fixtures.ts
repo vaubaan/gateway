@@ -56,7 +56,7 @@ export function context(
   resources: readonly Resource[] = [acme],
   fields: Record<string, string> = {},
 ): ExecuteContext {
-  return { credential: credential(fields), appConfig: {}, fetch, resources };
+  return { credential: credential(fields), fetch, resources };
 }
 
 export const config = (image: string = IMAGE, mounts: unknown[] = []) => ({

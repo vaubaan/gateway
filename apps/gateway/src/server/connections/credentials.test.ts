@@ -60,7 +60,7 @@ function oauthHarness(routes: readonly MockRoute[]) {
 }
 
 async function configured(h: ConnectionsHarness): Promise<ConnectionsHarness> {
-  await h.providerApps.save('oauthco', { client_id: 'cid', client_secret: 'csecret' });
+  await h.seedClient('oauthco', 'cid', 'csecret');
   return h;
 }
 
@@ -72,17 +72,15 @@ const refreshed = (n: number): MockRoute => ({
 });
 
 describe('resolve', () => {
-  it('hands the decrypted credential and an app config without the client secret', async () => {
+  it('hands the decrypted credential, never the client secret', async () => {
     const h = await configured(oauthHarness([]));
     const id = await seed(h, 'oauthco', secret());
     const resolved = await h.broker.resolve(id);
     expect(resolved.credential).toEqual(secret());
-    expect(resolved.appConfig).toEqual({ client_id: 'cid' });
     expect(resolved.plugin.id).toBe('oauthco');
     expect(h.fetch.calls).toHaveLength(0);
 
     const ctx = h.broker.contextOf(resolved);
-    expect(ctx.appConfig).toEqual({ client_id: 'cid' });
     expect(JSON.stringify(ctx)).not.toContain('csecret');
   });
 
@@ -249,11 +247,13 @@ describe('refresh', () => {
     expect((await h.store.connections.getById(id))!.status).toBe('active');
   });
 
-  it('leaves the connection active when the company app is no longer configured', async () => {
+  it('expires the connection when the client it was made with is no longer registered', async () => {
+    // The grant belonged to that client: nothing can refresh it, the owner reconnects.
     const h = oauthHarness([]);
     const id = await seed(h, 'oauthco', secret());
-    await expect(h.broker.refresh(id)).rejects.toThrow(/no complete app configuration/);
-    expect((await h.store.connections.getById(id))!.status).toBe('active');
+    await expect(h.broker.refresh(id)).rejects.toThrow(/reconnect it/);
+    expect((await h.store.connections.getById(id))!.status).toBe('expired');
+    expect(h.fetch.calls).toHaveLength(0);
   });
 
   it('expires a credential that has no refresh path (api key, oauth2 without refresh token)', async () => {
@@ -263,7 +263,7 @@ describe('refresh', () => {
         fixturePlugin({ id: 'oauthco', credential: SPEC }),
       ],
     });
-    await h.providerApps.save('oauthco', { client_id: 'cid', client_secret: 'csecret' });
+    await h.seedClient('oauthco', 'cid', 'csecret');
     const key = await seed(h, 'keyco', { kind: 'api-key', fields: { token: 't' }, metadata: {} });
     const bare = await seed(h, 'oauthco', secret({ refreshToken: null }));
     await expect(h.broker.refresh(key)).rejects.toBeInstanceOf(UpstreamAuthError);
@@ -309,12 +309,12 @@ describe('refresh', () => {
         }),
       ],
     });
-    await h.providerApps.save('oauthco', { client_id: 'cid', client_secret: 'csecret' });
+    await h.seedClient('oauthco', 'cid', 'csecret');
     const id = await seed(h, 'oauthco', secret());
     const resolved = await h.broker.refresh(id);
     expect(resolved.credential).toMatchObject({ accessToken: 'at-plugin' });
     expect(h.fetch.calls).toHaveLength(0); // no token endpoint call by the host
-    expect(seen[0]!.appConfig).toEqual({ client_id: 'cid' }); // still no client secret
+    expect(JSON.stringify(seen[0])).not.toContain('csecret'); // never the client secret
     expect(parseSecret((await h.store.connections.getCredential(id))!)).toMatchObject({
       refreshToken: 'rt-plugin',
     });

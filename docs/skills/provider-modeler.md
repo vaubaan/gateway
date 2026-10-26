@@ -58,10 +58,11 @@ back. Where the two disagree, the kit wins; report the disagreement.
   [`docs/handbook/providers/`](../handbook/providers/README.md), chosen for
   its resemblance: `cloudflare-dns` (`api-key`, one resource per zone,
   layered write risks), `vercel` (environment in the call), `supabase`
-  (several planes, `oauth2`), `github` (`app-install` with
-  `userVerification`, per-call token), `ssh` (`ssh-key`, shell commands
-  classified from their text), `railway` (rewrapped remote MCP server,
-  `oauth2` with refresh).
+  (several planes, `api-key`), `github` (`api-key` with a guide, the git
+  remote), `ssh` (`ssh-key`, shell commands classified from their text, an
+  injectable transport), `miro` (rewrapped remote MCP server, `oauth2` with a
+  client the gateway registers itself), `gmail` (`api-key` app password over
+  IMAP, an injectable transport).
 
 Provider documentation comes from Context7, not from memory and not from
 ad-hoc web fetches. Context7 is reached through the gateway, like any other
@@ -128,14 +129,14 @@ The numbers on the right are the steps of the kit.
    that reaches a URL path is one path segment (`pathIdent`). A call touching
    several entities returns several slices; a call that hands out a
    credential is a write.
-6. **Credential** (step 5). One `CredentialSpec`: `api-key`, `oauth2`,
-   `app-install` or `ssh-key`. The host runs the flow and the standard
-   `refresh_token` grant; declare `refresh()` only for a non-standard one.
-   For `app-install`, declare `userVerification` whenever the provider can
-   list the installations a user reaches, with `CLIENT_ID_FIELD` and a secret
-   `CLIENT_SECRET_FIELD` in `appConfigFields`; without it the host refuses
-   the connection unless the operator accepts unverified installations. The
-   plugin never sees a client secret and never reads the environment.
+6. **Credential** (step 5). One `CredentialSpec`: `api-key` (with its
+   `label`, `createUrl`, `guide` and `verify`) whenever a person can make a
+   key at the provider, `oauth2` only where none exists — and then with
+   `clientRegistration`: the gateway registers its own client, no
+   administrator declares one (ADR gmail-over-imap-with-an-app-password) —,
+   or `ssh-key`. The host runs the flow and the standard `refresh_token`
+   grant; declare `refresh()` only for a non-standard one. The plugin never
+   sees a client secret and never reads the environment.
 7. **Resources** (step 6). `discoverResources(ctx)` returns the refs the
    owner will label and a mission will select; the classifier compares with
    the same refs. The provider's answer goes through a type guard.
@@ -159,9 +160,8 @@ The numbers on the right are the steps of the kit.
 11. **Registration** (step 10). The dependency in
     `apps/gateway/package.json`, then one import and one array entry in
     `apps/gateway/src/server/compose/shipped-plugins.ts`. That registry is
-    the single provider list; add the provider to no other list. For an
-    `oauth2` or `app-install` plugin, its app settings in the two examples
-    under `deploy/config/`.
+    the single provider list; add the provider to no other list, and nothing
+    to the configuration examples.
 12. **Version and changelog** (step 11). A new plugin starts at `0.1.0`, the
     same in `src/index.ts` and `package.json`; `catalog_version: 1`; one
     entry in the root `CHANGELOG.md` under `[Unreleased]`.

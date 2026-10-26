@@ -127,7 +127,6 @@ external`), never prefetched.
 | `/admin/bootstrap` in setup mode, `POST /api/setup/master-key`                                                                    | `admin/bootstrap/page.tsx`, `api/setup/master-key/route.ts`, `proxy.ts` (the redirect of every other path)                                     | [configuration](configuration.md), [authentication](authentication.md)                       |
 | `/admin`, `/admin/identity-provider`, `…/new`, `…/<id>`                                                                           | `admin/(guarded)/page.tsx`, `admin/(guarded)/identity-provider/**`, `admin/(guarded)/layout.tsx`, `components/settings/SignInProviderForm.tsx` | [authentication](authentication.md)                                                          |
 | `POST /api/admin/identity-provider`, `POST /api/admin/sign-in-providers`, `…/<id>/remove`                                         | `api/admin/identity-provider/route.ts`, `api/admin/sign-in-providers/**`                                                                       | [authentication](authentication.md)                                                          |
-| `POST /admin/provider-apps/<provider>` (the OAuth client of a service, declared from its connect page)                            | `admin/(guarded)/provider-apps/[provider]/route.ts`                                                                                            | [connections](connections.md)                                                                |
 | `/admin/telemetry`, `POST /api/admin/telemetry`                                                                                   | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts`                                                                           | [telemetry](telemetry.md)                                                                    |
 | `/admin/encryption`, `POST /api/admin/master-key/download`, `…/handed-over`                                                       | `admin/(guarded)/encryption/page.tsx`, `api/admin/master-key/**`                                                                               | [configuration](configuration.md), [authentication](authentication.md)                       |
 | `/accounts`, `/accounts/new`, `/accounts/new/<provider>`, `/accounts/<id>`                                                        | `(app)/accounts/**/page.tsx`                                                                                                                   | [connections](connections.md)                                                                |
@@ -502,11 +501,10 @@ are windows of time, not calendar days: the server does not know the
 reader's time zone. The cost is a handful of indexed reads per mission the
 person can read, no scan. `readSetup(setupDepsOf(root))` (`server/now/setup.ts`)
 is the checklist an administrator reads on a first run: the host of the
-identity provider, the services that sign people in through an OAuth client
-and whether it is declared (`ProviderAppsService.list`, `needsApp`; the
-missing ones carry the id of their service, for the link to its connect
-page), and whether telemetry was decided. Settings → Setup counts its
-"OAuth clients" step the same way.
+identity provider and whether telemetry was decided (`SetupView`
+`{ sign_in, telemetry }`). No service needs anything declared by an
+administrator, so neither the first run nor Settings → Setup has a step per
+service.
 
 **The page has three forms** (`(app)/_now/`; style guide §1.1):
 

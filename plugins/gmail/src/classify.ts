@@ -201,40 +201,72 @@ function sensitiveLabelSlice(action: 'R' | 'W', label: string | null): Slice {
 
 // ─── Argument validation ───────────────────────────────────────────────────
 
-/** Longest thread or message id accepted (Gmail's are 16 hexadecimal digits). */
-export const MAX_GMAIL_ID_LENGTH = 64;
+/**
+ * Longest thread or message id accepted : the lower-case hexadecimal of a
+ * 64-bit `X-GM-THRID` / `X-GM-MSGID`, as the Gmail API prints it.
+ */
+export const MAX_GMAIL_ID_LENGTH = 16;
 /** Longest label accepted (Gmail caps a label name at 225 characters). */
 export const MAX_LABEL_LENGTH = 225;
 
-const GMAIL_ID = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_GMAIL_ID_LENGTH}}$`);
-const LABEL_CHARS = /^[A-Za-z0-9_./-]+$/;
+/** Longest MIME part number accepted (`1.2.3`), in characters. */
+export const MAX_PART_LENGTH = 32;
+
+const GMAIL_ID = new RegExp(`^[0-9a-f]{1,${MAX_GMAIL_ID_LENGTH}}$`);
+/** One number of a part number : 1 to 9999, no leading zero. */
+const PART_NUMBER = /^[1-9][0-9]{0,3}$/;
+/**
+ * What a label name may hold : letters, marks and digits of any script, the
+ * space, and common punctuation. Never a control character, a quote, a
+ * backslash, `*` / `%` (IMAP's `LIST` wildcards), braces (an IMAP literal
+ * starts with `{`), brackets (`[Gmail]`) or angle brackets.
+ */
+const LABEL_CHAR = /^[\p{L}\p{M}\p{N} _.,;:!?'’&+()@#=~^$€£«»–—/-]$/u;
 /** What a bracket identifier of a slice may hold (the slice grammar of the policy engine). */
 const SLICE_IDENT = /^[A-Za-z0-9_./~-]+$/;
 
 /**
- * A Gmail thread or message id, or `null` : an opaque token of one path
- * segment — no dot, no separator, no escape, bounded. The id lands in a slice
- * today and in a request path (`users/me/threads/{id}`) once the plugin
- * executes, where `encodeURIComponent` would leave `.` and `..` for a URL
- * parser to remove ; a value outside the grammar is refused, never escaped.
- * The one check `classify` and the executor to come share.
+ * A Gmail thread or message id, or `null` : 1 to 16 lower-case hexadecimal
+ * digits, the Gmail API's spelling of the 64-bit `X-GM-THRID` / `X-GM-MSGID`
+ * the IMAP server numbers them with. The id lands in a slice and, converted
+ * to its decimal value, in an IMAP `SEARCH` ; a value outside the grammar is
+ * refused, never escaped or normalised. The one check `classify` and
+ * `execute` share (ADR plugin-identifiers-one-grammar-for-classify-and-execute).
  */
 export function gmailId(value: unknown): string | null {
   return typeof value === 'string' && GMAIL_ID.test(value) ? value : null;
 }
 
 /**
- * A label argument, or `null` : a system label id (`INBOX`), a user label id
- * (`Label_42`) or a label name without spaces, nested with `/`
- * (`Legal/Contracts`), bounded. No segment is empty, `.` or `..` : whatever
- * the executor to come does with the value — a request body, or a path
- * segment (`users/me/labels/{id}`) — no URL parser can read a dot segment in
- * it. Shared with that executor, like `gmailId`.
+ * A MIME part number of a message (`2`, `1.2`), or `null` : numbers from 1,
+ * separated by dots, bounded. The `part` of `get_attachment` lands in an IMAP
+ * `FETCH BODY[<part>]` ; shared with `execute`, like `gmailId`.
+ */
+export function gmailPartId(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > MAX_PART_LENGTH) return null;
+  // Split on the dots, each number checked alone : no repeated group to backtrack in.
+  return value.split('.').every((n) => PART_NUMBER.test(n)) ? value : null;
+}
+
+/**
+ * A label argument, or `null` : a system label id (`INBOX`) or a user label
+ * name as `list_labels` returns it, nested with `/` — `Clients 2026`,
+ * `Factures payées`, `Projets/Été`. At most `MAX_LABEL_LENGTH` characters,
+ * each one of `LABEL_CHAR` (no control character, CR or LF, quote,
+ * backslash, wildcard, brace or bracket) ; no segment empty, `.` or `..`, and
+ * no blank at either end of the name or of a segment. Over IMAP the name is
+ * a mailbox name, which `imapflow` sends quoted, in modified UTF-7. Shared
+ * with `execute`, like `gmailId`.
  */
 export function labelRef(value: unknown): string | null {
-  if (typeof value !== 'string' || value.length > MAX_LABEL_LENGTH) return null;
-  if (!LABEL_CHARS.test(value)) return null;
-  return value.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..') ? value : null;
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if ([...value].length > MAX_LABEL_LENGTH) return null;
+  for (const ch of value) if (!LABEL_CHAR.test(ch)) return null;
+  return value
+    .split('/')
+    .every((seg) => seg !== '' && seg !== '.' && seg !== '..' && seg === seg.trim())
+    ? value
+    : null;
 }
 
 /** A required identifier argument checked by its grammar, or the denial that names it. */
@@ -252,9 +284,15 @@ function requireArg(
 
 /**
  * Comparison key of a label name : Gmail's search syntax is case-insensitive
- * and writes a space or a `/` of the name as `-` (`label:legal-contracts`).
+ * and writes a space or a `/` of the name as `-` (`label:legal-contracts`) ;
+ * the name is compared in Unicode NFC, so `Été` typed composed or decomposed
+ * is one label.
  */
-const labelKey = (label: string): string => label.toLowerCase().replace(/[\s/]+/g, '-');
+const labelKey = (label: string): string =>
+  label
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/[\s/]+/g, '-');
 
 /** `candidate` is `parent` or a label nested under it (`legal/contracts`, `legal-contracts`). */
 function isLabelOrNested(candidate: string, parent: string): boolean {
@@ -267,11 +305,43 @@ function isLabelOrNested(candidate: string, parent: string): boolean {
 const DELETING_LABELS: ReadonlySet<string> = new Set(['TRASH', 'SPAM']);
 
 /**
- * System label ids a write may name. A user label is addressed by an opaque
- * id (`Label_42`) the classifier cannot map to a name, so only these ids are
- * known not to be one of the owner's sensitive labels.
+ * A label a write may name, or `null` : `labelRef`, and never `TRASH` or
+ * `SPAM` in any case. The one check of a written label, for `classify` and
+ * `execute`.
  */
-const SYSTEM_LABEL_IDS: ReadonlySet<string> = new Set([
+export function writableLabel(value: unknown): string | null {
+  const label = labelRef(value);
+  return label !== null && !DELETING_LABELS.has(label.toUpperCase()) ? label : null;
+}
+
+/** Prefixes of Gmail's system folders, whatever the locale's product name. */
+const SYSTEM_CONTAINER_PREFIXES = ['[gmail]', '[google mail]'];
+
+/**
+ * A label `create_label` may name, or `null` : `labelRef`, and none of the
+ * system label ids (`INBOX`, `TRASH`, `SPAM`, `CATEGORY_*`…, in any case),
+ * and nothing under Gmail's system container (`[Gmail]/…`). The server
+ * check (the name exists, or is a special-use folder) is `execute`'s.
+ */
+export function creatableLabel(value: unknown): string | null {
+  const label = labelRef(value);
+  if (label === null) return null;
+  const upper = label.toUpperCase();
+  const first = upper.split('/')[0] ?? upper;
+  if (SYSTEM_LABEL_IDS.has(first) || DELETING_LABELS.has(first)) return null;
+  const lower = label.toLowerCase();
+  if (SYSTEM_CONTAINER_PREFIXES.some((p) => lower === p || lower.startsWith(`${p}/`))) return null;
+  return label;
+}
+
+/**
+ * System label ids a write may name. Any other value is a user label name,
+ * which may be, or be nested under, one of the owner's sensitive labels ;
+ * only these ids are known not to be one. `execute` writes four of them
+ * (`INBOX`, `STARRED`, `IMPORTANT`, `UNREAD`) and refuses the others, which
+ * IMAP does not expose as writable labels.
+ */
+export const SYSTEM_LABEL_IDS: ReadonlySet<string> = new Set([
   'INBOX',
   'STARRED',
   'UNREAD',
@@ -404,6 +474,32 @@ export function classifyGmail(
         fromZoneSlice('unknown'),
       ];
       if (md.sensitive_labels.length > 0) slices.push(sensitiveLabelSlice('R', null));
+      return { slices };
+    }
+
+    // Like get_thread : the sender and the labels are unknown before the fetch.
+    case 'gmail__get_attachment': {
+      const tid = requireArg(args, 'thread_id', gmailId);
+      if (typeof tid !== 'string') return tid;
+      const mid = requireArg(args, 'message_id', gmailId);
+      if (typeof mid !== 'string') return mid;
+      const part = requireArg(args, 'part', gmailPartId);
+      if (typeof part !== 'string') return part;
+      const slices: Slice[] = [
+        slice('R', [name('mailbox'), name('thread'), ident(tid), name('message'), ident(mid)]),
+        fromZoneSlice('unknown'),
+      ];
+      if (md.sensitive_labels.length > 0) slices.push(sensitiveLabelSlice('R', null));
+      return { slices };
+    }
+
+    case 'gmail__create_label': {
+      const label = requireArg(args, 'name', creatableLabel);
+      if (typeof label !== 'string') return label;
+      const segment = SLICE_IDENT.test(label) ? ident(label) : ANY_IDENT;
+      const slices: Slice[] = [slice('W', [name('mailbox'), name('label'), segment])];
+      const named = md.sensitive_labels.find((s) => isLabelOrNested(label, s));
+      if (named !== undefined) slices.push(sensitiveLabelSlice('W', named));
       return { slices };
     }
 

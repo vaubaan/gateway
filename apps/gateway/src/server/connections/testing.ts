@@ -26,22 +26,27 @@ import { MemoryAuditWriter } from '@vaubaan/gateway-core';
 
 import { createAuthorityModule } from '../authority';
 import { MemoryRateLimiter, MemorySessionStore } from '../compose/memory';
-import type { ProviderAppConfig as FileProviderAppConfig } from '../config/types';
 import { silentLogger } from '../logging';
-import { ProviderAppsService } from '../provider-apps';
+import type { ConfigRepo } from '../store/repositories/config';
 import { openTestStore, type TestStore } from '../store/testing';
 import type { GroupRecord, UserRecord } from '../store/types';
 import { CredentialBroker } from './credentials';
-import { OAuth2Clients } from './oauth2-clients';
+import { OAuth2Clients, registeredClientKey } from './oauth2-clients';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService, type Actor } from './service';
 
 export const PUBLIC_URL = new URL('https://gateway.example.com');
 
+/**
+ * An `oauth2` way. Its client is one the gateway registers itself, the only kind
+ * there is (ADR gmail-over-imap-with-an-app-password); a test that is not about
+ * the registration seeds it with `ConnectionsHarness.seedClient`.
+ */
 export const OAUTH_SPEC: OAuth2CredentialSpec = {
   kind: 'oauth2',
   authorizationUrl: 'https://provider.example.com/oauth/authorize',
   tokenUrl: 'https://provider.example.com/oauth/token',
+  clientRegistration: { registrationUrl: 'https://provider.example.com/oauth/register' },
   scopes: ['read', 'write'],
   pkce: true,
   clientAuthMethod: 'client_secret_basic',
@@ -212,14 +217,11 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
 export interface HarnessOptions {
   readonly plugins: readonly ProviderPlugin[];
   readonly routes?: readonly MockRoute[];
-  /** `providers.<id>` blocks of the mounted configuration. */
-  readonly fileApps?: ReadonlyMap<string, FileProviderAppConfig>;
 }
 
 export interface ConnectionsHarness extends TestStore {
   readonly registry: PluginRegistry;
   readonly fetch: MockFetch;
-  readonly providerApps: ProviderAppsService;
   readonly clients: OAuth2Clients;
   readonly broker: CredentialBroker;
   readonly service: ConnectionService;
@@ -229,6 +231,11 @@ export interface ConnectionsHarness extends TestStore {
   readonly audit: MemoryAuditWriter;
   /** Creates a user (and optional groups they belong to) and returns the actor. */
   actor(email: string, groupNames?: readonly string[]): Promise<Actor>;
+  /**
+   * Keeps a client as if the gateway had registered it at the provider for this
+   * instance's callback: what a test of the flows, not of the registration, starts from.
+   */
+  seedClient(providerId: string, clientId: string, clientSecret: string | null): Promise<void>;
 }
 
 export function connectionsHarness(options: HarnessOptions): ConnectionsHarness {
@@ -237,14 +244,8 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
   const fetch = mockFetch(options.routes ?? []);
   const now = (): number => test.clock.now().getTime();
   const sessions = new MemorySessionStore(now);
-  const providerApps = new ProviderAppsService(
-    options.fileApps ?? new Map(),
-    test.store.config,
-    registry,
-  );
   const audit = new MemoryAuditWriter();
   const clients = new OAuth2Clients({
-    providerApps,
     config: test.store.config,
     publicUrl: PUBLIC_URL,
     fetch,
@@ -254,7 +255,6 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
   const broker = new CredentialBroker({
     connections: test.store.connections,
     registry,
-    providerApps,
     clients,
     fetch,
     clock: test.clock,
@@ -270,7 +270,6 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
   const service = new ConnectionService({
     store: test.store,
     registry,
-    providerApps,
     clients,
     broker,
     grounds: authority.grounds,
@@ -286,7 +285,6 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     ...test,
     registry,
     fetch,
-    providerApps,
     clients,
     broker,
     service,
@@ -308,7 +306,54 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
       }
       return { user, groups };
     },
+    async seedClient(providerId, clientId, clientSecret) {
+      await seedRegisteredClient(test.store.config, {
+        providerId,
+        clientId,
+        clientSecret,
+        redirectUri: service.callbackUrl(providerId).href,
+        at: test.clock.now(),
+      });
+    },
   };
+}
+
+/**
+ * Keeps a client in `instance_config` as `OAuth2Clients` keeps one it registered
+ * at the provider for `redirectUri`: the starting point of a test of the flows,
+ * not of the registration (oauth2-clients.test.ts).
+ */
+export async function seedRegisteredClient(
+  config: Pick<ConfigRepo, 'apply'>,
+  client: {
+    readonly providerId: string;
+    readonly clientId: string;
+    readonly clientSecret: string | null;
+    readonly redirectUri: string;
+    readonly at: Date;
+  },
+): Promise<void> {
+  const { providerId } = client;
+  await config.apply([
+    { kind: 'value', key: registeredClientKey(providerId, 'client_id'), value: client.clientId },
+    client.clientSecret === null
+      ? { kind: 'delete', key: registeredClientKey(providerId, 'client_secret') }
+      : {
+          kind: 'secret',
+          key: registeredClientKey(providerId, 'client_secret'),
+          plain: client.clientSecret,
+        },
+    {
+      kind: 'value',
+      key: registeredClientKey(providerId, 'redirect_uri'),
+      value: client.redirectUri,
+    },
+    {
+      kind: 'value',
+      key: registeredClientKey(providerId, 'registered_at'),
+      value: client.at.toISOString(),
+    },
+  ]);
 }
 
 /** The `state` of the authorization (or installation) URL a flow redirected to. */

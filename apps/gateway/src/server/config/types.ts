@@ -61,33 +61,6 @@ export interface AdminRule {
   readonly emails: readonly string[];
 }
 
-/**
- * The OAuth client the company declared at a provider that connects that
- * way. Which fields a given provider needs is declared by its plugin
- * (`CredentialSpec`); the loader only guarantees the shape and resolves
- * secret references.
- */
-export interface ProviderAppConfig {
-  readonly clientId?: string;
-  readonly clientSecret?: string;
-}
-
-export const PROVIDER_APP_FIELDS = ['client_id', 'client_secret'] as const;
-export type ProviderAppField = (typeof PROVIDER_APP_FIELDS)[number];
-
-export function isProviderAppField(raw: string): raw is ProviderAppField {
-  return (PROVIDER_APP_FIELDS as readonly string[]).includes(raw);
-}
-
-/** YAML/env field → `ProviderAppConfig` property. Exhaustive: a field added to
- *  `PROVIDER_APP_FIELDS` without a property here fails to compile. */
-export const PROVIDER_APP_FIELD_PROPERTY: Readonly<
-  Record<ProviderAppField, keyof ProviderAppConfig>
-> = {
-  client_id: 'clientId',
-  client_secret: 'clientSecret',
-};
-
 export interface EncryptionConfig {
   /** Raw 32-byte master key currently used to encrypt. */
   readonly masterKey: Uint8Array;
@@ -309,8 +282,14 @@ export interface InstanceConfig {
    */
   readonly signIn: readonly SignInProvider[];
   readonly admin: AdminRule;
-  /** Provider apps keyed by plugin id. Ids are validated against the registry by the root. */
-  readonly providers: ReadonlyMap<string, ProviderAppConfig>;
+  /**
+   * Keys and variables of earlier versions the instance no longer reads, as
+   * written (`providers.gmail.client_id`, `VAUBAAN_PROVIDER_GMAIL_CLIENT_ID`):
+   * the OAuth clients an administrator declared (ADR
+   * gmail-over-imap-with-an-app-password). They do not stop the boot; the root
+   * logs one warning each.
+   */
+  readonly retiredKeys: readonly string[];
   readonly bootstrapToken: string | null;
   readonly telemetry: TelemetryConfig;
   /** Mail delivery, or `null` when no relay is configured. */
@@ -348,9 +327,6 @@ export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   // A presigned URL is the credential itself; a file path is harmless but treated alike.
   const from = config.restore.from;
   if (from) out.push(from.kind === 'url' ? from.url.href : from.path);
-  for (const app of config.providers.values()) {
-    if (app.clientSecret) out.push(app.clientSecret);
-  }
   if ('encryption' in config) {
     out.push(...keyEncodings(config.encryption.masterKey));
     for (const key of config.encryption.previousKeys.values()) out.push(...keyEncodings(key));

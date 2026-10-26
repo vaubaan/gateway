@@ -23,7 +23,6 @@ export function nowDepsOf(root: GatewayRoot): NowDeps {
 export function setupDepsOf(root: GatewayRoot): SetupDeps {
   return {
     providers: root.auth.providers,
-    providerApps: root.providerApps,
     telemetry: root.telemetry,
   };
 }
@@ -40,10 +39,4 @@ export {
   type SharedMission,
   type StoppedMission,
 } from './now-reader';
-export {
-  oauthClientChecklist,
-  readSetup,
-  type OAuthClientChecklist,
-  type SetupDeps,
-  type SetupView,
-} from './setup';
+export { readSetup, type SetupDeps, type SetupView } from './setup';

@@ -5,7 +5,7 @@ import { createRedactor } from '../logging/redact';
 import { loadInstanceConfig, MASTER_KEY_BYTES } from './load';
 import { CONFIG_FILE_ENV } from './sources';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
-import { KEYS, parseProviderEnvName } from './sources';
+import { KEYS, secretEnvVariables } from './sources';
 import { TEST_BOOTSTRAP_TOKEN, TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
 import { secretValues } from './types';
 import { readFileSync } from 'node:fs';
@@ -48,7 +48,7 @@ describe('loadInstanceConfig — required keys', () => {
     expect(config.approvals.expirySeconds).toBe(600);
     expect(config.log.level).toBe('info');
     expect(config.trustedProxies).toEqual([]);
-    expect(config.providers.size).toBe(0);
+    expect(config.retiredKeys).toEqual([]);
   });
 
   it('names every missing required key at once, with its environment variable', () => {
@@ -287,34 +287,40 @@ describe('loadInstanceConfig — IdP block', () => {
   });
 });
 
-describe('loadInstanceConfig — provider apps', () => {
-  it('parses VAUBAAN_PROVIDER_<ID>_<FIELD>, including hyphenated ids and _FILE secrets', () => {
-    const { config } = loadInstanceConfig({
+describe('loadInstanceConfig — the retired OAuth clients of providers', () => {
+  // ADR gmail-over-imap-with-an-app-password: no OAuth client is declared by an administrator.
+  it('starts, reads none of them, and lists every key and variable still set', () => {
+    const { config, secretEnvNames } = loadInstanceConfig({
       env: validEnv({
+        [CONFIG_FILE_ENV]: '/config/gateway.yaml',
         VAUBAAN_PROVIDER_GMAIL_CLIENT_ID: '12345.apps.googleusercontent.com',
         VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET_FILE: '/run/secrets/gmail',
-        VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_ID: 'cf-id',
-        VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET: 'cf-secret',
+        VAUBAAN_PROVIDER_GITHUB_TOKEN: 'x',
       }),
-      readFile: fakeFiles({ '/run/secrets/gmail': 'GOCSPX-abc\n' }),
+      readFile: fakeFiles({
+        '/config/gateway.yaml':
+          'providers:\n  gmail:\n    client_id: abc\n    client_secret: s3cret\n  vercel: {}\n',
+      }),
     });
-    expect([...config.providers.keys()].sort()).toEqual(['cloudflare-dns', 'gmail']);
-    expect(config.providers.get('gmail')).toEqual({
-      clientId: '12345.apps.googleusercontent.com',
-      clientSecret: 'GOCSPX-abc',
-    });
-    expect(config.providers.get('cloudflare-dns')).toEqual({
-      clientId: 'cf-id',
-      clientSecret: 'cf-secret',
-    });
-  });
-
-  it('refuses an unknown provider field in env and in YAML', () => {
-    expect(paths(failure(validEnv({ VAUBAAN_PROVIDER_GITHUB_TOKEN: 'x' })))).toEqual(['providers']);
-    const err = failure(validEnv({ [CONFIG_FILE_ENV]: '/config/gateway.yaml' }), {
-      '/config/gateway.yaml': 'providers:\n  vercel:\n    token: abc\n',
-    });
-    expect(paths(err)).toEqual(['providers.vercel.token']);
+    expect(config.retiredKeys).toEqual([
+      'VAUBAAN_PROVIDER_GITHUB_TOKEN',
+      'VAUBAAN_PROVIDER_GMAIL_CLIENT_ID',
+      'VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET_FILE',
+      'providers.gmail.client_id',
+      'providers.gmail.client_secret',
+      'providers.vercel',
+    ]);
+    // Taken out of the process environment with the secrets: one of them held a client secret.
+    expect(secretEnvNames).toEqual(
+      expect.arrayContaining([
+        'VAUBAAN_PROVIDER_GITHUB_TOKEN',
+        'VAUBAAN_PROVIDER_GMAIL_CLIENT_ID',
+        'VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET_FILE',
+      ]),
+    );
+    expect(secretEnvVariables({ VAUBAAN_PROVIDER_X_CLIENT_ID: 'a' })).toEqual([
+      'VAUBAAN_PROVIDER_X_CLIENT_ID',
+    ]);
   });
 });
 
@@ -456,23 +462,13 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
         VAUBAAN_IDP_ISSUER: 'https://idp.example.com',
         VAUBAAN_IDP_CLIENT_ID: 'gw',
         VAUBAAN_IDP_CLIENT_SECRET: 'idp-s3cret',
-        VAUBAAN_PROVIDER_GMAIL_CLIENT_SECRET: 'gmail-s3cret',
-        VAUBAAN_PROVIDER_VERCEL_CLIENT_SECRET: 'vercel-s3cret',
-        VAUBAAN_PROVIDER_VERCEL_CLIENT_ID: 'public-id',
       }),
     });
     const secrets = secretValues(config);
     expect(secrets).toEqual(
-      expect.arrayContaining([
-        TEST_MASTER_KEY,
-        oldKey,
-        TEST_BOOTSTRAP_TOKEN,
-        'idp-s3cret',
-        'gmail-s3cret',
-        'vercel-s3cret',
-      ]),
+      expect.arrayContaining([TEST_MASTER_KEY, oldKey, TEST_BOOTSTRAP_TOKEN, 'idp-s3cret']),
     );
-    expect(secrets).not.toContain('public-id');
+    expect(secrets).not.toContain('gw');
   });
 
   it('registers a master key with the redactor in the form it was configured in (base64url, unpadded)', () => {
@@ -514,22 +510,6 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
   });
 });
 
-describe('provider environment names', () => {
-  it('splits VAUBAAN_PROVIDER_<ID>_<FIELD> with hyphenated ids and the longest field', () => {
-    expect(parseProviderEnvName('VAUBAAN_PROVIDER_GMAIL_CLIENT_ID')).toEqual({
-      providerId: 'gmail',
-      field: 'client_id',
-    });
-    expect(parseProviderEnvName('VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET')).toEqual({
-      providerId: 'cloudflare-dns',
-      field: 'client_secret',
-    });
-    expect(parseProviderEnvName('VAUBAAN_PROVIDER_CLIENT_ID')).toBeNull();
-    expect(parseProviderEnvName('VAUBAAN_PROVIDER_GITHUB_TOKEN')).toBeNull();
-    expect(parseProviderEnvName('OTHER_GMAIL_CLIENT_ID')).toBeNull();
-  });
-});
-
 describe('KEYS and the example files stay in sync', () => {
   const configDir = resolve(__dirname, '../../../../../deploy/config');
   const envExample = readFileSync(resolve(configDir, '.env.example'), 'utf8');
@@ -564,7 +544,7 @@ describe('KEYS and the example files stay in sync', () => {
     expect(config.publicUrl.origin).toBe('https://gateway.example.com');
     expect(config.admin).toEqual({ group: null, emails: ['ops@example.com'] });
     expect(config.idp).toBeNull();
-    expect(config.providers.size).toBe(0);
+    expect(config.retiredKeys).toEqual([]);
     expect(config.bootstrapToken).toBe(TEST_BOOTSTRAP_TOKEN);
   });
 });

@@ -83,7 +83,6 @@ function permissiveFetch(body: unknown = { id: 'x', segment_id: 'seg_news' }): M
 function ctx(fetch: MockFetch, resources: readonly Resource[] = mission): ExecuteContext {
   return {
     credential: { kind: 'api-key', fields: { api_key: 're_abc_123' }, metadata: {} },
-    appConfig: {},
     fetch,
     resources,
   };

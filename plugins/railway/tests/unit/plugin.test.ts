@@ -94,7 +94,6 @@ const connCtx = (
   over: Partial<ConnectionContext> = {},
 ): ConnectionContext => ({
   credential: secret(),
-  appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   ...over,
 });

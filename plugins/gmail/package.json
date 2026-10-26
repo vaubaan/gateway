@@ -1,9 +1,9 @@
 {
   "name": "@vaubaan/plugin-gmail",
-  "version": "0.3.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "Vaubaan Gateway provider plugin for Gmail — experimental, classifier-only : identity-zoned risks for reading, drafting and labelling",
+  "description": "Vaubaan Gateway provider plugin for Gmail — experimental : search, read, draft and label over IMAP with an app password, under identity-zoned risks ; never sends",
   "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"
@@ -12,9 +12,12 @@
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@vaubaan/plugin-sdk": "*"
+    "@vaubaan/plugin-sdk": "*",
+    "html-to-text": "^10.0.1",
+    "imapflow": "^2.4.0"
   },
   "devDependencies": {
+    "@types/html-to-text": "^9.0.4",
     "@vaubaan/policy-engine": "*"
   }
 }

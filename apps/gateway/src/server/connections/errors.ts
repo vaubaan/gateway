@@ -10,7 +10,6 @@ import type { ConnectionStatus } from '@vaubaan/shared';
 
 export const CONNECT_ERROR_CODES = [
   'provider-unknown',
-  'app-not-configured',
   'invalid-input',
   'return-url-refused',
   'rate-limited',
@@ -35,8 +34,6 @@ export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
 
 export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> = {
   'provider-unknown': 'This service is not available on this gateway.',
-  'app-not-configured':
-    'An administrator must declare the OAuth client of this service first, on its connect page.',
   'invalid-input': 'Some values are missing or do not have the expected format.',
   'return-url-refused': 'The return address is outside this gateway and was refused.',
   'rate-limited': 'Too many attempts to connect. Wait a minute and retry.',
@@ -66,7 +63,6 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
 
 const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'provider-unknown': 404,
-  'app-not-configured': 409,
   'invalid-input': 400,
   'return-url-refused': 400,
   'rate-limited': 429,

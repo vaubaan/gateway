@@ -87,7 +87,6 @@ describe('template plugin — structural kit', () => {
       resources: [staging],
       context: (fetch, resources) => ({
         credential: { kind: 'api-key', fields: { [API_KEY_FIELD]: 'k-123' }, metadata: {} },
-        appConfig: {},
         fetch,
         resources,
       }),
@@ -269,7 +268,6 @@ describe('executeTemplate with mockFetch', () => {
     resources: readonly Resource[] = [staging],
   ): ExecuteContext => ({
     credential: { kind: 'api-key', fields: { [API_KEY_FIELD]: 'k-123' }, metadata: {} },
-    appConfig: {},
     fetch,
     resources,
   });

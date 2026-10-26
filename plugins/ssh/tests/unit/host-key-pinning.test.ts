@@ -331,7 +331,6 @@ describe('plugin.execute / discoverResources — a credential without a pin neve
     const plugin = createSshPlugin({ transport });
     const ctx: ExecuteContext = {
       credential: credentialWith(fields),
-      appConfig: {},
       fetch: noFetch,
       resources: [resource],
     };
@@ -346,7 +345,6 @@ describe('plugin.execute / discoverResources — a credential without a pin neve
     const plugin = createSshPlugin({ transport });
     const ctx: ConnectionContext = {
       credential: credentialWith(fields),
-      appConfig: {},
       fetch: noFetch,
     };
     await expect(plugin.discoverResources(ctx)).rejects.toThrow(/'host_key_fingerprint'/);
@@ -366,7 +364,6 @@ describe('plugin.execute / discoverResources — a credential without a pin neve
     const plugin = createSshPlugin({ transport });
     const ctx: ExecuteContext = {
       credential: credentialWith({ ...BASE_FIELDS, host_key_fingerprint: `${REAL_PIN}=` }),
-      appConfig: {},
       fetch: noFetch,
       resources: [resource],
     };

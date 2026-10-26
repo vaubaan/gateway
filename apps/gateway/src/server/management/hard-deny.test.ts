@@ -121,7 +121,6 @@ describe('management door — hard deny, by imports', () => {
     'groups',
     'authority',
     'store',
-    'provider-apps',
     'crypto',
     'auth',
     'telemetry',

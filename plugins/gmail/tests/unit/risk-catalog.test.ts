@@ -47,8 +47,8 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
   test('the loaded catalog has the expected shape', () => {
     expect(parsedCatalog.provider).toBe('gmail');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
-    // Expect 15 named risks + 1 fallback = 16.
-    expect(parsedCatalog.risks.length).toBe(16);
+    // Expect 16 named risks + 1 fallback = 17 (catalog 5 added gmail.label-create).
+    expect(parsedCatalog.risks.length).toBe(17);
   });
 
   test('every entry declares the required fields', () => {
@@ -179,6 +179,8 @@ const FALLBACK_ID = 'gmail.uncategorized-write';
 const GMAIL_TOOLS = [
   'gmail__search_threads',
   'gmail__get_thread',
+  'gmail__get_attachment',
+  'gmail__create_label',
   'gmail__list_drafts',
   'gmail__create_draft',
   'gmail__list_labels',
@@ -207,7 +209,11 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
         { q: 'label:LEGAL' },
       ];
     case 'gmail__get_thread':
-      return [{ id: 't_xyz' }];
+      return [{ id: '1a2b3c' }];
+    case 'gmail__get_attachment':
+      return [{ thread_id: 'aa01', message_id: 'bb02', part: '2' }];
+    case 'gmail__create_label':
+      return [{ name: 'Clients/2026' }, { name: 'Factures payées' }];
     case 'gmail__list_drafts':
       return [{}];
     case 'gmail__create_draft':
@@ -220,10 +226,10 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
       return [{}];
     case 'gmail__label_message':
     case 'gmail__unlabel_message':
-      return [{ thread_id: 't1', message_id: 'm1', label: 'IMPORTANT' }];
+      return [{ thread_id: 'aa01', message_id: 'bb02', label: 'IMPORTANT' }];
     case 'gmail__label_thread':
     case 'gmail__unlabel_thread':
-      return [{ thread_id: 't1', label: 'IMPORTANT' }];
+      return [{ thread_id: 'aa01', label: 'IMPORTANT' }];
     case 'gmail__describe_zones':
       return [{}];
     default:
@@ -308,7 +314,7 @@ describe('gmail risk-catalog — risksTouchedBy sanity checks', () => {
   });
 
   test('a label write on a system label touches gmail.label-write alone', () => {
-    const outcome = classifyGmail('gmail__label_thread', { thread_id: 't1', label: 'STARRED' }, [
+    const outcome = classifyGmail('gmail__label_thread', { thread_id: 'aa01', label: 'STARRED' }, [
       mailbox,
     ]);
     if (!('slices' in outcome)) throw new Error('expected slices');

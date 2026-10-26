@@ -33,7 +33,7 @@ const ENV = '00000000-0000-4000-8000-0000000000e1';
 const PASTED: CredentialSecret = { kind: 'api-key', fields: { api_token: TOKEN }, metadata: {} };
 
 function ctx(fetch: MockFetch, credential: CredentialSecret = PASTED): ConnectionContext {
-  return { credential, appConfig: {}, fetch };
+  return { credential, fetch };
 }
 
 const projects = (id: string, name: string) => ({

@@ -57,6 +57,7 @@ import {
   mergeTrees,
   readEnvSource,
   readFileSource,
+  retiredConfigKeys,
   secretEnvVariables,
   SIGN_IN_ENV_PREFIX,
 } from './sources';
@@ -73,12 +74,8 @@ import {
   LOG_LEVELS,
   type LogLevel,
   type OAuthConfig,
-  PROVIDER_APP_FIELD_PROPERTY,
-  PROVIDER_APP_FIELDS,
-  type ProviderAppConfig,
   isClientRegistrationPolicy,
   isLogLevel,
-  isProviderAppField,
   isMailTlsMode,
   MAIL_TLS_MODES,
   type MailConfig,
@@ -422,7 +419,6 @@ function validate(
   const signIn = readSignIn(r);
   const signInProviders = checkSignInProviders(r, idp, signIn);
   const admin = readAdmin(r, signInProviders);
-  const providers = readProviders(r);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
 
   const mail = readMail(r);
@@ -463,7 +459,7 @@ function validate(
     idp,
     signIn,
     admin,
-    providers,
+    retiredKeys: retiredConfigKeys(raw, env),
     bootstrapToken,
     telemetry: {
       enabled: telemetryEnabled,
@@ -1217,41 +1213,6 @@ function readAdmin(r: Reader, signInProviders: readonly SignInProvider[]): Admin
   // Optional: a seed the boot applies while the store names no administrator (ADR
   // administrators-live-in-the-instance). Without one the setup names the first.
   return { group, emails };
-}
-
-function readProviders(r: Reader): ReadonlyMap<string, ProviderAppConfig> {
-  const out = new Map<string, ProviderAppConfig>();
-  const block = r.tree('providers');
-  if (!block) return out;
-  for (const [providerId, value] of Object.entries(block)) {
-    const base = `providers.${providerId}`;
-    if (!isPlainObject(value)) {
-      r.issues.add(base, `expected a mapping of app fields, got ${typeName(value)}`);
-      continue;
-    }
-    const app: { -readonly [K in keyof ProviderAppConfig]?: string } = {};
-    for (const [field, fieldValue] of Object.entries(value)) {
-      const path = `${base}.${field}`;
-      if (!isProviderAppField(field)) {
-        r.issues.add(
-          path,
-          `unknown provider app field; expected one of ${PROVIDER_APP_FIELDS.join(', ')}`,
-        );
-        continue;
-      }
-      if (typeof fieldValue !== 'string' || fieldValue.trim() === '') {
-        r.issues.add(
-          path,
-          `expected a non-empty string, got ${typeName(fieldValue)}`,
-          envNamesFor(path),
-        );
-        continue;
-      }
-      app[PROVIDER_APP_FIELD_PROPERTY[field]] = fieldValue;
-    }
-    out.set(providerId, app);
-  }
-  return out;
 }
 
 /* ------------------------------------------------------------------------ */

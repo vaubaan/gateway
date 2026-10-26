@@ -136,7 +136,6 @@ export const echoWrites: MockRoute = {
 export function ctx(fetch: MockFetch, resources: readonly Resource[] = [pageRoot]): ExecuteContext {
   return {
     credential: { kind: 'api-key', fields: { [API_TOKEN_FIELD]: TOKEN }, metadata: {} },
-    appConfig: {},
     fetch,
     resources,
   };

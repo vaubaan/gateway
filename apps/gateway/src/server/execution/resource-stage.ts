@@ -47,6 +47,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 import type { Slice } from '@vaubaan/shared';
 
+import { isRetiredWay, retiredWayReason } from '../connections/mapping';
 import type { ConnectionsRepo } from '../store';
 import { missionResourceOf } from './mission-context';
 
@@ -123,9 +124,7 @@ export function unavailableReason(
   // An account connected a way the plugin no longer declares (the GitHub App
   // of catalog v8, an OAuth app of Supabase or Railway) runs nothing until it
   // is reconnected the way the service now offers.
-  if (kind !== plugin.credential.kind) {
-    return `this account was connected a way ${plugin.displayName} no longer offers on this gateway (${kind}); its owner reconnects it from Accounts.`;
-  }
+  if (isRetiredWay(kind, plugin.credential.kind)) return retiredWayReason(plugin.displayName, kind);
   const unbound = plugin.unboundTools?.[tool];
   if (connection?.hosts_instance === true && unbound !== undefined) {
     return `this account can reach the resource that hosts this gateway. ${unbound}`;

@@ -2,10 +2,9 @@
 title: Connections — connect flows, resources, credential refresh, OAuth clients
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-24
 tracks:
   - apps/gateway/src/server/connections/
-  - apps/gateway/src/server/provider-apps/
   - apps/gateway/src/server/compose/shipped-plugins.ts
   - apps/gateway/src/server/store/repositories/connections.ts
   - apps/gateway/migrations/0004_connection_resource_curation.sql
@@ -14,13 +13,11 @@ tracks:
   - apps/gateway/src/app/(app)/accounts/
   - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/app/(app)/layout.tsx
-  - apps/gateway/src/app/admin/(guarded)/provider-apps/
   - apps/gateway/src/components/connections/
   - apps/gateway/src/app/(app)/reference/[id]/page.tsx
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/tests/integration/connections/
-  - apps/gateway/tests/unit/server/connections/
 ---
 
 # Connections — connect flows, resources, credential refresh, OAuth clients
@@ -28,8 +25,8 @@ tracks:
 How a user connects a provider — one way per service, the simplest the
 service offers —, how the credential is stored and refreshed, how the
 resources of a connection are discovered and curated, and where the OAuth
-client of a service that signs people in comes from — declared by an
-administrator, or registered by the gateway itself
+client of a service that signs people in comes from — registered by the
+gateway itself; no administrator declares one
 (spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §0 "Connection",
 "Resource"; §2.3 connection states; §4.2 Connections and Administration;
 §4.3; §6 anti-replay; §7.2). Decisions:
@@ -42,20 +39,19 @@ service offers one, OAuth only where it offers none; the GitHub App, the
 installation verification, the manifest flow and the second way of
 connecting of earlier builds are described there),
 [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)
-(the client of a service that accepts dynamic registration). Built on the
+(the client of a service that accepts dynamic registration),
+[gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)
+(no OAuth client declared by an administrator any more; an account made a
+way its plugin no longer offers). Built on the
 [plugin SDK](plugin-sdk.md) (`CredentialSpec`, `discoverResources`,
 `experimental`), the [store](store.md) (`connections`,
 `connection_resources`, `instance_config`), the
-[configuration](configuration.md) root (`providers` block, `RateLimiter`,
-`SessionStore`) and [authentication](authentication.md) (web session,
+[configuration](configuration.md) root (`RateLimiter`, `SessionStore`) and [authentication](authentication.md) (web session,
 `guardMutation`: origin check, session, role).
 
 ## Layout
 
 ```
-apps/gateway/src/server/provider-apps/      host-agnostic, never imports `next`
-  fields.ts            appConfigFieldsOf(spec): which settings the OAuth client of a service needs
-  service.ts           ProviderAppsService: file-or-store values, sealed secrets, host/plugin views
 apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   index.ts             createConnectionsModule(deps) → root.connections; barrel
   service.ts           ConnectionService: start/complete, discover, discoverAfterCall, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
@@ -63,17 +59,17 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   credentials.ts       CredentialBroker: resolve() / refresh() — the refresh persistence hook
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError,
                        registerClient (RFC 7591), OAuth2RegistrationError
-  oauth2-clients.ts    OAuth2Clients: the client of an `oauth2` service — declared, or registered and kept
+  oauth2-clients.ts    OAuth2Clients: the client of an `oauth2` service, registered and kept
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
   credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
   ssh-keypair.ts       generateEd25519KeyPair(): OpenSSH private key + authorized_keys line
   input.ts             field validation, resolveReturnTo, env label, editable metadata lists
-  mapping.ts           connectionSummaryOf(), connectionOwnerOf(): record → shown shapes
+  mapping.ts           connectionSummaryOf(), connectionOwnerOf(), isRetiredWay(), retiredWayReason(): record → shown shapes
   handlers.ts          Request → Response handlers of the nine endpoints (transfer and reassign: handbook authority)
   errors.ts            ConnectError (closed codes + UI sentences), ConnectionUnavailableError,
                        ProviderUnreachableError
-  testing.ts           fixturePlugin(), one spec per kind, connectionsHarness() — tests only
+  testing.ts           fixturePlugin(), one spec per kind, connectionsHarness(), seedRegisteredClient() — tests only
 apps/gateway/src/server/compose/shipped-plugins.ts   SHIPPED_PLUGINS, buildShippedRegistry()
 apps/gateway/migrations/0004_connection_resource_curation.sql
 apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNotice()
@@ -81,7 +77,6 @@ apps/gateway/src/components/
   shell/AppShell.tsx                 the shell: AppShell (the side navigation) and AdminShell (the same, with the local navigation of Settings)
   connections/parts.tsx              NoticeBanner, AccountState, ExperimentalBadge, CredentialFieldInputs
   connections/TokenGuide.tsx         steps 1 and 2 of a token connection: where to create it, the permissions to tick
-  connections/OAuthClientForm.tsx    the OAuth client of a service, declared on its connect page by an administrator
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
 apps/gateway/src/app/(app)/accounts/
   page.tsx                           /accounts
@@ -104,8 +99,6 @@ apps/gateway/src/components/connections/
 apps/gateway/src/app/admin/(guarded)/connections/
   (no page: /admin/connections redirects to /accounts#without-owner, next.config.ts LEGACY_REDIRECTS)
   [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
-apps/gateway/src/app/admin/(guarded)/provider-apps/
-  [provider]/route.ts                POST /admin/provider-apps/<provider>   → handlers.saveProviderApp (no page: the form is on the connect page)
 ```
 
 Route handlers are one-line adapters over `root.connections.handlers` (the
@@ -129,34 +122,28 @@ one entry in `SHIPPED_PLUGINS`, plus the dependency in
 ## The OAuth client of a service
 
 A service that signs people in through its own authorization (`oauth2`)
-needs an OAuth client. Either the company declares it once before anyone
-connects (Gmail), or — when the service accepts dynamic client registration
-and the plugin declares `clientRegistration` — the gateway registers its own
-and nobody declares anything (Miro; "A client the gateway registers itself"
-below). A service that takes a key needs nothing from an administrator.
-`appConfigFieldsOf(spec)` (`provider-apps/fields.ts`):
-
-| Credential kind                    | Fields the administrator enters                                                   |
-| ---------------------------------- | --------------------------------------------------------------------------------- |
-| `oauth2`                           | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields` |
-| `oauth2` with `clientRegistration` | none — the gateway registers its own client at the service                        |
-| `api-key`                          | none — each user pastes a key of their own                                        |
-| `ssh-key`                          | none — the instance generates the key pair                                        |
-
-`needsProviderApp(spec)` is true when that list is not empty. Gmail is the
-one shipped plugin that needs it.
+needs an OAuth client, and the only one the gateway knows is one it
+registers itself: the plugin must declare `clientRegistration` (the SDK
+type requires it and `definePlugin` refuses a spec without it), so a service
+that accepts no dynamic client registration and offers no key a person can
+make cannot be connected. Nobody declares anything: no form, no setting, no
+setup step, no configuration key (ADR
+[gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md):
+Gmail, the one service that used a client an administrator declared, moved
+to an app password; the `provider_apps.*` settings it left are deleted by
+migration 0023 and the `providers.<id>.*` keys are retired, handbook
+[configuration](configuration.md) "Retired keys"). A service that takes a
+key, or a host reached by SSH, needs nothing from an administrator either.
 
 ### A client the gateway registers itself (`oauth2-clients.ts`)
 
-`OAuth2Clients({ providerApps, config: store.config, publicUrl, fetch, clock,
-logger })` is where the connect flows and the broker get the client of an
+`OAuth2Clients({ config: store.config, publicUrl, fetch, clock, logger })`
+is where the connect flows and the broker get the client of an
 `oauth2` service (ADR
 [oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md)):
 
-- **`forAuthorization(plugin, spec, redirectUri)`** — a flow starts. A
-  declared client comes from `providerApps.hostAppConfig` (none →
-  `OAuth2ClientMissing`, the page's `app-not-configured`). A registered one
-  is read from `instance_config`; when there is none, or when it was
+- **`forAuthorization(plugin, spec, redirectUri)`** — a flow starts. The
+  registered client is read from `instance_config`; when there is none, or when it was
   registered for another callback (the public URL changed), the host
   registers one (`registerClient`: `POST registrationUrl` with
   `client_name` "Vaubaan Gateway (<public host>)", the one redirect URI,
@@ -168,106 +155,40 @@ logger })` is where the connect flows and the broker get the client of an
   carry a client id, the secret of a confidential client, and no other auth
   method than the one asked. Single-flight per provider in the process.
 - **`forTokenRequest(plugin, spec)`** — exchange, refresh, revocation: the
-  declared or the stored client, never a registration
-  (`OAuth2ClientMissing` when none).
+  stored client, never a registration (`OAuth2ClientMissing` when none).
 - **`rejected(plugin, spec, clientId)`** — the provider answered
   `invalid_client` (code exchange in `completeOAuth2`, refresh in the
   broker): a registered client that is still `clientId` is forgotten (its
-  four keys deleted, logged), so the next connect registers again. A
-  declared client is left alone. Every other account connected through the
-  forgotten client is turned `expired` at its next refresh (the broker reads
-  "no client" for a self-registering spec as a rejected credential: its grant
-  belonged to that client), never retried as unreachable.
+  four keys deleted, logged), so the next connect registers again. Every
+  other account connected through the forgotten client is turned `expired`
+  at its next refresh (the broker reads "no client" as a rejected
+  credential: its grant belonged to that client), never retried as
+  unreachable.
 
 A refused registration is `client-registration-failed` (status and protocol
 code: "Board Co: the registration endpoint answered HTTP 403
 (access_denied)"); an unreachable one `provider-unreachable`; a registered
 client gone between the start and the callback `state-invalid`. Nothing of a
-registered client appears on the connect page, in Settings → Setup or in
-`pluginAppConfig` (`{}`).
+registered client appears on the connect page or in Settings → Setup, and a
+plugin never receives any of it (`ConnectionContext` carries the credential
+and the IO primitives only).
 
-`ProviderAppsService(config.providers, store.config, registry)`:
-
-- **Sources.** A `providers.<id>` block of the mounted configuration
-  (`VAUBAAN_PROVIDER_<ID>_CLIENT_ID`, `VAUBAAN_PROVIDER_<ID>_CLIENT_SECRET[_FILE]`)
-  wins for the whole provider: `source: 'file'`, `isReadOnly(id)` true,
-  `save()` refuses. The block is translated to the snake_case record plugins
-  read by `fileAppConfig()`. Otherwise the values come from `instance_config`
-  under `provider_apps.<id>.<field>`; secret fields are sealed
-  (`config.setSecret`, associated data
-  `instance_config:provider_apps.<id>.<field>`). A file block that lacks a
-  required field is reported incomplete — it is never completed from the
-  store.
-- **`status(id)` / `list()`** → `ProviderAppStatus { providerId, displayName,
-experimental, credentialKind, needsApp, fields, source, configured, missing,
-values (non-secret only), secretsSet }`. The secret values are never
-  returned.
-- **`save(id, input)`** validates every field at once (`ProviderAppError.problems`:
-  required, `pattern`), keeps a stored secret when the input is blank,
-  removes a blank optional field; refused for a provider that needs no
-  client. **`clear(id)`** deletes the stored keys of the provider.
-- **`hostAppConfig(id)`** — the full record, secrets included, for the
-  host's own use (OAuth client authentication, the declarative revocation);
-  throws `ProviderAppNotConfigured` naming the missing fields.
-- **`pluginAppConfig(id)`** — what a plugin receives as `ctx.appConfig`:
-  the same record **without `client_secret`** (ADR
-  plugin-contract-and-credential-spec D2: a plugin never sees the OAuth
-  client secret); `{}` for a plugin that declares no OAuth client.
-
-**Where it is declared.** On the service's own connect page,
-`/accounts/new/<id>` (`connectPagePath(id)`), for an administrator
-(`OAuthClientForm`): while the client is not declared the page shows, under
-"Declare the OAuth client of <service>" (`data-testid="oauth-client-missing"`),
-the redirect address to register at the service
-(`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`),
-the fields (`CredentialFieldInputs`: secrets as password inputs, never
-pre-filled; `idPrefix` `provider-app-<id>`), Save and, for store-sourced
-settings, Remove; once declared, the same form sits behind the disclosure
-"The OAuth client of <service>" (`data-testid="oauth-client-settings"`)
-under the connect form. Anyone else reads a callout with the same test id:
-an administrator declares it once, on this page. A file-sourced provider
-shows the form disabled with `CONFIG_WORDS.fileReadOnly`. Settings → Setup
-and the home's first-run checklist count the services whose client is
-missing (`SetupView.company_apps = { registered, missing: { id, name }[] }`,
-`now/setup.ts`) and link "Declare <service>" to that page; the picker leads
-an administrator there too.
-
-`POST /admin/provider-apps/<provider>` (`providerAppActionPath(id)`,
-`handlers.saveProviderApp`) goes through
-`guardMutation(request, deps, 'operator')` (origin, session, admin rule; the
-bootstrap operator may use it), answers 400 to a body that is not a form,
-reads the status before the change, applies the form's `action` —
-`clear` (`CLEAR_PROVIDER_APP_ACTION`, `clearProviderApp`: refused when the
-file sets the provider) or none (`storeProviderApp`: the `field.<name>`
-values) — and writes one `AdminAuditEntry` `config-changed` on
-`instance-config` / `provider-app:<id>` whose `before`/`after` carry the
-non-secret values and the names of the secrets set (`auditView`). Its
-`user_id` is `auditActorId(principal)`: the operator's user id, or
-`BOOTSTRAP_ACTOR_ID` for the bootstrap operator (handbook
-[authentication](authentication.md)). The entry is written after the change
-is committed: when that write fails, the failure is logged at `error`
-(`audit entry not written for a saved configuration change`, with `actor`
-and `provider`) and the operator still gets the notice. The handler checks
-that the provider is registered (`registry.has`; an unknown id gets the
-`provider-unknown` notice on `/accounts/new`); a failure to read the
-settings (store, configuration) propagates. Success and every refusal come
-back to the connect page as a one-time notice.
+Tests that are about the flows, not the registration, start from a client
+already kept: `ConnectionsHarness.seedClient(id, clientId, secret)` and
+`seedRegisteredClient(config, …)` write the four keys as a registration would.
 
 ## One way per service
 
 A plugin declares its one way of connecting in `credential` (ADR
 [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
 the simplest the service offers — a key a person makes by hand (`api-key`)
-whenever the service has one that works, `oauth2` where it has none (Gmail,
-Miro), `ssh-key` for a host. The host never looks for a second way.
+whenever the service has one that works (Gmail's is an app password),
+`oauth2` where it has none (Miro), `ssh-key` for a host. The host never looks for a second way.
 
 - **What is offered.** `ConnectionService.describe` builds one
   `ConnectableProvider` per plugin: `kind`, `redirects` (true for `oauth2`:
-  the page sends the person to the service), `registersItself` (`oauth2`
-  with `clientRegistration`), `usesApp` (an administrator declares the
-  client: `oauth2` without `clientRegistration`), `configured` (the OAuth
-  client is declared, or none is needed), the form
-  `fields`, `createUrl`, `label` (what the person creates, in the service's
+  the page sends the person to the service, through the client the gateway
+  registers there), the form `fields`, `createUrl`, `label` (what the person creates, in the service's
   words) and the `guide` with each permission's tools as `{ name, title }`
   (`toolLabel`: the plugin's `toolTitles`, else the name).
 - **What is run.** `start` runs the plugin's `credential`; `complete`
@@ -281,13 +202,23 @@ Miro), `ssh-key` for a host. The host never looks for a second way.
   discovery. Stored in clear: `metadata.account`, `metadata.expires_at`,
   `credential_expires_at`; the token is sealed with the credential.
 - **An account connected a way the plugin no longer offers** (the GitHub
-  App, the OAuth apps of Supabase and Railway of earlier builds: its
-  `metadata.credential_kind` is not the plugin's) keeps its id and its
-  missions, but the execution door refuses every call on it before the
-  budget (`toolUnavailableOn`, handbook [execution-door](execution-door.md):
-  "this account was connected a way <service> no longer offers on this
-  gateway") and `callableTools` leaves its tools out of `tools/list`, until
-  its owner reconnects it from Accounts; reconnecting drops the old way's
+  App, the OAuth apps of Supabase and Railway, a Gmail account connected by
+  OAuth before Gmail moved to an app password: its `metadata.credential_kind`
+  is not the plugin's, `isRetiredWay`) keeps its id, its resources, its
+  shares and its missions, but nothing reads its stored secret: the
+  execution door refuses every call on it before the budget
+  (`toolUnavailableOn`, handbook [execution-door](execution-door.md): the
+  sentence of `retiredWayReason`, "this account was connected a way
+  <service> no longer offers on this gateway (<kind>); its owner reconnects
+  it from Accounts.") and `callableTools` leaves its tools out of
+  `tools/list`; a discovery, the owner's "Refresh" or the gateway's after a
+  call, records the same sentence as its failure without calling the plugin
+  (whose `expectCredentialKind` would throw `CredentialKindMismatch`); the
+  account page names the way with "(a way this gateway no longer offers:
+  reconnect the account)" (`ConnectionView.wayRetired`,
+  `credentialKindLabel(kind, retired)`) and a "needs reconnecting" note
+  (`data-testid="account-way-retired"`), until its owner reconnects it from
+  Accounts; reconnecting drops the old way's
   metadata (installation id, token account) except `discovery`. The gateway
   withdraws nothing at the provider for such an account: `canWithdraw`
   answers false for a kind the plugin does not declare, and `providerGrantOf`
@@ -308,8 +239,7 @@ Both pass the per-user rate limit first (`RateLimiter.take('connect:<userId>',
 CONNECT_RATE_LIMIT = 10, CONNECT_RATE_WINDOW_MS = 60 s)` → `rate-limited`).
 
 ```
-oauth2       start    clients.forAuthorization(): declared ──none──▶ app-not-configured
-                                              registered ──none / other callback──▶ registerClient()
+oauth2       start    clients.forAuthorization(): registered ──none / other callback──▶ registerClient()
                                               ──refused──▶ client-registration-failed ──network──▶ provider-unreachable
                       pending.create({kind, providerId, userId, codeVerifier, redirectUri,
                                       returnTo, reconnectId})  → state   (TTL 10 min)
@@ -410,7 +340,7 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
   `connection-reconnected`.
 
 `ConnectError` codes (`errors.ts`, sentences in `CONNECT_ERROR_MESSAGES`):
-`provider-unknown`, `app-not-configured`, `invalid-input`,
+`provider-unknown`, `invalid-input`,
 `return-url-refused`, `rate-limited`, `state-invalid`, `provider-denied`,
 `token-exchange-failed`, `credential-rejected`,
 `provider-unreachable`, `not-found`, `connection-revoked`,
@@ -585,7 +515,8 @@ plugin `revoke` ignoring its signal) and never throws.
 | nothing                                                                        | nobody                   | —                                                                                                                                      |
 
 The host sends the declarative shapes itself because one of them carries
-the company's OAuth client secret, which a plugin never receives. Redirects
+the OAuth client secret, which a plugin never receives. No shipped plugin
+declares a `revocation` today. Redirects
 are refused (`redirect: 'error'`): the token goes to the declared endpoint
 or nowhere. `canWithdraw(plugin)` is the one rule that says whether a
 plugin has a way.
@@ -623,7 +554,7 @@ a `CredentialSecret`, and the refresh persistence hook for every caller
 
 ```ts
 const resolved = await root.connections.credentials.resolve(connectionId);
-// { connection, plugin, credential (decrypted), appConfig (no OAuth client secret) }
+// { connection, plugin, credential (decrypted) } — never an OAuth client secret
 try {
   await resolved.plugin.execute({ ...broker.contextOf(resolved), resources }, tool, args);
 } catch (err) {
@@ -645,7 +576,8 @@ single-process only`: rotating refresh tokens are single use, a hosted
   - the plugin declares `refresh()` → it is called with the plugin context
     (non-standard flows only);
   - else `oauth2` + `refreshable` + a stored refresh token → `refreshGrant`
-    with the company's client (`oauthClient` from `hostAppConfig`), the
+    with the registered client (`clients.forTokenRequest`; none → the
+    connection is `expired`: its grant belonged to a forgotten client), the
     `resource` indicator, and rotation: a new `refresh_token` replaces the
     old one, an absent one keeps it;
   - else (api key, ssh key, oauth2 without refresh token) → rejected.
@@ -829,12 +761,10 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
     shared.
   - **Connect an account**: `ServicePicker`, a grid of `PickCard`s from
     `ConnectionService.providers()` — the mark, the name and how the account
-    is connected (`howToConnect`: "sign in at Gmail", "paste: fine-grained
+    is connected (`howToConnect`: "sign in at Miro", "paste: fine-grained
     personal access token", "a key pair made here, installed on the host").
-    A service whose OAuth client is not declared is dashed and says who to
-    ask; for an administrator the card leads to the service's connect page,
-    where the client is declared. The primary action of the page jumps to
-    this region.
+    Every service is connectable at once. The primary action of the page
+    jumps to this region.
   - With no account and nothing shared the first region is one sentence
     (`EmptyState`) and the picker follows.
 - **`/accounts/new`** — the same picker on a page of its own, for whoever
@@ -849,10 +779,7 @@ patterns are in `lib/vocabulary.ts` (`ACCOUNT_PAGES`, `ACCOUNT_ACTIONS`,
   permission choice — **3** "Paste it here", the form, then two sentences:
   what the gateway does with the token and why a shared service account is
   fine. The words are `TOKEN_CONNECT` (`lib/vocabulary.ts`); the steps and
-  permissions are the plugin's. An `oauth2` service whose client is not
-  declared shows the OAuth client section to an administrator and a callout
-  to anyone else ("The OAuth client of a service" above). For the other
-  ways the form is as follows, on the narrow measure: an
+  permissions are the plugin's. For the other ways the form is as follows, on the narrow measure: an
   optional name, then a "Continue to …" button (redirect flows) or the
   declared fields (`CredentialFieldInputs`: `field.<name>` inputs, secrets
   masked). **A field says its shape before the person types**: the label
@@ -951,8 +878,7 @@ redirects to `/login`.
 
 ## Tests
 
-Unit, co-located (`src/server/connections/*.test.ts`,
-`src/server/provider-apps/service.test.ts`), all on `openTestStore()` and
+Unit, co-located (`src/server/connections/*.test.ts`), all on `openTestStore()` and
 `mockFetch` through `connectionsHarness()`:
 
 - `oauth2.test.ts` — authorization URL, RFC 7636 vector, the three
@@ -977,8 +903,11 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   account and expiry and never shown, a rejected or expired token storing
   nothing, a refusal the plugin wrote shown in its words and a quoted
   provider body never, an account made a way the plugin no longer offers reconnected
-  with a token on the same id (and withdrawn nowhere), a token never
-  refreshed, a token revocation asking nothing.
+  with a token on the same id (and withdrawn nowhere), the same account
+  (a stored `oauth2` secret) flagged `wayRetired` and discovered by nobody —
+  "Refresh" and the discovery after a call record the reconnect sentence,
+  the plugin never called —, a token never refreshed, a token revocation
+  asking nothing.
 - `mapping.test.ts` — the summary, the owner's name, a vanished owner.
 - `pending.test.ts`, `input.test.ts`, `codec-and-keypair.test.ts` (the
   generated key is parsed and used by `ssh2`; a stored `app-install`
@@ -992,32 +921,22 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   `failure-reason.test.ts` (the status and our own words; a
   `CredentialRefusal` kept),
   `shipped-providers.test.ts` (the real plugins through the driver: one way
-  per service, a key offered at once, Gmail and Miro the `oauth2` ways —
-  Miro's client registering itself —, every
-  guided token way with a label, a link, steps and a check; the grant
-  withdrawn for Gmail only; a valid authorization redirect for every
-  `oauth2` plugin), `provider-apps/service.test.ts` (fields per kind, the
-  sources, sealed secrets, one transaction per save, every problem at once,
-  the client secret kept from the plugin, the file winning and read-only,
-  clear per provider).
+  per service, a key offered at once, Miro the one `oauth2` way, with a
+  registration endpoint —, every guided token way (Gmail's app password
+  among them) with a label, a link, steps and a check; no grant withdrawn by
+  the gateway for any shipped plugin; a valid authorization redirect for
+  every `oauth2` plugin, from a seeded registered client).
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+3: the
 default environment read on every resource and never stored, the
 merge rule and the credential state transitions at the repository) and
 `tests/integration/connections/connect-flow.test.ts` over `buildRoot`
-with the `:memory:` store and the **real** encryptor: an administrator
-declares the OAuth client → user connects → the blob and a dump of every
-table are scanned for the access token, refresh token, client secret, API
-key and SSH private key in clear → resources → owner edit survives a
-refresh → replay refused → revoke → `revoked`, blob NULL, audit trail; an
-unknown provider is reported as unknown while a failure to read the client
-settings propagates and writes nothing.
-`tests/unit/server/connections/provider-app-handler.test.ts`: a saved
-OAuth client whose audit entry cannot be written still stands and is logged
-at `error` with the actor and the provider (never the secret); the entry is
-written when the audit works; a body that is not a form is 400 on
-`saveProviderApp`, `connect` and `updateResource` and writes nothing. The
-guard of every mutating handler is covered by
+with the `:memory:` store and the **real** encryptor: the gateway registers
+its OAuth client at the first connect → user connects → the blob and a dump
+of every table are scanned for the access token, refresh token, client
+secret, API key and SSH private key in clear (the registered client's secret
+sealed) → resources → owner edit survives a refresh → replay refused →
+revoke → `revoked`, blob NULL, audit trail. The guard of every mutating handler is covered by
 `tests/unit/server/auth/mutation-guard.test.ts` (handbook
 [authentication](authentication.md)).
 `tests/integration/connections/repository-status.test.ts` (6): `revoked` is
@@ -1048,11 +967,16 @@ by feature", the section on connecting).
 
 ## How to debug
 
-- **A service cannot be picked under "Connect an account"** (its card is
-  dashed and says who to ask) — its OAuth client is not declared or not
-  complete. Its connect page (`/accounts/new/<id>`) shows the form to an
-  administrator; with a `providers.<id>` block in the mounted configuration
-  the form is read-only and the block must carry every required field.
+- **An account says "a way this gateway no longer offers: reconnect the
+  account"** — it was made a way its plugin no longer declares (a Gmail
+  account connected by OAuth before the app password): "Reconnect" on its
+  page, with the way the service now offers; the id, the resources and the
+  shares are kept. Remove the old grant at the service by hand (the plugin's
+  `manualRevocation`).
+- **A boot warning `configuration key no longer read`** — the configuration
+  still sets a retired `providers.<id>.*` key or `VAUBAAN_PROVIDER_*`
+  variable (handbook [configuration](configuration.md), "Retired keys"):
+  remove it.
 - **`state-invalid` after consent** — the flow took more than 10 minutes,
   the callback was opened twice, the user's session changed between start
   and callback (the state is bound to the user id), or the web session
@@ -1081,8 +1005,7 @@ rejected` with `failure` (the status in the gateway's words, never the
   "Reconnect" on the page of the account; the id and the missions are kept.
 - **Calls fail but the connection stays `active`** —
   `ProviderUnreachableError`: the token endpoint answered 5xx, timed out,
-  or the OAuth client of the service was removed (`ProviderAppNotConfigured`
-  names the fields).
+  or could not be reached.
 - **An owner's label disappeared after a refresh** — it cannot through
   `syncDiscoveredResources`, the only resource sync of the repository; check
   whether the plugin started returning `env` (`env_source = 'plugin'` then
@@ -1099,17 +1022,17 @@ rejected` with `failure` (the status in the gateway's words, never the
   service offers: an `api-key` spec with its `label`, `createUrl`, `guide`
   (every tool served by a permission; `definePlugin` checks) and `verify`
   whenever a person can make a key at the service; `oauth2` only when it
-  offers none. If an OAuth client needs a field the mounted configuration
-  cannot express, add it to `PROVIDER_APP_FIELDS` (`config/types.ts`);
-  `shipped-providers.test.ts` fails until then.
+  offers none, and then with `clientRegistration` (the gateway registers its
+  own client): a service that accepts no dynamic registration and offers no
+  key cannot be shipped without a decision of its own.
 - **A new credential kind** — an ADR first (it changes the plugin
   contract), then: the variant in `credential-codec.ts`, one private method
   of `ConnectionService` with its discovery policy and its one-line case in
-  `start` (and in `complete` for a redirect flow),
-  `appConfigFieldsOf`, the form branch in `new/[provider]/page.tsx`.
-  A kind that leaves the contract needs no migration: a stored credential of
-  that kind is refused at the execution door until the account is
-  reconnected.
+  `start` (and in `complete` for a redirect flow), the form branch in
+  `new/[provider]/page.tsx`.
+  A kind that leaves the contract, or a plugin that changes its way, needs
+  no migration: a stored credential of another kind is refused at the
+  execution door and by discovery until the account is reconnected.
 - **A non-standard refresh** — the plugin implements `refresh(ctx)`; the
   broker calls it instead of the generic grant and persists the result.
 - **A hosted deployment** — replace the two `// single-process only`

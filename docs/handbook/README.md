@@ -41,7 +41,7 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [authentication](authentication.md) | How a human gets a session: the sign-in providers (OIDC, GitHub), admission and invitations, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                                  |
 | [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections).                                                          |
-| [connections](connections.md)       | Connect flows (one way per service: a pasted token, OAuth only for Gmail), credential storage and refresh, resource discovery and curation, OAuth clients.                                                          |
+| [connections](connections.md)       | Connect flows (one way per service: a pasted key, OAuth only for Miro), credential storage and refresh, resource discovery and curation, the OAuth clients the gateway registers.                                   |
 | [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit, the mission pages.                     |
 | [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox ("Waiting for you"): the request URL, who may open it, the decision, events, expiry.                                              |
 | [audit](audit.md)                   | How what happened is made visible: the search of the Activity page, the activity of one mission, the retention sweeper, administrative entries.                                                                     |
@@ -68,22 +68,22 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 
 One handbook per provider plugin (`plugins/<id>`):
 
-| Handbook                                                | What it covers                                                                                                                          |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| [providers/github](providers/github.md)                 | `@vaubaan/plugin-github`.                                                                                                               |
-| [providers/vercel](providers/vercel.md)                 | `@vaubaan/plugin-vercel`: plugin and risk model.                                                                                        |
-| [providers/supabase](providers/supabase.md)             | `@vaubaan/plugin-supabase`.                                                                                                             |
-| [providers/railway](providers/railway.md)               | `@vaubaan/plugin-railway`: rewraps the official Railway MCP server and adds four GraphQL variable tools.                                |
-| [providers/stripe](providers/stripe.md)                 | `@vaubaan/plugin-stripe`: modelling and runtime.                                                                                        |
-| [providers/resend](providers/resend.md)                 | `@vaubaan/plugin-resend`: modelling and runtime.                                                                                        |
-| [providers/cloudflare-dns](providers/cloudflare-dns.md) | `@vaubaan/plugin-cloudflare-dns`: modelling and runtime.                                                                                |
-| [providers/context7](providers/context7.md)             | `@vaubaan/plugin-context7`: rewraps the official Context7 MCP server (library documentation).                                           |
-| [providers/upstash-redis](providers/upstash-redis.md)   | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                 |
-| [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                   |
-| [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`, experimental and classifier-only: it classifies the modelled tools and discovers the mailbox, exposes no tool. |
-| [providers/fly](providers/fly.md)                       | `@vaubaan/plugin-fly`: the apps of one Fly organization, their machines, volumes, secrets, IPs and certificates.                        |
-| [providers/miro](providers/miro.md)                     | `@vaubaan/plugin-miro`: Miro's MCP server rewrapped, OAuth with a client the gateway registers.                                         |
-| [providers/notion](providers/notion.md)                 | `@vaubaan/plugin-notion`: pages, content, databases and comments under shared roots, proven by an ancestry walk.                        |
+| Handbook                                                | What it covers                                                                                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [providers/github](providers/github.md)                 | `@vaubaan/plugin-github`.                                                                                                                                          |
+| [providers/vercel](providers/vercel.md)                 | `@vaubaan/plugin-vercel`: plugin and risk model.                                                                                                                   |
+| [providers/supabase](providers/supabase.md)             | `@vaubaan/plugin-supabase`.                                                                                                                                        |
+| [providers/railway](providers/railway.md)               | `@vaubaan/plugin-railway`: rewraps the official Railway MCP server and adds four GraphQL variable tools.                                                           |
+| [providers/stripe](providers/stripe.md)                 | `@vaubaan/plugin-stripe`: modelling and runtime.                                                                                                                   |
+| [providers/resend](providers/resend.md)                 | `@vaubaan/plugin-resend`: modelling and runtime.                                                                                                                   |
+| [providers/cloudflare-dns](providers/cloudflare-dns.md) | `@vaubaan/plugin-cloudflare-dns`: modelling and runtime.                                                                                                           |
+| [providers/context7](providers/context7.md)             | `@vaubaan/plugin-context7`: rewraps the official Context7 MCP server (library documentation).                                                                      |
+| [providers/upstash-redis](providers/upstash-redis.md)   | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                                            |
+| [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                                              |
+| [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`, experimental: an app password, twelve tools over IMAP (search, read with HTML and attachments, draft, label, create labels), never sends. |
+| [providers/fly](providers/fly.md)                       | `@vaubaan/plugin-fly`: the apps of one Fly organization, their machines, volumes, secrets, IPs and certificates.                                                   |
+| [providers/miro](providers/miro.md)                     | `@vaubaan/plugin-miro`: Miro's MCP server rewrapped, OAuth with a client the gateway registers.                                                                    |
+| [providers/notion](providers/notion.md)                 | `@vaubaan/plugin-notion`: pages, content, databases and comments under shared roots, proven by an ancestry walk.                                                   |
 
 ## Legacy
 

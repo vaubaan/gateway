@@ -20,7 +20,6 @@ async function connected() {
   const providers = createDemoProviders();
   const resources = await vercelPlugin.discoverResources({
     credential,
-    appConfig: {},
     fetch: providers.fetch,
   });
   return { providers, resources };

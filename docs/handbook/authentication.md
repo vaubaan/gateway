@@ -1308,11 +1308,10 @@ token is active, the setup page creates another administrator's account.
 - **`/admin`** — **Setup**: a checklist (`Rows` with a `CheckMark` each) that
   says what a fresh install needs, what is done and what is left, each line
   read from the service that owns the fact: sign-in (`auth.idp.current()`),
-  the public address (always done: it is the configuration's), OAuth clients
-  (`providerApps.list()`: only once one is declared — the step then says
-  which, and names a service still missing without alarm; while none is, the
-  step is absent, and the connect page of the service says what it needs, ADR
-  [setup-checklist-lists-only-what-is-needed](../decisions/setup-checklist-lists-only-what-is-needed.md)),
+  the public address (always done: it is the configuration's), no step per
+  service (no service needs anything declared by an administrator, ADRs
+  [setup-checklist-lists-only-what-is-needed](../decisions/setup-checklist-lists-only-what-is-needed.md),
+  [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)),
   administrators
   (who matches the rule today), telemetry (`telemetry.overview()`), and — only
   when they need someone — accounts without owner

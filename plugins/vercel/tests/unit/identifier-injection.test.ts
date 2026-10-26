@@ -372,8 +372,8 @@ describe('vercel identifiers — a project ref that is not a path-safe identifie
         },
       },
     ]);
-    await expect(
-      vercelPlugin.discoverResources({ credential, appConfig: {}, fetch }),
-    ).rejects.toThrow(/not a path-safe identifier/);
+    await expect(vercelPlugin.discoverResources({ credential, fetch })).rejects.toThrow(
+      /not a path-safe identifier/,
+    );
   });
 });

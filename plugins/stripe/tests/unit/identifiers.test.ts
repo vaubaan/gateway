@@ -51,7 +51,6 @@ function permissiveFetch(): MockFetch {
 function ctx(fetch: MockFetch, resources: readonly Resource[] = [testResource]): ExecuteContext {
   return {
     credential: { kind: 'api-key', fields: { test_key: 'sk_test_abc123' }, metadata: {} },
-    appConfig: {},
     fetch,
     resources,
   };

@@ -163,7 +163,10 @@ const nextConfig: NextConfig = {
   // better-sqlite3 is reached through /healthz → composition root → store, so
   // nft traces it on its own; its runtime files (lib, bindings) stay listed as
   // the guarantee for the prebuilt binary, whatever the route graph becomes.
-  serverExternalPackages: ['ssh2'],
+  // imapflow (the Gmail plugin's IMAP client) is not an addon, but it loads
+  // pino, whose worker-thread transports resolve files at run time: kept
+  // external, it is traced and copied as the package it is.
+  serverExternalPackages: ['ssh2', 'imapflow'],
   outputFileTracingIncludes: {
     '/*': [
       '../../node_modules/argon2/prebuilds/**',

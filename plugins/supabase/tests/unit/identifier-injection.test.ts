@@ -37,7 +37,6 @@ const execCtx = (
   resources: readonly Resource[] = [project],
 ): ExecuteContext => ({
   credential: { kind: 'api-key', fields: { access_token: 'sbp_access' }, metadata: {} },
-  appConfig: { client_id: 'cid', client_secret: 'csecret' },
   fetch,
   resources,
 });

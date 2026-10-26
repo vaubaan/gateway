@@ -307,21 +307,10 @@ describe('the home and the inbox: read models', () => {
   });
 
   describe('readSetup', () => {
-    it('says what is configured: the sign-in, the OAuth clients, telemetry', async () => {
+    it('says what is configured: the sign-in and telemetry, and nothing per service', async () => {
       const setup = await readSetup(setupDepsOf(rig.root));
-      // Every service that connects through an OAuth client is in one list or the other;
-      // one that takes a key needs nothing and is in neither.
-      const apps = await rig.root.providerApps.list();
-      const needing = apps.filter((app) => app.needsApp);
-      expect(
-        [
-          ...setup.company_apps.registered,
-          ...setup.company_apps.missing.map((app) => app.name),
-        ].sort(),
-      ).toEqual(needing.map((app) => app.displayName).sort());
-      for (const missing of setup.company_apps.missing) {
-        expect(needing.map((app) => app.providerId)).toContain(missing.id);
-      }
+      // No service needs an OAuth client declared (ADR gmail-over-imap-with-an-app-password).
+      expect(Object.keys(setup).sort()).toEqual(['sign_in', 'telemetry']);
       expect(setup.telemetry).toEqual({ enabled: false, decided: false });
     });
   });

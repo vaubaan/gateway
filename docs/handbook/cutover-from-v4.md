@@ -77,22 +77,11 @@ instance uses apps the company owns, never the ones the v4 operator held.
 
 ### 1.3 The OAuth client of a service that signs people in
 
-Only Gmail connects through an OAuth client the company declares (ADR
-[one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md));
-every other service takes a key a person makes (§1.4). The redirect URI to
-register at the service is shown on its connect page:
-`<public_url>/connections/callback/<provider>`.
-
-- [ ] **Google — an OAuth client**, only if you connect Gmail (Google Cloud
-      Console → Credentials → OAuth client ID, web application, Gmail API
-      enabled), redirect URI `<public_url>/connections/callback/gmail`. The
-      Gmail plugin is experimental and exposes **no tool** today: connecting it
-      is not part of the acceptance set.
-
-An OAuth client is entered on the service's connect page by an administrator
-(stored encrypted) or mounted as `providers.<id>.*` /
-`VAUBAAN_PROVIDER_<ID>_CLIENT_ID|CLIENT_SECRET`; a mounted block wins for the
-whole provider and makes its form read-only.
+Since the ADR
+[gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)
+no OAuth client is declared by an administrator: Gmail connects with an app
+password, and `providers.<id>.*` / `VAUBAAN_PROVIDER_*` are retired (the
+instance warns when they are set).
 
 ### 1.4 Keys for the providers
 
@@ -203,9 +192,8 @@ Preconditions: section 1 done; v4 untouched and serving.
       token; configure the IdP on Settings → Sign-in; "Test the sign-in" shows
       your email and Administrator "yes: you match the rule"; sign in through
       the IdP; Settings → Setup (`/admin`) shows the install token as revoked.
-- [ ] **A3 — OAuth clients.** For Gmail only, if connected: declare the
-      client of §1.3 on its connect page; Settings → Setup reads it as
-      declared.
+- [ ] **A3 — OAuth clients.** Nothing to declare: Gmail connects with an
+      app password, Miro through a client the gateway registers itself.
 - [ ] **A4 — Import, then connect what the import cannot carry.** Run the
       importer's dry run, then `--apply` ([import-from-v4](import-from-v4.md)
       §2.2–2.3): Cloudflare, Vercel, Stripe and SSH accounts are created

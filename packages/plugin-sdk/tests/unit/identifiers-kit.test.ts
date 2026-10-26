@@ -28,7 +28,6 @@ const SAMPLES: ToolSamples = {
 
 const context = (fetch: MockFetch): ExecuteContext => ({
   credential: { kind: 'api-key', fields: { api_key: 'k' }, metadata: {} },
-  appConfig: {},
   fetch,
   resources: [],
 });

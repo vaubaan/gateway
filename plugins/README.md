@@ -480,7 +480,7 @@ of one of three kinds:
 | Kind      | When                                         | You declare                                                                                                | `execute` receives                                           |
 | --------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `createUrl?`                                                       | `{ fields, metadata }`                                       |
-| `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`, `resourceIndicator?`… | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
+| `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `clientRegistration`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`… | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
 | `ssh-key` | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                        | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
 **`api-key`** (the template):
@@ -505,14 +505,21 @@ credential: {
 In `help`, tell the user the narrowest key that works. The gateway restricts
 what an agent does with the key; it cannot restrict the key itself.
 
-**`oauth2`.** Only for a provider that offers no key a person can make.
-Each company declares its own OAuth client at the provider; an
-administrator enters its client id and secret on the service's connect page
-(the gateway always asks for those two; list anything else you need in
-`appConfigFields`). Set `refreshable: true` when the token endpoint issues
-refresh tokens: the gateway performs the standard `refresh_token` grant
-itself. Write `refresh()` on the plugin only when the provider's refresh is
-not the standard one.
+**`oauth2`.** Only for a provider that offers no key a person can make,
+**and** that accepts dynamic client registration (RFC 7591): declare its
+`clientRegistration.registrationUrl`, and the gateway registers its own
+client there the first time someone connects (ADR
+[oauth-client-registered-by-the-gateway](../docs/decisions/oauth-client-registered-by-the-gateway.md)).
+`definePlugin` refuses an `oauth2` spec without it: nobody declares an OAuth
+client by hand (ADR
+[gmail-over-imap-with-an-app-password](../docs/decisions/gmail-over-imap-with-an-app-password.md)).
+A provider with neither a key nor dynamic registration may offer another
+protocol a person can open with a key (Gmail: IMAP with an app password,
+[`plugins/gmail/src/credential.ts`](./gmail/src/credential.ts)). Set
+`refreshable: true` when the token endpoint issues refresh tokens: the
+gateway performs the standard `refresh_token` grant itself. Write
+`refresh()` on the plugin only when the provider's refresh is not the
+standard one.
 
 **A token with a guide** (`api-key`). Give the connect page what it shows:
 `label` (what the person creates, in the provider's words), `createUrl`,
@@ -523,11 +530,6 @@ before anything is stored: who the token acts as and when it expires, an
 `UpstreamAuthError` for a rejected token. The worked example is
 [`plugins/github/src/credential.ts`](./github/src/credential.ts) with its
 permissions in [`permissions.ts`](./github/src/permissions.ts).
-
-A plugin whose provider signs people in (`oauth2`) must also show
-its settings in the two deployment examples, `deploy/config/gateway.example.yaml`
-and `deploy/config/.env.example`; a structural test compares them with the
-`appConfigFields` of the registered plugins (step 10).
 
 ## Step 6 — Resources (`discoverResources` in `src/execute.ts`)
 
@@ -719,7 +721,7 @@ names:
 ```ts
 const report = await assertIdentifiersRefused(acmePlugin, SAMPLES, {
   resources: [staging],
-  context: (fetch, resources) => ({ credential, appConfig: {}, fetch, resources }),
+  context: (fetch, resources) => ({ credential, fetch, resources }),
 });
 expect(report.pathIdentifiers).toContainEqual({ tool: TOOL.getWidget, argument: 'widget_id' });
 ```
@@ -855,8 +857,6 @@ derives from it.
 2. `apps/gateway/src/server/compose/shipped-plugins.ts`: one import of the
    default export, placed in alphabetical order of the package names, and
    one entry at the end of `SHIPPED_PLUGINS`.
-3. For an `oauth2` plugin: its OAuth client settings in
-   `deploy/config/gateway.example.yaml` and `deploy/config/.env.example`.
 
 Add the provider to no other list; if a test or a page needs the provider
 list, it reads the registry. Set `experimental: true` in `definePlugin` for a
@@ -952,7 +952,6 @@ change yourself:
 | `report.fallbackHits` is not empty                                                    | A realistic call is covered by the fallback alone: add the catalog entry.                                                                                                                                                                                                                                                                          |
 | `mockFetch: unexpected GET …`                                                         | The plugin requested a URL no route covers: add the route or fix the URL.                                                                                                                                                                                                                                                                          |
 | `next build` fails reading `risk-catalog.yaml`                                        | The catalog is loaded with `new URL(…, import.meta.url)`: use `catalogPathNextTo(import.meta.url)`.                                                                                                                                                                                                                                                |
-| `example-config-providers.test.ts` fails                                              | An `oauth2` plugin is registered without its settings in `deploy/config/*.example*` (step 10).                                                                                                                                                                                                                                                     |
 | `plugin-identifier-tests.test.ts` fails for `<id>`                                    | No test file of the plugin feeds `'..'` and an encoded or separator form (`%2e%2e`, `%2f`, `../`) to both `classify` and `execute` (step 8). The file is read with the TypeScript parser: the values must be string literals of the code, the classifier and the executor must be called, and at least one test must run (not `skip`, not `todo`). |
 
 More cases: SDK handbook,

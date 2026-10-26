@@ -161,8 +161,8 @@ The list the command prints (`tour.ts`), without the values of the run
    GitHub takes the two tokens of `DEMO_GITHUB_TOKENS` only (one per
    organisation; the check at paste names the organisation). Supabase and
    Railway take a token of the right shape, which the simulated API does not
-   answer; Gmail needs an OAuth client the demo does not declare: its card
-   says so.
+   answer; Gmail signs in over IMAP with an app password, which the demo does
+   not simulate: its check at paste fails.
 
 3. **Read what a service allows**: Reference → GitHub. Its permissions
    compared across its presets ("why?" unfolds the reason and the six words

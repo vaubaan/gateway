@@ -521,7 +521,7 @@ const credential = { kind: 'api-key' as const, fields: { api_key: 're_abc_123' }
 const ctxOf = (
   fetch: typeof globalThis.fetch,
   resources: readonly Resource[] = mission,
-): ExecuteContext => ({ credential, appConfig: {}, fetch, resources });
+): ExecuteContext => ({ credential, fetch, resources });
 const textOf = (r: { content: readonly unknown[] }) => (r.content[0] as { text: string }).text;
 const jsonOf = (r: { content: readonly unknown[] }) => JSON.parse(textOf(r)) as unknown;
 
@@ -977,7 +977,6 @@ describe('executeResend with mockFetch', () => {
 describe('discoverResendResources with mockFetch', () => {
   const connection = (fetch: typeof globalThis.fetch): ConnectionContext => ({
     credential,
-    appConfig: {},
     fetch,
   });
 
@@ -1082,7 +1081,6 @@ describe('discoverResendResources with mockFetch', () => {
           scopes: [],
           metadata: {},
         },
-        appConfig: {},
         fetch,
       }),
     ).rejects.toMatchObject({ name: 'CredentialKindMismatch' });

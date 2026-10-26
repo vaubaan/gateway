@@ -12,7 +12,6 @@ import type { MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
-import type { ProviderAppsService } from '../provider-apps';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
@@ -26,7 +25,6 @@ export interface ConnectionsModuleDeps {
   readonly config: InstanceConfig;
   readonly store: Store;
   readonly registry: PluginRegistry;
-  readonly providerApps: ProviderAppsService;
   readonly sessions: SessionStore;
   readonly rateLimiter: RateLimiter;
   readonly authenticator: Authenticator;
@@ -57,7 +55,6 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
   const logger = deps.logger.child({ component: 'connections' });
   const outbound: typeof fetch = deps.fetch ?? ((input, init) => fetch(input, init));
   const clients = new OAuth2Clients({
-    providerApps: deps.providerApps,
     config: deps.store.config,
     publicUrl: deps.config.publicUrl,
     fetch: outbound,
@@ -67,7 +64,6 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
   const credentials = new CredentialBroker({
     connections: deps.store.connections,
     registry: deps.registry,
-    providerApps: deps.providerApps,
     clients,
     fetch: outbound,
     clock,
@@ -76,7 +72,6 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
   const service = new ConnectionService({
     store: deps.store,
     registry: deps.registry,
-    providerApps: deps.providerApps,
     clients,
     broker: credentials,
     grounds: deps.grounds,
@@ -93,12 +88,8 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     connections: service,
-    registry: deps.registry,
-    providerApps: deps.providerApps,
     notices,
-    audit: deps.store.auditWriter,
     logger,
-    clock,
   });
   const discoveryAfterCall = new DiscoveryAfterCall({
     registry: deps.registry,
@@ -140,10 +131,7 @@ export {
 } from './errors';
 export {
   actorOf,
-  CLEAR_PROVIDER_APP_ACTION,
   connectPagePath,
-  PROVIDER_APP_ACTION_PATH,
-  providerAppActionPath,
   connectionPath,
   FIELD_PREFIX,
   METADATA_PREFIX,

@@ -30,7 +30,6 @@ const testResource: Resource = {
 function ctx(fetch: MockFetch): ExecuteContext {
   return {
     credential: { kind: 'api-key', fields: { test_key: TOKEN }, metadata: {} },
-    appConfig: {},
     fetch,
     resources: [testResource],
   };

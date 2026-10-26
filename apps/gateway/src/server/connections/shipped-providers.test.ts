@@ -1,14 +1,11 @@
 /**
  * The generic driver against the plugins the image actually ships: every
- * connect form and every provider-app form is derived from a real
- * `CredentialSpec`. No request leaves the process (`mockFetch` with no route).
+ * connect form is derived from a real `CredentialSpec`. No request leaves the process (`mockFetch` with no route).
  */
 import { createRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
-import { PROVIDER_APP_FIELDS } from '../config/types';
-import { appConfigFieldsOf, APP_FIELD_NAME_PATTERN } from '../provider-apps';
 import { toolTitleOf } from '../providers/tool-titles';
 import { canWithdraw } from './credentials';
 import { connectionsHarness, stateOf } from './testing';
@@ -18,19 +15,6 @@ describe('shipped plugins through the generic connect driver', () => {
     const registry = createRegistry(SHIPPED_PLUGINS);
     expect(registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(registry.size).toBeGreaterThanOrEqual(10);
-  });
-
-  it('can express every provider-app field in the mounted configuration', () => {
-    // A field a plugin asks for but `providers.<id>.<field>` cannot carry would
-    // force the operator through the Admin page; today none exists.
-    for (const plugin of SHIPPED_PLUGINS) {
-      for (const field of appConfigFieldsOf(plugin.credential)) {
-        expect(field.name, `${plugin.id}.${field.name}`).toMatch(APP_FIELD_NAME_PATTERN);
-        expect(PROVIDER_APP_FIELDS as readonly string[], `${plugin.id}.${field.name}`).toContain(
-          field.name,
-        );
-      }
-    }
   });
 
   it('every tool of a shipped plugin says what it does in a few words, and tools/list does not carry it', () => {
@@ -80,9 +64,7 @@ describe('shipped plugins through the generic connect driver', () => {
         plugin.credential.kind === 'oauth2' ? plugin.credential.revocation : 'revoke()',
       ]),
     );
-    expect(Object.fromEntries(declared)).toEqual({
-      gmail: { url: 'https://oauth2.googleapis.com/revoke', format: 'token-form' },
-    });
+    expect(Object.fromEntries(declared)).toEqual({});
     for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
@@ -93,7 +75,7 @@ describe('shipped plugins through the generic connect driver', () => {
       (plugin) => plugin.credential.kind === 'api-key' && plugin.credential.guide !== undefined,
     );
     expect(guided.map((plugin) => plugin.id)).toEqual(
-      expect.arrayContaining(['github', 'railway', 'supabase']),
+      expect.arrayContaining(['github', 'gmail', 'railway', 'supabase']),
     );
     for (const plugin of guided) {
       const spec = plugin.credential;
@@ -113,24 +95,26 @@ describe('shipped plugins through the generic connect driver', () => {
   it('ships one way per service: a key at once, OAuth only where no key exists, and flags experimental ones', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const before = await h.service.providers();
-    // The OAuth way needs the company's client declared, unless the gateway registers its own;
-    // a key needs nothing from the operator.
+    // Nothing needs the operator: a key is pasted, an OAuth client is registered by the gateway.
     for (const p of before) {
       expect(p.redirects, p.id).toBe(p.kind === 'oauth2');
-      expect(p.usesApp, p.id).toBe(p.kind === 'oauth2' && !p.registersItself);
-      expect(p.configured, p.id).toBe(!p.usesApp);
       if (p.kind === 'oauth2') expect(p.fields, p.id).toEqual([]);
       else expect(p.fields.length, p.id).toBeGreaterThan(0);
     }
     const ways = before.map((p) => p.kind);
     expect(ways).toContain('ssh-key');
     expect(ways).not.toContain('app-install');
-    // Gmail and Miro offer no key a person can use (ADR one-place-to-authorize-services-token-first;
-    // Miro's REST token needs an app an organisation may refuse, ADR
-    // miro-rewraps-the-official-mcp-server): the OAuth ways shipped. Miro's client
-    // registers itself (ADR oauth-client-registered-by-the-gateway).
-    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual(['gmail', 'miro']);
-    expect(before.filter((p) => p.registersItself).map((p) => p.id)).toEqual(['miro']);
+    // Miro offers no key a person can use (its REST token needs an app an organisation may
+    // refuse, ADR miro-rewraps-the-official-mcp-server): the one OAuth way shipped, with a
+    // client the gateway registers itself (ADR oauth-client-registered-by-the-gateway). Gmail
+    // connects with an app password (ADR gmail-over-imap-with-an-app-password).
+    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual(['miro']);
+    for (const plugin of SHIPPED_PLUGINS) {
+      if (plugin.credential.kind !== 'oauth2') continue;
+      expect(plugin.credential.clientRegistration.registrationUrl, plugin.id).toMatch(
+        /^https:\/\//,
+      );
+    }
     expect(before.filter((p) => p.experimental).map((p) => p.id)).toEqual(
       SHIPPED_PLUGINS.filter((p) => p.experimental === true).map((p) => p.id),
     );
@@ -139,18 +123,11 @@ describe('shipped plugins through the generic connect driver', () => {
   it('builds a valid authorization redirect for every oauth2 plugin', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const alice = await h.actor('alice@example.com');
-    // A client the gateway registers is not part of this test (oauth2-clients.test.ts).
-    const redirectFlows = SHIPPED_PLUGINS.filter(
-      (p) => p.credential.kind === 'oauth2' && p.credential.clientRegistration === undefined,
-    );
+    // The registration itself is tested in oauth2-clients.test.ts: the client is seeded here.
+    const redirectFlows = SHIPPED_PLUGINS.filter((p) => p.credential.kind === 'oauth2');
     expect(redirectFlows.length).toBeGreaterThan(0);
     for (const plugin of redirectFlows) {
-      // Fill every declared field with a value of the declared shape.
-      const values: Record<string, string> = {};
-      for (const field of appConfigFieldsOf(plugin.credential)) {
-        values[field.name] = field.pattern?.includes('[0-9]+') ? '12345' : 'value-1';
-      }
-      await h.providerApps.save(plugin.id, values);
+      await h.seedClient(plugin.id, 'value-1', 'secret-1');
 
       const result = await h.service.start(alice, plugin.id);
       if (result.kind !== 'redirect') throw new Error(`${plugin.id}: expected a redirect`);

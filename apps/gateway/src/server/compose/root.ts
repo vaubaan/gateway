@@ -42,7 +42,6 @@ import { createInstanceModule, type InstanceModule } from '../instance';
 import { createMasterKeyModule, type MasterKeyModule } from '../master-key';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
-import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
 import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } from '../oauth-as';
 import { createRequestsModule, type RequestsModule } from '../requests';
@@ -53,7 +52,7 @@ import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
-import { checkProviderApps, checkSelfResources, RegistryCatalogIndex } from './registry';
+import { checkSelfResources, RegistryCatalogIndex } from './registry';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
@@ -75,8 +74,6 @@ export interface GatewayRoot {
   readonly sessions: SessionStore;
   /** Human authentication: OIDC relying party, web sessions, bootstrap, admin rule. */
   readonly auth: AuthModule;
-  /** The company's registered app per provider: mounted configuration or Admin page. */
-  readonly providerApps: ProviderAppsService;
   /** Connect flows, resources, credential broker with the generic OAuth refresh. */
   readonly connections: ConnectionsModule;
   /** Authority: owner or union of shares, mission grounds (`orphaned`, derived), membership settlement. */
@@ -175,9 +172,9 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   const encryptor = await createEncryptor(config.encryption);
 
   // The registry comes first: the store checks every persisted RiskId
-  // against the loaded catalogs, and the provider apps against the ids.
+  // against the loaded catalogs.
   const registry = await (deps.buildRegistry ?? buildShippedRegistry)(config, logger);
-  checkProviderApps(config, registry, logger);
+  logRetiredKeys(config, logger);
   checkSelfResources(config, registry);
 
   const store = await (deps.openStore ?? openEmbeddedStore)({
@@ -272,7 +269,6 @@ function logConfigurationSummary(
         : config.admin.group
           ? 'group (a seed: applied while the store names nobody)'
           : `emails (${config.admin.emails.length}; a seed: applied while the store names nobody)`,
-    providers: [...config.providers.keys()],
     telemetry: !config.telemetry.enabledSetByConfig
       ? 'not set (Administration decides; off by default)'
       : config.telemetry.enabled
@@ -347,7 +343,6 @@ type RootModules = Pick<
   | 'cache'
   | 'sessions'
   | 'auth'
-  | 'providerApps'
   | 'connections'
   | 'authority'
   | 'shares'
@@ -425,12 +420,10 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   });
 
   const cache = deps.cache ?? new MemoryCacheClient();
-  const providerApps = new ProviderAppsService(config.providers, store.config, registry);
   const connections = createConnectionsModule({
     config,
     store,
     registry,
-    providerApps,
     sessions,
     rateLimiter,
     authenticator: auth.authenticator,
@@ -618,7 +611,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     cache,
     sessions,
     auth,
-    providerApps,
     connections,
     authority,
     shares,
@@ -738,5 +730,21 @@ export async function resetRoot(): Promise<void> {
     } catch {
       // a root that failed to build has nothing to close
     }
+  }
+}
+
+/**
+ * One warning per retired key or variable the configuration still sets: the
+ * OAuth clients an administrator declared per provider (`providers.<id>.*`,
+ * `VAUBAAN_PROVIDER_<ID>_<FIELD>`) are no longer read since Gmail connects with
+ * an app password (ADR gmail-over-imap-with-an-app-password). The instance
+ * starts; the value is never logged.
+ */
+export function logRetiredKeys(config: Pick<InstanceConfig, 'retiredKeys'>, logger: Logger): void {
+  for (const key of config.retiredKeys) {
+    logger.warn(
+      'configuration key no longer read: the gateway takes no OAuth client declared by an administrator (Gmail connects with an app password); remove it',
+      { key },
+    );
   }
 }

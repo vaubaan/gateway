@@ -7,9 +7,8 @@
  *
  *   api-key      start(): the form values, checked at paste and by a first discovery
  *   oauth2       start(): authorization redirect with a single-use `state` and PKCE
- *                complete(): code exchange with the service's OAuth client —
- *                declared by an administrator, or registered by the gateway
- *                itself (`OAuth2Clients`)
+ *                complete(): code exchange with the OAuth client the gateway
+ *                registered at the service itself (`OAuth2Clients`)
  *   ssh-key      start(): an ed25519 key pair generated here, public key shown
  *
  * A connection is created under the name of the user who connected it. An
@@ -40,7 +39,6 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { Logger } from '../logging';
-import { needsProviderApp, type ProviderAppsService } from '../provider-apps';
 import { catalogEnvsOf } from '../missions/catalog-view';
 import type { Store } from '../store';
 import { ownResourceEnv } from '../store/resource-env';
@@ -75,11 +73,13 @@ import {
   OAuth2TokenError,
   type OAuth2Client,
 } from './oauth2';
-import { OAuth2ClientMissing, OAuth2Clients } from './oauth2-clients';
+import { OAuth2ClientMissing, type OAuth2Clients } from './oauth2-clients';
 import {
   connectionCredentialKind,
   connectionOwnerOf,
   connectionPublicFields,
+  isRetiredWay,
+  retiredWayReason,
   type StoredCredentialKind,
 } from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
@@ -146,18 +146,11 @@ export interface ConnectableProvider {
   readonly kind: CredentialKind;
   /**
    * The service signs the person in itself (`oauth2`): the connect page sends
-   * them there and they come back. False for a key pasted or generated here.
+   * them there and they come back, through an OAuth client the gateway
+   * registers itself, so nobody declares anything before connecting. False
+   * for a key pasted or generated here.
    */
   readonly redirects: boolean;
-  /**
-   * The gateway registers its own OAuth client at the service (`oauth2` with
-   * `clientRegistration`): nobody declares anything before connecting.
-   */
-  readonly registersItself: boolean;
-  /** Goes through an OAuth client the company declares at the service (`oauth2`). */
-  readonly usesApp: boolean;
-  /** Usable now: its OAuth client is declared, or it needs none. Users may connect. */
-  readonly configured: boolean;
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
   /** Where the user creates the key (`api-key`). */
@@ -214,6 +207,11 @@ export interface ConnectionView {
   readonly experimental: boolean;
   /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
   readonly credentialKind: StoredCredentialKind | null;
+  /**
+   * The account was made a way its plugin no longer declares (`isRetiredWay`):
+   * it runs nothing until its owner reconnects it.
+   */
+  readonly wayRetired: boolean;
   /** What the service said the pasted token acts as, at connect time (`octocat`); `null` when not said. */
   readonly tokenAccount: string | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
@@ -317,8 +315,7 @@ export interface ConnectionServiceDeps {
   /** The three repositories the service reads and writes; never the raw handle. */
   readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
-  readonly providerApps: ProviderAppsService;
-  /** The OAuth client of an `oauth2` service: declared, or registered by the gateway. */
+  /** The OAuth client of an `oauth2` service, registered by the gateway. */
   readonly clients: OAuth2Clients;
   readonly broker: CredentialBroker;
   /** Re-checks the missions of a connection after an act that may have removed an authority. */
@@ -383,7 +380,7 @@ export class ConnectionService {
 
   // ── Providers ─────────────────────────────────────────────────────────────
 
-  /** Every registered plugin, in registry order; the picker shows the `configured` ones. */
+  /** Every registered plugin, in registry order. */
   async providers(): Promise<ConnectableProvider[]> {
     return Promise.all(this.deps.registry.ids.map((id) => this.describe(id)));
   }
@@ -395,10 +392,6 @@ export class ConnectionService {
   private async describe(providerId: string): Promise<ConnectableProvider> {
     const { plugin } = this.deps.registry.require(providerId);
     const spec = plugin.credential;
-    const usesApp = needsProviderApp(spec);
-    const configured = usesApp
-      ? (await this.deps.providerApps.status(providerId)).configured
-      : true;
     const guide = spec.kind === 'api-key' ? spec.guide : undefined;
     return {
       id: plugin.id,
@@ -408,9 +401,6 @@ export class ConnectionService {
       experimental: plugin.experimental === true,
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
-      registersItself: spec.kind === 'oauth2' && OAuth2Clients.registersItself(spec),
-      usesApp,
-      configured,
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
       createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
       label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
@@ -627,7 +617,6 @@ export class ConnectionService {
     try {
       check = await spec.verify({
         credential: secret,
-        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
         fetch: this.deps.fetch,
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
       });
@@ -818,7 +807,6 @@ export class ConnectionService {
     try {
       const resources = await this.discoverWith(plugin, {
         credential: secret,
-        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
         fetch: this.deps.fetch,
       });
       return { resources, error: null };
@@ -953,6 +941,10 @@ export class ConnectionService {
     connection: ConnectionRecord,
     afterCall: DiscoveryAfterCallCause | null,
   ): Promise<DiscoveryRecord> {
+    // An account made a way the plugin no longer declares: its stored secret is not
+    // what the plugin reads, so the plugin is not called; the owner reconnects it.
+    const retired = this.retiredWayOf(connection);
+    if (retired !== null) return this.recordDiscovery(connection.id, 0, retired, afterCall);
     try {
       let resolved = await this.deps.broker.resolve(connection.id);
       let resources: readonly Resource[];
@@ -1345,8 +1337,7 @@ export class ConnectionService {
 
   /**
    * The OAuth client of a flow, or the `ConnectError` the page shows: a
-   * declared client not declared yet (`app-not-configured`), a registration
-   * the service refused (`client-registration-failed`) or could not take
+   * registration the service refused (`client-registration-failed`) or could not take
    * (`provider-unreachable`), a registered client gone between the start and
    * the callback (`state-invalid`: start again).
    */
@@ -1357,13 +1348,7 @@ export class ConnectionService {
     try {
       return await get();
     } catch (err) {
-      if (err instanceof OAuth2ClientMissing) {
-        throw new ConnectError(
-          plugin.credential.kind === 'oauth2' && OAuth2Clients.registersItself(plugin.credential)
-            ? 'state-invalid'
-            : 'app-not-configured',
-        );
-      }
+      if (err instanceof OAuth2ClientMissing) throw new ConnectError('state-invalid');
       if (err instanceof OAuth2RegistrationError) {
         this.deps.logger.warn('OAuth client registration failed', {
           provider: plugin.id,
@@ -1470,6 +1455,17 @@ export class ConnectionService {
     };
   }
 
+  /** The refusal sentence of an account made a way its plugin no longer declares, or `null`. */
+  private retiredWayOf(connection: ConnectionRecord): string | null {
+    const registered = this.deps.registry.get(connection.provider);
+    if (!registered) return null;
+    const { plugin } = registered;
+    const kind = connectionCredentialKind(connection, plugin.credential.kind);
+    return kind !== null && isRetiredWay(kind, plugin.credential.kind)
+      ? retiredWayReason(plugin.displayName, kind)
+      : null;
+  }
+
   private async view(connection: ConnectionRecord): Promise<ConnectionView> {
     const registered = this.deps.registry.get(connection.provider);
     const metadata = connection.metadata ?? {};
@@ -1482,6 +1478,7 @@ export class ConnectionService {
       providerGrant: this.providerGrantOf(connection).grant,
       experimental: registered?.plugin.experimental === true,
       credentialKind: kind,
+      wayRetired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
       tokenAccount: pasted && typeof metadata.account === 'string' ? metadata.account : null,
       tokenExpiresAt: pasted ? connection.credentialExpiresAt : null,
       ownerLabel: await this.ownerLabel(connection),

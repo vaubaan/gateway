@@ -61,8 +61,7 @@ describe('a service connected with a pasted token', () => {
     const provider = await h.service.provider('dual');
     expect(provider).toMatchObject({
       kind: 'api-key',
-      usesApp: false,
-      configured: true,
+      redirects: false,
       label: 'personal access token',
       createUrl: 'https://provider.example.com/tokens',
     });
@@ -73,8 +72,6 @@ describe('a service connected with a pasted token', () => {
         tools: [{ name: 'dual__list_things', title: 'List things' }],
       },
     ]);
-    // Nothing for an administrator to declare: the OAuth client exists for `oauth2` only.
-    expect((await h.providerApps.status('dual')).needsApp).toBe(false);
   });
 
   it('a pasted token is checked first; who it acts as and its expiry are kept, never the token', async () => {
@@ -177,6 +174,64 @@ describe('a service connected with a pasted token', () => {
     expect(again.reconnected).toBe(true);
     expect(again.connection.metadata).toMatchObject({ credential_kind: 'api-key', account: 'bot' });
     expect(again.connection.metadata).not.toHaveProperty('installation_id');
+  });
+
+  it('an account made a way the plugin no longer offers discovers nothing and says to reconnect, the plugin never called', async () => {
+    // A Gmail account connected by OAuth before Gmail moved to an app password (ADR
+    // gmail-over-imap-with-an-app-password): the stored oauth2 secret is not what the
+    // plugin reads (`expectCredentialKind` would throw CredentialKindMismatch).
+    let discoveries = 0;
+    const h = connectionsHarness({
+      plugins: [
+        fixturePlugin({
+          id: 'dual',
+          displayName: 'Dual',
+          credential: tokenSpec(),
+          discoverResources: async () => {
+            discoveries += 1;
+            return [];
+          },
+        }),
+      ],
+    });
+    const alice = await h.actor('alice@example.com');
+    const existing = await h.store.connections.create({
+      provider: 'dual',
+      owner: { kind: 'user', id: alice.user.id },
+      displayName: 'Dual (OAuth)',
+      credential: serializeSecret({
+        kind: 'oauth2',
+        accessToken: 'at',
+        refreshToken: 'rt',
+        expiresAt: '2026-01-01T00:00:00.000Z',
+        scopes: [],
+        metadata: {},
+      }),
+      credentialExpiresAt: null,
+      metadata: { credential_kind: 'oauth2' },
+    });
+    const view = await h.service.get(alice, existing.id);
+    expect(view).toMatchObject({ credentialKind: 'oauth2', wayRetired: true });
+
+    const reason =
+      'this account was connected a way Dual no longer offers on this gateway (oauth2); its owner reconnects it from Accounts.';
+    expect(await h.service.discover(alice, existing.id)).toMatchObject({
+      ok: false,
+      count: 0,
+      error: reason,
+    });
+    expect(
+      await h.service.discoverAfterCall(existing.id, { tool: 'dual__list_things', missionId: 'm' }),
+    ).toMatchObject({ record: { ok: false, error: reason }, added: 0 });
+    expect(discoveries).toBe(0);
+    expect(h.fetch.calls).toHaveLength(0);
+    // Nothing is withdrawn at the provider for a way the gateway no longer runs.
+    expect((await h.service.revoke(alice, existing.id)).providerGrant).toBe('manual');
+
+    // An account made the plugin's way is not retired.
+    const done = await h.service.start(alice, 'dual', { fields: { token: TOKEN } });
+    if (done.kind !== 'connected') throw new Error('expected a connection');
+    expect((await h.service.get(alice, done.connection.id)).wayRetired).toBe(false);
   });
 
   it('an `app-install` account (the GitHub App of earlier builds) is reconnected with a token, its stored blob never read', async () => {

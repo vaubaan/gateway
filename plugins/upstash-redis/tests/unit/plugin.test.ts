@@ -67,7 +67,7 @@ function ctx(
   resources: readonly Resource[] = [cache],
   logger?: PluginLogger,
 ): ExecuteContext {
-  return { credential, appConfig: {}, fetch, resources, ...(logger ? { logger } : {}) };
+  return { credential, fetch, resources, ...(logger ? { logger } : {}) };
 }
 
 const DATABASE_URL = `${UPSTASH_MANAGEMENT_API}/redis/database/db-abc-123`;

@@ -390,12 +390,6 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'none',
     ),
   ),
-  'connections.handlers.saveProviderApp': form('operator', 303, (rig, headers) =>
-    rig.root.connections.handlers.saveProviderApp(
-      post('/admin/provider-apps/github', headers, { action: 'clear' }),
-      'github',
-    ),
-  ),
   'auth.handlers.saveIdpSettings': form('operator', 303, (rig, headers) =>
     rig.root.auth.handlers.saveIdpSettings(
       post('/api/admin/identity-provider', headers, {

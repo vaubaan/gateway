@@ -1,18 +1,20 @@
 /**
- * Mandatory suite of the `gmail` plugin : the SDK kit, the experimental
- * shape (no exposed tool, `execute` not implemented), the credential spec,
- * `discoverResources` against `mockFetch`, resource selection and the
- * presets. No network : an unmatched request fails the test.
+ * Mandatory suite of the `gmail` plugin : the SDK kit (tools, catalog
+ * coverage, identifiers), the credential spec (an app password over IMAP),
+ * `verify` and `discoverResources` against a fake IMAP transport, resource
+ * selection and the presets. No network : the transport is `fakeGmail()`.
+ * Tool by tool, execution is in `execute.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
 import {
   CredentialKindMismatch,
+  UpstreamAuthError,
   definePlugin,
   serializeSlice,
+  type ApiKeySecret,
   type ConnectionContext,
   type ExecuteContext,
-  type OAuth2Secret,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 import {
@@ -22,22 +24,23 @@ import {
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
-  GMAIL_API_BASE,
-  GMAIL_AUTHORIZATION_URL,
+  GMAIL_APP_PASSWORDS_URL,
   GMAIL_CLASSIFIED_TOOLS,
-  GMAIL_NOT_IMPLEMENTED_CODE,
-  GMAIL_SCOPE_COMPOSE,
-  GMAIL_SCOPE_READONLY,
-  GMAIL_TOKEN_URL,
+  createGmailPlugin,
   gmailClassifiedToolDeclarations,
   gmailPlugin,
+  normalizeAppPassword,
   readMailboxMetadata,
 } from '../../src/index.ts';
+import { fakeGmail } from './fake-imap.ts';
 
 const MAILBOX = 'me@myorg.com';
+const THREAD = '18c2a9f0e1d2b3a4';
+const MESSAGE = '18c2a9f0e1d2b3a5';
 
 const mailbox: Resource = {
   provider: 'gmail',
@@ -58,35 +61,78 @@ const otherMailbox: Resource = {
 };
 const githubRepo: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
-const oauthSecret = (overrides: Partial<OAuth2Secret> = {}): OAuth2Secret => ({
-  kind: 'oauth2',
-  accessToken: 'ya29.access',
-  refreshToken: '1//refresh',
-  expiresAt: '2026-10-13T12:00:00.000Z',
-  scopes: [GMAIL_SCOPE_READONLY, GMAIL_SCOPE_COMPOSE],
+const secret = (fields: Record<string, string> = {}): ApiKeySecret => ({
+  kind: 'api-key',
+  fields: { email: 'Me@MyOrg.com', app_password: 'abcd efgh ijkl mnop', ...fields },
   metadata: {},
+});
+
+const connCtx = (overrides: Partial<ConnectionContext> = {}): ConnectionContext => ({
+  credential: secret(),
+  fetch: mockFetch([]),
   ...overrides,
 });
 
-const connCtx = (
-  fetch: typeof globalThis.fetch,
-  overrides: Partial<ConnectionContext> = {},
-): ConnectionContext => ({
-  credential: oauthSecret(),
-  appConfig: { client_id: 'cid', client_secret: 'csecret' },
-  fetch,
-  ...overrides,
+const execCtx = (resources: readonly Resource[] = [mailbox]): ExecuteContext => ({
+  ...connCtx(),
+  resources,
 });
 
-const execCtx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
-  ...connCtx(fetch),
-  resources: [mailbox],
-});
-
-const PROFILE_URL = `${GMAIL_API_BASE}/users/me/profile`;
+/** The samples of every tool, ids in the grammar (16 lower-case hexadecimal digits at most). */
+const SAMPLES: ToolSamples = {
+  gmail__describe_zones: [{ args: {} }],
+  gmail__search_threads: [
+    { args: { q: 'from:no-reply@vendor.com' } },
+    { args: { q: 'from:colleague@myorg.com' } },
+    { args: { q: 'from:other@vendor.com' } },
+    { args: { q: 'from:random@random.io' } },
+    { args: { q: 'is:unread' } },
+    { args: { q: 'label:LEGAL' } },
+    { args: { q: 'from:no-reply@vendor.com OR newer_than:3650d' } },
+    { args: { q: 'from:colleague@myorg.com -label:LEGAL -label:HR' } },
+    { args: { q: 'is:unread' }, resources: [], expectDenied: true },
+    { args: { q: 'is:unread' }, resources: [mailbox, otherMailbox], expectDenied: true },
+  ],
+  gmail__get_thread: [{ args: { id: THREAD } }, { args: {}, expectDenied: true }],
+  gmail__get_attachment: [
+    { args: { thread_id: THREAD, message_id: MESSAGE, part: '2' } },
+    { args: { thread_id: THREAD, message_id: MESSAGE, part: '1.2' } },
+    { args: { thread_id: THREAD, message_id: MESSAGE }, expectDenied: true },
+    { args: { thread_id: THREAD, message_id: MESSAGE, part: '0' }, expectDenied: true },
+  ],
+  gmail__list_drafts: [{ args: {} }],
+  gmail__create_draft: [
+    { args: { to: [MAILBOX], subject: 's', body: 'b' } },
+    { args: { to: ['colleague@myorg.com'], subject: 's', body: 'b' } },
+    {
+      args: { to: ['partner@vendor.com'], cc: 'Me <me@myorg.com>', subject: 's', body: 'b' },
+    },
+    // An external recipient, and a recipient that does not parse, refuse the call.
+    { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' }, expectDenied: true },
+    {
+      args: { to: ['evil@evil.example, colleague@myorg.com'], subject: 's', body: 'b' },
+      expectDenied: true,
+    },
+  ],
+  gmail__list_labels: [{ args: {} }],
+  gmail__create_label: [
+    { args: { name: 'Clients 2026' } },
+    { args: { name: 'Projets/Été' } },
+    { args: { name: 'TRASH' }, expectDenied: true },
+    { args: { name: '[Gmail]/Archive' }, expectDenied: true },
+  ],
+  gmail__label_message: [{ args: { thread_id: THREAD, message_id: MESSAGE, label: 'STARRED' } }],
+  gmail__unlabel_message: [{ args: { thread_id: THREAD, message_id: MESSAGE, label: 'STARRED' } }],
+  gmail__label_thread: [
+    { args: { thread_id: THREAD, label: 'STARRED' } },
+    { args: { label: 'STARRED' }, expectDenied: true },
+    { args: { thread_id: THREAD, label: 'TRASH' }, expectDenied: true },
+  ],
+  gmail__unlabel_thread: [{ args: { thread_id: THREAD, label: 'STARRED' } }],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SDK kit and experimental shape
+// SDK kit
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('gmail plugin — SDK kit', () => {
@@ -96,85 +142,26 @@ describe('gmail plugin — SDK kit', () => {
     assertNoWildcard(gmailPlugin);
   });
 
-  test('is experimental : flag set, version below 1.0, no tool exposed', () => {
+  test('is experimental, below 1.0, and exposes its twelve tools', () => {
     expect(gmailPlugin.experimental).toBe(true);
-    expect(gmailPlugin.version.startsWith('0.')).toBe(true);
-    expect(gmailPlugin.tools).toEqual([]);
+    expect(gmailPlugin.version).toBe('0.5.0');
     expect(gmailPlugin.description).toMatch(/experimental/i);
-  });
-
-  test('the ten classified tools are declared (unexposed) under the gmail__ prefix', () => {
-    const names = gmailClassifiedToolDeclarations.map((t) => t.name);
+    expect(gmailPlugin.description).toMatch(/never sends/i);
+    const names = gmailPlugin.tools.map((t) => t.name);
     expect(names).toEqual([...GMAIL_CLASSIFIED_TOOLS]);
-    expect(names).toHaveLength(10);
-    for (const t of gmailClassifiedToolDeclarations) {
+    expect(gmailPlugin.tools).toBe(gmailClassifiedToolDeclarations);
+    expect(names).toHaveLength(12);
+    // No tool sends: IMAP cannot, and no SMTP client is shipped.
+    expect(names.some((n) => /send/.test(n))).toBe(false);
+    for (const t of gmailPlugin.tools) {
       expect(t.name.startsWith('gmail__')).toBe(true);
       expect(t.inputSchema.type).toBe('object');
     }
   });
 
-  test('coverage of the exposed surface is vacuous (no tool) and passes', () => {
-    const report = assertCatalogCoverage(gmailPlugin, {});
-    expect(report.toolsChecked).toBe(0);
-  });
-
-  test('the identifier proof is vacuous too : no tool is exposed, so nothing can be executed', async () => {
-    const report = await assertIdentifiersRefused(
-      gmailPlugin,
-      {},
-      { context: (fetch) => execCtx(fetch) },
-    );
-    expect(report).toMatchObject({ toolsChecked: 0, hostileCalls: 0, pathIdentifiers: [] });
-  });
-
-  test('every classified tool maps to slices the catalog covers', () => {
-    // The classified tools are not exposed ; a plugin variant that exposes
-    // them lets the kit check the classifier → catalog plumbing.
-    const exposed = definePlugin({ ...gmailPlugin, tools: gmailClassifiedToolDeclarations });
-    const report = assertCatalogCoverage(
-      exposed,
-      {
-        gmail__describe_zones: [{ args: {} }],
-        gmail__search_threads: [
-          { args: { q: 'from:no-reply@vendor.com' } },
-          { args: { q: 'from:colleague@myorg.com' } },
-          { args: { q: 'from:other@vendor.com' } },
-          { args: { q: 'from:random@random.io' } },
-          { args: { q: 'is:unread' } },
-          { args: { q: 'label:LEGAL' } },
-          { args: { q: 'from:no-reply@vendor.com OR newer_than:3650d' } },
-          { args: { q: 'from:colleague@myorg.com -label:LEGAL -label:HR' } },
-          { args: { q: 'is:unread' }, resources: [], expectDenied: true },
-          { args: { q: 'is:unread' }, resources: [mailbox, otherMailbox], expectDenied: true },
-        ],
-        gmail__get_thread: [{ args: { id: 't_xyz' } }, { args: {}, expectDenied: true }],
-        gmail__list_drafts: [{ args: {} }],
-        gmail__create_draft: [
-          { args: { to: [MAILBOX], subject: 's', body: 'b' } },
-          { args: { to: ['colleague@myorg.com'], subject: 's', body: 'b' } },
-          {
-            args: { to: ['partner@vendor.com'], cc: 'Me <me@myorg.com>', subject: 's', body: 'b' },
-          },
-          // An external recipient, and a recipient that does not parse, refuse the call.
-          { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' }, expectDenied: true },
-          {
-            args: { to: ['evil@evil.example, colleague@myorg.com'], subject: 's', body: 'b' },
-            expectDenied: true,
-          },
-        ],
-        gmail__list_labels: [{ args: {} }],
-        gmail__label_message: [{ args: { thread_id: 't1', message_id: 'm1', label: 'STARRED' } }],
-        gmail__unlabel_message: [{ args: { thread_id: 't1', message_id: 'm1', label: 'STARRED' } }],
-        gmail__label_thread: [
-          { args: { thread_id: 't1', label: 'STARRED' } },
-          { args: { label: 'STARRED' }, expectDenied: true },
-          { args: { thread_id: 't1', label: 'TRASH' }, expectDenied: true },
-        ],
-        gmail__unlabel_thread: [{ args: { thread_id: 't1', label: 'STARRED' } }],
-      },
-      { resources: [mailbox] },
-    );
-    expect(report.toolsChecked).toBe(10);
+  test('every tool maps to slices the catalog covers', () => {
+    const report = assertCatalogCoverage(gmailPlugin, SAMPLES, { resources: [mailbox] });
+    expect(report.toolsChecked).toBe(12);
     // Untouched on purpose : the classifier refuses a draft to an external
     // recipient, and no modelled tool emits a bulk write. Every write of
     // these samples is covered by a specific entry, so the fallback is never
@@ -190,16 +177,33 @@ describe('gmail plugin — SDK kit', () => {
     const exposed = definePlugin({
       ...gmailPlugin,
       tools: gmailClassifiedToolDeclarations.filter((t) => t.name === 'gmail__unlabel_thread'),
+      toolTitles: { gmail__unlabel_thread: 'Remove a label from a thread' },
     });
     const report = assertCatalogCoverage(
       exposed,
-      { gmail__unlabel_thread: [{ args: { thread_id: 't1', label: 'LEGAL' } }] },
+      { gmail__unlabel_thread: [{ args: { thread_id: THREAD, label: 'LEGAL' } }] },
       { resources: [mailbox] },
     );
     expect(report.fallbackHits).toHaveLength(1);
   });
-});
 
+  test('a hostile identifier is refused by classify and reaches no IMAP command', async () => {
+    const transport = fakeGmail();
+    const report = await assertIdentifiersRefused(createGmailPlugin({ transport }), SAMPLES, {
+      resources: [mailbox],
+      context: (_fetch, resources) => execCtx(resources),
+      elsewhere: {
+        reset: () => transport.calls.splice(0),
+        sent: () => transport.calls.map((c) => ({ method: 'IMAP', url: `imap:${c.op}` })),
+      },
+      pathIdentifiers: { none: 'the upstream is IMAP, not an HTTP request' },
+    });
+    expect(report.toolsChecked).toBe(12);
+    expect(report.pathIdentifiers).toEqual([]);
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
+  });
+});
 // ─────────────────────────────────────────────────────────────────────────────
 // Resource selection and metadata
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,155 +286,146 @@ describe('gmail classify — mailbox selection', () => {
 // Credential spec
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('gmail credential spec', () => {
-  test('Google oauth2 : PKCE, client_secret_post, offline + consent, refreshable', () => {
-    const spec = gmailPlugin.credential;
-    expect(spec.kind).toBe('oauth2');
-    if (spec.kind !== 'oauth2') return;
-    expect(spec.authorizationUrl).toBe(GMAIL_AUTHORIZATION_URL);
-    expect(spec.tokenUrl).toBe(GMAIL_TOKEN_URL);
-    expect(spec.authorizationUrl).toBe('https://accounts.google.com/o/oauth2/v2/auth');
-    expect(spec.tokenUrl).toBe('https://oauth2.googleapis.com/token');
-    expect(spec.pkce).toBe(true);
-    expect(spec.clientAuthMethod).toBe('client_secret_post');
-    expect(spec.refreshable).toBe(true);
-    expect(spec.extraAuthorizationParams).toEqual({
-      access_type: 'offline',
-      prompt: 'consent',
-      include_granted_scopes: 'true',
-    });
-    expect(spec.resourceIndicator).toBeUndefined();
-  });
+describe('gmail credential spec — an app password over IMAP', () => {
+  const spec = gmailPlugin.credential;
 
-  test('scopes are readonly + compose only : no modify, no send, no mail.google.com', () => {
-    const spec = gmailPlugin.credential;
-    if (spec.kind !== 'oauth2') throw new Error('oauth2 expected');
-    expect(spec.scopes).toEqual([
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/gmail.compose',
+  test('api-key : the address and the secret app password, a guide, a verify', () => {
+    expect(spec.kind).toBe('api-key');
+    if (spec.kind !== 'api-key') return;
+    expect(spec.fields.map((f) => [f.name, f.secret])).toEqual([
+      ['email', false],
+      ['app_password', true],
     ]);
-    for (const s of spec.scopes) {
-      expect(s).not.toMatch(/gmail\.modify|gmail\.send|mail\.google\.com\/?$/);
-    }
+    expect(spec.createUrl).toBe(GMAIL_APP_PASSWORDS_URL);
+    expect(spec.label).toBe('app password');
+    expect(typeof spec.verify).toBe('function');
   });
 
-  test('no plugin refresh : the host performs the standard refresh_token grant from the spec', () => {
+  test('the guide : 2-Step Verification, the app passwords page, the name, Workspace and IMAP caveats ; no permission, no expiry', () => {
+    if (spec.kind !== 'api-key' || !spec.guide) throw new Error('guide expected');
+    const text = spec.guide.steps.join(' ');
+    expect(text).toMatch(/2-Step Verification/);
+    expect(text).toContain('https://myaccount.google.com/apppasswords');
+    expect(text).toContain('"Vaubaan Gateway"');
+    expect(text).toMatch(/Workspace administrator/);
+    expect(text).toMatch(/IMAP is on/);
+    expect(text).toMatch(/no scopes/);
+    expect(spec.guide.permissions).toEqual([]);
+    expect(spec.guide.recommendedExpiryDays).toBeNull();
+  });
+
+  test('the field patterns accept the password with or without Google’s spaces', () => {
+    if (spec.kind !== 'api-key') throw new Error('api-key expected');
+    // nosemgrep: detect-non-literal-regexp -- the plugin's own field declaration
+    const pattern = new RegExp(spec.fields[1]!.pattern!);
+    expect(pattern.test('abcd efgh ijkl mnop')).toBe(true);
+    expect(pattern.test('abcdefghijklmnop')).toBe(true);
+    expect(pattern.test('abcd efgh ijkl')).toBe(false);
+    expect(pattern.test('abcd-efgh-ijkl-mnop')).toBe(false);
+  });
+
+  test('normalizeAppPassword strips spaces and wants exactly 16 letters', () => {
+    expect(normalizeAppPassword('abcd efgh ijkl mnop')).toBe('abcdefghijklmnop');
+    expect(normalizeAppPassword(' ABCD\tEFGH ijkl mnop ')).toBe('ABCDEFGHijklmnop');
+    expect(normalizeAppPassword('abcd efgh ijkl mno')).toBeNull();
+    expect(normalizeAppPassword('abcd efgh ijkl mnop q')).toBeNull();
+    expect(normalizeAppPassword('abcd efgh ijkl mn0p')).toBeNull();
+    expect(normalizeAppPassword(42)).toBeNull();
+  });
+
+  test('no refresh, no revoke hook : the owner deletes the app password at Google', () => {
     expect(gmailPlugin.refresh).toBeUndefined();
+    expect(gmailPlugin.revoke).toBeUndefined();
+    expect(gmailPlugin.manualRevocation).toContain(GMAIL_APP_PASSWORDS_URL);
+    expect(gmailPlugin.manualRevocation).toContain('Vaubaan Gateway');
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// discoverResources
+// verify and discoverResources
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('gmail discoverResources', () => {
-  test('returns the authenticated mailbox as the single resource', async () => {
-    const fetch = mockFetch([
-      {
-        method: 'GET',
-        url: PROFILE_URL,
-        body: {
-          emailAddress: 'Alice@MyOrg.com',
-          messagesTotal: 12345,
-          threadsTotal: 678,
-          historyId: '99',
-        },
-        times: 1,
-      },
-    ]);
-    const resources = await gmailPlugin.discoverResources(connCtx(fetch));
-    expect(resources).toEqual([
+describe('gmail verify and discoverResources', () => {
+  test('verify signs in with the lower-cased address and the password without spaces, and names the account', async () => {
+    const transport = fakeGmail();
+    const plugin = createGmailPlugin({ transport });
+    if (plugin.credential.kind !== 'api-key' || !plugin.credential.verify) throw new Error();
+    const check = await plugin.credential.verify(connCtx());
+    expect(check).toEqual({ account: 'me@myorg.com', expiresAt: null });
+    const session = transport.calls[0];
+    expect(session).toMatchObject({
+      op: 'session',
+      account: { email: 'me@myorg.com', appPassword: 'abcdefghijklmnop' },
+    });
+    // Signs in and finds the two folders every tool needs, by special use.
+    expect(transport.ops()).toEqual(['mailboxes', 'mailboxes']);
+  });
+
+  test('a refused sign-in is an UpstreamAuthError : nothing is stored, the account needs a new password', async () => {
+    const transport = fakeGmail();
+    transport.refuseSignIn = true;
+    const plugin = createGmailPlugin({ transport });
+    if (plugin.credential.kind !== 'api-key' || !plugin.credential.verify) throw new Error();
+    await expect(plugin.credential.verify(connCtx())).rejects.toBeInstanceOf(UpstreamAuthError);
+    await expect(plugin.discoverResources(connCtx())).rejects.toBeInstanceOf(UpstreamAuthError);
+  });
+
+  test('a mailbox whose All Mail is hidden from IMAP is refused with the setting to change', async () => {
+    const transport = fakeGmail();
+    transport.folders = transport.folders.filter((f) => f.specialUse !== '\\All');
+    const plugin = createGmailPlugin({ transport });
+    await expect(plugin.discoverResources(connCtx())).rejects.toThrow(/Show in IMAP/);
+  });
+
+  test('discovery returns the mailbox as the single resource, ref and account_email lower-cased', async () => {
+    const plugin = createGmailPlugin({ transport: fakeGmail() });
+    expect(await plugin.discoverResources(connCtx())).toEqual([
       {
         provider: 'gmail',
-        ref: 'alice@myorg.com',
-        displayName: 'alice@myorg.com',
-        metadata: { account_email: 'alice@myorg.com', messages_total: 12345, threads_total: 678 },
+        ref: 'me@myorg.com',
+        displayName: 'me@myorg.com',
+        metadata: { account_email: 'me@myorg.com' },
       },
     ]);
-    expect(fetch.calls[0]!.headers.authorization).toBe('Bearer ya29.access');
-    expect(fetch.pending()).toEqual([]);
   });
 
-  test('does not pre-fill any zoning list', async () => {
-    const fetch = mockFetch([{ url: PROFILE_URL, body: { emailAddress: 'bob@gmail.com' } }]);
-    const [res] = await gmailPlugin.discoverResources(connCtx(fetch));
-    expect(res!.metadata).toEqual({ account_email: 'bob@gmail.com' });
-    const md = readMailboxMetadata(res!);
-    expect(md.internal_domains).toEqual([]);
+  test('an OAuth credential of an earlier build is refused before any IMAP command', async () => {
+    const transport = fakeGmail();
+    const plugin = createGmailPlugin({ transport });
+    const oauth = {
+      kind: 'oauth2' as const,
+      accessToken: 'ya29.access',
+      refreshToken: '1//refresh',
+      expiresAt: null,
+      scopes: [],
+      metadata: {},
+    };
+    await expect(plugin.discoverResources(connCtx({ credential: oauth }))).rejects.toBeInstanceOf(
+      CredentialKindMismatch,
+    );
+    expect(transport.calls).toEqual([]);
   });
 
-  test('401 / 403 → UpstreamAuthError with the status', async () => {
-    for (const status of [401, 403]) {
-      const fetch = mockFetch([{ url: PROFILE_URL, status, body: { error: 'invalid_token' } }]);
-      await expect(gmailPlugin.discoverResources(connCtx(fetch))).rejects.toMatchObject({
-        name: 'UpstreamAuthError',
-        upstreamStatus: status,
-      });
-    }
+  test('a malformed stored field is a host bug, not a provider error', async () => {
+    const plugin = createGmailPlugin({ transport: fakeGmail() });
+    const bad = connCtx({ credential: secret({ app_password: 'short' }) });
+    const err = await plugin.discoverResources(bad).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(UpstreamAuthError);
   });
 
-  test('other upstream failures and malformed profiles are plain errors', async () => {
-    await expect(
-      gmailPlugin.discoverResources(
-        connCtx(mockFetch([{ url: PROFILE_URL, status: 500, body: 'x' }])),
-      ),
-    ).rejects.toThrow(/HTTP 500/);
-    await expect(
-      gmailPlugin.discoverResources(connCtx(mockFetch([{ url: PROFILE_URL, body: {} }]))),
-    ).rejects.toThrow(/without an emailAddress/);
-  });
-
-  test('wrong credential kind is refused before any call', async () => {
-    const fetch = mockFetch([]);
-    await expect(
-      gmailPlugin.discoverResources(
-        connCtx(fetch, {
-          credential: { kind: 'api-key', fields: { api_key: 'x' }, metadata: {} },
-        }),
-      ),
-    ).rejects.toBeInstanceOf(CredentialKindMismatch);
-    expect(fetch.calls).toHaveLength(0);
-  });
-
-  test('passes the abort signal through', async () => {
+  test('the caller’s signal and a session deadline reach the transport', async () => {
+    const transport = fakeGmail();
     const controller = new AbortController();
-    const fetch = mockFetch([{ url: PROFILE_URL, body: { emailAddress: 'a@b.co' } }]);
-    await gmailPlugin.discoverResources(connCtx(fetch, { signal: controller.signal }));
-    expect(fetch.calls).toHaveLength(1);
+    await createGmailPlugin({ transport }).discoverResources(
+      connCtx({ signal: controller.signal }),
+    );
+    expect(transport.calls[0]).toMatchObject({
+      op: 'session',
+      options: { signal: controller.signal, timeoutMs: 60_000 },
+    });
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// execute — not implemented
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('gmail execute (experimental)', () => {
-  test('every classified tool answers a structured not_implemented error without any call', async () => {
-    const fetch = mockFetch([]);
-    for (const tool of GMAIL_CLASSIFIED_TOOLS) {
-      const result = await gmailPlugin.execute(execCtx(fetch), tool, {});
-      expect(result.isError).toBe(true);
-      expect(result.structuredContent).toMatchObject({
-        error: GMAIL_NOT_IMPLEMENTED_CODE,
-        plugin: 'gmail',
-        experimental: true,
-        tool,
-      });
-      const text = (result.content[0] as { type: string; text: string }).text;
-      expect(JSON.parse(text)).toEqual(result.structuredContent);
-      expect(text).toMatch(/not implemented/);
-      expect(text).toMatch(/experimental/);
-    }
-    expect(fetch.calls).toHaveLength(0);
-  });
-
-  test('an unknown tool gets the same answer (classify denies it earlier)', async () => {
-    const result = await gmailPlugin.execute(execCtx(mockFetch([])), 'gmail__nope', { a: 1 });
-    expect(result.isError).toBe(true);
-    expect(result.structuredContent?.tool).toBe('gmail__nope');
-  });
-});
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Presets
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,7 +441,7 @@ describe('gmail presets', () => {
 
   test('ships read-only and developer', () => {
     expect(gmailPlugin.catalog.presets?.map((p) => p.id)).toEqual(['read-only', 'developer']);
-    expect(gmailPlugin.catalog.catalog_version).toBe(4);
+    expect(gmailPlugin.catalog.catalog_version).toBe(5);
   });
 
   test('read-only : reads only, no bulk read, no sensitive label, every entry auto', () => {

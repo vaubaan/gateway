@@ -196,7 +196,6 @@ export const SECTIONS = {
   peopleAndKeys: 'People and keys',
   permissionsAndUsage: 'Permissions and usage',
   connectedApps: 'Connected apps',
-  oauthClients: 'OAuth clients',
   administrators: 'Administrators',
   peopleAndTeams: 'People and teams',
   setup: 'Setup',

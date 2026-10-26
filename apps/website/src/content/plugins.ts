@@ -180,8 +180,8 @@ function riskInfo(entry: RiskEntry): RiskInfo {
 }
 
 function credentialInfo(spec: CredentialSpec): CredentialInfo {
-  const fields =
-    spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : (spec.appConfigFields ?? []);
+  // An `oauth2` way asks for nothing: the gateway registers its own client at the service.
+  const fields = spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [];
   const guide = spec.kind === 'api-key' ? spec.guide : undefined;
   return {
     kind: spec.kind,
@@ -197,7 +197,7 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     recommendedExpiryDays: guide ? guide.recommendedExpiryDays : null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
-    registersItself: spec.kind === 'oauth2' && spec.clientRegistration !== undefined,
+    registersItself: spec.kind === 'oauth2',
   };
 }
 

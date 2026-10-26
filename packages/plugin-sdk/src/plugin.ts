@@ -23,7 +23,7 @@ import type {
   Slice,
 } from '@vaubaan/shared';
 
-import type { CredentialSecret, CredentialSpec, ProviderAppConfig } from './credential.ts';
+import type { CredentialSecret, CredentialSpec } from './credential.ts';
 import type { EnvOf } from './env-of.ts';
 import type { GitRemoteCapability } from './git/remote.ts';
 import type { ToolResultPartSink } from './streaming.ts';
@@ -58,15 +58,13 @@ export interface PluginLogger {
 
 /**
  * What a plugin receives whenever it talks to its provider on behalf of a
- * connection : the decrypted credential (in memory only), the company's OAuth
- * client for this provider when it connects that way, and the IO primitives. The plugin never
+ * connection : the decrypted credential (in memory only) and the IO
+ * primitives. The plugin never
  * reads `process.env`, never opens its own `fetch` : both are injected so
  * tests run with `mockFetch` and never reach a real provider.
  */
 export interface ConnectionContext {
   readonly credential: CredentialSecret;
-  /** The company's OAuth client for this provider (client id and its own settings). Empty for `api-key` and `ssh-key`. */
-  readonly appConfig: ProviderAppConfig;
   readonly fetch: typeof fetch;
   readonly signal?: AbortSignal;
   readonly logger?: PluginLogger;

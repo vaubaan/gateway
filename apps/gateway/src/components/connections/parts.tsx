@@ -78,12 +78,18 @@ const CREDENTIAL_KIND_LABEL = {
   'ssh-key': 'SSH key pair',
 } as const;
 
-/** A kind the contract no longer knows (`app-install`) is named as stored, with what it means now. */
-export function credentialKindLabel(kind: string | null): string {
+/**
+ * How an account was made, in a few words. A way its plugin no longer offers
+ * (`retired`: a Gmail account connected by OAuth) or a kind the contract no
+ * longer knows (`app-install`) says so, with what it means now.
+ */
+export function credentialKindLabel(kind: string | null, retired = false): string {
   if (kind === null) return 'unknown';
-  if (kind in CREDENTIAL_KIND_LABEL)
-    return CREDENTIAL_KIND_LABEL[kind as keyof typeof CREDENTIAL_KIND_LABEL];
-  return `${kind} (a way this gateway no longer offers: reconnect the account)`;
+  const known = kind in CREDENTIAL_KIND_LABEL;
+  const label = known ? CREDENTIAL_KIND_LABEL[kind as keyof typeof CREDENTIAL_KIND_LABEL] : kind;
+  return known && !retired
+    ? label
+    : `${label} (a way this gateway no longer offers: reconnect the account)`;
 }
 
 /** Multi-line secrets (PEM private keys) need a textarea; other secrets are masked. */

@@ -57,8 +57,9 @@ function connectedOf(result: StartResult) {
   return result;
 }
 
+/** The client the gateway would have registered at the provider (not what these tests are about). */
 async function configureOAuthApp(h: ConnectionsHarness, providerId = 'oauthco'): Promise<void> {
-  await h.providerApps.save(providerId, { client_id: 'cid', client_secret: 'csecret' });
+  await h.seedClient(providerId, 'cid', 'csecret');
 }
 
 describe('oauth2 — authorization code with PKCE and a single-use state', () => {
@@ -134,7 +135,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     });
     // The plugin discovered with the fresh token and never saw the client secret.
     expect(seen[0]!.credential).toMatchObject({ kind: 'oauth2', accessToken: 'at-1' });
-    expect(seen[0]!.appConfig).toEqual({ client_id: 'cid' });
+    expect(JSON.stringify(seen[0])).not.toContain('csecret');
     expect((await h.store.connections.listResources(done.connection.id)).map((r) => r.ref)).toEqual(
       ['proj-a', 'proj-b'],
     );
@@ -225,7 +226,7 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
     expect(done.returnTo).toBe('/missions/new?from=connect');
   });
 
-  it('needs the company app, and reports a denial or a failed exchange in the gateway’s words', async () => {
+  it('reports a denial or a failed exchange in the gateway’s words', async () => {
     const denied = harness([
       {
         method: 'POST',
@@ -235,7 +236,6 @@ describe('oauth2 — authorization code with PKCE and a single-use state', () =>
       },
     ]);
     const alice = await denied.h.actor('alice@example.com');
-    await expectConnectError(denied.h.service.start(alice, 'oauthco'), 'app-not-configured');
     await configureOAuthApp(denied.h);
 
     const first = stateOf(redirectOf(await denied.h.service.start(alice, 'oauthco')));
@@ -368,7 +368,6 @@ describe('api-key — form checked by a first discovery', () => {
       fields: { token: 'tok-secret-123', team_id: 'team_a' },
       metadata: { team_id: 'team_a' },
     });
-    expect(seen[0]!.appConfig).toEqual({});
     // Resources of another provider or without a ref are ignored.
     expect(done.discovery).toMatchObject({ ok: true, count: 1 });
     const view = await h.service.get(alice, done.connection.id);
@@ -528,9 +527,9 @@ describe('ownership, reconnection, revocation', () => {
     const h = harness();
     const alice = await h.actor('alice@example.com');
     const providers = await h.service.providers();
-    expect(providers.map((p) => [p.id, p.experimental, p.configured, p.kind])).toEqual([
-      ['keyco', false, true, 'api-key'],
-      ['gmailco', true, true, 'api-key'],
+    expect(providers.map((p) => [p.id, p.experimental, p.kind])).toEqual([
+      ['keyco', false, 'api-key'],
+      ['gmailco', true, 'api-key'],
     ]);
     const { connection } = connectedOf(await h.service.start(alice, 'gmailco', { fields }));
     expect((await h.service.get(alice, connection.id)).experimental).toBe(true);

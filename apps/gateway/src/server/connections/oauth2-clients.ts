@@ -1,21 +1,15 @@
 /**
  * The OAuth client of an `oauth2` service — the one place the connect flows
  * (`ConnectionService`) and the credential broker (refresh, revocation) get
- * it from. Two origins, chosen by the plugin's spec:
+ * it from. There is one origin: the spec declares `clientRegistration`
+ * (RFC 7591), and this instance registers its own client at the provider the
+ * first time someone connects, keeps it, and reuses it for every connection
+ * (Miro's MCP server). No administrator declares a client (ADRs
+ * oauth-client-registered-by-the-gateway, gmail-over-imap-with-an-app-password).
  *
- *   declared    an administrator declared the company's client at the service
- *               and entered it on the service's connect page or in the mounted
- *               configuration (`ProviderAppsService`, Gmail);
- *   registered  the spec declares `clientRegistration` (RFC 7591): this
- *               instance registers its own client at the provider the first
- *               time someone connects, keeps it, and reuses it for every
- *               connection (Miro's MCP server). ADR
- *               oauth-client-registered-by-the-gateway.
- *
- * A registered client lives in `instance_config` under
- * `oauth_clients.<provider>.*`: `client_id`, `redirect_uri` and
- * `registered_at` as values, `client_secret` sealed by the store's encryptor
- * like a declared client's secret. It is registered again when there is none,
+ * The client lives in `instance_config` under `oauth_clients.<provider>.*`:
+ * `client_id`, `redirect_uri` and `registered_at` as values, `client_secret`
+ * sealed by the store's encryptor. It is registered again when there is none,
  * when the instance's callback address is no longer the one it was registered
  * with (the public URL changed), and after the provider rejected it
  * (`invalid_client`): `rejected` forgets it. Registrations are single-flight
@@ -25,12 +19,6 @@
 import type { OAuth2CredentialSpec, ProviderPlugin } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
-import {
-  CLIENT_ID_FIELD,
-  CLIENT_SECRET_FIELD,
-  ProviderAppNotConfigured,
-  type ProviderAppsService,
-} from '../provider-apps';
 import type { ConfigRepo } from '../store/repositories/config';
 import { toIso, type Clock } from '../store/clock';
 import { registerClient, type OAuth2Client } from './oauth2';
@@ -48,16 +36,15 @@ export function registeredClientKey(
 /** The name the provider shows on its consent page and in the person's list of apps. */
 export const REGISTERED_CLIENT_NAME = 'Vaubaan Gateway';
 
-/** A service whose client is declared by an administrator has none yet. */
+/** No registered client is kept for the service (never registered, or forgotten after a rejection). */
 export class OAuth2ClientMissing extends Error {
   constructor(readonly providerId: string) {
-    super(`provider '${providerId}': no OAuth client is declared`);
+    super(`provider '${providerId}': no OAuth client is registered`);
     this.name = 'OAuth2ClientMissing';
   }
 }
 
 export interface OAuth2ClientsDeps {
-  readonly providerApps: Pick<ProviderAppsService, 'hostAppConfig'>;
   readonly config: Pick<ConfigRepo, 'get' | 'getSecret' | 'apply'>;
   /** The instance's public URL: its host names the client at the provider. */
   readonly publicUrl: URL;
@@ -74,23 +61,16 @@ export class OAuth2Clients {
 
   constructor(private readonly deps: OAuth2ClientsDeps) {}
 
-  /** True when the gateway registers this client itself: nobody declares anything. */
-  static registersItself(spec: OAuth2CredentialSpec): boolean {
-    return spec.clientRegistration !== undefined;
-  }
-
   /**
    * The client of an authorization that starts now, for `redirectUri`: the
-   * declared one, or the registered one — registered first when there is
-   * none, or when it was registered for another callback address. Throws
-   * `OAuth2ClientMissing` (declared, not yet) or `OAuth2RegistrationError`.
+   * registered one — registered first when there is none, or when it was
+   * registered for another callback address. Throws `OAuth2RegistrationError`.
    */
   async forAuthorization(
     plugin: ProviderOf,
     spec: OAuth2CredentialSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
-    if (!OAuth2Clients.registersItself(spec)) return this.declared(plugin.id, spec);
     const stored = await this.stored(plugin.id, spec);
     if (stored && stored.redirectUri === redirectUri) return stored.client;
     return this.register(plugin.id, spec, redirectUri);
@@ -98,23 +78,21 @@ export class OAuth2Clients {
 
   /**
    * The client of a token request (code exchange, refresh, revocation): the
-   * declared one, or the registered one as it is. Never registers: a grant
-   * belongs to the client that obtained it. Throws `OAuth2ClientMissing`.
+   * registered one as it is. Never registers: a grant belongs to the client
+   * that obtained it. Throws `OAuth2ClientMissing`.
    */
   async forTokenRequest(plugin: ProviderOf, spec: OAuth2CredentialSpec): Promise<OAuth2Client> {
-    if (!OAuth2Clients.registersItself(spec)) return this.declared(plugin.id, spec);
     const stored = await this.stored(plugin.id, spec);
     if (!stored) throw new OAuth2ClientMissing(plugin.id);
     return stored.client;
   }
 
   /**
-   * The provider answered `invalid_client` for `clientId`: a registered client
-   * is forgotten (when it is still that one), so the next connection
-   * registers again. A declared client is the administrator's: left alone.
+   * The provider answered `invalid_client` for `clientId`: the registered
+   * client is forgotten (when it is still that one), so the next connection
+   * registers again.
    */
-  async rejected(plugin: ProviderOf, spec: OAuth2CredentialSpec, clientId: string): Promise<void> {
-    if (!OAuth2Clients.registersItself(spec)) return;
+  async rejected(plugin: ProviderOf, _spec: OAuth2CredentialSpec, clientId: string): Promise<void> {
     const current = await this.deps.config.get(registeredClientKey(plugin.id, 'client_id'));
     if (current !== clientId) return;
     await this.deps.config.apply(
@@ -126,24 +104,6 @@ export class OAuth2Clients {
     this.deps.logger.warn('registered OAuth client rejected by the provider; forgotten', {
       provider: plugin.id,
     });
-  }
-
-  private async declared(providerId: string, spec: OAuth2CredentialSpec): Promise<OAuth2Client> {
-    let app: Readonly<Record<string, string>>;
-    try {
-      app = await this.deps.providerApps.hostAppConfig(providerId);
-    } catch (err) {
-      if (err instanceof ProviderAppNotConfigured) {
-        throw new OAuth2ClientMissing(providerId);
-      }
-      throw err;
-    }
-    const clientId = app[CLIENT_ID_FIELD];
-    if (!clientId) throw new OAuth2ClientMissing(providerId);
-    return {
-      clientId,
-      clientSecret: spec.clientAuthMethod === 'none' ? null : (app[CLIENT_SECRET_FIELD] ?? null),
-    };
   }
 
   private async stored(
@@ -184,10 +144,8 @@ export class OAuth2Clients {
     spec: OAuth2CredentialSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
-    const registration = spec.clientRegistration;
-    if (!registration) throw new OAuth2ClientMissing(providerId);
     const client = await registerClient(
-      registration,
+      spec.clientRegistration,
       spec,
       { redirectUri, clientName: `${REGISTERED_CLIENT_NAME} (${this.deps.publicUrl.host})` },
       { fetch: this.deps.fetch },

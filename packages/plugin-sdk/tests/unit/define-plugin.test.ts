@@ -163,6 +163,7 @@ describe('definePlugin', () => {
         pkce: true,
         clientAuthMethod: 'client_secret_basic',
         refreshable: true,
+        clientRegistration: { registrationUrl: 'https://auth.example/register' },
         ...extra,
       },
     });
@@ -188,6 +189,31 @@ describe('definePlugin', () => {
         "credential.revocation.format: 'client-credentials-json' needs a confidential client and refresh tokens",
       ]);
     }
+  });
+
+  test('an oauth2 spec names the registration endpoint of the client the gateway registers itself', () => {
+    // No administrator declares an OAuth client (ADR gmail-over-imap-with-an-app-password).
+    const oauth = (clientRegistration: unknown): ProviderPlugin =>
+      ({
+        ...acmePlugin,
+        credential: {
+          kind: 'oauth2',
+          authorizationUrl: 'https://auth.example/authorize',
+          tokenUrl: 'https://auth.example/token',
+          scopes: ['read'],
+          pkce: true,
+          clientAuthMethod: 'client_secret_basic',
+          refreshable: true,
+          ...(clientRegistration === undefined ? {} : { clientRegistration }),
+        },
+      }) as ProviderPlugin;
+    expect(pluginIssues(oauth({ registrationUrl: 'https://auth.example/register' }))).toEqual([]);
+    expect(pluginIssues(oauth(undefined))).toEqual([
+      'credential.clientRegistration: expected { registrationUrl }',
+    ]);
+    expect(pluginIssues(oauth({ registrationUrl: 'http://auth.example/register' }))).toEqual([
+      'credential.clientRegistration.registrationUrl: expected an https URL',
+    ]);
   });
 
   test('a token handout names a declared tool and risks of the catalog', () => {
@@ -387,6 +413,7 @@ describe('definePlugin', () => {
         pkce: false,
         clientAuthMethod: 'none',
         refreshable: true,
+        clientRegistration: { registrationUrl: 'https://auth.example/register' },
       },
     };
     const oauthIssues = pluginIssues(oauthNoRefresh);
