@@ -150,3 +150,13 @@ alone.
   purl scoping and expiry dates decided it.
 - **Scanning only the pushed range for secrets.** Misses force-pushes and
   new branches; the whole history costs seconds.
+
+## Amendment 2026-10-26 — on every pull request, not every push
+
+ADR [ci-billed-minutes-budget](ci-billed-minutes-budget.md): the security
+checks (dependency audit, lockfile gate, actionlint, gitleaks, Semgrep) now
+run as steps of the one gate job `audit`, on every pull request that is ready
+for review, weekly on the default branch with the image scan, and in the
+release gates. A push to `main` or `v5` no longer runs them: it is the squash
+merge of a pull request they checked. `secrets.yml` still scans every push of
+a work branch.

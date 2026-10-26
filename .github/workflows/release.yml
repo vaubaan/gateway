@@ -147,8 +147,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # The same gates as a pull request, by construction: ci.yml itself (check,
-  # audit, e2e, docker smoke), called on the released commit.
+  # The same gates as a pull request, by construction, and the browser tests:
+  # ci.yml itself (jobs `audit` and `e2e`), called on the released commit.
   gates:
     needs: plan
     uses: ./.github/workflows/ci.yml

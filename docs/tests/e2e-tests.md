@@ -166,9 +166,10 @@ ships (details in the handbook, "Known limits at M1"):
 
 > `apps/gateway/tests/e2e/v5/cutover-smoke.spec.ts`. One Playwright test that
 > walks the path of the scenario above on an ephemeral instance. Runs in the
-> `e2e` job of `.github/workflows/ci.yml` on every push to `main` and `v5`, on a pull request
-> that changes a page, a component, a style, a browser test or a plugin (`scripts/ci-scope.sh`,
-> `surface=true`), in the release gates, and locally with `npm run test:e2e:v5`.
+> `e2e` job of `.github/workflows/ci.yml` weekly on `main`, on a pull request that carries the
+> label `e2e` (CI asks for it when the change touches a page, a component, a style, a browser
+> test or a plugin: `scripts/ci-scope.sh`, `surface=true`), in the release gates, and locally
+> with `npm run test:e2e:v5`.
 
 What it does, in order:
 
