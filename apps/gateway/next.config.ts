@@ -158,11 +158,16 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: resolve(__dirname, '../../'),
   // Native addons must not be bundled. argon2 and better-sqlite3 are in Next's
-  // default external list; ssh2 is not. argon2's prebuilt .node binaries are
-  // traced explicitly because nft does not follow node-gyp-build lookups.
-  // better-sqlite3 is reached through /healthz → composition root → store, so
-  // nft traces it on its own; its runtime files (lib, bindings) stay listed as
-  // the guarantee for the prebuilt binary, whatever the route graph becomes.
+  // default external list; ssh2 is not. Both load a prebuilt N-API binary
+  // shipped in their package through a path computed at run time, which nft
+  // does not follow: argon2's `prebuilds/<platform>-<arch>/` (node-gyp-build)
+  // and better-sqlite3's `prebuilds/<platform>-<arch>.node` (since 13) are
+  // traced explicitly, the latter for the building platform (the image builds
+  // on each architecture). nft itself, reading better-sqlite3's loader, adds
+  // the binaries of the other systems for the same architecture (about 6 MB
+  // never loaded, as argon2's `prebuilds/**` already ships).
+  // better-sqlite3's package.json and lib/ stay listed as the guarantee of its
+  // loader, whatever the route graph becomes.
   // imapflow (the Gmail plugin's IMAP client) is not an addon, but it loads
   // pino, whose worker-thread transports resolve files at run time: kept
   // external, it is traced and copied as the package it is.
@@ -172,9 +177,7 @@ const nextConfig: NextConfig = {
       '../../node_modules/argon2/prebuilds/**',
       '../../node_modules/better-sqlite3/package.json',
       '../../node_modules/better-sqlite3/lib/**',
-      '../../node_modules/better-sqlite3/build/Release/*.node',
-      '../../node_modules/bindings/**',
-      '../../node_modules/file-uri-to-path/**',
+      `../../node_modules/better-sqlite3/prebuilds/${process.platform}*-${process.arch}.node`,
       // The store applies these at boot (apps/gateway/src/server/store/migrate.ts).
       './migrations/*.sql',
       // Plugins read their risk catalog from disk at import time

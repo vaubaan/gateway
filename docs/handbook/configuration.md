@@ -353,8 +353,10 @@ review 2026-10-15 M1). What the upgrade means for this module:
 - `serverExternalPackages`: `argon2` and `better-sqlite3` are in Next's
   default external list, `ssh2` is added. `outputFileTracingIncludes` lists
   the `argon2` prebuilds (nft does not follow `node-gyp-build`) and the
-  runtime files of `better-sqlite3` (`package.json`, `lib/`, the `.node`
-  binary, `bindings`, `file-uri-to-path`), `./migrations/*.sql`, which
+  runtime files of `better-sqlite3` (`package.json`, `lib/`, and since 13
+  the prebuilt `prebuilds/<platform>-<arch>.node` of the building platform;
+  nft adds the other systems' binaries of the same architecture, read from
+  the loader), `./migrations/*.sql`, which
   the store reads from disk at boot, and `../../plugins/*/src/**/*.yaml`,
   the risk catalogs the plugins read at import time (handbook
   [plugin-sdk](plugin-sdk.md)). Since P0.R the `/healthz` route graph

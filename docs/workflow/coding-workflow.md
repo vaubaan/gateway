@@ -81,6 +81,10 @@ type-check` at the root fans out to all of them.
 
 ## TypeScript and lint baseline
 
+- TypeScript 6.0 (`typescript` pinned at the root). Not 7 yet: it ships no
+  compiler API, which typescript-eslint and the structural tests need;
+  Dependabot ignores it until then (ADR
+  [typescript-7](../decisions/typescript-7.md)).
 - `tsconfig.base.json`: `strict`, `noUncheckedIndexedAccess`,
   `noImplicitOverride`, `noFallthroughCasesInSwitch`,
   `useUnknownInCatchVariables`, ES2022, bundler resolution,
@@ -374,10 +378,11 @@ architecture.
 as few pull requests as possible, since each one costs a CI run (ADR
 ci-billed-minutes-budget). Once a week, Monday morning, for npm: every minor
 and patch in one pull request, and every major in another (`@types/node`
-excepted: its major follows the runtime); at most two npm pull requests open
+excepted: its major follows the runtime; and TypeScript 7, until
+typescript-eslint supports it, ADR typescript-7); at most two npm pull requests open
 at a time. Once a month: the Node base image of the Dockerfile (new digest
-of the pinned tag, or a new 26.x; never a new Node major: the ABI of the
-native addons), Caddy in the Compose file, and the actions (grouped; commit
+of the pinned tag, or a new 26.x; never a new Node major: the runtime of
+the image is a decision), Caddy in the Compose file, and the actions (grouped; commit
 and version comment move together). Each waits a **cooldown** before it is
 proposed — 4 days for a patch or an image, 7 for a minor or an action, 30
 for a major — so a version published in the last 72 hours is never
@@ -622,9 +627,9 @@ cause and re-run the failed jobs: the version tag is kept as it is. If the
 GitHub release already exists, `release` fails rather than overwrite it.
 
 Both architectures are published because both native addons ship a prebuilt
-glibc binary for them: `argon2` carries `linux-x64` and `linux-arm64` in its
-package, `better-sqlite3` downloads `linux-x64` or `linux-arm64` for the
-Node ABI of the base image at install time, and the base image index has
+glibc binary for them: `argon2` and `better-sqlite3` (since 13) carry
+`linux-x64` and `linux-arm64` N-API binaries in their package — nothing is
+downloaded or compiled at install —, and the base image index has
 both. The smoke test loads the two addons on each architecture at every
 release, so a dependency bump that loses one fails the release instead of
 shipping a broken image.
@@ -697,8 +702,9 @@ weekly image scan fails when a fixed vulnerability waits in the pinned image.
 
 The base stays a Debian (glibc) image of the Node 26 line (since 2026-10-26;
 Node 22 before, ADR docker-image-and-config-format, amendment 2026-10-26). Another Node
-major changes the ABI the prebuilt addons are downloaded for: it is a minor
-release at least, and both architectures must pass the smoke test first. The
+major is a minor release at least, and both architectures must pass the smoke
+test first: the two addons are N-API builds, stable across Node majors, but the
+runtime itself changes under every dependency. The
 Node major moves in one pull request with `node-version` of the workflows,
 `engines.node` and `@types/node` (whose majors Dependabot does not propose:
 types above the runtime would compile calls the runtime lacks).

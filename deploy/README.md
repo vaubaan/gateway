@@ -430,7 +430,7 @@ docker buildx imagetools inspect caddy:<version>-alpine
 The digest is what is pulled: once it is present the registry ignores the
 tag, which is why version and digest are written together on one line. The
 base must stay a Debian (glibc) image. Dependabot proposes the bumps every
-week (a new major of Node excepted: it changes the ABI of the native addons);
+week (a new major of Node excepted: the runtime of the image is a decision);
 they are also checked by hand before every release and on a Node or Debian
 security release — the procedure is in
 [`docs/workflow/coding-workflow.md`](../docs/workflow/coding-workflow.md#refreshing-the-base-image-digests).

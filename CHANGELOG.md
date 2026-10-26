@@ -9,6 +9,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies.** better-sqlite3 13 for operators: the store's SQLite driver
+  is now an N-API addon whose binaries ship in the package, so the image build
+  no longer downloads one for the Node version, and SQLite moves from 3.53.2 to
+  3.53.4. The database file, its WAL and the backups are unchanged; nothing to
+  do on upgrade.
+  For contributors: Vitest 5 (same projects `shared` and `isolated`, same
+  commands, same tests) and TypeScript 6.0 (no configuration change).
+  TypeScript 7 waits for typescript-eslint to support it (ADR typescript-7).
+
 ## [2.0.0-alpha.8] - 2026-10-26
 
 ### Added

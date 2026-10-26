@@ -55,9 +55,9 @@ export default defineConfig({
         // graph per worker, not per file. Every test file imports the
         // composition root, and re-evaluating it for each of ~400 files was
         // more than half of the run. Tests build their own root on a
-        // `:memory:` store and share no module state. (Vitest 3 reads
-        // `isolate` from the run, not from a project: hence the flag, and
-        // isolation by default for a plain `vitest run`.)
+        // `:memory:` store and share no module state. (The flag, not
+        // `isolate: false` here, which Vitest reads per project since 4: a
+        // plain `vitest run <path>` stays isolated, as it always was.)
         extends: true,
         test: {
           name: 'shared',

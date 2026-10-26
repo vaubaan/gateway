@@ -1,8 +1,9 @@
 /**
  * Native addons survive the Next.js build (Turbopack, `output: 'standalone'`).
  *
- * `argon2` and `better-sqlite3` ship prebuilt `.node` binaries that Next's file
- * tracing does not discover on its own; `next.config.ts` lists them in
+ * `argon2` and `better-sqlite3` ship prebuilt N-API `.node` binaries in their
+ * package (`prebuilds/`), loaded through a path computed at run time that
+ * Next's file tracing does not discover on its own; `next.config.ts` lists them in
  * `outputFileTracingIncludes`. This test reads the build output and checks:
  *
  * 1. the route handler trace (`/healthz`, compiled by the build) includes the
@@ -55,7 +56,9 @@ describe.skipIf(!hasBuild)('standalone output keeps the native addons (Next buil
       ),
     ).toBe(true);
     expect(
-      nodeBinaries.some((f) => /better-sqlite3\/build\/Release\/better_sqlite3\.node$/.test(f)),
+      nodeBinaries.some((f) =>
+        new RegExp(`better-sqlite3/prebuilds/${process.platform}-${process.arch}\\.node$`).test(f),
+      ),
     ).toBe(true);
   });
 
