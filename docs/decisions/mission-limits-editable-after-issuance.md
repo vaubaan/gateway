@@ -1,10 +1,21 @@
 ---
 title: A mission's limits are changed after issuance by its creator, judged by issuance's own check, read by the budget inside its decision
-status: accepted
+status: superseded
 date: 2026-10-14
+superseded-by: mission-editable-after-issuance
+superseded-date: 2026-10-24
 ---
 
 # A mission's limits are changed after issuance by its creator, judged by issuance's own check, read by the budget inside its decision
+
+> **Superseded on 2026-10-24** by
+> [mission-editable-after-issuance](mission-editable-after-issuance.md): the owner
+> decided that a mission is edited after issuance without limit by its creator
+> (name, expiry, accounts, resources, permissions, limits, gates — not the period).
+> What this record settled still holds inside the wider edit: issuance's own check
+> judges what moves and only what moves, the change applies at once in the current
+> period, the budget reads the limits inside its decision. Point 1 ("nothing else
+> moves") no longer holds; `setLimits` remains as a narrower entry point.
 
 > Product owner's decision of 2026-10-14 (item 1 of
 > [owner-decisions-second-round](owner-decisions-second-round.md)), from the

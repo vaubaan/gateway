@@ -26,6 +26,7 @@ tracks:
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
   - apps/gateway/tests/e2e/v5/team-mission.spec.ts
   - apps/gateway/tests/e2e/v5/change-limits.spec.ts
+  - apps/gateway/tests/e2e/v5/edit-mission.spec.ts
   - apps/gateway/tests/e2e/v5/mission-pages.ts
   - apps/gateway/migrations/0010_mission_members_and_token_holders.sql
   - apps/gateway/tests/e2e/v5/browser.ts
@@ -55,7 +56,9 @@ Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
 (a call whose resources disagree on the environment),
 [mission-pages-confirm-the-explicit-list-and-ask-before-a-key-stops](../decisions/mission-pages-confirm-the-explicit-list-and-ask-before-a-key-stops.md)
-(the confirmation before a mission is created, what replacing a key asks).
+(the confirmation before a mission is created, what replacing a key asks),
+[mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)
+(the whole mission edited by its creator after issuance).
 Built on the [store](store.md) repositories, the
 [plugin SDK](plugin-sdk.md) registry (catalogs, presets, `experimental`,
 `envOf`), [connections](connections.md) (resources, their `env` labels, hidden
@@ -927,14 +930,16 @@ session, the audit and the catalog show, and what a filter is typed with.
 
 ## HTTP surface
 
-| Route                           | Handler     | Answers                                                                                                                                                                       |
-| ------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/missions/preview`    | `preview`   | 200 `{ preview }`                                                                                                                                                             |
-| `POST /api/missions`            | `issue`     | 201 `{ mission, token: { secret, prefix }, kit }` · 422 `{ error: 'refused', preview }`                                                                                       |
-| `POST /api/missions/:id/rotate` | `rotate`    | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                                                                                                                  |
-| `POST /api/missions/:id/revoke` | `revoke`    | 200 `{ mission: { id, status } }` · 404                                                                                                                                       |
-| `POST /api/missions/:id/gate`   | `setGate`   | 200 `{ mission: { id }, risk_id, gate, previous, opening_closed }` · 400 `invalid-gate-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy`                        |
-| `POST /api/missions/:id/limits` | `setLimits` | 200 `{ mission: { id }, changed: [{ risk_id, before, after }] }` · 400 `invalid-limits-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy` / `refused` (`issues`) |
+| Route                                 | Handler       | Answers                                                                                                                                                                       |
+| ------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/missions/preview`          | `preview`     | 200 `{ preview }`                                                                                                                                                             |
+| `POST /api/missions`                  | `issue`       | 201 `{ mission, token: { secret, prefix }, kit }` · 422 `{ error: 'refused', preview }`                                                                                       |
+| `POST /api/missions/:id/rotate`       | `rotate`      | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                                                                                                                  |
+| `POST /api/missions/:id/revoke`       | `revoke`      | 200 `{ mission: { id, status } }` · 404                                                                                                                                       |
+| `POST /api/missions/:id/gate`         | `setGate`     | 200 `{ mission: { id }, risk_id, gate, previous, opening_closed }` · 400 `invalid-gate-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy`                        |
+| `POST /api/missions/:id/limits`       | `setLimits`   | 200 `{ mission: { id }, changed: [{ risk_id, before, after }] }` · 400 `invalid-limits-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy` / `refused` (`issues`) |
+| `POST /api/missions/:id/edit`         | `edit`        | 200 `{ mission: { id, name }, changes, requests_closed }` · 400 `invalid-edit` (`problems`) · 404 · 409 `mission-inactive` / `conflict` · 422 `refused` (`issues`, `changes`) |
+| `POST /api/missions/:id/edit/preview` | `previewEdit` | 200 `{ preview: { ok, issues, notices, changes, revision } }` · 400 `invalid-edit` · 404 · 409 `mission-inactive`; writes nothing                                             |
 
 The team's routes (`team-handlers.ts`, same guard, merged into
 `root.missions.handlers`):
@@ -961,6 +966,73 @@ All thirteen routes of the two tables go through `guardMutation(request, deps, '
 `origin-mismatch`), then a **user** session (401 without, 403 for the
 bootstrap operator — a mission always has an identified human behind it), `Cache-Control: no-store`; a body that is not a
 draft is 400 `invalid-draft` with one problem per field (unknown keys refused).
+
+## Editing a mission after issuance — `MissionService.edit(user, missionId, { draft, revision })`
+
+ADR [mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)
+(supersedes the limits-only rule). The creator edits everything a draft holds — name,
+expiry, accounts added or removed, per account its resource scope and selection, the
+permissions added or removed with their quota, rate (calls and window) and gate — but
+the period. The pure part is `missions/mission-edit.ts` (browser-safe, shared with the
+form); the words of an edit are `missions/change-words.ts`.
+
+- **What the editor starts from** — `editView(user, missionId)`: the mission as a
+  `MissionSnapshot` (each account with its stored scope, its stored ids — stale ones
+  included — and its part of the policy), the same as a `MissionDraft`
+  (`draftOfSnapshot`: `selected` with the stored ids, `connection` as the scope, `all`
+  with no id read as `selected` with none), its `revision` (`missionRevision`, a digest
+  of name, expiry instant, period, selections and policy, whatever the order of the
+  rows), the `blocked` state (`gateEditBlockedBy`), what each risk used this period and
+  the open claims and approval requests. `null` for anyone but the creator.
+- **The body** — `{ draft, revision }`, strict; the draft is parsed by
+  `missionDraftSchema`, the creation's. A revision that is not the mission's now is
+  `conflict`, nothing written.
+- **The judgement** — `judgeEdit(context, before, draft)` runs `previewDraft` — the
+  creation's preview — under the creator's issuance context now, then keeps the
+  issues about what moves (the ADR's table): an added account is judged whole; on a
+  kept account, a resource issue counts when it names an added resource,
+  `no-resource-selected` when the selection moved, a line issue when it names a line
+  added or whose quota, calls or window moved, `connection-unavailable` only when the
+  account widens (resources added, scope widened, a permission added, a quota or a rate
+  raised), `connection-unknown` when anything on it moves, `no-accepted-risk` when lines
+  were added or removed; the name and the expiry only when they move; a gate alone is
+  not judged. `period-not-editable` refuses another period. A moving line the preview
+  did not pass is never dropped silently: the issue that names it counts.
+- **What is written** — `judgement.after`: what moves takes the preview's resolution
+  ("every resource known now" becomes the explicit list of that instant), what does not
+  move is the stored value (a kept stale resource stays selected). `MissionsRepo.edit`
+  writes it in one `BEGIN IMMEDIATE` transaction that re-reads the mission and writes
+  nothing unless the actor is the creator, the stored status is not `revoked` and the
+  revision still matches (`unchanged`); only the rows that move are touched (kept
+  connection and resource rows are not rewritten and keep their
+  `mission_resources.source`; a resource row the edit adds carries `source = 'edit'`,
+  which the mission page does not mark — only `created` reads "created by this
+  mission"); an end moved into the future (or
+  removed) turns a stored `expired` back to `active`; the open claims and approval
+  requests about a removed risk become `refused` with `decision_json = { resolution:
+'mission-changed', removed }` and their sealed arguments erased; unconsumed approvals
+  covering a removed risk are retired. An edit that moves nothing writes nothing.
+- **Session events**, when the session exists: `permission-added`,
+  `permission-removed` (which ends a gate opening of that risk, `GATE_EVENT_KINDS`),
+  `limits-changed` (with `rate_window_seconds` / `_before` when the window moved),
+  `gate-changed`, the closed requests' `request` events (`state: 'refused', reason:
+'mission-changed'`), then one `mission-changed` (no risk) whose details
+  (`changeSummaryOf`) the activity words with `missionChangeClauses`.
+- **One audit entry** — act `mission-changed`, `before` / `after` holding only the
+  sections that moved, each in full (`auditOfChanges`): `name`, `expires_at`,
+  `connections` (ids), `resources` (`{ connection_id, resource_scope, resource_ids }`
+  per account that moved), `permissions` (lines removed and changed before; added and
+  changed after); `after.requests_closed`.
+- **What a call sees** — the next call loads the new context (resources, accepted
+  risks); a call already past its resource and risk stages keeps its admission there,
+  but the budget re-reads limits and gates inside its decision and fails closed on a
+  touched risk that is gone (`livePolicy`, [budget-and-sessions](budget-and-sessions.md)).
+- **Not on the management door**: `ManagementMissions` picks neither `edit`,
+  `previewEdit` nor `editView` (`hard-deny.test.ts`). `list_my_missions` reads the
+  stored mission, so it shows the edit.
+
+`setLimits`, `setGate` and `changePermissions` below stay as narrower entry points: the
+limits deep link, the gate switch, the answer to a permission request.
 
 ## Editing a gate after issuance — `MissionService.setGate(user, missionId, riskId, gate)`
 
@@ -1065,7 +1137,9 @@ and [the decision](../decisions/mission-permissions-and-explicit-requests.md).
 
 ## Changing the limits after issuance — `MissionService.setLimits(user, missionId, edits)`
 
-ADR [mission-limits-editable-after-issuance](../decisions/mission-limits-editable-after-issuance.md).
+ADR [mission-limits-editable-after-issuance](../decisions/mission-limits-editable-after-issuance.md),
+superseded by [mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md):
+this is now the narrow entry point behind "Change limits"; the whole edit is above.
 `edits` is `[{ risk_id, quota, rate_limit_max }]`; the route takes
 `{ limits: [{ risk_id, quota, rate_limit: { max } }] }` and refuses any other key (a
 window, a gate, a period).
@@ -1395,23 +1469,24 @@ act is shown when the server would take it, read from `MissionTeam`
 (`role`, `issuable`, `my_token`, `candidates`, `revocable`) and from the
 mission's state — never spelled again as a condition of the page.
 
-| Act                            | Where                            | Who, when                                  | Asks first                                                              |
-| ------------------------------ | -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
-| Setup kit (the masked key)     | header, own row                  | whoever holds a working key                | —                                                                       |
-| Generate my key                | header (primary), own row, "···" | whoever has none, while the mission serves | no: nothing stops                                                       |
-| Replace my key                 | own row, "···"                   | whoever has one, while the mission serves  | `ConfirmDialog`: the current key stops at once, the others keep working |
-| Revoke my key                  | "···"                            | whoever has one                            | `DangerConfirm`, typing one's address                                   |
-| Add people                     | header                           | the creator, until the mission is stopped  | a dialog: pick a person, the rule in one sentence                       |
-| Remove (a teammate)            | their row                        | the creator                                | `DangerConfirm`, typing their address                                   |
-| Revoke key (a teammate's)      | their row                        | the creator                                | `DangerConfirm`, typing their address                                   |
-| New machine key                | "···"                            | the creator, while the mission serves      | a dialog: its name                                                      |
-| Replace key (a machine's)      | its row                          | the creator, while the mission serves      | `ConfirmDialog`: the current key stops at once                          |
-| Revoke (a machine key)         | its row                          | the creator                                | `DangerConfirm`, typing its name                                        |
-| "Ask me first" on a permission | its row                          | the creator, while `gates_editable`        | no: a switch; a toast confirms                                          |
-| Change limits                  | permissions section, "···"       | the creator, while `limits_editable`       | `ConfirmDialog` listing each change, before → after                     |
-| Leave the mission              | "···"                            | a teammate (never the creator)             | `DangerConfirm`, typing the mission's name                              |
-| Duplicate                      | "···"                            | the creator                                | — (opens "New mission" on a copy)                                       |
-| Stop the mission               | "···", stop zone                 | the creator, until it is stopped           | `DangerConfirm`, typing the mission's name; says for how many holders   |
+| Act                            | Where                            | Who, when                                  | Asks first                                                                                     |
+| ------------------------------ | -------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Setup kit (the masked key)     | header, own row                  | whoever holds a working key                | —                                                                                              |
+| Generate my key                | header (primary), own row, "···" | whoever has none, while the mission serves | no: nothing stops                                                                              |
+| Replace my key                 | own row, "···"                   | whoever has one, while the mission serves  | `ConfirmDialog`: the current key stops at once, the others keep working                        |
+| Revoke my key                  | "···"                            | whoever has one                            | `DangerConfirm`, typing one's address                                                          |
+| Add people                     | header                           | the creator, until the mission is stopped  | a dialog: pick a person, the rule in one sentence                                              |
+| Remove (a teammate)            | their row                        | the creator                                | `DangerConfirm`, typing their address                                                          |
+| Revoke key (a teammate's)      | their row                        | the creator                                | `DangerConfirm`, typing their address                                                          |
+| New machine key                | "···"                            | the creator, while the mission serves      | a dialog: its name                                                                             |
+| Replace key (a machine's)      | its row                          | the creator, while the mission serves      | `ConfirmDialog`: the current key stops at once                                                 |
+| Revoke (a machine key)         | its row                          | the creator                                | `DangerConfirm`, typing its name                                                               |
+| "Ask me first" on a permission | its row                          | the creator, while `gates_editable`        | no: a switch; a toast confirms                                                                 |
+| Edit mission                   | permissions section, "···"       | the creator, while `limits_editable`       | opens `/missions/<id>/edit`; its dialog lists every change, before → after, with what it means |
+| Change limits                  | permissions section, "···"       | the creator, while `limits_editable`       | `ConfirmDialog` listing each change, before → after                                            |
+| Leave the mission              | "···"                            | a teammate (never the creator)             | `DangerConfirm`, typing the mission's name                                                     |
+| Duplicate                      | "···"                            | the creator                                | — (opens "New mission" on a copy)                                                              |
+| Stop the mission               | "···", stop zone                 | the creator, until it is stopped           | `DangerConfirm`, typing the mission's name; says for how many holders                          |
 
 "Replace my key" and "Generate my key" both post to
 `/api/missions/<id>/tokens/mine`, for the creator too. Replacing a machine key
@@ -1428,6 +1503,32 @@ that Escape and the backdrop do not close ("I saved the key").
 The teammates' select lists every active person's address on purpose (product
 owner, 2026-10-13; threat model, A25): the gateway is one company's, and a
 free-text field would confirm or deny any address typed.
+
+### Edit mission (`/missions/<id>/edit`)
+
+`edit/page.tsx` reads `editView`; anyone but the creator gets "not found", a revoked or
+orphaned mission a callout that says why it is not edited. Otherwise it renders
+`MissionForm` with `edit` (`EditSource`: id, revision, snapshot, used, open requests),
+keyed on the revision. In edit mode (`new/edit-state.ts`, pure):
+
+- `initialEditState` loads the mission (`loadResolved` over `resolvedOfSnapshot`): its
+  accounts included with their stored selection and lines, the name, the period, and
+  the end date as the choice "As it is" (`expiry: 'keep'`, `keptExpiry`);
+- `editDraftOf` is the form's draft with the mission's period, plus the accounts the
+  form cannot show (no longer in the issuance context) carried back unchanged;
+- the rail's issues are `judgeEdit`'s, so the page and the server agree; "Save
+  changes" is enabled when the edit passes and moves something; the period select is
+  disabled with its reason; "Start from a mission…" and "Paste an agent's proposal"
+  are not offered;
+- the dialog (`data-testid="confirm-edit"`) lists `changeLines(changes, source,
+naming)`: per section, before → after, and what it means — a limit lowered under
+  what this period used ("Already used up"), a permission removed ("Refused from the
+  next call", and the waiting requests it closes), a resource removed ("No longer
+  reached"), an account added or removed, an earlier end;
+- saved, it posts `{ draft, revision }` to `/api/missions/<id>/edit` and goes to
+  `/missions/<id>?edited=1`, where a callout (`mission-edited`) says the key, the
+  session and what was used are unchanged. A 422 puts the server's issues in the
+  rail; a 409 says the mission changed meanwhile.
 
 ### The activity of a mission (`/missions/<id>/session`)
 
@@ -1631,6 +1732,14 @@ words, Can / Asks first / Cannot, the limit that is near) and
 activity says of each kind of event). The components they are built from are
 in `tests/unit/app/design-system.test.tsx` ([web-app](web-app.md)).
 
+The edit: `src/server/missions/mission-edit.test.ts` (the judge's table, the
+revision, the words), `app/(app)/missions/new/edit-state.test.ts` (the form in edit
+mode, the confirmation's lines), `tests/integration/missions/edit.test.ts` (every
+section in one edit, refusals identical to a creation, a stale kept resource, period,
+conflict, creator only, revoked and expired, moot requests closed, a stale call failing
+closed, the HTTP answers, the execution door after an edit) and the `edit` cases of
+`tests/integration/store/missions.test.ts`; in the browser, `edit-mission.spec.ts`.
+
 Browser, `tests/e2e/v5/team-mission.spec.ts` (1: a teammate added, a machine
 key, the teammate's own key in her browser only, none of the creator's acts
 offered to her, three holders attributed in the activity and the record, each
@@ -1653,8 +1762,11 @@ specs share are in `tests/e2e/v5/mission-pages.ts`.
   or its provider has no registered plugin (`root.registry.ids`).
 - **The detail shows "no resource" on a connection that has resources** — the
   mission was issued when the connection had none (or all were hidden): it
-  reaches none, and the door answers `resource-not-in-mission`. Duplicate the
-  mission to issue one on the resources known now.
+  reaches none, and the door answers `resource-not-in-mission`. Edit the mission
+  ("Edit mission") and pick the resources: same key.
+- **An edit answers `conflict`** — the mission changed since the editor was opened
+  (another tab, "Change limits", an answer to a permission request): reload the edit
+  page. **`period-not-editable`** — the period never moves; duplicate the mission.
 - **Calls are refused `risk-not-accepted` on one resource only** — read the
   preview's `notices`: the resource has no environment label, or a label the
   catalog does not know; env-scoped risks can never be touched on it. Label it

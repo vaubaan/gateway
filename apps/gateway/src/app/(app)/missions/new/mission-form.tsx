@@ -19,6 +19,12 @@
  * Once created, the screen becomes the key, shown once, with the kit
  * (`KeyReveal`): the key exists nowhere else, so nothing navigates away
  * until the person asks to open the mission.
+ *
+ * With `edit`, the same screen edits a mission after issuance (ADR
+ * mission-editable-after-issuance): prefilled from the mission, its period
+ * fixed, its end date "as it is", judged by `judgeEdit` — the creation's
+ * preview kept on what moves —, and "Save changes" confirms every change
+ * before → after with what it means. Same key, same session, same counters.
  */
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -79,6 +85,7 @@ import type {
   PreviewNotice,
   ResolvedDraftConnection,
 } from '@/server/missions/model';
+import { hasChanges, judgeEdit } from '@/server/missions/mission-edit';
 import { defaultResources, previewDraft } from '@/server/missions/preview';
 import type { RiskPlanes } from '@/server/providers/planes';
 
@@ -110,6 +117,7 @@ import {
   type FormState,
   type PeriodChoice,
 } from './form-state';
+import { changeLines, editDraftOf, initialEditState, type EditSource } from './edit-state';
 import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
 import { PresetPanel } from './preset-panel';
 
@@ -182,14 +190,19 @@ export function MissionForm({
   missions,
   initial,
   planes,
+  edit = null,
 }: {
   context: readonly IssuanceConnection[];
   /** Per service id: the planes of its data model, for the services that have several. */
   planes: Readonly<Record<string, RiskPlanes>>;
   missions: readonly { id: string; name: string }[];
   initial: InitialDraft | null;
+  /** The mission this form edits; `null` for a creation. */
+  edit?: EditSource | null;
 }) {
-  const [state, setState] = useState<FormState>(() => startState(context, initial));
+  const [state, setState] = useState<FormState>(() =>
+    edit ? initialEditState(context, edit.snapshot) : startState(context, initial),
+  );
   const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
   const [openEditors, setOpenEditors] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<PendingDiscard | null>(null);
@@ -209,7 +222,24 @@ export function MissionForm({
     () => previewDraft({ connections: context, now }, draftOf(context, state, now)),
     [context, state, now],
   );
-  const issues = serverIssues.length > 0 ? serverIssues : preview.issues;
+  // An edit is judged on what it moves, against the mission as it stands.
+  const judgement = useMemo(
+    () =>
+      edit
+        ? judgeEdit(
+            { connections: context, now },
+            edit.snapshot,
+            editDraftOf(context, state, edit.snapshot, now),
+          )
+        : null,
+    [context, state, now, edit],
+  );
+  const changed = judgement ? hasChanges(judgement.changes) : false;
+  const issues = serverIssues.length > 0 ? serverIssues : (judgement?.issues ?? preview.issues);
+  const ready = judgement ? judgement.ok && changed : preview.ok;
+  const permissionCount = judgement
+    ? judgement.after.connections.reduce((n, c) => n + c.policy.length, 0)
+    : preview.policy.length;
   const included: IncludedAccount[] = context.flatMap((connection) => {
     const cs = state.connections[connection.id];
     return cs?.included ? [{ connection, state: cs }] : [];
@@ -217,7 +247,7 @@ export function MissionForm({
   const period = periodOf(state.period);
   const periodSeconds = period.kind === 'recurring' ? period.length_seconds : null;
   const expiresAt = expiryOf(state, now);
-  const carries = `${count(preview.policy.length, { one: 'explicit permission', many: 'explicit permissions' })}, ${limitsResetEvery(periodSeconds)}, ${expiresAt && Number.isNaN(Date.parse(expiresAt)) ? 'no end date yet' : expiresOn(expiresAt, now)}.`;
+  const carries = `${count(permissionCount, { one: 'explicit permission', many: 'explicit permissions' })}, ${limitsResetEvery(periodSeconds)}, ${expiresAt && Number.isNaN(Date.parse(expiresAt)) ? 'no end date yet' : expiresOn(expiresAt, now)}.`;
 
   function patch(next: Partial<FormState>) {
     setServerIssues([]);
@@ -312,6 +342,38 @@ export function MissionForm({
     }
   }
 
+  /** "Save changes": the edit, judged again by the server, applied at once. */
+  async function save() {
+    if (!edit) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/missions/${encodeURIComponent(edit.missionId)}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draft: editDraftOf(context, state, edit.snapshot, new Date()),
+          revision: edit.revision,
+        }),
+      });
+      const body: unknown = await res.json().catch(() => null);
+      if (res.ok) {
+        window.location.assign(`${ROUTES.missions}/${edit.missionId}?edited=1`);
+        return;
+      }
+      if (res.status === 422 && isRecord(body) && Array.isArray(body.issues)) {
+        setConfirming(false);
+        setServerIssues(body.issues as PreviewIssue[]);
+      } else {
+        setError(problemsOf(body) ?? messageOf(body, res.status));
+      }
+    } catch {
+      setError(UNREACHABLE);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function checkProposal() {
     setError(null);
     setProposalReport(null);
@@ -369,12 +431,33 @@ export function MissionForm({
   if (created)
     return <CreatedView created={created} period={periodSeconds} expiresAt={expiresAt} now={now} />;
 
-  const crumbs = [{ label: 'Missions', href: ROUTES.missions }, { label: PAGES.newMission.title }];
+  const crumbs = edit
+    ? [
+        { label: 'Missions', href: ROUTES.missions },
+        { label: edit.snapshot.name, href: `${ROUTES.missions}/${edit.missionId}` },
+        { label: MISSION_ACTIONS.editMission },
+      ]
+    : [{ label: 'Missions', href: ROUTES.missions }, { label: PAGES.newMission.title }];
+  const title = edit
+    ? `${MISSION_ACTIONS.editMission} “${edit.snapshot.name}”`
+    : PAGES.newMission.title;
+  const lede = edit ? MISSION_WORDS.editLede : PAGES.newMission.lede;
+  const naming = {
+    resource: (connectionId: string, resourceId: string) => {
+      const found = context
+        .find((c) => c.id === connectionId)
+        ?.resources.find((r) => r.id === resourceId);
+      return found ? found.display_name || found.ref : resourceId;
+    },
+    risk: (riskId: string) =>
+      context.flatMap((c) => c.risks).find((r) => r.risk_id === riskId)?.label ?? riskId,
+  };
+  const lines = judgement && edit ? changeLines(judgement.changes, edit, naming) : [];
 
   if (context.length === 0) {
     return (
       <>
-        <PageHeader crumbs={crumbs} title={PAGES.newMission.title} lede={PAGES.newMission.lede} />
+        <PageHeader crumbs={crumbs} title={title} lede={lede} />
         <Callout
           tone="info"
           title="Connect an account first"
@@ -389,9 +472,9 @@ export function MissionForm({
 
   return (
     <>
-      <PageHeader crumbs={crumbs} title={PAGES.newMission.title} lede={PAGES.newMission.lede} />
+      <PageHeader crumbs={crumbs} title={title} lede={lede} />
 
-      {initial && (
+      {initial && !edit && (
         <div className={styles.block}>
           <Callout
             tone={initial.issues.length > 0 ? 'warn' : 'info'}
@@ -414,7 +497,7 @@ export function MissionForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (preview.ok) setConfirming(true);
+          if (ready) setConfirming(true);
         }}
       >
         <FormWithRail
@@ -437,18 +520,27 @@ export function MissionForm({
                 )}
                 {error && !confirming && (
                   <p className={styles.railRefused} role="alert" data-testid="create-error">
-                    Not created: {error}
+                    {edit ? 'Not saved' : 'Not created'}: {error}
                   </p>
                 )}
               </CardBody>
               <CardFooter>
-                <Button type="submit" variant="primary" size="lg" disabled={busy || !preview.ok}>
-                  {ACTIONS.createMission}
+                <Button type="submit" variant="primary" size="lg" disabled={busy || !ready}>
+                  {edit ? MISSION_ACTIONS.saveChanges : ACTIONS.createMission}
                 </Button>
-                <ButtonLink href={ROUTES.missions} variant="ghost">
+                <ButtonLink
+                  href={edit ? `${ROUTES.missions}/${edit.missionId}` : ROUTES.missions}
+                  variant="ghost"
+                >
                   {ACTIONS.cancel}
                 </ButtonLink>
-                <span className={styles.railHint}>{MISSION_WORDS.keyAtTheEnd}</span>
+                <span className={styles.railHint}>
+                  {edit
+                    ? changed
+                      ? MISSION_WORDS.sameKeyAfterEdit
+                      : MISSION_WORDS.nothingChangedYet
+                    : MISSION_WORDS.keyAtTheEnd}
+                </span>
               </CardFooter>
             </Card>
           }
@@ -463,7 +555,7 @@ export function MissionForm({
                 maxLength={120}
                 autoFocus
               />
-              {missions.length > 0 && (
+              {!edit && missions.length > 0 && (
                 <Select
                   value=""
                   className={styles.startFrom}
@@ -485,15 +577,17 @@ export function MissionForm({
                   ))}
                 </Select>
               )}
-              <Button
-                type="button"
-                aria-expanded={proposalOpen}
-                onClick={() => setProposalOpen((o) => !o)}
-              >
-                {MISSION_ACTIONS.pasteProposal}
-              </Button>
+              {!edit && (
+                <Button
+                  type="button"
+                  aria-expanded={proposalOpen}
+                  onClick={() => setProposalOpen((o) => !o)}
+                >
+                  {MISSION_ACTIONS.pasteProposal}
+                </Button>
+              )}
             </div>
-            {proposalOpen && (
+            {proposalOpen && !edit && (
               <div className={styles.proposal}>
                 <Field
                   label="What the agent proposed"
@@ -763,13 +857,18 @@ export function MissionForm({
           <FormStep
             n={3}
             title="Limits and lifetime"
-            hint="Limits that reset every day suit an agent that works every day."
+            hint={
+              edit
+                ? MISSION_WORDS.periodFixed
+                : 'Limits that reset every day suit an agent that works every day.'
+            }
           >
             <FormColumns>
               <Field label="Limits reset" htmlFor="mission-period">
                 <Select
                   id="mission-period"
                   value={state.period}
+                  disabled={edit !== null}
                   onChange={(e) => {
                     if (isChoice<PeriodChoice>(PERIOD_CHOICES, e.target.value)) {
                       patch({ period: e.target.value });
@@ -793,11 +892,13 @@ export function MissionForm({
                     }
                   }}
                 >
-                  {EXPIRY_CHOICES.map((x) => (
+                  {EXPIRY_CHOICES.filter((x) => edit !== null || x.id !== 'keep').map((x) => (
                     <option key={x.id} value={x.id}>
-                      {x.days === null
-                        ? x.label
-                        : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * 86_400_000), now)}`}
+                      {x.id === 'keep'
+                        ? `${x.label} · ${expiresOn(state.keptExpiry ?? null, now)}`
+                        : x.days === null
+                          ? x.label
+                          : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * 86_400_000), now)}`}
                     </option>
                   ))}
                 </Select>
@@ -822,8 +923,56 @@ export function MissionForm({
         </FormWithRail>
       </form>
 
+      {edit && (
+        <Dialog
+          open={confirming}
+          onClose={() => setConfirming(false)}
+          width="lg"
+          divided
+          dismissible={!busy}
+          title={`Save the changes to “${edit.snapshot.name}”?`}
+          description={<>{MISSION_WORDS.editConfirm}</>}
+          hint={WAITING.recorded}
+          testId="confirm-edit"
+          footer={
+            <>
+              <Button type="button" variant="primary" loading={busy} onClick={() => void save()}>
+                {busy ? 'Saving…' : MISSION_ACTIONS.saveChanges}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setConfirming(false)}
+              >
+                Back to the form
+              </Button>
+            </>
+          }
+        >
+          <ul className={styles.issueList} data-testid="edit-changes">
+            {lines.map((line, index) => (
+              <li key={`${line.section}:${index}`} data-warn={line.warn ? 'true' : undefined}>
+                <strong>{line.section}</strong> · {line.text}
+                {line.consequence && (
+                  <span className={line.warn ? styles.railRefused : styles.quietText}>
+                    {' '}
+                    — {line.consequence}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {error && confirming && (
+            <p className={styles.railRefused} role="alert">
+              Not saved: {error}
+            </p>
+          )}
+        </Dialog>
+      )}
+
       <Dialog
-        open={confirming}
+        open={confirming && edit === null}
         onClose={() => setConfirming(false)}
         width="lg"
         divided

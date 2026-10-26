@@ -77,6 +77,11 @@ export interface RequestClosedEventDetails {
   readonly request_id: string;
   readonly request_kind: RequestKind;
   readonly state: RequestClosedState;
+  /**
+   * Why it closed when nobody answered it as such: `mission-changed`, an edit of the
+   * mission removed a permission the request was about. Absent otherwise.
+   */
+  readonly reason?: string | null;
 }
 
 export type RequestEventDetails = RequestDroppedEventDetails | RequestClosedEventDetails;
@@ -157,14 +162,82 @@ export interface GateChangedEventDetails {
  * The creator changed the limits of one accepted risk on the mission itself:
  * its quota per period and the number of calls of its rate window. The risk is
  * the event's own `risk_id` column; one change of several risks is one event per
- * risk, written in one transaction. The rate window and the gate are not part of
- * it (a gate edit is `gate-changed`; the window never changes after issuance).
+ * risk, written in one transaction. The gate is not part of it (a gate edit is
+ * `gate-changed`). The rate window moves only through an edit of the mission (ADR
+ * mission-editable-after-issuance); the two window fields are present then, absent
+ * on an event that left it as it was.
  */
 export interface LimitsChangedEventDetails {
   readonly quota: number;
   readonly quota_before: number;
   readonly rate_limit_max: number;
   readonly rate_limit_max_before: number;
+  readonly rate_window_seconds?: number;
+  readonly rate_window_seconds_before?: number;
+}
+
+/**
+ * A permission added to the mission by its creator's edit, with the limits and
+ * the gate it starts with. The risk is the event's own `risk_id` column.
+ */
+export interface PermissionAddedEventDetails {
+  readonly quota: number;
+  readonly rate_limit_max: number;
+  readonly rate_window_seconds: number;
+  readonly gate: Gate;
+}
+
+/**
+ * A permission removed from the mission by its creator's edit, with the limits and
+ * the gate it had. It ends a gate opening of that risk (like `gate-changed`): a
+ * permission added again later in the period does not inherit it.
+ */
+export interface PermissionRemovedEventDetails {
+  readonly quota: number;
+  readonly rate_limit_max: number;
+  readonly rate_window_seconds: number;
+  readonly gate: Gate;
+}
+
+/** One permission whose limits moved in an edit of the mission. */
+export interface MissionChangedLimit {
+  readonly risk_id: RiskId;
+  readonly quota_before: number;
+  readonly quota: number;
+  readonly rate_limit_max_before: number;
+  readonly rate_limit_max: number;
+  readonly rate_window_seconds_before: number;
+  readonly rate_window_seconds: number;
+}
+
+/**
+ * The creator edited the mission (ADR mission-editable-after-issuance): one event
+ * per edit, with no risk of its own, summarising every section that moved — what
+ * the mission's activity says in one sentence. The permissions that moved also
+ * have their own events (`permission-added`, `permission-removed`,
+ * `limits-changed`, `gate-changed`).
+ */
+export interface MissionChangedEventDetails {
+  readonly name_changed: boolean;
+  readonly expiry_changed: boolean;
+  /** The expiry after the edit, when it moved (`null`: never). */
+  readonly expires_at?: Iso8601 | null;
+  readonly connections_added: number;
+  readonly connections_removed: number;
+  readonly resources_added: number;
+  readonly resources_removed: number;
+  /** Accounts whose scope (every resource known now / the whole account / picked) moved. */
+  readonly scopes_changed: number;
+  readonly permissions_added: readonly RiskId[];
+  readonly permissions_removed: readonly RiskId[];
+  readonly limits: readonly MissionChangedLimit[];
+  readonly gates: readonly {
+    readonly risk_id: RiskId;
+    readonly gate_before: Gate;
+    readonly gate: Gate;
+  }[];
+  /** Open requests the edit made moot and closed. */
+  readonly requests_closed: number;
 }
 
 /**
@@ -216,6 +289,9 @@ export interface SessionEventDetailsByKind {
   readonly 'gate-changed': GateChangedEventDetails;
   readonly 'limits-changed': LimitsChangedEventDetails;
   readonly 'resources-created': ResourcesCreatedEventDetails;
+  readonly 'permission-added': PermissionAddedEventDetails;
+  readonly 'permission-removed': PermissionRemovedEventDetails;
+  readonly 'mission-changed': MissionChangedEventDetails;
   readonly rotation: RotationEventDetails;
   readonly revocation: RevocationEventDetails;
 }
@@ -313,7 +389,7 @@ function isCallRefused(d: Fields): d is Fields & CallRefusedEventDetails {
 function isRequest(d: Fields): d is Fields & RequestEventDetails {
   if (!isText(d.request_id) || !isRequestKind(d.request_kind)) return false;
   // A closed request says how it closed; a dropped one names the call that asked.
-  if (d.state !== undefined) return isRequestClosedState(d.state);
+  if (d.state !== undefined) return isRequestClosedState(d.state) && isOptionalText(d.reason);
   return isText(d.tool) && isText(d.fingerprint) && isOptionalTextList(d.risk_ids);
 }
 
@@ -352,12 +428,74 @@ function isGateChanged(d: Fields): d is Fields & GateChangedEventDetails {
   return isText(d.gate) && isGate(d.gate) && isText(d.gate_before) && isGate(d.gate_before);
 }
 
+function isOptionalCount(value: unknown): value is number | undefined {
+  return value === undefined || isCount(value);
+}
+
 function isLimitsChanged(d: Fields): d is Fields & LimitsChangedEventDetails {
   return (
     isCount(d.quota) &&
     isCount(d.quota_before) &&
     isCount(d.rate_limit_max) &&
-    isCount(d.rate_limit_max_before)
+    isCount(d.rate_limit_max_before) &&
+    isOptionalCount(d.rate_window_seconds) &&
+    isOptionalCount(d.rate_window_seconds_before)
+  );
+}
+
+function isPermissionLine(
+  d: Fields,
+): d is Fields & (PermissionAddedEventDetails | PermissionRemovedEventDetails) {
+  return (
+    isCount(d.quota) &&
+    isCount(d.rate_limit_max) &&
+    isCount(d.rate_window_seconds) &&
+    isText(d.gate) &&
+    isGate(d.gate)
+  );
+}
+
+function isChangedLimit(value: unknown): value is MissionChangedLimit {
+  return (
+    isFields(value) &&
+    isText(value.risk_id) &&
+    isCount(value.quota_before) &&
+    isCount(value.quota) &&
+    isCount(value.rate_limit_max_before) &&
+    isCount(value.rate_limit_max) &&
+    isCount(value.rate_window_seconds_before) &&
+    isCount(value.rate_window_seconds)
+  );
+}
+
+function isChangedGate(value: unknown): boolean {
+  return (
+    isFields(value) &&
+    isText(value.risk_id) &&
+    isText(value.gate) &&
+    isGate(value.gate) &&
+    isText(value.gate_before) &&
+    isGate(value.gate_before)
+  );
+}
+
+function isMissionChanged(d: Fields): d is Fields & MissionChangedEventDetails {
+  return (
+    typeof d.name_changed === 'boolean' &&
+    typeof d.expiry_changed === 'boolean' &&
+    isOptionalText(d.expires_at) &&
+    isCount(d.connections_added) &&
+    isCount(d.connections_removed) &&
+    isCount(d.resources_added) &&
+    isCount(d.resources_removed) &&
+    isCount(d.scopes_changed) &&
+    isTextList(d.permissions_added) &&
+    isTextList(d.permissions_removed) &&
+    Array.isArray(d.limits) &&
+    d.limits.every(isChangedLimit) &&
+    Array.isArray(d.gates) &&
+    d.gates.every(isChangedGate) &&
+    isCount(d.requests_closed)
   );
 }
 
@@ -402,6 +540,11 @@ export function parseEventDetails(kind: string, details: unknown): SessionEventD
       return isLimitsChanged(details) ? { kind, details } : null;
     case 'resources-created':
       return isResourcesCreated(details) ? { kind, details } : null;
+    case 'permission-added':
+    case 'permission-removed':
+      return isPermissionLine(details) ? { kind, details } : null;
+    case 'mission-changed':
+      return isMissionChanged(details) ? { kind, details } : null;
     case 'rotation':
       return isRotation(details) ? { kind, details } : null;
     case 'revocation':

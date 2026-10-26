@@ -25,6 +25,8 @@ import {
   type RotationEventDetails,
 } from '@vaubaan/shared';
 
+import { describeMissionChange } from '../missions/change-words';
+
 export interface SessionEventLike {
   readonly id: string;
   readonly ts: Iso8601;
@@ -89,8 +91,9 @@ function nameOf(kind: RequestEventDetails['request_kind']): string {
 function describeRequest(details: RequestEventDetails): string {
   const kind = nameOf(details.request_kind);
   if ('state' in details) {
-    return details.state === 'expired'
-      ? `The ${kind} expired unanswered`
+    if (details.state === 'expired') return `The ${kind} expired unanswered`;
+    return details.reason === 'mission-changed'
+      ? `The ${kind} was closed: the creator removed the permission it was about`
       : `The creator refused the ${kind}`;
   }
   if (details.request_kind === 'permission') return 'The agent requested missing permissions';
@@ -148,6 +151,12 @@ function describeWithoutDetails(kind: string): string {
       return 'The creator changed the limits of a risk';
     case 'resources-created':
       return 'Reached a resource it created';
+    case 'permission-added':
+      return 'The creator added a risk to the mission';
+    case 'permission-removed':
+      return 'The creator removed a risk from the mission';
+    case 'mission-changed':
+      return 'The creator changed the mission';
     case 'rotation':
       return ROTATION_LINE;
     case 'revocation':
@@ -183,6 +192,14 @@ export function describeEvent(event: SessionEventLike): string {
     }
     case 'resources-created':
       return `Reached what it created with ${parsed.details.tool}: ${parsed.details.refs.join(', ')}`;
+    case 'permission-added': {
+      const d = parsed.details;
+      return `The creator added the risk: quota ${d.quota}, rate ${d.rate_limit_max} per ${d.rate_window_seconds} s, gate ${d.gate}`;
+    }
+    case 'permission-removed':
+      return 'The creator removed the risk from the mission';
+    case 'mission-changed':
+      return describeMissionChange(parsed.details);
     case 'rotation':
       return describeRotation(parsed.details);
     case 'revocation':

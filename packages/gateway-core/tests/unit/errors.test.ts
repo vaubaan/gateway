@@ -194,6 +194,20 @@ describe('refusal fields', () => {
     expect(r.hint).toContain('no resource');
   });
 
+  test('resource-not-in-mission: a selection says the creator can add the resource to the same mission', () => {
+    const r = refuse.resourceNotInMission({
+      cited_ref: 'new-board',
+      connection: { id: 'con_1', name: 'Miro (acme)' },
+      allowed_resources: [{ ref: 'old-board', env: null, display_name: null }],
+    });
+    expect(r.hint).toContain(
+      'A resource this mission creates through the gateway is reached right after its creation.',
+    );
+    expect(r.hint).toContain(
+      'ask the mission creator to add the resource: they edit the mission, your key stays the same and your next call reaches it.',
+    );
+  });
+
   test('resource-not-in-mission: a whole-account mission says when a new resource is reached', () => {
     const r = refuse.resourceNotInMission({
       cited_ref: 'new-app',

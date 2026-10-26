@@ -66,7 +66,7 @@ export const RESOURCE_CHOICES: readonly {
     label: 'Every resource known now',
     hint: 'found later: not reached',
     explanation:
-      'The resources listed today, and the ones this mission creates. One found later is not reached: its creator adds it to the mission.',
+      'The resources listed today, and the ones this mission creates. One found later is not reached until the creator adds it to this mission with “Edit mission”.',
   },
   {
     id: 'connection',
@@ -116,6 +116,8 @@ export const EXPIRY_CHOICES = [
   { id: '30d', label: 'In 30 days', days: 30 },
   { id: '90d', label: 'In 90 days', days: 90 },
   { id: 'custom', label: 'On a date…', days: null },
+  /** Edit mode only: the end date the mission already has. */
+  { id: 'keep', label: 'As it is', days: null },
 ] as const;
 export type ExpiryChoice = (typeof EXPIRY_CHOICES)[number]['id'];
 
@@ -127,6 +129,8 @@ export interface FormState {
   /** `datetime-local` value, used when `expiry` is `custom`. */
   readonly expiryCustom: string;
   readonly showExperimental: boolean;
+  /** Edit mode: the mission's end date, sent when `expiry` is `keep`. */
+  readonly keptExpiry?: string | null;
 }
 
 /** Limits that reset every day are the usual shape of "one key per code project". */
@@ -739,10 +743,11 @@ export function periodChoiceOf(period: DraftPeriod): PeriodChoice {
 }
 
 export function expiryOf(
-  state: Pick<FormState, 'expiry' | 'expiryCustom'>,
+  state: Pick<FormState, 'expiry' | 'expiryCustom' | 'keptExpiry'>,
   now: Date,
 ): string | null {
   if (state.expiry === 'never') return null;
+  if (state.expiry === 'keep') return state.keptExpiry ?? null;
   if (state.expiry === 'custom') {
     const at = new Date(state.expiryCustom);
     // An unusable date is sent as such: the preview answers "not a valid date".

@@ -262,7 +262,7 @@ describe('retention of the session history', () => {
 
   it('keeps exactly the kinds a period reads back: the gate events and the credit events', () => {
     expect([...PERIOD_STATE_EVENT_KINDS].sort()).toEqual(
-      ['extension', 'gate-changed', 'gate-opened', 'reset'].sort(),
+      ['extension', 'gate-changed', 'gate-opened', 'permission-removed', 'reset'].sort(),
     );
   });
 });

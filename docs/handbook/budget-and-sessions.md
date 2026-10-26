@@ -2,7 +2,7 @@
 title: Budget and sessions — decision core, session service, rate windows
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-24
 tracks:
   - apps/gateway/src/server/budget/
   - apps/gateway/src/server/rate-limit/
@@ -187,7 +187,9 @@ opening:
   runs to close it. A one-off mission has no period end, so the request service refuses
   to open a gate on it (`no-period-end`) and no such event exists;
 - **a later edit** — `gate-changed` is recorded when the creator sets the risk's gate on
-  the mission page ([missions](missions.md), "Editing a gate"). An opening is in force
+  the mission page ([missions](missions.md), "Editing a gate"), and `permission-removed`
+  when an edit of the mission removes the risk (`GATE_EVENT_KINDS` holds the three kinds):
+  a permission removed then added again in the period asks again. An opening is in force
   only if no `gate-changed` of that risk has a timestamp greater than **or equal to** its
   own: on a tie the edit wins and the gate stays closed. The edit finds an opening to
   close with this same function over the period that runs now (`currentPeriod`),
@@ -235,7 +237,8 @@ const result = await service.recordCall({
    gates are read live too, and a touched risk no longer stored is removed), so a limit the creator changed after
    the mission was loaded is the one that decides — no call decided after the change
    commits passes above it (ADR
-   [mission-limits-editable-after-issuance](../decisions/mission-limits-editable-after-issuance.md));
+   [mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md), which
+   supersedes mission-limits-editable-after-issuance);
    then peeks the rate windows of the touched risks, derives the gates opened for
    the period (`ctx.riskEvents` → `openedGatesOf`), looks up the usable approvals of
    the call (`ctx.findApprovals({ tool, fingerprint })`) and reads which of the gated
@@ -507,6 +510,21 @@ COUNT(audit allowed)` per risk after a mixed run**, a credit event with malforme
 `livePolicy(policy, limits, touched)` preserves untouched lines and rereads the
 limits and gate of each touched line inside the decision transaction. A removed
 touched line fails closed; it cannot execute using the admission snapshot.
+
+**An edit of the whole mission** ([missions](missions.md), "Editing a mission after
+issuance"; ADR mission-editable-after-issuance) changes nothing of this module's rules
+and is read the same way: the edit commits in one transaction; a decision after it
+reads the new limits, window and gate of each touched risk, and fails closed on one that
+was removed. Accepted risks and resources are the caller's context, loaded when the call
+starts: an in-flight call past its resource and risk stages keeps that admission, the
+next call loads the new mission. Counters are keyed by session, risk and period, none
+of which an edit moves — the period is not editable for that reason: changing its length
+would move the current period's start, so the counters would either restart at zero (a
+hidden reset) or have to be moved to a key where `countersAgreeWithAudit` no longer
+holds. A permission added starts with no counter; one removed then added again finds its
+counter as it was. A shorter rate window applies at once; a longer one only counts what
+the in-memory window still remembered (`peek` prunes to the window it is given), so it
+can be slightly lenient for one window's length after the change.
 `prepareApprovalArguments` prepares a sealed blob before the transaction for
 any nonempty risk set because a human can set a gate while encryption awaits.
 The blob is retained only when an approval request is actually created. Policy

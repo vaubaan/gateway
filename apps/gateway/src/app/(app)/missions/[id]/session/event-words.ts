@@ -45,6 +45,14 @@ function creditLines(event: SessionEventView): EventLine[] {
   );
 }
 
+function permissionLines(permission: NonNullable<SessionEventView['permission']>): EventLine[] {
+  return [
+    line(`${permission.quota} a period`),
+    line(`${permission.rate_limit_max} per ${permission.rate_window_seconds} s`),
+    line(`“${GATE_WORDS[gateWordOf(permission.gate)]}”`),
+  ];
+}
+
 function keyLines(event: SessionEventView): EventLine[] {
   if (!event.token_prefix) return [];
   // Whose key it is stands in the "Who" column of the row.
@@ -63,6 +71,9 @@ const KNOWN: Readonly<Record<SessionEventKind, true>> = {
   'limits-changed': true,
   'permissions-changed': true,
   'resources-created': true,
+  'permission-added': true,
+  'permission-removed': true,
+  'mission-changed': true,
   rotation: true,
   revocation: true,
 };
@@ -108,6 +119,13 @@ export function eventWords(
     }
     case 'request': {
       const what = event.request_kind === 'claim' ? 'asked for more room' : 'asked for a yes';
+      if (event.request_state === 'refused' && event.request_reason === 'mission-changed') {
+        return {
+          outcome: 'closed by your edit',
+          tone: null,
+          lines: [line(what), line('the permission it was about was removed')],
+        };
+      }
       if (event.request_state === 'refused') {
         return { outcome: 'refused by the creator', tone: null, lines: [line(what)] };
       }
@@ -152,6 +170,20 @@ export function eventWords(
               ),
             ]
           : [],
+      };
+    case 'permission-added':
+      return {
+        outcome: 'permission added',
+        tone: null,
+        lines: event.permission ? permissionLines(event.permission) : [],
+      };
+    case 'permission-removed':
+      return { outcome: 'permission removed', tone: null, lines: [] };
+    case 'mission-changed':
+      return {
+        outcome: 'changed the mission',
+        tone: null,
+        lines: (event.mission_change ?? []).map((clause) => line(clause)),
       };
     case 'reset':
       return { outcome: 'limits reset', tone: null, lines: creditLines(event) };

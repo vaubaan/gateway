@@ -102,7 +102,7 @@ const LAST_EVENTS = 8;
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string | string[] }>;
+  searchParams: Promise<{ edit?: string | string[]; edited?: string | string[] }>;
 }
 
 /** The query that opens the permission table in edit mode for the limits. */
@@ -129,8 +129,10 @@ export default async function MissionPage({ params, searchParams }: Props) {
   if (!detail) notFound();
   const { mission, state, orphan, issuedVia } = detail;
   const isCreator = detail.role === 'creator';
-  const editingLimits =
-    isCreator && detail.limits_editable && (await searchParams).edit === EDIT_LIMITS;
+  const query = await searchParams;
+  const editingLimits = isCreator && detail.limits_editable && query.edit === EDIT_LIMITS;
+  // Back from "Edit mission": the edit is saved (ADR mission-editable-after-issuance).
+  const justEdited = isCreator && query.edited === '1';
   const now = new Date();
   const [team, activity, inbox] = await Promise.all([
     root.missions.team.team(user, id),
@@ -374,6 +376,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
                 ? `${missionPath}?edit=${EDIT_LIMITS}#permissions`
                 : null
             }
+            editHref={isCreator && detail.limits_editable ? `${missionPath}/edit` : null}
           />
         }
       />
@@ -384,6 +387,12 @@ export default async function MissionPage({ params, searchParams }: Props) {
           <Mono quiet>{shortId(mission.id)}</Mono>
         </span>
       </p>
+
+      {justEdited && (
+        <Callout tone="ok" title={MISSION_WORDS.edited} testId="mission-edited">
+          The key, the session and what was used this period are unchanged.
+        </Callout>
+      )}
 
       {!isCreator && (
         <p className={styles.headNote} data-testid="shared-with-me">
@@ -554,6 +563,9 @@ export default async function MissionPage({ params, searchParams }: Props) {
             'Change a limit up or down. What was used stays used.'
           ) : isCreator && detail.limits_editable ? (
             <>
+              <ButtonLink href={`${missionPath}/edit`} size="sm" data-testid="edit-mission">
+                {MISSION_ACTIONS.editMission}
+              </ButtonLink>
               <ButtonLink href={`${missionPath}/permissions`} size="sm">
                 Modify permissions
               </ButtonLink>

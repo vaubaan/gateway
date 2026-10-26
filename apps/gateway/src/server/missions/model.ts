@@ -223,6 +223,8 @@ export const PREVIEW_ISSUE_CODES = [
   'no-accepted-risk',
   'invalid-period',
   'invalid-expiry',
+  /** An edit after issuance asks for another period (ADR mission-editable-after-issuance). */
+  'period-not-editable',
 ] as const;
 export type PreviewIssueCode = (typeof PREVIEW_ISSUE_CODES)[number];
 

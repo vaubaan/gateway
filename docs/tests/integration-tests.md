@@ -109,7 +109,7 @@ this table says where each requirement lives, and what is not written yet.
 | Suite                                                                                                                                                                                                    |     Tests |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
 | `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                                                                                                               |         8 |
-| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                                                   |        10 |
+| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                                                   |        13 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                                                                                                                 |         2 |
 | `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                                                                                                               |        12 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                                                                                                             |        46 |
@@ -317,7 +317,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/config.test.ts`                                                                                                                                                    |         7 |
 | `apps/gateway/tests/integration/store/connections-shares.test.ts`                                                                                                                                        |        14 |
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                                                                                                              |        14 |
-| `apps/gateway/tests/integration/store/created-resources.test.ts`                                                                                                                                         |        11 |
+| `apps/gateway/tests/integration/store/created-resources.test.ts`                                                                                                                                         |        12 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                                                                                                               |        20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                                                                                                                |        11 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                                                                                                                                                  |        22 |
@@ -2744,7 +2744,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
   asks, a label named without its parenthesis); **the one limit that matters**
   (the closest once one is at 60 %, nothing otherwise or without a period);
   per-minute from any stored window; who created it and whose yes it waits for.
-- **`src/app/(app)/missions/[id]/session/event-words.test.ts`** (8) — what a
+- **`src/app/(app)/missions/[id]/session/event-words.test.ts`** (13) — what a
   row of a mission's activity says of an event: allowed, and "after the
   creator's yes"; a refusal is red with its code in mono, except
   `approval-required`, which is amber ("asked first"), and `budget-exhausted`
@@ -2826,6 +2826,37 @@ connections and resources seeded through the repositories (36):
   transaction, nothing written for an unknown risk; the decision reads the
   stored limits), `server/management/hard-deny.test.ts` (the door holds no
   `setLimits`, no tool name says "limit").
+- **`tests/integration/missions/edit.test.ts`** (8) — **a mission edited after
+  issuance by its creator** (ADR [[mission-editable-after-issuance]]): one edit moves
+  every section — name, expiry, an account added, a resource added and one removed,
+  permissions added and removed, a quota, a rate with its window, a gate — with the
+  same keys, and what was used stays used under the new limit; one `mission-changed`
+  entry with each section before and after; session events per risk that moved
+  (`permission-added`, `permission-removed`, `limits-changed`, `gate-changed`) and the
+  summary the activity words ("1 account added", "quota of … 5 → 9"); **a refusal is
+  the very issue a creation gets** (a quota of 0; a stale resource added back), **a
+  lowered limit is not refused because a kept resource went stale**, and the stale
+  resource stays selected; another period is `period-not-editable`; a stale revision
+  is `conflict` and writes nothing; an edit that moves nothing writes nothing; the
+  creator only (another user, an operator: not found); a revoked mission is not
+  edited, an expired one is and an end moved into the future brings it back to
+  `active`; **a removed permission closes the approval request about it** (`refused`,
+  `mission-changed`, arguments erased, listed in the audit entry) and leaves a claim on
+  a kept permission open; a call carrying the mission loaded before the edit fails
+  closed on the removed permission; the route: 200 with the changes, 409, 422, 400; at
+  the execution door, an added resource is reached and a removed one refused from the
+  next call, same token, one session. With it: `src/server/missions/mission-edit.test.ts`
+  (11, the judge's table: unchanged, kept stale resource, added stale resource, a
+  connection needing reconnecting refuses a widening only, an added permission outside
+  the authority, a gate alone, period and expiry, an account left without permission, a
+  removed account; the revision; the sentence), `store/missions.test.ts` (`edit` in one
+  transaction with its events, nothing written when the revision moved, for another
+  actor or a revoked mission, an unknown risk refused),
+  `app/(app)/missions/new/edit-state.test.ts` (4, the form in edit mode),
+  `app/(app)/missions/[id]/session/event-words.test.ts` (the new kinds), the
+  `edit` / `previewEdit` rows of `tests/unit/server/auth/mutation-guard.test.ts`, and
+  `server/management/hard-deny.test.ts` (the door holds neither `edit`, `previewEdit`,
+  `editView` nor `changePermissions`).
 
 ### Mission members and per-holder tokens
 
@@ -2916,7 +2947,7 @@ connections and resources seeded through the repositories (36):
   `resources-created`; **nothing joins on a declined (`isError`) call, an
   unreadable answer, a ref outside the grammar, or the instance's own
   resource**; **a store failure never changes the answer**.
-- **`tests/integration/store/created-resources.test.ts`** (11) — the store side:
+- **`tests/integration/store/created-resources.test.ts`** (12) — the store side:
   `upsertDiscoveredResources` inserts unlabelled (the connection default
   applies) and touches no other row, clears a stale flag with the owner's name,
   label and hidden flag kept and the provider facts merged, returns each given
@@ -2927,7 +2958,9 @@ connections and resources seeded through the repositories (36):
   (`resourceSources` read back, a second add repeats nothing and keeps the
   source), an empty `all` becomes `selected`, `connection` writes nothing, the
   `resources-created` event whatever the scope, a foreign resource or
-  connection refused with nothing written, the `source` CHECK.
+  connection refused with nothing written, the `source` CHECK; `MissionsRepo.edit`
+  stores the resource rows it adds with `source: 'edit'` and leaves a kept
+  row's `created` alone (ADR [[mission-editable-after-issuance]]).
 - **`src/server/connections/discovery-after-call.test.ts`** (12) — the
   scheduler alone: the member (or, for a named key, the creator) is the actor;
   declined result, another tool, an unknown tool, no connection or another

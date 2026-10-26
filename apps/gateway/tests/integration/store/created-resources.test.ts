@@ -8,7 +8,9 @@
  *     `FRESH_RESOURCE_STALE_GRACE_MS` ago;
  *   - `MissionsRepo.addResources` adds to an explicit selection with its source, turns
  *     an empty `all` into `selected`, writes nothing under `connection`, and records a
- *     `resources-created` event in the mission's session.
+ *     `resources-created` event in the mission's session;
+ *   - `MissionsRepo.edit` stores the resource rows it adds with source `edit`
+ *     (ADR mission-editable-after-issuance) and leaves the kept rows' source alone.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -266,6 +268,54 @@ describe('created resources in the store', () => {
           .run(m.id, connection, b.id, source);
       expect(() => insert('other')).toThrow(/CHECK/);
       expect(() => insert('edit')).not.toThrow();
+    });
+
+    it('a resource the creator adds by an edit is stored with source `edit`; kept rows keep theirs', async () => {
+      const a = (await row('acme/a'))!;
+      const b = (await row('acme/b'))!;
+      const m = await mission('selected', [a.id]);
+      const fresh = await created();
+      await store.missions.addResources(m.id, connection, [fresh.id], 'created');
+      const edited = await store.missions.edit(m.id, {
+        actorUserId: creator,
+        unchanged: () => true,
+        name: m.name,
+        expiresAt: null,
+        connections: [
+          {
+            connectionId: connection,
+            resourceScope: 'selected',
+            resourceIds: [a.id, b.id, fresh.id],
+          },
+          { connectionId: other, resourceScope: 'connection', resourceIds: [] },
+        ],
+        policy: POLICY,
+        summary: (closed) => ({
+          kind: 'mission-changed',
+          details: {
+            name_changed: false,
+            expiry_changed: false,
+            connections_added: 1,
+            connections_removed: 0,
+            resources_added: 1,
+            resources_removed: 0,
+            scopes_changed: 0,
+            permissions_added: [],
+            permissions_removed: [],
+            limits: [],
+            gates: [],
+            requests_closed: closed,
+          },
+        }),
+      });
+      expect(edited).not.toBeNull();
+      const stored = await store.missions.getById(m.id);
+      expect(stored?.connections.find((c) => c.connectionId === connection)).toEqual({
+        connectionId: connection,
+        resourceScope: 'selected',
+        resourceIds: [a.id, b.id, fresh.id].sort(),
+        resourceSources: { [b.id]: 'edit', [fresh.id]: 'created' },
+      });
     });
   });
 });

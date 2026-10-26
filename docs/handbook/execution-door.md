@@ -1065,7 +1065,7 @@ $ curl … -d '{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocol
 
 $ curl … -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"github__list_branches","arguments":{"owner":"acme","repo":"infra"}}}' \
   | jq -c '.error | {code, message, data: {code: .data.code, cited_ref: .data.cited_ref, allowed_resources: .data.allowed_resources, hint: .data.hint}}'
-{"code":-32603,"message":"Vaubaan refused the call: resource-not-in-mission","data":{"code":"resource-not-in-mission","cited_ref":"acme/infra","allowed_resources":[{"ref":"acme/app","env":null,"display_name":"acme/app"}],"hint":"Resource 'acme/infra' is not part of this mission on connection 'acme-org'. The mission may touch: acme/app. A resource this mission creates through the gateway is reached right after its creation; for one created elsewhere, use one of these refs or ask the mission creator to add it."}}
+{"code":-32603,"message":"Vaubaan refused the call: resource-not-in-mission","data":{"code":"resource-not-in-mission","cited_ref":"acme/infra","allowed_resources":[{"ref":"acme/app","env":null,"display_name":"acme/app"}],"hint":"Resource 'acme/infra' is not part of this mission on connection 'acme-org'. The mission may touch: acme/app. A resource this mission creates through the gateway is reached right after its creation. For one created elsewhere, use one of these refs, or ask the mission creator to add the resource: they edit the mission, your key stays the same and your next call reaches it."}}
 
 $ curl -sS http://127.0.0.1:3917/mcp/catalog -H "Authorization: Bearer $VAUBAAN_MISSION_TOKEN" \
   | jq -c '{mission: .mission.state, callable: (.callable_tools | length), surface: (.tools | length), budget: .budget[0]}'

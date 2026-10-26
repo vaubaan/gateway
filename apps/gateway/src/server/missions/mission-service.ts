@@ -94,9 +94,22 @@ import type {
   MissionIssuer,
   MissionPreview,
   PreviewIssue,
+  PreviewNotice,
   ResolvedDraftConnection,
   SeverityLevel,
 } from './model';
+import { parseMissionDraft } from './draft-schema';
+import {
+  auditOfChanges,
+  changeSummaryOf,
+  draftOfSnapshot,
+  hasChanges,
+  judgeEdit,
+  revisionOf,
+  type MissionChanges,
+  type MissionSnapshot,
+  type MissionSnapshotConnection,
+} from './mission-edit';
 import { checkPolicyLines, previewDraft } from './preview';
 import {
   bearerMatches,
@@ -112,7 +125,10 @@ import { issueTokenTo, type IssuedSecret } from './token-issuer';
 const COPY_SUFFIX = ' (copy)';
 
 export interface MissionServiceDeps {
-  readonly store: Pick<Store, 'missions' | 'connections' | 'sessions' | 'users' | 'auditWriter'>;
+  readonly store: Pick<
+    Store,
+    'missions' | 'connections' | 'sessions' | 'users' | 'auditWriter' | 'requests'
+  >;
   readonly registry: PluginRegistry;
   readonly authority: AuthorityService;
   /**
@@ -318,6 +334,104 @@ export type SetLimitsResult =
       readonly reason: 'inactive';
       readonly state: 'revoked' | 'orphaned';
     };
+
+/** What the creator's edit form starts from (`MissionService.editView`). */
+export interface MissionEditView {
+  readonly mission: MissionRecord;
+  /** The mission as it stands, everything an edit may move. */
+  readonly snapshot: MissionSnapshot;
+  /** The draft that stands for it: sent back unchanged, an edit that moves nothing. */
+  readonly draft: MissionDraft;
+  /** What the edit must carry back (`MissionService.edit`'s `revision`). */
+  readonly revision: string;
+  /** Why the mission cannot be edited now; `null` when it can. */
+  readonly blocked: 'revoked' | 'orphaned' | null;
+  /** Calls used in the current period, per risk: what a lowered limit is compared with. */
+  readonly used: Readonly<Record<RiskId, number>>;
+  /** Open claims and approval requests, with the risks they are about. */
+  readonly open_requests: readonly {
+    readonly id: string;
+    readonly kind: string;
+    readonly risk_ids: readonly RiskId[];
+  }[];
+}
+
+/** What an edit would do, or why it is refused; writes nothing. */
+export type EditPreviewResult =
+  | {
+      readonly ok: boolean;
+      readonly reason?: undefined;
+      readonly issues: readonly PreviewIssue[];
+      readonly notices: readonly PreviewNotice[];
+      readonly changes: MissionChanges;
+      /** The mission's revision now: a different one than the editor's means a conflict. */
+      readonly revision: string;
+    }
+  | { readonly ok: false; readonly reason: 'not-found' }
+  | { readonly ok: false; readonly reason: 'invalid-edit'; readonly problems: readonly string[] }
+  | { readonly ok: false; readonly reason: 'inactive'; readonly state: 'revoked' | 'orphaned' };
+
+export type EditResult =
+  | {
+      readonly ok: true;
+      readonly mission: MissionRecord;
+      readonly changes: MissionChanges;
+      /** The open requests the edit made moot, now closed. */
+      readonly requests_closed: readonly string[];
+    }
+  | { readonly ok: false; readonly reason: 'not-found' }
+  | { readonly ok: false; readonly reason: 'invalid-edit'; readonly problems: readonly string[] }
+  | { readonly ok: false; readonly reason: 'inactive'; readonly state: 'revoked' | 'orphaned' }
+  /** The mission changed since the editor read it: nothing was written. */
+  | { readonly ok: false; readonly reason: 'conflict' }
+  /** What issuance would refuse, about what the edit moves. */
+  | {
+      readonly ok: false;
+      readonly reason: 'refused';
+      readonly issues: readonly PreviewIssue[];
+      readonly changes: MissionChanges;
+    };
+
+/** The body of an edit: the edited draft and the revision it was made from. */
+function parseEditBody(
+  raw: unknown,
+):
+  | { readonly ok: true; readonly draft: MissionDraft; readonly revision: string }
+  | { readonly ok: false; readonly problems: readonly string[] } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, problems: ['The edit is an object { draft, revision }.'] };
+  }
+  const body = raw as Record<string, unknown>;
+  const extra = Object.keys(body).filter((key) => key !== 'draft' && key !== 'revision');
+  if (extra.length > 0) {
+    return { ok: false, problems: [`Unexpected field(s): ${extra.join(', ')}.`] };
+  }
+  if (
+    typeof body.revision !== 'string' ||
+    body.revision.length === 0 ||
+    body.revision.length > 64
+  ) {
+    return { ok: false, problems: ['revision: the revision the edit was made from.'] };
+  }
+  const parsed = parseMissionDraft(body.draft);
+  if (!parsed.ok) return { ok: false, problems: parsed.problems.map((p) => `draft.${p}`) };
+  return { ok: true, draft: parsed.draft, revision: body.revision };
+}
+
+/** The revision of a stored mission, computed without IO (inside a store transaction too). */
+function revisionOfRecord(mission: MissionRecord): string {
+  return revisionOf({
+    name: mission.name,
+    expires_at: mission.expiresAt,
+    period: statedPeriodOf(mission),
+    connections: mission.connections.map((c) => ({
+      connection_id: c.connectionId,
+      resource_scope: c.resourceScope,
+      resource_ids: c.resourceIds,
+    })),
+    policy: mission.policy.map(policyEntryOf),
+  });
+}
 
 /**
  * The public part of a verified token: what the execution door needs — the row,
@@ -1267,6 +1381,176 @@ export class MissionService {
       delegated_client_id: null,
     });
     return { ok: true as const, mission: written };
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Edit after issuance (ADR mission-editable-after-issuance)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /** The mission as everything an edit may move, its policy partitioned per account. */
+  private async snapshotOf(mission: MissionRecord): Promise<MissionSnapshot> {
+    const policy = mission.policy.map(policyEntryOf);
+    const connections: MissionSnapshotConnection[] = [];
+    for (const c of mission.connections) {
+      const connection = await this.deps.store.connections.getById(c.connectionId);
+      const provider = connection?.provider ?? '';
+      connections.push({
+        connection_id: c.connectionId,
+        provider,
+        display_name: connection?.displayName ?? c.connectionId,
+        resource_scope: c.resourceScope,
+        resource_ids: [...c.resourceIds],
+        policy: policy.filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
+      });
+    }
+    return {
+      name: mission.name,
+      expires_at: mission.expiresAt,
+      period: statedPeriodOf(mission),
+      connections,
+    };
+  }
+
+  /**
+   * What the creator's edit form starts from: the mission as a snapshot and as a
+   * draft, its revision, what was used this period and the open requests. `null`
+   * ("not found") for anyone but the creator.
+   */
+  async editView(user: AuthoritySubject, missionId: string): Promise<MissionEditView | null> {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return null;
+    const snapshot = await this.snapshotOf(mission);
+    const session = await this.deps.store.sessions.getByMission(mission.id);
+    const used: Record<RiskId, number> = {};
+    if (session) {
+      const period = this.periodNow(mission);
+      for (const counter of await this.deps.store.sessions.counters(session.id, period.start)) {
+        used[counter.riskId] = counter.consumed;
+      }
+    }
+    const open = (await this.deps.store.requests.listForMission(mission.id)).filter(
+      (r) => r.state === 'open' && r.kind !== 'permission',
+    );
+    return {
+      mission,
+      snapshot,
+      draft: draftOfSnapshot(snapshot),
+      revision: revisionOfRecord(mission),
+      blocked: gateEditBlockedBy(mission),
+      used,
+      open_requests: open.map((r) => ({ id: r.id, kind: r.kind, risk_ids: r.riskIds })),
+    };
+  }
+
+  /** The judgement of an edit against the mission as it stands. */
+  private async judged(user: AuthoritySubject, missionId: string, raw: unknown) {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return { ok: false as const, reason: 'not-found' as const };
+    const blocked = gateEditBlockedBy(mission);
+    if (blocked) return { ok: false as const, reason: 'inactive' as const, state: blocked };
+    const body = parseEditBody(raw);
+    if (!body.ok) {
+      return { ok: false as const, reason: 'invalid-edit' as const, problems: body.problems };
+    }
+    const snapshot = await this.snapshotOf(mission);
+    const connections = await this.issuanceContext(user);
+    const judgement = judgeEdit({ connections, now: this.deps.clock.now() }, snapshot, body.draft);
+    return {
+      ok: true as const,
+      mission,
+      snapshot,
+      judgement,
+      asked: body.revision,
+      revision: revisionOfRecord(mission),
+    };
+  }
+
+  /** What an edit would change, or why it would be refused. Writes nothing. */
+  async previewEdit(
+    user: AuthoritySubject,
+    missionId: string,
+    raw: unknown,
+  ): Promise<EditPreviewResult> {
+    const judged = await this.judged(user, missionId, raw);
+    if (!judged.ok) return judged;
+    const { judgement } = judged;
+    return {
+      ok: judgement.ok,
+      issues: judgement.issues,
+      notices: judgement.notices,
+      changes: judgement.changes,
+      revision: judged.revision,
+    };
+  }
+
+  /**
+   * The creator edits the mission after issuance, without limit on what moves but its
+   * period (ADR mission-editable-after-issuance): `{ draft, revision }`, the edited
+   * draft and the revision of the mission it was made from. Creator only — anyone
+   * else is "not found" — and no delegated variant: the management door is not handed
+   * this method. Revoked and orphaned missions are not edited; an expired one is.
+   *
+   * Judged by issuance's own check on what moves (`judgeEdit`): the creation's preview
+   * under the creator's authority now, its issues kept when they are about something
+   * the edit moves. Applied at once, in one store transaction (`MissionsRepo.edit`),
+   * to the same token, session and counters; requests a removal makes moot are closed.
+   * One `mission-changed` audit entry; an edit that moves nothing writes nothing.
+   *
+   * Between the authority check and the write, the creator's authority may go: the
+   * mission then reads `orphaned` and serves nothing, as an issuance racing the same
+   * revocation would.
+   */
+  async edit(user: AuthoritySubject, missionId: string, raw: unknown): Promise<EditResult> {
+    const judged = await this.judged(user, missionId, raw);
+    if (!judged.ok) return judged;
+    const { mission, snapshot, judgement, revision } = judged;
+    if (judged.asked !== revision) return { ok: false, reason: 'conflict' };
+    if (!judgement.ok) {
+      return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
+    }
+    const { after, changes } = judgement;
+    if (!hasChanges(changes)) return { ok: true, mission, changes, requests_closed: [] };
+
+    const written = await this.deps.store.missions.edit(mission.id, {
+      actorUserId: user.id,
+      unchanged: (current) => revisionOfRecord(current) === revision,
+      name: after.name,
+      expiresAt: after.expires_at,
+      connections: after.connections.map((c) => ({
+        connectionId: c.connection_id,
+        resourceScope: c.resource_scope,
+        resourceIds: c.resource_scope === 'connection' ? [] : [...c.resource_ids],
+      })),
+      policy: after.connections.flatMap((c) => c.policy.map(policyEntryRecordOf)),
+      summary: (closed) => ({
+        kind: 'mission-changed',
+        actorUserId: user.id,
+        details: changeSummaryOf(changes, closed),
+      }),
+    });
+    if (!written) return { ok: false, reason: 'conflict' };
+    const closed = written.closedRequests.map((r) => r.id);
+    const audit = auditOfChanges(snapshot, after, changes);
+    await this.deps.store.auditWriter.write({
+      kind: 'admin',
+      ts: toIso(this.deps.clock.now()),
+      user_id: user.id,
+      act: 'mission-changed',
+      object: { type: 'mission', id: mission.id },
+      before: audit.before,
+      after: { ...audit.after, requests_closed: closed },
+      delegated_client_id: null,
+    });
+    this.deps.logger.info('mission edited', {
+      mission_id: mission.id,
+      connections_added: changes.connections_added.length,
+      connections_removed: changes.connections_removed.length,
+      permissions_added: changes.permissions_added.length,
+      permissions_removed: changes.permissions_removed.length,
+      permissions_changed: changes.permissions_changed.length,
+      requests_closed: closed.length,
+    });
+    return { ok: true, mission: written.mission, changes, requests_closed: closed };
   }
 
   /**

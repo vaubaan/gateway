@@ -2,7 +2,7 @@
 title: Requests — claims, approvals and permission requests, the creator's decision, the inbox
 status: current
 date: 2026-10-13
-last_synced: 2026-10-17
+last_synced: 2026-10-24
 tracks:
   - apps/gateway/src/server/store/repositories/permission-requests.ts
   - apps/gateway/src/server/execution/permission-request.ts
@@ -48,6 +48,15 @@ the request page per IP"), §7.6, §7.7. Decisions:
 [claim-resolutions-as-counter-credits](../decisions/claim-resolutions-as-counter-credits.md),
 [atomic-budget-accounting](../decisions/atomic-budget-accounting.md) (amendment
 "The approval gate").
+
+**Closed by an edit.** When the creator edits the mission and removes a permission
+([missions](missions.md), "Editing a mission after issuance"), the open claims and
+approval requests about it are closed in the edit's own transaction
+(`MissionsRepo.edit`): state `refused`, decided by the creator, `decision_json =
+{ resolution: 'mission-changed', removed: [...] }`, sealed arguments erased, and a
+`request` event `{ state: 'refused', reason: 'mission-changed' }`, which the timelines
+say as "closed: you removed the permission it was about". Permission requests are left
+open. The edit's audit entry lists them (`after.requests_closed`).
 
 For claims and approvals, the request row itself is **not** created here: the budget's
 `SessionService.recordCall` inserts it inside the refusal transaction — an

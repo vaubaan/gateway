@@ -25,6 +25,9 @@ function event(kind: string, over: Partial<SessionEventView> = {}): SessionEvent
     gate_open_until: null,
     limits: null,
     created_refs: null,
+    permission: null,
+    mission_change: null,
+    request_reason: null,
     tokens_revoked: null,
     token_prefix: null,
     replaced_prefix: null,
@@ -45,6 +48,50 @@ describe('what the activity of a mission says of an event', () => {
     expect(words(event('resources-created', { created_refs: ['a', 'b'] })).outcome).toBe(
       'reached the resources it created',
     );
+  });
+
+  it('says an edit of the mission in one line per clause', () => {
+    const changed = words(
+      event('mission-changed', {
+        mission_change: [
+          '2 resources added',
+          '1 permission removed',
+          'quota of github.read 200 → 500',
+        ],
+      }),
+    );
+    expect(changed.outcome).toBe('changed the mission');
+    expect(changed.lines.map((l) => l.text)).toEqual([
+      '2 resources added',
+      '1 permission removed',
+      'quota of github.read 200 → 500',
+    ]);
+  });
+
+  it('says a permission added with its limits, and a permission removed', () => {
+    const added = words(
+      event('permission-added', {
+        permission: { quota: 50, rate_limit_max: 10, rate_window_seconds: 60, gate: 'approval' },
+      }),
+    );
+    expect(added.outcome).toBe('permission added');
+    expect(added.lines.map((l) => l.text)).toEqual([
+      '50 a period',
+      '10 per 60 s',
+      '“ask me first”',
+    ]);
+    expect(words(event('permission-removed')).outcome).toBe('permission removed');
+  });
+
+  it('says a request closed by an edit, not refused', () => {
+    const closed = words(
+      event('request', {
+        request_kind: 'claim',
+        request_state: 'refused',
+        request_reason: 'mission-changed',
+      }),
+    );
+    expect(closed.outcome).toBe('closed by your edit');
   });
 
   it('says a change of limits with the values before and after', () => {
