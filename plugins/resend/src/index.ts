@@ -15,6 +15,7 @@
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyResend } from './classify.ts';
+import { createdResendResources } from './created.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
 import { RESEND_ICON } from './icon.ts';
@@ -29,7 +30,7 @@ export const resendPlugin = definePlugin({
   id: 'resend',
   displayName: 'Resend',
   icon: RESEND_ICON,
-  version: '0.4.1',
+  version: '0.5.0',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',
@@ -42,6 +43,9 @@ export const resendPlugin = definePlugin({
   // Domains and segments are what a Resend connection lists : a created one is
   // discovered at once (ADR discovery-runs-after-a-creating-call).
   resourceCreatingTools: ['resend__create_domain', 'resend__create_segment'],
+  // Read from the call's answer: the mission that created it reaches it at once
+  // (ADR created-resources-join-the-mission).
+  createdResources: createdResendResources,
   dataModel: resendDataModel,
   catalog: resendCatalog.catalog,
   credential: {

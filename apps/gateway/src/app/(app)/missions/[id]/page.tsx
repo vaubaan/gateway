@@ -330,7 +330,12 @@ export default async function MissionPage({ params, searchParams }: Props) {
                   connection.display_name
                 ) : (
                   listed(
-                    connection.resources.map((r) => r.display_name || r.ref),
+                    connection.resources.map((r) => {
+                      const name = r.display_name || r.ref;
+                      return connection.created_resource_ids?.includes(r.id)
+                        ? `${name} (${MISSION_WORDS.createdByMission})`
+                        : name;
+                    }),
                     2,
                   )
                 )}

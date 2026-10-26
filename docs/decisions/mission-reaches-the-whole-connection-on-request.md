@@ -86,10 +86,22 @@ possible.
   already issued with `all` — a mission its creator read as "these five
   repositories" would start reaching the sixth. Contrary to "nothing is
   widened silently".
-- **A resource created by a mission joins that mission.** A special case at
-  the door (who created what, through which call, what if discovery reports it
+- **A resource created by a mission joins that mission.** _Reversed on
+  2026-10-24 by ADR [created-resources-join-the-mission](created-resources-join-the-mission.md)._
+  A special case at the door (who created what, through which call, what if discovery reports it
   under another ref), hard to explain on the mission page, and it still leaves
   out the resources someone else creates on the account the mission operates.
 - **Re-issue the mission when a resource appears.** What happens today: it
   forces a key replacement for every holder each time the account grows, which
   is exactly the friction this decision removes.
+
+## Amendment 2026-10-24 — what a mission creates, it reaches
+
+The rejected alternative "a resource created by a mission joins that mission"
+is reversed by ADR
+[created-resources-join-the-mission](created-resources-join-the-mission.md): a
+mission whose scope is an explicit list (`all`, `selected`) now reaches, right
+after the call, a resource it created through a tool its plugin lists in
+`resourceCreatingTools` (`mission_resources.source = 'created'`). Scope
+`connection` is unchanged; a resource created elsewhere still reaches only a
+whole-connection mission, once discovery lists it.

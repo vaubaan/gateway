@@ -99,6 +99,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'gate-changed': true,
   'limits-changed': true,
   'permissions-changed': true,
+  'mission-resources-added': true,
   'permission-requested': true,
   'approval-granted': true,
   'request-refused': true,

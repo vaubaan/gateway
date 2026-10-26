@@ -46,12 +46,23 @@ export interface AnsweredCall {
   readonly connectionId: string | null;
   /** What the plugin returned: an `isError` result is a call the plugin declined. */
   readonly result: unknown;
+  /**
+   * The call's arguments, for the plugin's `createdResources` (ADR
+   * created-resources-join-the-mission). Never logged, never audited.
+   */
+  readonly args?: Readonly<Record<string, unknown>>;
 }
 
 /** A scheduled discovery: why, and who is behind it. */
 export interface ScheduledCause extends DiscoveryAfterCallCause {
   /** The audit's actor: the member holding the key, or the creator for a named key. */
   readonly userId: string;
+  /**
+   * The refs the call created, already recorded on the connection (ADR
+   * created-resources-join-the-mission): the discovery looks again while it does not
+   * return them. Empty: it looks again while it adds nothing.
+   */
+  readonly createdRefs?: readonly string[];
 }
 
 export interface DiscoveryAfterCallDeps {
@@ -90,8 +101,9 @@ export class DiscoveryAfterCall {
    * discovery of the call's connection when the call succeeded (not an
    * `isError` result) and its tool is one the plugin declares as creating a
    * resource. Returns whether it scheduled one. Never throws, never waits.
+   * `createdRefs`: what the call created, as `CreatedResources` recorded it.
    */
-  afterCall(ctx: MissionContext, call: AnsweredCall): boolean {
+  afterCall(ctx: MissionContext, call: AnsweredCall, createdRefs: readonly string[] = []): boolean {
     if (this.stopped || call.connectionId === null || isErrorResult(call.result)) return false;
     const registered = this.deps.registry.providerForTool(call.tool);
     if (!registered?.plugin.resourceCreatingTools?.includes(call.tool)) return false;
@@ -100,8 +112,8 @@ export class DiscoveryAfterCall {
     this.schedule(call.connectionId, {
       missionId: ctx.mission.id,
       tool: call.tool,
-      userId:
-        ctx.token.holder.kind === 'member' ? ctx.token.holder.user_id : ctx.mission.creator_id,
+      userId: callerUserId(ctx),
+      ...(createdRefs.length > 0 ? { createdRefs } : {}),
     });
     return true;
   }
@@ -174,19 +186,28 @@ export class DiscoveryAfterCall {
       let outcome: AfterCallDiscovery | null = null;
       let attempts = 0;
       for (;;) {
-        outcome = await this.deps.service.discoverAfterCall(connectionId, cause);
+        outcome = await this.deps.service.discoverAfterCall(
+          connectionId,
+          { missionId: cause.missionId, tool: cause.tool },
+          cause.createdRefs ?? [],
+        );
         attempts += 1;
         if (outcome === null) return; // the connection no longer serves: nothing to look for
-        const lookAgain = !outcome.record.ok || outcome.added === 0;
+        // Created refs named: look again until discovery returns them (they are reached
+        // already, recorded from the call's answer). None: until it adds something.
+        const lookAgain =
+          !outcome.record.ok ||
+          (cause.createdRefs?.length ? outcome.missing > 0 : outcome.added === 0);
         const delay = this.retryDelaysMs[attempts - 1];
         if (!lookAgain || delay === undefined || this.stopped) break;
         await this.sleep(delay);
         if (this.stopped) break;
       }
-      await this.deps.service.auditDiscoveryAfterCall(connectionId, cause, {
-        ...outcome,
-        attempts,
-      });
+      await this.deps.service.auditDiscoveryAfterCall(
+        connectionId,
+        { missionId: cause.missionId, tool: cause.tool, userId: cause.userId },
+        { ...outcome, attempts },
+      );
       this.deps.logger.info('resource discovery after a creating call', {
         ...context,
         ok: outcome.record.ok,
@@ -208,4 +229,9 @@ function isErrorResult(result: unknown): boolean {
     result !== null &&
     (result as { isError?: unknown }).isError === true
   );
+}
+
+/** The human behind the call's key: the member holding it, or the creator for a named key. */
+export function callerUserId(ctx: MissionContext): string {
+  return ctx.token.holder.kind === 'member' ? ctx.token.holder.user_id : ctx.mission.creator_id;
 }

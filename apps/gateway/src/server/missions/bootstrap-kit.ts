@@ -172,8 +172,15 @@ function wholeAccount(c: KitConnection): string {
     c.resources.length === 0
       ? 'none known yet'
       : `known now: ${c.resources.map(resourceLine).join(', ')}`;
-  return `the whole account, including resources discovered later (${known}). A resource you create through the gateway is reached right after its creation; one created elsewhere once the account's owner refreshes its resources — until then a call that cites it is refused with \`resource-not-in-mission\`.`;
+  return `the whole account, including resources discovered later (${known}).`;
 }
+
+/**
+ * What a mission creates, it reaches (ADR created-resources-join-the-mission): said once,
+ * under the accounts, whatever their scope.
+ */
+export const CREATED_RESOURCES_LINE =
+  "A resource this mission creates through the gateway (a creating tool of the account, such as a new app, project or board) is reached right after its creation, from your next call on. One created elsewhere is not: the mission's creator adds it to the mission, or the account's owner refreshes its resources when the mission reaches the whole account; until then a call that cites it is refused with `resource-not-in-mission`.";
 
 function policyLine(entry: KitPolicyLine, period: DraftPeriod): string {
   const gate =
@@ -276,6 +283,7 @@ function agentInstructions(
     '',
     '### Accounts and resources you may touch',
     ...connections,
+    CREATED_RESOURCES_LINE,
     '',
     `### Permissions and limits (${resetPhrase(mission.period)}; the mission ${expiryPhrase(mission.expires_at)})`,
     ...input.policy.map((entry) => policyLine(entry, mission.period)),

@@ -162,6 +162,13 @@ export type AdminAct =
   /** The creator changed the limits of accepted risks on the mission itself (quota per
    *  period, calls per rate window): `before` and `after` list each changed risk. */
   | 'permissions-changed'
+  /** Resources joined the mission's selection. `after.cause` says how:
+   *  `created-by-the-mission` — the mission created them through a creating call
+   *  and reaches them at once (ADR created-resources-join-the-mission); the actor is
+   *  the human behind the call's key, `after` carries `connection_id`, `tool`,
+   *  `refs`, `resource_scope` and `added_to_selection` (empty under scope
+   *  `connection`, which reaches them already). Object: the mission. */
+  | 'mission-resources-added'
   | 'permission-requested'
   | 'limits-changed'
   | 'approval-granted'

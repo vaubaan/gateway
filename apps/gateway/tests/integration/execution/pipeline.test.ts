@@ -18,6 +18,7 @@ import { UpstreamAuthError } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CALL_REJECTED_RPC_CODE } from '../../../src/server/execution';
+import { agePastStaleGrace } from '../../../src/server/store/testing';
 import {
   DEPOT_API_KEY,
   depotSecret,
@@ -295,7 +296,8 @@ describe('execution door: the call pipeline', () => {
       const { connections } = instance.root.store;
       const scratch = instance.resources.find((r) => r.ref === 'scratch');
       await connections.setResourceHidden(scratch?.id ?? '', true);
-      // The next discovery no longer returns app-prod.
+      // The next discovery no longer returns app-prod (seen long ago: past the grace).
+      agePastStaleGrace(instance.root.store, instance.connection.id);
       await connections.syncDiscoveredResources(instance.connection.id, [
         { ref: 'app-staging', displayName: 'app-staging' },
         { ref: 'scratch', displayName: 'scratch' },
@@ -367,7 +369,9 @@ describe('execution door: the call pipeline', () => {
           allowed_resources: [{ ref: 'late', env: null, display_name: 'late' }],
         });
 
-        // The next discovery no longer returns `late`: the mission no longer reaches it.
+        // The next discovery no longer returns `late`: the mission no longer reaches it
+        // (once `late` is past the grace of a fresh row).
+        agePastStaleGrace(empty.root.store, empty.connection.id);
         await connections.syncDiscoveredResources(empty.connection.id, [
           { ref: 'kept-out', displayName: 'kept-out' },
         ]);

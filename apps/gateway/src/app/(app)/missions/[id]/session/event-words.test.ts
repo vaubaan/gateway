@@ -24,6 +24,7 @@ function event(kind: string, over: Partial<SessionEventView> = {}): SessionEvent
     gate_before: null,
     gate_open_until: null,
     limits: null,
+    created_refs: null,
     tokens_revoked: null,
     token_prefix: null,
     replaced_prefix: null,
@@ -37,6 +38,15 @@ function event(kind: string, over: Partial<SessionEventView> = {}): SessionEvent
 const words = (e: SessionEventView, requestOpen = false) => eventWords(e, { requestOpen });
 
 describe('what the activity of a mission says of an event', () => {
+  it('says the mission reached what it created, with the refs (ADR created-resources-join-the-mission)', () => {
+    expect(
+      words(event('resources-created', { tool: 'miro__board_create', created_refs: ['uXj~'] })),
+    ).toMatchObject({ outcome: 'reached a resource it created', tone: null });
+    expect(words(event('resources-created', { created_refs: ['a', 'b'] })).outcome).toBe(
+      'reached the resources it created',
+    );
+  });
+
   it('says a change of limits with the values before and after', () => {
     const changed = words(
       event('limits-changed', {

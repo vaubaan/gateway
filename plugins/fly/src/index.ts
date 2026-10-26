@@ -11,6 +11,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 
 import { classifyFly } from './classify.ts';
 import { flyDataModel } from './data-model.ts';
+import { createdFlyResources } from './created.ts';
 import { discoverFlyResources, executeFly } from './execute.ts';
 import { FLY_ICON } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
@@ -25,7 +26,7 @@ export const flyPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Fly.io',
   icon: FLY_ICON,
-  version: '0.2.1',
+  version: '0.3.0',
   description:
     'Apps on Fly.io: machines, images, volumes and snapshots, secrets, IP addresses and ' +
     'certificates — one resource per app.',
@@ -40,6 +41,9 @@ export const flyPlugin = definePlugin({
   // An app is what a Fly connection lists : a created app is discovered at once
   // (ADR discovery-runs-after-a-creating-call).
   resourceCreatingTools: [TOOL.createApp],
+  // Read from the call's answer: the mission that created it reaches it at once
+  // (ADR created-resources-join-the-mission).
+  createdResources: createdFlyResources,
   dataModel: flyDataModel,
   catalog: flyCatalog.catalog,
   credential: flyCredential,
@@ -53,6 +57,7 @@ export default flyPlugin;
 
 export { classifyFly, flyDataModel, flyTools };
 export { readFlyCall, resolveApp } from './call.ts';
+export { createdFlyResources } from './created.ts';
 export {
   EXEC_OUTPUT_MAX,
   MAX_DISCOVERED_APPS,

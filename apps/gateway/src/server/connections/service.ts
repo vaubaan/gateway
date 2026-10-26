@@ -46,7 +46,6 @@ import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
-  DiscoveredResource,
   GroupRecord,
   Principal,
   UserRecord,
@@ -58,6 +57,7 @@ import { ConnectError } from './errors';
 import { providerFailureReason } from './failure-reason';
 import {
   cleanName,
+  usableResourcesOf,
   editableMetadataKeys,
   parseEnvLabel,
   parseListValue,
@@ -185,6 +185,12 @@ export interface AfterCallDiscovery {
   readonly record: DiscoveryRecord;
   /** Refs discovery returned that the connection did not list before (or listed as stale). */
   readonly added: number;
+  /**
+   * How many of the refs the call created (`createdResources`, already recorded on the
+   * connection) this discovery did not return yet; 0 when the call named none (ADR
+   * created-resources-join-the-mission).
+   */
+  readonly missing: number;
 }
 
 /**
@@ -893,10 +899,14 @@ export class ConnectionService {
    * lists a new resource a moment late) and audits the outcome once, through
    * `auditDiscoveryAfterCall`. `null` when the connection no longer serves
    * (gone, revoked, expired): there is nothing to look for with it.
+   * `createdRefs`: the refs the call created, read from its answer and already
+   * recorded (ADR created-resources-join-the-mission); the outcome says how many
+   * of them this discovery did not return yet.
    */
   async discoverAfterCall(
     connectionId: string,
     cause: DiscoveryAfterCallCause,
+    createdRefs: readonly string[] = [],
   ): Promise<AfterCallDiscovery | null> {
     const connection = await this.deps.store.connections.getById(connectionId);
     if (!connection || connection.status === 'revoked' || connection.status === 'expired') {
@@ -909,11 +919,13 @@ export class ConnectionService {
           .map((r) => r.ref),
       );
     const before = await liveRefs();
-    const record = await this.rediscover(connection, cause);
-    if (!record.ok) return { record, added: 0 };
+    const returned = new Set<string>();
+    const record = await this.rediscover(connection, cause, returned);
+    if (!record.ok) return { record, added: 0, missing: createdRefs.length };
     let added = 0;
     for (const ref of await liveRefs()) if (!before.has(ref)) added += 1;
-    return { record, added };
+    const missing = createdRefs.filter((ref) => !returned.has(ref)).length;
+    return { record, added, missing };
   }
 
   /** The `resources-discovered` entry of a discovery the gateway ran after a call. */
@@ -940,6 +952,8 @@ export class ConnectionService {
   private async rediscover(
     connection: ConnectionRecord,
     afterCall: DiscoveryAfterCallCause | null,
+    /** Filled with the refs the discovery returned, when given. */
+    returned?: Set<string>,
   ): Promise<DiscoveryRecord> {
     // An account made a way the plugin no longer declares: its stored secret is not
     // what the plugin reads, so the plugin is not called; the owner reconnects it.
@@ -964,7 +978,7 @@ export class ConnectionService {
         }
         resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
       }
-      return await this.storeDiscovery(connection, resolved.plugin, resources, afterCall);
+      return await this.storeDiscovery(connection, resolved.plugin, resources, afterCall, returned);
     } catch (err) {
       this.deps.logger.warn('resource discovery failed', {
         connection_id: connection.id,
@@ -1378,24 +1392,14 @@ export class ConnectionService {
     plugin: ProviderPlugin,
     resources: readonly Resource[],
     afterCall: DiscoveryAfterCallCause | null = null,
+    returned?: Set<string>,
   ): Promise<DiscoveryRecord> {
-    const usable: DiscoveredResource[] = [];
-    for (const r of resources) {
-      if (r.provider !== plugin.id || typeof r.ref !== 'string' || r.ref.length === 0) {
-        this.deps.logger.warn('plugin returned an unusable resource; ignored', {
-          provider: plugin.id,
-          connection_id: connection.id,
-        });
-        continue;
-      }
-      // A label the plugin sets must be a valid environment label; otherwise the
-      // resource is kept unlabelled and the owner decides.
-      const label = typeof r.env === 'string' ? parseEnvLabel(r.env) : null;
-      usable.push({
-        ref: r.ref,
-        displayName: cleanName(r.displayName) ?? r.ref,
-        env: label?.ok ? label.env : null,
-        metadata: r.metadata ?? null,
+    const { usable, unusable } = usableResourcesOf(plugin.id, resources);
+    for (const r of usable) returned?.add(r.ref);
+    for (let i = 0; i < unusable; i += 1) {
+      this.deps.logger.warn('plugin returned an unusable resource; ignored', {
+        provider: plugin.id,
+        connection_id: connection.id,
       });
     }
     await this.deps.store.connections.syncDiscoveredResources(connection.id, usable);

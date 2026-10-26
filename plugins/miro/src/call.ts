@@ -90,7 +90,9 @@ export function resolveBoard(
     };
   }
   if (!boardsOf(resources).some((r) => r.ref === ref)) {
-    return { denied: `${BOARD_ARGUMENT}: board '${ref}' is not a board of this mission.` };
+    return {
+      denied: `${BOARD_ARGUMENT}: board '${ref}' is not a board of this mission. A board this mission creates through the gateway is reached right after its creation; one created elsewhere must be added to the mission by its creator.`,
+    };
   }
   return { board: ref };
 }

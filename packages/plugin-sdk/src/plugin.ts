@@ -214,7 +214,8 @@ export interface ProviderPlugin {
    * discovery-runs-after-a-creating-call). Each name is an MCP tool of the
    * plugin (`definePlugin`). A tool that creates something inside a resource
    * (a DNS record in a zone, a machine in an app) is not one. Absent : no call
-   * of this plugin triggers a discovery.
+   * of this plugin triggers a discovery. A plugin that declares it must
+   * declare `createdResources` too (`definePlugin`).
    */
   readonly resourceCreatingTools?: readonly string[];
 
@@ -276,6 +277,26 @@ export interface ProviderPlugin {
    * will see in `resources`.
    */
   discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
+
+  /**
+   * The resource(s) a successful call of one of `resourceCreatingTools`
+   * created, read from the call's answer and described exactly as
+   * `discoverResources` would describe them (same ref, display name and
+   * metadata shape). Pure : no IO, no credential. The host calls it on the
+   * request path, after an allowed call whose result is not `isError`, upserts
+   * what it returns into the connection's resources and adds it to the
+   * mission that made the call, so the mission reaches what it created at once
+   * (ADR created-resources-join-the-mission). The answer is untrusted : read
+   * every ref through the grammar discovery uses, and return `[]` when the
+   * answer cannot be read — the discovery that follows the call still runs.
+   * `args` are the call's arguments, already classified and allowed.
+   * Required when `resourceCreatingTools` is declared (`definePlugin`).
+   */
+  createdResources?(
+    tool: string,
+    args: Readonly<Record<string, unknown>>,
+    result: McpToolResult,
+  ): readonly Resource[];
 
   /**
    * Derive the environment a slice falls under when the provider carries

@@ -42,13 +42,15 @@ function context(holder: 'member' | 'named' = 'member'): MissionContext {
   } as unknown as MissionContext;
 }
 
-const ok = (added: number): AfterCallDiscovery => ({
+const ok = (added: number, missing = 0): AfterCallDiscovery => ({
   record: { at: 'now', ok: true, count: 3, error: null, afterCall: null },
   added,
+  missing,
 });
 const failed: AfterCallDiscovery = {
   record: { at: 'now', ok: false, count: 0, error: 'HTTP 503', afterCall: null },
   added: 0,
+  missing: 0,
 };
 
 interface Rig {
@@ -113,6 +115,29 @@ describe('DiscoveryAfterCall', () => {
         added: 1,
       },
     ]);
+  });
+
+  it('told what the call created, looks again while discovery does not return it (ADR created-resources-join-the-mission)', async () => {
+    // Nothing new (the row was recorded from the answer already), the created ref missing once.
+    const r = rig(async (n) => (n === 1 ? ok(0, 1) : ok(0, 0)));
+    r.scheduler.afterCall(context(), created, ['fresh']);
+    await r.scheduler.idle();
+    expect(r.runs).toHaveLength(2);
+    expect(r.sleeps).toEqual([5]);
+    expect(r.audits[0]).toMatchObject({ attempts: 2, added: 0 });
+
+    // Never returned: the bounded schedule, nothing more.
+    const never = rig(async () => ok(0, 1));
+    never.scheduler.afterCall(context(), created, ['fresh']);
+    await never.scheduler.idle();
+    expect(never.runs).toHaveLength(3);
+    expect(never.sleeps).toEqual([5, 10]);
+
+    // Returned at once: one attempt, although it added nothing.
+    const found = rig(async () => ok(0, 0));
+    found.scheduler.afterCall(context(), created, ['fresh']);
+    await found.scheduler.idle();
+    expect(found.runs).toHaveLength(1);
   });
 
   it('names the creator as the actor of a call made with a named key', async () => {

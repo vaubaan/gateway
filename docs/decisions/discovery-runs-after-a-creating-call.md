@@ -139,3 +139,17 @@ mission with an explicit list still needs its creator to add it.
   Miro `create_*` create objects _inside_ a resource, `railway__create-project`
   does not follow the pattern of the others, and a slice says what is touched,
   not what appears.
+
+## Amendment 2026-10-24 — the created resource is recorded before the answer leaves
+
+ADR [created-resources-join-the-mission](created-resources-join-the-mission.md)
+adds a step on the request path, before this discovery is scheduled: the
+plugin reads the created resource from the call's answer
+(`createdResources`), the host upserts it into the connection's resources and
+adds it to the mission's selection when the scope is an explicit list. The
+discovery after the call still runs; told which refs were created, it looks
+again (2 s, 10 s) while it does not return them, then gives up. A row first
+seen less than 15 minutes ago is no longer marked stale by a discovery that
+does not return it (`FRESH_RESOURCE_STALE_GRACE_MS`). Decision 7 ("a mission
+with an explicit list still needs its creator to add it") no longer holds for
+a resource the mission created itself.

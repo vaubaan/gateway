@@ -2,7 +2,7 @@
 title: Fly.io provider plugin
 status: current
 date: 2026-10-16
-last_synced: 2026-10-18
+last_synced: 2026-10-24
 tracks:
   - plugins/fly/src/
   - plugins/fly/tests/unit/
@@ -294,9 +294,19 @@ resources).
 discovery again, off the request path (ADR
 [discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)), so the new app is a resource
 of the connection from the agent's next calls — `fly__list_apps` returns it,
-and it carries the account's default environment if the owner set one. A
-mission issued on the whole account reaches it at once; a mission with an
-explicit list still needs its creator to add it (or a new mission). Without
+and it carries the account's default environment if the owner set one.
+Before the answer leaves, `createdFlyResources` (`src/created.ts`, the
+plugin's `createdResources`, plugin 0.3.0) reads the app from the call: Fly's
+`POST /apps` answers `{ id, created_at }` (Fly's Machines API reference,
+read through Context7 on 2026-10-24), so the ref is the name the call asked
+for (`appName` grammar), confirmed by the `id` of the answer, and the resource
+carries `app_id` and `network`; an answer without an id, or naming another
+app, gives nothing. The host records it and adds it to the mission that
+created it, whatever its resource scope (ADR [created-resources-join-the-mission](../../decisions/created-resources-join-the-mission.md)): the mission reaches the
+new app from its next call. `org_slug` and `image_prefixes` arrive with the
+discovery that follows a moment later; a deploy on the app before it is
+refused with "refresh the account's resources". An app created elsewhere still
+needs the mission's creator to add it to a mission with an explicit list. Without
 a default environment, a person labels the app before the env-scoped
 configuration runs.
 

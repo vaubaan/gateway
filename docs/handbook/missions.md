@@ -2,13 +2,15 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-24
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
   - apps/gateway/src/server/store/membership.ts
   - apps/gateway/src/server/store/mission-reach.ts
   - apps/gateway/migrations/0018_mission_reaches_the_whole_connection.sql
+  - apps/gateway/migrations/0024_created_resources_join_the_mission.sql
+  - apps/gateway/src/server/execution/created-resources.ts
   - apps/gateway/src/server/store/errors.ts
   - apps/gateway/src/server/store/repositories/missions.ts
   - apps/gateway/src/server/users/service.ts
@@ -509,7 +511,8 @@ labelled. Nothing defaults to this scope: the draft default stays `all`.
    `expiresAt`, the policy lines (`policyEntryRecordOf`), and per connection the
    **explicit resource ids** with `resourceScope: 'selected'` — also when the
    draft said `all` (then: the resources neither hidden nor stale), so a
-   resource discovered later is not covered (spec §3.1). A connection on which
+   resource discovered later is not covered (spec §3.1) — except one the
+   mission creates itself ("What a mission creates, it reaches" below). A connection on which
    nothing resolved (no resource known, or every resource hidden) is stored
    `all` with an empty list, because the store refuses an empty `selected`
    (`selectionRecordOf`). A draft that said `connection` is stored
@@ -563,8 +566,8 @@ the mission, never cached:
 
 | Stored scope | What the mission reaches                                                                                                                        |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `selected`   | **exactly the resource ids stored at issuance that discovery still returns**                                                                    |
-| `all`        | nothing: the list was empty at issuance ("none known then"), whatever was discovered since                                                      |
+| `selected`   | **exactly the resource ids stored at issuance — or added since by the mission's own creating calls — that discovery still returns**             |
+| `all`        | nothing: the list was empty at issuance ("none known then"), whatever was discovered since (a creating call turns it into `selected`)           |
 | `connection` | **every resource discovery returns now**, known at issuance or discovered later, except the hidden ones; one that vanishes is no longer reached |
 
 Whatever the scope, a stale resource and one of the instance's own are not
@@ -588,16 +591,55 @@ function and say the same thing:
   is built from that same list and flag, so the agent is never told it may
   touch a resource the door refuses with `resource-not-in-mission`.
 
-"Discovered" means the connection's resource rows: a resource a mission
-creates (`fly__create_app`) is reached once discovery returns it. A call
-through the execution door of a tool its plugin declares in
-`resourceCreatingTools` runs the connection's discovery again right after the
-answer (ADR
-[discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md);
-handbook [connections](connections.md), "Discovery after a creating call"), so
-a whole-account mission reaches what it created from its next calls; a
-resource created elsewhere waits for the owner's "Refresh". The kit and the
-`resource-not-in-mission` hint of such a mission say so to the agent.
+### What a mission creates, it reaches
+
+ADR [created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md)
+(it reverses the rejected alternative of ADR
+mission-reaches-the-whole-connection-on-request). A call through the execution
+door of a tool its plugin declares in `resourceCreatingTools`
+(`miro__board_create`, `fly__create_app`, …), allowed and not `isError`, is
+followed — before its answer leaves — by `CreatedResources.record`
+(`execution/created-resources.ts`, wired in `execution/index.ts`):
+
+1. the plugin's `createdResources(tool, args, result)` reads the created
+   resource(s) from the answer ([plugin SDK](plugin-sdk.md)); `usableResourcesOf`
+   keeps those of the provider with a ref, and the instance's own
+   (`isSelfResource`) are left out;
+2. `connections.upsertDiscoveredResources` records them on the connection
+   (handbook [connections](connections.md), "Resources");
+3. `missions.addResources(missionId, connectionId, ids, 'created', { tool,
+actorUserId })` adds them to the mission's selection: under `selected` the
+   rows are inserted (`mission_resources.source = 'created'`, migration
+   `0024`; an id already selected keeps its row and source); an `all` that
+   stored nothing becomes `selected`; under `connection` nothing is written,
+   the row is reached through `reachedResources` already. In the same
+   transaction the mission's session records a `resources-created` event
+   (`{ tool, connection_id, refs }`), whatever the scope;
+4. one admin audit entry `mission-resources-added` on the mission,
+   `after: { cause: 'created-by-the-mission', connection_id, tool, refs,
+resource_scope, added_to_selection }`, actor the human behind the call's key
+   (`callerUserId`: the member, or the creator for a named key);
+5. the refs go to the discovery after the call, which looks again while it
+   does not return them (handbook [connections](connections.md), "Discovery
+   after a creating call"); a row first seen within 15 minutes is not marked
+   stale meanwhile.
+
+A failure in 1–4 is logged (`created resources not recorded`, with
+`connection_id`, `tool`, `mission_id`, `error_class` — never the arguments) and
+returns `[]`: the answer of the call is unchanged and the discovery still runs.
+The answer waits for local SQLite writes only (the resource rows, the selection
+and its event, the audit entry). `MissionConnection.resourceSources` reads the
+source of every id that was not stored at issuance; `MissionService.get` gives
+the reached ones `created_resource_ids`, and the mission page writes "(created
+by this mission)" after their name. The activity of the mission says "reached a
+resource it created" with the refs (`event-words.ts`), the waiting page
+"Reached a resource it created with `<tool>`", the instance's activity "added
+resources to a mission · created by the mission".
+
+A resource created _elsewhere_ is reached only by a whole-account mission,
+once discovery returns it (the owner's "Refresh"); a mission with an explicit
+list needs its creator to add it. The kit, the `resource-not-in-mission` hint
+and Miro's own refusal of an unknown board say so to the agent.
 
 - **`draftFrom(user, missionId)` / `duplicate(...)`** — the creator's own
   mission as a draft: same connections, the selected resources that still exist
@@ -1457,9 +1499,11 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    then "Accounts and resources you may touch" (the refs, with their
    env labels; for an account given whole, `KitConnection.reaches_later`:
    "the whole account, including resources discovered later (known now: …)"
-   or "(none known yet)", and that a resource the agent creates through the
-   gateway is reached right after its creation, one created elsewhere once the
-   account's owner refreshes its resources), "Permissions and limits" (each id with its label, its limit
+   or "(none known yet)"), then, whatever the scope, `CREATED_RESOURCES_LINE`:
+   a resource the mission creates through the gateway is reached right after
+   its creation, one created elsewhere is added by the mission's creator, or
+   reached after the owner's refresh when the mission has the whole account,
+   "Permissions and limits" (each id with its label, its limit
    per period, its rate limit and "runs freely" or "asks the mission creator
    first, each time"; how often the limits reset and when the mission ends),
    then one line per

@@ -313,16 +313,28 @@ function toolIssues(plugin: ProviderPlugin): string[] {
 /**
  * `resourceCreatingTools` names MCP tools of the plugin, once each : the host
  * runs discovery after a successful call of one of them, so a name that is not
- * a tool would silently trigger nothing.
+ * a tool would silently trigger nothing. A plugin that declares it reads the
+ * created resource from the answer (`createdResources`).
  */
 function resourceCreatingToolIssues(plugin: ProviderPlugin): string[] {
   const declared: unknown = plugin.resourceCreatingTools;
+  const reader: unknown = plugin.createdResources;
+  if (reader !== undefined && typeof reader !== 'function') {
+    return ['createdResources: expected a function when present'];
+  }
   if (declared === undefined) return [];
   if (!isList(declared) || declared.length === 0) {
     return ['resourceCreatingTools: expected a non-empty list of tool names when present'];
   }
   const mcp = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
   const issues: string[] = [];
+  // The host adds what a creating call made to the mission that made it, read
+  // from the call's answer (ADR created-resources-join-the-mission).
+  if (reader === undefined) {
+    issues.push(
+      'createdResources: required when resourceCreatingTools is declared (read the created resource from the answer)',
+    );
+  }
   const seen = new Set<unknown>();
   for (const tool of declared) {
     if (typeof tool !== 'string' || !mcp.has(tool)) {

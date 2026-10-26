@@ -15,6 +15,7 @@ import { loadMissionContext } from '../../../src/server/execution/mission-contex
 import { MissionService, type MissionDraft } from '../../../src/server/missions';
 import { catalogEnvs, seedConnection } from '../../../src/server/missions/testing';
 import { ManualClock } from '../../../src/server/store/clock';
+import { agePastStaleGrace } from '../../../src/server/store/testing';
 import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
@@ -197,6 +198,7 @@ describe('missions: issue, rotate, revoke', () => {
 
   it('drops a resource that turned stale from the detail and the kit, like the door does', async () => {
     const { mission, token } = await issued();
+    agePastStaleGrace(root.store, seeded.github.connection.id); // past the grace of a fresh row
     await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
@@ -223,6 +225,7 @@ describe('missions: issue, rotate, revoke', () => {
     const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
     await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
     // Discovery no longer returns acme/web: it turns stale, it is not deleted.
+    agePastStaleGrace(root.store, connectionId); // past the grace of a fresh row
     await root.store.connections.syncDiscoveredResources(connectionId, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
@@ -301,6 +304,7 @@ describe('missions: issue, rotate, revoke', () => {
     // Discovery finds a new repository, the owner hides one, another vanishes.
     const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
     await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
+    agePastStaleGrace(root.store, connectionId); // past the grace of a fresh row
     await root.store.connections.syncDiscoveredResources(connectionId, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
@@ -340,6 +344,7 @@ describe('missions: issue, rotate, revoke', () => {
 
   it('drops a resource that turned stale when duplicating', async () => {
     const source = await issued();
+    agePastStaleGrace(root.store, seeded.github.connection.id); // past the grace of a fresh row
     await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
       { ref: 'acme/app', displayName: 'acme/app' },
     ]);

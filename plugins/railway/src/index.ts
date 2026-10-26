@@ -22,6 +22,7 @@ import {
   discoverRailwayResources,
   executeRailway,
 } from './execute.ts';
+import { createdRailwayResources } from './created.ts';
 import { railwayCredential } from './credential.ts';
 import { RAILWAY_ICON } from './icon.ts';
 import { railwayToolTitles } from './tool-titles.ts';
@@ -35,7 +36,7 @@ export const railwayPlugin = definePlugin({
   id: 'railway',
   displayName: 'Railway',
   icon: RAILWAY_ICON,
-  version: '5.0.1',
+  version: '5.1.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:
@@ -48,6 +49,9 @@ export const railwayPlugin = definePlugin({
   // A project is what a Railway connection lists : a created project is
   // discovered at once (ADR discovery-runs-after-a-creating-call).
   resourceCreatingTools: ['railway__create-project'],
+  // Read from the call's answer: the mission that created it reaches it at once
+  // (ADR created-resources-join-the-mission).
+  createdResources: createdRailwayResources,
   dataModel: railwayDataModel,
   catalog: railwayCatalog.catalog,
   credential: railwayCredential,

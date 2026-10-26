@@ -38,6 +38,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
   ADR gmail-over-imap-with-an-app-password and its amendment.
 
+- **What a mission creates, it reaches.** A mission that creates a resource
+  through the gateway (`miro__board_create`, `fly__create_app`,
+  `railway__create-project`, `resend__create_domain` / `create_segment`,
+  `upstash_redis__create_database`) reaches it right after the call, whatever
+  its resource scope: before the answer leaves, the plugin reads the new
+  resource from the call's answer (new optional SDK hook `createdResources`,
+  required with `resourceCreatingTools`), the gateway records it on the
+  account and adds it to the mission's selection. The mission page marks it
+  "created by this mission", the mission's activity says it "reached a
+  resource it created", and the audit records `mission-resources-added`
+  (cause `created-by-the-mission`). A resource first seen less than 15 minutes
+  ago is no longer marked stale by a discovery that does not list it yet (Miro
+  lists a new board minutes late). Migration `0024` (`mission_resources.source`,
+  `connection_resources.first_seen_at`). Plugins: Fly 0.3.0, Miro 0.4.0,
+  Railway 5.1.0, Resend 0.5.0, Upstash Redis 3.2.0. ADR
+  created-resources-join-the-mission.
+
 ### Changed
 
 - **Gmail connects with an app password.** A person creates an app password
@@ -48,6 +65,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   gone with it. **A Gmail account connected by OAuth runs nothing until its
   owner reconnects it** with an app password (same account, resources and
   shares); its page and its discovery say so.
+
+- The `resource-not-in-mission` hint of a mission with an explicit list, the
+  setup kit, the issuance form's "Every resource known now", the management
+  door's instructions and Miro's refusal of an unknown board say that a
+  resource the mission creates through the gateway is reached at once, and
+  one created elsewhere is added by the mission's creator.
 
 ### Removed
 

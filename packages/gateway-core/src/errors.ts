@@ -279,7 +279,7 @@ export const refuse = {
       cited_ref: input.cited_ref,
       connection: { id: input.connection.id, name: input.connection.name },
       allowed_resources: input.allowed_resources,
-      hint: `Resource '${input.cited_ref}' is not part of this mission on connection '${input.connection.name}'. The mission may touch: ${allowed}. Use one of these refs, or ask the mission creator to add the resource.`,
+      hint: `Resource '${input.cited_ref}' is not part of this mission on connection '${input.connection.name}'. The mission may touch: ${allowed}. A resource this mission creates through the gateway is reached right after its creation; for one created elsewhere, use one of these refs or ask the mission creator to add it.`,
     };
   },
 

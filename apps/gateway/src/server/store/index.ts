@@ -255,8 +255,11 @@ export type {
   ConnectionsRepo,
   CreateConnectionInput,
 } from './repositories/connections.ts';
+export { FRESH_RESOURCE_STALE_GRACE_MS } from './repositories/connections.ts';
 export type { CreateShareInput, SharesRepo } from './repositories/shares.ts';
 export type {
+  AddedMissionResources,
+  CreatedBy,
   AddMemberInput,
   AppliedLimitChange,
   CreateMissionInput,

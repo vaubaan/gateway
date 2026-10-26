@@ -5,6 +5,7 @@ import { isOnMission, membershipOf } from '../membership.ts';
 import { MISSION_TOKEN_KINDS } from '@vaubaan/shared';
 
 import {
+  MISSION_RESOURCE_SOURCES,
   MISSION_TOKEN_STATUSES,
   RESOURCE_SCOPES,
   USER_STATUSES,
@@ -15,6 +16,8 @@ import {
   type MissionMemberRecord,
   type MissionPolicyEntry,
   type MissionRecord,
+  type MissionResourceSource,
+  type ResourceScope,
   type MissionStatus,
   type MissionTokenRecord,
   type NewEvent,
@@ -81,6 +84,21 @@ export interface RemovedMember {
   readonly tokenRevoked: MissionTokenRecord | null;
 }
 
+/** The call that created the resources `addResources` adds (source `created`). */
+export interface CreatedBy {
+  readonly tool: string;
+  /** The human behind the call's key. */
+  readonly actorUserId: string | null;
+}
+
+/** What `addResources` did on one connection of a mission. */
+export interface AddedMissionResources {
+  /** The connection's scope after the write (`all` with an id becomes `selected`). */
+  readonly scope: ResourceScope;
+  /** The ids written now, in the given order; an id already selected is not repeated. */
+  readonly added: readonly string[];
+}
+
 /** What the `missions.status` column may hold: every `MissionStatus` but the derived one. */
 export type StoredMissionStatus = Exclude<MissionStatus, 'orphaned'>;
 
@@ -93,6 +111,24 @@ export interface MissionsRepo {
     requestId?: string,
   ): Promise<MissionRecord | null>;
   create(input: CreateMissionInput): Promise<MissionRecord>;
+  /**
+   * Adds resources of one of the mission's connections to its explicit selection, each
+   * row marked with `source` (ADR created-resources-join-the-mission: `created` for a
+   * resource the mission created). Scope `connection` already reaches every resource of
+   * the connection: nothing is written. Scope `all` that stored nothing becomes
+   * `selected`. An id already selected keeps its row and its source. One transaction.
+   * `NotFoundError` when the mission does not carry the connection; `InvariantError`
+   * when a resource is not one of that connection's. With `created`, the mission's
+   * session (when it has one) records a `resources-created` event in the same
+   * transaction, whatever the scope: the mission reaches what it created.
+   */
+  addResources(
+    missionId: string,
+    connectionId: string,
+    resourceIds: readonly string[],
+    source: MissionResourceSource,
+    created?: CreatedBy,
+  ): Promise<AddedMissionResources>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
   /**
@@ -286,6 +322,11 @@ interface ConnectionRow {
   resource_scope: string;
 }
 
+interface SelectedRow {
+  resource_id: string;
+  source: string;
+}
+
 interface TokenRow {
   id: string;
   mission_id: string;
@@ -371,7 +412,15 @@ function policyToRecord(row: PolicyRow): MissionPolicyEntry {
   };
 }
 
-function connectionToRecord(row: ConnectionRow, resourceIds: string[]): MissionConnection {
+function connectionToRecord(
+  row: ConnectionRow,
+  selected: readonly SelectedRow[],
+): MissionConnection {
+  const sources: Record<string, MissionResourceSource> = {};
+  for (const r of selected) {
+    const source = parseEnum(MISSION_RESOURCE_SOURCES, r.source, 'mission_resources.source');
+    if (source !== 'issuance') sources[r.resource_id] = source;
+  }
   return {
     connectionId: row.connection_id,
     resourceScope: parseEnum(
@@ -379,7 +428,8 @@ function connectionToRecord(row: ConnectionRow, resourceIds: string[]): MissionC
       row.resource_scope,
       'mission_connections.resource_scope',
     ),
-    resourceIds,
+    resourceIds: selected.map((r) => r.resource_id),
+    ...(Object.keys(sources).length > 0 ? { resourceSources: sources } : {}),
   };
 }
 
@@ -482,8 +532,21 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const connectionsOf = db.prepare<[string], ConnectionRow>(
     'SELECT connection_id, resource_scope FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
   );
-  const resourcesOf = db.prepare<[string, string], { resource_id: string }>(
-    'SELECT resource_id FROM mission_resources WHERE mission_id = ? AND connection_id = ? ORDER BY resource_id',
+  const resourcesOf = db.prepare<[string, string], SelectedRow>(
+    'SELECT resource_id, source FROM mission_resources WHERE mission_id = ? AND connection_id = ? ORDER BY resource_id',
+  );
+  const scopeOf = db.prepare<[string, string], { resource_scope: string }>(
+    'SELECT resource_scope FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
+  );
+  const setScope = db.prepare<[string, string, string]>(
+    'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
+  );
+  const insertResourceFrom = db.prepare<[string, string, string, string]>(
+    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, source)
+     VALUES (?, ?, ?, ?) ON CONFLICT (mission_id, resource_id) DO NOTHING`,
+  );
+  const resourceConnectionOf = db.prepare<[string], { connection_id: string; ref: string }>(
+    'SELECT connection_id, ref FROM connection_resources WHERE id = ?',
   );
   const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     'UPDATE missions SET status = ?, closed_at = COALESCE(?, closed_at), updated_at = ? WHERE id = ?',
@@ -604,12 +667,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       updatedAt: row.updated_at,
       closedAt: row.closed_at,
       // perf: one query per connection; a Postgres port joins or aggregates instead.
-      connections: connectionsOf.all(row.id).map((c) =>
-        connectionToRecord(
-          c,
-          resourcesOf.all(row.id, c.connection_id).map((r) => r.resource_id),
-        ),
-      ),
+      connections: connectionsOf
+        .all(row.id)
+        .map((c) => connectionToRecord(c, resourcesOf.all(row.id, c.connection_id))),
       policy: policyOf.all(row.id).map(policyToRecord),
     };
   }
@@ -675,6 +735,63 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         writePolicy(id, input.policy);
       });
       return requireMission(id);
+    },
+    async addResources(missionId, connectionId, resourceIds, source, created) {
+      if (!MISSION_RESOURCE_SOURCES.includes(source)) {
+        throw new InvariantError(`unknown mission resource source '${String(source)}'`);
+      }
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, (): AddedMissionResources => {
+        const row = scopeOf.get(missionId, connectionId);
+        if (!row) throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
+        const scope = parseEnum(
+          RESOURCE_SCOPES,
+          row.resource_scope,
+          'mission_connections.resource_scope',
+        );
+        const refs: string[] = [];
+        for (const resourceId of resourceIds) {
+          const owner = resourceConnectionOf.get(resourceId);
+          if (!owner) throw new NotFoundError('connection_resource', resourceId);
+          if (owner.connection_id !== connectionId) {
+            throw new InvariantError(
+              `resource ${resourceId} does not belong to connection ${connectionId}`,
+            );
+          }
+          if (!refs.includes(owner.ref)) refs.push(owner.ref);
+        }
+        const added: string[] = [];
+        // Scope `connection` reaches every resource of the connection already.
+        const writes = scope !== 'connection' && resourceIds.length > 0;
+        if (writes) {
+          // `all` stores no id only when nothing was known at issuance: with one, it is a list.
+          if (scope === 'all') setScope.run('selected', missionId, connectionId);
+          for (const resourceId of resourceIds) {
+            if (added.includes(resourceId)) continue;
+            if (insertResourceFrom.run(missionId, connectionId, resourceId, source).changes > 0) {
+              added.push(resourceId);
+            }
+          }
+          touch.run(now, missionId);
+        }
+        // What the mission created is in its activity, whatever the scope.
+        const session =
+          source === 'created' && created && refs.length > 0
+            ? sessions.sessionOfMission(missionId)
+            : null;
+        if (session && created) {
+          sessions.recordEvent(
+            session.id,
+            {
+              kind: 'resources-created',
+              actorUserId: created.actorUserId,
+              details: { tool: created.tool, connection_id: connectionId, refs },
+            },
+            now,
+          );
+        }
+        return { scope: writes ? 'selected' : scope, added };
+      });
     },
     async getById(id) {
       const row = byId.get(id);

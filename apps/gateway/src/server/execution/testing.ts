@@ -12,6 +12,7 @@
 import {
   createRegistry,
   definePlugin,
+  jsonObjectsOf,
   UpstreamAuthError,
   type CredentialSecret,
   type ExecuteContext,
@@ -225,6 +226,24 @@ export function depotPlugin(): DepotPlugin {
     async discoverResources() {
       discoveries += 1;
       return scriptedDiscovery ? scriptedDiscovery() : [];
+    },
+    // A scripted `create_space` answers `{ "created": { "ref", "name"? } }`; the default
+    // answer (the call echoed) names nothing it created.
+    createdResources(name, _args, result) {
+      if (name !== `${DEPOT}__create_space`) return [];
+      return jsonObjectsOf(result).flatMap((answer) => {
+        const created = answer.created as { ref?: unknown; name?: unknown } | undefined;
+        const ref = created?.ref;
+        if (typeof ref !== 'string' || !/^[a-z0-9-]+$/.test(ref)) return [];
+        return [
+          {
+            provider: DEPOT,
+            ref,
+            displayName: typeof created?.name === 'string' ? created.name : ref,
+            metadata: { created_by_call: true },
+          },
+        ];
+      });
     },
     async refresh() {
       if (scriptedRefresh) return scriptedRefresh();

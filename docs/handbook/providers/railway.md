@@ -2,7 +2,7 @@
 title: Railway provider plugin
 status: current
 date: 2026-10-13
-last_synced: 2026-10-20
+last_synced: 2026-10-24
 tracks:
   - plugins/railway/src/credential.ts
   - plugins/railway/src/user-agent.ts
@@ -69,7 +69,16 @@ are what the classifier checks `environmentId` and `serviceId` against
 (below). `railway__create-project` is declared in `resourceCreatingTools`:
 after it succeeds the gateway discovers the account's projects again, off the
 request path, so the new project is a resource at once (ADR
-[discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)). `railway__railway-agent` may
+[discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)).
+Before the answer leaves, `createdRailwayResources` (`src/created.ts`, the
+plugin's `createdResources`, plugin 5.1.0) reads the project from the answer
+of Railway's MCP server, so the mission that created it reaches it at once
+(ADR [created-resources-join-the-mission](../../decisions/created-resources-join-the-mission.md)). ⚠ Railway does not document that answer: the hook reads a JSON
+answer (a text block or `structuredContent`) holding, at any depth, exactly
+one object whose `id` passes the Railway identifier grammar and whose `name`
+is the name the call asked for, with its environments and services as
+`{ id, name }` lists when present (empty otherwise); a text answer gives
+nothing and the project then waits for the discovery. `railway__railway-agent` may
 create a project from a free-text request; it is not declared, so such a
 project waits for the owner's "Refresh".
 

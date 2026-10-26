@@ -2,7 +2,7 @@
 title: Upstash Redis provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-14
+last_synced: 2026-10-24
 tracks:
   - plugins/upstash-redis/src/index.ts
   - plugins/upstash-redis/src/classify.ts
@@ -277,6 +277,11 @@ endpoint, state, database_type, tls }`; the owner labels `env`.
   after it succeeds the gateway runs this discovery again, off the request
   path, so the new database is a resource at once (ADR
   [discovery-runs-after-a-creating-call](../../decisions/discovery-runs-after-a-creating-call.md)).
+  Before the answer leaves, `createdUpstashRedisResources` (`src/created.ts`,
+  the plugin's `createdResources`, plugin 3.2.0) reads the database from the
+  Management API's answer (credentials already stripped): `database_id`
+  through `pathIdent`, `database_name`, the same non-secret metadata keys as
+  discovery; the mission that created it reaches it at once (ADR [created-resources-join-the-mission](../../decisions/created-resources-join-the-mission.md)).
 
 ## 5. Credential (`src/credential.ts`)
 

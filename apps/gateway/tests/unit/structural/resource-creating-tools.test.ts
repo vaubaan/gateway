@@ -1,7 +1,9 @@
 /**
  * Structural test (ADR discovery-runs-after-a-creating-call): the tools of the
  * shipped plugins whose success creates a resource of the connection — the
- * calls after which the execution door runs the connection's discovery again.
+ * calls after which the execution door runs the connection's discovery again,
+ * and whose answer the plugin reads (`createdResources`) so the mission that
+ * made the call reaches what it created (ADR created-resources-join-the-mission).
  *
  * Read from the plugins the image ships (`compose/shipped-plugins.ts`). The
  * expected table is kept here on purpose: adding or dropping a creating tool
@@ -33,6 +35,20 @@ describe('resource-creating tools of the shipped plugins', () => {
       for (const tool of declared) expect(tools.has(tool), tool).toBe(true);
     },
   );
+
+  it.each(
+    SHIPPED_PLUGINS.filter((plugin) => plugin.resourceCreatingTools).map((p) => [p.id, p] as const),
+  )('%s reads what its creating tools created (createdResources)', (_id, plugin) => {
+    // ADR created-resources-join-the-mission: the mission that created it reaches it.
+    expect(typeof plugin.createdResources).toBe('function');
+    // An answer it cannot read gives nothing, for every creating tool.
+    for (const tool of plugin.resourceCreatingTools ?? []) {
+      expect(plugin.createdResources?.(tool, {}, { content: [] })).toEqual([]);
+      expect(
+        plugin.createdResources?.(tool, {}, { content: [{ type: 'text', text: 'created' }] }),
+      ).toEqual([]);
+    }
+  });
 
   it('every plugin named in the table is shipped', () => {
     const shipped = new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id));

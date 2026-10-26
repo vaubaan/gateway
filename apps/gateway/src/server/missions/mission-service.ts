@@ -433,6 +433,11 @@ export interface MissionDetailConnection {
   readonly reaches_later: boolean;
   /** Why this connection no longer serves the mission; `null` while it serves. */
   readonly lost: PartLossCause | null;
+  /**
+   * The ids among `resources` the mission created itself and reaches since (ADR
+   * created-resources-join-the-mission); absent when there is none.
+   */
+  readonly created_resource_ids?: readonly string[];
 }
 
 export interface MissionDetailRisk extends MissionPolicyEntry {
@@ -478,6 +483,16 @@ export interface MissionDetail extends MissionOverview {
 
 /** A user who may read the mission: `id`, and nothing else is trusted from the caller. */
 type Reader = AuthoritySubject;
+
+/** The reached resources the mission created itself, as `created_resource_ids` (or nothing). */
+function createdIdsOf(
+  selection: MissionConnectionRecord,
+  reached: readonly Pick<ConnectionResourceRecord, 'id'>[],
+): { readonly created_resource_ids?: readonly string[] } {
+  const sources = selection.resourceSources ?? {};
+  const ids = reached.filter((r) => sources[r.id] === 'created').map((r) => r.id);
+  return ids.length > 0 ? { created_resource_ids: ids } : {};
+}
 
 function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): IssuanceResource {
   return {
@@ -1703,6 +1718,7 @@ export class MissionService {
         resources: reached.map((r) => toIssuanceResource(r, false)),
         reaches_later: reachesLaterResources(c),
         lost: lost.find((part) => part.connectionId === c.connectionId)?.cause ?? null,
+        ...createdIdsOf(c, reached),
       });
     }
     return details;

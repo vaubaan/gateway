@@ -96,19 +96,38 @@ describe('definePlugin', () => {
   test('resourceCreatingTools is optional; it names MCP tools of the plugin, once each', () => {
     const [tool] = acmePlugin.tools;
     const name = tool!.name;
-    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [name] })).toEqual([]);
-    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [] })).toEqual([
+    const reader = { createdResources: () => [] };
+    expect(pluginIssues({ ...acmePlugin, ...reader, resourceCreatingTools: [name] })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, ...reader, resourceCreatingTools: [] })).toEqual([
       'resourceCreatingTools: expected a non-empty list of tool names when present',
     ]);
     expect(
-      pluginIssues({ ...acmePlugin, resourceCreatingTools: ['acme__create_nothing'] }),
+      pluginIssues({ ...acmePlugin, ...reader, resourceCreatingTools: ['acme__create_nothing'] }),
     ).toEqual(["resourceCreatingTools: 'acme__create_nothing' is not a tool of this plugin"]);
-    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [name, name] })).toEqual([
-      `resourceCreatingTools: '${name}' is listed twice`,
-    ]);
+    expect(pluginIssues({ ...acmePlugin, ...reader, resourceCreatingTools: [name, name] })).toEqual(
+      [`resourceCreatingTools: '${name}' is listed twice`],
+    );
     expect(() =>
-      definePlugin({ ...acmePlugin, resourceCreatingTools: ['acme__create_nothing'] }),
+      definePlugin({ ...acmePlugin, ...reader, resourceCreatingTools: ['acme__create_nothing'] }),
     ).toThrow(PluginDefinitionError);
+  });
+
+  test('a plugin that declares resourceCreatingTools reads the created resource (createdResources)', () => {
+    const name = acmePlugin.tools[0]!.name;
+    expect(pluginIssues({ ...acmePlugin, resourceCreatingTools: [name] })).toEqual([
+      'createdResources: required when resourceCreatingTools is declared (read the created resource from the answer)',
+    ]);
+    expect(() => definePlugin({ ...acmePlugin, resourceCreatingTools: [name] })).toThrow(
+      PluginDefinitionError,
+    );
+    // The hook alone is harmless (nothing calls it); a non-function is refused.
+    expect(pluginIssues({ ...acmePlugin, createdResources: () => [] })).toEqual([]);
+    expect(
+      pluginIssues({
+        ...acmePlugin,
+        createdResources: 'nope' as unknown as ProviderPlugin['createdResources'],
+      }),
+    ).toEqual(['createdResources: expected a function when present']);
   });
 
   test('toolTitles is optional; a title names a declared tool and reads as a headline', () => {

@@ -2,7 +2,7 @@
 title: Miro provider plugin
 status: current
 date: 2026-10-16
-last_synced: 2026-10-23
+last_synced: 2026-10-24
 tracks:
   - plugins/miro/src/
   - plugins/miro/scripts/
@@ -11,7 +11,7 @@ tracks:
 
 # Miro provider plugin
 
-`@vaubaan/plugin-miro` 0.3.0, tool prefix `miro__`. A **rewrap of Miro's
+`@vaubaan/plugin-miro` 0.4.0, tool prefix `miro__`. A **rewrap of Miro's
 official MCP server** (`https://mcp.miro.com/`), connected by **OAuth with a
 client the gateway registers itself** — no Miro app to create, nothing to
 paste. Decisions: ADR
@@ -32,10 +32,15 @@ when such a fact turns out worse than assumed.
 against a real Miro account: the OAuth flow works (dynamic registration,
 PKCE, an access token of 3599 s, a refresh token), and Miro's `tools/list`
 (51 tools) is now `src/upstream-tools.json`, verbatim — tool names, argument
-names, required arguments and the locator `miro_url` are Miro's. **The tool
-calls themselves have not run live**: what Miro answers to each, and
-discovery's reading of `board_search_boards`, are still tested against mocks
-only.
+names, required arguments and the locator `miro_url` are Miro's. On
+2026-10-24 the product owner's Dalae instance ran `miro__board_create`
+through the gateway: Miro answered one text block whose text is JSON,
+`{"miro_url":"https://miro.com/app/board/uXjVEVgYKSE=/","name":"Vaubaan test board (delete me)"}`
+(**verified live**; it is the fixture of `created.test.ts`). The same run
+showed that `board_search_boards` did not return the new board at 2 s nor at
+10 s, and the mission's `list_boards` still did not list it two minutes later
+(§6.2). The other tool calls, and discovery's reading of
+`board_search_boards`, are still tested against mocks only.
 
 ## 0. Why the MCP server, and not the REST API
 
@@ -409,8 +414,26 @@ organisation has not enabled its MCP server — is a `CredentialRefusal` with
 rejected credential. A successful discovery then runs `tools/list` and logs
 the differences with the model (`toolDrift`, names only), never failing.
 
-`board_create` is a resource-creating tool: the host discovers again after it
-succeeds.
+`board_create` is a resource-creating tool (`resourceCreatingTools`). After
+it succeeds, before the answer leaves, `createdMiroResources`
+(`src/created.ts`, the plugin's `createdResources`) reads the new board from
+the answer — the JSON objects of the text blocks and of `structuredContent`,
+whose `miro_url` (or `viewLink` / `url` / `boardUrl` / `link`) is a board URL
+read through `boardIdOfUrl` and `boardRefOf`, not an item's link — and
+describes it as `boardsIn` does: `ref` the id with `=` as `~`, `displayName`
+the name (else the id), `metadata.url`. An answer that names no board, or two
+different boards, gives `[]`. The host records the board on the connection and
+adds it to the mission that created it, so every call on it works from the
+next call on (ADR
+[created-resources-join-the-mission](../../decisions/created-resources-join-the-mission.md)),
+then discovers again; since Miro's search lists a new board late (observed
+2026-10-24: more than two minutes), the row is not marked stale for 15
+minutes after it was first seen. A board created in Miro itself is not read
+this way: `resolveBoard` refuses it ("board 'X' is not a board of this
+mission. A board this mission creates through the gateway is reached right
+after its creation; one created elsewhere must be added to the mission by its
+creator.") until the mission's creator adds it, or, for a mission on the whole
+account, until a discovery lists it.
 
 ### 6.3 Execution
 
@@ -455,6 +478,7 @@ Every request goes to one constant URL; no identifier reaches a URL path.
 | `src/classify.ts`                   | the slices                                                                                           |
 | `src/mcp.ts`                        | the JSON-RPC client                                                                                  |
 | `src/execute.ts`                    | execution, discovery, `boardsIn`, `toolDrift`                                                        |
+| `src/created.ts`                    | `createdMiroResources`: the board `board_create` made, read from Miro's answer (§6.2)                |
 | `src/credential.ts`                 | the `oauth2` spec                                                                                    |
 | `src/risk-catalog.yaml`             | catalog 3                                                                                            |
 | `scripts/capture-upstream-tools.ts` | the capture of `tools/list` (§6.5)                                                                   |
@@ -523,6 +547,10 @@ again` with the tool and argument names that differ. Against the list of
   discovery from JSON (with ids, and Miro's captured board summaries without
   one), page after page while `has_more`, a server that ignores `offset`,
   from text, the `403` refusal in the plugin's words, the drift log.
+- `created.test.ts` — `createdResources`: the board of the answer observed
+  live on 2026-10-24 (same ref and metadata as `boardsIn`), `structuredContent`,
+  a nameless board; nothing from a text answer, another host, http, a malformed
+  id, an item link, two boards, another tool.
 - `risk-catalog.test.ts` — risks per tool, the ids of catalogs 1 and 2 kept,
   the presets and their gates (`board-share` in `facilitator` only, behind
   an approval), a ceiling per risk.

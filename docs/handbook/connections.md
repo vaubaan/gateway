@@ -9,6 +9,7 @@ tracks:
   - apps/gateway/src/server/store/repositories/connections.ts
   - apps/gateway/migrations/0004_connection_resource_curation.sql
   - apps/gateway/migrations/0017_connection_default_env.sql
+  - apps/gateway/migrations/0024_created_resources_join_the_mission.sql
   - apps/gateway/src/server/store/resource-env.ts
   - apps/gateway/src/app/(app)/accounts/
   - apps/gateway/src/app/(app)/connections/callback/
@@ -620,10 +621,30 @@ merge (one transaction; migration `0004` added the columns):
 | `owner_metadata_json` | NULL                            | untouched                                                             |
 | `hidden`              | 0                               | untouched                                                             |
 | `stale_since`         | NULL                            | cleared                                                               |
+| `first_seen_at`       | now                             | kept; set to now when the row was stale (it is seen again)            |
 
 A ref the discovery no longer returns is **not deleted**: `stale_since` is
 set (kept at its first value by later discoveries) and cleared when the
-ref comes back. `ConnectionResourceRecord.metadata` is the effective
+ref comes back. **Grace of a fresh row** (ADR
+[created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md),
+migration `0024`): a row whose `first_seen_at` is less than
+`FRESH_RESOURCE_STALE_GRACE_MS` (15 minutes, `repositories/connections.ts`)
+old is not marked stale by a discovery that misses it — a provider may list a
+resource a while after creating it (Miro's board search did not return a
+board two minutes after its creation). Rows that existed before `0024` were
+backfilled with `discovered_at`, so they are past the grace. Tests that need a
+missed ref to turn stale at once call `agePastStaleGrace` (`store/testing.ts`).
+
+`store.connections.upsertDiscoveredResources(connectionId, resources)` is the
+merge of a resource a creating call made, read from its answer (below): the
+same rules as the table for each given ref — insert, or refresh with the owner
+edits kept and the stale flag cleared — except that the provider facts are
+**merged** over the row's (`{ ...known, ...answered }`: a call's answer knows
+fewer facts than a discovery, and the next discovery replaces them whole). No
+other row is touched and nothing is marked stale. It returns the rows of the
+given refs. `usableResourcesOf` (`input.ts`) is the one filter both merges
+apply to what a plugin returned: another provider's resource or one without a
+ref is left out, the name cleaned, an invalid plugin label dropped. `ConnectionResourceRecord.metadata` is the effective
 metadata, `{ ...discovered, ...ownerMetadata }` — what `toPluginResource()`
 hands to `classify` / `execute`. The destructive `replaceResources` of the first store
 (it deleted missing refs and cascaded to mission selections) is gone from the
@@ -656,14 +677,20 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
 
 ### Discovery after a creating call
 
-ADR [discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md).
+ADRs [discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md),
+[created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md).
 A plugin lists in `resourceCreatingTools` the tools whose success creates
 something its discovery returns ([plugin SDK](plugin-sdk.md)): `fly__create_app`,
-`railway__create-project`, `resend__create_domain`, `resend__create_segment`,
-`upstash_redis__create_database`. The execution door hands every allowed call
-it answered to `root.connections.discoveryAfterCall.afterCall(ctx, { tool,
-connectionId, result })` ([execution door](execution-door.md), "After the
-answer"); `DiscoveryAfterCall` (`discovery-after-call.ts`):
+`miro__board_create`, `railway__create-project`, `resend__create_domain`,
+`resend__create_segment`, `upstash_redis__create_database`, and reads what
+they created from the answer (`createdResources`). The execution door awaits
+its after-call step for every allowed call it answered ([execution
+door](execution-door.md), "After the answer"): first `CreatedResources.record`
+(`execution/created-resources.ts`) records the created resource on the
+connection (`upsertDiscoveredResources`) and in the mission (handbook
+[missions](missions.md), "What a mission creates, it reaches"), then
+`root.connections.discoveryAfterCall.afterCall(ctx, { tool, connectionId,
+result, args }, createdRefs)`; `DiscoveryAfterCall` (`discovery-after-call.ts`):
 
 - **schedules** a discovery of the call's connection only when the tool is in
   its plugin's `resourceCreatingTools`, the result is not `isError` (a call the
@@ -673,7 +700,10 @@ answer"); `DiscoveryAfterCall` (`discovery-after-call.ts`):
 - **coalesces** per connection: one discovery in flight, at most one queued (the
   latest cause wins). `// single-process only`, like the broker's refresh lock.
 - **looks again** after `DISCOVERY_AFTER_CALL_RETRY_DELAYS_MS` (2 s, then 10 s)
-  when the discovery failed or added no ref, then gives up.
+  when the discovery failed, or — told the refs the call created — while it
+  does not return them (`AfterCallDiscovery.missing`), or — told none — when it
+  added no ref; then gives up. The created row is reached meanwhile and is not
+  marked stale (the grace above).
 - **audits once** per scheduled discovery, on the last attempt's outcome:
   `resources-discovered` with `after: { ok, count, error, cause: 'after-a-call',
 mission_id, tool, added, attempts }`; the actor is the member holding the
@@ -685,9 +715,10 @@ call failed`, with `connection_id`, `tool`, `mission_id`, `error_class` —
 - **stops** with the root (`root.close()` → `stop()`): the queued discovery is
   dropped, a retry wait is cut short, the one in flight is awaited.
 
-`ConnectionService.discoverAfterCall(connectionId, cause)` skips a connection
-that is gone, `revoked` or `expired` (`null`), counts the live refs before and
-after, and runs `rediscover` — the same broker refresh, merge and
+`ConnectionService.discoverAfterCall(connectionId, cause, createdRefs)` skips a
+connection that is gone, `revoked` or `expired` (`null`), counts the live refs
+before and after, counts the created refs the discovery did not return
+(`missing`), and runs `rediscover` — the same broker refresh, merge and
 `metadata.discovery` record as the owner's "Refresh" — with
 `metadata.discovery.afterCall = { missionId, tool }`. It audits nothing;
 `auditDiscoveryAfterCall` writes the entry. The account page reads the record:

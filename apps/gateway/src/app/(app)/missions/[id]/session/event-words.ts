@@ -62,6 +62,7 @@ const KNOWN: Readonly<Record<SessionEventKind, true>> = {
   'gate-changed': true,
   'limits-changed': true,
   'permissions-changed': true,
+  'resources-created': true,
   rotation: true,
   revocation: true,
 };
@@ -84,6 +85,15 @@ export function eventWords(
   switch (event.kind) {
     case 'permissions-changed':
       return { outcome: 'permissions changed', tone: null, lines: [] };
+    case 'resources-created': {
+      const refs = event.created_refs ?? [];
+      return {
+        outcome:
+          refs.length > 1 ? 'reached the resources it created' : 'reached a resource it created',
+        tone: null,
+        lines: refs.map(identifier),
+      };
+    }
     case 'call-allowed':
       return {
         outcome: 'allowed',

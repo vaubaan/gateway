@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-23
+last_synced: 2026-10-24
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -109,7 +109,7 @@ this table says where each requirement lives, and what is not written yet.
 | Suite                                                                                                                                                                                                    |     Tests |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
 | `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                                                                                                               |         8 |
-| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                                                   |         9 |
+| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                                                   |        10 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                                                                                                                 |         2 |
 | `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                                                                                                               |        12 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                                                                                                             |        46 |
@@ -151,7 +151,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/config/sign-in.test.ts`                                                                                                                                                         |        19 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                                                                                                                          |        15 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                                                                                                                                                |        15 |
-| `apps/gateway/src/server/connections/discovery-after-call.test.ts`                                                                                                                                       |        11 |
+| `apps/gateway/src/server/connections/discovery-after-call.test.ts`                                                                                                                                       |        12 |
 | `apps/gateway/src/server/connections/failure-reason.test.ts`                                                                                                                                             |        14 |
 | `apps/gateway/src/server/connections/gmail-oauth-account.test.ts`                                                                                                                                        |         1 |
 | `apps/gateway/src/server/connections/input.test.ts`                                                                                                                                                      |        25 |
@@ -270,6 +270,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/agent-label.test.ts`                                                                                                                                           |         6 |
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`                                                                                                                                         |         8 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                                                                                                                     |         4 |
+| `apps/gateway/tests/integration/execution/created-resources.test.ts`                                                                                                                                     |        10 |
 | `apps/gateway/tests/integration/execution/discovery-after-call.test.ts`                                                                                                                                  |         8 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`                                                                                                                                             |        22 |
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                                                                                                              |        26 |
@@ -316,6 +317,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/config.test.ts`                                                                                                                                                    |         7 |
 | `apps/gateway/tests/integration/store/connections-shares.test.ts`                                                                                                                                        |        14 |
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                                                                                                              |        14 |
+| `apps/gateway/tests/integration/store/created-resources.test.ts`                                                                                                                                         |        11 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                                                                                                               |        20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                                                                                                                |        11 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                                                                                                                                                  |        22 |
@@ -367,7 +369,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                                                                                                                      |        10 |
 | `apps/gateway/tests/unit/structural/plugin-icons.test.ts`                                                                                                                                                |        29 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                                                                                                                     |        33 |
-| `apps/gateway/tests/unit/structural/resource-creating-tools.test.ts`                                                                                                                                     |        15 |
+| `apps/gateway/tests/unit/structural/resource-creating-tools.test.ts`                                                                                                                                     |        21 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                                                                                                                             |        71 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                                                                                                                  |        15 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                                                                                                                      |         3 |
@@ -390,7 +392,8 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                                                                                                                       |        10 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                                                                                                                  |        31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                                                                                                                    |         4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                                                                                                                   |        34 |
+| `packages/plugin-sdk/tests/unit/created-resources.test.ts`                                                                                                                                               |         3 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                                                                                                                   |        36 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                                                                                                                          |         8 |
 | `packages/plugin-sdk/tests/unit/git-pack.test.ts`                                                                                                                                                        |         9 |
 | `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                                                                                                               |         4 |
@@ -431,6 +434,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/context7/tests/unit/plugin.test.ts`                                                                                                                                                             |        12 |
 | `plugins/context7/tests/unit/risk-catalog.test.ts`                                                                                                                                                       |         5 |
 | `plugins/fly/tests/unit/classify.test.ts`                                                                                                                                                                |        34 |
+| `plugins/fly/tests/unit/created.test.ts`                                                                                                                                                                 |         2 |
 | `plugins/fly/tests/unit/execute.test.ts`                                                                                                                                                                 |        32 |
 | `plugins/fly/tests/unit/identifiers.test.ts`                                                                                                                                                             |         5 |
 | `plugins/fly/tests/unit/plugin.test.ts`                                                                                                                                                                  |         8 |
@@ -455,6 +459,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                                                          |        48 |
 | `plugins/gmail/tests/unit/transport.test.ts`                                                                                                                                                             |        11 |
 | `plugins/miro/tests/unit/classify.test.ts`                                                                                                                                                               |        17 |
+| `plugins/miro/tests/unit/created.test.ts`                                                                                                                                                                |         5 |
 | `plugins/miro/tests/unit/execute.test.ts`                                                                                                                                                                |        15 |
 | `plugins/miro/tests/unit/identifiers.test.ts`                                                                                                                                                            |         6 |
 | `plugins/miro/tests/unit/plugin.test.ts`                                                                                                                                                                 |        19 |
@@ -469,6 +474,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/notion/tests/unit/plugin.test.ts`                                                                                                                                                               |         8 |
 | `plugins/notion/tests/unit/risk-catalog.test.ts`                                                                                                                                                         |         5 |
 | `plugins/railway/tests/unit/classify.test.ts`                                                                                                                                                            |        22 |
+| `plugins/railway/tests/unit/created.test.ts`                                                                                                                                                             |         3 |
 | `plugins/railway/tests/unit/credential.test.ts`                                                                                                                                                          |        14 |
 | `plugins/railway/tests/unit/data-model.test.ts`                                                                                                                                                          |         1 |
 | `plugins/railway/tests/unit/identifier-injection.test.ts`                                                                                                                                                |       294 |
@@ -477,6 +483,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/railway/tests/unit/risk-catalog.test.ts`                                                                                                                                                        |        19 |
 | `plugins/resend/tests/unit/addresses.test.ts`                                                                                                                                                            |        13 |
 | `plugins/resend/tests/unit/classify.test.ts`                                                                                                                                                             |        64 |
+| `plugins/resend/tests/unit/created.test.ts`                                                                                                                                                              |         3 |
 | `plugins/resend/tests/unit/data-model.test.ts`                                                                                                                                                           |         6 |
 | `plugins/resend/tests/unit/identifiers.test.ts`                                                                                                                                                          |        58 |
 | `plugins/resend/tests/unit/mission-evaluation.test.ts`                                                                                                                                                   |        15 |
@@ -509,6 +516,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/supabase/tests/unit/sql.property.test.ts`                                                                                                                                                       |         3 |
 | `plugins/upstash-redis/tests/unit/classify.test.ts`                                                                                                                                                      |        31 |
 | `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                                                                                                                 |       105 |
+| `plugins/upstash-redis/tests/unit/created.test.ts`                                                                                                                                                       |         2 |
 | `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                                                                                                                    |         1 |
 | `plugins/upstash-redis/tests/unit/execute.test.ts`                                                                                                                                                       |        33 |
 | `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                                                                                                                   |        42 |
@@ -672,7 +680,7 @@ npx vitest run packages/policy-engine     # one package
   `toolDeclarations`, `labels` (with `experimental`, `summary` when the plugin has one, and `icon` — `null` without one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (35) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); `summary` optional, a non-empty paragraph of at most 600 characters when present; `icon` optional, the path data of one SVG path when present (`SVG_PATH_DATA_PATTERN`: a drawing command first, then commands, numbers and separators — markup, `url(…)` and an empty string are issues; ADR service-icons-declared-by-the-plugin); **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
+- **`define-plugin.test.ts`** (36) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); **a plugin that declares it must declare `createdResources`**, a function (ADR created-resources-join-the-mission); `summary` optional, a non-empty paragraph of at most 600 characters when present; `icon` optional, the path data of one SVG path when present (`SVG_PATH_DATA_PATTERN`: a drawing command first, then commands, numbers and separators — markup, `url(…)` and an empty string are issues; ADR service-icons-declared-by-the-plugin); **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -715,6 +723,7 @@ npx vitest run packages/policy-engine     # one package
   the fallback flag: a catch-all recognised by convention only fails);
   `mockFetch` (routes by method / URL / predicate, recorded calls, `times`,
   unmatched request rejects).
+- **`created-resources.test.ts`** (3) — `jsonValuesOf` / `jsonObjectsOf`, what a `createdResources` hook reads (ADR [[created-resources-join-the-mission]]): the structured content first, then each JSON text block; objects only; never throws; a block past `CREATED_ANSWER_MAX_LENGTH` not parsed. The Fly hook has its own `plugins/fly/tests/unit/created.test.ts` (2): the app the call named, confirmed by the id Fly answered; nothing without that id, for a name outside the grammar, for another app or another tool.
 - **`streaming.test.ts`** (9) — **streamed results**: `appendPart` merges
   consecutive text parts and keeps every other boundary; `streamToolResult`
   returns the complete result without a sink, hands each part to the sink in
@@ -971,7 +980,7 @@ naming the target for both sides, legitimate shapes, the query strings and
 SQL text the plugin builds, the project ref as a host label).
 `data-model` (1).
 
-**Railway** (406) — `plugin.test.ts` (31): kit (the nine named risks
+**Railway** (409) — `plugin.test.ts` (31): kit (the nine named risks
 touched, no fallback hit), `classifyRailway` on `Resource[]` (project and
 environment resolution, denials), `oauth2` credential spec (PKCE,
 `resourceIndicator`, `prompt=consent`, no plugin `refresh`), `executeRailway`
@@ -1003,6 +1012,7 @@ refuses every `serviceId`, a malformed list in the metadata binds nothing.
 `execute` with nothing sent; the declared schemas do not offer them; no other
 id-like argument of any tool is left unbound.
 `data-model` (1).
+`created` (3, ADR [[created-resources-join-the-mission]]): a JSON answer naming the project asked for gives it with its environments and services; `structuredContent` and plain lists read too; nothing from a text answer (Railway does not document the answer), another name, an id outside the grammar, two projects, no name asked, another tool.
 
 **SSH** (697) — `plugin.test.ts` (300): kit (every catalog risk touched by
 one `ssh__exec` sample); `classifySsh`: host resolution against the
@@ -1041,7 +1051,7 @@ nothing else (54); the command sent is the command classified (27); a
 character outside the BMP does not hide a glob or a brace (6).
 `classify` (90), `data-model` (2). No test reaches a real host.
 
-**Resend** (233) — `plugin.test.ts` (44): kit (the two deprecated v4 ids
+**Resend** (236) — `plugin.test.ts` (44): kit (the two deprecated v4 ids
 knowingly unreached), the `from` domain as the resource, recipient zones
 (a single send is its zone slice, never a count marker), batch sends,
 domains / segments / contacts, broadcasts verified against the named
@@ -1064,8 +1074,9 @@ query and the body, the domain whose path carries its `domain_id`, an id
 the provider answers. `addresses.test.ts` (13): **a string that could carry
 a second recipient is not an address** (a recipient is classified on the
 address it parses to and sent as the string given). `data-model` (6).
+`created` (3, ADR [[created-resources-join-the-mission]]): `create_domain` gives the domain (ref lower-cased, `domain_id`, status, region, empty zones) and `create_segment` the segment, as discovery describes them; nothing from an id or a domain outside the grammar, a missing id, another tool.
 
-**Upstash Redis** (313) — `plugin.test.ts` (27): kit with one sample per
+**Upstash Redis** (315) — `plugin.test.ts` (27): kit with one sample per
 tool (21 tools, every named risk touched, no fallback hit), presets,
 database resolution against the mission's resources (single-database
 default; ambiguous, missing, foreign or malformed refused; account-level
@@ -1098,6 +1109,7 @@ an IP address — fail before any request with an error that holds no token,
 and the four legitimate shapes post to the host. `identifiers.test.ts`
 (42): the grammar of a database ref, the database as a segment of the
 Management API path, Redis keys and command words in the JSON body only.
+`created` (2, ADR [[created-resources-join-the-mission]]): the database answered (ref = `database_id`, the non-secret metadata of discovery); nothing from an id outside the grammar, a missing id, another tool.
 
 **Stripe** (220) — `plugin.test.ts` (32): kit (every named risk touched, no
 fallback hit), resource resolution and `modeOf` (ref suffix, metadata; the
@@ -1221,7 +1233,7 @@ records the reason without calling the plugin, every Gmail tool is refused with
 the same sentence, and reconnecting with an app password keeps the account
 (signed in over IMAP first; nothing over HTTP).
 
-**Miro** (69; plugin 0.3.0, a rewrap of Miro's MCP server — ADR
+**Miro** (74; plugin 0.4.0, a rewrap of Miro's MCP server — ADR
 [[miro-rewraps-the-official-mcp-server]], amendment 2026-10-23) —
 `plugin.test.ts` (19): kit (28 tools, the thirteen named risks touched, no
 fallback hit,
@@ -1267,6 +1279,11 @@ risk**), the ids of catalogs 1 and 2 kept, the presets (`scribe` never
 deletes so never updates the canvas; **`board-share` in `facilitator` only,
 behind an approval, never in `read-only` / `scribe`**; `facilitator` asks
 first for deletions, new boards and shares), a ceiling per risk.
+`created` (5, ADR [[created-resources-join-the-mission]]): **the answer of
+`board_create` observed live on 2026-10-24** gives the board with the same
+ref and metadata as `boardsIn`; `structuredContent` read too; a nameless board
+named by its id; nothing from a text answer, another host, http, a malformed
+id, an item link, two different boards, or another tool.
 
 **Structural — `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`**
 (one per shipped plugin, and the cases of the check itself) — ADR [[scope-caps-not-enforced-in-v5-0]]: the v5.0 door has no cap
@@ -2881,7 +2898,37 @@ connections and resources seeded through the repositories (36):
   the plugin declined (`isError`) and a non-creating tool schedule nothing**;
   **a burst of three creations coalesces into two discoveries** (one in flight,
   one queued); **the answer leaves before the discovery starts**.
-- **`src/server/connections/discovery-after-call.test.ts`** (11) — the
+- **`tests/integration/execution/created-resources.test.ts`** (10) — ADR
+  [[created-resources-join-the-mission]], through the door with the `depot`
+  fixture whose `createdResources` reads a scripted `{ "created": { "ref",
+"name" } }` answer: **an explicit selection reaches the space it created on
+  its very next call** (row, selection with `source: 'created'` and the
+  `mission-resources-added` entry — cause, connection, tool, refs, scope, the
+  member as actor, no arguments — all written before the answer left; the read
+  is executed with the new space in `ctx.resources`); **the discovery that does
+  not list it yet does not mark it stale** and the space stays reached; a
+  discovery that returns it ends the retries after one attempt and its
+  description wins; an `all` selection that knew nothing becomes `selected`
+  with the created space; a whole-account mission reaches it at once with no
+  selection row (`added_to_selection: []`); a new row reads the connection's
+  default environment, a known one keeps its owner name and label; the mission
+  detail gives `created_resource_ids` and the session records
+  `resources-created`; **nothing joins on a declined (`isError`) call, an
+  unreadable answer, a ref outside the grammar, or the instance's own
+  resource**; **a store failure never changes the answer**.
+- **`tests/integration/store/created-resources.test.ts`** (11) — the store side:
+  `upsertDiscoveredResources` inserts unlabelled (the connection default
+  applies) and touches no other row, clears a stale flag with the owner's name,
+  label and hidden flag kept and the provider facts merged, returns each given
+  ref once, refuses an unknown connection; **the stale grace** — a row first
+  seen within `FRESH_RESOURCE_STALE_GRACE_MS` survives a discovery that misses
+  it and is stale past it, a stale row that comes back is protected anew;
+  `addResources` — `selected` gains the id with `source: 'created'`
+  (`resourceSources` read back, a second add repeats nothing and keeps the
+  source), an empty `all` becomes `selected`, `connection` writes nothing, the
+  `resources-created` event whatever the scope, a foreign resource or
+  connection refused with nothing written, the `source` CHECK.
+- **`src/server/connections/discovery-after-call.test.ts`** (12) — the
   scheduler alone: the member (or, for a named key, the creator) is the actor;
   declined result, another tool, an unknown tool, no connection or another
   connection schedule nothing; nothing starts before the caller returns; a
@@ -2891,12 +2938,16 @@ connections and resources seeded through the repositories (36):
   is logged with the connection, the tool and the mission and its class only
   (never the message), and the next one still runs; `stop()` drops the queued
   one, schedules nothing more, waits for the one in flight and cuts a retry
-  wait short.
-- **`tests/unit/structural/resource-creating-tools.test.ts`** (15) — every
+  wait short; told the refs the call created, it looks again while discovery
+  does not return them (whatever it added), up to the bounded schedule, and
+  stops at once when it does.
+- **`tests/unit/structural/resource-creating-tools.test.ts`** (21) — every
   shipped plugin declares exactly its resource-creating tools (Fly
-  `create_app`, Railway `create-project`, Resend `create_domain` /
-  `create_segment`, Upstash Redis `create_database`, nothing elsewhere), each
-  one of its MCP tools.
+  `create_app`, Miro `board_create`, Railway `create-project`, Resend
+  `create_domain` / `create_segment`, Upstash Redis `create_database`, nothing
+  elsewhere), each one of its MCP tools; **each of these plugins reads what its
+  creating tools created (`createdResources`)** and gives nothing from an
+  empty or a plain-text answer (ADR created-resources-join-the-mission).
 - **`tests/integration/execution/team-door.test.ts`** (11) — over HTTP at the
   door: **two members and a named token share one counter and are attributed
   separately** (five calls by three holders spend the five credits, the sixth
@@ -5256,9 +5307,13 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   script ran against the product owner's Miro account: the OAuth flow
   (registration, PKCE, a 3599 s access token, a refresh token) works and
   `plugins/miro/src/upstream-tools.json` is Miro's `tools/list`, verbatim.
-  No tool call has run live yet: what Miro answers to each (discovery's
-  `board_search_boards` included, read from its captured `outputSchema`)
-  is tested against mocks only. A first connection through the gateway and
+  On 2026-10-24 `miro__board_create` ran live through the gateway (its answer
+  is the fixture of `created.test.ts`), and Miro's `board_search_boards` did
+  not list the new board two minutes later — the reason of the stale grace
+  (ADR created-resources-join-the-mission). The other tool calls (discovery's
+  `board_search_boards` included, read from its captured `outputSchema`) are
+  tested against mocks only; the end to end "create a board, then draw on it"
+  through a mission with an explicit list is still to be run live. A first connection through the gateway and
   one call per risk are the next live steps (handbook providers/miro §6.5).
 
 - **The collector's SQL against PostgREST** — `schema.sql` is checked as text

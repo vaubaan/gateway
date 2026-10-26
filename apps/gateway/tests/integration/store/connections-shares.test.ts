@@ -163,6 +163,8 @@ describe('connections repository', () => {
     if (!a) throw new Error('expected a resource');
     await store.connections.setResourceEnv(a.id, 'prod');
 
+    // Past the grace a fresh row has (FRESH_RESOURCE_STALE_GRACE_MS).
+    t.clock.advance(16 * 60_000);
     const second = await store.connections.syncDiscoveredResources(c.id, [
       { ref: 'proj-a', displayName: 'Project A (renamed)' },
       { ref: 'proj-c', displayName: 'Project C', env: 'staging' },
@@ -280,7 +282,7 @@ describe('connections repository', () => {
     await store.connections.setResourceHidden(gone.id, true);
     await store.connections.setResourceOwnerMetadata(domain.id, { internal_domains: ['acme.com'] });
 
-    t.clock.advance(60_000);
+    t.clock.advance(16 * 60_000); // past the grace of a fresh row
     const second = await store.connections.syncDiscoveredResources(c.id, [
       {
         ref: 'mail.acme.com',
@@ -297,7 +299,7 @@ describe('connections repository', () => {
       displayNameEdited: true,
       metadata: { kind: 'domain', status: 'verified', internal_domains: ['acme.com'] },
       ownerMetadata: { internal_domains: ['acme.com'] },
-      discoveredAt: '2026-10-13T09:01:00.000Z',
+      discoveredAt: '2026-10-13T09:16:00.000Z',
       staleSince: null,
     });
     expect(second.find((r) => r.id === live.id)).toMatchObject({
@@ -307,7 +309,7 @@ describe('connections repository', () => {
     });
     expect(second.find((r) => r.id === gone.id)).toMatchObject({
       hidden: true,
-      staleSince: '2026-10-13T09:01:00.000Z',
+      staleSince: '2026-10-13T09:16:00.000Z',
       discoveredAt: '2026-10-13T09:00:00.000Z',
     });
 

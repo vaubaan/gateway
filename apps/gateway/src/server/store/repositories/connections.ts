@@ -14,6 +14,7 @@ import type {
 } from '../types.ts';
 import { PROVIDER_GRANT_OUTCOMES, RESOURCE_ENV_SOURCES } from '../types.ts';
 import { effectiveResourceEnv } from '../resource-env.ts';
+import { toIso } from '../clock.ts';
 import {
   nowIso,
   parseEnum,
@@ -25,6 +26,15 @@ import {
   toJson,
   type RepoContext,
 } from './context.ts';
+
+/**
+ * How long a resource row stays safe from being marked stale after it was first seen
+ * (inserted, or seen again after it was stale): a provider may list a resource a while
+ * after creating it (Miro's board search did not return a board two minutes after its
+ * creation), and the discovery a creating call schedules must not drop the row that call
+ * just recorded (ADR created-resources-join-the-mission).
+ */
+export const FRESH_RESOURCE_STALE_GRACE_MS = 15 * 60 * 1000;
 
 export interface CreateConnectionInput {
   readonly provider: string;
@@ -134,10 +144,24 @@ export interface ConnectionsRepo {
    *  - a known ref keeps its id, its owner label, its owner metadata, its `hidden` flag and
    *    its display name once the owner renamed it; the discovered metadata replaces the
    *    previous provider facts; a plugin-set `env` always follows the plugin;
-   *  - a ref the discovery no longer returns is marked stale (`staleSince`), and a stale
-   *    ref that comes back is cleared.
+   *  - a ref the discovery no longer returns is marked stale (`staleSince`), unless it
+   *    was first seen less than `FRESH_RESOURCE_STALE_GRACE_MS` ago; a stale ref that
+   *    comes back is cleared (and counts as first seen again).
    */
   syncDiscoveredResources(
+    connectionId: string,
+    resources: readonly DiscoveredResource[],
+  ): Promise<ConnectionResourceRecord[]>;
+  /**
+   * The resources a creating call made, read from its answer (ADR
+   * created-resources-join-the-mission): each ref is inserted, or — known already — has its
+   * stale flag cleared and its provider facts merged over the ones it had (the next
+   * discovery replaces them whole). Owner edits are kept as by `syncDiscoveredResources`;
+   * no other row is touched, nothing is marked stale. A new row carries no label of its
+   * own unless the plugin set one, so it reads the connection's default environment.
+   * Returns the rows of the given refs, in the given order.
+   */
+  upsertDiscoveredResources(
     connectionId: string,
     resources: readonly DiscoveredResource[],
   ): Promise<ConnectionResourceRecord[]>;
@@ -190,20 +214,21 @@ interface ResourceRow {
   display_name_edited: number;
   hidden: number;
   stale_since: string | null;
+  first_seen_at: string | null;
 }
 
 const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
   key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
   provider_grant, default_env`;
 const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
-  owner_metadata_json, env_source, display_name_edited, hidden, stale_since`;
+  owner_metadata_json, env_source, display_name_edited, hidden, stale_since, first_seen_at`;
 /**
  * Every read that becomes a `ConnectionResourceRecord` goes through this join, so the
  * effective label (own label, else the connection's default) is computed in one place.
  */
 const RESOURCE_READ = `SELECT r.id, r.connection_id, r.ref, r.env, r.display_name, r.discovered_at,
   r.metadata_json, r.owner_metadata_json, r.env_source, r.display_name_edited, r.hidden,
-  r.stale_since, c.default_env
+  r.stale_since, r.first_seen_at, c.default_env
   FROM connection_resources r JOIN connections c ON c.id = r.connection_id`;
 
 /** Every status of the schema's `CHECK`; a status added to the union fails to compile here. */
@@ -374,20 +399,26 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? AND ref = ?`,
   );
   const insertDiscovered = db.prepare<
-    [string, string, string, string | null, string, string, string | null, string]
+    [string, string, string, string | null, string, string, string | null, string, string]
   >(
     `INSERT INTO connection_resources (id, connection_id, ref, env, display_name, discovered_at,
-       metadata_json, env_source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       metadata_json, env_source, first_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
+  // A stale row that comes back counts as first seen again: the grace protects it anew.
   const updateDiscovered = db.prepare<
-    [string | null, string, string, string, string | null, string]
+    [string | null, string, string, string, string | null, string, string]
   >(
     `UPDATE connection_resources SET env = ?, env_source = ?, display_name = ?, discovered_at = ?,
-       metadata_json = ?, stale_since = NULL WHERE id = ?`,
+       metadata_json = ?,
+       first_seen_at = CASE WHEN stale_since IS NULL THEN first_seen_at ELSE ? END,
+       stale_since = NULL
+     WHERE id = ?`,
   );
-  const markStale = db.prepare<[string, string]>(
-    'UPDATE connection_resources SET stale_since = COALESCE(stale_since, ?) WHERE id = ?',
+  // A row first seen after the cut-off is within its grace: left as it is.
+  const markStale = db.prepare<[string, string, string]>(
+    `UPDATE connection_resources SET stale_since = COALESCE(stale_since, ?)
+     WHERE id = ? AND (first_seen_at IS NULL OR first_seen_at <= ?)`,
   );
   const setDisplayNameStmt = db.prepare<[string, number, string]>(
     'UPDATE connection_resources SET display_name = ?, display_name_edited = ? WHERE id = ?',
@@ -403,6 +434,52 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     const row = byId.get(id);
     if (!row) throw new NotFoundError('connection', id);
     return toRecord(row);
+  }
+
+  /**
+   * One discovered ref merged into the connection's rows (`syncDiscoveredResources`,
+   * `upsertDiscoveredResources`): inserted, or refreshed with the owner's edits kept.
+   * `keepMetadata` merges the new provider facts over the ones the row has instead of
+   * replacing them (a creating call knows fewer facts than a discovery). Inside the
+   * caller's transaction.
+   */
+  function mergeDiscovered(
+    connectionId: string,
+    r: DiscoveredResource,
+    now: Iso,
+    keepMetadata: boolean,
+  ): void {
+    const pluginEnv = r.env ?? null;
+    const existing = resourceByRef.get(connectionId, r.ref);
+    if (!existing) {
+      insertDiscovered.run(
+        ctx.newId(),
+        connectionId,
+        r.ref,
+        pluginEnv,
+        r.displayName,
+        now,
+        toJson(r.metadata ?? null),
+        pluginEnv !== null ? 'plugin' : 'owner',
+        now,
+      );
+      return;
+    }
+    const known = keepMetadata
+      ? parseJsonObject(existing.metadata_json, 'connection_resources.metadata_json')
+      : null;
+    const metadata = known ? { ...known, ...(r.metadata ?? {}) } : (r.metadata ?? null);
+    updateDiscovered.run(
+      // A label the plugin sets follows the plugin; otherwise the owner's label stays
+      // (and becomes editable again if the plugin used to set it).
+      pluginEnv ?? existing.env,
+      pluginEnv !== null ? 'plugin' : 'owner',
+      existing.display_name_edited === 1 ? existing.display_name : r.displayName,
+      now,
+      toJson(metadata),
+      now,
+      existing.id,
+    );
   }
 
   function requireResource(id: string): ConnectionResourceRecord {
@@ -576,43 +653,35 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     async syncDiscoveredResources(connectionId, resources) {
       requireConnection(connectionId);
       const now = nowIso(ctx);
+      const graceCutoff = toIso(new Date(Date.parse(now) - FRESH_RESOURCE_STALE_GRACE_MS));
       withImmediateTransaction(db, () => {
         const seen = new Set<string>();
         for (const r of resources) {
           if (seen.has(r.ref)) continue; // a plugin listing a ref twice: the first one wins
           seen.add(r.ref);
-          const pluginEnv = r.env ?? null;
-          const metadataJson = toJson(r.metadata ?? null);
-          const existing = resourceByRef.get(connectionId, r.ref);
-          if (!existing) {
-            insertDiscovered.run(
-              ctx.newId(),
-              connectionId,
-              r.ref,
-              pluginEnv,
-              r.displayName,
-              now,
-              metadataJson,
-              pluginEnv !== null ? 'plugin' : 'owner',
-            );
-            continue;
-          }
-          updateDiscovered.run(
-            // A label the plugin sets follows the plugin; otherwise the owner's label stays
-            // (and becomes editable again if the plugin used to set it).
-            pluginEnv ?? existing.env,
-            pluginEnv !== null ? 'plugin' : 'owner',
-            existing.display_name_edited === 1 ? existing.display_name : r.displayName,
-            now,
-            metadataJson,
-            existing.id,
-          );
+          mergeDiscovered(connectionId, r, now, false);
         }
         for (const row of resourcesOf.all(connectionId)) {
-          if (!seen.has(row.ref)) markStale.run(now, row.id);
+          if (!seen.has(row.ref)) markStale.run(now, row.id, graceCutoff);
         }
       });
       return resourcesOf.all(connectionId).map(resourceToRecord);
+    },
+    async upsertDiscoveredResources(connectionId, resources) {
+      requireConnection(connectionId);
+      const now = nowIso(ctx);
+      const refs: string[] = [];
+      withImmediateTransaction(db, () => {
+        for (const r of resources) {
+          if (refs.includes(r.ref)) continue; // the first one wins, as in a discovery
+          refs.push(r.ref);
+          mergeDiscovered(connectionId, r, now, true);
+        }
+      });
+      return refs.flatMap((ref) => {
+        const row = resourceByRef.get(connectionId, ref);
+        return row ? [requireResource(row.id)] : [];
+      });
     },
     async setResourceDisplayName(resourceId, displayName) {
       const current = requireResource(resourceId);

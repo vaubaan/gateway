@@ -678,6 +678,8 @@ export const ACTIVITY_WORDS = {
   machineKey: 'machine key',
   /** Beside "refreshed what an account reaches" when the gateway ran it after a call. */
   afterCreatingCall: 'after a call that created one',
+  /** Beside "added resources to a mission" when the mission created them itself. */
+  createdByTheMission: 'created by the mission',
   argumentsNeverStored: 'never stored',
   fingerprintHidden:
     'never stored · their fingerprint is shown to the creator of the mission and to the owners of the account only',
@@ -781,6 +783,7 @@ export const ACT_WORDS = {
   'backup-failed': 'failed to make a backup',
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
+  'mission-resources-added': 'added resources to a mission',
   'permission-requested': 'requested missing permissions',
   'limits-changed': 'changed the limits of a mission',
   'mission-member-left': 'left a mission',
@@ -1172,6 +1175,8 @@ export const MISSION_WORDS = {
   explicitList: 'Only the accounts you can use. A preset fills an explicit list.',
   /** An account a mission was given whole (resource scope `connection`). */
   wholeAccount: 'the whole account, including resources found later',
+  /** After a resource the mission created itself (ADR created-resources-join-the-mission). */
+  createdByMission: 'created by this mission',
   peopleLater: 'Just you for now; teammates and machine keys are added after creating.',
   keyAtTheEnd: 'Key shown once.',
   railTitle: 'What this mission will be able to do',

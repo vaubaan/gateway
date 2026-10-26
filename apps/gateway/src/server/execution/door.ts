@@ -116,11 +116,13 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
   readonly pipeline: CallPipeline;
   /**
    * Told of every allowed call once the door has its answer, before the answer
-   * leaves; must not wait (ADR discovery-runs-after-a-creating-call: a call
-   * that created a resource schedules the connection's discovery). Absent:
-   * nothing follows a call.
+   * leaves, and awaited: a call that created a resource records it on the
+   * connection and in the mission — local writes only — (ADR
+   * created-resources-join-the-mission), then schedules the connection's
+   * discovery off the request path (ADR discovery-runs-after-a-creating-call).
+   * Must never wait on a provider. Absent: nothing follows a call.
    */
-  readonly afterCall?: (ctx: MissionContext, call: AnsweredCall) => void;
+  readonly afterCall?: (ctx: MissionContext, call: AnsweredCall) => void | Promise<void>;
   readonly logger: Logger;
   readonly build: BuildInfo;
   readonly clock?: Clock;
@@ -366,7 +368,12 @@ export class ExecutionDoor {
       });
       switch (outcome.kind) {
         case 'allowed':
-          this.followCall(ctx, name, outcome.audit.connection_id, outcome.result);
+          await this.followCall(ctx, {
+            tool: name,
+            connectionId: outcome.audit.connection_id,
+            result: outcome.result,
+            args: args ?? {},
+          });
           // What the plugin returned (`McpToolResult`), forwarded as is.
           return outcome.result as CallToolResult;
         case 'refused':
@@ -391,24 +398,20 @@ export class ExecutionDoor {
   }
 
   /**
-   * Hands an allowed call to `afterCall` (a discovery after a creating call).
-   * What follows a call never changes its answer: a hook that throws is logged
-   * — its class, never the arguments — and the answer leaves as it is.
+   * Hands an allowed call to `afterCall` (what a creating call made joins the
+   * mission, then a discovery is scheduled). What follows a call never changes
+   * its answer: a hook that throws or rejects is logged — its class, never the
+   * arguments — and the answer leaves as it is.
    */
-  private followCall(
-    ctx: MissionContext,
-    tool: string,
-    connectionId: string | null,
-    result: unknown,
-  ): void {
+  private async followCall(ctx: MissionContext, call: AnsweredCall): Promise<void> {
     if (!this.deps.afterCall) return;
     try {
-      this.deps.afterCall(ctx, { tool, connectionId, result });
+      await this.deps.afterCall(ctx, call);
     } catch (error) {
       this.deps.logger.warn('after-call hook failed', {
         mission_id: ctx.mission.id,
-        tool,
-        connection_id: connectionId,
+        tool: call.tool,
+        connection_id: call.connectionId,
         error_class: error instanceof Error ? error.name : typeof error,
       });
     }

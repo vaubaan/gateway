@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-24
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/git/paths.ts
@@ -625,21 +625,36 @@ token prefix, token kind, holder label (the member's email or the token's
 name), tool, outcome, refusal code, `arguments_hash`, agent label. Never an
 argument, never the bearer.
 
-### After the answer: discovery after a creating call
+### After the answer: what a creating call made, then a discovery
 
-ADR [discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md).
-On an `allowed` outcome, the door calls `afterCall(ctx, { tool, connectionId:
-audit.connection_id, result })` (`ExecutionDoorDeps.afterCall`, wired by
-`createExecutionModule` to `connections.discoveryAfterCall.afterCall`) before
-returning the result (`followCall` in `door.ts`). The hook only schedules and
-returns: when the tool is in its plugin's `resourceCreatingTools` and the
-result is not `isError`, the connection's discovery runs on a later turn of
-the event loop, coalesced and bounded (handbook [connections](connections.md),
-"Discovery after a creating call"). A hook that throws is logged
-(`after-call hook failed`, its class only) and the answer leaves unchanged.
-`refused`, `rejected` and `failed` outcomes, the permission tool and the git
-remote never reach it. On a whole-account mission the next call's context
-(`loadMissionContext`, read per request) then holds the new resource.
+ADRs [created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md),
+[discovery-runs-after-a-creating-call](../decisions/discovery-runs-after-a-creating-call.md).
+On an `allowed` outcome, the door **awaits** `afterCall(ctx, { tool,
+connectionId: audit.connection_id, result, args })`
+(`ExecutionDoorDeps.afterCall`, `followCall` in `door.ts`) before returning
+the result. `createExecutionModule` wires it to two steps:
+
+1. `CreatedResources.record(ctx, call)` (`created-resources.ts`), on the
+   request path — when the tool is in its plugin's `resourceCreatingTools`, the
+   result is not `isError` and the connection is the mission's connection of
+   that provider: the plugin's `createdResources` reads the created resource
+   from the answer, the host records it on the connection and adds it to the
+   mission's selection, and audits `mission-resources-added` (handbook
+   [missions](missions.md), "What a mission creates, it reaches"). Local
+   SQLite writes only; it never throws and returns the refs it recorded (`[]`
+   on a failure, logged `created resources not recorded` with its class only);
+2. `connections.discoveryAfterCall.afterCall(ctx, call, createdRefs)`, which
+   only schedules and returns: the connection's discovery runs on a later turn
+   of the event loop, coalesced and bounded (handbook
+   [connections](connections.md), "Discovery after a creating call").
+
+A hook that throws or rejects is logged (`after-call hook failed`, its class
+only) and the answer leaves unchanged. The arguments ride `call.args` to the
+plugin's pure hook only; they are never logged nor audited. `refused`,
+`rejected` and `failed` outcomes, the permission tool and the git
+remote never reach it. The next call's context (`loadMissionContext`, read per
+request) then holds the new resource, under an explicit selection as under the
+whole connection.
 
 ### Audit entry
 
@@ -1050,7 +1065,7 @@ $ curl … -d '{"jsonrpc":"2.0","id":2,"method":"initialize","params":{"protocol
 
 $ curl … -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"github__list_branches","arguments":{"owner":"acme","repo":"infra"}}}' \
   | jq -c '.error | {code, message, data: {code: .data.code, cited_ref: .data.cited_ref, allowed_resources: .data.allowed_resources, hint: .data.hint}}'
-{"code":-32603,"message":"Vaubaan refused the call: resource-not-in-mission","data":{"code":"resource-not-in-mission","cited_ref":"acme/infra","allowed_resources":[{"ref":"acme/app","env":null,"display_name":"acme/app"}],"hint":"Resource 'acme/infra' is not part of this mission on connection 'acme-org'. The mission may touch: acme/app. Use one of these refs, or ask the mission creator to add the resource."}}
+{"code":-32603,"message":"Vaubaan refused the call: resource-not-in-mission","data":{"code":"resource-not-in-mission","cited_ref":"acme/infra","allowed_resources":[{"ref":"acme/app","env":null,"display_name":"acme/app"}],"hint":"Resource 'acme/infra' is not part of this mission on connection 'acme-org'. The mission may touch: acme/app. A resource this mission creates through the gateway is reached right after its creation; for one created elsewhere, use one of these refs or ask the mission creator to add it."}}
 
 $ curl -sS http://127.0.0.1:3917/mcp/catalog -H "Authorization: Bearer $VAUBAAN_MISSION_TOKEN" \
   | jq -c '{mission: .mission.state, callable: (.callable_tools | length), surface: (.tools | length), budget: .budget[0]}'

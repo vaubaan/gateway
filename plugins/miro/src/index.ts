@@ -18,6 +18,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyMiro } from './classify.ts';
 import { miroCredential } from './credential.ts';
 import { miroDataModel } from './data-model.ts';
+import { createdMiroResources } from './created.ts';
 import { discoverMiroResources, executeMiro } from './execute.ts';
 import { MIRO_ICON } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
@@ -33,7 +34,7 @@ export const miroPlugin = definePlugin({
   displayName: 'Miro',
   icon: MIRO_ICON,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.3.1',
+  version: '0.4.0',
   description:
     "Miro boards through Miro's own MCP server: read and draw on boards, tables, comments, prototypes — one resource per board.",
   summary:
@@ -49,8 +50,11 @@ export const miroPlugin = definePlugin({
   classify: classifyMiro,
   execute: executeMiro,
   discoverResources: discoverMiroResources,
-  // A new board is a new resource of the account (ADR discovery-runs-after-a-creating-call).
+  // A new board is a new resource of the account (ADR discovery-runs-after-a-creating-call),
+  // read from Miro's answer and reached by the mission that created it (ADR
+  // created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.boardCreate],
+  createdResources: createdMiroResources,
 });
 
 // The gateway registers a plugin through its default export.
@@ -65,6 +69,7 @@ export {
   type MiroCall,
 } from './call.ts';
 export { slicesOf } from './classify.ts';
+export { createdMiroResources } from './created.ts';
 export { REQUIRED_SCOPES, miroCredential } from './credential.ts';
 export {
   DISCOVERY_PAGE_SIZE,
