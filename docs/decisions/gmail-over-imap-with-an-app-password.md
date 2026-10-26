@@ -8,6 +8,8 @@ amends:
   - one-place-to-authorize-services-token-first
   - oauth-client-registered-by-the-gateway
   - setup-checklist-lists-only-what-is-needed
+amended-by:
+  - google-calendar-through-an-oauth-broker
 ---
 
 # Gmail connects over IMAP with a Google app password; the gateway no longer takes an OAuth client declared by an administrator
@@ -106,6 +108,10 @@ folder by a localized name. The subject and the addresses of a draft never
 carry CR or LF. The risk catalog, its ids and its presets do not change.
 
 ### D3 — No OAuth client declared by an administrator, anywhere
+
+> **Amended on 2026-10-24** by [google-calendar-through-an-oauth-broker](google-calendar-through-an-oauth-broker.md):
+> an `oauth2` spec declares `clientRegistration` **or** `broker`; the
+> administrator-declared client stays removed.
 
 Removed from the gateway: `appConfigFields` of the SDK's `oauth2` spec, the
 `ProviderAppConfig` a plugin received as `ctx.appConfig`, the provider-apps

@@ -12,6 +12,7 @@ partially-supersedes:
   - mint-install-token-credential
 amended-by:
   - gmail-over-imap-with-an-app-password
+  - google-calendar-through-an-oauth-broker
   - plugin-catalog-path-and-standalone-tracing
   - fallback-risk-only-when-uncategorized
   - token-connections-beside-the-integration-app
