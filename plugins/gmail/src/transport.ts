@@ -292,7 +292,6 @@ async function readCapped(
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
     if (size + buf.length > cap) {
       chunks.push(buf.subarray(0, cap - size));
-      size = cap;
       truncated = true;
       break;
     }

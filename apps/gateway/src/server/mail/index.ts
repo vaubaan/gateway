@@ -99,6 +99,7 @@ export function createLinkMailer(deps: MailerDeps): LinkMailer {
       } catch (err) {
         // Neither the address nor the link: the log is not where a link may land.
         logger.error('mail failed', { kind: input.kind, detail: describe(err) });
+        // eslint-disable-next-line preserve-caught-error -- the cause is withheld on purpose: an SMTP error can quote the address.
         throw new Error(`mail delivery failed (${input.kind})`);
       }
     },
@@ -113,6 +114,7 @@ export function createLinkMailer(deps: MailerDeps): LinkMailer {
         logger.info('mail sent', { kind: 'notice' });
       } catch (err) {
         logger.error('mail failed', { kind: 'notice', detail: describe(err) });
+        // eslint-disable-next-line preserve-caught-error -- the cause is withheld on purpose: an SMTP error can quote the address.
         throw new Error('mail delivery failed (notice)');
       }
     },
