@@ -30,7 +30,7 @@
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
-    "better-sqlite3": "12.11.1",
+    "better-sqlite3": "13.0.3",
     "geist": "^1.8.1",
     "libsodium-wrappers-sumo": "^0.8.4",
     "next": "16.4.2",
@@ -46,7 +46,7 @@
     "@modelcontextprotocol/client": "2.3.1",
     "@types/better-sqlite3": "9.6.0",
     "@types/libsodium-wrappers-sumo": "^0.8.2",
-    "@types/nodemailer": "^7.0.5",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2"
