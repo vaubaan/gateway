@@ -17,7 +17,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   3.53.4. The database file, its WAL and the backups are unchanged; nothing to
   do on upgrade.
   For contributors: Vitest 5 (same projects `shared` and `isolated`, same
-  commands, same tests).
+  commands, same tests) and TypeScript 6.0 (no configuration change).
+  TypeScript 7 waits for typescript-eslint to support it (ADR typescript-7).
 
 ## [2.0.0-alpha.8] - 2026-10-26
 

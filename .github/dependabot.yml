@@ -37,6 +37,12 @@ updates:
       # have. The major moves with the base image, by hand, in one pull request.
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]
+      # TypeScript 7 ships no compiler API, which typescript-eslint's typed
+      # rules and our structural tests need: stay on 6.x until
+      # typescript-eslint supports 7 (ADR typescript-7, status proposed,
+      # which says when to remove this entry).
+      - dependency-name: typescript
+        versions: ['>=7.0.0']
     groups:
       # One pull request for every minor and patch, production and development.
       npm:

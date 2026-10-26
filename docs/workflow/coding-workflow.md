@@ -81,6 +81,10 @@ type-check` at the root fans out to all of them.
 
 ## TypeScript and lint baseline
 
+- TypeScript 6.0 (`typescript` pinned at the root). Not 7 yet: it ships no
+  compiler API, which typescript-eslint and the structural tests need;
+  Dependabot ignores it until then (ADR
+  [typescript-7](../decisions/typescript-7.md)).
 - `tsconfig.base.json`: `strict`, `noUncheckedIndexedAccess`,
   `noImplicitOverride`, `noFallthroughCasesInSwitch`,
   `useUnknownInCatchVariables`, ES2022, bundler resolution,
@@ -374,7 +378,8 @@ architecture.
 as few pull requests as possible, since each one costs a CI run (ADR
 ci-billed-minutes-budget). Once a week, Monday morning, for npm: every minor
 and patch in one pull request, and every major in another (`@types/node`
-excepted: its major follows the runtime); at most two npm pull requests open
+excepted: its major follows the runtime; and TypeScript 7, until
+typescript-eslint supports it, ADR typescript-7); at most two npm pull requests open
 at a time. Once a month: the Node base image of the Dockerfile (new digest
 of the pinned tag, or a new 26.x; never a new Node major: the runtime of
 the image is a decision), Caddy in the Compose file, and the actions (grouped; commit
