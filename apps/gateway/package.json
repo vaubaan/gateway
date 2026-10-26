@@ -31,7 +31,7 @@
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
     "better-sqlite3": "13.0.3",
-    "geist": "^1.8.1",
+    "geist": "^1.8.2",
     "libsodium-wrappers-sumo": "^0.8.4",
     "next": "16.4.2",
     "nodemailer": "^10.1.4",
