@@ -157,7 +157,7 @@ each; and the expensive runs happen when they buy something.
 
 | Event                                    | What runs                                                                |
 | ---------------------------------------- | ------------------------------------------------------------------------ |
-| pull request to `main`/`v5`, ready       | `audit`: every gate but the browser (about eight billed minutes)         |
+| pull request to `main`/`v5`, ready       | `audit`: every gate but the browser (about ten billed minutes)           |
 | pull request, draft                      | nothing: a draft is work in progress; "Ready for review" starts the run  |
 | label `e2e` put on a pull request        | `e2e` alone (the browser tests); then on every later push too            |
 | push to `main` or `v5`                   | nothing: a squash merge of an up-to-date pull request is what it checked |
@@ -219,7 +219,7 @@ request falls back on the caches the weekly run leaves on the default branch.
 `next build` skips its own tsc pass when `VAUBAAN_BUILD_TYPECHECKED=1`
 (`npm run ci`, CI); the image build type-checks as before.
 
-**What a pull request waits for.** `audit`: about six minutes, eight billed
+**What a pull request waits for.** `audit`: about ten minutes, ten billed
 — the same gate as `npm run ci` plus the supply-chain, secret and static
 analysis checks. The browser tests (a production build and the scenarios in
 series, about five billed minutes) run on a pull request only when it carries
@@ -458,7 +458,7 @@ the rules for contributors are:
   for a change the browser can show), the PR template checklist answered,
   CHANGELOG `Unreleased` updated.
 - **A pull request is opened when it is ready.** Every push to a ready pull
-  request runs CI (about eight billed minutes): work in progress stays on the
+  request runs CI (about ten billed minutes): work in progress stays on the
   branch, or in a **draft** pull request, which runs nothing; "Ready for
   review" starts the run. Push the fixes of one review round together, not
   one by one. An agent opens its pull request once its local gate is green,

@@ -75,12 +75,13 @@ Node 26, which would have restored addons built for the wrong ABI).
 
 ## Consequences
 
-- A pull request costs about eight billed minutes per ready push, thirteen
-  with the label `e2e`; nothing on `main`. About 10 to 15 minutes per pull
-  request instead of about 60: the free minutes cover the current pace with
-  room, and a paid budget stays a safety net, not a running cost.
-- Wall time of a pull request run grows from about two to about six
-  minutes: the steps run in series.
+- A pull request costs about ten billed minutes per ready push (measured on
+  the first run, #123: 9 min 49 s), fifteen with the label `e2e`; nothing on
+  `main`. About 10 to 20 minutes per pull request instead of about 60: the
+  free minutes cover the current pace with room, and a paid budget stays a
+  safety net, not a running cost.
+- Wall time of a pull request run grows from about five to about ten
+  minutes: the steps run in series, the whole Vitest suite on one runner.
 - A browser regression in a change merged without the label is found by the
   weekly run or by the release gates, never in a release; the label, the
   notice and the local gate make it rare.

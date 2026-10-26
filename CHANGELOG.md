@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.8] - 2026-10-26
+
 ### Added
 
 - **A sign-in provider says when it was set up for another address.** After a
@@ -97,6 +99,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   is reached at once, and that any other one is added to the same mission by
   its creator with "Edit mission" (same key), instead of a new mission being
   needed.
+
+- **Dependencies.** Next.js 16.4.2, js-yaml 5 (the risk catalogs are read
+  with the same safe schema: JavaScript, local and binary tags and complex
+  keys are refused), imapflow 2.5.6 for Gmail; ESLint 10 for contributors.
 
 ### Removed
 
@@ -1578,7 +1584,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.7...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.8...HEAD
+[2.0.0-alpha.8]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.7...v2.0.0-alpha.8
 [2.0.0-alpha.7]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.6...v2.0.0-alpha.7
 [2.0.0-alpha.6]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.5...v2.0.0-alpha.6
 [2.0.0-alpha.5]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.4...v2.0.0-alpha.5
