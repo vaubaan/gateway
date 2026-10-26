@@ -2,7 +2,7 @@
 title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-26
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
@@ -216,6 +216,13 @@ five-id catalog).
 - **Ids** are UUIDv7 text generated in the application (`newId()`); **timestamps** are
   ISO-8601 UTC text produced by the injected `Clock`. SQL never calls
   `CURRENT_TIMESTAMP`.
+- **Driver**: better-sqlite3 13, an N-API addon whose prebuilt binaries ship inside the
+  package (`prebuilds/<platform>-<arch>.node`, glibc and musl, x64 and arm64): nothing is
+  downloaded or compiled at install, and a new Node major does not change the binary. It
+  bundles SQLite 3.53.4; `openDb` refuses anything older than `MIN_SQLITE_VERSION`. The
+  store relies on the driver's defaults, unchanged in 13: integers come back as numbers
+  (no `defaultSafeIntegers`), `unsafeMode` off, a 5 s busy `timeout` that `openDb`
+  sets explicitly; WAL is the store's own pragma.
 - **Interfaces are async**, implementations are synchronous better-sqlite3 calls. Only
   the `decide` callback of `decideAndDecrement` is synchronous by contract because it
   runs inside the transaction.

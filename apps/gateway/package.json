@@ -30,7 +30,7 @@
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
-    "better-sqlite3": "12.11.1",
+    "better-sqlite3": "13.0.3",
     "geist": "^1.8.1",
     "libsodium-wrappers-sumo": "^0.8.4",
     "next": "16.4.2",

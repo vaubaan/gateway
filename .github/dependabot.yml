@@ -62,7 +62,7 @@ updates:
     commit-message:
       prefix: chore(deps)
     ignore:
-      # The Node major is the ABI of the prebuilt native addons: a decision, not a bump.
+      # The Node major is the runtime of the image: a decision, not a bump.
       - dependency-name: node
         update-types: [version-update:semver-major]
 
