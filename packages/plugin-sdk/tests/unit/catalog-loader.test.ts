@@ -564,6 +564,16 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     expect(err!.source).toBe('broken.yaml');
     expect(err!.issues[0]).toMatch(/^YAML syntax:/);
   });
+
+  test.each([
+    ['a JS function', 'provider: !!js/function "function () { return 1 }"'],
+    ['a JS regexp', 'provider: !!js/regexp /x/'],
+    ['a custom local tag', 'provider: !acme vercel'],
+    ['a YAML 1.1 binary', 'provider: !!binary AAAA'],
+    ['a complex mapping key', '? [provider]\n: vercel'],
+  ])('%s is refused as a YAML syntax error, never constructed', (_label, text) => {
+    expect(issuesOf(() => parseCatalogYaml(text))[0]).toMatch(/^YAML syntax:/);
+  });
 });
 
 describe('isCompleteVector', () => {

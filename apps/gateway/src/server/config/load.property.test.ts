@@ -8,7 +8,7 @@
  * Seeded and replayable (`propertyRuns`, FC_SEED / FC_RUNS).
  */
 import fc from 'fast-check';
-import { dump } from 'js-yaml';
+import { stringify } from 'yaml';
 import { describe, expect, it } from 'vitest';
 
 import { propertyRuns } from '@vaubaan/plugin-sdk/testing';
@@ -74,7 +74,7 @@ const tree = fc.letrec((tie) => ({
 const yamlText = fc.oneof(
   tree.map((value) => {
     try {
-      return dump(value);
+      return stringify(value);
     } catch {
       return '';
     }
