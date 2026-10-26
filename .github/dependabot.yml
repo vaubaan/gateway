@@ -1,15 +1,18 @@
-# Version updates, proposed as pull requests once a week (docs/workflow/coding-workflow.md,
-# "Dependency updates"). Dependabot reads this file from the default branch only:
-# it takes effect when `v5` is cut over to `main`.
+# Version updates, proposed as pull requests (docs/workflow/coding-workflow.md,
+# "Dependency updates"). Dependabot reads this file from the default branch only.
+#
+# Every pull request costs a CI run in billed minutes (ADR
+# ci-billed-minutes-budget), so the updates come in as few pull requests as
+# possible: npm once a week, every minor and patch together in one pull request
+# and every major together in another, a major only once it is a month old; the
+# base image, Caddy and the actions once a month.
 #
 # Cooldown: a version is proposed only once it has been public for some days —
 # never one published in the last 72 hours. A malicious release is usually found
 # and pulled within that window. Security updates (an advisory with a fixed
-# version) are not delayed by the cooldown: Dependabot opens them at once, when
-# Dependabot security updates are enabled in the repository settings.
-#
-# Grouped so that a week is a handful of pull requests: minor and patch updates
-# together, per ecosystem; a major stays alone, it is a decision.
+# version) are not delayed by the cooldown nor by the schedule: Dependabot opens
+# them at once, when Dependabot security updates are enabled in the repository
+# settings; the dependency audit of every CI run fails on them meanwhile.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -21,10 +24,10 @@ updates:
       timezone: Europe/Paris
     cooldown:
       default-days: 7
-      semver-major-days: 14
+      semver-major-days: 30
       semver-minor-days: 7
       semver-patch-days: 4
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
     commit-message:
       prefix: chore(deps)
     ignore:
@@ -35,12 +38,14 @@ updates:
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]
     groups:
-      npm-production:
-        dependency-type: production
+      # One pull request for every minor and patch, production and development.
+      npm:
+        patterns: ['*']
         update-types: [minor, patch]
-      npm-development:
-        dependency-type: development
-        update-types: [minor, patch]
+      # One pull request for every major: still a decision each, read together.
+      npm-major:
+        patterns: ['*']
+        update-types: [major]
 
   # The base image of deploy/docker/Dockerfile (node, pinned by version and
   # digest). A new version also needs the documentation that quotes it: the
@@ -49,8 +54,7 @@ updates:
   - package-ecosystem: docker
     directory: /deploy/docker
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: '06:00'
       timezone: Europe/Paris
     cooldown:
@@ -66,8 +70,7 @@ updates:
   - package-ecosystem: docker-compose
     directory: /deploy
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: '06:00'
       timezone: Europe/Paris
     cooldown:
@@ -80,8 +83,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: '06:00'
       timezone: Europe/Paris
     cooldown:

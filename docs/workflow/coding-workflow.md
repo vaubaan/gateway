@@ -104,7 +104,7 @@ type-check` at the root fans out to all of them.
 
 | Script                             | What it does                                                                                            |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `npm run ci`                       | type-check, lint, format:check, build, test — the gate of CI's `check`, `lint` and `test` jobs          |
+| `npm run ci`                       | type-check, lint, format:check, build, test — the code steps of CI's `audit` job                        |
 | `npm run type-check`               | `tsc --noEmit` in every workspace, in parallel, incremental (`scripts/type-check.mjs`)                  |
 | `npm run lint` / `lint:fix`        | ESLint over the repository                                                                              |
 | `npm run format` / `format:check`  | Prettier write / check                                                                                  |
@@ -136,59 +136,67 @@ configuration lives in the root `package.json`:
 - `*.{md,json,yaml,yml,css,html}` → `prettier --check`.
 
 It takes seconds. Type-check, tests and the production build are **not**
-run by the hook; they run in CI on every push and pull request, and
-`npm run ci` reproduces the full gate by hand. Emergency bypass (do not
-abuse): `git commit --no-verify`.
+run by the hook; `npm run ci` reproduces the code steps of CI by hand, and a
+pull request runs them once it is ready for review. A change the browser can
+show also runs `npm run test:e2e:v5` locally before its pull request, or
+carries the label `e2e` ([CI](#ci-githubworkflowsciyml)). Emergency bypass
+(do not abuse): `git commit --no-verify`.
 
 ## CI (`.github/workflows/ci.yml`)
 
-Triggers: push and pull request to `main` and `v5`, `workflow_dispatch`,
-and `workflow_call` — the release pipeline calls this file as its gates
-([Release](#the-release-pipeline-githubworkflowsreleaseyml)). One concurrency
-group per workflow and ref with `cancel-in-progress` (`github.workflow` is
-the caller's name in a called run, so a release and the CI of the same ref
-never cancel each other); `permissions: contents: read`. Linux runners,
-Node 26 (the runtime of the image). Every job that needs the dependencies goes through
-`.github/actions/setup`: `node_modules` is cached by the hash of
-`package-lock.json`; on a miss, `npm ci --no-audit --no-fund` installs
-exactly the lockfile, or fails. The jobs run in parallel: a run lasts as long
-as its longest job.
-Every action is pinned by commit, as
+**Billed minutes are the budget of this file** (ADR
+[ci-billed-minutes-budget](../decisions/ci-billed-minutes-budget.md)). The
+repository is private on a free plan: 2,000 hosted-runner minutes a month,
+and GitHub bills every job rounded up to the next minute. So the code checks
+run as **one job, in series**, instead of ten parallel jobs of a few seconds
+each; and the expensive runs happen when they buy something.
+
+| Event                                    | What runs                                                                |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| pull request to `main`/`v5`, ready       | `audit`: every gate but the browser (about eight billed minutes)         |
+| pull request, draft                      | nothing: a draft is work in progress; "Ready for review" starts the run  |
+| label `e2e` put on a pull request        | `e2e` alone (the browser tests); then on every later push too            |
+| push to `main` or `v5`                   | nothing: a squash merge of an up-to-date pull request is what it checked |
+| weekly (`schedule`, Monday 05:23 UTC)    | everything: `audit`, `e2e`, `docker` with the image scan                 |
+| release (`workflow_call` by release.yml) | `audit` and `e2e` (the image is built and scanned by `release.yml`)      |
+| manual run (`workflow_dispatch`)         | everything                                                               |
+
+One concurrency group per workflow and ref with `cancel-in-progress`
+(`github.workflow` is the caller's name in a called run, so a release and the
+CI of the same ref never cancel each other; a run started by the `e2e` label
+has a group of its own, so it does not cancel the run of the last push);
+`permissions: contents: read`. Linux runners, Node 26 (the runtime of the
+image). Every step that needs the dependencies goes through
+`.github/actions/setup`: `node_modules` is cached by the exact Node version
+and the hash of `package-lock.json`; on a miss, `npm ci --no-audit --no-fund`
+installs exactly the lockfile, or fails. Every action is pinned by commit, as
 in `release.yml`, with the release it is in a comment: a tag can be moved, a
 commit cannot.
 
 ```yaml
 jobs:
-  scope: # scripts/ci-scope.sh: code=false when only docs/** or *.md changed; surface=true when a page, a component, a style, a browser test or a plugin changed
-  check: # if code
-    - npm audit signatures # registry signatures and provenance of what is installed
-    - npm run type-check # every workspace in parallel, tsc incremental (build info cached)
-    - npm run format:check # Prettier cache restored
-    - npm run build --workspace @vaubaan/website # VAUBAAN_BUILD_TYPECHECKED=1
-  lint: # if code
-    - npm run generate --workspace @vaubaan/website # the .source/ collections its types need
-    - npm run lint # pull request: ESLint cache restored; push: every file
-  test: # if code; three shards
-    - npx vitest run --project shared --no-isolate --shard=<n>/3
-    - npx vitest run --project isolated # last shard only
-  docs: # if not code
-    - npm run format:check
-    - npx vitest run <every test file naming docs/ or a .md file>
-  audit: # no install; timeout 5 min
+  audit: # not on a draft, not on a run started by a label; in series, cheapest first; timeout 30 min
+    - scripts/ci-scope.sh # code=false when only docs/** or *.md changed; surface=true when a page, a component, a style, a browser test or a plugin changed
+    - notice "Browser tests not run" # a pull request with surface=true and without the label e2e
     - node scripts/audit-gate.mjs # npm audit --omit=dev against .github/audit-allowlist.json
     - node scripts/lockfile-gate.mjs # npmjs registry only, https, sha512, the package named
     - actionlint # the workflows (pinned by checksum; shellcheck on every run:)
-  secrets: # full clone; timeout 5 min
-    - scripts/secret-scan.sh # gitleaks over the whole history
-  sast: # timeout 10 min
-    - checkout semgrep/semgrep-rules at a pinned commit
-    - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh
-  e2e: # if code, and on a pull request only if surface (push to main/v5, release gates: always); timeout 20 min
+    - scripts/secret-scan.sh # gitleaks over the whole history (full clone)
+    - .github/actions/setup, npm audit signatures # registry signatures and provenance of what is installed
+    - npm run type-check # if code; tsc incremental (build info cached)
+    - npm run format:check # Prettier cache restored
+    - npm run build --workspace @vaubaan/website # if code; VAUBAAN_BUILD_TYPECHECKED=1
+    - npm run lint # if code; pull request: ESLint cache restored; otherwise every file
+    - npx vitest run --project shared --no-isolate # if code
+    - npx vitest run --project isolated # if code
+    - npx vitest run <every test file naming docs/ or a .md file> # if not code
+    - docker run --network none semgrep/semgrep@sha256:… scripts/sast.sh # semgrep-rules at a pinned commit
+  e2e: # after audit; weekly, manual, release; on a pull request only with the label e2e; timeout 20 min
     - npx playwright install chromium # browser cached by version; the runner has Chrome's libraries
     - npm run test:e2e:v5 # next build (no tsc pass), then Playwright on the ephemeral instance
-    - npx vitest run … standalone-* demo/ # the suites that need the build (skipped in `test`)
+    - npx vitest run … standalone-* demo/ # the suites that need the build
     - on failure: upload test-results/v5 (traces, screenshots) for 7 days
-  docker: # schedule and manual runs of ci.yml only (each release builds its own image)
+  docker: # weekly and manual runs of ci.yml only (each release builds its own image)
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
       GitHub Actions layer cache; scripts/stamp-commit.sh first writes the
       checked-out commit into apps/gateway/build-commit.txt, no build argument)
@@ -201,38 +209,37 @@ checked (`*.tsbuildinfo`, `.cache/prettier`, `.cache/eslint`; gitignored)
 and check again only what changed, by content. A cache holds results, never
 a verdict on a changed file. The one blind spot is ESLint's: a file whose
 content did not change is not linted again when a type it imports changed,
-so a push to `main` or `v5` lints every file. `next build` skips its own
-tsc pass when `VAUBAAN_BUILD_TYPECHECKED=1` (`npm run ci`, CI); the image
-build type-checks as before.
+so only a pull request restores the ESLint cache; the weekly run, a manual
+run and a release lint every file. With no CI run on `main` any more, a pull
+request falls back on the caches the weekly run leaves on the default branch.
+`next build` skips its own tsc pass when `VAUBAAN_BUILD_TYPECHECKED=1`
+(`npm run ci`, CI); the image build type-checks as before.
 
-**What a pull request waits for.** `check`, `lint`, `test` and the
-security jobs: about two minutes. The browser tests (`e2e`, a production
-build and the scenarios in series, about four minutes) run on a pull request
-only when `scope` finds a change that can alter what the browser shows
-(`surface=true`: `apps/gateway/src/app/**`, `src/components/**`,
-`src/styles/**`, `apps/gateway/tests/e2e/**`, or any `plugins/**` file, since
-the reference and the mission form are drawn from the plugins' catalogs,
-presets and tools). A change confined to the server, the packages or the
-scripts does not wait for them. They run on every push to `main`, whatever
-changed, and in the release gates. The image (`docker`, about five minutes)
-is built by the release pipeline for each architecture, and weekly by this
-workflow for the vulnerability scan. A browser regression in a server-only
-change is therefore seen on `main`, never in a release; one in a page or a
-plugin is seen on the pull request (on 2026-10-18 two plugin and form
-changes merged green and left `main` red for a day, which is why).
+**What a pull request waits for.** `audit`: about six minutes, eight billed
+— the same gate as `npm run ci` plus the supply-chain, secret and static
+analysis checks. The browser tests (a production build and the scenarios in
+series, about five billed minutes) run on a pull request only when it carries
+the label **`e2e`**. Put it on a change that can alter what the browser
+shows: `apps/gateway/src/app/**`, `src/components/**`, `src/styles/**`,
+`apps/gateway/tests/e2e/**`, or any `plugins/**` file, since the reference
+and the mission form are drawn from the plugins' catalogs, presets and tools.
+`audit` says so in a notice when such a pull request lacks the label. Without
+it, a browser regression is found by `npm run test:e2e:v5` run locally (the
+local gate of such a change, [Local gate](#local-gate)), by the weekly run on
+`main`, or at the latest by the release gates — never in a release.
 
-**Documentation only.** A push or pull request that changes only `docs/**`
-or Markdown files runs `scope`, `docs` and the security jobs (`audit`,
-`secrets`, `sast`): the tests that read the documentation — the structural
-index against the spec, the key table of the configuration handbook — still
-run.
+**Documentation only.** A pull request that changes only `docs/**` or
+Markdown files runs `audit` with the documentation tests instead of the code
+steps: format, the tests that read the documentation (the structural index
+against the spec, the key table of the configuration handbook), and the
+supply-chain, secret and static analysis checks.
 
-Weekly (Monday 05:23 UTC, `schedule`), the same file runs its security jobs
-only — `audit`, `secrets`, `sast` and `docker` with its scan; `check`,
-`lint`, `test`, `docs` and `e2e` are skipped — so a new advisory or a new rule finds what an unchanged
-tree already ships. GitHub runs a schedule from the default branch only:
-it starts at the cutover. Every other branch is scanned for secrets on each
-push by `.github/workflows/secrets.yml`.
+**Weekly** (Monday 05:23 UTC), the whole file runs on the default branch:
+`audit` over every file, `e2e`, and `docker` with its scan, so the browser
+tests and the image see what was merged during the week, and a new advisory
+or a new rule finds what an unchanged tree already ships. Every work branch
+is also scanned for secrets on each push by `.github/workflows/secrets.yml`
+(one billed minute).
 
 The `docker` job builds the single gateway image and runs the container
 smoke test described in [`docs/tests/e2e-tests.md`](../tests/e2e-tests.md)
@@ -301,7 +308,7 @@ The `e2e` job runs the browser tests of
 ephemeral instance: the built app on the real composition root with the
 `:memory:` store, a simulated identity provider and a mocked provider. It
 needs no secret and reaches no network besides the Chromium download. It is
-not part of `npm run ci`, which stays the `check` job's gate; run it locally
+not part of `npm run ci`, which stays the code steps of the `audit` job; run it locally
 with `npm run test:e2e:v5` (after `npx playwright install chromium` once).
 The cutover acceptance scenario itself is manual and is never run by CI
 ([`docs/tests/e2e-tests.md`](../tests/e2e-tests.md)).
@@ -316,12 +323,12 @@ a scan. Each check runs locally with the same script as in CI.
 
 | Check                     | Where it runs                                                                                 | Local command                                                              | Fails on                                                                                                             | Reviewed exceptions                                                                       |
 | ------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Secrets (gitleaks)        | `ci.yml` `secrets`; `secrets.yml` on every other branch; weekly                               | `scripts/secret-scan.sh` (full clone)                                      | a secret anywhere in the history                                                                                     | `.gitleaks.toml` (exact value or file), `.gitleaksignore` (fingerprint of a deleted file) |
-| Static analysis (Semgrep) | `ci.yml` `sast`; weekly                                                                       | `scripts/sast.sh <semgrep-rules checkout>`, or the `docker run` of the job | any finding of the pinned community security rules or of `.semgrep/vaubaan.yml`; a custom rule whose test cases fail | inline `// nosemgrep: <rule> -- <why>`; `.semgrepignore` (paths)                          |
+| Secrets (gitleaks)        | `ci.yml` `audit`; `secrets.yml` on every push of a work branch; weekly                        | `scripts/secret-scan.sh` (full clone)                                      | a secret anywhere in the history                                                                                     | `.gitleaks.toml` (exact value or file), `.gitleaksignore` (fingerprint of a deleted file) |
+| Static analysis (Semgrep) | `ci.yml` `audit`; weekly                                                                      | `scripts/sast.sh <semgrep-rules checkout>`, or the `docker run` of the job | any finding of the pinned community security rules or of `.semgrep/vaubaan.yml`; a custom rule whose test cases fail | inline `// nosemgrep: <rule> -- <why>`; `.semgrepignore` (paths)                          |
 | Image (Trivy)             | `ci.yml` `docker`; `release.yml` `image`, per architecture, before anything is pushed; weekly | `npm run docker:build && scripts/image-scan.sh vaubaan-gateway:local`      | HIGH or CRITICAL with a fixed version, Debian or npm layer                                                           | `.trivyignore.yaml` (id, purl, statement, `expired_at`)                                   |
 | Dependency advisories     | `ci.yml` `audit`                                                                              | `node scripts/audit-gate.mjs`                                              | [Dependency audit](#dependency-audit)                                                                                | `.github/audit-allowlist.json`                                                            |
 | Lockfile                  | `ci.yml` `audit`                                                                              | `node scripts/lockfile-gate.mjs`                                           | an entry from another registry, over http, without sha512, or downloading another package                            | none: fix the lockfile                                                                    |
-| Registry signatures       | `ci.yml` `check`                                                                              | `npm audit signatures` (after `npm ci`)                                    | an installed package whose signature or attestation does not verify                                                  | none                                                                                      |
+| Registry signatures       | `ci.yml` `audit`                                                                              | `npm audit signatures` (after `npm ci`)                                    | an installed package whose signature or attestation does not verify                                                  | none                                                                                      |
 | Workflows                 | `ci.yml` `audit`                                                                              | `actionlint`                                                               | a workflow error, a shellcheck finding in a `run:`                                                                   | none                                                                                      |
 | Parsers (fast-check)      | `npm run test`                                                                                | `FC_SEED=<s> FC_RUNS=<n> npx vitest run <file>`                            | a counter-example                                                                                                    | none: fix the parser, keep the counter-example as a case                                  |
 
@@ -359,16 +366,18 @@ architecture.
 
 ### Dependency updates
 
-`.github/dependabot.yml`, read from the default branch (it starts at the
-cutover), proposes once a week, Monday morning: npm updates (minor and patch
-in two groups, production and development; each major alone, except
-`@types/node`, whose major follows the runtime), the Node base
-image of the Dockerfile (new digest of the pinned tag, or a new 26.x; never
-a new Node major: the ABI of the native addons), Caddy in the Compose file,
-and the actions (grouped; commit and version comment move together). Each
-waits a **cooldown** before it is proposed — 4 days for a patch or an
-image, 7 for a minor or an action, 14 for a major — so a version published
-in the last 72 hours is never adopted. Security updates are not delayed by
+`.github/dependabot.yml`, read from the default branch, proposes updates in
+as few pull requests as possible, since each one costs a CI run (ADR
+ci-billed-minutes-budget). Once a week, Monday morning, for npm: every minor
+and patch in one pull request, and every major in another (`@types/node`
+excepted: its major follows the runtime); at most two npm pull requests open
+at a time. Once a month: the Node base image of the Dockerfile (new digest
+of the pinned tag, or a new 26.x; never a new Node major: the ABI of the
+native addons), Caddy in the Compose file, and the actions (grouped; commit
+and version comment move together). Each waits a **cooldown** before it is
+proposed — 4 days for a patch or an image, 7 for a minor or an action, 30
+for a major — so a version published in the last 72 hours is never
+adopted. Security updates are not delayed by
 the cooldown when Dependabot security updates are enabled in the
 repository settings. A base image bump with a new version also needs the
 documentation that quotes it (`base-images-pinned` fails until it does):
@@ -380,7 +389,7 @@ lockfile diff.
 
 The versions and hashes of gitleaks, Trivy and actionlint live in
 `scripts/fetch-tool.sh`; the Semgrep image digest and the
-`semgrep/semgrep-rules` commit in `ci.yml` (`sast`). Dependabot does not
+`semgrep/semgrep-rules` commit in `ci.yml` (job `audit`, step "Static analysis"). Dependabot does not
 see them. Once a quarter, or when a tool announces a fix: take a release
 **at least a week old**, read its checksums file (or the asset digest of
 the GitHub release), change the version and both hashes together, run the
@@ -436,13 +445,20 @@ the rules for contributors are:
   `feat/<id>-<slug>` (or `fix/*`) branches created from the `v5`
   integration branch; the orchestrator merges them into `v5` with a merge
   commit (no fast-forward), and `v5` reaches `main` at milestones. CI runs
-  on pushes and PRs to both.
+  on pull requests to both, not on pushes ([CI](#ci-githubworkflowsciyml)).
 - One feature or fix per pull request. Pull requests into `main` are squash
   merged (`CONTRIBUTING.md`).
 - Commit messages follow Conventional Commits (`feat(scope):`,
   `fix(scope):`, `docs:`, `refactor(repo):`, `chore:`).
-- Before opening a PR: `npm run ci` green locally, the PR template
-  checklist answered, CHANGELOG `Unreleased` updated.
+- Before opening a PR: `npm run ci` green locally (and `npm run test:e2e:v5`
+  for a change the browser can show), the PR template checklist answered,
+  CHANGELOG `Unreleased` updated.
+- **A pull request is opened when it is ready.** Every push to a ready pull
+  request runs CI (about eight billed minutes): work in progress stays on the
+  branch, or in a **draft** pull request, which runs nothing; "Ready for
+  review" starts the run. Push the fixes of one review round together, not
+  one by one. An agent opens its pull request once its local gate is green,
+  and does not push to it again unless something must change.
 
 ## Release
 
@@ -571,7 +587,7 @@ in a comment.
 | Job       | Runs on      | Permissions                                                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | --------- | ------------ | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `plan`    | tag, dry run | `contents: read`                                                                                          | `scripts/release-plan.mjs`: the tag names the version of `package.json`, is the highest release so far, and `CHANGELOG.md` has its dated section; the tagged commit is on `main` (a pre-release: or on `v5`). Outputs the version, the image tags, the release notes, and what this repository can publish — the architectures to build and whether an attestation is signed ([below](#on-a-private-repository)); its summary lists what is left out, if anything.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `scope` (always `code=true` there), `check`, `lint`, `test`, `audit`, `secrets`, `sast`, `e2e`. A release passes what a pull request passes, and the browser tests; the image is built, smoke-tested and scanned by `image` below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `audit` (scope always `code=true` there) and `e2e`. A release passes what a pull request passes, and the browser tests; the image is built, smoke-tested and scanned by `image` below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `image`   | tag, dry run | `contents: read`                                                                                          | One native runner per architecture of the plan (`ubuntu-24.04`, `ubuntu-24.04-arm`; no emulation): builds the image without reading any cache, runs `deploy/docker/smoke.sh` on it with the expected version, commit and architecture, scans it with Trivy (`scripts/image-scan.sh`: a fixed HIGH or CRITICAL fails the release before anything is pushed), writes its SBOM (SPDX, Syft) as a workflow artefact.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `push`    | tag only     | `contents: read`, `packages: write`                                                                       | Per architecture, after `gates` and `image`: pushes the image to GHCR **by digest, without a tag**, from the layers `image` built in this run, with BuildKit's SBOM and provenance (`mode=max`) attached; pulls that digest back and runs the smoke test on it; writes the SBOM of what was pushed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `publish` | tag only     | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | `scripts/release-image-index.sh`: assembles the digests — exactly one per planned architecture, checked — into one image index under `<version>`, with its OCI annotations; signs a build-provenance attestation for its digest (`actions/attest`, stored on GitHub and next to the image) and verifies it at once with `gh attestation verify` as an operator would (repository, signer workflow, tag) — no attestation, or one that does not verify, fails the job; only then points the aliases of a final release (`<major>.<minor>`, `latest`) at that digest. On a private repository the plan has decided there is no attestation: both steps are skipped, a step writes that to the summary, and the aliases move on that decision. A version tag never moves: an existing one is kept when it holds the same images (a re-run), refused otherwise. |
