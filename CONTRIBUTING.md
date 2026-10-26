@@ -20,7 +20,7 @@ Security problems are **not** reported in public issues: see
 
 ## Prerequisites
 
-- **Node.js 20 or later and npm 10 or later** (CI runs Node 22).
+- **Node.js 26 or later and npm 11 or later** (CI and the image run Node 26).
 - **Git.**
 - Nothing else for the everyday work: no database, no cloud account, no
   provider credential. The test suite makes no network call.

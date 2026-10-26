@@ -254,3 +254,35 @@ in the blob. `scripts/gen-master-key.mjs` prints a key.
   but each is a repo-wide change (Turbopack, zod 4) that would couple a
   foundation feature with a migration; they are scheduled as their own
   features with this ADR as their brief.
+
+## Amendment 2026-10-26 — the runtime moves to Node 26
+
+**Context.** The image ran Node 22 (§5) while Dependabot proposed
+`@types/node` 26: types ahead of the runtime let code compile against calls
+Node 22 does not have. Node 26 is the current line, the prebuilt binaries of
+`better-sqlite3` (12.x supports Node 20 to 26), `argon2` and `ssh2` exist for
+its ABI, and Debian bookworm images of it are published for `linux/amd64` and
+`linux/arm64`.
+
+**Decision.**
+
+1. Every stage builds from `node:26.12.1-bookworm-slim`, pinned by version
+   and digest of the multi-architecture index, as §5 says for 22. The
+   rest of §5 (glibc, four stages, build tools only in `deps`, non-root)
+   is unchanged.
+2. The Node major is one decision across the repository and moves in one
+   pull request: the `FROM … AS base` line, `node-version` of the workflows
+   and of `.github/actions/setup`, `engines.node` (`>=26`: CI and the image
+   test nothing older, so nothing older is claimed) and `@types/node` (same
+   major as the runtime). Dependabot does not propose a Node major of the
+   image nor a major of `@types/node`.
+
+**Consequences.** Running from source needs Node 26 and npm 11. An operator
+of the published image upgrades by pulling it; the store, its migrations and
+the configuration do not depend on the Node major. The note of ADR
+embedded-store-sqlite-and-migrations that 12.x "honours `engines.node >=
+20`" stays true of the library; the floor of the project is now 26.
+
+**Rejected.** Pinning `@types/node` to 22 and keeping the runtime: it fixes
+the mismatch but keeps a line that leaves active support first, and only
+defers the same move.

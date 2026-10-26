@@ -6,8 +6,8 @@
   "description": "Vaubaan Gateway v5 — open source, on-prem MCP gateway that gives coding agents risk-budgeted missions instead of cloud credentials",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20",
-    "npm": ">=10"
+    "node": ">=26",
+    "npm": ">=11"
   },
   "workspaces": [
     "apps/*",
@@ -37,7 +37,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@playwright/test": "1.64.1",
-    "@types/node": "20.19.41",
+    "@types/node": "26.6.5",
     "@vaubaan/harness": "^1.4.0",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",

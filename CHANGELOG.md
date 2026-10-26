@@ -73,6 +73,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **Runtime: Node 26.** The image is built on `node:26.12.1-bookworm-slim`
+  (pinned by digest, as before), CI and the release run Node 26, and
+  `engines` asks for Node 26 and npm 11; `@types/node` follows (26.x).
+  The native addons (`better-sqlite3`, `argon2`, `ssh2`'s `cpu-features`)
+  load from their prebuilt binaries for the new ABI. An operator who runs
+  the published image has nothing to do: pull the new tag and restart, the
+  store and the configuration are unchanged. Running from source needs Node 26. ADR docker-image-and-config-format, amendment 2026-10-26.
 - **Gmail connects with an app password.** A person creates an app password
   named "Vaubaan Gateway" in the Google Account of the mailbox (2-Step
   Verification on) and pastes it with the address; the gateway signs in over
