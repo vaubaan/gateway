@@ -9,12 +9,16 @@
  * - `Avatar`, `AvatarStack` — the mark, alone or overlapped.
  * - `KeyHolder` — the mark, the name, and the qualifiers said in words
  *   ("· you · creator", "· machine key").
- * - `ServiceMark` — the icon the service's plugin declares, monochrome on a
- *   neutral fill; two letters on a hue (GitHub → GH) when it declares none
- *   (ADR service-icons-declared-by-the-plugin).
+ * - `ServiceMark` — the icon the service's plugin declares, in its brand
+ *   colour on a neutral fill (a near-black brand takes the ink in the dark
+ *   theme, `darkThemeMarkColor`); two letters on a hue (GitHub → GH) when it
+ *   declares none (ADRs service-icons-declared-by-the-plugin,
+ *   service-marks-in-brand-colour).
  * - `KeyMark` — a masked key in mono with the key icon.
  * - `AgentLabel` — the name an agent gave itself (never verified).
  */
+import type { CSSProperties } from 'react';
+
 import { Icon } from './Icon.tsx';
 import styles from './Avatar.module.css';
 
@@ -137,6 +141,47 @@ export function serviceLetters(name: string): string {
   return (capitals.length >= 2 ? capitals.slice(0, 2) : name.slice(0, 2)).toUpperCase();
 }
 
+/**
+ * Below this relative luminance (sRGB, 0 to 1) a brand colour is close enough
+ * to black to vanish on the dark paper: GitHub's #181717 is 0.006, Fly.io's
+ * #24175B 0.017; Stripe's #635BFF, the darkest one kept, is 0.17.
+ */
+const NEAR_BLACK_LUMINANCE = 0.1;
+
+/**
+ * The mark of a service as the registry hands it out (`ServiceIcon` of the
+ * plugin SDK, spelled here so that a client component bundles no server
+ * package): the `d` of its icon on a 24-unit grid and the brand colour it is
+ * drawn in, `null` when the plugin declares none.
+ */
+export interface ServiceMarkIcon {
+  readonly path: string;
+  readonly color: string | null;
+}
+
+/** sRGB channel (0–255) to linear light, per WCAG 2. */
+function linear(channel: number): number {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+/**
+ * The colour a mark takes in the dark theme: the brand colour itself, or
+ * the ink when the brand is near black (it would vanish on the dark paper).
+ * `#RRGGBB` in, a CSS colour out.
+ */
+export function darkThemeMarkColor(hex: string): string {
+  const match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!match) return hex;
+  const [r, g, b] = match.slice(1).map((pair) => Number.parseInt(pair, 16)) as [
+    number,
+    number,
+    number,
+  ];
+  const luminance = 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+  return luminance < NEAR_BLACK_LUMINANCE ? 'var(--ink)' : hex;
+}
+
 export function ServiceMark({
   name,
   icon = null,
@@ -145,21 +190,30 @@ export function ServiceMark({
   /** The service's display name, from the plugin registry. */
   name: string;
   /**
-   * The `d` of the service's icon (`ProviderPlugin.icon`, a 24-unit grid),
-   * from the registry too; `null` or absent for a plugin that declares none.
+   * The service's mark from the registry (`serviceIconOf`): the `d` of its
+   * icon on a 24-unit grid and the brand colour it is drawn in; `null` or
+   * absent for a plugin that declares no icon.
    */
-  icon?: string | null;
+  icon?: ServiceMarkIcon | null;
   size?: 'sm' | 'lg';
 }) {
   const sizeClass = size === 'lg' ? styles.serviceLg : '';
   if (icon) {
+    // Without a colour the mark keeps the secondary ink: the stylesheet's fallback.
+    const style = icon.color
+      ? ({
+          '--mark-color': icon.color,
+          '--mark-color-dark': darkThemeMarkColor(icon.color),
+        } as CSSProperties)
+      : undefined;
     return (
       <span
         className={[styles.service, styles.serviceIcon, sizeClass].join(' ')}
+        style={style}
         aria-hidden="true"
       >
         <svg viewBox="0 0 24 24" className={styles.serviceGlyph} focusable="false">
-          <path d={icon} fill="currentColor" />
+          <path d={icon.path} fill="currentColor" />
         </svg>
       </span>
     );

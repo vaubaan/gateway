@@ -47,11 +47,13 @@ export {
   ServiceMark,
   KeyMark,
   AgentLabel,
+  darkThemeMarkColor,
   hueOf,
   initialsOf,
   serviceLetters,
   type AvatarSize,
   type HolderKind,
+  type ServiceMarkIcon,
   type StackMember,
 } from './Avatar.tsx';
 export { Mono } from './Mono.tsx';

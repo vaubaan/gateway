@@ -101,6 +101,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `clientRegistration` or `broker: { provider }` (`OAuth2BrokeredSpec`,
   `isBrokeredSpec`, `PluginRegistry.brokerProviders()`).
 
+### Changed
+
+- **Service marks are drawn in their brand colour.** The icon of a service
+  (Accounts, the connect picker, the mission form, Reference) is drawn in the
+  colour its plugin declares (`ProviderPlugin.iconColor`, Simple Icons' hex
+  for the brand) on the same neutral square; a near-black brand (GitHub,
+  Notion, Vercel, Railway, Resend, Miro, Fly.io) takes the ink in the dark
+  theme. Every shipped plugin declares its colour; the released ones gain a
+  patch version.
+  ADR service-marks-in-brand-colour, amending
+  service-icons-declared-by-the-plugin.
+
 ## [2.0.0-alpha.9] - 2026-10-27
 
 ### Changed

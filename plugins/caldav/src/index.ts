@@ -23,7 +23,7 @@ import {
 import { classifyCaldav } from './classify.ts';
 import { caldavDataModel } from './data-model.ts';
 import { createCaldavRuntime, type CaldavRuntimeOptions } from './execute.ts';
-import { CALDAV_ICON } from './icon.ts';
+import { CALDAV_ICON, CALDAV_ICON_COLOR } from './icon.ts';
 import { CALDAV_PLUGIN_ID, CALDAV_PLUGIN_VERSION } from './identity.ts';
 import { caldavToolTitles } from './tool-titles.ts';
 import { caldavTools } from './tools.ts';
@@ -38,6 +38,7 @@ export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): Provider
     id: CALDAV_PLUGIN_ID,
     displayName: 'CalDAV Calendar',
     icon: CALDAV_ICON,
+    iconColor: CALDAV_ICON_COLOR,
     version: CALDAV_PLUGIN_VERSION,
     description:
       'Calendars on any CalDAV server (iCloud, Fastmail, Nextcloud…), connected with an app password: list calendars and events, read, create, change and delete events, under risks zoned by who the attendees are. Not for Google Calendar.',

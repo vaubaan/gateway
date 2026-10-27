@@ -16,7 +16,7 @@ import { notionCredential } from './credential.ts';
 import { notionDataModel } from './data-model.ts';
 import { discoverNotionResources } from './discovery.ts';
 import { executeNotion } from './execute.ts';
-import { NOTION_ICON } from './icon.ts';
+import { NOTION_ICON, NOTION_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { notionToolTitles, notionTools } from './tools.ts';
 
@@ -27,8 +27,9 @@ export const notionPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Notion',
   icon: NOTION_ICON,
+  iconColor: NOTION_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.1',
+  version: '0.1.2',
   description:
     'Read and edit the pages, page content, databases and comments of the Notion pages shared with an internal connection.',
   summary:

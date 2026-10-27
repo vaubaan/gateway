@@ -143,7 +143,7 @@ describe('gmail plugin — SDK kit', () => {
   });
 
   test('is at 1.0, no longer says experimental, and exposes its twelve tools', () => {
-    expect(gmailPlugin.version).toBe('1.0.0');
+    expect(gmailPlugin.version).toMatch(/^1\.0\.\d+$/);
     expect(gmailPlugin.description).not.toMatch(/experimental/i);
     expect(gmailPlugin.summary).not.toMatch(/experimental/i);
     expect(gmailPlugin.description).toMatch(/never sends/i);

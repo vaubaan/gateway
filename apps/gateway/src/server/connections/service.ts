@@ -36,8 +36,10 @@ import {
   type PluginRegistry,
   type ProviderPlugin,
   type Resource,
+  type ServiceIcon,
   type SshKeyCredentialSpec,
   type TokenPermissionAccess,
+  serviceIconOf,
 } from '@vaubaan/plugin-sdk';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
@@ -152,8 +154,8 @@ export interface ConnectableProvider {
   readonly id: string;
   readonly displayName: string;
   readonly description: string | null;
-  /** The path data of the service's monochrome mark; `null` when the plugin declares none. */
-  readonly icon: string | null;
+  /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon. */
+  readonly icon: ServiceIcon | null;
   readonly kind: CredentialKind;
   /**
    * The service signs the person in itself (`oauth2`): the connect page sends
@@ -233,8 +235,8 @@ export interface ProviderGrantView {
 export interface ConnectionView {
   readonly connection: ConnectionRecord;
   readonly providerLabel: string;
-  /** The service's mark (`ProviderPlugin.icon`); `null` when the plugin declares none or is gone. */
-  readonly providerIcon: string | null;
+  /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
+  readonly providerIcon: ServiceIcon | null;
   readonly providerGrant: ProviderGrantView;
   /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
   readonly credentialKind: StoredCredentialKind | null;
@@ -439,7 +441,7 @@ export class ConnectionService {
       id: plugin.id,
       displayName: plugin.displayName,
       description: plugin.description ?? null,
-      icon: plugin.icon ?? null,
+      icon: serviceIconOf(plugin),
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
       viaBroker: spec.kind === 'oauth2' && isBrokeredSpec(spec),
@@ -1643,7 +1645,7 @@ export class ConnectionService {
     return {
       connection,
       providerLabel: registered?.plugin.displayName ?? connection.provider,
-      providerIcon: registered?.plugin.icon ?? null,
+      providerIcon: registered ? serviceIconOf(registered.plugin) : null,
       providerGrant: this.providerGrantOf(connection).grant,
       credentialKind: kind,
       wayRetired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,

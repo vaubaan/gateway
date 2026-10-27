@@ -18,7 +18,7 @@ import { classifyResend } from './classify.ts';
 import { createdResendResources } from './created.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
-import { RESEND_ICON } from './icon.ts';
+import { RESEND_ICON, RESEND_ICON_COLOR } from './icon.ts';
 import { resendToolTitles } from './tool-titles.ts';
 import { resendTools } from './tools.ts';
 
@@ -30,7 +30,8 @@ export const resendPlugin = definePlugin({
   id: 'resend',
   displayName: 'Resend',
   icon: RESEND_ICON,
-  version: '0.5.0',
+  iconColor: RESEND_ICON_COLOR,
+  version: '0.5.1',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',

@@ -6,6 +6,7 @@
  * so that both themes are compared on one screen whatever the theme of the
  * page. `children` receives the theme so that ids stay unique.
  */
+import type { ServiceMarkIcon } from '@/components/ui';
 import type { ChosenTheme } from '@/lib/theme';
 
 import styles from './design.module.css';
@@ -74,8 +75,8 @@ export function Pile({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * The marks of the shipped services, by provider id (`ProviderPlugin.icon`),
+ * The marks of the shipped services, by provider id (path and brand colour),
  * read from the registry by the server page: the gallery shows real icons
  * beside the lettered fallback, without a list of its own.
  */
-export type GalleryIcons = Readonly<Record<string, string>>;
+export type GalleryIcons = Readonly<Record<string, ServiceMarkIcon>>;

@@ -356,7 +356,7 @@ async function ownedRow(root: GatewayRoot, actor: Actor, view: ConnectionView): 
 interface SharedRow {
   readonly connection: ReceivedShare['connection'];
   readonly providerLabel: string;
-  readonly providerIcon: string | null;
+  readonly providerIcon: ReceivedShare['providerIcon'];
   readonly givenBy: string;
   /** Through which teams the access reaches the person; empty when it was given to them. */
   readonly through: readonly string[];

@@ -4,12 +4,17 @@ status: accepted
 date: 2026-10-23
 amends:
   - plugin-contract-and-credential-spec
+amended-by:
+  - service-marks-in-brand-colour
 ---
 
 # A service is shown by the brand icon its plugin declares, monochrome
 
 > Product owner's decision of 2026-10-23 ("replace the cloud service icons by
-> the real icons, but monochrome"). Spec:
+> the real icons, but monochrome"). **Amended on 2026-10-27** by
+> [service-marks-in-brand-colour](./service-marks-in-brand-colour.md): the
+> icon is now drawn in the brand colour the plugin declares; point 3 below
+> and the rejected alternative "Coloured brand icons" no longer hold. Spec:
 > [style-guide §3.1, §5](../spec/style-guide.md). Handbooks:
 > [plugin-sdk, "`ProviderPlugin`"](../handbook/plugin-sdk.md#providerplugin-plugints),
 > [web-app, "Marks"](../handbook/web-app.md).

@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-ssh",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for bash over SSH — pinned host key, read whitelist, writes priced by command class",

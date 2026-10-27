@@ -28,7 +28,7 @@
  *     (spec §2.3; `handlers.ts` holds the confirmation).
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
-import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import { type PluginRegistry, type ServiceIcon, serviceIconOf } from '@vaubaan/plugin-sdk';
 import type { RiskId } from '@vaubaan/shared';
 
 import {
@@ -157,8 +157,8 @@ export interface ReceivedShare {
   readonly share: ShareRecord;
   readonly connection: Pick<ConnectionRecord, 'id' | 'displayName' | 'provider' | 'status'>;
   readonly providerLabel: string;
-  /** The service's mark (`ProviderPlugin.icon`); `null` when the plugin declares none or is gone. */
-  readonly providerIcon: string | null;
+  /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
+  readonly providerIcon: ServiceIcon | null;
   readonly ownerLabel: string;
   /** How it reaches the user: `you`, or the group it was made to. */
   readonly via: string;
@@ -492,7 +492,7 @@ export class ShareService {
         share,
         connection,
         providerLabel: registered?.plugin.displayName ?? connection.provider,
-        providerIcon: registered?.plugin.icon ?? null,
+        providerIcon: registered ? serviceIconOf(registered.plugin) : null,
         ownerLabel: await principalLabel(this.deps.store, connection.owner),
         via:
           share.target.kind === 'user'

@@ -174,6 +174,9 @@ describe('the styles of the interface', () => {
     '--dialog-top',
     '--dialog-bottom',
     '--stack-label',
+    // ServiceMark sets the brand colour of one mark, and its dark-theme counterpart.
+    '--mark-color',
+    '--mark-color-dark',
   ]);
 
   it('refers only to tokens that exist', () => {

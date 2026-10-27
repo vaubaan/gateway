@@ -42,6 +42,9 @@ export const PLUGIN_SUMMARY_MAX_LENGTH = 600;
  */
 export const SVG_PATH_DATA_PATTERN = /^[Mm][0-9A-Za-z.,\s+-]*$/;
 
+/** `ProviderPlugin.iconColor` : one sRGB colour as six hex digits, `#RRGGBB`, nothing a stylesheet could misread. */
+export const HEX_COLOUR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+
 /** Upper bound of one `ProviderPlugin.toolTitles` entry : a headline, not a description. */
 export const TOOL_TITLE_MAX_LENGTH = 60;
 
@@ -228,6 +231,11 @@ function identityIssues(plugin: ProviderPlugin): string[] {
   if (plugin.icon !== undefined) {
     if (typeof plugin.icon !== 'string' || !SVG_PATH_DATA_PATTERN.test(plugin.icon)) {
       issues.push('icon: expected the path data of one SVG path (`M…`) when present');
+    }
+  }
+  if (plugin.iconColor !== undefined) {
+    if (typeof plugin.iconColor !== 'string' || !HEX_COLOUR_PATTERN.test(plugin.iconColor)) {
+      issues.push('iconColor: expected a colour as `#RRGGBB` when present');
     }
   }
   if (plugin.summary !== undefined) {

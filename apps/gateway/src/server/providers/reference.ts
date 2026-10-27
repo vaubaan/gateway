@@ -10,7 +10,12 @@
  * community validation status.
  */
 import { parseSlice } from '@vaubaan/policy-engine';
-import type { PluginRegistry, RegisteredPlugin, TokenHandout } from '@vaubaan/plugin-sdk';
+import type {
+  PluginRegistry,
+  RegisteredPlugin,
+  ServiceIcon,
+  TokenHandout,
+} from '@vaubaan/plugin-sdk';
 import type {
   CredentialKind,
   DataModel,
@@ -58,8 +63,8 @@ export interface ProviderCard {
   readonly version: string;
   /** One line: what it connects to. */
   readonly description: string | null;
-  /** The path data of the service's monochrome mark (`ProviderPlugin.icon`); `null` when it declares none. */
-  readonly icon: string | null;
+  /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon. */
+  readonly icon: ServiceIcon | null;
   /** The primary way of connecting. */
   readonly credential_kind: CredentialKind;
   readonly counts: ProviderCounts;
@@ -90,7 +95,10 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     name: plugin.displayName,
     version: plugin.version,
     description: plugin.description ?? null,
-    icon: plugin.icon ?? null,
+    // `serviceIconOf` of the SDK, spelled out: this module reaches a client
+    // component (service-view imports a note from it), and a value import of
+    // the SDK would pull the server-only packages behind it into the browser.
+    icon: plugin.icon ? { path: plugin.icon, color: plugin.iconColor ?? null } : null,
     credential_kind: plugin.credential.kind,
     counts: countsOf(registered, risks),
     plane_slugs: plugin.dataModel.planes.map((plane) => plane.slug),

@@ -131,15 +131,25 @@ export interface ProviderPlugin {
   readonly displayName: string;
   /**
    * The brand icon of the service : the `d` of one SVG path on a 24×24 grid,
-   * drawn to be filled with `currentColor`. The web interface shows it
-   * monochrome, in one ink on a neutral fill, beside the service's name
-   * (ADR service-icons-declared-by-the-plugin). Vendor the path in the
+   * drawn to be filled with `currentColor`. The web interface shows it in
+   * the brand colour of `iconColor` on a neutral fill, beside the service's
+   * name (ADRs service-icons-declared-by-the-plugin,
+   * service-marks-in-brand-colour). Vendor the path in the
    * plugin (Simple Icons, CC0 1.0, is the usual source ; say so in a
    * comment) ; never a runtime dependency on an icon package. Optional in
    * the contract — a plugin without one is shown by two letters of its name ;
    * every plugin shipped with the gateway declares one (structural test).
    */
   readonly icon?: string;
+  /**
+   * The colour the icon is drawn in, `#RRGGBB` : the brand's own (Simple
+   * Icons publishes one per icon), or one chosen for a service without a
+   * brand. The interface draws a near-black colour in the ink of the dark
+   * theme, so the mark stays visible there. Optional ; without it the icon is
+   * drawn in the secondary ink. Every shipped plugin declares one (structural
+   * test).
+   */
+  readonly iconColor?: string;
   /** Semver of the plugin. Reported by telemetry ; bump on every published change. */
   readonly version: string;
   /** One-line description for the providers page. */

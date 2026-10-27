@@ -122,10 +122,22 @@
   border-radius: 8px;
   font-size: var(--text-sm);
 }
-/* The brand icon: one ink on the neutral fill, never a hue, never a status. */
+/*
+ * The brand icon on the neutral fill, in the brand colour the plugin declares
+ * (the secondary ink without one); never a hue, never a status. In the dark
+ * theme a near-black brand takes the ink (ServiceMark sets both variables).
+ */
 .serviceIcon {
   background: var(--fill);
-  color: var(--ink-2);
+  color: var(--mark-color, var(--ink-2));
+}
+[data-theme='dark'] .serviceIcon {
+  color: var(--mark-color-dark, var(--ink-2));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .serviceIcon {
+    color: var(--mark-color-dark, var(--ink-2));
+  }
 }
 .serviceGlyph {
   display: block;

@@ -58,7 +58,7 @@ import {
   userLabels,
   type GmailRuntimeOptions,
 } from './execute.ts';
-import { GMAIL_ICON } from './icon.ts';
+import { GMAIL_ICON, GMAIL_ICON_COLOR } from './icon.ts';
 import {
   GMAIL_CLASSIFIED_TOOLS,
   GMAIL_TOOL_PREFIX,
@@ -79,7 +79,7 @@ import {
 // filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
 export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-export const GMAIL_PLUGIN_VERSION = '1.0.0';
+export const GMAIL_PLUGIN_VERSION = '1.0.1';
 
 export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPlugin {
   const runtime = createGmailRuntime(options);
@@ -87,6 +87,7 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
     id: GMAIL_PLUGIN_ID,
     displayName: 'Gmail',
     icon: GMAIL_ICON,
+    iconColor: GMAIL_ICON_COLOR,
     version: GMAIL_PLUGIN_VERSION,
     description:
       'Search, read (HTML and attachments included), draft, label and create labels in a Gmail mailbox over IMAP, with an app password, under risks zoned by who the sender or the recipient is. Never sends mail.',

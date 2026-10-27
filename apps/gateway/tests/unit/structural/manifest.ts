@@ -764,19 +764,24 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'shipped-plugin-icons',
     statement:
-      'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid, drawn monochrome): no service of the repository falls back to two letters, and the interface keeps no provider → icon list of its own.',
-    source: 'ADR service-icons-declared-by-the-plugin; style-guide §5 "Service mark"',
+      'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid) and the brand colour it is drawn in: no service of the repository falls back to two letters or to the plain ink, and the interface keeps no provider → icon or colour list of its own.',
+    source:
+      'ADRs service-icons-declared-by-the-plugin, service-marks-in-brand-colour; style-guide §5 "Service mark"',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-icons.test.ts`,
         tests: [
           'declares an icon: the path data of one SVG path',
+          'declares the brand colour it is drawn in: one #RRGGBB',
           'draws it on the 24-unit grid: no coordinate far outside it',
         ],
       },
       {
         file: 'packages/plugin-sdk/tests/unit/define-plugin.test.ts',
-        tests: ['icon is optional, and the path data of one SVG path when present'],
+        tests: [
+          'icon is optional, and the path data of one SVG path when present',
+          'iconColor is optional, and one #RRGGBB colour when present',
+        ],
       },
     ],
   },

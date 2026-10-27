@@ -18,7 +18,7 @@ import { classifyGoogleCalendar } from './classify.ts';
 import { googleCalendarCredential } from './credential.ts';
 import { googleCalendarDataModel } from './data-model.ts';
 import { discoverGoogleCalendarResources, executeGoogleCalendar } from './execute.ts';
-import { GOOGLE_CALENDAR_ICON } from './icon.ts';
+import { GOOGLE_CALENDAR_ICON, GOOGLE_CALENDAR_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { googleCalendarToolTitles } from './tool-titles.ts';
 import { googleCalendarTools } from './tools.ts';
@@ -31,6 +31,7 @@ export const googleCalendarPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Google Calendar',
   icon: GOOGLE_CALENDAR_ICON,
+  iconColor: GOOGLE_CALENDAR_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.1.0',
   description:
