@@ -1,89 +1,43 @@
 ---
-title: MCP-only en MVP — pas de CLI/SDK proxy
+title: MCP only — no CLI or SDK proxy
 status: accepted
 date: 2026-05-22
 ---
 
-> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+# MCP only — no CLI or SDK proxy
 
-# MCP-only en MVP — pas de CLI/SDK proxy
+## Context
 
-## Contexte
+A coding agent reaches a service through MCP tool calls, through a CLI in its terminal, or through
+an SDK or HTTPS API in its own code. The gateway can only govern the calls that pass through it,
+and anything it installs on the agent's machine is friction and attack surface.
 
-Un coding agent moderne (Claude Code, Cursor, Continue) appelle des outils
-de plusieurs manières :
+## Decision
 
-- Via **MCP** (Model Context Protocol — JSON-RPC sur HTTP/SSE/stdio) :
-  l'agent envoie `tools/call name=github__create_pr ...` à un serveur MCP.
-- Via **CLI** directe : l'agent exécute `gh pr create ...` dans le terminal.
-- Via **SDK / API HTTPS** : l'agent importe `@octokit/rest` et appelle
-  `octokit.pulls.create(...)`.
+The gateway intercepts MCP calls only (its git remote is a gateway door, not an interception). An
+agent running a CLI or an SDK with its own credentials bypasses it; the protection is that the
+agent never holds a provider credential.
 
-Le MCP Proxy ne peut intercepter que le canal **MCP**. Les deux autres
-canaux contournent le proxy.
+## Consequences
 
-## Décision
+- Nothing to install on the client but an MCP entry and a token; any MCP client works.
+- A new way for agents to reach a service is a new gateway door (like the git remote), never a
+  wrapper on the agent's machine.
+- The product claims a policy gateway for agent tool calls, not a kill switch for every agent
+  action.
 
-**MVP = MCP uniquement.** Le gateway `/mcp` intercepte exclusivement les
-calls JSON-RPC. Si un agent exécute `gh pr create` ou importe Octokit
-dans son code, **il bypass le proxy**.
+## Rejected alternatives
 
-Pour le MVP, on assume que les coding agents _modernes_ font la majorité
-de leur travail via MCP (c'est la direction de l'industrie : Anthropic,
-OpenAI, Cursor poussent MCP comme protocole unifié). Le scope MVP est
-donc utile sans être exhaustif.
+### A CLI proxy
 
-Hors-scope MVP :
+PATH shims and wrappers per CLI leave an immense bypass surface (`/usr/bin/git`, scripts) and heavy
+install friction.
 
-- Aucun proxy CLI (interception via PATH override / wrapper scripts).
-- Aucun proxy SDK (MITM TLS via CA root custom à installer sur le client).
-- Aucun runtime sandbox (eBPF, AppArmor) sur le client agent.
+### TLS man-in-the-middle
 
-v1.5+ pourra envisager un MITM TLS proxy avec custom CA pour couvrir CLI
+A root CA on the client affects every HTTPS call of the machine: a security red flag and an
+onboarding blocker.
 
-- SDK. ADR séparé à drafter à ce moment-là.
+### A runtime sandbox on the client (eBPF, nsjail)
 
-## Conséquences
-
-**Positives :**
-
-- **Surface MVP minimale.** Un seul protocole à modéliser, une seule
-  interception. Le gateway est un endpoint HTTP, pas un binaire CLI à
-  distribuer.
-- **Pas de friction d'install client.** L'agent configure son `mcp.json`
-  avec `https://vaubaan.com/mcp` + Bearer token. Pas de CA root à installer,
-  pas de shim CLI à mettre dans le PATH.
-- **Compatible le-jour-1 avec Claude Code, Cursor, Continue, n'importe
-  quel client MCP.**
-
-**Négatives :**
-
-- **Surface de bypass connue.** Si l'agent ouvre un terminal et tape
-  `gh pr merge`, ça contourne le proxy. Mitigations partielles :
-  - Documentation explicite ("Vaubaan filtre les MCP calls ; pour exiger
-    le filtrage, configure ton agent pour utiliser MCP uniquement").
-  - Token GitHub côté agent ? **Non** — l'agent n'a justement pas de PAT
-    GitHub propre dans le modèle v4. Si l'agent veut utiliser `gh`, il
-    doit s'authentifier via _son_ compte humain (ce que Claude Code fait
-    par défaut) — pas via Vaubaan. Le proxy n'a juridiction que sur les
-    calls qui _passent par lui_.
-  - Audit côté provider (GitHub audit log) : on voit le bot Vaubaan _et_
-    on voit les calls humains. Un humain qui delete un repo via `gh`
-    apparaît côté GitHub.
-- **Le marketing doit être honnête.** "Policy-enforcing gateway for MCP
-  tool calls" — pas "kill switch for all agent actions". Si l'org veut
-  vraiment ceinture+bretelles, c'est v1.5 (MITM) ou un sandbox agent
-  séparé.
-
-## Alternatives rejetées
-
-- **Inclure le proxy CLI dès le MVP.** Rejeté : friction d'install client
-  (PATH manipulation, alias bashrc), surface de contournement immense
-  (`/usr/bin/git`, scripts shell custom, npm scripts), maintenance d'un
-  wrapper par CLI provider. Coût ≫ valeur pour un MVP.
-- **MITM TLS dès le MVP.** Rejeté : installer une CA root client est un
-  red flag sécu majeur (impacte _tous_ les calls HTTPS du laptop, pas
-  seulement les calls cibles), friction d'onboarding insurmontable, et
-  on perd l'argument simplicité du proxy MCP.
-- **Sandbox runtime client (eBPF / nsjail).** Rejeté : OS-specific, friction
-  d'install, scope énorme. Hors charte produit MVP.
+OS-specific, heavy to install, outside the product's scope.

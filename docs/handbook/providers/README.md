@@ -1,137 +1,80 @@
 ---
 title: Provider plugin handbooks — index
-status: current
-date: 2026-10-13
-last_synced: 2026-10-27
 tracks:
   - plugins/*/src/risk-catalog.yaml
   - plugins/*/src/index.ts
+  - apps/gateway/src/server/connections/shipped-providers.test.ts
+last_reviewed: 2026-10-27
 ---
 
 # Provider plugin handbooks
 
-One handbook per provider plugin (`plugins/<id>`). Every shipped plugin is on
-the v5 plugin SDK (2026-10-13) and was brought to one consistent
-surface since: catalog loaded with `catalogPathNextTo`, fallback
-entry flagged `fallback: true`, no preset on the fallback, standard `oauth2`
-refresh performed by the host. Each handbook covers the same six subjects, under headings of its own
-(spec [`gateway-risk-model.md`](../../spec/gateway-risk-model.md),
-[`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5):
+One handbook per plugin (`plugins/<id>`): where to start, the classification invariants a reviewer
+checks, upstream traps, what to set up at the provider, debug. Tools, slices, risks and presets are
+read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: spec
+[`gateway-risk-model.md`](../../spec/gateway-risk-model.md) and
+[`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5; contract:
+[plugin-sdk](../plugin-sdk.md); new plugin: [`plugins/README.md`](../../../plugins/README.md).
 
-1. **Data model** — the entities of each plane, cardinalities, the
-   `envScopable` entity.
-2. **Tool → slice mapping** — the slice(s) each MCP tool emits.
-3. **Catalog and presets** — the YAML risks (6-axis vector,
-   `acceptable_in_envs` where relevant) and the shipped presets.
-4. **Coverage** — every tool covered by at least one non-fallback risk.
-5. **Edge cases** — the non-obvious classification decisions, argued.
-6. **Credential, discovery, execution, tests** — how the plugin runs today.
+## Rules every plugin follows (not repeated per handbook)
 
-These handbooks are the human source of truth for a provider's model. The
-code under `plugins/<id>/src/` materialises them; the `tracks:` frontmatter
-lets the drift detector compare the two.
+- The catalog is loaded with `catalogPathNextTo`; exactly one `<id>.uncategorized-write` fallback,
+  `fallback: true`, in no preset; a risk id is deprecated (`replaced_by`), never deleted.
+- A preset is a starting point; the persisted policy is always the explicit list of risk ids.
+- **What is executed is what was classified**: one reader per plugin, shared by `classify` and
+  `execute`; an identifier outside its grammar is refused, never escaped; one the slice grammar
+  cannot carry is classified `[*]`
+  ([ADR](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+- Undeclared arguments are refused in `classify` and again in `execute` when the executor forwards
+  its arguments; a plugin that builds each request field by field ignores them.
+- What the executor declines is an `isError` result carrying the reason (no `upstream_error` in the
+  audit); a provider failure is thrown: 401/403 `UpstreamAuthError`, other statuses
+  `UpstreamHttpError`.
+- An env-scoped risk runs only on a resource labelled with an environment its entry lists: an
+  **unlabelled resource cannot run env-scoped operations** (`risk-not-accepted`) until the owner
+  labels it.
+- A catalog, classifier or preset change updates the handbook in the same pull request and bumps
+  `catalog_version` and the plugin `version` (`plugins/README.md`, "Step 11"). A stricter
+  classification, or an executor refusing what it forwarded, is breaking (major; minor before 1.0).
 
 ## Index
 
-| Plugin          | Handbook                                     | Plane(s)                             | Risks                              | Presets                                                        | Credential | Notes                                                                                                                                                                                          |
-| --------------- | -------------------------------------------- | ------------------------------------ | ---------------------------------- | -------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CalDAV Calendar | [`caldav.md`](./caldav.md)                   | `calendar`                           | 9 + fallback                       | `read-only`, `own-agenda`, `assistant`                         | `api-key`  | App password over Basic auth to any CalDAV server (iCloud, Fastmail, Nextcloud); one resource per calendar; writes zoned by who the attendees are. Not Google.                                 |
-| Cloudflare DNS  | [`cloudflare-dns.md`](./cloudflare-dns.md)   | `dns`                                | 11 + fallback                      | `read-only`, `dns-operator`, `zone-admin`                      | `api-key`  | Zone-scoped token; record-write overlays.                                                                                                                                                      |
-| Context7        | [`context7.md`](./context7.md)               | `docs`                               | 1 + fallback                       | `read-only`                                                    | `api-key`  | Rewrap of mcp.context7.com; one resource per key. No environment.                                                                                                                              |
-| Fly.io          | [`fly.md`](./fly.md)                         | `apps`                               | 24 + fallback                      | `read-only`, `operator`, `fleet-upgrade`, `provisioner`        | `api-key`  | Organization token; image guard (digest + prefix), fresh snapshot before image changes, secret values masked.                                                                                  |
-| GitHub          | [`github.md`](./github.md)                   | `repo`                               | 16 + fallback (+ 2 deprecated ids) | `read-only`, `developer`, `release-manager`                    | `api-key`  | A fine-grained personal access token. No env-scoped risk.                                                                                                                                      |
-| Gmail           | [`gmail.md`](./gmail.md)                     | `mailbox`                            | 14 + fallback (+ 1 deprecated id)  | `read-only`, `developer`                                       | `api-key`  | App password, 10 tools over IMAP, never sends.                                                                                                                                                 |
-| Google Calendar | [`google-calendar.md`](./google-calendar.md) | `calendar`                           | 10 + fallback                      | `read-only`, `assistant`                                       | `oauth2`   | Rewrap of Google's Calendar MCP server; the OAuth client is the broker's (`oauth_brokers`). Invited people zoned internal / external; Google's emails to the guests a permission of their own. |
-| Miro            | [`miro.md`](./miro.md)                       | `board`, `guide`                     | 8 + fallback                       | `read-only`, `scribe`, `facilitator`                           | `oauth2`   | Rewrap of Miro's MCP server; OAuth client registered by the gateway (RFC 7591). Board ref writes the id's trailing `=` as `~`. Tool arguments modelled until captured.                         |
-| Notion          | [`notion.md`](./notion.md)                   | `content`                            | 14 + fallback                      | `read-only`, `reviewer`, `editor`                              | `api-key`  | One resource per shared top-level page or database; every id walked up to its root at run time. No environment; writes sent silently.                                                          |
-| Railway         | [`railway.md`](./railway.md)                 | `runtime`                            | 9 + fallback                       | `read-only`, `developer`, `operator`                           | `oauth2`   | Resource indicator on every token request. Services bound to their project.                                                                                                                    |
-| Resend          | [`resend.md`](./resend.md)                   | `email`                              | 15 + fallback (+ 2 deprecated ids) | `read-only`, `developer`, `marketing-operator`, `domain-admin` | `api-key`  | Recipient zones from the domain resource metadata.                                                                                                                                             |
-| SSH             | [`ssh.md`](./ssh.md)                         | `host`                               | 7 + fallback                       | `read-only`, `developer`, `operator`                           | `ssh-key`  | Pinned host key; command classes.                                                                                                                                                              |
-| Stripe          | [`stripe.md`](./stripe.md)                   | `billing`                            | 16 + fallback                      | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`  | One resource per mode (test / live); catalog v4. `read-only` covers catalog, subscriptions and balance: invoices, charges, payment intents and events need `read-customer-pii`.                |
-| Supabase        | [`supabase.md`](./supabase.md)               | `db`, `storage`, `auth`, `functions` | 24 + fallback (+ 1 deprecated id)  | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`   | Management API; `execute_sql` read-only. Prod migrations are limited to plain DDL and RLS.                                                                                                     |
-| Upstash Redis   | [`upstash-redis.md`](./upstash-redis.md)     | `cache`                              | 10 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`  | Env from the owner's database label.                                                                                                                                                           |
-| Vercel          | [`vercel.md`](./vercel.md)                   | `runtime`                            | 16 + fallback                      | `read-only`, `developer`, `operator`                           | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                                                                                                                                                 |
-
-Risk counts are the live named entries of each `risk-catalog.yaml`; every
-catalog adds exactly one `<id>.uncategorized-write` fallback. Deprecated ids
-are counted apart. Preset values are a
-starting point — ADR `mission-presets-default-values` is deferred.
-
-An env-scoped risk is acceptable in the environments its catalog entry
-lists, and the environment of a call is the label of the resource it
-touches (or what the plugin's `envOf` derives). **An unlabelled resource
-cannot run env-scoped operations**: the call is refused with
-`risk-not-accepted`, whatever the mission accepted, until the owner labels
-the resource on the account's page (Accounts).
-
-The v4 modelling notes of Railway and SSH (French) are archived as legacy in
-[`railway-ssh.md`](../legacy/railway-ssh.md); both plugins have their own
-handbook above.
-
-## Updating
-
-When a `risk-catalog.yaml`, a classifier or a preset changes, update the
-corresponding handbook in the same pull request and bump `catalog_version`
-(and the plugin `version` per the semver rule of ADR
-[[plugin-contract-and-credential-spec]] D9, spelled out for `0.x` plugins in
-[`plugins/README.md`](../../../plugins/README.md), "Step 11 — Version, changelog, pull request"). The
-`tracks:` frontmatter lists the files to watch.
+| Plugin          | Handbook                                     | Credential | In one line                                                      |
+| --------------- | -------------------------------------------- | ---------- | ---------------------------------------------------------------- |
+| CalDAV Calendar | [`caldav.md`](./caldav.md)                   | `api-key`  | App password over Basic auth to any CalDAV server; not Google.   |
+| Cloudflare DNS  | [`cloudflare-dns.md`](./cloudflare-dns.md)   | `api-key`  | Zone-scoped token; critical-record overlay.                      |
+| Context7        | [`context7.md`](./context7.md)               | `api-key`  | Rewrap of mcp.context7.com; one resource per key.                |
+| Fly.io          | [`fly.md`](./fly.md)                         | `api-key`  | Organization token; image guard, fresh snapshot, secrets masked. |
+| GitHub          | [`github.md`](./github.md)                   | `api-key`  | Fine-grained token; also the agents' git remote.                 |
+| Gmail           | [`gmail.md`](./gmail.md)                     | `api-key`  | App password over IMAP; never sends.                             |
+| Google Calendar | [`google-calendar.md`](./google-calendar.md) | `oauth2`   | Rewrap of Google's Calendar MCP; OAuth client held by a broker.  |
+| Miro            | [`miro.md`](./miro.md)                       | `oauth2`   | Rewrap of Miro's MCP; OAuth client registered by the gateway.    |
+| Notion          | [`notion.md`](./notion.md)                   | `api-key`  | One resource per shared root page or database.                   |
+| Railway         | [`railway.md`](./railway.md)                 | `api-key`  | Workspace or account token; services bound to their project.     |
+| Resend          | [`resend.md`](./resend.md)                   | `api-key`  | Recipient zones from the domain resource.                        |
+| SSH             | [`ssh.md`](./ssh.md)                         | `ssh-key`  | Pinned host key; command classes.                                |
+| Stripe          | [`stripe.md`](./stripe.md)                   | `api-key`  | One resource per mode (test / live).                             |
+| Supabase        | [`supabase.md`](./supabase.md)               | `api-key`  | Management API; `execute_sql` read-only.                         |
+| Upstash Redis   | [`upstash-redis.md`](./upstash-redis.md)     | `api-key`  | Env from the owner's database label.                             |
+| Vercel          | [`vercel.md`](./vercel.md)                   | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                   |
 
 ## Revoking a connection: what happens at the provider
 
-When an owner revokes a connection the gateway erases the credential it
-holds and, where the provider documents an endpoint for it, withdraws the
-grant there too ([connections, "The grant at the
-provider"](../connections.md#the-grant-at-the-provider-credentialsts-oauth2ts-provider-grantts)).
-An endpoint enters this table once it was read in the provider's
-documentation through Context7
-([ADR](../../decisions/use-context7-for-provider-docs.md)), never from memory
-and never by analogy with another provider.
+Revoking erases the credential and, where the provider documents an endpoint, withdraws the grant
+there too ([connections](../connections.md),
+[ADR](../../decisions/provider-side-revocation-on-connection-revoke.md)). An endpoint enters this table only once read in the
+provider's documentation through Context7, never from memory.
 
-| Provider                                                                                  | Credential          | Withdrawn by the gateway                                                                          | Read in the documentation                                                                                                                                                                                                                                                                                  | Otherwise: by hand                                                                                                                                                                                                                                    |
-| ----------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ----------------------------------------------------------------------------------------- | ----------          | ---------------------------------------------------------------------------                       | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Gmail                                                                                     | `oauth2`            | **yes** — `POST https://oauth2.googleapis.com/revoke`, form-encoded `token`                       | Google's OAuth 2.0 guide: method, content type, the `token` parameter (access or refresh token; revoking one revokes the other), 200 on success and 400 on error                                                                                                                                           | the Google Account, Security, third-party access                                                                                                                                                                                                      |
-| Google Calendar                                                                           | `oauth2` (brokered) | **yes** — `POST /revoke` with the refresh token, through the OAuth broker, which relays to Google | the broker contract ([oauth-broker-contract](../oauth-broker-contract.md)); the broker calls Google's revoke endpoint with the refresh token the instance sends                                                                                                                                            | the Google Account, Security, third-party apps with account access                                                                                                                                                                                    |
-| Vercel, Stripe, Cloudflare DNS, Upstash Redis, Resend, Supabase, Railway                  | `api-key`           | no, on purpose                                                                                    | —                                                                                                                                                                                                                                                                                                          | delete the key or token in the provider's dashboard. The key was created by a person and may be used elsewhere: the gateway erases its copy and deletes nothing at the provider                                                                       |
-| Vercel, Stripe, Cloudflare DNS, Upstash Redis, Resend, Supabase, Railway, CalDAV Calendar | `api-key`           | no, on purpose                                                                                    | —                                                                                                                                                                                                                                                                                                          | delete the key or token in the provider's dashboard. The key was created by a person and may be used elsewhere: the gateway erases its copy and deletes nothing at the provider                                                                       |
-| Context7                                                                                  | `api-key`           | no, on purpose                                                                                    | —                                                                                                                                                                                                                                                                                                          | delete the key or token in the provider's dashboard. The key was created by a person and may be used elsewhere: the gateway erases its copy and deletes nothing at the provider                                                                       |
-| GitHub (a fine-grained token)                                                             | `api-key`           | no, on purpose                                                                                    | GitHub: `POST /credentials/revoke` exists but is the leak-report endpoint (credentials the caller does not own, the owner is notified of a leak, 60 unauthenticated requests an hour, an authenticated call answers 403); Supabase and Railway: no endpoint deleting a personal or account token was found | delete the token on the service's token page, signed in as the account that created it (each token way's own `manualRevocation`; ADR [token-connections-beside-the-integration-app](../../decisions/token-connections-beside-the-integration-app.md)) |
-| SSH                                                                                       | `ssh-key`           | no                                                                                                | —                                                                                                                                                                                                                                                                                                          | remove the connection's public key from `authorized_keys` on the host                                                                                                                                                                                 |
+| Provider        | Withdrawn by the gateway                                                               | Otherwise, by hand                                                               |
+| --------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Google Calendar | **yes** — `POST /revoke` with the refresh token, relayed by the OAuth broker to Google | Google Account, Security, third-party apps with account access                   |
+| Miro            | no                                                                                     | Miro profile settings, apps allowed: remove "Vaubaan Gateway"                    |
+| SSH             | no                                                                                     | remove the connection's public key from `authorized_keys` on the host            |
+| every other     | no, on purpose: a pasted key or app password                                           | delete it at the provider; the gateway erases its copy and deletes nothing there |
 
-Each plugin carries its "by hand" sentence (`manualRevocation`), shown in
-the "Disconnect this account…" dialog and on the page of the disconnected
-account. A structural test
-(`shipped-providers.test.ts`) pins this table: the providers that declare
-an endpoint, the endpoint and its shape; adding one changes the test and
-this table in the same commit.
-
-Versions shipped today (`version` in `src/index.ts`, equal to the plugin's
-`package.json`; what telemetry reports as `plugin_version`): `4.2.0` for
-supabase; `4.2.0` for railway; `3.2.0` for github; `3.0.0` for cloudflare-dns,
-upstash-redis and vercel; `2.0.0` for ssh; `1.0.0` for gmail; `0.4.0` for stripe; `0.3.0` for
-resend; `0.2.0` for miro; `0.1.0` for caldav, context7, fly, notion and google-calendar. A version moves by a breaking step — major, or minor before 1.0 —
-when the classification becomes stricter or the executor refuses what it used
-to forward, because a call the previous version allowed is then refused: the
-classifiers that fail closed (root `CHANGELOG.md`, "Plugin classifiers fail
-closed"), the closed argument surface and the typed refusals of the executors
-(ADR
-[plugin-arguments-closed-surface-and-typed-refusals](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
-D5). `execute` throws every provider failure and returns what it declines
-itself ([plugin-sdk](../plugin-sdk.md), "Errors of `execute`").
-
-Three rules of that ADR are applied plugin by plugin, and each handbook says
-where its plugin stands:
-
-- **undeclared arguments** — a plugin whose executor forwards the arguments
-  it was given refuses an argument the tool's schema does not declare, in
-  `classify` and again in `execute`; a plugin that builds its request field
-  by field never reads such an argument;
-- **identifiers the slice grammar cannot carry** — classified as "any"
-  (`[*]`), never dropped or escaped;
-- **what the executor declines** — an `isError` result carrying the reason,
-  never a thrown `Error`.
-
-To draft a new provider, start from
-[`plugins/README.md`](../../../plugins/README.md) and copy the structure of an
-existing handbook.
+- Keys are not withdrawn on purpose: a person created them and may use them elsewhere. GitHub's
+  `POST /credentials/revoke` is a leak-report endpoint (403 on an authenticated call); no endpoint
+  deleting a Supabase or Railway personal token exists.
+- Each plugin's "by hand" sentence is its `manualRevocation`, shown in the disconnect dialog.
+  `shipped-providers.test.ts` pins which plugins declare an endpoint: adding one changes the test
+  and this table in the same commit.
