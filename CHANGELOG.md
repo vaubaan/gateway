@@ -9,6 +9,21 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **CalDAV Calendar plugin** (`@vaubaan/plugin-caldav` 0.1.0): calendars on
+  any CalDAV server — iCloud, Fastmail, Nextcloud and the others that speak
+  the standard — connected with a server URL, a username and an app password.
+  Each calendar is a resource; six tools list calendars and events, read an
+  event, and create, change and delete one, as JSON fields (the plugin writes
+  the iCalendar itself). Writes are priced by who the server may notify:
+  attendees inside the company domains, on the allowlist, or outside; a
+  change or a deletion is checked against the server's copy before anything
+  is written, and every write is conditional on the etag the agent read.
+  Presets `read-only`, `own-agenda` and `assistant`. Google Calendar is not
+  reachable this way (Google refuses app passwords over CalDAV): it is the
+  `google-calendar` plugin. ADR google-calendar-through-an-oauth-broker, D5.
+
 ## [2.0.0-alpha.9] - 2026-10-27
 
 ### Changed

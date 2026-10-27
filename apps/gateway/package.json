@@ -12,6 +12,7 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",
     "@vaubaan/gateway-core": "*",
+    "@vaubaan/plugin-caldav": "*",
     "@vaubaan/plugin-cloudflare-dns": "*",
     "@vaubaan/plugin-context7": "*",
     "@vaubaan/plugin-fly": "*",
