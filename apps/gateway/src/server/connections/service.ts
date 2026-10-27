@@ -142,7 +142,6 @@ export interface ConnectableProvider {
   readonly description: string | null;
   /** The path data of the service's monochrome mark; `null` when the plugin declares none. */
   readonly icon: string | null;
-  readonly experimental: boolean;
   readonly kind: CredentialKind;
   /**
    * The service signs the person in itself (`oauth2`): the connect page sends
@@ -210,7 +209,6 @@ export interface ConnectionView {
   /** The service's mark (`ProviderPlugin.icon`); `null` when the plugin declares none or is gone. */
   readonly providerIcon: string | null;
   readonly providerGrant: ProviderGrantView;
-  readonly experimental: boolean;
   /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
   readonly credentialKind: StoredCredentialKind | null;
   /**
@@ -404,7 +402,6 @@ export class ConnectionService {
       displayName: plugin.displayName,
       description: plugin.description ?? null,
       icon: plugin.icon ?? null,
-      experimental: plugin.experimental === true,
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
@@ -1480,7 +1477,6 @@ export class ConnectionService {
       providerLabel: registered?.plugin.displayName ?? connection.provider,
       providerIcon: registered?.plugin.icon ?? null,
       providerGrant: this.providerGrantOf(connection).grant,
-      experimental: registered?.plugin.experimental === true,
       credentialKind: kind,
       wayRetired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
       tokenAccount: pasted && typeof metadata.account === 'string' ? metadata.account : null,

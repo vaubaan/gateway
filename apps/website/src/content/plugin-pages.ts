@@ -21,13 +21,6 @@ export function withHealth(
   return plugins.map((p) => ({ ...p, health: healthOf(snapshot, p.id, p.version, thresholds) }));
 }
 
-export function statusWord(plugin: Pick<PluginInfo, 'experimental'>): string {
-  return plugin.experimental ? 'experimental' : 'stable';
-}
-
-const EXPERIMENTAL_NOTE =
-  'Experimental: the gateway registers this plugin and classifies its calls, but keeps it out of the connect and mission flows and lists none of its tools to agents.';
-
 function windowWords(seconds: number): string {
   if (seconds === 60) return 'minute';
   if (seconds === 3600) return 'hour';
@@ -65,14 +58,12 @@ export function pluginPageMarkdown(
     `The ${plugin.name} plugin lets a Vaubaan Gateway mission use ${plugin.name} without handing the agent a credential. ${text(plugin.description)}`,
     '',
     `- Version: ${code(plugin.version)} (package ${code(plugin.packageName)})`,
-    `- Status: ${statusWord(plugin)}`,
     `- Health: ${healthWords(plugin.health)} — [what this means](/plugins/health)`,
     `- Source: [${plugin.dir}](${githubTree(plugin.dir)}), catalog [risk-catalog.yaml](${githubBlob(`${plugin.dir}/src/risk-catalog.yaml`)})${plugin.catalogVersion !== null ? ` version ${plugin.catalogVersion}` : ''}${plugin.catalogDate ? ` of ${plugin.catalogDate}` : ''}`,
     `- How to connect an account: [Connect ${plugin.name}](/docs/providers/${plugin.id})`,
   ];
   if (plugin.docsUrl) lines.push(`- How it is modelled: [handbook](${plugin.docsUrl})`);
   lines.push('');
-  if (plugin.experimental) lines.push(EXPERIMENTAL_NOTE, '');
   if (plugin.summary) lines.push(text(plugin.summary), '');
 
   lines.push(
@@ -213,7 +204,6 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     `An account of ${plugin.name} is connected once, on the instance, by a person who then gives missions access to its resources; the agent never receives the credential. ${text(plugin.description)}`,
     '',
   ];
-  if (plugin.experimental) lines.push(EXPERIMENTAL_NOTE, '');
   if (plugin.summary) lines.push(text(plugin.summary), '');
   lines.push(
     `Permissions, presets and tools of this service: [${plugin.name} plugin](/plugins/${plugin.id}).`,
@@ -241,7 +231,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
   return lines.join('\n').trimEnd() + '\n';
 }
 
-/** `/plugins`: every plugin, with its version, status and health. */
+/** `/plugins`: every plugin, with its version and health. */
 export function pluginListMarkdown(plugins: readonly PluginWithHealth[]): string {
   return [
     '# Plugins',
@@ -249,11 +239,10 @@ export function pluginListMarkdown(plugins: readonly PluginWithHealth[]): string
     `A plugin teaches Vaubaan Gateway one service: how to classify a call into permissions, how to execute it, how to connect an account. ${plugins.length} plugins ship with the gateway; this list is generated from the repository's \`plugins/\` folder.`,
     '',
     markdownTable(
-      ['Plugin', 'Version', 'Status', 'Permissions', 'Health'],
+      ['Plugin', 'Version', 'Permissions', 'Health'],
       plugins.map((p) => [
         `[${p.name}](/plugins/${p.id})`,
         code(p.version),
-        statusWord(p),
         String(p.risks.length),
         healthWords(p.health),
       ]),

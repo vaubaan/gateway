@@ -2,7 +2,7 @@
 title: Management door — authorization server, delegated tokens, admission, tools
 status: current
 date: 2026-10-13
-last_synced: 2026-10-21
+last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/server/oauth-as/
   - apps/gateway/src/server/management/
@@ -866,8 +866,10 @@ What each answer contains (`views.ts`):
   [preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md)),
   always `within_authority`, whose `risks` is the count of explicit lines it
   writes out with every resource known now (`everythingIHold` over
-  `defaultResources`). Connections of experimental plugins are left out
-  unless `include_experimental` (`hidden_experimental` counts them).
+  `defaultResources`). Every connection is listed, whatever its plugin
+  (ADR no-experimental-plugins); the retired `include_experimental` input is
+  still accepted by the strict schema, and ignored, so that a client written
+  against an earlier build is not refused.
 - **`get_catalog`** — `risks` as explicit ids, one per environment for an
   env-scoped entry (`enumerateCatalog`), with label, reason, level,
   `fallback`, `deprecated`, `rate_ceiling_per_minute`; `presets` entry by
@@ -1217,8 +1219,7 @@ refused` carries the error code and the client id; the description in the
   `duplicate-provider`…). The same draft pasted in Missions → New mission →
   "Paste an agent's proposal" shows the same preview to the user.
 - **A connection is missing from `list_my_connections`.** The user holds no
-  authority on it (not an owner, no active share), it is revoked, or its
-  plugin is experimental (`include_experimental`).
+  authority on it (not an owner, no active share), or it is revoked.
 - **`mission-inactive` on a rotation.** `error.state` says which; for
   `orphaned`, `error.orphan` gives the cause and the uncovered risks.
 - **`mission-not-issued-here` on a rotation.** The mission is the user's but

@@ -2,7 +2,7 @@
 title: Known limitations — what has not been done, and what is not there
 status: current
 date: 2026-10-13
-last_synced: 2026-10-23
+last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/server/execution/tools.ts
   - apps/gateway/src/server/execution/scope-caps.ts
@@ -112,7 +112,7 @@ change that removes it.
   [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md)). →
   [execution-door, "Scope caps: not enforced"](execution-door.md#scope-caps-not-enforced-scope-capsts)
 - **`tools/list` is per provider, not per tool.** Every tool of a
-  non-experimental provider for which the mission holds an account (a
+  provider for which the mission holds an account (a
   connection) and at least one permission (an accepted risk) is listed; a
   listed tool whose own permission the mission does not hold is refused
   `risk-not-accepted` when called. →

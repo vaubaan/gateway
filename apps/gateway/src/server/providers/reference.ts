@@ -60,7 +60,6 @@ export interface ProviderCard {
   readonly description: string | null;
   /** The path data of the service's monochrome mark (`ProviderPlugin.icon`); `null` when it declares none. */
   readonly icon: string | null;
-  readonly experimental: boolean;
   /** The primary way of connecting. */
   readonly credential_kind: CredentialKind;
   readonly counts: ProviderCounts;
@@ -92,7 +91,6 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
     version: plugin.version,
     description: plugin.description ?? null,
     icon: plugin.icon ?? null,
-    experimental: plugin.experimental === true,
     credential_kind: plugin.credential.kind,
     counts: countsOf(registered, risks),
     plane_slugs: plugin.dataModel.planes.map((plane) => plane.slug),
@@ -100,12 +98,11 @@ function cardOf(registered: RegisteredPlugin, risks: readonly CatalogRisk[]): Pr
   };
 }
 
-/** The shipped plugins, registration order: stable ones first, experimental ones last. */
+/** The shipped plugins, registration order. */
 export function providerCards(registry: PluginRegistry): ProviderCard[] {
-  const cards = registry
+  return registry
     .all()
     .map((registered) => cardOf(registered, enumerateCatalog(registered.plugin.catalog)));
-  return [...cards.filter((c) => !c.experimental), ...cards.filter((c) => c.experimental)];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

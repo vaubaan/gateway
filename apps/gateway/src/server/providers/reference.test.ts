@@ -152,11 +152,9 @@ describe('presetReferenceOf', () => {
 });
 
 describe('the reference of the shipped plugins', () => {
-  it('has one card per plugin of the registry, experimental ones last', () => {
+  it('has one card per plugin of the registry, in registration order', () => {
     const cards = providerCards(registry);
-    expect(cards.map((card) => card.id).sort()).toEqual([...registry.ids].sort());
-    const firstExperimental = cards.findIndex((card) => card.experimental);
-    expect(cards.slice(firstExperimental).every((card) => card.experimental)).toBe(true);
+    expect(cards.map((card) => card.id)).toEqual([...registry.ids]);
     for (const card of cards) {
       expect(card.counts.risks).toBeGreaterThan(0);
       expect(card.counts.presets).toBeGreaterThan(0);

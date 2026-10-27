@@ -11,6 +11,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **Gmail is no longer experimental, and no plugin can be.** A mission that
+  accepts Gmail permissions now lists Gmail's tools to the agent's MCP client
+  (they were left out before, so the agent saw none). Gmail accounts appear
+  on the mission form, in the reference and in the management door's
+  `list_my_connections` like any other; the "Show experimental services"
+  toggle and the "experimental" tags are gone. The Gmail plugin
+  (`@vaubaan/plugin-gmail` 1.0.0, catalog 6) only drops the word from its
+  descriptions. For plugin authors: `experimental` is removed from
+  `definePlugin` and from `labels()`. For MCP clients: `list_my_connections`
+  no longer answers `hidden_experimental`, and still accepts, and ignores,
+  `include_experimental`. The public site's plugin pages and `/plugins.json`
+  drop the `status` field. ADR no-experimental-plugins.
 - **Dependencies.** better-sqlite3 13 for operators: the store's SQLite driver
   is now an N-API addon whose binaries ship in the package, so the image build
   no longer downloads one for the Node version, and SQLite moves from 3.53.2 to

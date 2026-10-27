@@ -64,10 +64,7 @@ describe('the plugin catalog of the site', () => {
     }
   });
 
-  it('says which plugins are experimental, from their declaration', () => {
-    const gmail = plugins.find((p) => p.id === 'gmail');
-    // The one experimental plugin today (classifier only); remove this line when it graduates.
-    expect(gmail?.experimental).toBe(true);
-    expect(plugins.filter((p) => !p.experimental).length).toBeGreaterThan(0);
+  it('carries no experimental state (ADR no-experimental-plugins)', () => {
+    for (const plugin of plugins) expect(plugin, plugin.id).not.toHaveProperty('experimental');
   });
 });

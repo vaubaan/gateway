@@ -2,7 +2,7 @@
 title: Connections — connect flows, resources, credential refresh, OAuth clients
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/server/connections/
   - apps/gateway/src/server/compose/shipped-plugins.ts
@@ -44,8 +44,8 @@ connecting of earlier builds are described there),
 [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)
 (no OAuth client declared by an administrator any more; an account made a
 way its plugin no longer offers). Built on the
-[plugin SDK](plugin-sdk.md) (`CredentialSpec`, `discoverResources`,
-`experimental`), the [store](store.md) (`connections`,
+[plugin SDK](plugin-sdk.md) (`CredentialSpec`, `discoverResources`),
+the [store](store.md) (`connections`,
 `connection_resources`, `instance_config`), the
 [configuration](configuration.md) root (`RateLimiter`, `SessionStore`) and [authentication](authentication.md) (web session,
 `guardMutation`: origin check, session, role).
@@ -76,7 +76,7 @@ apps/gateway/migrations/0004_connection_resource_curation.sql
 apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNotice()
 apps/gateway/src/components/
   shell/AppShell.tsx                 the shell: AppShell (the side navigation) and AdminShell (the same, with the local navigation of Settings)
-  connections/parts.tsx              NoticeBanner, AccountState, ExperimentalBadge, CredentialFieldInputs
+  connections/parts.tsx              NoticeBanner, AccountState, CredentialFieldInputs
   connections/TokenGuide.tsx         steps 1 and 2 of a token connection: where to create it, the permissions to tick
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
 apps/gateway/src/app/(app)/accounts/

@@ -176,8 +176,8 @@ describe('cited refs', () => {
 describe('tool discovery', () => {
   const depot = depotPlugin().plugin;
   const other = fixturePlugin({ id: 'other', credential: API_KEY_SPEC });
-  const hidden = fixturePlugin({ id: 'labs', credential: API_KEY_SPEC, experimental: true });
-  const registry = createRegistry([depot, other, hidden]);
+  const labs = fixturePlugin({ id: 'labs', credential: API_KEY_SPEC });
+  const registry = createRegistry([depot, other, labs]);
 
   const context = (providers: readonly string[], risks: readonly string[]): MissionContext =>
     ({
@@ -198,12 +198,12 @@ describe('tool discovery', () => {
     ]).toEqual(['depot', 'other']);
   });
 
-  it('lists nothing of an experimental plugin', () => {
+  it('lists the tools of every plugin the mission holds and accepts a risk of', () => {
     const tools = callableTools(
       context(['labs', 'other'], ['labs.read-things', 'other.read-things']),
       registry,
     );
-    expect(tools.map((t) => t.name)).toEqual(['other__list_things']);
+    expect(tools.map((t) => t.name)).toEqual(['other__list_things', 'labs__list_things']);
   });
 });
 

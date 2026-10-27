@@ -84,7 +84,6 @@ export interface PluginInfo {
   readonly dir: string;
   readonly description: string;
   readonly summary: string | null;
-  readonly experimental: boolean;
   readonly docsUrl: string | null;
   readonly manualRevocation: string | null;
   readonly catalogVersion: number | null;
@@ -212,7 +211,6 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
     dir,
     description: plugin.description ?? '',
     summary: plugin.summary ?? null,
-    experimental: plugin.experimental === true,
     docsUrl: plugin.docsUrl ?? null,
     manualRevocation: plugin.manualRevocation ?? null,
     catalogVersion: catalog.catalog_version ?? null,

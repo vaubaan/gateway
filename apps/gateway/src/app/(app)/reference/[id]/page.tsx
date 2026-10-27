@@ -22,10 +22,9 @@ import {
   Section,
   ServiceMark,
   SummaryLine,
-  Tag,
 } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
-import { ACCOUNT_WORDS, ENVIRONMENT_WORDS } from '@/lib/vocabulary';
+import { ENVIRONMENT_WORDS } from '@/lib/vocabulary';
 import { gitRemoteBase } from '@/server/git/paths';
 import { providerCards, providerReference } from '@/server/providers/reference';
 
@@ -54,7 +53,6 @@ export default async function ServiceReferencePage({ params }: Props) {
         level={2}
         mark={<ServiceMark name={reference.name} icon={reference.icon} size="lg" />}
         title={reference.name}
-        status={reference.experimental ? <Tag>{ACCOUNT_WORDS.experimental}</Tag> : undefined}
         lede={
           <span data-testid="provider-summary">
             {reference.summary ?? reference.description ?? 'This service ships no description.'}

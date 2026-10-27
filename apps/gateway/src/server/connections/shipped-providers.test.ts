@@ -92,7 +92,7 @@ describe('shipped plugins through the generic connect driver', () => {
     }
   });
 
-  it('ships one way per service: a key at once, OAuth only where no key exists, and flags experimental ones', async () => {
+  it('ships one way per service: a key at once, OAuth only where no key exists', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const before = await h.service.providers();
     // Nothing needs the operator: a key is pasted, an OAuth client is registered by the gateway.
@@ -115,9 +115,6 @@ describe('shipped plugins through the generic connect driver', () => {
         /^https:\/\//,
       );
     }
-    expect(before.filter((p) => p.experimental).map((p) => p.id)).toEqual(
-      SHIPPED_PLUGINS.filter((p) => p.experimental === true).map((p) => p.id),
-    );
   });
 
   it('builds a valid authorization redirect for every oauth2 plugin', async () => {

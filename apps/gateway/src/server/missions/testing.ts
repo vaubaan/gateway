@@ -192,7 +192,6 @@ export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): Iss
     provider_label: 'Acme',
     display_name: 'Acme main',
     status: 'active',
-    experimental: false,
     derives_env: false,
     default_env: null,
     basis: 'owner',

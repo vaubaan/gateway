@@ -135,7 +135,7 @@ function providerDoc(plugin: PluginInfo): GeneratedDoc {
     `providers/${plugin.id}.mdx`,
     `/docs/providers/${plugin.id}`,
     `Connect ${plugin.name}`,
-    `How to connect a ${plugin.name} account to Vaubaan Gateway${plugin.experimental ? ' (experimental plugin)' : ''}: ${plugin.credentials.some((c) => c.kind === 'oauth2') ? 'the sign-in at the service' : 'the token to make'}, and what to grant.`,
+    `How to connect a ${plugin.name} account to Vaubaan Gateway: ${plugin.credentials.some((c) => c.kind === 'oauth2') ? 'the sign-in at the service' : 'the token to make'}, and what to grant.`,
     splitTitle(markdown).rest,
     [plugin.dir],
   );
@@ -177,7 +177,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   );
 
   const threatModel = readRepoFile(THREAT_MODEL);
-  const serviceNames = plugins.map((p) => (p.experimental ? `${p.name} (experimental)` : p.name));
+  const serviceNames = plugins.map((p) => p.name);
   const markdown: Record<string, string> = {
     '/': landingMarkdown(serviceNames),
     '/plugins': pluginListMarkdown(withStatus),
@@ -214,7 +214,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
       path: '/plugins',
       group: 'plugins',
       title: 'Plugins',
-      description: `The ${plugins.length} plugins shipped with Vaubaan Gateway, with their version, status and health.`,
+      description: `The ${plugins.length} plugins shipped with Vaubaan Gateway, with their version and health.`,
       markdown: md('/plugins'),
       lastModified: lastModified(['plugins']),
     },

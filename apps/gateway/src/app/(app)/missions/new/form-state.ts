@@ -128,7 +128,6 @@ export interface FormState {
   readonly expiry: ExpiryChoice;
   /** `datetime-local` value, used when `expiry` is `custom`. */
   readonly expiryCustom: string;
-  readonly showExperimental: boolean;
   /** Edit mode: the mission's end date, sent when `expiry` is `keep`. */
   readonly keptExpiry?: string | null;
 }
@@ -157,7 +156,6 @@ export function initialFormState(context: readonly IssuanceConnection[]): FormSt
     period: DEFAULT_PERIOD,
     expiry: DEFAULT_EXPIRY,
     expiryCustom: '',
-    showExperimental: false,
   };
 }
 
@@ -785,11 +783,9 @@ export function loadResolved(
   resolved: readonly ResolvedDraftConnection[],
 ): FormState {
   const connections: Record<string, ConnectionState> = { ...state.connections };
-  let showExperimental = state.showExperimental;
   for (const line of resolved) {
     const connection = context.find((c) => c.id === line.connection_id);
     if (!connection) continue;
-    if (connection.experimental) showExperimental = true;
     connections[connection.id] = {
       included: true,
       // Explicit lines are a custom policy: the editor is the honest view of them.
@@ -805,7 +801,7 @@ export function loadResolved(
       edited: true,
     };
   }
-  return { ...state, connections, showExperimental };
+  return { ...state, connections };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

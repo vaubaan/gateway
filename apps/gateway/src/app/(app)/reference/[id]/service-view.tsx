@@ -298,7 +298,6 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
             tools={tools}
             total={reference.tools.length}
             serviceName={reference.name}
-            experimental={reference.experimental}
             showPlane={sliced}
             onGo={go}
           />

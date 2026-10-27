@@ -2,7 +2,7 @@
 title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/missions/
@@ -60,7 +60,7 @@ Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 [mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)
 (the whole mission edited by its creator after issuance).
 Built on the [store](store.md) repositories, the
-[plugin SDK](plugin-sdk.md) registry (catalogs, presets, `experimental`,
+[plugin SDK](plugin-sdk.md) registry (catalogs, presets,
 `envOf`), [connections](connections.md) (resources, their `env` labels, hidden
 and stale flags), [budget and sessions](budget-and-sessions.md) (policy vocabulary,
 mission state) and [authentication](authentication.md) (session, origin check).
@@ -248,7 +248,7 @@ null`: what is persisted is the explicit enumeration, never a preset reference.
 Pure; `context` is `{ connections: IssuanceConnection[], now }` where each
 `IssuanceConnection` carries the connection's resources, the catalog as explicit
 rows (`CatalogRisk`), the creator's `authority` and its `basis` (`owner` or
-`share`), the plugin's presets, `experimental`, `derives_env` and `default_env`. It never throws on a refusable draft: every
+`share`), the plugin's presets, `derives_env` and `default_env`. It never throws on a refusable draft: every
 reason is a `PreviewIssue { code, message, connection_index?, connection_id?,
 risk_ids?, resource_refs? }`, so everything is fixed in one pass.
 
@@ -432,7 +432,7 @@ catalogs' — at this commit:
 | cloudflare-dns | `read-only`, `dns-operator`, `zone-admin`                         |
 | upstash-redis  | `read-only`, `developer`, `operator`                              |
 | resend         | `read-only`, `developer`, `marketing-operator`, `domain-admin`    |
-| gmail          | `read-only`, `developer` (plugin `experimental`)                  |
+| gmail          | `read-only`, `developer`                                          |
 | context7       | `read-only`                                                       |
 | miro           | `read-only`, `scribe`, `facilitator`                              |
 | notion         | `read-only`, `reviewer`, `editor`                                 |
@@ -1266,9 +1266,9 @@ stays in view while the steps scroll.
    `{ scope: 'connection' }` for the whole account, the ticked list otherwise
    (so the confirmation lists what is stored); `loadResolved` loads a
    whole-connection proposal as such. An account with no resource known offers
-   the choice too. "Show experimental services" appears only when the reader holds
-   an account of an `experimental` plugin. A reader with a single usable
-   account finds it included. Then the presets, below.
+   the choice too. Every account the reader may delegate is listed, whatever
+   its service (ADR no-experimental-plugins). A reader with a single account
+   finds it included. Then the presets, below.
 3. **Limits and lifetime** — "Limits reset" (every hour, day, week, or never),
    "Expires" (never, in 24 hours, 7, 30, 90 days — each with its date — or on
    a date), and "People": a sentence, teammates and machine keys are added

@@ -188,13 +188,6 @@ export interface ProviderPlugin {
   /** URL of the plugin's modelling handbook, when published. */
   readonly docsUrl?: string;
   /**
-   * An experimental plugin is registered and classifies, but the host keeps
-   * it out of the default connect and issuance flows and lists none of its
-   * tools (gmail today : classifier-only, no executable tool). Absent means
-   * stable.
-   */
-  readonly experimental?: boolean;
-  /**
    * Tools whose effect cannot be bound to one resource (a free-text request to
    * the provider's own agent, say), each with one sentence saying why. The host
    * makes them unavailable on a connection that can reach a resource hosting
@@ -228,7 +221,7 @@ export interface ProviderPlugin {
    */
   readonly gitRemote?: GitRemoteCapability;
 
-  /** The MCP tools the plugin exposes, named `<prefix>__<local>`. May be empty for an experimental, classifier-only plugin. */
+  /** The MCP tools the plugin exposes, named `<prefix>__<local>`. May be empty for a classifier-only plugin. */
   readonly tools: readonly McpToolDeclaration[];
   /** Declarative graph of the provider's entities (risk-model spec §2). */
   readonly dataModel: DataModel;

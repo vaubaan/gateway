@@ -677,7 +677,7 @@ npx vitest run packages/policy-engine     # one package
   still indexed as the fallback).
 - **`registry.test.ts`** (12) — ids in registration order, `has/get/require`,
   `providerForTool` (exact name, prefix rule for unlisted tools, null),
-  `toolDeclarations`, `labels` (with `experimental`, `summary` when the plugin has one, and `icon` — `null` without one), `idEnum` (non-empty tuple, throws when
+  `toolDeclarations`, `labels` (with `summary` when the plugin has one, and `icon` — `null` without one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
 - **`define-plugin.test.ts`** (36) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); **a plugin that declares it must declare `createdResources`**, a function (ADR created-resources-join-the-mission); `summary` optional, a non-empty paragraph of at most 600 characters when present; `icon` optional, the path data of one SVG path when present (`SVG_PATH_DATA_PATTERN`: a drawing command first, then commands, numbers and separators — markup, `url(…)` and an empty string are issues; ADR service-icons-declared-by-the-plugin); **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
@@ -1178,7 +1178,7 @@ stays a plain `Error`, and so does an answer whose fields are absent or
 odd) or an `Error` carrying Context7's text; the abort signal reaches both
 requests; discovery and `verify` on `GET /v2/usage`. `risk-catalog` (5), `data-model` (2).
 
-**Gmail** (574, experimental, plugin 0.5.0, catalog 5, over IMAP with an app password —
+**Gmail** (574, plugin 1.0.0, catalog 6, over IMAP with an app password —
 ADR [[gmail-over-imap-with-an-app-password]]) — `plugin.test.ts` (26): kit, the
 twelve exposed tools (none sends), coverage (`draft-to-zone-external-unbounded`
 and `bulk-label-write` knowingly unreached), **the identifier kit against the
@@ -2381,8 +2381,8 @@ Unit, co-located under `apps/gateway/src/server/connections/`:
     credential, public key on the view, discovery deferred then run by
     the owner;
   - ownership (owner only, strangers get `not-found` everywhere, members
-    of an owner group are owners), the `experimental` flag on the picker
-    and the view, reconnect in place (expired → active, same id;
+    of an owner group are owners), every plugin offered on the picker in
+    registration order, reconnect in place (expired → active, same id;
     `provider-mismatch`; `connection-revoked`; **an `unowned` connection is
     not reconnected** until an owner is reassigned, spec §2.3), revoke
     (terminal, blob erased, idempotent, audited once);
@@ -2648,7 +2648,7 @@ Unit, co-located (230 with the authority suite):
   `dataModelTrees`: nesting, the carrier of the environment.
   `presetReferenceOf`: lines split by gate with their budget, base id expanded
   to every environment, what is left out. **Over every shipped plugin**: one
-  card per plugin of the registry, experimental ones last; every plugin has a
+  card per plugin of the registry, in registration order; every plugin has a
   `summary`; every catalog entry listed exactly once under a unique anchor,
   with a label, a reason and patterns that read as words, exactly one fallback;
   reads first, and a read has only read patterns; every preset expands to
@@ -2788,7 +2788,7 @@ connections and resources seeded through the repositories (36):
   no rotation of a revoked or expired mission; `rotation` / `revocation`
   session events and audit acts; list and detail (state, labels, remaining,
   masked kit); past expiry refused; one-off mission; a taken token prefix is
-  re-drawn; the issuance context (experimental, `derives_env`, presets,
+  re-drawn; the issuance context (`derives_env`, presets,
   authority); revoked connections left out, expired ones unusable; **every
   preset of every shipped plugin previews cleanly** for an owner whose
   resources carry every env label, never with the fallback. **The detail
@@ -3068,7 +3068,7 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   chain, a hop with a port or in brackets, an invalid `trusted_proxies`
   entry skipped — the one rule of `http/client-ip`); `citedRefs` over
   identifier and list segments; tool filter (needs a connection **and** an
-  accepted risk, nothing of an experimental plugin); token verifier (nothing
+  accepted risk; every plugin lists its tools, no experimental state); token verifier (nothing
   remembered: the state is read again on every call; a token stored as a
   SHA-256 digest is never throttled, however many wrong secrets are
   replayed; the argon2id check of a legacy token is **throttled per prefix
@@ -4611,7 +4611,8 @@ obtained through registration, sign-in, consent and code exchange):
   - The door lists exactly the seven tools, each with a description and a
     strict input schema; the server instructions carry the rules.
   - **Reading**: an owner sees their connections with the whole catalog,
-    resources and presets, experimental plugins hidden unless asked; which
+    resources and presets, Gmail included (no plugin is held back), the
+    retired `include_experimental` still accepted and ignored; which
     env-qualified risks are usable on a labelled connection, an unlabelled
     one and a provider that derives the environment; the connection's
     `default_env`, a resource that inherits it labelled and counted in
@@ -4670,8 +4671,8 @@ obtained through registration, sign-in, consent and code exchange):
   output schema**, through the official MCP client, which validates
   `structuredContent` against the `outputSchema` of `tools/list`:
   `tools/list` advertises an object output schema for each of the seven
-  tools; `list_my_connections` for an owner (with and without experimental
-  providers), a beneficiary and somebody who holds nothing; `get_catalog`
+  tools; `list_my_connections` for an owner (with and without the retired
+  `include_experimental`), a beneficiary and somebody who holds nothing; `get_catalog`
   for every provider of the instance, alone and against a connection;
   `preview_policy` for a draft that passes, one beyond the authority, a
   preset alone, an unresolvable environment and an unknown risk;
@@ -5291,8 +5292,8 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   folder of `plugins/` with a `package.json` is listed, `_template` is not
   (the expected list is computed independently of `discoverPluginDirs`);
   each plugin is imported through its entry, with a semver version, risks,
-  presets whose entries name risks of the same catalog, and credentials; the
-  experimental flag comes from the declaration (`gmail`).
+  presets whose entries name risks of the same catalog, and credentials; no
+  plugin carries an experimental state.
 - **`site.test.ts`** (10) — **the site as data**, built offline: every
   hand-written docs page, every generated one and every plugin page is in
   the page list, once; **every page has its `.md` twin** with the page's

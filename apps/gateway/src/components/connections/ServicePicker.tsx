@@ -6,7 +6,6 @@
  * administrator to declare anything.
  */
 import { PickCard, PickGrid, ServiceMark } from '@/components/ui';
-import { ACCOUNT_WORDS } from '@/lib/vocabulary';
 import { NEW_CONNECTION_PATH, type ConnectableProvider } from '@/server/connections';
 
 /** "Access token" → "access token"; "API key" stays: an acronym keeps its capitals. */
@@ -45,11 +44,7 @@ export function ServicePicker({
           href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(provider.id)}${suffix}`}
           lead={<ServiceMark name={provider.displayName} icon={provider.icon} />}
           title={provider.displayName}
-          description={
-            provider.experimental
-              ? `${howToConnect(provider)} · ${ACCOUNT_WORDS.experimental}`
-              : howToConnect(provider)
-          }
+          description={howToConnect(provider)}
           testId={`service-${provider.id}`}
         />
       ))}

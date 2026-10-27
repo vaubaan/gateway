@@ -824,7 +824,6 @@ export function AccountView({
                     <Link href={providerPath(connection.provider)} className={shared.reveal}>
                       what an agent can do on it
                     </Link>{' '}
-                    {detail.experimental && <Tag>{ACCOUNT_WORDS.experimental}</Tag>}{' '}
                     <ValidationBadge status={data.validation} />
                   </>
                 ),

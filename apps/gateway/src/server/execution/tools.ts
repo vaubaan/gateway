@@ -2,13 +2,13 @@
  * Tool discovery and the catalog document (spec §4.1 "Discovery", "Catalog").
  *
  * `tools/list` shows the tools a mission can potentially call: every tool of
- * a stable plugin for which the mission holds a connection AND accepts at
+ * a plugin for which the mission holds a connection AND accepts at
  * least one risk. The filter is per provider, not per tool: a plugin does not
  * declare which risks a tool can touch (that depends on the arguments —
  * the branch, the path, the environment), so a finer static filter would
  * either hide callable tools or need a contract the plugins do not have. A
  * listed tool can therefore still be refused `risk-not-accepted` at call time.
- * Experimental plugins list nothing (`ProviderPlugin.experimental`). A
+ * Every registered plugin lists its tools (ADR no-experimental-plugins). A
  * connection whose part of the mission is lost (`MissionConnection.lost`) lists
  * nothing either: every call through it is refused `connection-revoked`.
  *
@@ -58,7 +58,7 @@ export function callableTools(ctx: MissionContext, registry: PluginRegistry): Mc
   const providers = callableProviders(ctx);
   const tools: McpToolDeclaration[] = [];
   for (const { plugin } of registry.all()) {
-    if (plugin.experimental || !providers.has(plugin.id)) continue;
+    if (!providers.has(plugin.id)) continue;
     // A mission holds one connection per provider; a tool its way of
     // connecting cannot run is not listed (the resource stage refuses it too).
     const connection = ctx.connections.find((c) => c.provider === plugin.id);
@@ -163,7 +163,6 @@ export function buildCatalog(
   const callable = new Set(callableTools(ctx, registry).map((t) => t.name));
   const tools: CatalogTool[] = [];
   for (const { plugin } of registry.all()) {
-    if (plugin.experimental) continue;
     for (const tool of plugin.tools) {
       tools.push({
         name: tool.name,

@@ -482,7 +482,7 @@ describe('ownership, reconnection, revocation', () => {
     return connectionsHarness({
       plugins: [
         fixturePlugin({ id: 'keyco', displayName: 'Key Co', credential: API_KEY_SPEC }),
-        fixturePlugin({ id: 'gmailco', credential: API_KEY_SPEC, experimental: true }),
+        fixturePlugin({ id: 'gmailco', credential: API_KEY_SPEC }),
       ],
     });
   }
@@ -523,16 +523,16 @@ describe('ownership, reconnection, revocation', () => {
     await expectConnectError(h.service.get(dave, connection.id), 'not-found');
   });
 
-  it('surfaces the experimental flag of a plugin on the picker and on its connections', async () => {
+  it('offers every plugin on the picker, in registration order', async () => {
     const h = harness();
     const alice = await h.actor('alice@example.com');
     const providers = await h.service.providers();
-    expect(providers.map((p) => [p.id, p.experimental, p.kind])).toEqual([
-      ['keyco', false, 'api-key'],
-      ['gmailco', true, 'api-key'],
+    expect(providers.map((p) => [p.id, p.kind])).toEqual([
+      ['keyco', 'api-key'],
+      ['gmailco', 'api-key'],
     ]);
     const { connection } = connectedOf(await h.service.start(alice, 'gmailco', { fields }));
-    expect((await h.service.get(alice, connection.id)).experimental).toBe(true);
+    expect((await h.service.get(alice, connection.id)).providerLabel).toBe('gmailco');
     expect(await h.service.provider('nope')).toBeNull();
   });
 

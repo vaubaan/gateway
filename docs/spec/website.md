@@ -106,7 +106,7 @@ first version:
 ### 2.3 Plugins — `/plugins`, `/plugins/<id>`
 
 The list of plugins shipped with the gateway, and per plugin: description,
-version, status (stable / experimental), tools, risks with their labels,
+version, tools, risks with their labels,
 presets, how to connect (app, token), and its **health** (§2.4). Generated
 from `plugins/<id>/` (its declaration and `risk-catalog.yaml`) at build time.
 A plugin is listed because it exists in the repository, nowhere else.
@@ -170,7 +170,7 @@ browser.
   docs, the plugin list and the trust center in one Markdown file. Both are
   generated at build time.
 - **Machine-readable catalog.** `/plugins.json`: every plugin with its
-  version, status, tools, risks, presets and health, generated from the
+  version, tools, risks, presets and health, generated from the
   repository and the collector's aggregates (§2.3, §2.4). The same data the
   plugin pages show.
 - **Answers first.** Each page opens with a sentence that defines its subject

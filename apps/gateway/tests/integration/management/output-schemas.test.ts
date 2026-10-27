@@ -101,7 +101,7 @@ describe('management door — every answer matches its advertised output schema'
     await agent.close();
   });
 
-  it('list_my_connections: an owner, with and without experimental providers; a beneficiary; somebody who holds nothing', async () => {
+  it('list_my_connections: an owner, with and without the retired `include_experimental`; a beneficiary; somebody who holds nothing', async () => {
     const ada = await agentOf(ADA);
     await yes(ada, 'list_my_connections');
     await yes(ada, 'list_my_connections', { include_experimental: true });
@@ -118,7 +118,7 @@ describe('management door — every answer matches its advertised output schema'
     const agent = await agentOf(ADA);
     const { connections } = await yes<{
       connections: { connection_id: string; provider: string }[];
-    }>(agent, 'list_my_connections', { include_experimental: true });
+    }>(agent, 'list_my_connections');
     expect(connections.length).toBeGreaterThanOrEqual(4);
     for (const connection of connections) {
       await yes(agent, 'get_catalog', { provider: connection.provider });
