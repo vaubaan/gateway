@@ -132,6 +132,19 @@
 #   # env: VAUBAAN_IDP_INVITATION_ONLY
 #   invitation_only: false
 
+# OAuth brokers this instance is enrolled with, keyed by a name of your choice.
+# A broker owns an OAuth client at a provider that offers no key a person can
+# make (Google Calendar) and runs the sign-in for the instance; it gives you a
+# URL and a key, and records <public_url>/connections/callback/<plugin id>.
+# Without one, such a plugin is listed as not configured.
+# env: VAUBAAN_OAUTH_BROKER_<NAME>_<FIELD>, e.g. VAUBAAN_OAUTH_BROKER_MAIN_URL
+# oauth_brokers:
+#   main:
+#     url: https://broker.example.com/v1
+#     key: ${file:/run/secrets/oauth_broker_key}
+#     # The broker providers it serves (google). Unset: every provider.
+#     # providers: [google]
+
 # More sign-in providers, keyed by an id of your choice (lower-case letters,
 # digits, hyphens). Each is a button on the sign-in page; its callback is
 # <public_url>/auth/callback/<id>. A person signing in through two providers is

@@ -20,10 +20,12 @@ import { baseRiskId, isRiskId } from '@vaubaan/shared/risk-id';
 
 import { semanticIssues } from './catalog-loader.ts';
 import {
+  BROKER_PROVIDER_PATTERN,
   OAUTH2_REVOCATION_FORMATS,
   TOKEN_PERMISSION_ACCESS,
   type CredentialSpec,
   type OAuth2CredentialSpec,
+  type OAuth2RegisteredClientSpec,
 } from './credential.ts';
 import type { ProviderPlugin } from './plugin.ts';
 
@@ -253,7 +255,7 @@ function identityIssues(plugin: ProviderPlugin): string[] {
 /** Upper bound of `ProviderPlugin.manualRevocation` : a sentence or two. */
 export const PLUGIN_MANUAL_REVOCATION_MAX_LENGTH = 400;
 
-function registrationIssues(spec: OAuth2CredentialSpec): string[] {
+function registrationIssues(spec: OAuth2RegisteredClientSpec): string[] {
   const registration: unknown = spec.clientRegistration;
   if (!isRecord(registration))
     return ['credential.clientRegistration: expected { registrationUrl }'];
@@ -264,7 +266,7 @@ function registrationIssues(spec: OAuth2CredentialSpec): string[] {
   return issues;
 }
 
-function revocationIssues(spec: OAuth2CredentialSpec): string[] {
+function revocationIssues(spec: OAuth2RegisteredClientSpec): string[] {
   const revocation: unknown = spec.revocation;
   if (!isRecord(revocation)) return ['credential.revocation: expected { url, format }'];
   const issues: string[] = [];
@@ -564,20 +566,7 @@ function kindSpecIssues(spec: CredentialSpec): string[] {
         issues.push('credential.fields: an api-key spec needs at least one secret field');
       break;
     case 'oauth2':
-      for (const key of ['authorizationUrl', 'tokenUrl'] as const) {
-        if (!isHttpsUrl(spec[key])) issues.push(`credential.${key}: expected an https URL`);
-      }
-      if (!Array.isArray(spec.scopes))
-        issues.push('credential.scopes: expected a list (may be empty)');
-      if (spec.clientAuthMethod === 'none' && !spec.pkce)
-        issues.push('credential.pkce: a public client (clientAuthMethod none) must use PKCE');
-      if (spec.revocation !== undefined) issues.push(...revocationIssues(spec));
-      // The only OAuth client the host knows is one it registers itself (ADR
-      // gmail-over-imap-with-an-app-password): no administrator declares one.
-      issues.push(...registrationIssues(spec));
-      // `refreshable: true` needs no `refresh()` : the host performs the
-      // standard refresh_token grant from the spec (ADR plugin-contract D2 as
-      // as amended) ; `refresh` is an override for non-standard flows.
+      issues.push(...oauth2Issues(spec));
       break;
     case 'ssh-key':
       if (spec.algorithm !== 'ed25519')
@@ -586,6 +575,74 @@ function kindSpecIssues(spec: CredentialSpec): string[] {
         issues.push('credential.fields: expected a list (host, port, user)');
       break;
   }
+  return issues;
+}
+
+/**
+ * Fields only a spec with a registered client carries: a brokered spec leaves
+ * the provider's endpoints, PKCE, the client authentication and the
+ * revocation to the broker.
+ */
+const REGISTERED_CLIENT_ONLY_FIELDS = [
+  'authorizationUrl',
+  'tokenUrl',
+  'pkce',
+  'resourceIndicator',
+  'clientAuthMethod',
+  'refreshable',
+  'extraAuthorizationParams',
+  'revocation',
+] as const;
+
+/**
+ * An `oauth2` spec declares exactly one client source (ADR
+ * google-calendar-through-an-oauth-broker D3): `clientRegistration` (the gateway
+ * registers itself) or `broker` (the client is an OAuth broker's).
+ */
+function oauth2Issues(spec: OAuth2CredentialSpec): string[] {
+  const record = spec as unknown as Record<string, unknown>;
+  const hasBroker = record.broker !== undefined;
+  const hasRegistration = record.clientRegistration !== undefined;
+  if (hasBroker && hasRegistration) {
+    return ['credential: declare one client source, clientRegistration or broker, not both'];
+  }
+  const issues: string[] = [];
+  if (!Array.isArray(spec.scopes)) issues.push('credential.scopes: expected a list (may be empty)');
+  if (hasBroker) {
+    const broker: unknown = record.broker;
+    if (
+      !isRecord(broker) ||
+      typeof broker.provider !== 'string' ||
+      !BROKER_PROVIDER_PATTERN.test(broker.provider)
+    ) {
+      issues.push(
+        "credential.broker: expected { provider } with a lowercase slug such as 'google'",
+      );
+    }
+    for (const field of REGISTERED_CLIENT_ONLY_FIELDS) {
+      if (record[field] !== undefined) {
+        issues.push(`credential.${field}: a brokered spec leaves it to the broker`);
+      }
+    }
+    return issues;
+  }
+  return [...issues, ...registeredClientIssues(spec as OAuth2RegisteredClientSpec)];
+}
+
+function registeredClientIssues(spec: OAuth2RegisteredClientSpec): string[] {
+  const issues: string[] = [];
+  for (const key of ['authorizationUrl', 'tokenUrl'] as const) {
+    if (!isHttpsUrl(spec[key])) issues.push(`credential.${key}: expected an https URL`);
+  }
+  if (spec.clientAuthMethod === 'none' && !spec.pkce)
+    issues.push('credential.pkce: a public client (clientAuthMethod none) must use PKCE');
+  if (spec.revocation !== undefined) issues.push(...revocationIssues(spec));
+  // Without a broker, the only OAuth client the host knows is one it registers
+  // itself (ADR gmail-over-imap-with-an-app-password): no administrator declares one.
+  issues.push(...registrationIssues(spec));
+  // `refreshable: true` needs no `refresh()` : the host performs the standard
+  // refresh_token grant from the spec (ADR plugin-contract D2 as amended) ;
+  // `refresh` is an override for non-standard flows.
   return issues;
 }
 

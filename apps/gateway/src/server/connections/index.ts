@@ -18,6 +18,7 @@ import { CredentialBroker } from './credentials';
 import { DiscoveryAfterCall } from './discovery-after-call';
 import { createConnectionHandlers, type ConnectionHandlers } from './handlers';
 import { OAuth2Clients } from './oauth2-clients';
+import { OAuthBrokers } from './oauth-broker';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService } from './service';
 
@@ -61,10 +62,12 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     clock,
     logger,
   });
+  const brokers = new OAuthBrokers(deps.config.oauthBrokers, { fetch: outbound });
   const credentials = new CredentialBroker({
     connections: deps.store.connections,
     registry: deps.registry,
     clients,
+    brokers,
     fetch: outbound,
     clock,
     logger,
@@ -73,6 +76,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     store: deps.store,
     registry: deps.registry,
     clients,
+    brokers,
     broker: credentials,
     grounds: deps.grounds,
     pending: new PendingConnectStore(deps.sessions),
@@ -96,6 +100,14 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     service,
     logger,
   });
+  const unserved = deps.registry
+    .brokerProviders()
+    .filter((provider) => brokers.forProvider(provider) === null);
+  if (unserved.length > 0) {
+    logger.info('plugins need an OAuth broker that is not configured; listed as not configured', {
+      broker_providers: unserved,
+    });
+  }
   return { service, credentials, notices, handlers, discoveryAfterCall };
 }
 
@@ -105,7 +117,14 @@ export {
   type CredentialBrokerDeps,
   type ResolvedCredential,
 } from './credentials';
-export { CredentialFormatError, parseSecret, serializeSecret } from './credential-codec';
+export {
+  CredentialFormatError,
+  parseSecret,
+  parseStoredCredential,
+  serializeSecret,
+  type BrokerGrant,
+  type StoredCredential,
+} from './credential-codec';
 export {
   OAUTH_CLIENT_KEY_PREFIX,
   OAuth2ClientMissing,
@@ -126,9 +145,22 @@ export {
   ConnectError,
   ConnectionUnavailableError,
   isConnectError,
+  OAuthBrokerUnavailableError,
   ProviderUnreachableError,
   type ConnectErrorCode,
 } from './errors';
+export {
+  BROKER_REQUEST_TIMEOUT_MS,
+  brokerNotConfiguredReason,
+  challengeOf,
+  OAuthBrokerClient,
+  OAuthBrokerError,
+  OAuthBrokers,
+  type BrokerCall,
+  type FlowRequest,
+  type FreshToken,
+  type RedeemedGrant,
+} from './oauth-broker';
 export {
   actorOf,
   connectPagePath,

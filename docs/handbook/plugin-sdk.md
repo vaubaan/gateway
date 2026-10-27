@@ -293,16 +293,16 @@ provider says the credential itself is invalid.
 
 ### `CredentialSpec` and `CredentialSecret` (`credential.ts`)
 
-| Kind      | Spec fields                                                                                                                                                                         | Secret the plugin receives                                   |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `api-key` | `fields` (≥ 1 with `secret: true`), `createUrl?`                                                                                                                                    | `{ fields: Record<name, value>, metadata }`                  |
-| `oauth2`  | `authorizationUrl`, `tokenUrl` (https), `clientRegistration`, `scopes`, `pkce`, `resourceIndicator?`, `clientAuthMethod`, `refreshable`, `extraAuthorizationParams?`, `revocation?` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
-| `ssh-key` | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                                                                 | `{ privateKeyPem, publicKey, fields, metadata }`             |
+| Kind      | Spec fields                                                                                                                                                                                                                                                                                  | Secret the plugin receives                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `api-key` | `fields` (≥ 1 with `secret: true`), `createUrl?`                                                                                                                                                                                                                                             | `{ fields: Record<name, value>, metadata }`                  |
+| `oauth2`  | **either** `authorizationUrl`, `tokenUrl` (https), `clientRegistration`, `scopes`, `pkce`, `resourceIndicator?`, `clientAuthMethod`, `refreshable`, `extraAuthorizationParams?`, `revocation?` (`OAuth2RegisteredClientSpec`) **or** `broker: { provider }`, `scopes` (`OAuth2BrokeredSpec`) | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
+| `ssh-key` | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                                                                                                                                                                          | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
 One way of connecting per plugin, the simplest the provider offers (ADR
 [one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
 `api-key` whenever a person can make a key at the provider that works,
-`oauth2` where the provider offers none (miro), `ssh-key` for a host; gmail's
+`oauth2` where the provider offers none (miro, google-calendar), `ssh-key` for a host; gmail's
 key is an app password. The kinds and
 declarations of earlier builds that went through an app the company
 registered (`app-install`, its installation verification and manifest flow,
@@ -315,8 +315,14 @@ primitives (ADR
 [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md)
 removed the `ProviderAppConfig` of a client an administrator declared).
 
+**One client source.** `OAuth2CredentialSpec` is the union of two shapes,
+and `definePlugin` refuses a spec that declares both sources or neither (ADR
+[google-calendar-through-an-oauth-broker](../decisions/google-calendar-through-an-oauth-broker.md)
+D3); `isBrokeredSpec(spec)` tells them apart, and `PluginRegistry.brokerProviderOf(id)`
+/ `brokerProviders()` say which broker providers the registered plugins need.
+
 **A client the gateway registers itself.** `clientRegistration:
-{ registrationUrl }` is required on an `oauth2` spec: the provider accepts
+{ registrationUrl }` (`OAuth2RegisteredClientSpec`): the provider accepts
 dynamic client registration (RFC 7591, as remote MCP servers do): the host registers
 one client per instance there, keeps it, reuses it, and registers again when
 the provider rejects it (ADR
@@ -324,6 +330,19 @@ the provider rejects it (ADR
 Nobody declares anything: it is the only OAuth client the host knows, and
 `definePlugin` refuses an `oauth2` spec without it (and checks the URL is
 https). Shipped example: `plugins/miro/src/credential.ts`.
+
+**A client that is an OAuth broker's.** `broker: { provider }`
+(`OAuth2BrokeredSpec`, `provider` a lowercase slug, `BROKER_PROVIDER_PATTERN`)
+with the `scopes` to ask for, and nothing else: the provider's endpoints,
+PKCE towards the provider, the client authentication and the revocation are
+the broker's, and `definePlugin` refuses any of those fields on a brokered
+spec. The host starts the flow at the broker the configuration names for
+that provider, redeems the grant, refreshes and revokes through it (handbook
+[connections](connections.md), "A client that is an OAuth broker's";
+contract [oauth-broker-contract](oauth-broker-contract.md)). The plugin
+receives an `OAuth2Secret` with `refreshToken: null` and never sees the grant
+id or the broker key. Without a configured broker the plugin is listed as
+not configured. Shipped example: `plugins/google-calendar/src/credential.ts`.
 
 **Revocation of an `oauth2` grant** is declared, not coded:
 `revocation: { url, format }` on the spec, with `format` one of

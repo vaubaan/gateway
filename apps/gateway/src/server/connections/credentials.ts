@@ -23,12 +23,22 @@
  * is forgotten, so the reconnect registers a new one. A plugin's own `refresh()` is called instead only when it
  * declares one (non-standard flow). The OAuth client secret never reaches a
  * plugin.
+ *
+ * A brokered `oauth2` connection (ADR google-calendar-through-an-oauth-broker)
+ * is refreshed by the OAuth broker that holds its grant (`POST
+ * /grants/<id>/token`) and withdrawn there (`DELETE /grants/<id>`). The grant
+ * id sits in the sealed credential beside the secret (`BrokerGrant`) and never
+ * reaches the plugin. A broker that is down or refuses the call is a
+ * `OAuthBrokerUnavailableError`, which leaves the connection as it is; only a
+ * grant the broker says is over turns it `expired`.
  */
 import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
 import {
+  isBrokeredSpec,
   type ConnectionContext,
   type CredentialSecret,
+  type OAuth2Secret,
   type PluginRegistry,
   type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
@@ -37,8 +47,13 @@ import type { Logger } from '../logging';
 import type { ConnectionsRepo } from '../store';
 import type { Clock } from '../store/clock';
 import type { ConnectionRecord, ProviderGrantOutcome } from '../store/types';
-import { parseSecret, serializeSecret } from './credential-codec';
-import { ConnectionUnavailableError, errorMessage, ProviderUnreachableError } from './errors';
+import { parseStoredCredential, serializeSecret, type BrokerGrant } from './credential-codec';
+import {
+  ConnectionUnavailableError,
+  errorMessage,
+  OAuthBrokerUnavailableError,
+  ProviderUnreachableError,
+} from './errors';
 import { providerFailureReason } from './failure-reason';
 import {
   OAuth2TokenError,
@@ -49,6 +64,7 @@ import {
   type RevocationAttempt,
 } from './oauth2';
 import { OAuth2ClientMissing, type OAuth2Clients } from './oauth2-clients';
+import { OAuthBrokerError, type OAuthBrokers } from './oauth-broker';
 
 /** An access token that expires within this delay is refreshed before use. */
 export const REFRESH_SKEW_MS = 60_000;
@@ -59,6 +75,11 @@ export interface ResolvedCredential {
   readonly plugin: ProviderPlugin;
   /** Decrypted, in memory only; the caller drops it after the upstream call. */
   readonly credential: CredentialSecret;
+  /**
+   * The OAuth broker's grant of a brokered connection, `null` otherwise. Host
+   * only: never part of what a plugin receives (`contextOf`).
+   */
+  readonly brokerGrant: BrokerGrant | null;
 }
 
 export interface CredentialBrokerDeps {
@@ -66,6 +87,8 @@ export interface CredentialBrokerDeps {
   readonly registry: PluginRegistry;
   /** The OAuth client of an `oauth2` service, registered by the gateway. */
   readonly clients: Pick<OAuth2Clients, 'forTokenRequest' | 'rejected'>;
+  /** The OAuth brokers the instance is enrolled with: refresh and revocation of a brokered connection. */
+  readonly brokers: Pick<OAuthBrokers, 'byName'>;
   readonly fetch: typeof fetch;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -86,7 +109,8 @@ export function canWithdraw(
   if (kind !== plugin.credential.kind) return false;
   if (plugin.revoke) return true;
   const spec = plugin.credential;
-  return spec.kind === 'oauth2' && spec.revocation !== undefined;
+  if (spec.kind !== 'oauth2') return false;
+  return isBrokeredSpec(spec) || spec.revocation !== undefined;
 }
 
 /** The plugin's `refresh` override serves its primary way of connecting only. */
@@ -178,8 +202,8 @@ export class CredentialBroker {
       if (!registered) return null;
       const sealed = await this.deps.connections.getCredential(connectionId);
       if (sealed === null) return null;
-      const credential = parseSecret(sealed);
-      return { connection, plugin: registered.plugin, credential };
+      const { secret, brokerGrant } = parseStoredCredential(sealed);
+      return { connection, plugin: registered.plugin, credential: secret, brokerGrant };
     } catch (err) {
       this.deps.logger.warn('credential not readable for the provider-side revocation', {
         connection_id: connectionId,
@@ -249,15 +273,35 @@ export class CredentialBroker {
       return { outcome: 'revoked' };
     }
     const spec = plugin.credential;
-    if (spec.kind !== 'oauth2' || !spec.revocation || held.credential.kind !== 'oauth2') {
-      return { outcome: 'no-token' };
-    }
+    if (spec.kind !== 'oauth2' || held.credential.kind !== 'oauth2') return { outcome: 'no-token' };
+    if (isBrokeredSpec(spec)) return this.withdrawAtBroker(held.brokerGrant);
+    if (!spec.revocation) return { outcome: 'no-token' };
     return revokeGrant(
       spec.revocation,
       await this.deps.clients.forTokenRequest(plugin, spec),
       held.credential,
       { fetch: this.deps.fetch },
     );
+  }
+
+  /** `DELETE /grants/<id>` at the broker that holds the grant. */
+  private async withdrawAtBroker(grant: BrokerGrant | null): Promise<RevocationAttempt> {
+    if (grant === null) return { outcome: 'no-token' };
+    const broker = this.deps.brokers.byName(grant.broker);
+    if (!broker) {
+      return {
+        outcome: 'failed',
+        status: 0,
+        detail: `OAuth broker '${grant.broker}' is no longer configured`,
+      };
+    }
+    try {
+      await broker.revoke(grant.grantId);
+      return { outcome: 'revoked' };
+    } catch (err) {
+      if (!(err instanceof OAuthBrokerError)) throw err;
+      return { outcome: 'failed', status: err.status, detail: err.message };
+    }
   }
 
   /** The `ConnectionContext` a plugin receives for a connection-level call (discovery). */
@@ -280,8 +324,8 @@ export class CredentialBroker {
     if (!registered) throw new ConnectionUnavailableError(connectionId, 'missing');
     const sealed = await this.deps.connections.getCredential(connectionId);
     if (sealed === null) throw new ConnectionUnavailableError(connectionId, connection.status);
-    const credential = parseSecret(sealed);
-    return { connection, plugin: registered.plugin, credential };
+    const { secret, brokerGrant } = parseStoredCredential(sealed);
+    return { connection, plugin: registered.plugin, credential: secret, brokerGrant };
   }
 
   private expiresSoon(credential: CredentialSecret): boolean {
@@ -295,6 +339,9 @@ export class CredentialBroker {
   private canRefresh(resolved: ResolvedCredential): boolean {
     if (ownRefreshApplies(resolved.plugin, resolved.credential)) return true;
     const spec = resolved.plugin.credential;
+    if (spec.kind === 'oauth2' && isBrokeredSpec(spec)) {
+      return resolved.credential.kind === 'oauth2' && resolved.brokerGrant !== null;
+    }
     return (
       spec.kind === 'oauth2' &&
       spec.refreshable &&
@@ -314,7 +361,17 @@ export class CredentialBroker {
       // Only a rejection by the provider ends the connection; an unreachable provider,
       // a missing app configuration or a bug leaves its status alone for the next attempt.
       if (!(err instanceof UpstreamAuthError)) {
-        if (err instanceof ProviderUnreachableError) throw err;
+        if (err instanceof ProviderUnreachableError) {
+          if (err instanceof OAuthBrokerUnavailableError) {
+            this.deps.logger.warn('credential not refreshed: the OAuth broker failed', {
+              connection_id: connectionId,
+              provider: plugin.id,
+              broker: err.broker,
+              failure: err.message,
+            });
+          }
+          throw err;
+        }
         throw new ProviderUnreachableError(
           `${plugin.displayName}: the credential could not be refreshed (${providerFailureReason(err)})`,
         );
@@ -335,7 +392,7 @@ export class CredentialBroker {
     const expiresAt = next.kind === 'oauth2' ? next.expiresAt : null;
     const written = await this.deps.connections.refreshCredential(
       connectionId,
-      serializeSecret(next),
+      serializeSecret(next, current.brokerGrant),
       expiresAt,
     );
     if (!written) {
@@ -351,6 +408,14 @@ export class CredentialBroker {
     return this.load(connectionId);
   }
 
+  private obtainFromBroker(
+    plugin: ProviderPlugin,
+    credential: OAuth2Secret,
+    grant: BrokerGrant | null,
+  ): Promise<OAuth2Secret> {
+    return refreshAtBroker(this.deps.brokers, plugin, credential, grant);
+  }
+
   /** A fresh secret, or `UpstreamAuthError` (rejected) / `ProviderUnreachableError` (transient). */
   private async obtain(current: ResolvedCredential): Promise<CredentialSecret> {
     const { plugin, credential } = current;
@@ -362,7 +427,15 @@ export class CredentialBroker {
       return refreshed;
     }
     const spec = plugin.credential;
-    if (spec.kind !== 'oauth2' || !spec.refreshable || credential.kind !== 'oauth2') {
+    if (spec.kind === 'oauth2' && isBrokeredSpec(spec) && credential.kind === 'oauth2') {
+      return this.obtainFromBroker(plugin, credential, current.brokerGrant);
+    }
+    if (
+      spec.kind !== 'oauth2' ||
+      isBrokeredSpec(spec) ||
+      !spec.refreshable ||
+      credential.kind !== 'oauth2'
+    ) {
       throw new UpstreamAuthError(
         `a '${credential.kind}' credential cannot be refreshed; reconnect the provider`,
         HTTP_UNAUTHORIZED,
@@ -397,6 +470,44 @@ export class CredentialBroker {
       }
       throw err;
     }
+  }
+}
+
+/** The refresh of a brokered connection, for `CredentialBroker.obtain`. */
+async function refreshAtBroker(
+  brokers: Pick<OAuthBrokers, 'byName'>,
+  plugin: ProviderPlugin,
+  credential: OAuth2Secret,
+  grant: BrokerGrant | null,
+): Promise<OAuth2Secret> {
+  if (grant === null) {
+    throw new UpstreamAuthError(
+      `${plugin.displayName}: this connection holds no broker grant; reconnect it`,
+      HTTP_UNAUTHORIZED,
+    );
+  }
+  const broker = brokers.byName(grant.broker);
+  if (!broker) {
+    throw new OAuthBrokerUnavailableError(
+      grant.broker,
+      `OAuth broker '${grant.broker}' that holds this connection's grant is no longer configured`,
+    );
+  }
+  try {
+    const fresh = await broker.token(grant.grantId);
+    return {
+      kind: 'oauth2',
+      accessToken: fresh.accessToken,
+      refreshToken: null,
+      expiresAt: fresh.expiresAt,
+      scopes: fresh.scopes ?? credential.scopes,
+      metadata: credential.metadata,
+    };
+  } catch (err) {
+    if (!(err instanceof OAuthBrokerError)) throw err;
+    // Only a grant the broker says is over ends the connection.
+    if (err.grantGone) throw new UpstreamAuthError(err.message, err.status || HTTP_UNAUTHORIZED);
+    throw new OAuthBrokerUnavailableError(grant.broker, err.message);
   }
 }
 

@@ -14,10 +14,46 @@ export class CredentialFormatError extends Error {
   }
 }
 
-export function serializeSecret(secret: CredentialSecret): string {
-  return JSON.stringify(secret);
+/**
+ * The grant an OAuth broker holds for a connection (ADR
+ * google-calendar-through-an-oauth-broker D2): which broker, and its grant id.
+ * Kept in the sealed credential beside the secret, never handed to a plugin.
+ */
+export interface BrokerGrant {
+  readonly broker: string;
+  readonly grantId: string;
 }
 
+/** What the store seals: the plugin-facing secret, and the host-only broker grant. */
+export interface StoredCredential {
+  readonly secret: CredentialSecret;
+  readonly brokerGrant: BrokerGrant | null;
+}
+
+export function serializeSecret(
+  secret: CredentialSecret,
+  brokerGrant: BrokerGrant | null = null,
+): string {
+  return JSON.stringify(brokerGrant ? { ...secret, brokerGrant } : secret);
+}
+
+/** The sealed text read back: the secret and, for a brokered connection, its grant. */
+export function parseStoredCredential(text: string): StoredCredential {
+  const secret = parseSecret(text);
+  const raw = JSON.parse(text) as Record<string, unknown>;
+  const grant = raw.brokerGrant;
+  if (grant === undefined || grant === null) return { secret, brokerGrant: null };
+  if (!isRecord(grant)) throw new CredentialFormatError("'brokerGrant' is not an object");
+  return {
+    secret,
+    brokerGrant: {
+      broker: requireString(grant.broker, 'brokerGrant.broker'),
+      grantId: requireString(grant.grantId, 'brokerGrant.grantId'),
+    },
+  };
+}
+
+/** The plugin-facing secret alone; a broker grant beside it is left out. */
 export function parseSecret(text: string): CredentialSecret {
   let raw: unknown;
   try {

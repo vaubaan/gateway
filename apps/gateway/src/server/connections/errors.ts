@@ -17,6 +17,8 @@ export const CONNECT_ERROR_CODES = [
   'provider-denied',
   'token-exchange-failed',
   'client-registration-failed',
+  'broker-not-configured',
+  'broker-failed',
   'credential-rejected',
   'provider-unreachable',
   'not-found',
@@ -43,6 +45,10 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
   'token-exchange-failed': 'The service refused to exchange the authorization for a credential.',
   'client-registration-failed':
     'The service refused to register this gateway as one of its apps. Retry in a moment; if it keeps refusing, the service may not allow new apps for your organisation.',
+  'broker-not-configured':
+    'This service is connected through an OAuth broker, and this gateway is enrolled with none for it. An administrator configures one (oauth_brokers).',
+  'broker-failed':
+    'The OAuth broker this gateway is enrolled with could not complete the connection. Retry in a moment; if it keeps failing, tell an administrator.',
   'credential-rejected': 'The service rejected this credential.',
   'provider-unreachable': 'The service could not be reached. Retry in a moment.',
   'not-found': 'This account does not exist or is not yours.',
@@ -70,6 +76,8 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'provider-denied': 400,
   'token-exchange-failed': 502,
   'client-registration-failed': 502,
+  'broker-not-configured': 409,
+  'broker-failed': 502,
   'credential-rejected': 400,
   'provider-unreachable': 502,
   'not-found': 404,
@@ -131,6 +139,23 @@ export class ProviderUnreachableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ProviderUnreachableError';
+  }
+}
+
+/**
+ * The OAuth broker of a brokered connection is down, slow, refused the call or
+ * is no longer configured (ADR google-calendar-through-an-oauth-broker, "the
+ * connection shows the broker's failure, not an expiry"): nothing changed,
+ * retry later. A `ProviderUnreachableError`, so every caller that leaves the
+ * connection alone on a transient failure does so here too.
+ */
+export class OAuthBrokerUnavailableError extends ProviderUnreachableError {
+  constructor(
+    readonly broker: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'OAuthBrokerUnavailableError';
   }
 }
 

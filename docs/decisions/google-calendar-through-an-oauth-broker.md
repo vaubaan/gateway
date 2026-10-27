@@ -223,6 +223,50 @@ assessment, and Google's Limited Use rules on restricted data handed to
 instances the broker does not operate are not settled. Gmail stays on IMAP
 (ADR [gmail-over-imap-with-an-app-password](gmail-over-imap-with-an-app-password.md)).
 
+## Amendment of 2026-10-27 — D1 to D4 implemented
+
+What the implementation settled where the decision left it open, and where it
+reads the decision's words precisely. Handbooks:
+[oauth-broker-contract](../handbook/oauth-broker-contract.md) (the contract,
+for whoever builds a broker), [connections](../handbook/connections.md),
+[configuration](../handbook/configuration.md) "OAuth brokers",
+[providers/google-calendar](../handbook/providers/google-calendar.md).
+
+- **Which broker serves a plugin (D1).** `oauth_brokers.<name>` takes an
+  optional `providers` list. A plugin's `broker.provider` is served by the
+  broker that lists it, else by the **default broker** — the one without
+  `providers` —, else by none (the plugin is listed as not configured, with
+  the reason). At most one default broker, and one broker per provider: a
+  configuration error otherwise. The simplest enrollment is one broker and
+  no list. Rejected: naming the block after the provider
+  (`oauth_brokers.google`), which ties one broker to one provider; a list of
+  brokers tried in turn, which makes the grant's home ambiguous.
+- **`POST /flows` carries `state` (D2).** The browser comes back on
+  `return_url?grant=…&state=…`, and the broker can only give back a `state`
+  it was given: the call carries the gateway's `state` beside the four named
+  fields, and `challenge_method: "S256"`. A grant is redeemed, refreshed and
+  revoked at the broker that issued it, by name (kept in the sealed
+  credential beside the access token, never handed to the plugin).
+- **Errors and lifetimes (D2).** The contract fixes the error codes:
+  `invalid_grant` on redeem (twice, late, another instance, wrong verifier —
+  one answer), `grant_not_found` / `grant_revoked` on refresh (the connection
+  is then `expired`); anything else — a bad key, a broker down, slow or
+  refusing — is the broker's failure and changes no connection. `DELETE
+/grants/<id>` answers 204, also for a grant already gone.
+- **Tool names (D4).** The SDK writes a tool prefix with `_` for `-`
+  (`toolPrefixFor`): the tools are `google_calendar__*`, as Cloudflare DNS's
+  are `cloudflare_dns__*`.
+- **`list_calendars` (D4)** is answered by the gateway from the mission's
+  calendars (Google's lists the whole account); discovery calls Google's.
+  The eight other tools are relayed.
+- **The catalog (D4)** zones the people a call invites inside or outside the
+  company by the calendar's `internal_domains`, as Gmail zones recipients,
+  and makes a change or a deletion that lets Google email the event's current
+  guests a permission of its own (`notify-guests`), since who they are is not
+  known before the call. Ten risks, presets `read-only` and `assistant`.
+- **The tool list** is modelled from Google's reference (Context7,
+  2026-10-27), not captured: the open point below stands.
+
 ## Open points
 
 - The broker's own design (enrollment of an instance, its record of return

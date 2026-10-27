@@ -87,11 +87,19 @@ function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconne
   const name = provider.displayName;
   return (
     <div className={styles.prose}>
-      {provider.kind === 'oauth2' && (
+      {provider.kind === 'oauth2' && !provider.viaBroker && (
         <p>
           “Continue” sends you to {name}. You sign in there and allow this gateway, which registered
           itself as an app at {name} the first time someone connected; {name} then sends you back
           here with a credential, which is encrypted and kept under your name.
+        </p>
+      )}
+      {provider.kind === 'oauth2' && provider.viaBroker && (
+        <p>
+          “Continue” sends you to {name}. You sign in there and allow the app of the OAuth broker
+          this gateway is enrolled with; the broker keeps the long-lived authorization and sends you
+          back here with a short-lived access, which is encrypted and kept under your name. Your{' '}
+          {name} data never goes through the broker.
         </p>
       )}
       {provider.kind === 'api-key' && (
@@ -224,6 +232,10 @@ export default async function ConnectOneAccountPage({
         <Callout tone="warn" title="This account has no owner">
           It cannot be reconnected until an administrator names a new owner. The missions that use
           it keep running meanwhile.
+        </Callout>
+      ) : provider.unavailable !== null ? (
+        <Callout tone="warn" title="Not configured on this gateway">
+          {provider.unavailable}
         </Callout>
       ) : (
         <Guided

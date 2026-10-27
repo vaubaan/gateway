@@ -1,5 +1,5 @@
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
-import type { OAuth2CredentialSpec, OAuth2Secret } from '@vaubaan/plugin-sdk';
+import type { OAuth2RegisteredClientSpec, OAuth2Secret } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -55,7 +55,7 @@ describe('authorization request', () => {
   });
 
   it('adds the resource indicator and the extra parameters, which never override the core ones', () => {
-    const spec: OAuth2CredentialSpec = {
+    const spec: OAuth2RegisteredClientSpec = {
       ...OAUTH_SPEC,
       resourceIndicator: 'https://mcp.example.com',
       extraAuthorizationParams: {
@@ -141,7 +141,7 @@ describe('code exchange', () => {
     ).rejects.toThrow('PKCE is required');
     expect(fetch.calls).toHaveLength(0);
 
-    const noPkce: OAuth2CredentialSpec = { ...OAUTH_SPEC, pkce: false };
+    const noPkce: OAuth2RegisteredClientSpec = { ...OAUTH_SPEC, pkce: false };
     await exchangeCode(noPkce, CLIENT, { ...exchange, codeVerifier: null }, io(fetch));
     expect(form(fetch.calls[0]!.body).has('code_verifier')).toBe(false);
   });

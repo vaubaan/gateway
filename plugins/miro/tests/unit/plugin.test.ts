@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-import { catalogPathNextTo, toolPrefixFor } from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, isBrokeredSpec, toolPrefixFor } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertIdentifiersRefused,
@@ -121,7 +121,8 @@ describe('miro credential — OAuth with a client the gateway registers itself',
 
   test('nothing to declare : the gateway registers its client, and no revocation endpoint (Miro publishes none)', () => {
     const spec = miroPlugin.credential;
-    if (spec.kind !== 'oauth2') throw new Error('expected oauth2');
+    if (spec.kind !== 'oauth2' || isBrokeredSpec(spec))
+      throw new Error('expected a registered oauth2 client');
     expect(spec.clientRegistration.registrationUrl).toMatch(/^https:\/\//);
     expect(spec.revocation).toBeUndefined();
     expect(miroPlugin.manualRevocation).toMatch(/Vaubaan Gateway/);

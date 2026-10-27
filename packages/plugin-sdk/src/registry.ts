@@ -15,6 +15,7 @@ import {
   type Preset,
 } from '@vaubaan/shared';
 
+import { isBrokeredSpec } from './credential.ts';
 import { pluginIssues } from './define-plugin.ts';
 import type { ProviderPlugin } from './plugin.ts';
 
@@ -142,6 +143,29 @@ export class PluginRegistry {
    */
   gitRemote(): RegisteredPlugin | null {
     return this.all().find((r) => r.plugin.gitRemote !== undefined) ?? null;
+  }
+
+  /**
+   * The broker provider a plugin's `oauth2` spec takes its client from
+   * (`OAuth2BrokeredSpec.broker.provider`), or `null` when the plugin needs no
+   * OAuth broker. Throws when the provider is unknown.
+   */
+  brokerProviderOf(id: string): string | null {
+    const spec = this.require(id).plugin.credential;
+    return spec.kind === 'oauth2' && isBrokeredSpec(spec) ? spec.broker.provider : null;
+  }
+
+  /**
+   * Every broker provider some registered plugin needs, once each, in
+   * registration order: what the configuration's `oauth_brokers` should serve.
+   */
+  brokerProviders(): readonly string[] {
+    const out = new Set<string>();
+    for (const id of this.ids) {
+      const provider = this.brokerProviderOf(id);
+      if (provider !== null) out.add(provider);
+    }
+    return [...out];
   }
 
   /** The indexed catalog of a provider. */

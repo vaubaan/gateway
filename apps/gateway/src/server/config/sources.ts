@@ -96,12 +96,57 @@ export const SIGN_IN_FIELDS = [
   { field: 'allowed_email_domains', env: 'ALLOWED_EMAIL_DOMAINS', kind: 'list' },
   { field: 'invitation_only', env: 'INVITATION_ONLY', kind: 'bool' },
   { field: 'require_verified_email', env: 'REQUIRE_VERIFIED_EMAIL', kind: 'bool' },
-] as const satisfies readonly {
+] as const satisfies readonly NamedBlockField[];
+export type SignInField = (typeof SIGN_IN_FIELDS)[number]['field'];
+
+export const OAUTH_BROKER_ENV_PREFIX = 'VAUBAAN_OAUTH_BROKER_';
+
+/**
+ * The fields of one OAuth broker the instance is enrolled with
+ * (`oauth_brokers.<name>.<field>`, ADR google-calendar-through-an-oauth-broker
+ * D1), with the suffix of its variable (`VAUBAAN_OAUTH_BROKER_<NAME>_<SUFFIX>`).
+ * `key` is a secret like every other: a `_FILE` sibling or `${file:…}`.
+ */
+export const OAUTH_BROKER_FIELDS = [
+  { field: 'url', env: 'URL', kind: 'string' },
+  { field: 'key', env: 'KEY', kind: 'secret' },
+  { field: 'providers', env: 'PROVIDERS', kind: 'list' },
+] as const satisfies readonly NamedBlockField[];
+
+/** One field of a family of named blocks (`sign_in.<id>.*`, `oauth_brokers.<name>.*`). */
+export interface NamedBlockField {
   readonly field: string;
   readonly env: string;
   readonly kind: 'string' | 'secret' | 'list' | 'bool';
-}[];
-export type SignInField = (typeof SIGN_IN_FIELDS)[number]['field'];
+}
+
+/**
+ * A family of named blocks: the top-level key, the prefix of its variables
+ * (`<prefix><NAME>_<SUFFIX>`, a hyphen of the name ↔ an underscore) and its
+ * fields. The env reader, `envNamesFor`, `isSecretKeyPath` and
+ * `secretEnvVariables` read every family from `NAMED_BLOCKS`.
+ */
+export interface NamedBlock {
+  readonly top: string;
+  /** What one block is, in an error message ("sign-in provider"). */
+  readonly noun: string;
+  readonly prefix: string;
+  readonly fields: readonly NamedBlockField[];
+}
+
+export const SIGN_IN_BLOCK: NamedBlock = {
+  top: 'sign_in',
+  noun: 'sign-in provider',
+  prefix: SIGN_IN_ENV_PREFIX,
+  fields: SIGN_IN_FIELDS,
+};
+export const OAUTH_BROKER_BLOCK: NamedBlock = {
+  top: 'oauth_brokers',
+  noun: 'OAuth broker',
+  prefix: OAUTH_BROKER_ENV_PREFIX,
+  fields: OAUTH_BROKER_FIELDS,
+};
+export const NAMED_BLOCKS: readonly NamedBlock[] = [SIGN_IN_BLOCK, OAUTH_BROKER_BLOCK];
 
 const KEY_TABLE = [
   {
@@ -402,13 +447,11 @@ export function isKeyRequired(spec: KeySpec, idpConfigured?: boolean): boolean {
 
 /** Environment variable names that set a given YAML path (for error messages). */
 export function envNamesFor(path: string): string[] {
-  const signInMatch = /^sign_in\.([^.]+)\.(.+)$/.exec(path);
-  if (signInMatch) {
-    const [, id = '', field = ''] = signInMatch;
-    const spec = SIGN_IN_FIELDS.find((f) => f.field === field);
-    if (!spec) return [];
-    const name = signInEnvName(id, spec.env);
-    return spec.kind === 'secret' ? [name, `${name}_FILE`] : [name];
+  const named = namedFieldOf(path);
+  if (named) {
+    if (!named.spec) return [];
+    const name = namedBlockEnvName(named.block, named.name, named.spec.env);
+    return named.spec.kind === 'secret' ? [name, `${name}_FILE`] : [name];
   }
   const spec = KEYS.find((k) => k.path === path);
   if (!spec) return [];
@@ -424,10 +467,8 @@ export function envNamesFor(path: string): string[] {
  * but a `${NAME}` it references is treated as a secret's).
  */
 export function isSecretKeyPath(path: string): boolean {
-  const signInMatch = /^sign_in\.([^.]+)\.(.+)$/.exec(path);
-  if (signInMatch) {
-    return SIGN_IN_FIELDS.some((f) => f.field === signInMatch[2] && f.kind === 'secret');
-  }
+  const named = namedFieldOf(path);
+  if (named) return named.spec?.kind === 'secret';
   if (path.startsWith(`${RETIRED_PROVIDERS_KEY}.`)) return true;
   if (path.startsWith('encryption.previous_keys.')) return true;
   const spec = KEYS.find((k) => k.path === path);
@@ -451,10 +492,36 @@ export function secretEnvVariables(env: EnvSource): string[] {
   for (const name of Object.keys(env)) {
     if (env[name] === undefined) continue;
     const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
-    if (parseSignInEnvName(base)?.spec.kind === 'secret') out.add(name);
+    for (const block of NAMED_BLOCKS) {
+      if (parseNamedBlockEnvName(block, base)?.spec.kind === 'secret') out.add(name);
+    }
     if (name.startsWith(RETIRED_PROVIDER_ENV_PREFIX)) out.add(name);
   }
   return [...out].sort();
+}
+
+/**
+ * The family, the block name and the field a path of a named block names
+ * (`sign_in.acme.client_id`, `oauth_brokers.main.key`); `spec` is `undefined`
+ * for a field the family does not know. `null` for any other path.
+ */
+function namedFieldOf(
+  path: string,
+): { block: NamedBlock; name: string; spec: NamedBlockField | undefined } | null {
+  for (const block of NAMED_BLOCKS) {
+    if (!path.startsWith(`${block.top}.`)) continue;
+    const rest = path.slice(block.top.length + 1);
+    const dot = rest.indexOf('.');
+    if (dot <= 0 || dot === rest.length - 1) return null;
+    const field = rest.slice(dot + 1);
+    return { block, name: rest.slice(0, dot), spec: block.fields.find((f) => f.field === field) };
+  }
+  return null;
+}
+
+/** `<prefix><NAME>_<SUFFIX>`: a hyphen of the name becomes an underscore. */
+export function namedBlockEnvName(block: NamedBlock, name: string, suffix: string): string {
+  return `${block.prefix}${name.toUpperCase().replace(/-/g, '_')}_${suffix}`;
 }
 
 /** The top-level key of the retired per-provider OAuth clients (`providers.<id>.<field>`). */
@@ -485,7 +552,7 @@ export function retiredConfigKeys(tree: RawTree, env: EnvSource): string[] {
 
 /** `VAUBAAN_SIGN_IN_<ID>_<SUFFIX>`: a hyphen of the provider id becomes an underscore. */
 export function signInEnvName(providerId: string, suffix: string): string {
-  return `${SIGN_IN_ENV_PREFIX}${providerId.toUpperCase().replace(/-/g, '_')}_${suffix}`;
+  return namedBlockEnvName(SIGN_IN_BLOCK, providerId, suffix);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -504,7 +571,7 @@ export function readEnvSource(
     const value = readEnvValue(ctx, spec);
     if (value !== undefined) setPath(tree, spec.path, value);
   }
-  readSignInEnv(ctx, tree);
+  readNamedBlocksEnv(ctx, tree);
   return tree;
 }
 
@@ -558,27 +625,31 @@ function parseSecretMap(ctx: SourceContext, raw: string, spec: KeySpec): RawTree
 }
 
 /**
- * `VAUBAAN_SIGN_IN_<ID>_<FIELD>[_FILE]` → `sign_in.<id>.<field>`. The field is
- * matched as a suffix so that an id with a hyphen
+ * `<prefix><NAME>_<FIELD>[_FILE]` → `<top>.<name>.<field>`, for every family of
+ * `NAMED_BLOCKS`. The field is matched as a suffix so that a name with a hyphen
  * (`acme-entra` → `ACME_ENTRA`) parses unambiguously.
  */
-function readSignInEnv(ctx: SourceContext, tree: RawTree): void {
+function readNamedBlocksEnv(ctx: SourceContext, tree: RawTree): void {
+  for (const block of NAMED_BLOCKS) readNamedBlockEnv(ctx, tree, block);
+}
+
+function readNamedBlockEnv(ctx: SourceContext, tree: RawTree, block: NamedBlock): void {
   const seen = new Set<string>();
   for (const name of Object.keys(ctx.env).sort()) {
-    if (!name.startsWith(SIGN_IN_ENV_PREFIX) || ctx.env[name] === undefined) continue;
+    if (!name.startsWith(block.prefix) || ctx.env[name] === undefined) continue;
     const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
     if (seen.has(base)) continue;
     seen.add(base);
-    const parsed = parseSignInEnvName(base);
+    const parsed = parseNamedBlockEnvName(block, base);
     if (!parsed) {
       ctx.issues.add(
-        'sign_in',
-        `${name} does not end with a known sign-in provider field (${SIGN_IN_FIELDS.map((f) => f.env).join(', ')})`,
+        block.top,
+        `${name} does not end with a known ${block.noun} field (${block.fields.map((f) => f.env).join(', ')})`,
         [name],
       );
       continue;
     }
-    const path = `sign_in.${parsed.providerId}.${parsed.spec.field}`;
+    const path = `${block.top}.${parsed.name}.${parsed.spec.field}`;
     let value: unknown;
     switch (parsed.spec.kind) {
       case 'secret':
@@ -602,24 +673,34 @@ function readSignInEnv(ctx: SourceContext, tree: RawTree): void {
   }
 }
 
-const SIGN_IN_FIELDS_LONGEST_FIRST = [...SIGN_IN_FIELDS].sort(
-  (a, b) => b.env.length - a.env.length,
-);
-
 /**
- * `VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID` → `{ providerId: 'acme-entra', spec: client_id }`;
- * `null` when the name does not end with a known field or has no id part.
+ * `VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID` → `{ name: 'acme-entra', spec: client_id }`;
+ * `null` when the variable is not of the family, does not end with a known
+ * field or has no name part.
  */
+export function parseNamedBlockEnvName(
+  block: NamedBlock,
+  variable: string,
+): { name: string; spec: NamedBlockField } | null {
+  if (!variable.startsWith(block.prefix)) return null;
+  const rest = variable.slice(block.prefix.length);
+  const spec = [...block.fields]
+    .sort((a, b) => b.env.length - a.env.length)
+    .find((f) => rest.endsWith(`_${f.env}`));
+  if (!spec) return null;
+  const namePart = rest.slice(0, -(spec.env.length + 1));
+  if (namePart.length === 0) return null;
+  return { name: namePart.toLowerCase().replace(/_/g, '-'), spec };
+}
+
+/** `VAUBAAN_SIGN_IN_ACME_ENTRA_CLIENT_ID` → `{ providerId: 'acme-entra', spec: client_id }`. */
 export function parseSignInEnvName(
   name: string,
 ): { providerId: string; spec: (typeof SIGN_IN_FIELDS)[number] } | null {
-  if (!name.startsWith(SIGN_IN_ENV_PREFIX)) return null;
-  const rest = name.slice(SIGN_IN_ENV_PREFIX.length);
-  const spec = SIGN_IN_FIELDS_LONGEST_FIRST.find((f) => rest.endsWith(`_${f.env}`));
-  if (!spec) return null;
-  const idPart = rest.slice(0, -(spec.env.length + 1));
-  if (idPart.length === 0) return null;
-  return { providerId: idPart.toLowerCase().replace(/_/g, '-'), spec };
+  const parsed = parseNamedBlockEnvName(SIGN_IN_BLOCK, name);
+  if (!parsed) return null;
+  const spec = SIGN_IN_FIELDS.find((f) => f.field === parsed.spec.field);
+  return spec ? { providerId: parsed.name, spec } : null;
 }
 
 /* ------------------------------------------------------------------------ */

@@ -550,6 +550,8 @@ export const ACCOUNT_WORDS = {
   gone: 'no longer found',
   /** A resource of `InstanceConfig.selfResources` (SEC 2026-10-15 H1). */
   self: "this instance's own project: never reachable by a mission",
+  /** A service this instance cannot connect yet: an OAuth broker it needs is not configured. */
+  notConfigured: 'not configured on this gateway',
   noLabel: 'without an environment label',
 } as const;
 

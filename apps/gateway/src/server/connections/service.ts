@@ -8,7 +8,10 @@
  *   api-key      start(): the form values, checked at paste and by a first discovery
  *   oauth2       start(): authorization redirect with a single-use `state` and PKCE
  *                complete(): code exchange with the OAuth client the gateway
- *                registered at the service itself (`OAuth2Clients`)
+ *                registered at the service itself (`OAuth2Clients`) — or, for a
+ *                brokered spec, `POST /flows` at the OAuth broker, then the
+ *                one-time grant redeemed there (`OAuthBrokers`; ADR
+ *                google-calendar-through-an-oauth-broker)
  *   ssh-key      start(): an ed25519 key pair generated here, public key shown
  *
  * A connection is created under the name of the user who connected it. An
@@ -27,7 +30,9 @@ import {
   type CredentialCheck,
   type CredentialField,
   type CredentialSecret,
-  type OAuth2CredentialSpec,
+  isBrokeredSpec,
+  type OAuth2BrokeredSpec,
+  type OAuth2RegisteredClientSpec,
   type PluginRegistry,
   type ProviderPlugin,
   type Resource,
@@ -74,6 +79,13 @@ import {
   type OAuth2Client,
 } from './oauth2';
 import { OAuth2ClientMissing, type OAuth2Clients } from './oauth2-clients';
+import {
+  brokerNotConfiguredReason,
+  OAuthBrokerError,
+  type OAuthBrokerClient,
+  type OAuthBrokers,
+} from './oauth-broker';
+import type { BrokerGrant } from './credential-codec';
 import {
   connectionCredentialKind,
   connectionOwnerOf,
@@ -150,6 +162,8 @@ export interface ConnectableProvider {
    * for a key pasted or generated here.
    */
   readonly redirects: boolean;
+  /** The service's `oauth2` client is an OAuth broker's (ADR google-calendar-through-an-oauth-broker). */
+  readonly viaBroker: boolean;
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
   /** Where the user creates the key (`api-key`). */
@@ -157,6 +171,12 @@ export interface ConnectableProvider {
   /** What the person creates, in the service's words (`api-key`): "fine-grained personal access token". */
   readonly label: string | null;
   readonly guide: TokenGuideView | null;
+  /**
+   * Why the service cannot be connected on this instance, in a person's words;
+   * `null` when it can. Today: an OAuth broker the plugin needs is not
+   * configured (ADR google-calendar-through-an-oauth-broker D1).
+   */
+  readonly unavailable: string | null;
 }
 
 export interface DiscoveryRecord {
@@ -321,6 +341,8 @@ export interface ConnectionServiceDeps {
   readonly registry: PluginRegistry;
   /** The OAuth client of an `oauth2` service, registered by the gateway. */
   readonly clients: OAuth2Clients;
+  /** The OAuth brokers the instance is enrolled with, for a brokered `oauth2` service. */
+  readonly brokers: Pick<OAuthBrokers, 'forProvider' | 'byName'>;
   readonly broker: CredentialBroker;
   /** Re-checks the missions of a connection after an act that may have removed an authority. */
   readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
@@ -361,6 +383,8 @@ interface FinalizeOptions {
   readonly metadata: Record<string, unknown>;
   /** When the credential stops working, as the provider said; else an OAuth token's own expiry. */
   readonly expiresAt?: string | null;
+  /** The OAuth broker's grant of a brokered connection, sealed beside the secret. */
+  readonly brokerGrant?: BrokerGrant | null;
 }
 
 /** The outcome of the discovery attempted before the connection is written. */
@@ -404,6 +428,7 @@ export class ConnectionService {
       icon: plugin.icon ?? null,
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
+      viaBroker: spec.kind === 'oauth2' && isBrokeredSpec(spec),
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
       createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
       label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
@@ -419,7 +444,17 @@ export class ConnectionService {
             docsUrl: guide.docsUrl ?? null,
           }
         : null,
+      unavailable: this.unavailableReason(plugin),
     };
+  }
+
+  /** Why a plugin cannot be connected here, or `null`: a broker it needs is not configured. */
+  private unavailableReason(plugin: ProviderPlugin): string | null {
+    const spec = plugin.credential;
+    if (spec.kind !== 'oauth2' || !isBrokeredSpec(spec)) return null;
+    return this.deps.brokers.forProvider(spec.broker.provider)
+      ? null
+      : brokerNotConfiguredReason(plugin.displayName, spec.broker.provider);
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────────
@@ -468,7 +503,7 @@ export class ConnectionService {
 
     switch (spec.kind) {
       case 'oauth2':
-        return this.startOAuth2(flow, spec);
+        return isBrokeredSpec(spec) ? this.startBrokered(flow, spec) : this.startOAuth2(flow, spec);
       case 'api-key':
         return this.connectWithApiKey(flow, spec, input);
       case 'ssh-key':
@@ -476,7 +511,10 @@ export class ConnectionService {
     }
   }
 
-  private async startOAuth2(flow: FlowStart, spec: OAuth2CredentialSpec): Promise<StartResult> {
+  private async startOAuth2(
+    flow: FlowStart,
+    spec: OAuth2RegisteredClientSpec,
+  ): Promise<StartResult> {
     const pending = this.newPending('oauth2', flow, spec.pkce ? newCodeVerifier() : null);
     const client = await this.clientOrThrow(flow.plugin, () =>
       this.deps.clients.forAuthorization(flow.plugin, spec, pending.redirectUri),
@@ -488,6 +526,61 @@ export class ConnectionService {
       codeVerifier: pending.codeVerifier,
     });
     return { kind: 'redirect', url: url.href };
+  }
+
+  /**
+   * A brokered flow (ADR google-calendar-through-an-oauth-broker D2): the
+   * broker that serves the plugin's provider answers `POST /flows` with the
+   * provider's page; the S256 PKCE verifier and the broker's name stay in the
+   * pending flow, whose `state` the browser brings back with the grant.
+   */
+  private async startBrokered(flow: FlowStart, spec: OAuth2BrokeredSpec): Promise<StartResult> {
+    const broker = this.brokerOrThrow(flow.plugin, spec);
+    const pending: PendingConnect = {
+      ...this.newPending('oauth2', flow, newCodeVerifier()),
+      broker: broker.name,
+    };
+    const state = await this.deps.pending.create(pending);
+    try {
+      const url = await broker.startFlow({
+        provider: spec.broker.provider,
+        scopes: spec.scopes,
+        returnUrl: pending.redirectUri,
+        state,
+        verifier: pending.codeVerifier ?? '',
+      });
+      return { kind: 'redirect', url: url.href };
+    } catch (err) {
+      throw this.brokerFailure(flow.plugin, err);
+    }
+  }
+
+  /** The broker that serves a brokered plugin, or `broker-not-configured`. */
+  private brokerOrThrow(plugin: ProviderPlugin, spec: OAuth2BrokeredSpec): OAuthBrokerClient {
+    const broker = this.deps.brokers.forProvider(spec.broker.provider);
+    if (!broker) {
+      throw new ConnectError(
+        'broker-not-configured',
+        brokerNotConfiguredReason(plugin.displayName, spec.broker.provider),
+      );
+    }
+    return broker;
+  }
+
+  /** What the page shows when the broker failed: its failure, never an expiry or the broker's text. */
+  private brokerFailure(plugin: ProviderPlugin, err: unknown): unknown {
+    if (!(err instanceof OAuthBrokerError)) return err;
+    this.deps.logger.warn('OAuth broker call failed', {
+      provider: plugin.id,
+      broker: err.broker,
+      call: err.call,
+      upstream_status: err.status,
+      code: err.code,
+    });
+    return new ConnectError(
+      err.grantGone ? 'token-exchange-failed' : 'broker-failed',
+      `${plugin.displayName}: ${err.message}`,
+    );
   }
 
   private async connectWithApiKey(
@@ -688,6 +781,7 @@ export class ConnectionService {
       redirectUri: this.callbackUrl(flow.plugin.id).href,
       returnTo: flow.returnTo,
       reconnectId: flow.reconnectId,
+      broker: null,
       createdAt: this.nowIso(),
     };
   }
@@ -711,15 +805,68 @@ export class ConnectionService {
     const plugin = this.requirePlugin(providerId);
     const spec = plugin.credential;
     if (pending.kind === 'oauth2' && spec.kind === 'oauth2') {
-      return this.completeOAuth2(actor, plugin, spec, pending, query);
+      return isBrokeredSpec(spec)
+        ? this.completeBrokered(actor, plugin, pending, query)
+        : this.completeOAuth2(actor, plugin, spec, pending, query);
     }
     throw new ConnectError('state-invalid');
+  }
+
+  /**
+   * The browser is back from the broker with `grant` (and the `state` already
+   * checked): the grant is redeemed with the verifier of the pending flow at
+   * the broker that started it. The grant id and the access token are sealed;
+   * no refresh token reaches the gateway.
+   */
+  private async completeBrokered(
+    actor: Actor,
+    plugin: ProviderPlugin,
+    pending: PendingConnect,
+    query: URLSearchParams,
+  ): Promise<Connected> {
+    const denied = query.get('error');
+    if (denied) {
+      throw new ConnectError(
+        'provider-denied',
+        PROTOCOL_ERROR_CODE.test(denied) ? `${plugin.displayName}: ${denied}` : null,
+      );
+    }
+    const grant = query.get('grant');
+    if (!grant) throw new ConnectError('provider-denied', 'no grant was returned');
+    // The broker that started the flow, by name: a grant is redeemed where it was issued.
+    const broker = pending.broker ? this.deps.brokers.byName(pending.broker) : null;
+    if (!broker || !pending.codeVerifier) throw new ConnectError('state-invalid');
+    let redeemed;
+    try {
+      redeemed = await broker.redeem(grant, pending.codeVerifier);
+    } catch (err) {
+      throw this.brokerFailure(plugin, err);
+    }
+    const secret: CredentialSecret = {
+      kind: 'oauth2',
+      accessToken: redeemed.accessToken,
+      refreshToken: null,
+      expiresAt: redeemed.expiresAt,
+      scopes: [...redeemed.scopes],
+      metadata: {},
+    };
+    return this.finalize(actor, plugin, secret, {
+      displayName: pending.displayName,
+      reconnectId: pending.reconnectId,
+      returnTo: pending.returnTo,
+      discovery: 'best-effort',
+      metadata: {
+        oauth_broker: broker.name,
+        ...(redeemed.account ? { account: redeemed.account } : {}),
+      },
+      brokerGrant: { broker: broker.name, grantId: redeemed.grantId },
+    });
   }
 
   private async completeOAuth2(
     actor: Actor,
     plugin: ProviderPlugin,
-    spec: OAuth2CredentialSpec,
+    spec: OAuth2RegisteredClientSpec,
     pending: PendingConnect,
     query: URLSearchParams,
   ): Promise<Connected> {
@@ -834,7 +981,7 @@ export class ConnectionService {
   ): Promise<ConnectionRecord> {
     const { connections } = this.deps.store;
     const expiresAt = options.expiresAt ?? (secret.kind === 'oauth2' ? secret.expiresAt : null);
-    const sealed = serializeSecret(secret);
+    const sealed = serializeSecret(secret, options.brokerGrant ?? null);
     const metadata = { credential_kind: secret.kind, ...options.metadata };
     if (!options.reconnectId) {
       const created = await connections.create({
@@ -1472,6 +1619,8 @@ export class ConnectionService {
     const metadata = connection.metadata ?? {};
     const kind = connectionCredentialKind(connection, registered?.plugin.credential.kind ?? null);
     const pasted = kind === 'api-key';
+    // What the service said the account is: the pasted token's `verify`, or the broker's redeem.
+    const accountSaid = pasted || kind === 'oauth2';
     return {
       connection,
       providerLabel: registered?.plugin.displayName ?? connection.provider,
@@ -1479,7 +1628,7 @@ export class ConnectionService {
       providerGrant: this.providerGrantOf(connection).grant,
       credentialKind: kind,
       wayRetired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
-      tokenAccount: pasted && typeof metadata.account === 'string' ? metadata.account : null,
+      tokenAccount: accountSaid && typeof metadata.account === 'string' ? metadata.account : null,
       tokenExpiresAt: pasted ? connection.credentialExpiresAt : null,
       ownerLabel: await this.ownerLabel(connection),
       publicKey: typeof metadata.public_key === 'string' ? metadata.public_key : null,

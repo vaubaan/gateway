@@ -2,10 +2,11 @@
  * The services an account can be connected to, as a grid of choices: the
  * mark, the name, and how the account is connected in a few words. The list is
  * the plugin registry's (`ConnectionService.providers()`); nothing is
- * enumerated here. Every service is connectable at once: none waits for an
- * administrator to declare anything.
+ * enumerated here. A service waits for no administrator, except one connected
+ * through an OAuth broker none is configured for: it says it is not configured.
  */
 import { PickCard, PickGrid, ServiceMark } from '@/components/ui';
+import { ACCOUNT_WORDS } from '@/lib/vocabulary';
 import { NEW_CONNECTION_PATH, type ConnectableProvider } from '@/server/connections';
 
 /** "Access token" → "access token"; "API key" stays: an acronym keeps its capitals. */
@@ -44,7 +45,11 @@ export function ServicePicker({
           href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(provider.id)}${suffix}`}
           lead={<ServiceMark name={provider.displayName} icon={provider.icon} />}
           title={provider.displayName}
-          description={howToConnect(provider)}
+          description={
+            provider.unavailable !== null
+              ? `${howToConnect(provider)} · ${ACCOUNT_WORDS.notConfigured}`
+              : howToConnect(provider)
+          }
           testId={`service-${provider.id}`}
         />
       ))}

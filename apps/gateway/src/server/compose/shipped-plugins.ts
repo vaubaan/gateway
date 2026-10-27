@@ -18,6 +18,7 @@ import context7Plugin from '@vaubaan/plugin-context7';
 import flyPlugin from '@vaubaan/plugin-fly';
 import githubPlugin from '@vaubaan/plugin-github';
 import gmailPlugin from '@vaubaan/plugin-gmail';
+import googleCalendarPlugin from '@vaubaan/plugin-google-calendar';
 import miroPlugin from '@vaubaan/plugin-miro';
 import notionPlugin from '@vaubaan/plugin-notion';
 import railwayPlugin from '@vaubaan/plugin-railway';
@@ -45,6 +46,7 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   miroPlugin,
   notionPlugin,
   caldavPlugin,
+  googleCalendarPlugin,
 ];
 
 export async function buildShippedRegistry(): Promise<PluginRegistry> {

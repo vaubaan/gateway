@@ -1,6 +1,6 @@
 /**
  * The generic OAuth 2.0 client of the host, driven entirely by a plugin's
- * `OAuth2CredentialSpec` (ADR plugin-contract-and-credential-spec D2):
+ * `OAuth2RegisteredClientSpec` (ADR plugin-contract-and-credential-spec D2):
  *
  *   - the authorization request (RFC 6749 §4.1.1) with PKCE S256 (RFC 7636)
  *     and the resource indicator (RFC 8707) when the spec asks for them;
@@ -26,7 +26,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import type {
   OAuth2ClientRegistration,
-  OAuth2CredentialSpec,
+  OAuth2RegisteredClientSpec,
   OAuth2Revocation,
   OAuth2Secret,
 } from '@vaubaan/plugin-sdk';
@@ -71,9 +71,9 @@ export interface OAuth2Io {
   readonly now: () => Date;
 }
 
-/** What a token request needs to know about the endpoint: the part of an `OAuth2CredentialSpec` it reads. */
+/** What a token request needs to know about the endpoint: the part of an `OAuth2RegisteredClientSpec` it reads. */
 type TokenEndpoint = Pick<
-  OAuth2CredentialSpec,
+  OAuth2RegisteredClientSpec,
   'tokenUrl' | 'clientAuthMethod' | 'resourceIndicator'
 >;
 
@@ -98,7 +98,7 @@ export interface AuthorizationRequest {
 }
 
 export function buildAuthorizationUrl(
-  spec: OAuth2CredentialSpec,
+  spec: OAuth2RegisteredClientSpec,
   client: OAuth2Client,
   request: AuthorizationRequest,
 ): URL {
@@ -145,7 +145,7 @@ export interface CodeExchange {
 }
 
 export async function exchangeCode(
-  spec: OAuth2CredentialSpec,
+  spec: OAuth2RegisteredClientSpec,
   client: OAuth2Client,
   exchange: CodeExchange,
   io: OAuth2Io,
@@ -179,7 +179,7 @@ export async function exchangeCode(
  * carries none, the current one stays valid (RFC 6749 §6).
  */
 export async function refreshGrant(
-  spec: OAuth2CredentialSpec,
+  spec: OAuth2RegisteredClientSpec,
   client: OAuth2Client,
   current: OAuth2Secret,
   io: OAuth2Io,
@@ -325,7 +325,7 @@ const PROTOCOL_CODE = /^[a-z_]{1,40}$/;
  */
 export async function registerClient(
   registration: OAuth2ClientRegistration,
-  spec: Pick<OAuth2CredentialSpec, 'scopes' | 'clientAuthMethod'>,
+  spec: Pick<OAuth2RegisteredClientSpec, 'scopes' | 'clientAuthMethod'>,
   request: ClientRegistrationRequest,
   io: Pick<OAuth2Io, 'fetch'>,
 ): Promise<OAuth2Client> {

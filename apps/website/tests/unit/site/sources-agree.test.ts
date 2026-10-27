@@ -19,12 +19,12 @@ import { readRepoFile } from '../../../src/content/repo';
 import { SEVERITY_RANKS, severityOf } from '../../../src/content/severity';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
 
-const FAMILIES = ['sign_in.<id>.<field>'];
+const FAMILIES = ['sign_in.<id>.<field>', 'oauth_brokers.<name>.<field>'];
 
 describe('the configuration keys page', () => {
   const rows = parseConfigKeys(readRepoFile(CONFIG_HANDBOOK));
 
-  it('has one row per key of the gateway loader (KEYS), plus the sign-in key family', () => {
+  it('has one row per key of the gateway loader (KEYS), plus the named key families', () => {
     expect(rows.map((r) => r.key).sort()).toEqual([...KEYS.map((k) => k.path), ...FAMILIES].sort());
   });
 
