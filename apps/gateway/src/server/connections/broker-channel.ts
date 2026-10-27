@@ -12,7 +12,8 @@
  *     written on it before its key is the pinned one. The pin comes from
  *     `POST /attest {nonce}` answered on a connection presenting that key,
  *     with evidence carrying the nonce and the key's SPKI hash, checked by the
- *     `AttestationVerifier`. A pin lasts min(evidence expiry, 1 h). A broker
+ *     `AttestationVerifier`. `/attest` carries no broker key: the key is sent
+ *     only on a connection whose key is pinned and verified. A pin lasts min(evidence expiry, 1 h). A broker
  *     that presents another key (it restarted) is attested again once; a key
  *     no attestation carries gets nothing.
  *
@@ -65,9 +66,10 @@ export interface BrokerChannel {
   readonly admitted: AdmittedBroker | null;
 }
 
-function headers(key: string): Record<string, string> {
+/** The JSON headers, with the broker key as a Bearer when `key` is given. */
+function headers(key: string | null): Record<string, string> {
   return {
-    Authorization: `Bearer ${key}`,
+    ...(key === null ? {} : { Authorization: `Bearer ${key}` }),
     Accept: 'application/json',
     'Content-Type': 'application/json',
   };
@@ -156,7 +158,7 @@ export class AttestedChannel implements BrokerChannel {
         );
       }
     }
-    return this.exchange(socket, path, body, signal);
+    return this.exchange(socket, path, body, signal, { withKey: true });
   }
 
   /** The pin in force, or a new one from `POST /attest` (one attestation at a time). */
@@ -172,7 +174,11 @@ export class AttestedChannel implements BrokerChannel {
     const nonce = newAttestationNonce();
     const socket = await this.open(signal);
     const spkiHash = spkiOf(socket);
-    const answer = await this.exchange(socket, '/attest', JSON.stringify({ nonce }), signal);
+    // No broker key: this connection's key is not verified yet, and the key goes
+    // only where an attestation vouches for who listens.
+    const answer = await this.exchange(socket, '/attest', JSON.stringify({ nonce }), signal, {
+      withKey: false,
+    });
     if (answer.status !== 200) {
       throw new BrokerChannelError(
         'attest-answered',
@@ -251,12 +257,16 @@ export class AttestedChannel implements BrokerChannel {
     });
   }
 
-  /** One HTTP/1.1 request on a socket already checked; the socket closes after it. */
+  /**
+   * One HTTP/1.1 request on a socket; the socket closes after it. The broker
+   * key is sent only on a socket whose key is the pinned one (`withKey`).
+   */
   private exchange(
     socket: TLSSocket,
     path: string,
     body: string,
     signal: AbortSignal,
+    options: { readonly withKey: boolean },
   ): Promise<ChannelAnswer> {
     const url = endpoint(this.base, path);
     return new Promise<ChannelAnswer>((resolve, reject) => {
@@ -274,7 +284,7 @@ export class AttestedChannel implements BrokerChannel {
         path: `${url.pathname}${url.search}`,
         method: 'POST',
         headers: {
-          ...headers(this.key),
+          ...headers(options.withKey ? this.key : null),
           'Content-Length': String(Buffer.byteLength(body)),
           Host: url.host,
           Connection: 'close',

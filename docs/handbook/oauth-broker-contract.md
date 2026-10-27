@@ -89,8 +89,12 @@ sequenceDiagram
   JSON body.
 - **Base URL.** The instance is configured with a base URL that may carry a
   path (`https://broker.example.com/v1`); the paths below are appended to it.
-- **The broker key** is sent on every call as `Authorization: Bearer <key>`,
-  `/attest` included — every call but the browser's callback. It identifies
+- **The broker key** is sent as `Authorization: Bearer <key>` on every call
+  but two: `/attest`, which carries **no** `Authorization` header, and the
+  browser's callback. The gateway sends the key only on a connection whose
+  TLS key is pinned and verified, so whoever answers on the broker's address
+  without being the enclave never sees it. A broker answers `/attest`
+  without a key. The key identifies
   the **instance**: the broker knows which instance a key enrolls, and every
   flow is bound to that instance. The key never appears in a body, a URL or a
   redirect.
@@ -114,8 +118,8 @@ carries the SPKI hash of the certificate that connection presented:
    connection reuse), completes the handshake **without** checking the
    chain, and computes `base64url(SHA-256(DER SubjectPublicKeyInfo))` of the
    certificate presented. Nothing is written before this.
-2. With no pin in force, it sends `POST /attest {nonce}` on that connection
-   and verifies the answer (below). The key is then **pinned** for
+2. With no pin in force, it sends `POST /attest {nonce}` on that connection,
+   without the broker key, and verifies the answer (below). The key is then **pinned** for
    min(the evidence's `exp`, 1 hour).
 3. Every call — `/flows`, `/grants/redeem`, `/token`, `/revoke` — goes over a
    new connection whose presented key is the pinned one; the request is
@@ -136,7 +140,7 @@ for tests). The connect page and the account page say it is not attested.
 
 ### `POST /attest` — the attestation
 
-Request:
+No `Authorization` header: the broker answers it without a key. Request:
 
 ```json
 { "nonce": "kQ0b4r…43 characters" }
@@ -365,19 +369,19 @@ Every error answer is JSON `{"error": "<code>", "message": "<text>"}`.
 reading the broker's own logs — the gateway never shows it or logs it (it
 keeps the status and the code only).
 
-| Status | `error`                     | Where                   | What the gateway does                            |
-| ------ | --------------------------- | ----------------------- | ------------------------------------------------ |
-| 400    | `invalid_request`           | any                     | broker failure                                   |
-| 400    | `unsupported_provider`      | any                     | broker failure                                   |
-| 400    | `invalid_scope`             | `/flows`                | broker failure                                   |
-| 403    | `return_url_not_registered` | `/flows`                | broker failure                                   |
-| 400    | `invalid_grant`             | `/grants/redeem`        | the connect fails: start again                   |
-| 400    | `invalid_grant`             | `/token`                | connection **expired**                           |
-| 401    | `invalid_key`               | any, `/attest` included | broker failure — never an expiry                 |
-| 429    | `rate_limited`              | any                     | broker failure, retried later                    |
-| 5xx    | `temporarily_unavailable`…  | any                     | broker failure, retried later                    |
-| —      | (no answer, timeout)        | any                     | broker failure, retried later                    |
-| —      | (attestation refused)       | before any call         | broker failure: nothing is sent, nothing expires |
+| Status | `error`                     | Where             | What the gateway does                            |
+| ------ | --------------------------- | ----------------- | ------------------------------------------------ |
+| 400    | `invalid_request`           | any               | broker failure                                   |
+| 400    | `unsupported_provider`      | any               | broker failure                                   |
+| 400    | `invalid_scope`             | `/flows`          | broker failure                                   |
+| 403    | `return_url_not_registered` | `/flows`          | broker failure                                   |
+| 400    | `invalid_grant`             | `/grants/redeem`  | the connect fails: start again                   |
+| 400    | `invalid_grant`             | `/token`          | connection **expired**                           |
+| 401    | `invalid_key`               | any but `/attest` | broker failure — never an expiry                 |
+| 429    | `rate_limited`              | any               | broker failure, retried later                    |
+| 5xx    | `temporarily_unavailable`…  | any               | broker failure, retried later                    |
+| —      | (no answer, timeout)        | any               | broker failure, retried later                    |
+| —      | (attestation refused)       | before any call   | broker failure: nothing is sent, nothing expires |
 
 **A broker failure is never an expiry.** Only `invalid_grant` on `/token`
 ends a connection. A broker that is down, slow, not attested, refuses the
@@ -429,7 +433,7 @@ release.
 
 `FakeOAuthBroker.start({ keys })` runs an in-memory **HTTPS** server on
 `127.0.0.1` with a throwaway self-signed key (`fake-tls-certificate.ts`) that
-implements this page, `/attest` included, on the **test-only** platform
+implements this page, `/attest` (answered without a key) included, on the **test-only** platform
 `fake-enclave`: `attestationKit()` hands the code under test that platform's
 adapter and an allowlist admitting the fake's measurement — the
 configuration can never name it, and the production kit
@@ -440,9 +444,11 @@ plays a broker outside an enclave (plain HTTP, no `/attest`).
 `deny(authorizeUrl)` play the person at the provider and give the URL the
 browser comes back on, `down()` answers 503 to everything,
 `refusingProvider()` makes the provider refuse every refresh token
+(`invalid_grant`), `refusingCode()` makes it refuse the code at the redeem
 (`invalid_grant`), `attestWith({measurement, spkiHash, debug})` makes the
 evidence lie, `rotateTlsKey()` plays an enclave restart, and `calls` records
-what the gateway sent. Like a real broker it keeps no token: the refresh
+what the gateway sent (`withKey`: whether a call carried an `Authorization`
+header). Like a real broker it keeps no token: the refresh
 tokens it hands out live on its fake provider's side
 (`providerRefreshTokens`). `oauth-broker.test.ts` pins against it: the whole
 flow, a grant redeemed twice, late, by another instance or with the wrong

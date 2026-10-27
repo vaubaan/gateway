@@ -166,7 +166,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/oauth2.test.ts`                                                                                                                                                                                                                                                                             |        28 |
 | `apps/gateway/src/server/connections/oauth2-clients.test.ts`                                                                                                                                                                                                                                                                     |        14 |
 | `apps/gateway/src/server/connections/attestation-gcp.test.ts`                                                                                                                                                                                                                                                                    |         5 |
-| `apps/gateway/src/server/connections/oauth-broker.test.ts`                                                                                                                                                                                                                                                                       |        27 |
+| `apps/gateway/src/server/connections/oauth-broker.test.ts`                                                                                                                                                                                                                                                                       |        28 |
 | `apps/gateway/src/server/connections/pending.test.ts`                                                                                                                                                                                                                                                                            |         7 |
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                                                                                                                                                                                                                |        16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                                                                                                                                                                                                                                            |        24 |
@@ -558,7 +558,7 @@ this table says where each requirement lives, and what is not written yet.
 | `scripts/release-lib.test.mjs`                                                                                                                                                                                                                                                                                                   |        55 |
 | `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                                                                                                                                                                                                                             |         6 |
 | **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23)                                                                                                                         | **11958** |
-| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23; + 233 CalDAV 2026-10-27, its rows of the per-plugin structural tests not recounted; + 16 broker attestation 2026-10-27) | **12207** |
+| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23; + 233 CalDAV 2026-10-27, its rows of the per-plugin structural tests not recounted; + 17 broker attestation 2026-10-27) | **12208** |
 
 The table is generated from the JSON reports of one run of each project
 (`npx vitest run --project shared --reporter=json`, then `--project isolated`).
@@ -2666,7 +2666,7 @@ Execution door".
 
 ### A client that is an OAuth broker's (ADR google-calendar-through-an-oauth-broker)
 
-- **`src/server/connections/oauth-broker.test.ts`** (27) — against
+- **`src/server/connections/oauth-broker.test.ts`** (28) — against
   `FakeOAuthBroker`, the contract kit (`fake-oauth-broker.ts`, a real HTTPS
   server on the loopback interface with a throwaway key, `/attest` on the
   test-only `fake-enclave` platform; ADR
@@ -2688,10 +2688,13 @@ Execution door".
   turns it `expired`**. **Revocation** sends the refresh token to
   `POST /revoke` (`revoked`); a broker down says `failed`. **The contract's
   refusals at the client**: a grant redeemed twice, late, by another
-  instance, with the wrong verifier (`invalid_grant`, the grant over), **a bad
-  key (refused at `/attest`, 401, not a dead grant, the key never in the
-  message)**, a broker that answers 503 or is gone (status 0, not a dead
-  grant); the key only ever in the `Authorization` header. **The
+  instance, with the wrong verifier (`invalid_grant`, the grant over), **a
+  code the provider refuses at the redeem (`invalid_grant`,
+  `token-exchange-failed`, no connection, no refresh token)**, **a bad key
+  (`/attest` answered without it, the call refused 401 `invalid_key`, not a
+  dead grant, the key never in the message)**, a broker that answers 503 or
+  is gone (status 0, not a dead grant); the key only ever in the
+  `Authorization` header, **never on `/attest`, on every other call**. **The
   attestation**: obtained once and pinned, reused by the calls that follow,
   renewed with a new nonce after an hour; **a release that admits no broker
   version sends the broker nothing** ("no attested broker version admitted by

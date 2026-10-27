@@ -41,7 +41,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `POST /revoke {provider, refresh_token}`; an `invalid_grant` on a refresh
   makes the connection expired; errors are `{error, message}`. Every call
   goes over a TLS connection whose key an attestation of the broker carries
-  (`POST /attest`): a Google Confidential Space token, checked against
+  (`POST /attest`, sent without the broker key, which goes only over a
+  pinned, verified connection): a Google Confidential Space token, checked against
   Google's keys, debug off, a stable image, the gateway's nonce and the
   connection's key, and an image digest on the allowlist shipped with the
   release (`broker-measurements.json`). The allowlist is empty until a

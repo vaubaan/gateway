@@ -642,6 +642,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'FakeOAuthBroker.deny': exempt(FAKE_BROKER),
   'FakeOAuthBroker.down': exempt(FAKE_BROKER),
   'FakeOAuthBroker.recordReturnUrl': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.refusingCode': exempt(FAKE_BROKER),
   'FakeOAuthBroker.refusingProvider': exempt(FAKE_BROKER),
   'FakeOAuthBroker.stop': exempt(FAKE_BROKER),
   'FakeOAuthBroker.up': exempt(FAKE_BROKER),

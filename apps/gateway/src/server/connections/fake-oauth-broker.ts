@@ -29,7 +29,8 @@
  * the fake *provider's* (`providerRefreshTokens`), which the broker side only
  * reads when the gateway presents one. Knobs: `down()` / `up()` (503 to
  * everything), `clock` (the grant's lifetime), `refusingProvider()` (the
- * provider refuses every refresh token: `invalid_grant`), `attestWith()`
+ * provider refuses every refresh token: `invalid_grant`), `refusingCode()`
+ * (the provider refuses the code at the redeem: `invalid_grant`), `attestWith()`
  * (evidence for another version, key or a debug image), `rotateTlsKey()`
  * (the enclave restarted), and the record of every call (`calls`).
  */
@@ -93,6 +94,8 @@ export interface FakeBrokerCall {
   readonly instance: string | null;
   readonly body: Record<string, unknown> | null;
   readonly status: number;
+  /** Whether the call carried an `Authorization` header at all. */
+  readonly withKey: boolean;
 }
 
 /** What the next attestations say, instead of the truth. */
@@ -133,6 +136,7 @@ export class FakeOAuthBroker {
   private readonly returnUrls = new Map<string, Set<string>>();
   private isDown = false;
   private providerRefuses = false;
+  private providerRefusesCode = false;
   private override: FakeAttestationOverride = {};
   /** The provider's side: every refresh token it issued, by value. Not the broker's state. */
   readonly providerRefreshTokens = new Map<string, ProviderGrant>();
@@ -256,6 +260,11 @@ export class FakeOAuthBroker {
     this.providerRefuses = true;
   }
 
+  /** The provider refuses the authorization codes at the exchange (redeem: `invalid_grant`). */
+  refusingCode(): void {
+    this.providerRefusesCode = true;
+  }
+
   /**
    * The person allowed the access at the provider, and the provider came back to
    * the broker: the browser is sent to `return_url?grant=…&state=…`. `authorizeUrl`
@@ -303,7 +312,14 @@ export class FakeOAuthBroker {
       payload: Record<string, unknown> | null,
       instance: string | null,
     ) => {
-      this.calls.push({ method, path, instance, body, status });
+      this.calls.push({
+        method,
+        path,
+        instance,
+        body,
+        status,
+        withKey: req.headers.authorization !== undefined,
+      });
       res.statusCode = status;
       if (payload === null) {
         res.end();
@@ -316,12 +332,18 @@ export class FakeOAuthBroker {
       answer(503, { error: 'temporarily_unavailable', message: 'down' }, null);
       return;
     }
+    const prefix = this.url.pathname;
+    // `/attest` takes no key: the gateway sends it only once the connection is verified.
+    if (method === 'POST' && path === `${prefix}/attest`) {
+      const [status, payload] = await this.attest(body);
+      answer(status, payload, null);
+      return;
+    }
     const instance = this.instanceOf(req.headers.authorization);
     if (instance === null) {
       answer(401, { error: 'invalid_key', message: 'unknown broker key' }, null);
       return;
     }
-    const prefix = this.url.pathname;
     if (!path.startsWith(`${prefix}/`)) {
       answer(404, { error: 'not_found', message: 'no such path' }, instance);
       return;
@@ -353,8 +375,6 @@ export class FakeOAuthBroker {
         return this.refresh(body);
       case '/revoke':
         return this.revoke(body);
-      case '/attest':
-        return this.attest(body);
       default:
         return [404, refusal('not_found')];
     }
@@ -413,7 +433,8 @@ export class FakeOAuthBroker {
     if (this.now() - pending.issuedAt > FAKE_GRANT_TTL_MS) return refused;
     if (pending.flow.instance !== instance) return refused;
     if (s256(verifier) !== pending.flow.challenge) return refused;
-    // Only now is the provider's code exchanged: the provider issues the tokens.
+    // Only now is the provider's code exchanged: the provider issues the tokens, or refuses.
+    if (this.providerRefusesCode) return refused;
     const scopes = this.options.grantedScopes ?? pending.flow.scopes;
     const refreshToken = token('rt');
     this.providerRefreshTokens.set(refreshToken, {

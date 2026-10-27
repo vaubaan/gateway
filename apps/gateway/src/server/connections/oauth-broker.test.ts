@@ -335,10 +335,26 @@ describe('the contract’s refusals, at the client', () => {
   it('a bad key is refused, and it is not a dead grant', async () => {
     const client = new OAuthBrokerClient(broker.configFor('not-a-key'), io());
     const err = await refusal(client.token('google', 'rt_abcdefghijkl'));
-    // The attestation itself is refused first: /attest carries the key too.
-    expect(err).toMatchObject({ status: 401, grantGone: false });
-    expect(err.message).toMatch(/could not be attested \(token: answered 401 to attest\)/);
+    // The attestation takes no key; the call that follows is refused.
+    expect(callsTo('/attest')[0]?.status).toBe(200);
+    expect(err).toMatchObject({ status: 401, code: 'invalid_key', grantGone: false });
     expect(err.message).not.toContain('not-a-key');
+  });
+
+  it('a code the provider refuses at the redeem is invalid_grant: the connect fails', async () => {
+    const h = harness();
+    const { alice, authorizeUrl } = await startFlow(h);
+    broker.refusingCode();
+    const back = broker.approve(authorizeUrl);
+    await expectConnectError(
+      h.service.complete(alice, PLUGIN, back.searchParams),
+      'token-exchange-failed',
+    );
+    expect(callsTo('/grants/redeem')[0]).toMatchObject({ status: 400 });
+    expect(broker.providerRefreshTokens.size).toBe(0);
+    expect(await h.store.connections.listOwnedBy([{ kind: 'user', id: alice.user.id }])).toEqual(
+      [],
+    );
   });
 
   it('a broker that is down is a failure of the broker, not of the grant', async () => {
@@ -358,10 +374,12 @@ describe('the contract’s refusals, at the client', () => {
     broker = await startBroker();
   });
 
-  it('never sends the key anywhere but the Authorization header', async () => {
+  it('never sends the key anywhere but the Authorization header, and never to /attest', async () => {
     const h = harness();
     await connect(h);
     for (const call of broker.calls) expect(JSON.stringify(call.body)).not.toContain(KEY);
+    expect(callsTo('/attest').map((c) => c.withKey)).toEqual([false]);
+    expect(broker.calls.filter((c) => c.path !== '/v1/attest').every((c) => c.withKey)).toBe(true);
   });
 });
 

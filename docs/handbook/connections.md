@@ -205,7 +205,7 @@ productionAttestationKit({ fetch }) })`, built by `createConnectionsModule`. `fo
   opens a TLS socket of its own (`tls.connect`, chain unchecked on that
   socket only), hashes the presented key's SPKI, and writes nothing before
   that key is the pinned one. Without a pin it sends `POST /attest {nonce}`
-  on the socket; `AttestationVerifier` picks the platform adapter the answer
+  on the socket, without the broker key (sent only once the key is pinned); `AttestationVerifier` picks the platform adapter the answer
   names (`gcpConfidentialSpace`, the only one of `productionAttestationKit`)
   and requires the measurement on `broker-measurements.json` (empty today:
   "no attested broker version admitted by this release", and nothing is
@@ -1097,8 +1097,8 @@ by feature", the section on connecting).
   connection's: `401 (invalid_key)` a wrong key, `403
 (return_url_not_registered)` the broker has not recorded
   `<public_url>/connections/callback/<plugin>`, `503` or "could not be
-  reached" the broker is down. "could not be attested (…: answered 401 to
-  attest)" is the same refusal or outage on `/attest`.
+  reached" the broker is down. "could not be attested (…: answered 503 to
+  attest)" is the same outage on `/attest`, which takes no key.
 - **"OAuth broker '<name>' is not attested (…)"** — the gateway sent the
   broker nothing: "no attested broker version admitted by this release" (the
   release's allowlist names no broker version yet; upgrade, or declare your
