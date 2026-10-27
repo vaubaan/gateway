@@ -13,7 +13,7 @@ import { classifyFly } from './classify.ts';
 import { flyDataModel } from './data-model.ts';
 import { createdFlyResources } from './created.ts';
 import { discoverFlyResources, executeFly } from './execute.ts';
-import { FLY_ICON } from './icon.ts';
+import { FLY_ICON, FLY_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
 import { flyCredential } from './token.ts';
 import { flyToolTitles, flyTools } from './tools.ts';
@@ -26,7 +26,8 @@ export const flyPlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Fly.io',
   icon: FLY_ICON,
-  version: '0.3.0',
+  iconColor: FLY_ICON_COLOR,
+  version: '0.3.1',
   description:
     'Apps on Fly.io: machines, images, volumes and snapshots, secrets, IP addresses and ' +
     'certificates — one resource per app.',

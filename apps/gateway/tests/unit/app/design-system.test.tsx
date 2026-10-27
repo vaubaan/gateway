@@ -27,6 +27,7 @@ import {
   FormStep,
   FormWithRail,
   GateMark,
+  darkThemeMarkColor,
   hueOf,
   initialsOf,
   Input,
@@ -337,14 +338,32 @@ describe('marks', () => {
     expect(text(holder)).toBe('GAgithub-actions · machine key');
   });
 
-  it('shows a service by the icon its plugin declares, in one ink, and by two letters without one', () => {
-    const withIcon = renderToStaticMarkup(<ServiceMark name="GitHub" icon="M12 2 22 22H2Z" />);
+  it('shows a service by the icon its plugin declares, in its brand colour, and by two letters without one', () => {
+    const icon = { path: 'M12 2 22 22H2Z', color: '#635BFF' };
+    const withIcon = renderToStaticMarkup(<ServiceMark name="Stripe" icon={icon} />);
     expect(withIcon).toContain('<path d="M12 2 22 22H2Z" fill="currentColor"');
     expect(withIcon).toContain('viewBox="0 0 24 24"');
     expect(withIcon).toMatch(/class="[^"]*serviceIcon/);
+    expect(withIcon).toContain('--mark-color:#635BFF');
+    expect(withIcon).toContain('--mark-color-dark:#635BFF');
     expect(withIcon).not.toContain('data-hue');
     expect(withIcon).toContain('aria-hidden="true"');
     expect(text(withIcon)).toBe('');
+
+    // A near-black brand takes the ink in the dark theme; no colour keeps the stylesheet's ink.
+    const github = renderToStaticMarkup(
+      <ServiceMark name="GitHub" icon={{ path: 'M12 2 22 22H2Z', color: '#181717' }} />,
+    );
+    expect(github).toContain('--mark-color:#181717');
+    expect(github).toContain('--mark-color-dark:var(--ink)');
+    const uncoloured = renderToStaticMarkup(
+      <ServiceMark name="Acme" icon={{ path: 'M12 2 22 22H2Z', color: null }} />,
+    );
+    expect(uncoloured).not.toContain('style=');
+    expect(darkThemeMarkColor('#000000')).toBe('var(--ink)');
+    expect(darkThemeMarkColor('#24175B')).toBe('var(--ink)');
+    expect(darkThemeMarkColor('#EA4335')).toBe('#EA4335');
+    expect(darkThemeMarkColor('#3FCF8E')).toBe('#3FCF8E');
 
     const fallback = renderToStaticMarkup(<ServiceMark name="Acme Cloud" />);
     expect(text(fallback)).toBe('AC');
@@ -352,9 +371,7 @@ describe('marks', () => {
     expect(fallback).not.toContain('<svg');
     expect(renderToStaticMarkup(<ServiceMark name="Acme Cloud" icon={null} />)).toBe(fallback);
 
-    const large = renderToStaticMarkup(
-      <ServiceMark name="GitHub" icon="M12 2 22 22H2Z" size="lg" />,
-    );
+    const large = renderToStaticMarkup(<ServiceMark name="Stripe" icon={icon} size="lg" />);
     expect(large).toMatch(/class="[^"]*serviceLg/);
   });
 

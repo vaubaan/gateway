@@ -34,7 +34,7 @@ import {
   VERCEL_API_BASE,
   VERCEL_MCP_URL,
 } from './execute.ts';
-import { VERCEL_ICON } from './icon.ts';
+import { VERCEL_ICON, VERCEL_ICON_COLOR } from './icon.ts';
 import { vercelToolTitles } from './tool-titles.ts';
 import { vercelTools } from './tools.ts';
 
@@ -48,7 +48,8 @@ export const vercelPlugin = definePlugin({
   id: 'vercel',
   displayName: 'Vercel',
   icon: VERCEL_ICON,
-  version: '3.0.1',
+  iconColor: VERCEL_ICON_COLOR,
+  version: '3.0.2',
   description:
     'Runtime hosting plane — projects, deployments, logs, env vars, custom domains, firewall, preview comments.',
   summary:

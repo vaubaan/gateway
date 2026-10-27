@@ -538,7 +538,7 @@ export function MarkSections({ icons }: { icons: GalleryIcons }) {
         </Specimen>
         <Specimen
           name="Service, key, agent, id"
-          note="the icon a plugin declares, monochrome; two letters on a hue when it declares none"
+          note="the icon a plugin declares, in its brand colour on the neutral fill (a near-black brand takes the ink in the dark theme); two letters on a hue when it declares none"
         >
           {() => (
             <Line>

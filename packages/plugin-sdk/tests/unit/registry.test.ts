@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import { PluginRegistry, PluginRegistryError, createRegistry } from '../../src/registry.ts';
+import {
+  PluginRegistry,
+  PluginRegistryError,
+  createRegistry,
+  serviceIconOf,
+} from '../../src/registry.ts';
 import type { ProviderPlugin } from '../../src/plugin.ts';
 import { acmePlugin, acmeTools } from '../fixtures/acme/acme-plugin.ts';
 
@@ -94,9 +99,15 @@ describe('PluginRegistry — derivations', () => {
     expect(withSummary.labels()[0]?.summary).toBe('One connection is one Acme account.');
   });
 
-  test('labels carry the icon of the service when the plugin declares one', () => {
+  test('labels carry the icon of the service when the plugin declares one, with its colour', () => {
     const withIcon = new PluginRegistry([{ ...acmePlugin, icon: 'M12 2 22 22H2Z' }]);
-    expect(withIcon.labels()[0]?.icon).toBe('M12 2 22 22H2Z');
+    expect(withIcon.labels()[0]?.icon).toEqual({ path: 'M12 2 22 22H2Z', color: null });
+    const coloured = new PluginRegistry([
+      { ...acmePlugin, icon: 'M12 2 22 22H2Z', iconColor: '#635BFF' },
+    ]);
+    expect(coloured.labels()[0]?.icon).toEqual({ path: 'M12 2 22 22H2Z', color: '#635BFF' });
+    // A colour without an icon draws nothing: no mark.
+    expect(serviceIconOf({ iconColor: '#635BFF' })).toBeNull();
   });
 
   test('idEnum is a non-empty tuple', () => {

@@ -16,7 +16,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyTemplate } from './classify.ts';
 import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
-import { _TEMPLATE_ICON } from './icon.ts';
+import { _TEMPLATE_ICON, _TEMPLATE_ICON_COLOR } from './icon.ts';
 import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
 import { templateTools, templateToolTitles } from './tools.ts';
 
@@ -30,8 +30,9 @@ export const templatePlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Template provider',
   icon: _TEMPLATE_ICON,
+  iconColor: _TEMPLATE_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.0',
+  version: '0.1.1',
   description: 'Scaffold plugin. Copy it to start a real one.',
   // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
   // connection is, what one resource is, where the environment of a call comes from.

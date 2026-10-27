@@ -36,7 +36,7 @@ import {
 } from './credential.ts';
 import { sshDataModel } from './data-model.ts';
 import { createSshRuntime, DISCOVERY_PROBE, hostResource } from './execute.ts';
-import { SSH_ICON } from './icon.ts';
+import { SSH_ICON, SSH_ICON_COLOR } from './icon.ts';
 import { sshToolTitles } from './tool-titles.ts';
 import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S, SSH_EXEC, sshTools } from './tools.ts';
 import {
@@ -62,7 +62,8 @@ export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin
     id: PROVIDER,
     displayName: 'SSH (bash)',
     icon: SSH_ICON,
-    version: '2.0.1',
+    iconColor: SSH_ICON_COLOR,
+    version: '2.0.2',
     description:
       'Shell commands on a host over SSH — inspection on a read allow-list, writes priced by class (destructive, package, service, sudo), lines that cannot be classified priced as all of them.',
     summary:

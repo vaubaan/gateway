@@ -1,16 +1,17 @@
 /**
- * Structural test (ADR service-icons-declared-by-the-plugin): every plugin the
- * image ships declares its icon — the `d` of one SVG path on a 24×24 grid the
- * web interface fills with `currentColor` — so no service of this repository
- * falls back to two letters on a hue, and the interface never keeps a list of
- * provider icons of its own.
+ * Structural test (ADRs service-icons-declared-by-the-plugin,
+ * service-marks-in-brand-colour): every plugin the image ships declares its
+ * icon — the `d` of one SVG path on a 24×24 grid — and the brand colour it is
+ * drawn in, so no service of this repository falls back to two letters on a
+ * hue or to the plain ink, and the interface never keeps a list of provider
+ * icons or colours of its own.
  *
  * Read from the plugins the image ships (`compose/shipped-plugins.ts`), not
  * from a list kept here. `definePlugin` already refuses an icon that is not
  * path data; this holds the shipped plugins to *having* one, and to one that
  * fits the grid the mark is drawn on.
  */
-import { SVG_PATH_DATA_PATTERN } from '@vaubaan/plugin-sdk';
+import { HEX_COLOUR_PATTERN, SVG_PATH_DATA_PATTERN } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
@@ -30,6 +31,11 @@ describe('every shipped plugin declares the icon the interface shows it by', () 
       it('declares an icon: the path data of one SVG path', () => {
         expect(plugin.icon).toEqual(expect.any(String));
         expect(plugin.icon).toMatch(SVG_PATH_DATA_PATTERN);
+      });
+
+      it('declares the brand colour it is drawn in: one #RRGGBB', () => {
+        expect(plugin.iconColor).toEqual(expect.any(String));
+        expect(plugin.iconColor).toMatch(HEX_COLOUR_PATTERN);
       });
 
       it('draws it on the 24-unit grid: no coordinate far outside it', () => {

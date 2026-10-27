@@ -27,14 +27,31 @@ export interface RegisteredPlugin {
   readonly toolNames: ReadonlySet<string>;
 }
 
+/**
+ * The mark of a service as the interface draws it : the path data of its
+ * icon (`ProviderPlugin.icon`) and the colour it is drawn in
+ * (`ProviderPlugin.iconColor`, `null` when the plugin declares none).
+ */
+export interface ServiceIcon {
+  readonly path: string;
+  readonly color: string | null;
+}
+
+/** The `ServiceIcon` of a plugin, or `null` when it declares no icon (a colour alone draws nothing). */
+export function serviceIconOf(
+  plugin: Pick<ProviderPlugin, 'icon' | 'iconColor'>,
+): ServiceIcon | null {
+  return plugin.icon ? { path: plugin.icon, color: plugin.iconColor ?? null } : null;
+}
+
 /** What the UI needs to list providers. */
 export interface ProviderLabel {
   readonly id: string;
   readonly displayName: string;
   readonly version: string;
   readonly description: string | null;
-  /** `ProviderPlugin.icon` : the path data of the service's monochrome mark ; `null` when the plugin declares none. */
-  readonly icon: string | null;
+  /** The service's mark, path and colour (`serviceIconOf`) ; `null` when the plugin declares no icon. */
+  readonly icon: ServiceIcon | null;
   /** `ProviderPlugin.summary` : the plain-words paragraph of the provider reference. */
   readonly summary: string | null;
 }
@@ -190,7 +207,7 @@ export class PluginRegistry {
       displayName: plugin.displayName,
       version: plugin.version,
       description: plugin.description ?? null,
-      icon: plugin.icon ?? null,
+      icon: serviceIconOf(plugin),
       summary: plugin.summary ?? null,
     }));
   }

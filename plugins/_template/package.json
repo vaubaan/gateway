@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-template",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Scaffold for a Vaubaan Gateway provider plugin — copy, rename, fill in",

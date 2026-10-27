@@ -77,6 +77,18 @@ describe('definePlugin', () => {
     expect(pluginIssues({ ...acmePlugin, icon: 'M0 0"/><script>' })).toEqual([issue]);
   });
 
+  test('iconColor is optional, and one #RRGGBB colour when present', () => {
+    expect(pluginIssues({ ...acmePlugin, iconColor: '#635BFF' })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, iconColor: '#3fcf8e' })).toEqual([]);
+    const issue = 'iconColor: expected a colour as `#RRGGBB` when present';
+    expect(pluginIssues({ ...acmePlugin, iconColor: '' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, iconColor: '#fff' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, iconColor: 'rebeccapurple' })).toEqual([issue]);
+    expect(pluginIssues({ ...acmePlugin, iconColor: '#635BFF; background: url(x)' })).toEqual([
+      issue,
+    ]);
+  });
+
   test('secretArguments is optional; it names declared arguments of declared tools', () => {
     const tool = 'acme__update_thing';
     expect(pluginIssues({ ...acmePlugin, secretArguments: { [tool]: ['name'] } })).toEqual([]);
