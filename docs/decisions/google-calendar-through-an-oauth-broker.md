@@ -6,6 +6,8 @@ author: Renaud Pelissier (product owner), drafted with Claude
 amends:
   - gmail-over-imap-with-an-app-password
   - plugin-contract-and-credential-spec
+amended-by:
+  - oauth-broker-stateless-in-an-attested-enclave
 extends:
   - rewrap-official-mcps
   - miro-rewraps-the-official-mcp-server
