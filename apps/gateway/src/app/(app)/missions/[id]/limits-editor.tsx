@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * "Change limits" on a mission (spec §3.2; ADR mission-limits-editable-after-issuance):
+ * "Change limits" on a mission (spec §3.2; ADR mission-editable-after-issuance):
  * the permission table of the mission in edit mode, for its limits only. Each
  * permission the mission holds keeps its row; its limit per period and its calls per
  * minute (or per its own window) become fields. Nothing else is offered: a permission

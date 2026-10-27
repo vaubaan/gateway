@@ -1,6 +1,6 @@
 /**
  * Structural test: the commit `/healthz` reports is one the build saw for itself
- * (ADR deployed-commit-stamped-by-git-archive).
+ * (docs/workflow/coding-workflow.md).
  *
  * `git archive` writes the archived commit into `apps/gateway/build-commit.txt`
  * (`.gitattributes`: export-subst); `next.config.ts` reads it, else the

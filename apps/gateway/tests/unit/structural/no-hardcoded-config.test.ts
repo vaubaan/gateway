@@ -30,7 +30,7 @@ const ALLOWED: Record<string, string> = {
   'apps/gateway/src/server/config/telemetry-default.ts': 'the single default URL (spec §4.3)',
   'deploy/collector/README.md': 'the collector documents its own public host (the default URL)',
   'apps/gateway/src/server/config/sign-in.ts':
-    'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (ADR sign-in-providers-admission-and-admin-rule)',
+    'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (docs/handbook/authentication.md)',
   'apps/gateway/src/server/connections/attestation-gcp.ts':
     "Google Cloud Attestation's issuer, the fixed root of trust a broker's Confidential Space attestation is checked against (ADR oauth-broker-stateless-in-an-attested-enclave D4, D7)",
   'deploy/config/gateway.example.yaml': 'documented placeholders',

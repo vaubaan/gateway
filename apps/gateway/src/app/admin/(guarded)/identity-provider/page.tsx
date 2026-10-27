@@ -1,6 +1,6 @@
 /**
  * `/admin/identity-provider` — Settings → Sign-in: the sign-in providers of the
- * gateway (spec §4.2; ADR sign-in-providers-admission-and-admin-rule). One row
+ * gateway (spec §4.2; docs/handbook/authentication.md). One row
  * each: its name and id, its kind, who it admits, how many people signed in
  * through it, whether it is on. A provider saved here is edited
  * (`/admin/identity-provider/<id>`), tested beside the session — in another window,

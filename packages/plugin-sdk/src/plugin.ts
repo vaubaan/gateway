@@ -42,7 +42,7 @@ export type ClassifyOutcome = { readonly slices: readonly Slice[] } | { readonly
  * secret, never the credential. Absent when the host has none to give
  * (catalog tooling, tests) : a classifier then cites what the resources say,
  * or a wildcard, and never anything narrower than it knows.
- * ADR classify-sees-the-connection-public-fields.
+ * docs/handbook/plugin-sdk.md.
  */
 export interface ClassifyConnection {
   readonly fields: Readonly<Record<string, string>>;
@@ -133,8 +133,7 @@ export interface ProviderPlugin {
    * The brand icon of the service : the `d` of one SVG path on a 24×24 grid,
    * drawn to be filled with `currentColor`. The web interface shows it in
    * the brand colour of `iconColor` on a neutral fill, beside the service's
-   * name (ADRs service-icons-declared-by-the-plugin,
-   * service-marks-in-brand-colour). Vendor the path in the
+   * name (ADR service-icons-declared-by-the-plugin). Vendor the path in the
    * plugin (Simple Icons, CC0 1.0, is the usual source ; say so in a
    * comment) ; never a runtime dependency on an icon package. Optional in
    * the contract — a plugin without one is shown by two letters of its name ;
@@ -214,7 +213,7 @@ export interface ProviderPlugin {
    * call succeeds through the execution door, the host runs the connection's
    * discovery again, off the request path, so the new resource is known — and
    * reached by a mission issued on the whole connection — at once (ADR
-   * discovery-runs-after-a-creating-call). Each name is an MCP tool of the
+   * created-resources-join-the-mission). Each name is an MCP tool of the
    * plugin (`definePlugin`). A tool that creates something inside a resource
    * (a DNS record in a zone, a machine in an app) is not one. Absent : no call
    * of this plugin triggers a discovery. A plugin that declares it must
@@ -361,7 +360,7 @@ export interface ProviderPlugin {
    * refuses the call.
    *
    * Reserved : the v5.0 host has no cap stage and never calls this hook
-   * (ADR scope-caps-not-enforced-in-v5-0). A catalog's `caps` block is
+   * (ADR scope-caps-amplification-axis). A catalog's `caps` block is
    * therefore applied nowhere, and the shipped catalogs are not allowed to
    * declare one ; the hook keeps its place so that enforcing caps later is
    * not a contract change.

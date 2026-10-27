@@ -216,7 +216,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     expect(calls.some((call) => call.method === 'rotate' || call.method === 'revoke')).toBe(false);
   });
 
-  describe('rotate reaches only the missions this delegation issued (ADR management-door-rotation-scope-and-replay-trace)', () => {
+  describe('rotate reaches only the missions this delegation issued (docs/spec/vaubaan-gateway.md)', () => {
     /** An active mission of the user, as `get` returns it, issued by `delegationId` (or by the human). */
     const activeIssuedBy = (
       delegationId: string | null,

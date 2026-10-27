@@ -1,6 +1,6 @@
 /**
- * The backup carries the sign-in configuration (ADR
- * backup-carries-the-sign-in-configuration): a copy made on one host, restored on
+ * The backup carries the sign-in configuration (see
+ * docs/handbook/authentication.md): a copy made on one host, restored on
  * a fresh store whose environment is another, signs people in as the source did.
  */
 import { randomBytes } from 'node:crypto';

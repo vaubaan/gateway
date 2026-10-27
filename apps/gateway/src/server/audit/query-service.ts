@@ -1,7 +1,7 @@
 /**
  * `AuditQueryService` — what the Audit page reads (spec §4.2 "Audit", §8).
  *
- * Visibility (ADR audit-visibility-members-and-operators): a user sees the
+ * Visibility (docs/spec/vaubaan-gateway.md): a user sees the
  * entries about the missions they created, about the missions they are a
  * member of, and about the connections they or their groups own; an operator
  * sees every entry, calls included. The scope is applied in the store's

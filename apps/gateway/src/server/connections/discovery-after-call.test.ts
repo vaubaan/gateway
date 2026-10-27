@@ -1,5 +1,5 @@
 /**
- * `DiscoveryAfterCall` on its own (ADR discovery-runs-after-a-creating-call):
+ * `DiscoveryAfterCall` on its own (ADR created-resources-join-the-mission):
  * which calls schedule a discovery, coalescing, the bounded retry, the audit
  * once, errors logged without arguments, `stop()`. The door's end-to-end is in
  * tests/integration/execution/discovery-after-call.test.ts.

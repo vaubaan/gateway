@@ -515,7 +515,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
   },
   // The gateway's own discovery after a call that created a resource (ADR
-  // discovery-runs-after-a-creating-call): one entry per scheduled discovery,
+  // created-resources-join-the-mission): one entry per scheduled discovery,
   // written once its attempts are over; the actor is the human behind the key.
   'ConnectionService.auditDiscoveryAfterCall': {
     kind: 'mutation',
@@ -1131,7 +1131,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     },
   },
   'SignInProvidersService.carryIntoStore': exempt(
-    'the backup command writes it into its copy of the store, never into the live store: nobody acts on this instance (ADR backup-carries-the-sign-in-configuration)',
+    'the backup command writes it into its copy of the store, never into the live store: nobody acts on this instance (docs/handbook/authentication.md)',
   ),
   'SignInProvidersService.save': {
     kind: 'mutation',

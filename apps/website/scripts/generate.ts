@@ -1,5 +1,5 @@
 /**
- * Build-time generator of the site (ADR website-generated-from-the-repository).
+ * Build-time generator of the site (ADR website-nextjs-on-vercel).
  * Run before `next build`, `next dev` and the type-check:
  *
  *   npm run generate --workspace @vaubaan/website

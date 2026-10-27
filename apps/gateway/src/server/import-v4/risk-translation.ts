@@ -1,6 +1,6 @@
 /**
  * v4 `accepted_risks` → the explicit policy of a v5 mission, one id at a
- * time (ADR import-from-v4-one-shot-importer D6). Pure.
+ * time (docs/handbook/import-from-v4.md). Pure.
  *
  * The rule, for each v4 id of the connection's provider:
  *
@@ -25,7 +25,7 @@
  * preset carries — every catalog's fallback among them — has no budget to
  * take: dropped and reported, since a quota is never invented — unless the
  * operator asks for it with `carryUnbudgeted` (`--carry-unbudgeted <quota>`,
- * ADR import-from-v4-one-shot-importer, amendment of 2026-10-15): the id is
+ * docs/handbook/import-from-v4.md): the id is
  * then kept with that quota, a rate limit that adds nothing to it, and the
  * `approval` gate, always — every use waits for the owner's grant. Only that
  * reason is lifted; every other drop stays a drop.

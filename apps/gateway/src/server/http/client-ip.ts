@@ -15,7 +15,7 @@
  * the address still holds (as a global one) instead of being bypassed by a
  * forged header.
  *
- * Trusted-edge mode (`client_ip_header`, ADR client-address-from-a-trusted-edge-header):
+ * Trusted-edge mode (`client_ip_header`, docs/handbook/configuration.md):
  * some platforms publish no address range for their edge (Railway) but document
  * a single-value header the edge writes itself (`X-Real-IP`). When the operator
  * names that header, its value is the client address — believed only because

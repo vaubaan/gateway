@@ -164,7 +164,7 @@ export interface IssuanceConnection {
   readonly derives_env: boolean;
   /**
    * The connection owner's default environment for resources without a label of
-   * their own (ADR connection-default-environment-label); `null` when none. Already
+   * their own (ADR connect-driver-and-resource-curation); `null` when none. Already
    * applied to `resources[].env`: nothing reads it to resolve an environment.
    */
   readonly default_env: string | null;

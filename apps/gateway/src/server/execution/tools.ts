@@ -8,7 +8,7 @@
  * the branch, the path, the environment), so a finer static filter would
  * either hide callable tools or need a contract the plugins do not have. A
  * listed tool can therefore still be refused `risk-not-accepted` at call time.
- * Every registered plugin lists its tools (ADR no-experimental-plugins). A
+ * Every registered plugin lists its tools (docs/handbook/plugin-sdk.md). A
  * connection whose part of the mission is lost (`MissionConnection.lost`) lists
  * nothing either: every call through it is refused `connection-revoked`.
  *

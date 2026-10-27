@@ -1,6 +1,6 @@
 /**
  * Two sign-in providers on one instance, in a browser (spec §4.2 Settings →
- * Sign-in and People, §6; ADR sign-in-providers-admission-and-admin-rule): the
+ * Sign-in and People, §6; docs/handbook/authentication.md): the
  * administrator adds GitHub (the in-process `FakeGithub`) beside the company
  * directory (the `FakeIdp`) from Settings → Sign-in, the sign-in page then offers
  * both, an uninvited GitHub address is refused, invited from People it is

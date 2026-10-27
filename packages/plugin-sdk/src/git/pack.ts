@@ -1,10 +1,10 @@
 /**
  * The objects of a received pack, read before a byte of it leaves the
  * gateway (gitformat-pack(5) "pack-*.pack files have the following format" ;
- * ADR git-push-inspected-before-it-leaves).
+ * ADR gateway-as-git-remote).
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote".
- * ADR  : docs/decisions/git-push-inspected-before-it-leaves.md,
+ * ADR  : docs/decisions/gateway-as-git-remote.md,
  *        docs/decisions/gateway-as-git-remote.md.
  *
  * What a plugin needs from a push's own objects is its commits, trees and

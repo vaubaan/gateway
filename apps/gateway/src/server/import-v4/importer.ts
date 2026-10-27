@@ -1,6 +1,6 @@
 /**
  * The importer: one v4 organization's bundle into this instance, under one
- * owner (ADR import-from-v4-one-shot-importer). Three phases, each read from
+ * owner (docs/handbook/import-from-v4.md). Three phases, each read from
  * the instance as it is when the phase starts, so a second run completes what
  * the first could not and never duplicates what it did:
  *

@@ -1,5 +1,5 @@
 /**
- * The admin rule a backup carried (ADR backup-carries-the-sign-in-configuration),
+ * The admin rule a backup carried (docs/handbook/authentication.md),
  * superseded by the administrators kept in the store (ADR
  * administrators-live-in-the-instance).
  *

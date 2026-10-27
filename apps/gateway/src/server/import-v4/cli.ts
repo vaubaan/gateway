@@ -1,6 +1,6 @@
 /**
- * `import-v4`: the command the container runs to import a v4 bundle (ADR
- * import-from-v4-one-shot-importer D1, D4). Built into
+ * `import-v4`: the command the container runs to import a v4 bundle (see
+ * docs/handbook/import-from-v4.md). Built into
  * `apps/gateway/import-v4.mjs` beside the standalone server
  * (`scripts/build-commands.mjs`).
  *

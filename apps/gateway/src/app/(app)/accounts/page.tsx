@@ -7,7 +7,7 @@
  * ("Shares received") is the second region here: one place answers "which
  * accounts can my missions use, and how far". For an administrator, the
  * accounts whose owners all left are the last region, when there are any
- * (ADR ownerless-accounts-live-on-the-accounts-page).
+ * (docs/handbook/web-app.md).
  */
 import Link from 'next/link';
 

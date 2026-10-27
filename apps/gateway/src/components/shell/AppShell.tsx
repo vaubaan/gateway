@@ -5,8 +5,8 @@
  * The side navigation holds seven entries and nothing else — it is
  * navigation, not a status panel: Now, Waiting for you (with its count),
  * Missions, Accounts, Activity, Reference, then Settings after a rule. In a
- * narrow window it collapses to its icons. The bar (`PathBar`, ADR
- * shadcn-near-default-skin-and-path-bar) says where the page is — this
+ * narrow window it collapses to its icons. The bar (`PathBar`, see
+ * docs/handbook/web-app.md) says where the page is — this
  * gateway, the section, the page's crumbs and title — and holds, at its end,
  * the theme toggle and the person (their name, and behind it "Sign out").
  *

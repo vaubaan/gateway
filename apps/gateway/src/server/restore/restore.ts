@@ -1,5 +1,5 @@
 /**
- * Restore of a store copy (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot):
+ * Restore of a store copy (docs/handbook/store.md):
  * the one implementation behind the `restore` command and the first-boot restore.
  *
  *   1. preflight: the store's directory exists; an existing, non-empty store needs
@@ -54,7 +54,7 @@ import {
 import { compareWithShipped, loadMigrations, type Migration } from '../store/migrate';
 import { openEverySealedBlobOf, type SealedOpenCount } from '../store/repositories/sealed-blobs';
 
-/** How long a download may last, start to end (handbook configuration, "Fixed in code"). */
+/** How long a download may last, start to end (handbook configuration). */
 export const DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 /** Redirects followed, each to an https URL. */
 export const MAX_REDIRECTS = 5;

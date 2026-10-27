@@ -1,6 +1,6 @@
 /**
- * The windows of the anonymous sign-in endpoints (ADR
- * sign-in-rate-limits-and-bootstrap-lockout): one per client address when it is
+ * The windows of the anonymous sign-in endpoints (see
+ * docs/handbook/authentication.md): one per client address when it is
  * known, and one for the whole instance. Shared by the redirect sign-ins
  * (`handlers.ts`) and the forms of the local accounts (`local-handlers.ts`).
  */

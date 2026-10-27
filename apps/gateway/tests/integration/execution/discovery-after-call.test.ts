@@ -1,5 +1,5 @@
 /**
- * Discovery after a creating call (ADR discovery-runs-after-a-creating-call),
+ * Discovery after a creating call (ADR created-resources-join-the-mission),
  * through the execution door: the real composition root on the `:memory:`
  * store, the `depot` fixture plugin whose `depot__create_space` is declared in
  * `resourceCreatingTools`, missions issued through the mission service.

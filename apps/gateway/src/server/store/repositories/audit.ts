@@ -470,7 +470,7 @@ const EVERYTHING: SqlPiece = { sql: '1 = 1', params: [] };
 
 /**
  * The visibility rule, as one predicate over `audit` (spec §4.2 "Audit", §8;
- * ADR audit-visibility-members-and-operators). An entry is in the scope when:
+ * docs/spec/vaubaan-gateway.md). An entry is in the scope when:
  *
  *   call   — the scope holds every call, or its mission is one the viewer created
  *            or is a current member of, or its connection is one they own;

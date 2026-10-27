@@ -1,7 +1,7 @@
 /**
  * Several sign-in providers on one instance (spec §0 "Identity provider",
  * "Open provider", "Invitation", §4.3 admin rule, §6 human authentication; ADRs
- * sign-in-providers-admission-and-admin-rule and github-sign-in): the composition
+ * docs/handbook/authentication.md; ADR github-sign-in): the composition
  * root over the `:memory:` store, a company directory through the in-process
  * `FakeIdp` and GitHub through the in-process `FakeGithub`, the host-agnostic
  * handlers driven with web-standard `Request`s. No network.

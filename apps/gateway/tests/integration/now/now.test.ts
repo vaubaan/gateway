@@ -1,6 +1,6 @@
 /**
  * The read models of the home and of "Waiting for you" over the real root
- * (handbook web-app, "The home — Now"; handbook requests, "Who asked"):
+ * (handbook web-app; handbook requests):
  *
  *   - `RequestService.waiting` / `answered` and the `asker` of a view — who asked,
  *     with what, what is left — for the creator and nobody else;

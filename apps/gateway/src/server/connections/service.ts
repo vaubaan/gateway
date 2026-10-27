@@ -196,7 +196,7 @@ export interface DiscoveryRecord {
   readonly error: string | null;
   /**
    * Set when the gateway ran this discovery itself, after a call that created a
-   * resource (ADR discovery-runs-after-a-creating-call): the tool and its
+   * resource (ADR created-resources-join-the-mission): the tool and its
    * mission. `null` for a discovery a person ran (connect, "Refresh").
    */
   readonly afterCall: DiscoveryAfterCallCause | null;
@@ -644,7 +644,7 @@ export class ConnectionService {
     });
   }
 
-  // ── Import from v4 (ADR import-from-v4-one-shot-importer) ────────────────
+  // ── Import from v4 (docs/handbook/import-from-v4.md) ────────────────
 
   /**
    * Creates a connection from a key taken from the v4 SaaS, through the same
@@ -1058,7 +1058,7 @@ export class ConnectionService {
 
   /**
    * The gateway's own discovery after a call that created a resource of the
-   * connection (ADR discovery-runs-after-a-creating-call): the same merge as
+   * connection (ADR created-resources-join-the-mission): the same merge as
    * the owner's "Refresh", run by `DiscoveryAfterCall` off the request path.
    * Nothing is audited here: the scheduler may look again (a provider that
    * lists a new resource a moment late) and audits the outcome once, through
@@ -1219,7 +1219,7 @@ export class ConnectionService {
 
   /**
    * The owner's default environment for the connection's unlabelled resources
-   * (ADR connection-default-environment-label). `raw` is one of the catalog's
+   * (ADR connect-driver-and-resource-curation). `raw` is one of the catalog's
    * environment labels (`defaultEnvChoices`), or blank for none. A resource's own
    * label, the owner's or the plugin's, always wins over it. Audited
    * (`connection-default-env-set`) when it changes; an unchanged value writes nothing.

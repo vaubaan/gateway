@@ -1,5 +1,5 @@
 /**
- * The limits a decision is taken with (ADR mission-limits-editable-after-issuance): the
+ * The limits a decision is taken with (ADR mission-editable-after-issuance): the
  * caller's policy, with the quota and the rate of each risk as the store holds them in
  * the decision's own transaction. Which risks are accepted, and their gates, are the
  * caller's: a change of limits moves neither.

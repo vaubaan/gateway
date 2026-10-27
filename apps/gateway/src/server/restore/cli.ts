@@ -1,7 +1,7 @@
 /**
  * `restore`: puts a store copy in place of the instance's store, after proving it
- * is the copy meant and that this instance can use it (ADR
- * restore-verifies-before-it-replaces-and-runs-at-first-boot). Built into
+ * is the copy meant and that this instance can use it (see
+ * docs/handbook/store.md). Built into
  * `apps/gateway/restore.mjs` beside the standalone server (`scripts/build-commands.mjs`).
  *
  *   node apps/gateway/restore.mjs [<source>] [--sha256 <hex>] [--dry-run] [--force] [--max-mb <n>]

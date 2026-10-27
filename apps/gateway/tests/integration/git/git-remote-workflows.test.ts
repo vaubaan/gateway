@@ -1,5 +1,5 @@
 /**
- * The defect of 2026-10-16 and its fix (ADR git-push-inspected-before-it-leaves;
+ * The defect of 2026-10-16 and its fix (ADR gateway-as-git-remote;
  * handbook threat-model): a mission holding `github.git-push` and
  * `github.feature-branch-write` but NOT `github.workflow-write-via-file`
  * pushed a commit changing `.github/workflows/` on a feature branch; the

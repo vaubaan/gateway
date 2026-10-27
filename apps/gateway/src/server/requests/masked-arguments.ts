@@ -10,7 +10,7 @@
  * object (the secret names) stay. The sealed arguments and the call that may
  * be replayed are unchanged. Pure.
  *
- * Handbook: docs/handbook/requests.md ("Who reads the arguments").
+ * Handbook: docs/handbook/requests.md, Invariants.
  */
 import { createHash } from 'node:crypto';
 

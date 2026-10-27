@@ -1,6 +1,6 @@
 /**
- * The v4 importer end to end inside the process (ADR
- * import-from-v4-one-shot-importer): the exporter's bundle builder on a fake
+ * The v4 importer end to end inside the process (see
+ * docs/handbook/import-from-v4.md): the exporter's bundle builder on a fake
  * v4 database read (secrets sealed with the exact v4 scheme), the JSON piped
  * into the importer's command, the REAL composition root on a `:memory:`
  * store with the real encryptor and the real plugins. Providers are a fake

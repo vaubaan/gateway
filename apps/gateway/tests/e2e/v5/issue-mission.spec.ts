@@ -80,7 +80,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await page.getByRole('link', { name: 'New mission' }).first().click();
   await expect(page.getByRole('heading', { name: 'New mission', level: 1 })).toBeVisible();
 
-  // Every account is offered, Gmail included: no service is held back (ADR no-experimental-plugins).
+  // Every account is offered, Gmail included: no service is held back (docs/handbook/plugin-sdk.md).
   await expect(page.getByTestId('connection-gmail')).toBeVisible();
   await expect(page.getByText(/experimental/i)).toHaveCount(0);
 

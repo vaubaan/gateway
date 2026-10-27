@@ -10,7 +10,7 @@
  *   refuse          nothing changes; the risk stays exhausted until the next period
  *
  * A claim is about one risk and so is its answer (spec §3.4; ADR
- * claim-reset-is-the-claimed-risk-only): nothing a creator grants on a claim
+ * atomic-budget-accounting): nothing a creator grants on a claim
  * reopens another risk. A claim never edits the policy either: the quota of
  * the next period is the mission's, and a permanent change goes through the
  * mission itself. Both budget resolutions give back actions already consumed
@@ -105,8 +105,8 @@ function untilPeriodEnd(periodEnd: Iso8601 | null): string {
 /**
  * `orphaned` is derived from the creator's authority at the instant of the decision
  * (spec §2.3): the same request can be decided once that authority is back. The
- * request's own clock does not stop meanwhile (handbook requests, "A request on an
- * orphaned mission still expires"), so the sentence states the limit.
+ * request's own clock does not stop meanwhile (handbook requests, Traps, "A request of
+ * an orphaned mission still expires"), so the sentence states the limit.
  */
 export function orphanedProblem(requestExpiresAt: Iso8601): string {
   return `The mission is orphaned: the authority behind it is missing, so every call is refused whatever you decide. The request can be granted once that authority is back, until it expires (${formatUtc(requestExpiresAt)}); after that, the executor's next refused call opens a new one.`;

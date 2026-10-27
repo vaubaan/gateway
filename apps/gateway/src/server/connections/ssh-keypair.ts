@@ -41,7 +41,7 @@ export class SshKeyImportError extends Error {
 
 /**
  * The pair of an ed25519 private key that already exists (the importer from
- * v4, ADR import-from-v4-one-shot-importer D5): a PKCS#8 PEM (what v4
+ * v4, docs/handbook/import-from-v4.md): a PKCS#8 PEM (what v4
  * generated) or an unencrypted OpenSSH container. The private key is written
  * again in the OpenSSH container, the one format SSH clients read, with this
  * instance's comment. Any other key type, an encrypted key or a malformed one

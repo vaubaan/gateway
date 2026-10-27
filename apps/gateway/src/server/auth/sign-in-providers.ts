@@ -1,6 +1,6 @@
 /**
  * The sign-in providers of the instance (spec §0 "Identity provider", §4.2
- * Settings → Sign-in, §4.3; ADR sign-in-providers-admission-and-admin-rule).
+ * Settings → Sign-in, §4.3; docs/handbook/authentication.md).
  *
  * Two sources, merged by id:
  *
@@ -111,8 +111,8 @@ export interface ProviderState {
    * again when a test passes, since the provider's callback is registered at the
    * identity provider per public URL. `null` for a provider of the file, and for a
    * local one. When it differs from the instance's address — a restore on another
-   * host — the sign-in page and Settings say so (ADR
-   * backup-carries-the-sign-in-configuration, amendment 2026-10-23).
+   * host — the sign-in page and Settings say so (see
+   * docs/handbook/authentication.md).
    */
   readonly registeredFor: string | null;
 }
@@ -747,7 +747,7 @@ export class SignInProvidersService {
 
   /**
    * Writes every provider the configuration sets into this store as store-held ones
-   * (ADR backup-carries-the-sign-in-configuration). Run by the `backup` command on
+   * (docs/handbook/authentication.md). Run by the `backup` command on
    * its copy, never on a live store: the copy restored elsewhere signs people in as
    * the source did. The client secrets are sealed like any stored secret; the
    * provider `idp` goes to the single-provider keys. One transaction. The

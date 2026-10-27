@@ -1,6 +1,6 @@
 /**
- * The v4 importer ships in the standalone output and runs from it (ADR
- * import-from-v4-one-shot-importer D1): `.next/standalone/apps/gateway/import-v4.mjs`,
+ * The v4 importer ships in the standalone output and runs from it (see
+ * docs/handbook/import-from-v4.md): `.next/standalone/apps/gateway/import-v4.mjs`,
  * bundled by `scripts/build-commands.mjs` after `next build`, is started the
  * way the container starts it — a separate Node process in the standalone
  * tree, with the instance's configuration in its environment and its store

@@ -1,7 +1,7 @@
 /**
  * Locate `risk-catalog.yaml` next to the module that loads it.
  *
- * ADR : docs/decisions/plugin-catalog-path-and-standalone-tracing.md.
+ * Handbook : docs/handbook/plugin-sdk.md.
  *
  * `new URL('./risk-catalog.yaml', import.meta.url)` — the obvious pattern —
  * is rewritten by bundlers that recognise the literal : Turbopack (Next.js
@@ -20,7 +20,7 @@
  * The `join` below is marked `turbopackIgnore` : left alone, Turbopack treats
  * the computed path as "dynamic filesystem access" and traces the whole
  * application directory — tests and their fixtures included — into the
- * standalone output (ADR local-demo-mode D7). The catalogs do not depend on
+ * standalone output (docs/handbook/demo-mode.md). The catalogs do not depend on
  * that : they are traced by name.
  */
 

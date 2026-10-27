@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Build-time stamps frozen into the bundle: shown in the UI footer and by
-// `/healthz`. The commit is only ever one the build can see for itself (ADR
-// deployed-commit-stamped-by-git-archive): never a variable someone set by hand.
+// `/healthz`. The commit is only ever one the build can see for itself (see
+// docs/workflow/coding-workflow.md): never a variable someone set by hand.
 
 /**
  * Stamped by `git archive` with the full id of the archived commit
@@ -132,8 +132,8 @@ export const LEGACY_REDIRECTS: readonly {
   // Connected apps ("delegations") are a page of Settings.
   { source: '/delegations', destination: '/settings/connected-apps' },
   { source: '/delegations/:id/revoke', destination: '/settings/connected-apps/:id/revoke' },
-  // The accounts without owner are the last region of Accounts (ADR
-  // ownerless-accounts-live-on-the-accounts-page); the reassign action stays under /admin.
+  // The accounts without owner are the last region of Accounts (see
+  // docs/handbook/web-app.md); the reassign action stays under /admin.
   { source: '/admin/connections', destination: '/accounts#without-owner' },
 ];
 
@@ -183,7 +183,7 @@ const nextConfig: NextConfig = {
       // Plugins read their risk catalog from disk at import time
       // (`loadCatalogFile(catalogPathNextTo(import.meta.url))`); nft cannot see a
       // readFileSync behind a computed path, so every plugin YAML is traced here
-      // (ADR plugin-catalog-path-and-standalone-tracing).
+      // (docs/handbook/plugin-sdk.md).
       '../../plugins/*/src/**/*.yaml',
     ],
   },
@@ -196,7 +196,7 @@ const nextConfig: NextConfig = {
   // matches every route. Turbopack applies this option to route traces only: the
   // trace of the boot hook (`src/instrumentation.ts`) is not a route's and no key
   // reaches it, so it is cleaned at the source or not at all (handbook web-app,
-  // "What the standalone output carries").
+  // Start here).
   outputFileTracingExcludes: { '/*': NEVER_SHIPPED },
   // Same build id on every replica of one image (hosted deployments need it).
   generateBuildId: () => commitSha,

@@ -15,8 +15,7 @@
  * In the "Bounds" cell the text up to the first `;` is checked; what follows
  * is prose for the rules the table does not carry as data (a rule across two
  * keys, the format of a list entry). The "Consumed by" cell is prose and must
- * only be present. The handbook's second table ("Not configurable") is not
- * read by this test.
+ * only be present.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';

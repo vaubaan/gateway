@@ -18,9 +18,8 @@
  * with it any more outside tests.
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1, §6.
- * ADR  : docs/decisions/mission-token-sha256-digest.md, which supersedes the
- *        hash of docs/decisions/api-key-format-vbn-live-argon2id.md (the
- *        format is unchanged).
+ * ADR  : docs/decisions/mission-token-sha256-digest.md (SHA-256 replaced
+ *        the v4 argon2id hash; the format is unchanged).
  */
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';

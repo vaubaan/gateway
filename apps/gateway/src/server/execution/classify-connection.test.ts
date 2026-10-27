@@ -1,6 +1,6 @@
 /**
- * The classifier sees the connection's public form fields (ADR
- * classify-sees-the-connection-public-fields): a refused `fly__create_app` in a
+ * The classifier sees the connection's public form fields (see
+ * docs/handbook/plugin-sdk.md): a refused `fly__create_app` in a
  * mission with no Fly app cites `fly.org[<the connection's org>].app.W`, not
  * `fly.org[*]` (dogfood, 2026-10-16). Both stages hand the same view; nothing
  * but the visible fields reaches the plugin.

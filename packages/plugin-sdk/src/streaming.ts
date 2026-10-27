@@ -8,7 +8,7 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md (amendment
  *        "Streamed results").
  * Handbook : docs/handbook/plugin-sdk.md, docs/handbook/execution-door.md
- *        ("Streaming").
+ *        (Invariants, "Streaming decides first").
  *
  * The contract stays "`execute` returns one `McpToolResult`" : MCP has no
  * partial result, a `tools/call` is answered by exactly one message. What a

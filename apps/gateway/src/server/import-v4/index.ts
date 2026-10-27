@@ -1,6 +1,6 @@
 /**
- * Import of one v4 organization into this instance (ADR
- * import-from-v4-one-shot-importer). Handbook: docs/handbook/import-from-v4.md.
+ * Import of one v4 organization into this instance (handbook
+ * docs/handbook/import-from-v4.md).
  */
 export {
   bundleSchema,

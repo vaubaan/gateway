@@ -3,7 +3,7 @@
  * the call pipeline's `TelemetrySink`, the client of `@vaubaan/telemetry`,
  * the operator's toggle and the validation status read back from the
  * collector. Built once by the composition root as `root.telemetry`.
- * Handbook: docs/handbook/telemetry.md. ADR: telemetry-collector-shape.
+ * Handbook: docs/handbook/telemetry.md. ADR: telemetry-two-levels-behind-a-vercel-collector.
  *
  * Off by default, and inert until the operator turns it on: while telemetry
  * is disabled nothing leaves the instance, not even a statistics request.

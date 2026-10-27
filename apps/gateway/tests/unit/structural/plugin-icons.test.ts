@@ -1,6 +1,5 @@
 /**
- * Structural test (ADRs service-icons-declared-by-the-plugin,
- * service-marks-in-brand-colour): every plugin the image ships declares its
+ * Structural test (ADR service-icons-declared-by-the-plugin): every plugin the image ships declares its
  * icon — the `d` of one SVG path on a 24×24 grid — and the brand colour it is
  * drawn in, so no service of this repository falls back to two letters on a
  * hue or to the plain ink, and the interface never keeps a list of provider

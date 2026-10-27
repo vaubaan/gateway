@@ -1,6 +1,6 @@
 /**
- * Sign-in providers (spec §0 "Identity provider", "Open provider"; §4.3; ADR
- * sign-in-providers-admission-and-admin-rule). Pure definitions shared by the
+ * Sign-in providers (spec §0 "Identity provider", "Open provider"; §4.3; see
+ * docs/handbook/authentication.md). Pure definitions shared by the
  * configuration loader (providers from the mounted file and the environment)
  * and the authentication module (providers an administrator saved in
  * Settings → Sign-in): the provider id grammar, the issuer every user of a
@@ -76,7 +76,7 @@ export interface OidcSignInProvider extends SignInProviderBase {
    * Admit only an email the provider says it verified (`claims.email_verified` is
    * `true`), as for an open provider, although this one is a company directory. For
    * an admin rule by email on Entra ID, whose `email` claim a tenant's user
-   * administrators can set to anything (ADR verified-email-for-a-company-directory).
+   * administrators can set to anything (docs/handbook/authentication.md).
    * Absent: `false`.
    */
   readonly requireVerifiedEmail?: boolean;

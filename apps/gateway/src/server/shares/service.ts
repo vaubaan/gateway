@@ -15,8 +15,8 @@
  *     catalog, and an empty list is refused rather than stored;
  *   - never to someone who owns the connection now — its owner, or a current
  *     member of the group that owns it: such a share grants nothing today and
- *     would only outlive the membership (ADR
- *     share-to-a-current-owner-refused);
+ *     would only outlive the membership (see
+ *     docs/spec/vaubaan-gateway.md);
  *   - one active share per `(connection, target)`: sharing again to the same
  *     target replaces the previous restriction (that is how it is edited);
  *   - a share that is revoked or narrowed leaves the missions it grounded

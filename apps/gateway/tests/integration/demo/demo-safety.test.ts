@@ -1,5 +1,5 @@
 /**
- * The demo mode never reaches a real instance (handbook demo-mode, "Safety").
+ * The demo mode never reaches a real instance (handbook demo-mode, Invariants).
  *
  * Three guarantees, each held here:
  *

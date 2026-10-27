@@ -1,6 +1,6 @@
 /**
  * `POST /connections/<id>/default-env` — the owner's default environment label
- * for the account's unlabelled resources (ADR connection-default-environment-label).
+ * for the account's unlabelled resources (ADR connect-driver-and-resource-curation).
  * One-line adapter over the host-agnostic handler.
  */
 import { getRoot } from '@/server/compose';

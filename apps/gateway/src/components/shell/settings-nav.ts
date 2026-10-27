@@ -7,7 +7,7 @@
  * exist today (`/delegations`, `/admin/**`), under the words of the redesign:
  * no label is used for two things (the audit found "Connections" twice).
  * The accounts without owner are not an entry: they are the last region of
- * Accounts, for an administrator (ADR ownerless-accounts-live-on-the-accounts-page).
+ * Accounts, for an administrator (docs/handbook/web-app.md).
  */
 import type { SubNavGroup } from '@/components/ui';
 import { capitalize, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';

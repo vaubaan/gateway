@@ -4,8 +4,8 @@
  * A plugin reads `risk-catalog.yaml` from disk at import time through
  * `loadCatalogFile(catalogPathNextTo(import.meta.url))`. Next's file tracing
  * cannot follow a `readFileSync` behind a computed path, so `next.config.ts`
- * lists `plugins/*\/src/**\/*.yaml` in `outputFileTracingIncludes` (ADR
- * plugin-catalog-path-and-standalone-tracing). This test reads the build
+ * lists `plugins/*\/src/**\/*.yaml` in `outputFileTracingIncludes` (see
+ * docs/handbook/plugin-sdk.md). This test reads the build
  * output and checks that every catalog of the repository — the template's
  * included — is present under `.next/standalone`, at the path the module
  * computes relative to itself.

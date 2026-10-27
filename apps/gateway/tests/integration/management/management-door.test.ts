@@ -95,7 +95,7 @@ describe('management door — tools of a delegated agent', () => {
     it('an owner sees their connections with the whole catalog, resources and presets', async () => {
       const agent = await rig.agentOf(ADA);
       const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
-      // Every plugin is listed, Gmail included (ADR no-experimental-plugins).
+      // Every plugin is listed, Gmail included (docs/handbook/plugin-sdk.md).
       expect(data.connections.map((c) => c.provider).sort()).toEqual([
         'github',
         'gmail',

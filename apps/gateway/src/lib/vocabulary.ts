@@ -1284,7 +1284,7 @@ export function agoSentence(from: Date | string, now: Date = new Date()): string
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Connecting with a token pasted by hand, beside the company app (ADR
-// token-connections-beside-the-integration-app). The steps and permissions
+// one-place-to-authorize-services-token-first). The steps and permissions
 // themselves come from the plugin; only the frame is written here.
 // ─────────────────────────────────────────────────────────────────────────────
 

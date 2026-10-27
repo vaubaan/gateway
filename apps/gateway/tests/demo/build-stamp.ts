@@ -1,6 +1,6 @@
 /**
  * Whether the build under `apps/gateway/.next` is the build of the sources as
- * they are now (handbook demo-mode, "Starting it").
+ * they are now (handbook demo-mode, Traps).
  *
  * `npm run demo` used to build on every start. It now leaves a stamp next to
  * the build it made — a digest of every file a build reads — and serves that

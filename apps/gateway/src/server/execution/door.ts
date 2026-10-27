@@ -119,7 +119,7 @@ export interface ExecutionDoorDeps extends MissionAdmissionDeps {
    * leaves, and awaited: a call that created a resource records it on the
    * connection and in the mission — local writes only — (ADR
    * created-resources-join-the-mission), then schedules the connection's
-   * discovery off the request path (ADR discovery-runs-after-a-creating-call).
+   * discovery off the request path (ADR created-resources-join-the-mission).
    * Must never wait on a provider. Absent: nothing follows a call.
    */
   readonly afterCall?: (ctx: MissionContext, call: AnsweredCall) => void | Promise<void>;

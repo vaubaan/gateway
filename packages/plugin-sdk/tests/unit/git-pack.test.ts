@@ -1,5 +1,5 @@
 /**
- * The pack reader of the git remote (ADR git-push-inspected-before-it-leaves):
+ * The pack reader of the git remote (ADR gateway-as-git-remote):
  * packs written by the real `git pack-objects`, then garbled, truncated,
  * thinned and over its limits. An object is found only under the id its
  * content hashes to; the reader never throws.

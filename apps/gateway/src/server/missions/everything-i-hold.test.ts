@@ -87,7 +87,7 @@ describe('everything I hold — the expansion', () => {
   });
 
   it('a resource that carries the connection default environment reaches its ids', () => {
-    // The default is already applied to `resources[].env` (ADR connection-default-environment-label).
+    // The default is already applied to `resources[].env` (ADR connect-driver-and-resource-curation).
     const inherited: IssuanceResource = { ...byRef('scratch'), env: 'prod' };
     const connection = acmeConnection({ default_env: 'prod', resources: [inherited] });
     expect(idsOf(connection, [inherited])).toContain('acme[prod].write');

@@ -7,7 +7,7 @@
  * `nodemailer` speaks SMTP (STARTTLS on a submission port, TLS from the first
  * byte, or clear text for a relay on the same host); a test hands in its own
  * `transport`. A failed send is logged without the recipient or the link; the
- * caller decides what to tell (handbook authentication, "Local accounts").
+ * caller decides what to tell (handbook authentication).
  */
 import nodemailer from 'nodemailer';
 

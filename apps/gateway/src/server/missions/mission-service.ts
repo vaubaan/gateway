@@ -505,7 +505,7 @@ export interface MissionLostConnection {
   readonly final: boolean;
 }
 
-/** Why a mission reads `orphaned` right now (handbook authority, "Orphaned missions"). */
+/** Why a mission reads `orphaned` right now (handbook authority, Invariants). */
 export interface MissionOrphanReason {
   readonly cause: OrphanCause;
   /** The connection the cause was met on; `null` when the creator is gone. */
@@ -910,7 +910,7 @@ export class MissionService {
    * mission that very delegation issued is rotated: the new token is handed to
    * the caller, so rotating a mission the human issued — wider, perhaps with a
    * gate they opened — would hand a delegated client an authority nobody
-   * issued to it (ADR management-door-rotation-scope-and-replay-trace). The
+   * issued to it (docs/spec/vaubaan-gateway.md). The
    * human rotates any of their missions in the interface.
    */
   async rotate(
