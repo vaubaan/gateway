@@ -61,7 +61,7 @@ sequenceDiagram
   participant G as Gateway instance
   participant K as OAuth broker (enclave)
   participant P as Provider (Google)
-  G->>K: POST /attest {nonce} (on the TLS connection)
+  G->>K: POST /attest (no body, no key, on the TLS connection)
   K-->>G: 200 {platform, evidence}
   Note over G: verify evidence, pin the TLS key
   G->>K: POST /flows {provider, scopes, return_url, state, challenge}
@@ -85,10 +85,13 @@ sequenceDiagram
 ## Transport and authentication
 
 - **HTTPS, JSON.** Requests and answers are JSON
-  (`Content-Type: application/json`), UTF-8. Every call is a `POST` with a
-  JSON body.
-- **Base URL.** The instance is configured with a base URL that may carry a
-  path (`https://broker.example.com/v1`); the paths below are appended to it.
+  (`Content-Type: application/json`), UTF-8. Every call is a `POST`; all but
+  `/attest` carry a JSON body.
+- **Base URL.** A root URL with a port, such as
+  `https://api.broker.example.com:8443`: the reference broker serves its API
+  at the root, and the paths below are appended to it (`…:8443/token`). The
+  port is the TCP passthrough to the enclave (below); the browser callback is
+  on the public front.
 - **The broker key** is sent as `Authorization: Bearer <key>` on every call
   but two: `/attest`, which carries **no** `Authorization` header, and the
   browser's callback. The gateway sends the key only on a connection whose
@@ -98,8 +101,14 @@ sequenceDiagram
   the **instance**: the broker knows which instance a key enrolls, and every
   flow is bound to that instance. The key never appears in a body, a URL or a
   redirect.
-- The gateway follows **no redirect** on these calls and waits at most **15
-  seconds** for an answer (the attestation included).
+- The gateway follows **no redirect**: a 3xx answer, to `/attest` or to a
+  call, is a broker failure.
+- **Time.** Each request — the attestation, a call — waits at most **15
+  seconds**. A call that needs an attestation first may therefore take 30
+  seconds: the attestation runs on its own 15 seconds, shared by every call
+  waiting for it, and a call that gives up waiting does not cut it short for
+  the others. The revocation of a connection allows the same 30 seconds.
+- **Answers** longer than 256 KiB are refused.
 - A broker that rotates a key gives the instance's administrator the new
   one; the gateway reads it at its next start.
 
@@ -118,15 +127,31 @@ carries the SPKI hash of the certificate that connection presented:
    connection reuse), completes the handshake **without** checking the
    chain, and computes `base64url(SHA-256(DER SubjectPublicKeyInfo))` of the
    certificate presented. Nothing is written before this.
-2. With no pin in force, it sends `POST /attest {nonce}` on that connection,
-   without the broker key, and verifies the answer (below). The key is then **pinned** for
-   min(the evidence's `exp`, 1 hour).
+2. With no pin in force, it sends `POST /attest` on that connection, without
+   a body and without the broker key, and verifies the answer (below). The
+   key is then **pinned** for min(the evidence's `exp`, 1 hour).
 3. Every call — `/flows`, `/grants/redeem`, `/token`, `/revoke` — goes over a
    new connection whose presented key is the pinned one; the request is
    written only after that comparison. A connection presenting another key
    (the enclave restarted) makes the gateway attest again, once; a key that
    no fresh attestation carries gets nothing.
-4. After the pin expires, the next call attests again with a new nonce.
+4. After the pin expires, the next call attests again.
+
+**One key per broker: the broker runs as a single replica.** The pin covers
+one TLS key; two replicas behind one address would each present a key of
+their own, and every call landing on the other one would force a new
+attestation (or be refused). Scaling the broker out needs one address per
+replica, each enrolled as its own `oauth_brokers` block.
+
+**Why there is no nonce, and why a replay is harmless.** The evidence binds
+the enclave's TLS **public** key, not a gateway's request: the broker serves
+one cached attestation to everyone, refreshed every five minutes, so
+`/attest` costs it nothing and cannot be used to exhaust the platform's
+attestation quota. Whoever replays that attestation (copied from a broker's
+answer) does not hold the enclave's private key: the TLS connection it
+answers on presents another key, its SPKI hash is not the one the evidence
+names, and the gateway sends nothing. Freshness comes from `iat` (at most 10
+minutes old) and `exp`.
 
 The certificate chain is unchecked on these connections **only**; every
 other HTTPS call of the gateway verifies certificates as usual.
@@ -140,14 +165,7 @@ for tests). The connect page and the account page say it is not attested.
 
 ### `POST /attest` — the attestation
 
-No `Authorization` header: the broker answers it without a key. Request:
-
-```json
-{ "nonce": "kQ0b4r…43 characters" }
-```
-
-`nonce` is the base64url encoding, without padding, of 32 random bytes the
-gateway draws for this attestation (43 characters).
+No `Authorization` header and **no body**: the broker answers it to anyone.
 
 Answer `200 OK`:
 
@@ -160,6 +178,9 @@ Answer `200 OK`:
 | `platform` | The enclave platform: one the gateway release has an adapter for.               |
 | `evidence` | The platform's attestation, in the platform's format (below for each platform). |
 
+The broker serves a **cached** evidence and refreshes it every **five
+minutes**; the gateway accepts one issued up to ten minutes ago.
+
 For `platform: "gcp-confidential-space"`, `evidence` is a **Confidential
 Space OIDC attestation token** (a JWT) that the broker requests from the
 Confidential Space launcher (`POST /v1/token` on
@@ -167,24 +188,26 @@ Confidential Space launcher (`POST /v1/token` on
 
 - `audience`: **`oauth-broker-attestation`**
   (`BROKER_ATTESTATION_AUDIENCE`);
-- `nonces`, exactly two, in this order: the gateway's `nonce`, then
+- `nonces`: exactly one,
   `base64url(SHA-256(DER SubjectPublicKeyInfo of the broker's TLS key))`
-  (43 characters each — within Google's 10 to 74 bytes).
+  (43 characters — within Google's 10 to 74 bytes). No nonce of the
+  gateway's.
 
 The gateway checks, and refuses on any miss:
 
-| What                                            | Expected                                                                                                                               |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| signature                                       | RS256, a key of the JWKS named by `https://confidentialcomputing.googleapis.com/.well-known/openid-configuration` (`jwks_uri`), cached |
-| `iss`                                           | `https://confidentialcomputing.googleapis.com`                                                                                         |
-| `aud`                                           | `oauth-broker-attestation`                                                                                                             |
-| `exp`, `iat`                                    | not expired; issued within the last 10 minutes (60 s of clock tolerance)                                                               |
-| `swname`                                        | `CONFIDENTIAL_SPACE`                                                                                                                   |
-| `dbgstat`                                       | `disabled-since-boot` (the production image, not the debug one)                                                                        |
-| `secboot`                                       | `true`                                                                                                                                 |
-| `submods.confidential_space.support_attributes` | contains `STABLE`                                                                                                                      |
-| `submods.container.image_digest`                | `sha256:<64 hex>`, **on the allowlist** of the gateway release                                                                         |
-| `eat_nonce`                                     | an array of exactly two values: `[<the gateway's nonce>, <the SPKI hash of the connection's key>]`                                     |
+| What                                            | Expected                                                                                                                                                                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| signature                                       | RS256, a key of the JWKS named by `https://confidentialcomputing.googleapis.com/.well-known/openid-configuration` (`jwks_uri`), cached; a key not found or a JWKS that cannot be fetched runs the discovery again, once |
+| `iss`                                           | `https://confidentialcomputing.googleapis.com`                                                                                                                                                                          |
+| `aud`                                           | `oauth-broker-attestation`                                                                                                                                                                                              |
+| `exp`, `iat`                                    | not expired; issued within the last 10 minutes (60 s of clock tolerance)                                                                                                                                                |
+| `swname`                                        | `CONFIDENTIAL_SPACE`                                                                                                                                                                                                    |
+| `dbgstat`                                       | `disabled-since-boot` (the production image, not the debug one)                                                                                                                                                         |
+| `secboot`                                       | `true`                                                                                                                                                                                                                  |
+| `hwmodel`                                       | a confidential VM: `GCP_AMD_SEV`, `GCP_AMD_SEV_ES` or `GCP_INTEL_TDX` — not `GCP_SHIELDED_VM`, nor any other value                                                                                                      |
+| `submods.confidential_space.support_attributes` | contains `STABLE`                                                                                                                                                                                                       |
+| `submods.container.image_digest`                | `sha256:<64 hex>`, **on the allowlist** of the gateway release                                                                                                                                                          |
+| `eat_nonce`                                     | exactly the SPKI hash of the connection's key: `[<hash>]` (or `"<hash>"`, the shape Google may give one nonce)                                                                                                          |
 
 ### The allowlist
 
@@ -309,13 +332,13 @@ Answer `200 OK`:
 }
 ```
 
-| Field           | Rule                                                                                                                                          |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `refresh_token` | The provider's refresh token, as the provider issued it. The instance seals it; the broker keeps no copy.                                     |
-| `access_token`  | The provider's access token, as the provider issued it.                                                                                       |
-| `expires_at`    | ISO-8601 instant when the access token stops working. Omit or `null` when unknown; the gateway then refreshes only when the provider refuses. |
-| `account`       | The provider account the person signed in with (an email at Google), or `null`. Shown on the account's page; nothing is decided on it.        |
-| `scopes`        | The scopes the provider actually granted (a person may untick some at Google).                                                                |
+| Field           | Rule                                                                                                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `refresh_token` | **Opaque** to the gateway: the reference broker answers a sealed blob bound to the instance of the key, which only it can open, around the provider's refresh token. The instance seals it and presents it as is; the broker keeps no copy. |
+| `access_token`  | The provider's access token, as the provider issued it.                                                                                                                                                                                     |
+| `expires_at`    | ISO-8601 instant when the access token stops working. Omit or `null` when unknown; the gateway then refreshes only when the provider refuses.                                                                                               |
+| `account`       | The provider account the person signed in with (an email at Google), or `null`. Shown on the account's page; nothing is decided on it.                                                                                                      |
+| `scopes`        | The scopes the provider actually granted (a person may untick some at Google).                                                                                                                                                              |
 
 The broker refuses, with **one** answer, a grant that is unknown, already
 redeemed, past its lifetime, issued to another instance (another key),
@@ -402,6 +425,7 @@ the broker is back.
 | A refresh token  | the provider's: until revoked, refused, or the client secret is rotated.              |
 | An access token  | the provider's (an hour at Google); the gateway refreshes a minute before it expires. |
 | A pinned TLS key | min(the evidence's `exp`, 1 hour); then the gateway attests again.                    |
+| An evidence      | served cached, refreshed every 5 minutes; accepted up to 10 minutes after `iat`.      |
 
 ## What a broker operator provides
 
@@ -433,27 +457,35 @@ release.
 
 `FakeOAuthBroker.start({ keys })` runs an in-memory **HTTPS** server on
 `127.0.0.1` with a throwaway self-signed key (`fake-tls-certificate.ts`) that
-implements this page, `/attest` (answered without a key) included, on the **test-only** platform
+implements this page at the root of `https://127.0.0.1:<port>`, `/attest`
+(no body, no key, a cached evidence refreshed every five minutes) included,
+on the **test-only** platform
 `fake-enclave`: `attestationKit()` hands the code under test that platform's
 adapter and an allowlist admitting the fake's measurement — the
 configuration can never name it, and the production kit
 (`productionAttestationKit`) does not contain it. `{ attestation: 'none' }`
-plays a broker outside an enclave (plain HTTP, no `/attest`).
+plays a broker outside an enclave (no `/attest`); `trustingFetch()` is a
+fetch that trusts its certificate as an authority, so the chain and the name
+are checked as for any HTTPS service.
 
 `recordReturnUrl` enrolls a return URL, `approve(authorizeUrl)` /
 `deny(authorizeUrl)` play the person at the provider and give the URL the
 browser comes back on, `down()` answers 503 to everything,
 `refusingProvider()` makes the provider refuse every refresh token
 (`invalid_grant`), `refusingCode()` makes it refuse the code at the redeem
-(`invalid_grant`), `attestWith({measurement, spkiHash, debug})` makes the
-evidence lie, `rotateTlsKey()` plays an enclave restart, and `calls` records
+(`invalid_grant`), `attestWith({measurement, spkiHash, debug, ttlMs})` makes
+the evidence lie or last less, `rotateTlsKey()` plays an enclave restart,
+`holdAttest()` a slow attestation, `redirecting(route)` a 3xx answer, and
+`calls` records
 what the gateway sent (`withKey`: whether a call carried an `Authorization`
 header). Like a real broker it keeps no token: the refresh
-tokens it hands out live on its fake provider's side
-(`providerRefreshTokens`). `oauth-broker.test.ts` pins against it: the whole
+tokens it hands out are opaque values its fake provider knows, bound to the
+instance that redeemed them (`providerRefreshTokens`). `oauth-broker.test.ts` pins against it: the whole
 flow, a grant redeemed twice, late, by another instance or with the wrong
-verifier, a bad key, a broker that is down or gone, the refresh, the
-revocation, the pin and its renewal, and every refused attestation.
+verifier, a code the provider refuses, a bad key, a broker that is down or
+gone, the refresh, the revocation, the pin, its renewal and its end at a
+short `exp`, a caller that joins an attestation in progress while another
+times out, 3xx answers, and every refused attestation.
 `attestation-gcp.test.ts` pins the Confidential Space adapter on tokens
 signed by a key of its own, found through a discovery document as in
-production.
+production, and found again when the keys moved or the fetch failed.

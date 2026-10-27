@@ -61,7 +61,9 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError,
                        registerClient (RFC 7591), OAuth2RegistrationError
   oauth2-clients.ts    OAuth2Clients: the client of an `oauth2` service, registered and kept
-  oauth-broker.ts      OAuthBrokerClient (the four calls of a broker), OAuthBrokers (which broker serves a provider), OAuthBrokerError
+  oauth-broker.ts      OAuthBrokerClient (the calls of a broker), OAuthBrokers (which broker serves a provider), OAuthBrokerError
+  broker-channel.ts    AttestedChannel (pinned TLS, /attest), FetchChannel (attestation: none)
+  broker-attestation.ts AttestationVerifier, the platform adapter interface, the allowlist; attestation-gcp.ts the Confidential Space adapter
   fake-oauth-broker.ts FakeOAuthBroker: the contract test kit, an in-memory HTTP broker on 127.0.0.1 — tests only
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
@@ -204,8 +206,14 @@ productionAttestationKit({ fetch }) })`, built by `createConnectionsModule`. `fo
   `attestation: none` (`FetchChannel`, plain `fetch`). The attested channel
   opens a TLS socket of its own (`tls.connect`, chain unchecked on that
   socket only), hashes the presented key's SPKI, and writes nothing before
-  that key is the pinned one. Without a pin it sends `POST /attest {nonce}`
-  on the socket, without the broker key (sent only once the key is pinned); `AttestationVerifier` picks the platform adapter the answer
+  that key is the pinned one. Without a pin it sends `POST /attest` on the
+  socket, with no body and without the broker key (sent only once the key is
+  pinned); the broker answers a cached evidence bound to its TLS key, at most
+  ten minutes old. The attestation is shared by the calls waiting for it and
+  runs on its own 15 s; a call through an attested broker may take an
+  attestation and its request (`ATTESTED_CALL_BUDGET_MS`, 30 s), which is
+  also the revocation's budget through a broker. `AttestationVerifier` picks
+  the platform adapter the answer
   names (`gcpConfidentialSpace`, the only one of `productionAttestationKit`)
   and requires the measurement on `broker-measurements.json` (empty today:
   "no attested broker version admitted by this release", and nothing is

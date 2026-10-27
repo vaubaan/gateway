@@ -36,6 +36,7 @@ import {
   OAuthBrokerError,
   type OAuthBrokerIo,
 } from './oauth-broker';
+import { AttestedChannel, FetchChannel, MAX_ANSWER_BYTES } from './broker-channel';
 import { REFRESH_SKEW_MS } from './credentials';
 import { connectionsHarness, fixturePlugin, type ConnectionsHarness } from './testing';
 
@@ -76,6 +77,7 @@ afterEach(async () => {
 function harness(
   key: string | null = KEY,
   allowlist: readonly string[] = [FAKE_BROKER_MEASUREMENT],
+  brokerFetch?: typeof fetch,
 ): ConnectionsHarness {
   const h = connectionsHarness({
     plugins: [
@@ -91,6 +93,7 @@ function harness(
     ],
     brokers: key === null ? [] : [broker.configFor(key)],
     ...(broker.spkiHash ? { brokerAttestation: broker.attestationKit([...allowlist]) } : {}),
+    ...(brokerFetch ? { brokerFetch } : {}),
   });
   broker.recordReturnUrl('instance-a', h.service.callbackUrl(PLUGIN).href);
   clockNow = () => h.clock.now().getTime();
@@ -126,7 +129,7 @@ async function expectConnectError(promise: Promise<unknown>, code: string): Prom
 }
 
 function callsTo(path: string) {
-  return broker.calls.filter((c) => c.path === `/v1${path}`);
+  return broker.calls.filter((c) => c.path === path);
 }
 
 describe('a plugin whose client is an OAuth broker', () => {
@@ -146,9 +149,10 @@ describe('a plugin whose client is an OAuth broker', () => {
     const { authorizeUrl } = await startFlow(h);
     expect(authorizeUrl.startsWith(FAKE_AUTHORIZE_URL)).toBe(true);
     const [attest, flows] = broker.calls;
-    expect(attest).toMatchObject({ method: 'POST', path: '/v1/attest', status: 200 });
-    expect(String(attest?.body?.nonce)).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(flows).toMatchObject({ method: 'POST', path: '/v1/flows', instance: 'instance-a' });
+    // No body, no key: the broker answers its cached evidence to anyone.
+    expect(attest).toMatchObject({ method: 'POST', path: '/attest', status: 200, body: null });
+    expect(attest?.withKey).toBe(false);
+    expect(flows).toMatchObject({ method: 'POST', path: '/flows', instance: 'instance-a' });
     expect(flows?.body).toMatchObject({
       provider: 'google',
       scopes: BROKERED.scopes,
@@ -379,7 +383,7 @@ describe('the contract’s refusals, at the client', () => {
     await connect(h);
     for (const call of broker.calls) expect(JSON.stringify(call.body)).not.toContain(KEY);
     expect(callsTo('/attest').map((c) => c.withKey)).toEqual([false]);
-    expect(broker.calls.filter((c) => c.path !== '/v1/attest').every((c) => c.withKey)).toBe(true);
+    expect(broker.calls.filter((c) => c.path !== '/attest').every((c) => c.withKey)).toBe(true);
   });
 });
 
@@ -400,10 +404,71 @@ describe('the attestation of the broker', () => {
     });
     h.clock.advance(MAX_PIN_MS + 1_000);
     await h.broker.refresh(connection.id);
-    const attests = callsTo('/attest');
-    expect(attests).toHaveLength(2);
-    // A new nonce every time.
-    expect(attests[0]?.body?.nonce).not.toBe(attests[1]?.body?.nonce);
+    expect(callsTo('/attest')).toHaveLength(2);
+  });
+
+  it('accepts the broker’s cached evidence, and pins it until its own exp when that is sooner than an hour', async () => {
+    const h = harness();
+    // An evidence that holds 20 minutes, served cached for up to 5.
+    broker.attestWith({ ttlMs: 20 * 60_000 });
+    const { connection } = await connect(h);
+    const start = clockNow();
+    h.clock.advance(4 * 60_000);
+    // Another instance asks within the refresh cycle: the same cached evidence, admitted.
+    const other = new OAuthBrokerClient(broker.configFor(OTHER_KEY, 'other'), {
+      fetch,
+      attestation: broker.attestationKit(),
+      now: () => clockNow(),
+    });
+    await other.token('google', 'rt_unknown').catch(() => null);
+    expect(callsTo('/attest').map((c) => c.status)).toEqual([200, 200]);
+    expect(other.admitted?.expiresAt).toBe(h.brokers.byName('main')?.admitted?.expiresAt);
+    // The pin ends with the evidence (20 min), not after an hour.
+    expect(h.brokers.byName('main')?.admitted?.expiresAt).toBe(start + 20 * 60_000);
+    h.clock.advance(17 * 60_000);
+    expect(h.brokers.byName('main')?.admitted).toBeNull();
+    await h.broker.refresh(connection.id);
+    expect(callsTo('/attest')).toHaveLength(3);
+  });
+
+  it('a second caller joins the attestation in progress; the first one timing out does not cut it short', async () => {
+    harness();
+    const channel = new AttestedChannel(broker.url, KEY, {
+      verifier: new AttestationVerifier(broker.attestationKit()),
+      now: () => clockNow(),
+    });
+    const held = broker.holdAttest();
+    const impatient = new AbortController();
+    const body = JSON.stringify({ provider: 'google', refresh_token: 'rt_unknown' });
+    const first = channel.send('/token', body, impatient.signal);
+    await held.arrived;
+    const second = channel.send('/token', body, AbortSignal.timeout(10_000));
+    impatient.abort(new DOMException('timed out', 'TimeoutError'));
+    await expect(first).rejects.toMatchObject({ kind: 'unreachable' });
+    held.release();
+    expect((await second).status).toBe(400);
+    // One attestation served both: the second caller waited for it.
+    expect(callsTo('/attest')).toHaveLength(1);
+    expect(callsTo('/token')).toHaveLength(1);
+  });
+
+  it('a 3xx answer is refused, on /attest and on a call: nothing is followed', async () => {
+    const h = harness();
+    broker.redirecting('/attest');
+    expect((await failedStart(h)).message).toMatch(
+      /could not be attested \(flows: answered 302 to attest\)/,
+    );
+    expect(callsTo('/flows')).toEqual([]);
+  });
+
+  it('a 3xx answer to a call is the broker’s failure, not followed', async () => {
+    const h = harness();
+    const { connection } = await connect(h);
+    broker.redirecting('/token');
+    const err = await h.broker.refresh(connection.id).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(OAuthBrokerUnavailableError);
+    expect((err as Error).message).toMatch(/answered 302 to token/);
+    expect((await h.store.connections.getById(connection.id))?.status).toBe('active');
   });
 
   it('a release that admits no broker version sends the broker nothing', async () => {
@@ -427,7 +492,7 @@ describe('the attestation of the broker', () => {
     const h = harness();
     broker.attestWith({ spkiHash: 'A'.repeat(43) });
     const err = await failedStart(h);
-    expect(err.message).toMatch(/not bound to this request and this connection’s key/);
+    expect(err.message).toMatch(/not bound to this connection’s key/);
     expect(callsTo('/flows')).toEqual([]);
   });
 
@@ -467,8 +532,8 @@ describe('a broker declared attestation: none', () => {
     broker = await startBroker('none');
   });
 
-  it('is reached as any HTTPS service, without /attest, and every page says it is not attested', async () => {
-    const h = harness();
+  it('is reached as any HTTPS service, its certificate checked, without /attest, and every page says it is not attested', async () => {
+    const h = harness(KEY, [], broker.trustingFetch());
     expect((await h.service.providers())[0]?.brokerAttested).toBe(false);
     const { connection } = await connect(h);
     expect(callsTo('/attest')).toEqual([]);
@@ -480,6 +545,36 @@ describe('a broker declared attestation: none', () => {
       attested: false,
     });
     expect(h.brokers.byName('main')?.admitted).toBeNull();
+  });
+
+  it('a certificate no authority of the gateway vouches for is refused: nothing is sent', async () => {
+    const h = harness(KEY, [], globalThis.fetch);
+    const alice = await h.actor('alice@example.com');
+    const err = await expectConnectError(h.service.start(alice, PLUGIN), 'broker-failed');
+    expect(err.message).toMatch(/could not be reached/);
+    expect(broker.calls).toEqual([]);
+  });
+
+  it('a 3xx answer is refused, not followed', async () => {
+    const h = harness(KEY, [], broker.trustingFetch());
+    broker.redirecting('/flows');
+    const err = await expectConnectError(
+      h.service.start(await h.actor('alice@example.com'), PLUGIN),
+      'broker-failed',
+    );
+    expect(err.message).toMatch(/could not be reached/);
+  });
+
+  it('an answer longer than 256 KiB is refused', async () => {
+    const channel = new FetchChannel(
+      broker.url,
+      KEY,
+      async () => new Response('x'.repeat(MAX_ANSWER_BYTES + 1), { status: 200 }),
+    );
+    await expect(channel.send('/token', '{}', AbortSignal.timeout(5_000))).rejects.toMatchObject({
+      kind: 'unreachable',
+      message: 'answered more than a broker answers',
+    });
   });
 });
 

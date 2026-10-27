@@ -66,7 +66,7 @@ import {
   type RevocationAttempt,
 } from './oauth2';
 import { OAuth2ClientMissing, type OAuth2Clients } from './oauth2-clients';
-import { OAuthBrokerError, type OAuthBrokers } from './oauth-broker';
+import { ATTESTED_CALL_BUDGET_MS, OAuthBrokerError, type OAuthBrokers } from './oauth-broker';
 
 /** An access token that expires within this delay is refreshed before use. */
 export const REFRESH_SKEW_MS = 60_000;
@@ -120,14 +120,23 @@ function ownRefreshApplies(plugin: ProviderPlugin, credential: CredentialSecret)
   return plugin.refresh !== undefined && credential.kind === plugin.credential.kind;
 }
 
+/**
+ * How long a withdrawal may take: the provider's revocation request, or —
+ * through an attested OAuth broker — an attestation and the call
+ * (`ATTESTED_CALL_BUDGET_MS`), so that a broker that must be attested first
+ * is not cut short and recorded `failed` while it is still answering.
+ */
+function revocationDelayMs(plugin: ProviderPlugin): number {
+  const spec = plugin.credential;
+  const brokered = spec.kind === 'oauth2' && isBrokeredSpec(spec) && !plugin.revoke;
+  return brokered ? ATTESTED_CALL_BUDGET_MS : REVOCATION_REQUEST_TIMEOUT_MS;
+}
+
 /** A withdrawal that takes longer than the delay did not confirm anything. */
-async function withinRevocationDelay<T>(attempt: Promise<T>): Promise<T> {
+async function withinRevocationDelay<T>(attempt: Promise<T>, delayMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const tooSlow = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(
-      () => reject(new RevocationTimeout()),
-      REVOCATION_REQUEST_TIMEOUT_MS + REVOCATION_GRACE_MS,
-    );
+    timer = setTimeout(() => reject(new RevocationTimeout()), delayMs + REVOCATION_GRACE_MS);
   });
   try {
     return await Promise.race([attempt, tooSlow]);
@@ -219,7 +228,9 @@ export class CredentialBroker {
    * Asks the provider to withdraw the grant of a connection that was just
    * revoked here (spec §2.3), with the credential `forRevocation` read before
    * the store erased it. Never throws and never takes longer than
-   * `REVOCATION_REQUEST_TIMEOUT_MS`: the answer is one of three facts.
+   * `REVOCATION_REQUEST_TIMEOUT_MS` — `ATTESTED_CALL_BUDGET_MS` through an
+   * OAuth broker (an attestation, then the call): the answer is one of three
+   * facts.
    *
    *   `revoked`  the provider confirmed (the plugin's `revoke` resolved, or
    *              the endpoint of `credential.revocation` answered 2xx);
@@ -241,7 +252,10 @@ export class CredentialBroker {
       return 'failed';
     }
     try {
-      const outcome = await withinRevocationDelay(this.withdraw(plugin, held));
+      const outcome = await withinRevocationDelay(
+        this.withdraw(plugin, held),
+        revocationDelayMs(plugin),
+      );
       if (outcome.outcome === 'revoked') {
         this.deps.logger.info('provider grant withdrawn', log);
         return 'revoked';

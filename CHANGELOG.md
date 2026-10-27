@@ -41,11 +41,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `POST /revoke {provider, refresh_token}`; an `invalid_grant` on a refresh
   makes the connection expired; errors are `{error, message}`. Every call
   goes over a TLS connection whose key an attestation of the broker carries
-  (`POST /attest`, sent without the broker key, which goes only over a
-  pinned, verified connection): a Google Confidential Space token, checked against
-  Google's keys, debug off, a stable image, the gateway's nonce and the
-  connection's key, and an image digest on the allowlist shipped with the
-  release (`broker-measurements.json`). The allowlist is empty until a
+  (`POST /attest`, with no body and without the broker key, which goes only
+  over a pinned, verified connection): a Google Confidential Space token the
+  broker caches and refreshes every five minutes, checked against Google's
+  keys, at most ten minutes old, debug off, a stable image on a confidential
+  VM (AMD SEV, SEV-ES or Intel TDX), bound to the connection's TLS key, and an
+  image digest on the allowlist shipped with the release
+  (`broker-measurements.json`). The broker's URL is a root URL with a port;
+  the broker runs as a single replica (one pinned key). The refresh token is
+  opaque to the gateway. The allowlist is empty until a
   broker is released: an attested broker then gets nothing, and connecting
   says "no attested broker version admitted by this release". No broker was
   ever enrolled, so no connection or configuration needs migrating.

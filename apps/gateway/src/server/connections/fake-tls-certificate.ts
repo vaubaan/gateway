@@ -4,10 +4,13 @@
  * oauth-broker-stateless-in-an-attested-enclave D6). Not for production.
  *
  * Node makes key pairs but not certificates, and no private key is kept in
- * the repository: this writes the few DER bytes of an X.509 v1 certificate
- * (ECDSA P-256, SHA-256, a common name, a day of validity) and signs them.
- * Nothing verifies its chain: the gateway checks the key it carries against
- * an attestation, which is the point.
+ * the repository: this writes the few DER bytes of an X.509 v3 certificate
+ * (ECDSA P-256, SHA-256, a common name, the subject alternative names
+ * 127.0.0.1 and localhost, a day of validity) and signs them. For an attested
+ * broker nothing verifies its chain — the gateway checks the key it carries
+ * against an attestation, which is the point; for a broker declared
+ * `attestation: none` a test trusts it as its own authority, and the name
+ * check passes on 127.0.0.1.
  */
 import { generateKeyPairSync, sign } from 'node:crypto';
 
@@ -22,13 +25,21 @@ export function fakeTlsCertificate(commonName = 'fake-oauth-broker'): FakeTlsCer
   const algorithm = sequence(oid([1, 2, 840, 10045, 4, 3, 2])); // ecdsa-with-SHA256
   const name = sequence(set(sequence(oid([2, 5, 4, 3]), tlv(0x0c, Buffer.from(commonName)))));
   const now = Date.now();
+  // subjectAltName: iPAddress 127.0.0.1 ([7]), dNSName localhost ([2]).
+  const altNames = sequence(
+    tlv(0x87, Buffer.from([127, 0, 0, 1])),
+    tlv(0x82, Buffer.from('localhost')),
+  );
+  const extensions = tlv(0xa3, sequence(sequence(oid([2, 5, 29, 17]), tlv(0x04, altNames))));
   const tbs = sequence(
+    tlv(0xa0, integer(Buffer.from([0x02]))), // v3
     integer(Buffer.from([0x01])),
     algorithm,
     name,
     sequence(utcTime(new Date(now - 60_000)), utcTime(new Date(now + 24 * 60 * 60_000))),
     name,
     spki,
+    extensions,
   );
   const signature = sign('sha256', tbs, privateKey);
   const der = sequence(tbs, algorithm, tlv(0x03, Buffer.concat([Buffer.from([0]), signature])));

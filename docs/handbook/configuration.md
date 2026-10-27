@@ -649,7 +649,7 @@ The contract between the two is
 ```yaml
 oauth_brokers:
   main:
-    url: https://broker.example.com/v1
+    url: https://api.broker.example.com:8443
     key: ${file:/run/secrets/oauth_broker_key}
     # providers: [google]     # none: this broker serves every provider
     # attestation: none       # your own broker, outside an enclave: not verified
@@ -671,8 +671,10 @@ rules of `config/oauth-brokers.ts`.
   it is redacted from the logs (`secretValues`) and taken out of
   `process.env` (`secretEnvVariables`). The gateway sends it as a Bearer to
   the broker and nowhere else.
-- **The URL** is https; its path is the prefix of `/attest`, `/flows`,
-  `/grants/redeem`, `/token`, `/revoke`. http is accepted only for
+- **The URL** is https, a root URL with a port
+  (`https://api.broker.example.com:8443`): the reference broker serves at the
+  root. A path, when one is given, is kept as the prefix of `/attest`,
+  `/flows`, `/grants/redeem`, `/token`, `/revoke`. http is accepted only for
   `localhost`, `127.0.0.1` or `::1` **and** `attestation: none` (the tests'
   fake broker): an attested broker is reached over its own TLS key.
 - **`attestation`** is `required` (the default) or `none`, case-insensitive;

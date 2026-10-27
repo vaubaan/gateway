@@ -18,21 +18,27 @@
  *   …
  *   await broker.stop();
  *
- * By default it plays an attested broker: HTTPS with a key of its own (a
- * throwaway self-signed certificate, `fake-tls-certificate.ts`) and
- * `POST /attest` answered on the **test-only** platform `fake-enclave`, whose
+ * It serves at the root of its URL (`https://127.0.0.1:<port>`), over HTTPS
+ * with a key of its own (a throwaway self-signed certificate,
+ * `fake-tls-certificate.ts`). By default it plays an attested broker:
+ * `POST /attest` (no body, no key) answered with a cached evidence on the
+ * **test-only** platform `fake-enclave`, refreshed every five minutes, whose
  * adapter and allowlist `attestationKit()` hands to the code under test — the
  * configuration can never name it. `{ attestation: 'none' }` plays a broker
- * outside an enclave: plain HTTP on the loopback, no `/attest`.
+ * outside an enclave: no `/attest`, its certificate checked by a fetch that
+ * trusts it (`trustingFetch()`).
  *
  * Like a real broker it keeps no token: the refresh tokens it hands out are
- * the fake *provider's* (`providerRefreshTokens`), which the broker side only
- * reads when the gateway presents one. Knobs: `down()` / `up()` (503 to
+ * opaque values the fake *provider* knows (`providerRefreshTokens`), bound to
+ * the instance that redeemed them, which the broker side only reads when the
+ * gateway presents one. Knobs: `down()` / `up()` (503 to
  * everything), `clock` (the grant's lifetime), `refusingProvider()` (the
  * provider refuses every refresh token: `invalid_grant`), `refusingCode()`
  * (the provider refuses the code at the redeem: `invalid_grant`), `attestWith()`
- * (evidence for another version, key or a debug image), `rotateTlsKey()`
- * (the enclave restarted), and the record of every call (`calls`).
+ * (evidence for another version, key, lifetime or a debug image),
+ * `rotateTlsKey()` (the enclave restarted), `holdAttest()` (a slow
+ * attestation), `redirecting()` (a 3xx answer), and the record of every call
+ * (`calls`).
  */
 import {
   createHash,
@@ -41,8 +47,12 @@ import {
   X509Certificate,
   type KeyObject,
 } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { createServer as createTlsServer, type Server as HttpsServer } from 'node:https';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import {
+  createServer as createTlsServer,
+  request as httpsRequest,
+  type Server as HttpsServer,
+} from 'node:https';
 import type { AddressInfo } from 'node:net';
 
 import { jwtVerify, SignJWT } from 'jose';
@@ -63,6 +73,8 @@ export const FAKE_GRANT_TTL_MS = 5 * 60_000;
 export const FAKE_ACCESS_TOKEN_TTL_MS = 60 * 60_000;
 /** The lifetime of the fake's attestation evidence. */
 export const FAKE_ATTESTATION_TTL_MS = 60 * 60_000;
+/** How often the fake mints a new evidence; between, `/attest` answers the cached one. */
+export const FAKE_ATTESTATION_REFRESH_MS = 5 * 60_000;
 /** The provider the fake serves, unless told otherwise. */
 export const FAKE_BROKER_PROVIDER = 'google';
 /** The provider's consent page the fake answers `POST /flows` with. */
@@ -83,7 +95,7 @@ export interface FakeOAuthBrokerOptions {
   /** The scopes the provider granted; default: the scopes the flow asked for. */
   readonly grantedScopes?: readonly string[];
   readonly now?: () => number;
-  /** `fake-enclave` (the default): HTTPS and `/attest`. `none`: plain HTTP, not attested. */
+  /** `fake-enclave` (the default): `/attest` answered. `none`: no `/attest`, not attested. */
   readonly attestation?: 'fake-enclave' | 'none';
 }
 
@@ -104,6 +116,8 @@ export interface FakeAttestationOverride {
   /** The SPKI hash the evidence carries (default: the key the server presents). */
   readonly spkiHash?: string;
   readonly debug?: boolean;
+  /** The evidence's lifetime (default `FAKE_ATTESTATION_TTL_MS`). */
+  readonly ttlMs?: number;
 }
 
 interface Flow {
@@ -123,6 +137,8 @@ interface PendingGrant {
 
 /** A refresh token as the fake provider knows it; the broker side keeps nothing. */
 interface ProviderGrant {
+  /** The instance it is bound to: another instance presenting it is refused. */
+  readonly instance: string;
   readonly provider: string;
   readonly scopes: readonly string[];
   revoked: boolean;
@@ -138,6 +154,9 @@ export class FakeOAuthBroker {
   private providerRefuses = false;
   private providerRefusesCode = false;
   private override: FakeAttestationOverride = {};
+  private cachedEvidence: { readonly evidence: string; readonly at: number } | null = null;
+  private attestHold: Promise<void> | null = null;
+  private readonly redirects = new Set<string>();
   /** The provider's side: every refresh token it issued, by value. Not the broker's state. */
   readonly providerRefreshTokens = new Map<string, ProviderGrant>();
   readonly calls: FakeBrokerCall[] = [];
@@ -145,9 +164,11 @@ export class FakeOAuthBroker {
   readonly revokedAtProvider: string[] = [];
 
   private constructor(
-    private readonly server: Server | HttpsServer,
+    private readonly server: HttpsServer,
     readonly url: URL,
     private readonly options: FakeOAuthBrokerOptions,
+    /** The PEM of the certificate it presents (changes with `rotateTlsKey`). */
+    private certPem: string,
     private readonly enclave: {
       readonly signingKey: KeyObject;
       readonly verifyKey: KeyObject;
@@ -161,19 +182,18 @@ export class FakeOAuthBroker {
       void broker?.handle(req, res);
     };
     const attested = (options.attestation ?? FAKE_ENCLAVE_PLATFORM) === FAKE_ENCLAVE_PLATFORM;
-    const certificate = attested ? fakeTlsCertificate() : null;
-    const server = certificate
-      ? createTlsServer({ key: certificate.keyPem, cert: certificate.certPem }, handler)
-      : createServer(handler);
+    const certificate = fakeTlsCertificate();
+    const server = createTlsServer({ key: certificate.keyPem, cert: certificate.certPem }, handler);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
-    const scheme = certificate ? 'https' : 'http';
     const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
     broker = new FakeOAuthBroker(
       server,
-      new URL(`${scheme}://127.0.0.1:${port}/v1`),
+      // At the root, with a port: as the reference broker serves.
+      new URL(`https://127.0.0.1:${port}`),
       options,
-      certificate
+      certificate.certPem,
+      attested
         ? {
             signingKey: keys.privateKey,
             verifyKey: keys.publicKey,
@@ -218,6 +238,46 @@ export class FakeOAuthBroker {
     };
   }
 
+  /**
+   * A `fetch` that trusts this fake's certificate as its own authority, and
+   * checks the chain and the name like any HTTPS client: what a test hands a
+   * broker declared `attestation: none`. It never follows a redirect.
+   */
+  trustingFetch(): typeof fetch {
+    const ca = this.certPem;
+    return (input, init) => {
+      const url = new URL(
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+      );
+      return new Promise<Response>((resolve, reject) => {
+        const req = httpsRequest(
+          url,
+          {
+            method: init?.method ?? 'GET',
+            headers: init?.headers as Record<string, string> | undefined,
+            ca,
+            signal: init?.signal ?? undefined,
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.once('error', reject);
+            res.once('end', () => {
+              const status = res.statusCode ?? 0;
+              if (status >= 300 && status < 400 && init?.redirect === 'error') {
+                reject(new TypeError('redirect refused'));
+                return;
+              }
+              resolve(new Response(status === 204 ? null : Buffer.concat(chunks), { status }));
+            });
+          },
+        );
+        req.once('error', reject);
+        req.end(typeof init?.body === 'string' ? init.body : undefined);
+      });
+    };
+  }
+
   /** The SPKI hash of the TLS key the server presents now. */
   get spkiHash(): string | null {
     return this.enclave?.spkiHash ?? null;
@@ -226,17 +286,47 @@ export class FakeOAuthBroker {
   /** What the next attestations claim, instead of the truth (`{}` restores it). */
   attestWith(override: FakeAttestationOverride): void {
     this.override = override;
+    this.cachedEvidence = null;
+  }
+
+  /**
+   * `/attest` waits until `release()`: a slow attestation. `arrived` resolves
+   * when the first one is waiting.
+   */
+  holdAttest(): { arrived: Promise<void>; release: () => void } {
+    let release = (): void => undefined;
+    let arrive = (): void => undefined;
+    const arrived = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    this.attestHold = new Promise<void>((resolve) => {
+      release = () => {
+        this.attestHold = null;
+        resolve();
+      };
+    });
+    this.onAttestWaiting = arrive;
+    return { arrived, release };
+  }
+
+  private onAttestWaiting: (() => void) | null = null;
+
+  /** Answer `302 Found` to the route (`/attest`, `/token`…) from now on. */
+  redirecting(route: string): void {
+    this.redirects.add(route);
   }
 
   /** The enclave restarted: a new TLS key, which no earlier attestation carries. */
   rotateTlsKey(): void {
     if (!this.enclave) throw new Error('fake broker: started with attestation none');
     const certificate = fakeTlsCertificate();
-    (this.server as HttpsServer).setSecureContext({
+    this.server.setSecureContext({
       key: certificate.keyPem,
       cert: certificate.certPem,
     });
+    this.certPem = certificate.certPem;
     this.enclave.spkiHash = spkiHashOf(new X509Certificate(certificate.certPem));
+    this.cachedEvidence = null;
   }
 
   /** Enrollment: a return URL the broker has on record for an instance. */
@@ -332,10 +422,15 @@ export class FakeOAuthBroker {
       answer(503, { error: 'temporarily_unavailable', message: 'down' }, null);
       return;
     }
-    const prefix = this.url.pathname;
-    // `/attest` takes no key: the gateway sends it only once the connection is verified.
+    const prefix = this.url.pathname.replace(/\/+$/, '');
+    if (this.redirects.has(path.slice(prefix.length))) {
+      res.setHeader('Location', 'https://elsewhere.example.com/');
+      answer(302, null, null);
+      return;
+    }
+    // `/attest` takes no key and no body: anyone may ask which code runs here.
     if (method === 'POST' && path === `${prefix}/attest`) {
-      const [status, payload] = await this.attest(body);
+      const [status, payload] = await this.attest();
       answer(status, payload, null);
       return;
     }
@@ -372,9 +467,9 @@ export class FakeOAuthBroker {
       case '/grants/redeem':
         return this.redeem(body, instance);
       case '/token':
-        return this.refresh(body);
+        return this.refresh(body, instance);
       case '/revoke':
-        return this.revoke(body);
+        return this.revoke(body, instance);
       default:
         return [404, refusal('not_found')];
     }
@@ -438,6 +533,7 @@ export class FakeOAuthBroker {
     const scopes = this.options.grantedScopes ?? pending.flow.scopes;
     const refreshToken = token('rt');
     this.providerRefreshTokens.set(refreshToken, {
+      instance,
       provider: pending.flow.provider,
       scopes,
       revoked: false,
@@ -455,7 +551,10 @@ export class FakeOAuthBroker {
   }
 
   /** The broker adds its client secret and asks the provider; it writes nothing. */
-  private refresh(body: Record<string, unknown> | null): [number, Record<string, unknown>] {
+  private refresh(
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): [number, Record<string, unknown>] {
     const provider = body?.provider;
     const refreshToken = body?.refresh_token;
     if (typeof provider !== 'string' || typeof refreshToken !== 'string') {
@@ -463,14 +562,23 @@ export class FakeOAuthBroker {
     }
     if (!this.serves(provider)) return [400, refusal('unsupported_provider')];
     const known = this.providerRefreshTokens.get(refreshToken);
-    if (!known || known.revoked || known.provider !== provider || this.providerRefuses) {
+    if (
+      !known ||
+      known.revoked ||
+      known.provider !== provider ||
+      known.instance !== instance ||
+      this.providerRefuses
+    ) {
       return [400, refusal('invalid_grant')];
     }
     return [200, { access_token: token('at'), expires_at: this.expiry(), scopes: known.scopes }];
   }
 
   /** Relayed to the provider's revocation endpoint; 204 also when already revoked. */
-  private revoke(body: Record<string, unknown> | null): [number, Record<string, unknown> | null] {
+  private revoke(
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): [number, Record<string, unknown> | null] {
     const provider = body?.provider;
     const refreshToken = body?.refresh_token;
     if (typeof provider !== 'string' || typeof refreshToken !== 'string') {
@@ -478,35 +586,43 @@ export class FakeOAuthBroker {
     }
     if (!this.serves(provider)) return [400, refusal('unsupported_provider')];
     const known = this.providerRefreshTokens.get(refreshToken);
-    if (known && !known.revoked) {
+    if (known && !known.revoked && known.instance === instance) {
       known.revoked = true;
       this.revokedAtProvider.push(refreshToken);
     }
     return [204, null];
   }
 
-  /** `POST /attest {nonce}` → `{platform, evidence}` on the test-only platform. */
-  private async attest(
-    body: Record<string, unknown> | null,
-  ): Promise<[number, Record<string, unknown>]> {
+  /**
+   * `POST /attest` → `{platform, evidence}` on the test-only platform: a
+   * cached evidence naming the server's TLS key, minted again every five
+   * minutes. No nonce: a replay names a key the replayer cannot present.
+   */
+  private async attest(): Promise<[number, Record<string, unknown>]> {
     if (!this.enclave) return [404, refusal('not_found')];
-    const nonce = body?.nonce;
-    if (typeof nonce !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(nonce)) {
-      return [400, refusal('invalid_request')];
+    if (this.attestHold) {
+      this.onAttestWaiting?.();
+      this.onAttestWaiting = null;
+      await this.attestHold;
     }
     const now = this.now();
-    const evidence = await new SignJWT({
-      eat_nonce: [nonce, this.override.spkiHash ?? this.enclave.spkiHash],
-      measurement: this.override.measurement ?? FAKE_BROKER_MEASUREMENT,
-      debug: this.override.debug ?? false,
-    })
-      .setProtectedHeader({ alg: 'ES256' })
-      .setIssuer(FAKE_ENCLAVE_ISSUER)
-      .setAudience(BROKER_ATTESTATION_AUDIENCE)
-      .setIssuedAt(Math.floor(now / 1000))
-      .setExpirationTime(Math.floor((now + FAKE_ATTESTATION_TTL_MS) / 1000))
-      .sign(this.enclave.signingKey);
-    return [200, { platform: FAKE_ENCLAVE_PLATFORM, evidence }];
+    if (!this.cachedEvidence || now - this.cachedEvidence.at >= FAKE_ATTESTATION_REFRESH_MS) {
+      const evidence = await new SignJWT({
+        eat_nonce: [this.override.spkiHash ?? this.enclave.spkiHash],
+        measurement: this.override.measurement ?? FAKE_BROKER_MEASUREMENT,
+        debug: this.override.debug ?? false,
+      })
+        .setProtectedHeader({ alg: 'ES256' })
+        .setIssuer(FAKE_ENCLAVE_ISSUER)
+        .setAudience(BROKER_ATTESTATION_AUDIENCE)
+        .setIssuedAt(Math.floor(now / 1000))
+        .setExpirationTime(
+          Math.floor((now + (this.override.ttlMs ?? FAKE_ATTESTATION_TTL_MS)) / 1000),
+        )
+        .sign(this.enclave.signingKey);
+      this.cachedEvidence = { evidence, at: now };
+    }
+    return [200, { platform: FAKE_ENCLAVE_PLATFORM, evidence: this.cachedEvidence.evidence }];
   }
 
   private serves(provider: string): boolean {
@@ -520,8 +636,8 @@ export class FakeOAuthBroker {
 
 /**
  * The adapter of the test-only `fake-enclave` platform: the fake's evidence
- * is a JWT signed with its own key, carrying the nonce, the SPKI hash, the
- * measurement and a debug flag. Handed to the code under test by
+ * is a JWT signed with its own key, carrying the SPKI hash, the measurement
+ * and a debug flag. Handed to the code under test by
  * `attestationKit()`; no production kit contains it.
  */
 export function fakeEnclavePlatform(verifyKey: KeyObject): AttestationPlatform {
@@ -542,20 +658,14 @@ export function fakeEnclavePlatform(verifyKey: KeyObject): AttestationPlatform {
       }
       if (payload.debug !== false) throw new AttestationRefused('the broker runs a debug image');
       const nonces = payload.eat_nonce;
-      if (
-        !Array.isArray(nonces) ||
-        nonces.length !== 2 ||
-        nonces[0] !== expected.nonce ||
-        nonces[1] !== expected.spkiHash
-      ) {
-        throw new AttestationRefused(
-          'the attestation is not bound to this request and this connection’s key',
-        );
+      if (!Array.isArray(nonces) || nonces.length !== 1 || nonces[0] !== expected.spkiHash) {
+        throw new AttestationRefused('the attestation is not bound to this connection’s key');
       }
-      if (typeof payload.measurement !== 'string' || typeof payload.exp !== 'number') {
+      const { measurement, exp, iat } = payload;
+      if (typeof measurement !== 'string' || typeof exp !== 'number' || typeof iat !== 'number') {
         throw new AttestationRefused('the attestation names no measurement');
       }
-      return { measurement: payload.measurement, expiresAt: payload.exp * 1000 };
+      return { measurement, issuedAt: iat * 1000, expiresAt: exp * 1000 };
     },
   };
 }

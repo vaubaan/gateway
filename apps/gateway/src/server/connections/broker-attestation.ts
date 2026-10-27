@@ -1,13 +1,18 @@
 /**
  * The gateway's verifier of an OAuth broker's attestation (ADR
  * oauth-broker-stateless-in-an-attested-enclave D4, D5, D6). Before it sends
- * anything to a broker, the gateway asks it `POST /attest {nonce}` on a TLS
+ * anything to a broker, the gateway asks it `POST /attest` (no body) on a TLS
  * connection and checks the answer `{platform, evidence}` here:
  *
  *   - the platform adapter named by `platform` checks the evidence — signed by
- *     the platform's root of trust, debug off, the gateway's nonce, and the
- *     SHA-256 of the TLS key the connection presented — and says which code
- *     runs (its measurement) and until when the evidence holds;
+ *     the platform's root of trust, debug off, and bound to the SHA-256 of the
+ *     TLS key the connection presented — and says which code runs (its
+ *     measurement), when the evidence was issued and until when it holds;
+ *   - the evidence is at most `MAX_EVIDENCE_AGE_MS` old: the broker serves a
+ *     cached attestation it refreshes every five minutes, so there is no
+ *     nonce of the gateway's. A replayed attestation is harmless: it names the
+ *     enclave's TLS key, and whoever replays it does not hold that key's
+ *     private half, so the connection it answers on presents another key;
  *   - the measurement must be on the allowlist shipped with this release
  *     (`broker-measurements.json`): entries `{platform, measurement,
  *     broker_version}`.
@@ -23,10 +28,14 @@
  *
  * Handbook: docs/handbook/oauth-broker-contract.md ("Attestation").
  */
-import { createHash, randomBytes, type X509Certificate } from 'node:crypto';
+import { createHash, type X509Certificate } from 'node:crypto';
 
 /** The `aud` every attestation token a broker hands the gateway carries. */
 export const BROKER_ATTESTATION_AUDIENCE = 'oauth-broker-attestation';
+/** Evidence issued longer ago than this is refused (the broker refreshes it every five minutes). */
+export const MAX_EVIDENCE_AGE_MS = 10 * 60_000;
+/** Evidence issued this far in the future is refused (clocks differ a little). */
+const CLOCK_TOLERANCE_MS = 60_000;
 /** A verified key is pinned for the evidence's lifetime, an hour at most (D6). */
 export const MAX_PIN_MS = 60 * 60_000;
 /** What a connection shows when the release admits no broker version (the allowlist is empty). */
@@ -40,9 +49,8 @@ export interface BrokerMeasurement {
   readonly broker_version: string;
 }
 
-/** What the evidence must carry: the gateway's nonce and the key of the connection it came on. */
+/** What the evidence must carry: the key of the connection it came on. */
 export interface AttestationExpectation {
-  readonly nonce: string;
   /** base64url(SHA-256(DER SubjectPublicKeyInfo)) of the certificate the connection presented. */
   readonly spkiHash: string;
   readonly now: Date;
@@ -51,6 +59,8 @@ export interface AttestationExpectation {
 /** What a platform adapter vouches for, once the evidence checked out. */
 export interface AttestedClaims {
   readonly measurement: string;
+  /** Epoch milliseconds when the platform issued the evidence. */
+  readonly issuedAt: number;
   /** Epoch milliseconds after which the evidence no longer holds. */
   readonly expiresAt: number;
 }
@@ -113,8 +123,13 @@ export class AttestationVerifier {
     if (!admitted) {
       throw new AttestationRefused('the broker runs a version this release does not admit');
     }
-    if (claims.expiresAt <= expected.now.getTime()) {
-      throw new AttestationRefused('the attestation has expired');
+    const now = expected.now.getTime();
+    if (claims.expiresAt <= now) throw new AttestationRefused('the attestation has expired');
+    if (now - claims.issuedAt > MAX_EVIDENCE_AGE_MS) {
+      throw new AttestationRefused('the attestation is older than ten minutes');
+    }
+    if (claims.issuedAt - now > CLOCK_TOLERANCE_MS) {
+      throw new AttestationRefused('the attestation is issued in the future');
     }
     return {
       platform: platformName,
@@ -145,11 +160,6 @@ export function parseMeasurements(raw: unknown): BrokerMeasurement[] {
       broker_version: entry.broker_version,
     };
   });
-}
-
-/** The nonce of `POST /attest`: base64url, no padding, of 32 random bytes. */
-export function newAttestationNonce(): string {
-  return randomBytes(32).toString('base64url');
 }
 
 /** base64url(SHA-256(DER SubjectPublicKeyInfo)) of a certificate's key. */

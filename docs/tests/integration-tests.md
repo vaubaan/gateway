@@ -165,8 +165,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/mapping.test.ts`                                                                                                                                                                                                                                                                            |         3 |
 | `apps/gateway/src/server/connections/oauth2.test.ts`                                                                                                                                                                                                                                                                             |        28 |
 | `apps/gateway/src/server/connections/oauth2-clients.test.ts`                                                                                                                                                                                                                                                                     |        14 |
-| `apps/gateway/src/server/connections/attestation-gcp.test.ts`                                                                                                                                                                                                                                                                    |         5 |
-| `apps/gateway/src/server/connections/oauth-broker.test.ts`                                                                                                                                                                                                                                                                       |        28 |
+| `apps/gateway/src/server/connections/attestation-gcp.test.ts`                                                                                                                                                                                                                                                                    |         9 |
+| `apps/gateway/src/server/connections/oauth-broker.test.ts`                                                                                                                                                                                                                                                                       |        35 |
 | `apps/gateway/src/server/connections/pending.test.ts`                                                                                                                                                                                                                                                                            |         7 |
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                                                                                                                                                                                                                |        16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                                                                                                                                                                                                                                            |        24 |
@@ -558,7 +558,7 @@ this table says where each requirement lives, and what is not written yet.
 | `scripts/release-lib.test.mjs`                                                                                                                                                                                                                                                                                                   |        55 |
 | `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                                                                                                                                                                                                                             |         6 |
 | **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23)                                                                                                                         | **11958** |
-| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23; + 233 CalDAV 2026-10-27, its rows of the per-plugin structural tests not recounted; + 17 broker attestation 2026-10-27) | **12208** |
+| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23; + 233 CalDAV 2026-10-27, its rows of the per-plugin structural tests not recounted; + 28 broker attestation 2026-10-27) | **12219** |
 
 The table is generated from the JSON reports of one run of each project
 (`npx vitest run --project shared --reporter=json`, then `--project isolated`).
@@ -2666,13 +2666,13 @@ Execution door".
 
 ### A client that is an OAuth broker's (ADR google-calendar-through-an-oauth-broker)
 
-- **`src/server/connections/oauth-broker.test.ts`** (28) — against
+- **`src/server/connections/oauth-broker.test.ts`** (35) — against
   `FakeOAuthBroker`, the contract kit (`fake-oauth-broker.ts`, a real HTTPS
-  server on the loopback interface with a throwaway key, `/attest` on the
-  test-only `fake-enclave` platform; ADR
+  server at the root of a loopback URL with a throwaway key, `/attest` on
+  the test-only `fake-enclave` platform; ADR
   oauth-broker-stateless-in-an-attested-enclave). **Not configured**: the
   plugin listed with the reason, `start` refused `broker-not-configured`.
-  **The flow**: `POST /attest` with a 43-character nonce first, then
+  **The flow**: `POST /attest` first, **with no body and no key**, then
   `POST /flows` with the provider, the scopes, the return URL, the gateway's
   `state` and the S256 challenge, **never the verifier**; the grant redeemed
   with the verifier whose S256 is the challenge; **the sealed credential holds
@@ -2696,26 +2696,37 @@ Execution door".
   is gone (status 0, not a dead grant); the key only ever in the
   `Authorization` header, **never on `/attest`, on every other call**. **The
   attestation**: obtained once and pinned, reused by the calls that follow,
-  renewed with a new nonce after an hour; **a release that admits no broker
-  version sends the broker nothing** ("no attested broker version admitted by
-  this release"); a measurement off the allowlist, evidence for another TLS
-  key, a debug image: refused, no `/flows`; **a broker that restarted with a
-  new key is attested again, then served; a key no attestation carries gets
-  no `/token`** and the connection stays `active`. **`attestation: none`**:
-  plain HTTP on the loopback, no `/attest`, the connect page and the account
-  page say not attested. **The release's kit**: Google Confidential Space
-  only, an empty allowlist that admits nothing.
-- **`src/server/connections/attestation-gcp.test.ts`** (5) — the Google
+  renewed after an hour; **the broker's cached evidence admitted within its
+  five-minute cycle, and a pin that ends at an evidence `exp` shorter than an
+  hour**; **a second caller joins an attestation in progress, the first one
+  timing out does not cut it short** (one `/attest` serves both); **a 3xx
+  answer to `/attest` or to a call is refused, not followed**; **a release
+  that admits no broker version sends the broker nothing** ("no attested
+  broker version admitted by this release"); a measurement off the
+  allowlist, evidence for another TLS key, a debug image: refused, no
+  `/flows`; **a broker that restarted with a new key is attested again, then
+  served; a key no attestation carries gets no `/token`** and the connection
+  stays `active`. **`attestation: none`**: over HTTPS, **its certificate
+  checked** (trusted as its own authority, the name checked on 127.0.0.1),
+  no `/attest`, the connect page and the account page say not attested; **a
+  certificate no authority vouches for gets nothing**; a 3xx refused; **an
+  answer over 256 KiB refused**. **The release's kit**: Google Confidential
+  Space only, an empty allowlist that admits nothing.
+- **`src/server/connections/attestation-gcp.test.ts`** (9) — the Google
   Confidential Space adapter on RS256 tokens signed by a key of the test's
   own, found through the issuer's discovery document and JWKS as in
-  production: **admitted with the image digest as the measurement**; refused:
-  another signer, issuer or audience, a token older than ten minutes, not a
-  JWT; `swname` other than `CONFIDENTIAL_SPACE`, `dbgstat` other than
-  `disabled-since-boot`, `secboot` false, no `STABLE` support attribute, no
-  image digest; **`eat_nonce` not exactly `[nonce, SPKI hash]` in that
-  order** (a string, reversed, another key, a third value, another nonce);
-  the verifier admits only a measurement on the allowlist and only a platform
-  it has an adapter for.
+  production: **admitted with the image digest as the measurement**; **the
+  broker's cached token admitted up to ten minutes old**, refused at twenty;
+  refused: another signer, issuer or audience, not a JWT; `swname` other
+  than `CONFIDENTIAL_SPACE`, `dbgstat` other than `disabled-since-boot`,
+  `secboot` false, no `STABLE` support attribute, no image digest; **`hwmodel`
+  `GCP_AMD_SEV`, `GCP_AMD_SEV_ES` or `GCP_INTEL_TDX` only** (Shielded VM,
+  another value, none: refused); **`eat_nonce` exactly the SPKI hash** (as a
+  one-value array or a string; another key, a second value, an empty list:
+  refused); **the discovery run again when the key moved or the JWKS fetch
+  failed**, "keys could not be fetched" when it fails again; the verifier
+  admits only a measurement on the allowlist and only a platform it has an
+  adapter for.
 - `tests/integration/audit/admin-mutations.test.ts`: the three public
   methods of `OAuth2Clients` classified (a read, two system acts exempt with
   their reason).

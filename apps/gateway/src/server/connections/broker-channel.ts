@@ -10,12 +10,19 @@
  *     is not checked on this connection — and only on it: the socket is the
  *     channel's own (`tls.connect`), never a global agent, and nothing is
  *     written on it before its key is the pinned one. The pin comes from
- *     `POST /attest {nonce}` answered on a connection presenting that key,
- *     with evidence carrying the nonce and the key's SPKI hash, checked by the
+ *     `POST /attest` (no body) answered on a connection presenting that key,
+ *     with evidence carrying the key's SPKI hash, checked by the
  *     `AttestationVerifier`. `/attest` carries no broker key: the key is sent
- *     only on a connection whose key is pinned and verified. A pin lasts min(evidence expiry, 1 h). A broker
- *     that presents another key (it restarted) is attested again once; a key
- *     no attestation carries gets nothing.
+ *     only on a connection whose key is pinned and verified. A pin lasts
+ *     min(evidence expiry, 1 h). A broker that presents another key (it
+ *     restarted) is attested again once; a key no attestation carries gets
+ *     nothing. One pin per broker: the broker runs as a single replica.
+ *
+ * Time: every request (the attestation, a call) waits at most
+ * `BROKER_REQUEST_TIMEOUT_MS`. The attestation is shared by the calls that
+ * need it and runs on its own deadline; each caller waits for it no longer
+ * than its own signal allows. A call through an attested channel may thus
+ * take an attestation and a request: `budgetMs`.
  *
  * Failures: `BrokerChannelError` (`kind: 'unreachable'` — no answer, too slow
  * —, `'attest-answered'` — `/attest` refused — or `'not-attested'`), whose
@@ -29,14 +36,18 @@ import {
   AttestationRefused,
   MAX_PIN_MS,
   NO_ADMITTED_VERSION,
-  newAttestationNonce,
   spkiHashOf,
   type AdmittedBroker,
   type AttestationVerifier,
 } from './broker-attestation';
 
+/** A broker request (the attestation, or a call) that does not answer within this delay is unreachable. */
+export const BROKER_REQUEST_TIMEOUT_MS = 15_000;
+/** The longest a call through an attested channel may take: an attestation, then the request. */
+export const ATTESTED_CALL_BUDGET_MS = 2 * BROKER_REQUEST_TIMEOUT_MS;
+
 /** The largest answer read from a broker; its answers are a few hundred bytes. */
-const MAX_ANSWER_BYTES = 256 * 1024;
+export const MAX_ANSWER_BYTES = 256 * 1024;
 
 export interface ChannelAnswer {
   readonly status: number;
@@ -60,18 +71,20 @@ export class BrokerChannelError extends Error {
 }
 
 export interface BrokerChannel {
-  /** POST `body` (JSON) to `<base url><path>` with the broker key. */
+  /** POST `body` (JSON) to `<base url><path>` with the broker key; `signal` bounds the whole call. */
   send(path: string, body: string, signal: AbortSignal): Promise<ChannelAnswer>;
+  /** The longest `send` may take: the delay its caller's signal should allow. */
+  readonly budgetMs: number;
   /** The broker version the current pin admitted; `null` when not attested (yet, or ever). */
   readonly admitted: AdmittedBroker | null;
 }
 
-/** The JSON headers, with the broker key as a Bearer when `key` is given. */
-function headers(key: string | null): Record<string, string> {
+/** The JSON headers: the key as a Bearer when given, a content type when there is a body. */
+function headers(key: string | null, withBody = true): Record<string, string> {
   return {
     ...(key === null ? {} : { Authorization: `Bearer ${key}` }),
     Accept: 'application/json',
-    'Content-Type': 'application/json',
+    ...(withBody ? { 'Content-Type': 'application/json' } : {}),
   };
 }
 
@@ -87,6 +100,7 @@ function reasonOf(err: unknown): string {
 /** A broker that is not attested (`attestation: none`): plain HTTPS through `fetch`. */
 export class FetchChannel implements BrokerChannel {
   readonly admitted = null;
+  readonly budgetMs = BROKER_REQUEST_TIMEOUT_MS;
 
   constructor(
     private readonly base: URL,
@@ -107,8 +121,58 @@ export class FetchChannel implements BrokerChannel {
     } catch (err) {
       throw new BrokerChannelError('unreachable', `could not be reached (${reasonOf(err)})`);
     }
-    return { status: response.status, text: await response.text() };
+    return { status: response.status, text: await readCapped(response) };
   }
+}
+
+/** The answer's text, read up to `MAX_ANSWER_BYTES`; a longer one is refused. */
+async function readCapped(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_ANSWER_BYTES) {
+        await reader.cancel();
+        throw new BrokerChannelError('unreachable', 'answered more than a broker answers');
+      }
+      chunks.push(value);
+    }
+  } catch (err) {
+    if (err instanceof BrokerChannelError) throw err;
+    throw new BrokerChannelError('unreachable', `could not be reached (${reasonOf(err)})`);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+/** `promise`, or a rejection as soon as `signal` aborts: a caller stops waiting, the work goes on. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  const aborted = (): BrokerChannelError =>
+    new BrokerChannelError('unreachable', `could not be reached (${reasonOf(signal.reason)})`);
+  if (signal.aborted) return Promise.reject(aborted());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(aborted());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (err: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      },
+    );
+  });
+}
+
+/** The caller's signal, cut to one request's delay. */
+function oneRequest(signal: AbortSignal): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(BROKER_REQUEST_TIMEOUT_MS)]);
 }
 
 interface Pin {
@@ -126,6 +190,7 @@ export interface AttestedChannelDeps {
 export class AttestedChannel implements BrokerChannel {
   private pin: Pin | null = null;
   private attesting: Promise<Pin> | null = null;
+  readonly budgetMs = ATTESTED_CALL_BUDGET_MS;
 
   constructor(
     private readonly base: URL,
@@ -142,13 +207,15 @@ export class AttestedChannel implements BrokerChannel {
       throw new BrokerChannelError('not-attested', NO_ADMITTED_VERSION);
     }
     let pin = await this.currentPin(signal);
-    let socket = await this.open(signal);
+    let request = oneRequest(signal);
+    let socket = await this.open(request);
     if (spkiOf(socket) !== pin.spkiHash) {
       // Another key than the attested one: the enclave restarted, or someone else answers.
       socket.destroy();
       this.pin = null;
       pin = await this.currentPin(signal);
-      socket = await this.open(signal);
+      request = oneRequest(signal);
+      socket = await this.open(request);
       if (spkiOf(socket) !== pin.spkiHash) {
         socket.destroy();
         this.pin = null;
@@ -158,25 +225,28 @@ export class AttestedChannel implements BrokerChannel {
         );
       }
     }
-    return this.exchange(socket, path, body, signal, { withKey: true });
+    return this.exchange(socket, path, body, request, { withKey: true });
   }
 
-  /** The pin in force, or a new one from `POST /attest` (one attestation at a time). */
+  /**
+   * The pin in force, or a new one from `POST /attest`. One attestation at a
+   * time, on its own deadline, shared by the callers that need it: a caller
+   * whose signal aborts stops waiting without cutting it short for the others.
+   */
   private async currentPin(signal: AbortSignal): Promise<Pin> {
     if (this.pin && this.pin.until > this.deps.now()) return this.pin;
-    this.attesting ??= this.attest(signal).finally(() => {
+    this.attesting ??= this.attest(AbortSignal.timeout(BROKER_REQUEST_TIMEOUT_MS)).finally(() => {
       this.attesting = null;
     });
-    return this.attesting;
+    return untilAborted(this.attesting, signal);
   }
 
   private async attest(signal: AbortSignal): Promise<Pin> {
-    const nonce = newAttestationNonce();
     const socket = await this.open(signal);
     const spkiHash = spkiOf(socket);
     // No broker key: this connection's key is not verified yet, and the key goes
     // only where an attestation vouches for who listens.
-    const answer = await this.exchange(socket, '/attest', JSON.stringify({ nonce }), signal, {
+    const answer = await this.exchange(socket, '/attest', '', signal, {
       withKey: false,
     });
     if (answer.status !== 200) {
@@ -196,7 +266,6 @@ export class AttestedChannel implements BrokerChannel {
     let admitted: AdmittedBroker;
     try {
       admitted = await this.deps.verifier.verify(parsed, {
-        nonce,
         spkiHash,
         now: new Date(now),
       });
@@ -284,7 +353,7 @@ export class AttestedChannel implements BrokerChannel {
         path: `${url.pathname}${url.search}`,
         method: 'POST',
         headers: {
-          ...headers(options.withKey ? this.key : null),
+          ...headers(options.withKey ? this.key : null, body !== ''),
           'Content-Length': String(Buffer.byteLength(body)),
           Host: url.host,
           Connection: 'close',

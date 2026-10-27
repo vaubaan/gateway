@@ -230,6 +230,12 @@ export interface HarnessOptions {
    * attested broker.
    */
   readonly brokerAttestation?: BrokerAttestationKit;
+  /**
+   * How a broker declared `attestation: none` is reached (default: the
+   * platform's `fetch`); `FakeOAuthBroker.trustingFetch()` checks its
+   * certificate against its own authority.
+   */
+  readonly brokerFetch?: typeof fetch;
 }
 
 export interface ConnectionsHarness extends TestStore {
@@ -260,7 +266,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
   const outbound: typeof globalThis.fetch = (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     return brokerConfigs.some((b) => url.startsWith(b.url.href))
-      ? globalThis.fetch(input, init)
+      ? (options.brokerFetch ?? globalThis.fetch)(input, init)
       : fetch(input, init);
   };
   const now = (): number => test.clock.now().getTime();

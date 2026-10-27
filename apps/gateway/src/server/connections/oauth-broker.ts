@@ -44,8 +44,7 @@ import {
   type BrokerChannel,
 } from './broker-channel';
 
-/** A broker that does not answer within this delay is unreachable. */
-export const BROKER_REQUEST_TIMEOUT_MS = 15_000;
+export { ATTESTED_CALL_BUDGET_MS, BROKER_REQUEST_TIMEOUT_MS } from './broker-channel';
 
 /** The broker's `error` code is a protocol token, never free text. */
 const ERROR_CODE = /^[a-z_]{1,40}$/;
@@ -223,7 +222,7 @@ export class OAuthBrokerClient {
       answer = await this.channel.send(
         path,
         JSON.stringify(payload),
-        AbortSignal.timeout(BROKER_REQUEST_TIMEOUT_MS),
+        AbortSignal.timeout(this.channel.budgetMs),
       );
     } catch (err) {
       if (!(err instanceof BrokerChannelError)) throw err;
