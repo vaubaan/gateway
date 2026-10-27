@@ -4,7 +4,7 @@
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
  * Handbook : docs/handbook/providers/gmail.md.
  *
- * The plugin is **experimental** : the twelve tools are exposed and execute
+ * The twelve tools are exposed and execute
  * over IMAP (`execute.ts`, ADR gmail-over-imap-with-an-app-password) — eleven
  * that read (attachments included), draft, label and create labels, plus one
  * synthetic Vaubaan tool,

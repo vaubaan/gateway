@@ -2,7 +2,7 @@
 title: Web app — route map, layouts, shell, design system
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/app/layout.tsx
   - apps/gateway/src/app/(app)/page.tsx
@@ -904,7 +904,7 @@ handbook:
 
 - `components/connections/parts.tsx` (server): `AccountState({ status })` (a
   mark only for an exception: "Needs reconnecting", "Needs an owner"; a plain
-  word otherwise), `ExperimentalBadge`, `NoticeBanner({ notice })` for the
+  word otherwise), `NoticeBanner({ notice })` for the
   one-time note a redirect left, `credentialKindLabel(kind)` and
   `CredentialFieldInputs` with `credentialFieldId`, which says the shape a
   field expects in its label (`shape.ts`: `shapeOfPattern`)
@@ -941,16 +941,16 @@ Everything is generated from the plugin registry by
 `src/server/providers/reference.ts` (pure, no IO); no service has a
 hand-written page, and a plugin added to the registry has its page.
 
-| Function                               | Gives                                                                                                                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `providerCards(registry)`              | the index: name, one-line description, credential kind, counts (risks, presets, tools), the planes of the model, the environments of the catalog; experimental ones last |
-| `providerReference(registry, id)`      | the whole page of one plugin, or `null` (the page answers "not found")                                                                                                   |
-| `dataModelTrees(model)`                | each plane as a containment tree: entity, cardinalities, "carries the environment"                                                                                       |
-| `describePattern(pattern)`             | a slice pattern read as words: `Write: repo (any) › branch (main, master) › file (any)`; the fallback pattern reads "Write anything in `<provider>`"                     |
-| `presetReferenceOf(preset, risks)`     | a preset against the whole catalog: lines without asking, lines under approval, entries not included                                                                     |
-| `riskExplainer(registry)`              | `(riskId) → CatalogRisk \| null`, for the pages that list a persisted policy                                                                                             |
-| `planesOfPatterns`, `planesOfToolName` | `planes.ts`: the planes a catalog entry or a tool is filed under (below)                                                                                                 |
-| `riskPlanesOf(model, catalog)`         | `planes.ts`: per catalog entry its planes, or `null` for a model with one plane; what the plane filter of the permission editor of "New mission" reads                   |
+| Function                               | Gives                                                                                                                                                                |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `providerCards(registry)`              | the index: name, one-line description, credential kind, counts (risks, presets, tools), the planes of the model, the environments of the catalog; registration order |
+| `providerReference(registry, id)`      | the whole page of one plugin, or `null` (the page answers "not found")                                                                                               |
+| `dataModelTrees(model)`                | each plane as a containment tree: entity, cardinalities, "carries the environment"                                                                                   |
+| `describePattern(pattern)`             | a slice pattern read as words: `Write: repo (any) › branch (main, master) › file (any)`; the fallback pattern reads "Write anything in `<provider>`"                 |
+| `presetReferenceOf(preset, risks)`     | a preset against the whole catalog: lines without asking, lines under approval, entries not included                                                                 |
+| `riskExplainer(registry)`              | `(riskId) → CatalogRisk \| null`, for the pages that list a persisted policy                                                                                         |
+| `planesOfPatterns`, `planesOfToolName` | `planes.ts`: the planes a catalog entry or a tool is filed under (below)                                                                                             |
+| `riskPlanesOf(model, catalog)`         | `planes.ts`: per catalog entry its planes, or `null` for a model with one plane; what the plane filter of the permission editor of "New mission" reads               |
 
 A `RiskReference` also names the presets that include it (`presets`: id, label,
 anchor), the tools the plugin declares for it (`declared_tools`, from
@@ -965,15 +965,15 @@ then one entry per plugin with its `ServiceMark`, the icon from
 wide measure) and the content.
 
 **The index** (`reference/page.tsx`) is a quiet list, one row per service: its
-mark, its name (a link; "experimental" and the community validation tag where
-they apply), the plugin's one-line description, and "15 permissions · 3 presets
+mark, its name (a link; the community validation tag where
+it applies), the plugin's one-line description, and "15 permissions · 3 presets
 · 26 tools" at the end (`catalogSize`). `data-testid="provider-<id>"`.
 
 **`/reference/<id>`** is rendered by the server (`[id]/page.tsx`) down to the
 tabs, then by a client body (`[id]/service-view.tsx`, `ServiceView`):
 
 - **Header** — a `PageHeader` at level 2 (the `h1` stays "Reference"): the
-  mark, the name, "experimental", and the plugin's `summary` as the lede
+  mark, the name, and the plugin's `summary` as the lede
   (plain words: what an account is, what a resource is, where the environment
   comes from — [plugin-sdk](plugin-sdk.md)). Under it one line of counts and
   how an account connects, and "About this service" (a `Disclosure`): what it

@@ -59,8 +59,6 @@ export const MANAGEMENT_MISSION_METHODS = [
 export interface ProviderCatalog {
   readonly provider: string;
   readonly provider_label: string;
-  /** `ProviderPlugin.experimental`: left out of listings unless asked for. */
-  readonly experimental: boolean;
   /** The plugin derives the environment from the call: env-qualified ids need no labelled resource. */
   readonly derives_env: boolean;
   /** The whole catalog as explicit `RiskId`s, catalog order. */

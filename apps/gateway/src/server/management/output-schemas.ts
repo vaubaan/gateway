@@ -63,7 +63,6 @@ const connectionsAnswer = z.looseObject({
       provider_label: z.string(),
       display_name: z.string(),
       status: z.string().describe('`active`, or `expired`: missions on it fail until reconnected.'),
-      experimental: z.boolean(),
       authority: z.looseObject({
         basis: z.string().describe('`owner` or `share`.'),
         risk_ids: riskIds.describe('The exact restriction: nothing outside this list passes.'),
@@ -107,13 +106,11 @@ const connectionsAnswer = z.looseObject({
       ),
     }),
   ),
-  hidden_experimental: z.number(),
 });
 
 const catalogAnswer = z.looseObject({
   provider: z.string(),
   provider_label: z.string(),
-  experimental: z.boolean(),
   derives_env: z.boolean(),
   connection_id: z.string().nullable(),
   risks: z.array(

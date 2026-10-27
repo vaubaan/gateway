@@ -27,8 +27,7 @@ export const metadata: Metadata = {
 
 export default function Home() {
   const { plugins } = siteData();
-  const names = plugins.map((p) => (p.experimental ? `${p.name} (experimental)` : p.name));
-  const faq = landingFaq(names);
+  const faq = landingFaq(plugins.map((p) => p.name));
 
   return (
     <div className="page">
@@ -109,7 +108,6 @@ export default function Home() {
               <Link href={`/plugins/${p.id}`} prefetch={false}>
                 {p.name}
               </Link>
-              {p.experimental ? ' (experimental)' : ''}
             </span>
           ))}
           . Each is a catalog of named permissions with presets, generated here from the repository.

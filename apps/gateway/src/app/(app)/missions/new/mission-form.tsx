@@ -148,12 +148,11 @@ function startState(
   initial: InitialDraft | null,
 ): FormState {
   const blank = initialFormState(context);
-  // A single usable account is the obvious one: include it up front.
-  const usable = context.filter((c) => !c.experimental);
-  const [only] = usable;
+  // A single account is the obvious one: include it up front.
+  const [only] = context;
   const onlyState = only ? blank.connections[only.id] : undefined;
   const base: FormState =
-    usable.length === 1 && only && onlyState
+    context.length === 1 && only && onlyState
       ? { ...blank, connections: { ...blank.connections, [only.id]: setIncluded(onlyState, true) } }
       : blank;
   if (!initial) return base;
@@ -216,8 +215,6 @@ export function MissionForm({
   const [proposalText, setProposalText] = useState('');
   const [proposalReport, setProposalReport] = useState<MissionPreview | null>(null);
 
-  const hasExperimental = context.some((c) => c.experimental);
-  const visible = context.filter((c) => state.showExperimental || !c.experimental);
   const preview = useMemo(
     () => previewDraft({ connections: context, now }, draftOf(context, state, now)),
     [context, state, now],
@@ -638,7 +635,7 @@ export function MissionForm({
 
           <FormStep n={2} title="Accounts and permissions" hint={MISSION_WORDS.explicitList}>
             <div className={styles.accounts}>
-              {visible.map((connection) => {
+              {context.map((connection) => {
                 const cs = state.connections[connection.id] ?? EMPTY;
                 const name = `${connection.provider_label} ${connection.display_name}`;
                 // "N of M": M is "all resources" (neither hidden nor stale) plus
@@ -679,7 +676,6 @@ export function MissionForm({
                           ? 'you own it'
                           : `access given to you · may allow ${mayAllow(connection.authority.length, connection.risks.length)}`}
                       </span>
-                      {connection.experimental && <Tag tone="warn">experimental</Tag>}
                       {connection.status !== 'active' && (
                         <StatusMark tone="bad">{connection.status}</StatusMark>
                       )}
@@ -842,16 +838,6 @@ export function MissionForm({
                 );
               })}
             </div>
-            {hasExperimental && (
-              <div className={styles.afterLine}>
-                <Checkbox
-                  checked={state.showExperimental}
-                  onChange={(e) => patch({ showExperimental: e.target.checked })}
-                >
-                  Show experimental services
-                </Checkbox>
-              </div>
-            )}
           </FormStep>
 
           <FormStep

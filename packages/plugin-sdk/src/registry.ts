@@ -36,8 +36,6 @@ export interface ProviderLabel {
   readonly icon: string | null;
   /** `ProviderPlugin.summary` : the plain-words paragraph of the provider reference. */
   readonly summary: string | null;
-  /** `ProviderPlugin.experimental`, normalised to a boolean. */
-  readonly experimental: boolean;
 }
 
 export class PluginRegistryError extends Error {
@@ -170,7 +168,6 @@ export class PluginRegistry {
       description: plugin.description ?? null,
       icon: plugin.icon ?? null,
       summary: plugin.summary ?? null,
-      experimental: plugin.experimental ?? false,
     }));
   }
 

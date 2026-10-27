@@ -156,8 +156,6 @@ export interface IssuanceConnection {
   readonly provider_label: string;
   readonly display_name: string;
   readonly status: string;
-  /** `ProviderPlugin.experimental`: hidden from issuance unless the creator asks. */
-  readonly experimental: boolean;
   /**
    * True when the plugin derives the environment from the call itself
    * (`ProviderPlugin.envOf`, e.g. Vercel's `env[prod]` segment): its

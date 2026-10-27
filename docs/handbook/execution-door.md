@@ -2,7 +2,7 @@
 title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/server/execution/
   - apps/gateway/src/server/git/paths.ts
@@ -922,7 +922,7 @@ not to buffer (`X-Accel-Buffering: no` covers nginx).
 
 ## Discovery and catalog (`tools.ts`)
 
-`callableTools(ctx, registry)`: every tool of each non-experimental plugin
+`callableTools(ctx, registry)`: every tool of each plugin
 whose provider the mission both holds a connection for — one that still serves
 it, not `lost` — and accepts at least one risk of (`callableProviders`). The
 filter is per provider: a listed tool can still be refused `risk-not-accepted`
@@ -979,7 +979,7 @@ mission is 403 `mission-inactive`), `Cache-Control: no-store`:
 }
 ```
 
-`tools` is the whole surface of the instance (experimental plugins excluded);
+`tools` is the whole surface of the instance, every plugin's tools;
 `budget` comes from `SessionService.stateOf` for the current period and is the
 same for every holder of the mission. `git_remote` is present on the resources
 of the one plugin that declares a `gitRemote` (`registry.gitRemote()`), built

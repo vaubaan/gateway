@@ -90,7 +90,6 @@ export function managementCatalogOf(registry: PluginRegistry): ManagementCatalog
       Object.freeze({
         provider: id,
         provider_label: plugin.displayName,
-        experimental: plugin.experimental === true,
         derives_env: typeof plugin.envOf === 'function',
         risks: enumerateCatalog(plugin.catalog),
         presets: registry.presetsOf(id),

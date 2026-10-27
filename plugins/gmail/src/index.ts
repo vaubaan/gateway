@@ -1,5 +1,5 @@
 /**
- * `@vaubaan/plugin-gmail` — the Gmail provider plugin. **Experimental** : it
+ * `@vaubaan/plugin-gmail` — the Gmail provider plugin. It
  * classifies the twelve tools into the identity-zoned risks of its catalog and
  * executes them over IMAP, signed in with the mailbox's app password ; it
  * never sends mail.
@@ -79,7 +79,7 @@ import {
 // filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
 export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-export const GMAIL_PLUGIN_VERSION = '0.5.0';
+export const GMAIL_PLUGIN_VERSION = '1.0.0';
 
 export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPlugin {
   const runtime = createGmailRuntime(options);
@@ -89,12 +89,11 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
     icon: GMAIL_ICON,
     version: GMAIL_PLUGIN_VERSION,
     description:
-      'Experimental : search, read (HTML and attachments included), draft, label and create labels in a Gmail mailbox over IMAP, with an app password, under risks zoned by who the sender or the recipient is. Never sends mail.',
+      'Search, read (HTML and attachments included), draft, label and create labels in a Gmail mailbox over IMAP, with an app password, under risks zoned by who the sender or the recipient is. Never sends mail.',
     summary:
-      'Experimental. One account is one Gmail or Google Workspace mailbox, connected with an app password and reached over IMAP; the mailbox is its single resource. Reads are priced by who the sender is, drafts by who the recipients are, and a draft to an address outside the internal domains and the allowlists is refused. Drafts are saved, never sent.',
+      'One account is one Gmail or Google Workspace mailbox, connected with an app password and reached over IMAP; the mailbox is its single resource. Reads are priced by who the sender is, drafts by who the recipients are, and a draft to an address outside the internal domains and the allowlists is refused. Drafts are saved, never sent.',
     manualRevocation: `Delete the app password named "Vaubaan Gateway" at ${GMAIL_APP_PASSWORDS_URL}, in the Google Account of the mailbox.`,
     docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/gmail.md',
-    experimental: true,
     tools: gmailTools,
     toolTitles: gmailToolTitles,
     dataModel: gmailDataModel,

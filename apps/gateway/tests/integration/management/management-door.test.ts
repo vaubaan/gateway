@@ -95,13 +95,14 @@ describe('management door — tools of a delegated agent', () => {
     it('an owner sees their connections with the whole catalog, resources and presets', async () => {
       const agent = await rig.agentOf(ADA);
       const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
-      // Gmail is an experimental plugin: hidden unless asked.
+      // Every plugin is listed, Gmail included (ADR no-experimental-plugins).
       expect(data.connections.map((c) => c.provider).sort()).toEqual([
         'github',
+        'gmail',
         'supabase',
         'vercel',
       ]);
-      expect(data.hidden_experimental).toBe(1);
+      expect(data).not.toHaveProperty('hidden_experimental');
 
       const gh = data.connections.find((c) => c.connection_id === github)!;
       expect(gh.authority).toMatchObject({ basis: 'owner', whole_catalog: true });
@@ -115,11 +116,12 @@ describe('management door — tools of a delegated agent', () => {
       ]);
       expect(gh.presets.every((p) => p.within_authority)).toBe(true);
 
-      const all = await agent.call<ConnectionsAnswer>('list_my_connections', {
-        include_experimental: true,
+      // A client written against an earlier build still sends `include_experimental`:
+      // the strict input accepts it and ignores it.
+      const earlier = await agent.call<ConnectionsAnswer>('list_my_connections', {
+        include_experimental: false,
       });
-      expect(all.data.connections.map((c) => c.provider)).toContain('gmail');
-      expect(all.data.hidden_experimental).toBe(0);
+      expect(earlier.data).toEqual(data);
       await agent.close();
     });
 
@@ -198,9 +200,7 @@ describe('management door — tools of a delegated agent', () => {
     it('a beneficiary sees the shared connection with the exact restriction, and nothing else of the owner', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);
-      const { data } = await agent.call<ConnectionsAnswer>('list_my_connections', {
-        include_experimental: true,
-      });
+      const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
       expect(data.connections).toHaveLength(1);
       const [gh] = data.connections;
       expect(gh).toMatchObject({ connection_id: github, provider: 'github' });
@@ -218,10 +218,8 @@ describe('management door — tools of a delegated agent', () => {
 
     it('someone who holds nothing sees nothing', async () => {
       const agent = await rig.agentOf(BOB);
-      const { data } = await agent.call<ConnectionsAnswer>('list_my_connections', {
-        include_experimental: true,
-      });
-      expect(data).toEqual({ connections: [], hidden_experimental: 0 });
+      const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
+      expect(data).toEqual({ connections: [] });
       expect((await agent.call<MissionsAnswer>('list_my_missions')).data.missions).toEqual([]);
       await agent.close();
     });

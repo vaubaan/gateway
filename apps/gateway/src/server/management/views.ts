@@ -104,7 +104,6 @@ export interface ConnectionView {
   readonly display_name: string;
   /** `active`, or `expired`: missions on it fail until an owner reconnects it. */
   readonly status: string;
-  readonly experimental: boolean;
   readonly authority: {
     /** `owner`: the user's own connection or their group's. `share`: what they were shared. */
     readonly basis: 'owner' | 'share';
@@ -190,7 +189,6 @@ export function connectionView(connection: IssuanceConnection): ConnectionView {
     provider_label: connection.provider_label,
     display_name: connection.display_name,
     status: connection.status,
-    experimental: connection.experimental,
     authority: {
       basis: connection.basis,
       risk_ids: connection.authority,
@@ -233,7 +231,6 @@ export interface CatalogRiskView {
 export interface CatalogView {
   readonly provider: string;
   readonly provider_label: string;
-  readonly experimental: boolean;
   readonly derives_env: boolean;
   /** The connection the `in_my_authority` flags are about; `null` when none was named. */
   readonly connection_id: string | null;
@@ -262,7 +259,6 @@ export function catalogView(
   return {
     provider: catalog.provider,
     provider_label: catalog.provider_label,
-    experimental: catalog.experimental,
     derives_env: catalog.derives_env,
     connection_id: connection?.id ?? null,
     risks: catalog.risks.map((risk) => ({

@@ -859,9 +859,10 @@ derives from it.
    one entry at the end of `SHIPPED_PLUGINS`.
 
 Add the provider to no other list; if a test or a page needs the provider
-list, it reads the registry. Set `experimental: true` in `definePlugin` for a
-plugin the gateway should register but keep out of the default connect and
-issuance flows until it is proven.
+list, it reads the registry. Every registered plugin is offered in the
+connect and issuance flows and lists its tools to agents: there is no
+"experimental" state (ADR `no-experimental-plugins`); a young plugin says so
+with a version below `1.0.0`.
 
 ```bash
 npm run ci                         # type-check, lint, format check, build, tests

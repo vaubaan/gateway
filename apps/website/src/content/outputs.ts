@@ -90,7 +90,6 @@ export function pluginsJson(
         id: p.id,
         name: p.name,
         version: p.version,
-        status: p.experimental ? 'experimental' : 'stable',
         description: p.description,
         page: absolute(`/plugins/${p.id}`),
         source: `${GITHUB_REPO}/tree/main/${p.dir}`,

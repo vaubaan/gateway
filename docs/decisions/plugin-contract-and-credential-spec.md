@@ -16,6 +16,7 @@ amended-by:
   - plugin-catalog-path-and-standalone-tracing
   - fallback-risk-only-when-uncategorized
   - token-connections-beside-the-integration-app
+  - no-experimental-plugins
 ---
 
 # Plugin contract, credential spec, presets and the single registry

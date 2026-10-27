@@ -128,15 +128,16 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     ].join(' '),
     inputSchema: z
       .object({
+        // Retired with the experimental state (ADR no-experimental-plugins): every
+        // connection is listed. Still accepted, and ignored, so that a client written
+        // against an earlier build is not refused by the strict input.
         include_experimental: z
           .boolean()
           .optional()
-          .describe(
-            'Also list connections of experimental providers (hidden by default). Only when the user asked for one.',
-          ),
+          .describe('Deprecated and ignored: every connection is listed.'),
       })
       .strict(),
-    run: (tools, actor, args) => tools.listMyConnections(actor, args),
+    run: (tools, actor) => tools.listMyConnections(actor),
   }),
   define({
     name: 'get_catalog',

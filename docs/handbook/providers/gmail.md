@@ -1,8 +1,8 @@
 ---
-title: Gmail provider — experimental plugin on the v5 SDK
+title: Gmail provider — plugin on the v5 SDK
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-27
 tracks:
   - plugins/gmail/src/
   - plugins/gmail/tests/unit/
@@ -12,7 +12,7 @@ tracks:
 # Gmail provider
 
 `@vaubaan/plugin-gmail` (`plugins/gmail`), on `@vaubaan/plugin-sdk` since
-P1.2j. **Experimental** : the plugin classifies its twelve tools into its
+P1.2j. The plugin classifies its twelve tools into its
 catalog and executes them over **IMAP** (`imap.gmail.com:993`, implicit TLS),
 signed in with the mailbox's **app password** ; it never sends mail. Spec :
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5,
@@ -20,27 +20,27 @@ signed in with the mailbox's **app password** ; it never sends mail. Spec :
 ADRs : [[gmail-over-imap-with-an-app-password]] (the credential, the IMAP
 mapping, the removal of the OAuth way), [[plugin-contract-and-credential-spec]],
 [[scope-caps-amplification-axis]],
-[[plugin-identifiers-one-grammar-for-classify-and-execute]]. Contributor view :
+[[plugin-identifiers-one-grammar-for-classify-and-execute]],
+[[no-experimental-plugins]] (no longer experimental, version 1.0.0). Contributor view :
 [`plugins/gmail/README.md`](../../../plugins/gmail/README.md). The v4
 modelling rationale (research questions Q1–Q11, scenarios) is preserved in
 git history (`docs/handbook/providers/gmail.md` before 2026-10-13).
 
 ## Shape
 
-| Member               | Where                                           | Facts                                                                                                                                                                                                           |
-| -------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Member               | Where                                           | Facts                                                                                                                                                                                                           |
-| -------------------  | ----------------------------------------        | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                     |
-| `id` / `version`     | `src/index.ts`                                  | `gmail`, `0.5.0` (pre-1.0 while experimental). Default export `gmailPlugin` = `createGmailPlugin()` over the real transport ; `createGmailPlugin({ transport, now })` for tests.                                |
-| `experimental`       | `src/index.ts`                                  | `true` — `ProviderPlugin.experimental` of the SDK : the host registers the plugin, shows an "experimental" badge and keeps it out of the default connect and issuance flows.                                    |
-| `tools`              | `src/tools.ts`, `src/tool-titles.ts`            | The 12 tools of `gmailClassifiedToolDeclarations` (`gmailTools` is that list) : 11 that read (attachments included), draft, label and create labels, plus the synthetic `gmail__describe_zones`. No tool sends. |
-| `dataModel`          | `src/data-model.ts`                             | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                                                                                                         |
-| `catalog`            | `src/risk-catalog.yaml`                         | `catalog_version: 5`, 15 live risks + 1 deprecated id (`gmail.draft-to-zone-external-unbounded`) + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                               |
-| `credential`         | `src/credential.ts`, `src/execute.ts`           | `api-key` : `email` and secret `app_password`, a `guide`, `createUrl` the app passwords page, and `verify` (an IMAP sign-in) bound to the transport by `createGmailRuntime`.                                    |
-| `classify`           | `src/classify.ts`                               | Pure, fail-closed ; keyed on the mission's single mailbox resource and its `metadata`. Parsers : `src/q-parser.ts`, `src/address.ts`.                                                                           |
-| `execute`            | `src/execute.ts`, `src/draft.ts`, `src/html.ts` | Over `GmailTransport` (`src/transport.ts`) : arguments checked first, then one IMAP session per call (below, "Execution").                                                                                      |
-| `discoverResources`  | `src/execute.ts`                                | Signs in, checks the `\All` and `\Drafts` folders, returns one resource : `ref` = lower-cased address, `metadata.account_email`.                                                                                |
-| `refresh` / `revoke` | —                                               | None : an app password does not expire and the gateway cannot delete it ; `manualRevocation` points the owner at myaccount.google.com/apppasswords.                                                             |
+| Member               | Where                                           | Facts                                                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Member               | Where                                           | Facts                                                                                                                                                                                                                     |
+| -------------------  | ----------------------------------------        | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                               |
+| `id` / `version`     | `src/index.ts`                                  | `gmail`, `1.0.0` (1.0 since it is no longer experimental, ADR no-experimental-plugins). Default export `gmailPlugin` = `createGmailPlugin()` over the real transport ; `createGmailPlugin({ transport, now })` for tests. |
+| `tools`              | `src/tools.ts`, `src/tool-titles.ts`            | The 12 tools of `gmailClassifiedToolDeclarations` (`gmailTools` is that list) : 11 that read (attachments included), draft, label and create labels, plus the synthetic `gmail__describe_zones`. No tool sends.           |
+| `dataModel`          | `src/data-model.ts`                             | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                                                                                                                   |
+| `catalog`            | `src/risk-catalog.yaml`                         | `catalog_version: 6`, 15 live risks + 1 deprecated id (`gmail.draft-to-zone-external-unbounded`) + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                                         |
+| `credential`         | `src/credential.ts`, `src/execute.ts`           | `api-key` : `email` and secret `app_password`, a `guide`, `createUrl` the app passwords page, and `verify` (an IMAP sign-in) bound to the transport by `createGmailRuntime`.                                              |
+| `classify`           | `src/classify.ts`                               | Pure, fail-closed ; keyed on the mission's single mailbox resource and its `metadata`. Parsers : `src/q-parser.ts`, `src/address.ts`.                                                                                     |
+| `execute`            | `src/execute.ts`, `src/draft.ts`, `src/html.ts` | Over `GmailTransport` (`src/transport.ts`) : arguments checked first, then one IMAP session per call (below, "Execution").                                                                                                |
+| `discoverResources`  | `src/execute.ts`                                | Signs in, checks the `\All` and `\Drafts` folders, returns one resource : `ref` = lower-cased address, `metadata.account_email`.                                                                                          |
+| `refresh` / `revoke` | —                                               | None : an app password does not expire and the gateway cannot delete it ; `manualRevocation` points the owner at myaccount.google.com/apppasswords.                                                                       |
 
 ## Classification rules
 

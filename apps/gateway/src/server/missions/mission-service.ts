@@ -720,7 +720,6 @@ export class MissionService {
     return {
       ...connectionSummaryOf(connection),
       provider_label: plugin.displayName,
-      experimental: plugin.experimental === true,
       derives_env: typeof plugin.envOf === 'function',
       default_env: connection.defaultEnv,
       basis: authority.basis,

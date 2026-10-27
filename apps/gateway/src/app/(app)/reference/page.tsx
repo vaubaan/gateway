@@ -6,9 +6,9 @@
  * it shows no account and no mission.
  */
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
-import { Hint, Row, Rows, Section, ServiceMark, Tag } from '@/components/ui';
+import { Hint, Row, Rows, Section, ServiceMark } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
-import { ACCOUNT_WORDS, REFERENCE_WORDS } from '@/lib/vocabulary';
+import { REFERENCE_WORDS } from '@/lib/vocabulary';
 import { providerPath } from '@/server/providers/links';
 import { providerCards } from '@/server/providers/reference';
 
@@ -39,11 +39,6 @@ export default async function ReferencePage() {
               title={
                 <>
                   {card.name}
-                  {card.experimental && (
-                    <span className={styles.rowTag}>
-                      <Tag>{ACCOUNT_WORDS.experimental}</Tag>
-                    </span>
-                  )}
                   <span className={styles.rowTag}>
                     <ValidationBadge status={validation.get(card.id) ?? null} />
                   </span>

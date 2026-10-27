@@ -100,7 +100,6 @@ function rig(
         ? {
             provider: 'acme',
             provider_label: 'Acme',
-            experimental: false,
             derives_env: false,
             risks: enumerateCatalog(ACME_CATALOG),
             presets: ACME_CATALOG.presets ?? [],
@@ -658,7 +657,6 @@ describe('views', () => {
     const catalog = {
       provider: 'acme',
       provider_label: 'Acme',
-      experimental: false,
       derives_env: false,
       risks: enumerateCatalog(ACME_CATALOG),
       presets: ACME_CATALOG.presets ?? [],
@@ -690,7 +688,6 @@ describe('views', () => {
     const catalog = {
       provider: 'acme',
       provider_label: 'Acme',
-      experimental: false,
       derives_env: false,
       risks: enumerateCatalog(ACME_CATALOG),
       presets: ACME_CATALOG.presets ?? [],

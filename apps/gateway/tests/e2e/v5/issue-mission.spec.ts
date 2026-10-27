@@ -2,8 +2,8 @@
  * "New mission" in a browser, against an ephemeral instance with a simulated
  * IdP (spec §7.4, §4.2, §4.4).
  *
- * The signed-in person owns a GitHub, a Supabase and a Vercel account (and an
- * experimental Gmail one). The first test creates a three-account mission and
+ * The signed-in person owns a GitHub, a Supabase, a Vercel and a Gmail
+ * account. The first test creates a three-account mission and
  * checks the screen is the one the redesign asks for — presets first, each
  * saying what it yields; the summary and the one action in a rail that stays
  * in view; the permissions one by one a click away; a confirmation that lists
@@ -80,12 +80,9 @@ test('create a three-account mission on one page, then replace its key and stop 
   await page.getByRole('link', { name: 'New mission' }).first().click();
   await expect(page.getByRole('heading', { name: 'New mission', level: 1 })).toBeVisible();
 
-  // Experimental services stay out until the person asks for them.
-  await expect(page.getByTestId('connection-gmail')).toHaveCount(0);
-  await page.getByLabel('Show experimental services').check();
+  // Every account is offered, Gmail included: no service is held back (ADR no-experimental-plugins).
   await expect(page.getByTestId('connection-gmail')).toBeVisible();
-  await page.getByLabel('Show experimental services').uncheck();
-  await expect(page.getByTestId('connection-gmail')).toHaveCount(0);
+  await expect(page.getByText(/experimental/i)).toHaveCount(0);
 
   // Nothing can be created before a name, an account and a preset; the rail says what is missing.
   const create = page.getByRole('button', { name: 'Create mission' });
@@ -519,13 +516,13 @@ test('the reference explains each service: permissions against presets, tools, m
     .getByRole('link', { name: 'Reference' })
     .click();
   await expect(page.getByRole('heading', { name: 'Reference', level: 1 })).toBeVisible();
-  // One line per shipped plugin, from the registry; the experimental one says so.
+  // One line per shipped plugin, from the registry; none is tagged experimental.
   await expect(page.getByTestId('provider-github')).toContainText(
     `${GITHUB.permissions} permissions`,
   );
   await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.presets} presets`);
   await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.tools} tools`);
-  await expect(page.getByTestId('provider-gmail')).toContainText('experimental');
+  await expect(page.getByTestId('provider-gmail')).not.toContainText('experimental');
   // The services are a local navigation beside the content.
   const services = page.getByRole('navigation', { name: 'Services' });
   await expect(services.getByRole('link', { name: 'All services' })).toHaveAttribute(

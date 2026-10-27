@@ -91,7 +91,6 @@ export interface FixturePluginOptions {
   /** Tool titles, keyed by tool name. */
   readonly toolTitles?: Readonly<Record<string, string>>;
   readonly displayName?: string;
-  readonly experimental?: boolean;
   readonly discoverResources?: (ctx: ConnectionContext) => Promise<readonly Resource[]>;
   readonly refresh?: (ctx: ConnectionContext) => Promise<CredentialSecret>;
   readonly revoke?: (ctx: ConnectionContext) => Promise<void>;
@@ -119,7 +118,6 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
     displayName: options.displayName ?? id,
     version: '0.0.1',
     description: `Fixture provider ${id}.`,
-    ...(options.experimental ? { experimental: true } : {}),
     tools: [
       {
         name: `${id}__list_things`,

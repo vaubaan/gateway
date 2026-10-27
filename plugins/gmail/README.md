@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-gmail`
 
-Vaubaan Gateway provider plugin for Gmail. **Experimental.** The plugin
+Vaubaan Gateway provider plugin for Gmail. The plugin
 models the risks of reading, drafting and labelling in a mailbox, and
 executes its twelve tools over **IMAP** (`imap.gmail.com:993`, implicit TLS),
 signed in with the mailbox's **app password**. It never sends mail: a draft
@@ -134,8 +134,9 @@ The transport is an interface (`GmailTransport`, `src/transport.ts`):
 ## Catalog and presets
 
 `src/risk-catalog.yaml` — sixteen risks plus the mandatory
-`gmail.uncategorized-write` fallback, `catalog_version: 5` (5 added
-`gmail.label-create`, in the `developer` preset). No risk is
+`gmail.uncategorized-write` fallback, `catalog_version: 6` (5 added
+`gmail.label-create`, in the `developer` preset; 6 drops "Experimental" from
+the `developer` preset's description). No risk is
 env-scoped (Gmail has no environment). No entry declares `caps` or
 `infra_limits`: the door enforces no stateless cap (ADR
 `scope-caps-not-enforced-in-v5-0`), so `gmail.read-from-zone-unknown` and
@@ -144,7 +145,8 @@ SDK coverage kit showed the v4 catalog left two slices uncovered or on the
 fallback: `draft-write` is the one id v5 adds, for the containment slice of
 a draft (the zone risk carries the exfiltration axis), and `read-mailbox`,
 an existing id, also matches the thread containment slice of `get_thread`.
-Plugin version 0.5.0.
+Plugin version 1.0.0: the plugin is no longer experimental (ADR
+`no-experimental-plugins`).
 
 | Preset      | Grants                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

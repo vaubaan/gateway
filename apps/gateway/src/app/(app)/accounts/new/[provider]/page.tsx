@@ -239,12 +239,6 @@ export default async function ConnectOneAccountPage({
             {reconnect && (
               <input type="hidden" name="connection_id" value={reconnect.connection.id} />
             )}
-            {provider.experimental && (
-              <Callout tone="neutral" title="Experimental service">
-                It can be connected, but it is left out of new missions by default and may offer no
-                tool yet.
-              </Callout>
-            )}
             {!reconnect && (
               <Field
                 label="Name"

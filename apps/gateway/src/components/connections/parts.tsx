@@ -1,21 +1,12 @@
 /**
  * Small server components shared by the Accounts pages and Settings → Company
- * apps: the note a redirect left, the state of an account, the "experimental"
- * tag, and the inputs of a plugin-declared `CredentialField` list.
+ * apps: the note a redirect left, the state of an account, and the inputs of a
+ * plugin-declared `CredentialField` list.
  */
 import type { CredentialField } from '@vaubaan/plugin-sdk';
 
-import {
-  Callout,
-  CodeBlock,
-  Field,
-  Input,
-  StatusMark,
-  Tag,
-  Textarea,
-  type Tone,
-} from '@/components/ui';
-import { ACCOUNT_STATES, ACCOUNT_WORDS } from '@/lib/vocabulary';
+import { Callout, CodeBlock, Field, Input, StatusMark, Textarea, type Tone } from '@/components/ui';
+import { ACCOUNT_STATES } from '@/lib/vocabulary';
 import {
   FIELD_PREFIX,
   type FieldProblem,
@@ -47,10 +38,6 @@ export function AccountState({ status }: { status: ConnectionStatus }) {
 /** True when the state of an account is an exception a row or a title should show. */
 export function isAccountException(status: ConnectionStatus): boolean {
   return ACCOUNT_STATES[status].tone !== null;
-}
-
-export function ExperimentalBadge() {
-  return <Tag>{ACCOUNT_WORDS.experimental}</Tag>;
 }
 
 /** What the act the person just made did, said once after the redirect. */

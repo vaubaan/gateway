@@ -344,21 +344,6 @@ describe('creation form — period, expiry, loading a draft', () => {
     expect(cs.entries['acme.read']?.quota).toBe('9');
     expect(previewOf(cs).policy).toEqual(source.policy);
   });
-
-  it('shows experimental providers when the loaded draft uses one', () => {
-    const experimental = acmeConnection({ experimental: true });
-    const source = previewDraft(
-      { connections: [experimental], now: NOW },
-      {
-        name: 'm',
-        connections: [{ connection_id: 'conn-acme', preset: 'reader' }],
-        period: { kind: 'one-off' },
-        expires_at: null,
-      },
-    );
-    const loaded = loadResolved([experimental], initialFormState([experimental]), source.resolved);
-    expect(loaded.showExperimental).toBe(true);
-  });
 });
 
 describe('creation form — a preset explains itself', () => {

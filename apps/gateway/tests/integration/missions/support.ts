@@ -63,8 +63,7 @@ export const BOB = {
 /**
  * Ada owns four connections: GitHub (three repositories), Supabase (a
  * staging and a prod project), Vercel (two projects, no label: the plugin
- * derives the env from the call) and Gmail (experimental plugin, no
- * resource). Bob owns nothing.
+ * derives the env from the call) and Gmail (no resource). Bob owns nothing.
  *
  * `issuer` is the `iss` of the identity provider the seeded people will sign in
  * through, when it is not the default test IdP: a user is `(issuer, subject)`,

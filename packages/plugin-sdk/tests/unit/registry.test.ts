@@ -75,7 +75,6 @@ describe('PluginRegistry — derivations', () => {
         description: 'Fixture provider.',
         icon: null,
         summary: null,
-        experimental: false,
       },
       {
         id: 'beta-cloud',
@@ -84,7 +83,6 @@ describe('PluginRegistry — derivations', () => {
         description: 'Fixture provider.',
         icon: null,
         summary: null,
-        experimental: false,
       },
     ]);
   });

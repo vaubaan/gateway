@@ -811,12 +811,11 @@ describe('missions: issuance context', () => {
     await root.close();
   });
 
-  it('carries resources, catalog, authority and presets; flags experimental and env-deriving plugins', async () => {
+  it('carries resources, catalog, authority and presets; flags env-deriving plugins', async () => {
     const context = await root.missions.service.issuanceContext(seeded.ada);
     const byProvider = new Map(context.map((c) => [c.provider, c]));
     expect([...byProvider.keys()].sort()).toEqual(['github', 'gmail', 'supabase', 'vercel']);
-    expect(byProvider.get('gmail')?.experimental).toBe(true);
-    expect(byProvider.get('github')?.experimental).toBe(false);
+    expect(byProvider.get('gmail')).not.toHaveProperty('experimental');
     expect(byProvider.get('vercel')?.derives_env).toBe(true);
     expect(byProvider.get('supabase')?.derives_env).toBe(false);
     for (const connection of context) {

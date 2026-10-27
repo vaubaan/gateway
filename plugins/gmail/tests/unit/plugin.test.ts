@@ -142,10 +142,10 @@ describe('gmail plugin — SDK kit', () => {
     assertNoWildcard(gmailPlugin);
   });
 
-  test('is experimental, below 1.0, and exposes its twelve tools', () => {
-    expect(gmailPlugin.experimental).toBe(true);
-    expect(gmailPlugin.version).toBe('0.5.0');
-    expect(gmailPlugin.description).toMatch(/experimental/i);
+  test('is at 1.0, no longer says experimental, and exposes its twelve tools', () => {
+    expect(gmailPlugin.version).toBe('1.0.0');
+    expect(gmailPlugin.description).not.toMatch(/experimental/i);
+    expect(gmailPlugin.summary).not.toMatch(/experimental/i);
     expect(gmailPlugin.description).toMatch(/never sends/i);
     const names = gmailPlugin.tools.map((t) => t.name);
     expect(names).toEqual([...GMAIL_CLASSIFIED_TOOLS]);
@@ -441,7 +441,7 @@ describe('gmail presets', () => {
 
   test('ships read-only and developer', () => {
     expect(gmailPlugin.catalog.presets?.map((p) => p.id)).toEqual(['read-only', 'developer']);
-    expect(gmailPlugin.catalog.catalog_version).toBe(5);
+    expect(gmailPlugin.catalog.catalog_version).toBe(6);
   });
 
   test('read-only : reads only, no bulk read, no sensitive label, every entry auto', () => {

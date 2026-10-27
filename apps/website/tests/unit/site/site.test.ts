@@ -117,13 +117,13 @@ describe('robots.txt and sitemap.xml', () => {
 });
 
 describe('plugins.json', () => {
-  it('carries every plugin with its version, status, risks, presets and a health that is never a rate offline', () => {
+  it('carries every plugin with its version, risks, presets and a health that is never a rate offline', () => {
     const json = JSON.parse(site.files.get('plugins.json') ?? '{}') as {
-      plugins: { id: string; version: string; status: string; health: { state: string } }[];
+      plugins: Record<string, unknown>[];
     };
     expect(json.plugins.map((p) => p.id)).toEqual(site.plugins.map((p) => p.id));
     for (const plugin of json.plugins) {
-      expect(['stable', 'experimental']).toContain(plugin.status);
+      expect(plugin).not.toHaveProperty('status');
       expect(plugin.health).toEqual({ state: 'not-enough-reports' });
     }
   });

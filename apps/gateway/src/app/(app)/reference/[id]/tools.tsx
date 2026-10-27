@@ -21,7 +21,6 @@ export function ToolList({
   tools,
   total,
   serviceName,
-  experimental,
   showPlane,
   onGo,
 }: {
@@ -29,7 +28,6 @@ export function ToolList({
   tools: readonly ToolReference[];
   total: number;
   serviceName: string;
-  experimental: boolean;
   showPlane: boolean;
   onGo: (fragment: string) => void;
 }) {
@@ -140,13 +138,6 @@ export function ToolList({
             testId="token-handout-note"
           >
             {noteBody(TOKEN_HANDOUT_NOTE)}
-          </Callout>
-        </div>
-      )}
-      {experimental && (
-        <div className={styles.callout}>
-          <Callout tone="neutral" title="Experimental service">
-            Left out of new missions by default; its tools are not listed to agents.
           </Callout>
         </div>
       )}

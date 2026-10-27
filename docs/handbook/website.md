@@ -2,7 +2,7 @@
 title: The public site — vaubaan.com, generated from the repository
 status: current
 date: 2026-10-16
-last_synced: 2026-10-16
+last_synced: 2026-10-27
 tracks:
   - apps/website/scripts/generate.ts
   - apps/website/src/content/
@@ -85,7 +85,7 @@ The generator:
    and a name not starting with `_`, imported through its `exports["."]` entry
    — the plugin's `definePlugin` validates the declaration and the SDK's
    loader reads its `risk-catalog.yaml`, as at gateway boot. Each is reduced to
-   `PluginInfo`: id, name, version, description, summary, experimental,
+   `PluginInfo`: id, name, version, description, summary,
    tools (with their titles), risks (label, reason, severity, kind, envs),
    presets, credentials (kind, fields, guide steps, permissions, scopes, whether
    the gateway registers its own OAuth client),
@@ -138,7 +138,7 @@ their relative links are pointed at GitHub by `rewriteRelativeLinks()`.
   `- [title](https://vaubaan.com/<path>.md): description`.
 - `public/llms-full.txt`: every one of those pages in full, each after a
   `Source:` line.
-- `public/plugins.json`: every plugin with version, status, description,
+- `public/plugins.json`: every plugin with version, description,
   tools, risks, presets, health (`measured` or `not-enough-reports`), and the
   thresholds.
 - `public/sitemap.xml`: every page, `lastmod` from `git log -1 --format=%cs`
@@ -184,7 +184,7 @@ not wrap.
 
 - `plugins.test.ts` — every plugin folder listed, `_template` left out, each
   plugin loaded with risks, presets and credentials, preset entries naming
-  risks of the same catalog, the experimental flag read from the declaration.
+  risks of the same catalog, no plugin carrying an experimental state.
 - `site.test.ts` — `buildSite()` offline: every hand-written, generated and
   plugin page present; each with its twin in `files`, starting with its
   title, and reachable by `markdownTwinOf()`; a defining first sentence;

@@ -78,8 +78,6 @@ const refused = (refusal: ManagementRefusal): ToolOutcome<never> => ({ ok: false
 
 export interface ConnectionsAnswer {
   readonly connections: readonly ConnectionView[];
-  /** Connections of experimental providers left out; pass `include_experimental` to see them. */
-  readonly hidden_experimental: number;
 }
 
 export interface MissionsAnswer {
@@ -212,16 +210,9 @@ export class ManagementTools {
    * the ones shared with them, directly or through a group — each with its
    * exact restriction, its resources and its presets.
    */
-  async listMyConnections(
-    actor: ManagementActor,
-    input: { readonly include_experimental?: boolean } = {},
-  ): Promise<ToolOutcome<ConnectionsAnswer>> {
+  async listMyConnections(actor: ManagementActor): Promise<ToolOutcome<ConnectionsAnswer>> {
     const context = await this.deps.missions.issuanceContext({ id: actor.userId });
-    const shown = context.filter((c) => input.include_experimental === true || !c.experimental);
-    return done({
-      connections: shown.map(connectionView),
-      hidden_experimental: context.length - shown.length,
-    });
+    return done({ connections: context.map(connectionView) });
   }
 
   /**
