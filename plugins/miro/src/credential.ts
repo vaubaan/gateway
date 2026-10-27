@@ -20,14 +20,14 @@
  * guide) ; their lifetime is not published (⚠).
  */
 
-import type { OAuth2CredentialSpec } from '@vaubaan/plugin-sdk';
+import type { OAuth2RegisteredClientSpec } from '@vaubaan/plugin-sdk';
 
 import { MIRO_OAUTH } from './identity.ts';
 
 /** The two scopes the tools need, and nothing else (no `openid`, no `email`). */
 export const REQUIRED_SCOPES = ['boards:read', 'boards:write'] as const;
 
-export const miroCredential: OAuth2CredentialSpec = {
+export const miroCredential: OAuth2RegisteredClientSpec = {
   kind: 'oauth2',
   authorizationUrl: MIRO_OAUTH.authorizationUrl,
   tokenUrl: MIRO_OAUTH.tokenUrl,

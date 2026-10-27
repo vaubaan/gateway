@@ -61,15 +61,17 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError,
                        registerClient (RFC 7591), OAuth2RegistrationError
   oauth2-clients.ts    OAuth2Clients: the client of an `oauth2` service, registered and kept
+  oauth-broker.ts      OAuthBrokerClient (the four calls of a broker), OAuthBrokers (which broker serves a provider), OAuthBrokerError
+  fake-oauth-broker.ts FakeOAuthBroker: the contract test kit, an in-memory HTTP broker on 127.0.0.1 — tests only
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
-  credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
+  credential-codec.ts  serializeSecret / parseSecret / parseStoredCredential: CredentialSecret (+ the host-only BrokerGrant) ⇄ the sealed text
   ssh-keypair.ts       generateEd25519KeyPair(): OpenSSH private key + authorized_keys line
   input.ts             field validation, resolveReturnTo, env label, editable metadata lists
   mapping.ts           connectionSummaryOf(), connectionOwnerOf(), isRetiredWay(), retiredWayReason(): record → shown shapes
   handlers.ts          Request → Response handlers of the nine endpoints (transfer and reassign: handbook authority)
   errors.ts            ConnectError (closed codes + UI sentences), ConnectionUnavailableError,
-                       ProviderUnreachableError
+                       ProviderUnreachableError, OAuthBrokerUnavailableError
   testing.ts           fixturePlugin(), one spec per kind, connectionsHarness(), seedRegisteredClient() — tests only
 apps/gateway/src/server/compose/shipped-plugins.ts   SHIPPED_PLUGINS, buildShippedRegistry()
 apps/gateway/migrations/0004_connection_resource_curation.sql
@@ -123,11 +125,14 @@ one entry in `SHIPPED_PLUGINS`, plus the dependency in
 ## The OAuth client of a service
 
 A service that signs people in through its own authorization (`oauth2`)
-needs an OAuth client, and the only one the gateway knows is one it
-registers itself: the plugin must declare `clientRegistration` (the SDK
-type requires it and `definePlugin` refuses a spec without it), so a service
-that accepts no dynamic client registration and offers no key a person can
-make cannot be connected. Nobody declares anything: no form, no setting, no
+needs an OAuth client, and the plugin names exactly one source for it (ADR
+[google-calendar-through-an-oauth-broker](../decisions/google-calendar-through-an-oauth-broker.md)
+D3; `definePlugin` refuses both or neither): `clientRegistration`, a client
+the gateway registers itself (below), or `broker: { provider }`, the client
+of an OAuth broker the instance is enrolled with (below, "A client that is
+an OAuth broker's"). A service that accepts no dynamic client registration,
+that no configured broker serves and that offers no key a person can make
+cannot be connected. Nobody declares anything: no form, no setting, no
 setup step, no configuration key (ADR
 [gmail-over-imap-with-an-app-password](../decisions/gmail-over-imap-with-an-app-password.md):
 Gmail, the one service that used a client an administrator declared, moved
@@ -177,6 +182,49 @@ and the IO primitives only).
 Tests that are about the flows, not the registration, start from a client
 already kept: `ConnectionsHarness.seedClient(id, clientId, secret)` and
 `seedRegisteredClient(config, …)` write the four keys as a registration would.
+
+### A client that is an OAuth broker's (`oauth-broker.ts`)
+
+A brokered spec (`OAuth2BrokeredSpec`, Google Calendar) declares no endpoint
+and no client: the broker that serves its provider runs the flow with its own
+client and keeps the refresh tokens. The contract — the four calls, their
+JSON, the status codes, the lifetime of a grant — is
+[oauth-broker-contract](oauth-broker-contract.md). Here, the host's side:
+
+- **Which broker.** `OAuthBrokers(config.oauthBrokers, { fetch })`, built by
+  `createConnectionsModule`. `forProvider(provider)` is the broker whose
+  `providers` lists it, else the default broker (one without `providers`),
+  else none (`brokerFor`, handbook [configuration](configuration.md) "OAuth
+  brokers"). At boot the module logs, once, the broker providers that plugins
+  need and no broker serves.
+- **Not configured.** `ConnectableProvider.unavailable` carries the reason
+  (`brokerNotConfiguredReason`) when no broker serves the plugin; the picker
+  says "not configured on this gateway" and the connect page shows the
+  reason instead of the form; `start` refuses with `broker-not-configured`.
+- **Start** (`startBrokered`). A pending flow is stored first (S256 PKCE
+  verifier, the broker's name, the redirect URI as `return_url`); then
+  `POST /flows { provider, scopes, return_url, state, challenge,
+challenge_method: 'S256' }` and the browser is sent to the
+  `authorize_url` it answers (https only). The verifier never leaves the
+  pending flow.
+- **Callback** (`completeBrokered`). The same route and the same `state`
+  check as any flow (single use, the session's user, this plugin). `error`
+  is a protocol code (`provider-denied`); `grant` is redeemed at the broker
+  that started the flow (`POST /grants/redeem { grant, verifier }`). The
+  connection stores an `OAuth2Secret` with `refreshToken: null` and, beside
+  it in the sealed text, the `BrokerGrant { broker, grantId }`
+  (`serializeSecret(secret, grant)`), which `parseSecret` leaves out: a
+  plugin never receives it. `account` goes to the connection's metadata
+  (`tokenAccount` on its page), `oauth_broker` names the broker.
+- **Failures.** `OAuthBrokerError { broker, call, status, code, grantGone }`;
+  its message names the broker, the call, the status and the protocol code,
+  never the broker's text or the key. At connect time a refused grant is
+  `token-exchange-failed`; anything else (down, timeout, bad key, refused
+  return URL) is `broker-failed`.
+
+Tests: `oauth-broker.test.ts` against `FakeOAuthBroker`, the harness routing
+the broker's URL to the network and everything else to its `mockFetch`
+(`connectionsHarness({ brokers })`).
 
 ## One way per service
 
@@ -513,6 +561,7 @@ plugin `revoke` ignoring its signal) and never throws.
 | `revoke(ctx)` on the contract                                                  | the plugin               | whatever its provider needs; it resolves when the provider confirmed and throws otherwise. Takes precedence. No shipped plugin has one |
 | `credential.revocation: { url, format: 'token-form' }` (`oauth2`)              | the host (`revokeGrant`) | `POST url`, form-encoded `token=<refresh token, else access token>`, no client authentication                                          |
 | `credential.revocation: { url, format: 'client-credentials-json' }` (`oauth2`) | the host                 | `POST url`, JSON `{ client_id, client_secret, refresh_token }`; nothing is sent without a stored refresh token                         |
+| `credential.broker` (`oauth2`, brokered)                                       | the host                 | `DELETE /grants/<grant_id>` at the broker that holds the grant (it revokes at the provider); 204, also when already gone               |
 | nothing                                                                        | nobody                   | —                                                                                                                                      |
 
 The host sends the declarative shapes itself because one of them carries
@@ -576,6 +625,14 @@ single-process only`: rotating refresh tokens are single use, a hosted
   credential, then:
   - the plugin declares `refresh()` → it is called with the plugin context
     (non-standard flows only);
+  - else a brokered `oauth2` spec with a stored `BrokerGrant` → `POST
+/grants/<grant_id>/token` at that broker; the new access token is sealed
+    with the same grant. A grant the broker says is over (`grant_not_found`,
+    `grant_revoked`, `invalid_grant`) is a rejection (→ `expired`); a broker
+    that is down, slow, refuses the key or is no longer configured is an
+    `OAuthBrokerUnavailableError` (a `ProviderUnreachableError`: the status
+    is left alone, the failure is logged and recorded as the broker's —
+    "OAuth broker 'main' answered 503 to token" —, never as an expiry);
   - else `oauth2` + `refreshable` + a stored refresh token → `refreshGrant`
     with the registered client (`clients.forTokenRequest`; none → the
     connection is `expired`: its grant belonged to a forgotten client), the
@@ -1008,6 +1065,16 @@ by feature", the section on connecting).
   still sets a retired `providers.<id>.*` key or `VAUBAAN_PROVIDER_*`
   variable (handbook [configuration](configuration.md), "Retired keys"):
   remove it.
+- **A service says "not configured on this gateway"** — its client is an
+  OAuth broker's and no `oauth_brokers` block serves its broker provider
+  (handbook [configuration](configuration.md), "OAuth brokers"); the boot log
+  names the providers no broker serves.
+- **"OAuth broker '<name>' answered …"** — the broker's failure, never the
+  connection's: `401 (invalid_key)` a wrong key, `403
+(return_url_not_registered)` the broker has not recorded
+  `<public_url>/connections/callback/<plugin>`, `503` or "could not be
+  reached" the broker is down. Nothing is expired; calls resume once the
+  broker answers (contract: [oauth-broker-contract](oauth-broker-contract.md)).
 - **`state-invalid` after consent** — the flow took more than 10 minutes,
   the callback was opened twice, the user's session changed between start
   and callback (the state is bound to the user id), or the web session

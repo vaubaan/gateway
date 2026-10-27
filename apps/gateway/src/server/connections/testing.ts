@@ -14,7 +14,7 @@ import {
   type ConnectionContext,
   type CredentialSecret,
   type CredentialSpec,
-  type OAuth2CredentialSpec,
+  type OAuth2RegisteredClientSpec,
   type PluginRegistry,
   type ProviderPlugin,
   type Resource,
@@ -31,7 +31,9 @@ import type { ConfigRepo } from '../store/repositories/config';
 import { openTestStore, type TestStore } from '../store/testing';
 import type { GroupRecord, UserRecord } from '../store/types';
 import { CredentialBroker } from './credentials';
+import type { OAuthBrokerConfig } from '../config/types';
 import { OAuth2Clients, registeredClientKey } from './oauth2-clients';
+import { OAuthBrokers } from './oauth-broker';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService, type Actor } from './service';
 
@@ -42,7 +44,7 @@ export const PUBLIC_URL = new URL('https://gateway.example.com');
  * there is (ADR gmail-over-imap-with-an-app-password); a test that is not about
  * the registration seeds it with `ConnectionsHarness.seedClient`.
  */
-export const OAUTH_SPEC: OAuth2CredentialSpec = {
+export const OAUTH_SPEC: OAuth2RegisteredClientSpec = {
   kind: 'oauth2',
   authorizationUrl: 'https://provider.example.com/oauth/authorize',
   tokenUrl: 'https://provider.example.com/oauth/token',
@@ -54,7 +56,7 @@ export const OAUTH_SPEC: OAuth2CredentialSpec = {
 };
 
 /** An `oauth2` way whose client the gateway registers itself (RFC 7591), like Miro's MCP server. */
-export const REGISTERED_OAUTH_SPEC: OAuth2CredentialSpec = {
+export const REGISTERED_OAUTH_SPEC: OAuth2RegisteredClientSpec = {
   kind: 'oauth2',
   authorizationUrl: 'https://mcp.provider.example.com/authorize',
   tokenUrl: 'https://mcp.provider.example.com/token',
@@ -215,12 +217,19 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
 export interface HarnessOptions {
   readonly plugins: readonly ProviderPlugin[];
   readonly routes?: readonly MockRoute[];
+  /**
+   * The OAuth brokers the instance is enrolled with. Calls to their URLs go to
+   * the network (a `FakeOAuthBroker` on the loopback interface); every other
+   * call goes to the `mockFetch` of `routes`.
+   */
+  readonly brokers?: readonly OAuthBrokerConfig[];
 }
 
 export interface ConnectionsHarness extends TestStore {
   readonly registry: PluginRegistry;
   readonly fetch: MockFetch;
   readonly clients: OAuth2Clients;
+  readonly brokers: OAuthBrokers;
   readonly broker: CredentialBroker;
   readonly service: ConnectionService;
   readonly pending: PendingConnectStore;
@@ -240,6 +249,14 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
   const test = openTestStore();
   const registry = createRegistry(options.plugins);
   const fetch = mockFetch(options.routes ?? []);
+  const brokerConfigs = options.brokers ?? [];
+  const outbound: typeof globalThis.fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    return brokerConfigs.some((b) => url.startsWith(b.url.href))
+      ? globalThis.fetch(input, init)
+      : fetch(input, init);
+  };
+  const brokers = new OAuthBrokers(brokerConfigs, { fetch: outbound });
   const now = (): number => test.clock.now().getTime();
   const sessions = new MemorySessionStore(now);
   const audit = new MemoryAuditWriter();
@@ -254,7 +271,8 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     connections: test.store.connections,
     registry,
     clients,
-    fetch,
+    brokers,
+    fetch: outbound,
     clock: test.clock,
     logger: silentLogger,
   });
@@ -269,13 +287,14 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     store: test.store,
     registry,
     clients,
+    brokers,
     broker,
     grounds: authority.grounds,
     pending,
     rateLimiter: new MemoryRateLimiter(now),
     audit,
     publicUrl: PUBLIC_URL,
-    fetch,
+    fetch: outbound,
     clock: test.clock,
     logger: silentLogger,
   });
@@ -284,6 +303,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     registry,
     fetch,
     clients,
+    brokers,
     broker,
     service,
     pending,

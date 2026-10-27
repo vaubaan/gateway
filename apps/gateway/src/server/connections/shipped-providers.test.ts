@@ -2,7 +2,7 @@
  * The generic driver against the plugins the image actually ships: every
  * connect form is derived from a real `CredentialSpec`. No request leaves the process (`mockFetch` with no route).
  */
-import { createRegistry } from '@vaubaan/plugin-sdk';
+import { createRegistry, isBrokeredSpec } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
@@ -57,14 +57,17 @@ describe('shipped plugins through the generic connect driver', () => {
   it('withdraws the provider-side grant for the providers that document an endpoint, and for no other', () => {
     // The endpoints below are the ones read in the providers' documentation (ADR
     // provider-side-revocation-on-connection-revoke). A plugin joins this table with
-    // its source, never by analogy. A pasted token is deleted by hand at the service.
+    // its source, never by analogy. A pasted token is deleted by hand at the service. A
+    // brokered connection is withdrawn by its broker (`DELETE /grants/<id>`, ADR
+    // google-calendar-through-an-oauth-broker D2).
     const declared = new Map(
-      SHIPPED_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => [
-        plugin.id,
-        plugin.credential.kind === 'oauth2' ? plugin.credential.revocation : 'revoke()',
-      ]),
+      SHIPPED_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => {
+        const spec = plugin.credential;
+        if (spec.kind !== 'oauth2') return [plugin.id, 'revoke()'];
+        return [plugin.id, isBrokeredSpec(spec) ? 'broker' : spec.revocation];
+      }),
     );
-    expect(Object.fromEntries(declared)).toEqual({});
+    expect(Object.fromEntries(declared)).toEqual({ 'google-calendar': 'broker' });
     for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
@@ -107,21 +110,33 @@ describe('shipped plugins through the generic connect driver', () => {
     // Miro offers no key a person can use (its REST token needs an app an organisation may
     // refuse, ADR miro-rewraps-the-official-mcp-server): the one OAuth way shipped, with a
     // client the gateway registers itself (ADR oauth-client-registered-by-the-gateway). Gmail
-    // connects with an app password (ADR gmail-over-imap-with-an-app-password).
-    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual(['miro']);
+    // connects with an app password (ADR gmail-over-imap-with-an-app-password). Google
+    // Calendar's client is an OAuth broker's (ADR google-calendar-through-an-oauth-broker):
+    // without a broker configured it is listed as not configured, with the reason.
+    expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual([
+      'miro',
+      'google-calendar',
+    ]);
     for (const plugin of SHIPPED_PLUGINS) {
-      if (plugin.credential.kind !== 'oauth2') continue;
-      expect(plugin.credential.clientRegistration.registrationUrl, plugin.id).toMatch(
-        /^https:\/\//,
-      );
+      const spec = plugin.credential;
+      if (spec.kind !== 'oauth2') continue;
+      if (isBrokeredSpec(spec)) expect(spec.broker.provider, plugin.id).toBe('google');
+      else expect(spec.clientRegistration.registrationUrl, plugin.id).toMatch(/^https:\/\//);
     }
+    expect(before.filter((p) => p.unavailable !== null).map((p) => p.id)).toEqual([
+      'google-calendar',
+    ]);
+    expect(before.filter((p) => p.viaBroker).map((p) => p.id)).toEqual(['google-calendar']);
   });
 
   it('builds a valid authorization redirect for every oauth2 plugin', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const alice = await h.actor('alice@example.com');
     // The registration itself is tested in oauth2-clients.test.ts: the client is seeded here.
-    const redirectFlows = SHIPPED_PLUGINS.filter((p) => p.credential.kind === 'oauth2');
+    // A brokered flow starts at the broker: oauth-broker.test.ts drives it end to end.
+    const redirectFlows = SHIPPED_PLUGINS.filter(
+      (p) => p.credential.kind === 'oauth2' && !isBrokeredSpec(p.credential),
+    );
     expect(redirectFlows.length).toBeGreaterThan(0);
     for (const plugin of redirectFlows) {
       await h.seedClient(plugin.id, 'value-1', 'secret-1');
@@ -131,7 +146,7 @@ describe('shipped plugins through the generic connect driver', () => {
       const url = new URL(result.url);
       expect(url.protocol, plugin.id).toBe('https:');
       expect(stateOf(result.url), plugin.id).toMatch(/^[A-Za-z0-9_-]{43}$/);
-      if (plugin.credential.kind === 'oauth2') {
+      if (plugin.credential.kind === 'oauth2' && !isBrokeredSpec(plugin.credential)) {
         const spec = plugin.credential;
         expect(`${url.origin}${url.pathname}`, plugin.id).toBe(spec.authorizationUrl);
         expect(url.searchParams.get('redirect_uri'), plugin.id).toBe(

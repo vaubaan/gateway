@@ -380,6 +380,8 @@ type Rule =
 const READ: Rule = { kind: 'read' };
 const exempt = (why: string): Rule => ({ kind: 'exempt', why });
 
+const FAKE_BROKER =
+  'the fake OAuth broker of the contract test kit (fake-oauth-broker.ts): a test double the composition root never builds';
 const SESSION_STATE =
   'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
 const SYSTEM_REFRESH =
@@ -613,6 +615,27 @@ const RULES: Readonly<Record<string, Rule>> = {
   'OAuth2Clients.rejected': exempt(
     'forgets a registered client the provider refused (invalid_client), during an exchange or a refresh, with no human act: the next connect registers again; the instance log says so',
   ),
+  'OAuthBrokers.forProvider': READ,
+  'OAuthBrokers.byName': READ,
+  'OAuthBrokerClient.startFlow': exempt(
+    "asks the OAuth broker to start a person's connect (ADR google-calendar-through-an-oauth-broker): nothing is written in the store; the connection-created entry follows",
+  ),
+  'OAuthBrokerClient.redeem': exempt(
+    'a step of a person’s connect: the grant redeemed at the broker becomes the credential of the connection-created (or connection-reconnected) entry',
+  ),
+  'OAuthBrokerClient.token': exempt(SYSTEM_REFRESH),
+  'OAuthBrokerClient.revoke': exempt(
+    'a step of ConnectionService.revoke, whose connection-revoked entry carries what the broker answered (after.provider_grant)',
+  ),
+  'FakeOAuthBroker.approve': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.configFor': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.deny': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.down': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.grantIds': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.recordReturnUrl': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.refusingProvider': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.stop': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.up': exempt(FAKE_BROKER),
   'PendingConnectStore.create': exempt(SESSION_STATE),
   'PendingConnectStore.take': exempt(SESSION_STATE),
   'NoticeStore.put': exempt(SESSION_STATE),

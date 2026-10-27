@@ -2,7 +2,11 @@ import { describe, expect, test } from 'vitest';
 
 import { PluginDefinitionError, definePlugin, pluginIssues } from '../../src/define-plugin.ts';
 import type { ProviderPlugin } from '../../src/plugin.ts';
-import { CredentialKindMismatch, expectCredentialKind } from '../../src/credential.ts';
+import {
+  CredentialKindMismatch,
+  expectCredentialKind,
+  isBrokeredSpec,
+} from '../../src/credential.ts';
 import { DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled } from '../../src/flags.ts';
 import { PluginRegistry, PluginRegistryError } from '../../src/registry.ts';
 import {
@@ -233,6 +237,45 @@ describe('definePlugin', () => {
     expect(pluginIssues(oauth({ registrationUrl: 'http://auth.example/register' }))).toEqual([
       'credential.clientRegistration.registrationUrl: expected an https URL',
     ]);
+  });
+
+  test('an oauth2 spec names one client source: a registered client or a broker (ADR google-calendar-through-an-oauth-broker D3)', () => {
+    const brokered = (credential: Record<string, unknown>): ProviderPlugin =>
+      ({
+        ...acmePlugin,
+        credential: { kind: 'oauth2', scopes: ['read'], ...credential },
+      }) as unknown as ProviderPlugin;
+    expect(pluginIssues(brokered({ broker: { provider: 'google' } }))).toEqual([]);
+    expect(pluginIssues(brokered({ broker: { provider: 'Google' } }))).toEqual([
+      "credential.broker: expected { provider } with a lowercase slug such as 'google'",
+    ]);
+    expect(pluginIssues(brokered({ broker: 'google' }))).toEqual([
+      "credential.broker: expected { provider } with a lowercase slug such as 'google'",
+    ]);
+    expect(
+      pluginIssues(
+        brokered({
+          broker: { provider: 'google' },
+          clientRegistration: { registrationUrl: 'https://auth.example/register' },
+        }),
+      ),
+    ).toEqual(['credential: declare one client source, clientRegistration or broker, not both']);
+    // The provider's endpoints, PKCE and the client are the broker's.
+    expect(
+      pluginIssues(
+        brokered({
+          broker: { provider: 'google' },
+          tokenUrl: 'https://auth.example/token',
+          refreshable: true,
+        }),
+      ),
+    ).toEqual([
+      'credential.tokenUrl: a brokered spec leaves it to the broker',
+      'credential.refreshable: a brokered spec leaves it to the broker',
+    ]);
+    expect(isBrokeredSpec({ kind: 'oauth2', broker: { provider: 'google' }, scopes: [] })).toBe(
+      true,
+    );
   });
 
   test('a token handout names a declared tool and risks of the catalog', () => {

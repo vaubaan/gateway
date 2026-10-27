@@ -118,13 +118,60 @@ export interface ApiKeyCredentialSpec {
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';
 
 /**
- * Authorization-code flow run by the host, with an OAuth client the gateway
- * registers itself at the provider (`clientRegistration`, Miro's MCP server).
- * No administrator declares a client (ADR gmail-over-imap-with-an-app-password):
- * a provider that offers neither a key a person can make nor dynamic client
- * registration cannot be connected. The plugin never sees the client secret.
+ * Authorization-code flow for a provider that offers no key a person can
+ * make. The spec declares exactly one source for the OAuth client (ADR
+ * google-calendar-through-an-oauth-broker D3):
+ *
+ *   - `OAuth2RegisteredClientSpec` — the gateway registers its own client at
+ *     the provider (`clientRegistration`, RFC 7591; Miro's MCP server) and
+ *     runs the flow against the provider's endpoints;
+ *   - `OAuth2BrokeredSpec` — the client is an OAuth broker's (`broker`): the
+ *     broker the instance is enrolled with runs the flow with its own client
+ *     and keeps the refresh token (Google Calendar).
+ *
+ * No administrator declares a client (ADR gmail-over-imap-with-an-app-password).
+ * Either way the plugin receives an access token (`OAuth2Secret`) and never
+ * sees a client secret, a grant id or a broker key.
  */
-export interface OAuth2CredentialSpec {
+export type OAuth2CredentialSpec = OAuth2RegisteredClientSpec | OAuth2BrokeredSpec;
+
+/**
+ * The OAuth client is an OAuth broker's (ADR google-calendar-through-an-oauth-broker
+ * D1, D2): a service outside the gateway that owns a client at the provider
+ * and runs the authorization-code flow for the instances enrolled with it.
+ * The host asks the broker for the flow, redeems the one-time grant the
+ * browser brings back, refreshes and revokes through the broker; it keeps a
+ * grant id and the current access token, never a refresh token or a client
+ * secret. A plugin whose broker is not configured is listed as not configured.
+ *
+ * The provider's endpoints, PKCE towards the provider, the client
+ * authentication and the revocation are the broker's: they are not declared.
+ */
+export interface OAuth2BrokeredSpec {
+  readonly kind: 'oauth2';
+  readonly broker: OAuth2Broker;
+  /** Never set on this variant: one client source per spec. */
+  readonly clientRegistration?: never;
+  /** The scopes the broker asks the provider for: the narrowest the tools need. */
+  readonly scopes: readonly string[];
+}
+
+/** Which provider a broker runs the flow at, in the broker's words (`google`). */
+export interface OAuth2Broker {
+  /** A lowercase slug (`google`): what the gateway names as `provider` in `POST /flows`. */
+  readonly provider: string;
+}
+
+/** Whether an `oauth2` spec takes its client from a broker. */
+export function isBrokeredSpec(spec: OAuth2CredentialSpec): spec is OAuth2BrokeredSpec {
+  return spec.broker !== undefined;
+}
+
+/** A broker provider name: a lowercase slug, at most 32 characters. */
+export const BROKER_PROVIDER_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** The OAuth client is one the gateway registers itself at the provider (Miro). */
+export interface OAuth2RegisteredClientSpec {
   readonly kind: 'oauth2';
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
@@ -135,11 +182,12 @@ export interface OAuth2CredentialSpec {
    * instance settings), reuses it for every connection of the instance, and
    * registers again when the provider rejects it or the instance's callback
    * address changed. Nobody declares anything: no administrator step, no
-   * secret to paste. Required: it is the only OAuth client the host knows
-   * (ADRs oauth-client-registered-by-the-gateway,
+   * secret to paste (ADRs oauth-client-registered-by-the-gateway,
    * gmail-over-imap-with-an-app-password).
    */
   readonly clientRegistration: OAuth2ClientRegistration;
+  /** Never set on this variant: one client source per spec. */
+  readonly broker?: never;
   readonly scopes: readonly string[];
   /** RFC 7636. Always true for a public client (`clientAuthMethod: 'none'`). */
   readonly pkce: boolean;

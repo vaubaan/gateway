@@ -39,6 +39,12 @@ export interface PendingConnect {
   readonly returnTo: string | null;
   /** Set when the flow re-authenticates an existing connection instead of creating one. */
   readonly reconnectId: string | null;
+  /**
+   * The OAuth broker that started a brokered flow, by name: the grant the
+   * browser brings back is redeemed there (`null` for any other flow). An
+   * older record without it reads as `null`.
+   */
+  readonly broker?: string | null;
   readonly createdAt: string;
 }
 

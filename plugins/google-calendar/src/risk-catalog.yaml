@@ -1,0 +1,268 @@
+# Google Calendar risk catalog — loaded by `@vaubaan/plugin-sdk`
+# (`loadCatalogFile`) at gateway boot.
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2.
+# ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4.
+# Handbook : docs/handbook/providers/google-calendar.md §3.
+#
+# 10 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
+# instead). A calendar has no environment: no risk is env-scoped.
+#
+# Writes are not layered: creating an event (`calendar[c].event.W`), changing
+# one (`event[e].W`), deleting one (`event[e].delete.W`) and answering an
+# invitation (`event[e].response.W`) are four slices of four lengths, each
+# matched by one risk only. Two markers ride along:
+#   - `guests[internal|external].W` when a call invites people, by zone (the
+#     addresses against the calendar's `internal_domains`, as Gmail zones
+#     recipients) — Google emails them an invitation that carries the event;
+#   - `event[e].notify.W` when a change or a deletion lets Google email the
+#     event's current guests (any `notificationLevel` but `NONE`): the guests
+#     are not known before the call, so this is its own decision.
+provider: google-calendar
+catalog_version: 1
+catalog_date: 2026-10-27
+
+risks:
+  # ─── READS ─────────────────────────────────────────────────────────────
+
+  - id: google-calendar.calendar-list
+    label: 'List the calendars of the mission'
+    reason: >-
+      The names of the calendars the mission was given, answered by the
+      gateway from what discovery found. Nothing of an event.
+    matches: 'google-calendar.calendar[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: google-calendar.event-read
+    label: 'Read events (titles, times, places, guests, descriptions)'
+    reason: >-
+      Listing, searching and reading the events of a calendar of the mission.
+      An agenda says who meets whom, when and where, and a description may
+      hold a meeting link or a document; it is also text written by others,
+      a path for prompt injection.
+    matches: 'google-calendar.calendar[*].event[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: google-calendar.free-busy-read
+    label: 'Read when people are free or busy'
+    reason: >-
+      Suggesting a time reads the busy slots of the people named — never
+      their events — as far as their calendar shares it with this account.
+      No calendar of the mission bounds who is asked about.
+    matches: 'google-calendar.free-busy.R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── WRITES — EVENTS ───────────────────────────────────────────────────
+
+  - id: google-calendar.event-create
+    label: 'Create events'
+    reason: >-
+      A new event on a calendar of the mission. Alone it reaches nobody but
+      the calendar's readers; inviting people is a permission of its own,
+      by who they are.
+    matches: 'google-calendar.calendar[*].event.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: google-calendar.event-change
+    label: 'Change events (time, title, description, place, guests)'
+    reason: >-
+      Moving or rewriting an existing event, the ones others organised
+      included when the account may edit them. Undone by changing it back,
+      but whoever read it meanwhile acted on it.
+    matches: 'google-calendar.calendar[*].event[*].W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: google-calendar.event-delete
+    label: 'Delete events'
+    reason: >-
+      Removing an event from a calendar of the mission; on an event this
+      account organises, Google cancels it for every guest. Google keeps
+      deleted events in its trash for a while, but a cancelled meeting is
+      not undone for the people who were told.
+    matches: 'google-calendar.calendar[*].event[*].delete.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: google-calendar.event-respond
+    label: 'Answer invitations (accept, maybe, decline)'
+    reason: >-
+      Accepting, tentatively accepting or declining an invitation, with an
+      optional comment. Google tells the organizer, who may be outside the
+      company.
+    matches: 'google-calendar.calendar[*].event[*].response.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team
+      persistence: session
+
+  # ─── WRITES — WHO IS REACHED ───────────────────────────────────────────
+
+  - id: google-calendar.invite-internal
+    label: 'Invite people of the company'
+    reason: >-
+      Adding guests whose address is on an internal domain of the calendar
+      (its `internal_domains`) or a meeting room. Google emails them the
+      event, its description and attachments included: it stays inside the
+      company.
+    matches: 'google-calendar.calendar[*].guests[internal].W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: google-calendar.invite-external
+    label: 'Invite people outside the company'
+    reason: >-
+      Adding guests on any other domain. Google emails them the event, its
+      description and attachments included: the way calendar content leaves
+      the company, and a way to spam in the account's name. Scheduling with
+      customers needs it; it is best asked for.
+    matches: 'google-calendar.calendar[*].guests[external].W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+  - id: google-calendar.notify-guests
+    label: 'Let Google email the guests about a change or a cancellation'
+    reason: >-
+      A change or a deletion sent with any notification level but NONE:
+      Google emails the event's current guests, who may be outside the
+      company, the new version of the event. Who they are is not known
+      before the call. An agent that sets notificationLevel to NONE does not
+      need this permission.
+    matches: 'google-calendar.calendar[*].event[*].notify.W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+  # ─── FALLBACK (required) ───────────────────────────────────────────────
+
+  - id: google-calendar.uncategorized-write
+    label: 'Uncategorized Google Calendar write'
+    reason: >-
+      Catch-all for writes no entry above covers; none of the offered tools
+      reaches it today. A tool Google adds is not offered until it is
+      modelled. Never offered in a preset.
+    matches: 'google-calendar.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: account
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+# Presets are default suggestions copied into a mission policy at issuance
+# (spec §3.2). Deliberately in no preset: the fallback.
+presets:
+  - id: read-only
+    label: Read-only
+    description: List the calendars, read and search their events and see when people are free. Nothing is changed and nobody is emailed.
+    entries:
+      - risk_id: google-calendar.calendar-list
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.event-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.free-busy-read
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+
+  - id: assistant
+    label: Assistant
+    description: Run the agenda like an assistant. Reading, creating and moving events, answering invitations, inviting colleagues and telling the guests of a change run freely; deleting an event and inviting anyone outside the company ask first.
+    entries:
+      - risk_id: google-calendar.calendar-list
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.event-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.free-busy-read
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.event-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.event-change
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.event-respond
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.invite-internal
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.notify-guests
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: google-calendar.event-delete
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: google-calendar.invite-external
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval

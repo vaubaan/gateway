@@ -18,6 +18,7 @@
     "@vaubaan/plugin-fly": "*",
     "@vaubaan/plugin-github": "*",
     "@vaubaan/plugin-gmail": "*",
+    "@vaubaan/plugin-google-calendar": "*",
     "@vaubaan/plugin-miro": "*",
     "@vaubaan/plugin-notion": "*",
     "@vaubaan/plugin-railway": "*",

@@ -21,16 +21,17 @@ follow can be detected as drift.
 
 ## Running an instance
 
-| Handbook                                  | What it covers                                                                                                                                                             |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [configuration](configuration.md)         | Instance configuration, crypto and the composition root: how the process starts from configuration alone.                                                                  |
-| [store](store.md)                         | The embedded SQLite store: one file on the mounted volume, schema and migrations applied at boot, repository interfaces.                                                   |
-| [cutover-from-v4](cutover-from-v4.md)     | The procedure to move the one real user of the v4 SaaS onto a v5 instance and switch v4 off: what to prepare, the checklist, live checks.                                  |
-| [import-from-v4](import-from-v4.md)       | The one-shot import of a v4 organization: the exporter, the importer in the image, the operator's procedure (dry run, apply, connect by hand, run again).                  |
-| [demo-mode](demo-mode.md)                 | `npm run demo`: the real application in a browser with a simulated identity provider, simulated services and seeded data.                                                  |
-| [threat-model](threat-model.md)           | What the gateway defends, against whom, with which control, and which test proves the control is still there: the security reading of the spec and of the other handbooks. |
-| [known-limitations](known-limitations.md) | What a reader should know before relying on this version: what has not been done, and what is not there.                                                                   |
-| [website](website.md)                     | The public site vaubaan.com (`apps/website`), generated from the repository at build time: user docs, plugin pages and health, trust center, Markdown twins, llms.txt.     |
+| Handbook                                          | What it covers                                                                                                                                                             |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [configuration](configuration.md)                 | Instance configuration, crypto and the composition root: how the process starts from configuration alone.                                                                  |
+| [oauth-broker-contract](oauth-broker-contract.md) | The four calls between an instance and an OAuth broker (requests, answers, errors, lifetimes, auth): what a broker implements.                                             |
+| [store](store.md)                                 | The embedded SQLite store: one file on the mounted volume, schema and migrations applied at boot, repository interfaces.                                                   |
+| [cutover-from-v4](cutover-from-v4.md)             | The procedure to move the one real user of the v4 SaaS onto a v5 instance and switch v4 off: what to prepare, the checklist, live checks.                                  |
+| [import-from-v4](import-from-v4.md)               | The one-shot import of a v4 organization: the exporter, the importer in the image, the operator's procedure (dry run, apply, connect by hand, run again).                  |
+| [demo-mode](demo-mode.md)                         | `npm run demo`: the real application in a browser with a simulated identity provider, simulated services and seeded data.                                                  |
+| [threat-model](threat-model.md)                   | What the gateway defends, against whom, with which control, and which test proves the control is still there: the security reading of the spec and of the other handbooks. |
+| [known-limitations](known-limitations.md)         | What a reader should know before relying on this version: what has not been done, and what is not there.                                                                   |
+| [website](website.md)                             | The public site vaubaan.com (`apps/website`), generated from the repository at build time: user docs, plugin pages and health, trust center, Markdown twins, llms.txt.     |
 
 Packaging and deployment (image, compose file, reverse proxy) are in
 [`deploy/README.md`](../../deploy/README.md).
@@ -68,23 +69,25 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 
 One handbook per provider plugin (`plugins/<id>`):
 
-| Handbook                                                | What it covers                                                                                                                                                                  |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [providers/github](providers/github.md)                 | `@vaubaan/plugin-github`.                                                                                                                                                       |
-| [providers/vercel](providers/vercel.md)                 | `@vaubaan/plugin-vercel`: plugin and risk model.                                                                                                                                |
-| [providers/supabase](providers/supabase.md)             | `@vaubaan/plugin-supabase`.                                                                                                                                                     |
-| [providers/railway](providers/railway.md)               | `@vaubaan/plugin-railway`: rewraps the official Railway MCP server and adds four GraphQL variable tools.                                                                        |
-| [providers/stripe](providers/stripe.md)                 | `@vaubaan/plugin-stripe`: modelling and runtime.                                                                                                                                |
-| [providers/resend](providers/resend.md)                 | `@vaubaan/plugin-resend`: modelling and runtime.                                                                                                                                |
-| [providers/cloudflare-dns](providers/cloudflare-dns.md) | `@vaubaan/plugin-cloudflare-dns`: modelling and runtime.                                                                                                                        |
-| [providers/context7](providers/context7.md)             | `@vaubaan/plugin-context7`: rewraps the official Context7 MCP server (library documentation).                                                                                   |
-| [providers/upstash-redis](providers/upstash-redis.md)   | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                                                         |
-| [providers/ssh](providers/ssh.md)                       | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                                                           |
-| [providers/gmail](providers/gmail.md)                   | `@vaubaan/plugin-gmail`: an app password, twelve tools over IMAP (search, read with HTML and attachments, draft, label, create labels), never sends.                            |
-| [providers/fly](providers/fly.md)                       | `@vaubaan/plugin-fly`: the apps of one Fly organization, their machines, volumes, secrets, IPs and certificates.                                                                |
-| [providers/miro](providers/miro.md)                     | `@vaubaan/plugin-miro`: Miro's MCP server rewrapped, OAuth with a client the gateway registers.                                                                                 |
-| [providers/notion](providers/notion.md)                 | `@vaubaan/plugin-notion`: pages, content, databases and comments under shared roots, proven by an ancestry walk.                                                                |
-| [providers/caldav](providers/caldav.md)                 | `@vaubaan/plugin-caldav`, "CalDAV Calendar": any CalDAV server (iCloud, Fastmail, Nextcloud) with an app password; calendars and events, writes zoned by who the attendees are. |
+| Handbook                                                  | What it covers                                                                                                                                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| -------------------------------------------------------   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [providers/github](providers/github.md)                   | `@vaubaan/plugin-github`.                                                                                                                                                       |
+| [providers/vercel](providers/vercel.md)                   | `@vaubaan/plugin-vercel`: plugin and risk model.                                                                                                                                |
+| [providers/supabase](providers/supabase.md)               | `@vaubaan/plugin-supabase`.                                                                                                                                                     |
+| [providers/railway](providers/railway.md)                 | `@vaubaan/plugin-railway`: rewraps the official Railway MCP server and adds four GraphQL variable tools.                                                                        |
+| [providers/stripe](providers/stripe.md)                   | `@vaubaan/plugin-stripe`: modelling and runtime.                                                                                                                                |
+| [providers/resend](providers/resend.md)                   | `@vaubaan/plugin-resend`: modelling and runtime.                                                                                                                                |
+| [providers/cloudflare-dns](providers/cloudflare-dns.md)   | `@vaubaan/plugin-cloudflare-dns`: modelling and runtime.                                                                                                                        |
+| [providers/context7](providers/context7.md)               | `@vaubaan/plugin-context7`: rewraps the official Context7 MCP server (library documentation).                                                                                   |
+| [providers/upstash-redis](providers/upstash-redis.md)     | `@vaubaan/plugin-upstash-redis`: plugin and risk model.                                                                                                                         |
+| [providers/ssh](providers/ssh.md)                         | `@vaubaan/plugin-ssh`: bash over SSH.                                                                                                                                           |
+| [providers/gmail](providers/gmail.md)                     | `@vaubaan/plugin-gmail`: an app password, twelve tools over IMAP (search, read with HTML and attachments, draft, label, create labels), never sends.                            |
+| [providers/fly](providers/fly.md)                         | `@vaubaan/plugin-fly`: the apps of one Fly organization, their machines, volumes, secrets, IPs and certificates.                                                                |
+| [providers/miro](providers/miro.md)                       | `@vaubaan/plugin-miro`: Miro's MCP server rewrapped, OAuth with a client the gateway registers.                                                                                 |
+| [providers/notion](providers/notion.md)                   | `@vaubaan/plugin-notion`: pages, content, databases and comments under shared roots, proven by an ancestry walk.                                                                |
+| [providers/google-calendar](providers/google-calendar.md) | `@vaubaan/plugin-google-calendar`: Google's Calendar MCP server rewrapped, with an access token from an OAuth broker; invited people zoned inside or outside.                   |
+| [providers/caldav](providers/caldav.md)                   | `@vaubaan/plugin-caldav`, "CalDAV Calendar": any CalDAV server (iCloud, Fastmail, Nextcloud) with an app password; calendars and events, writes zoned by who the attendees are. |
 
 ## Legacy
 

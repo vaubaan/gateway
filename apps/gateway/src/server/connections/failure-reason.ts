@@ -16,9 +16,15 @@
  */
 import { CredentialRefusal, UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
 
-import { ConnectError, oneLine, ProviderUnreachableError } from './errors';
+import {
+  ConnectError,
+  OAuthBrokerUnavailableError,
+  oneLine,
+  ProviderUnreachableError,
+} from './errors';
 import { OAuth2RegistrationError, OAuth2TokenError } from './oauth2';
 import { OAuth2ClientMissing } from './oauth2-clients';
+import { OAuthBrokerError } from './oauth-broker';
 
 /** An OAuth `error` code is a token of the protocol (RFC 6749 §5.2), never free text. */
 const OAUTH_ERROR_CODE = /^[a-z_]{1,40}$/;
@@ -48,6 +54,10 @@ export function providerFailureReason(err: unknown): string {
     return `the registration endpoint answered HTTP ${err.status}${code}`;
   }
   if (err instanceof OAuth2ClientMissing) return 'no OAuth client is registered for this service';
+  // The broker's failure, in the gateway's words (the message never quotes the broker).
+  if (err instanceof OAuthBrokerError || err instanceof OAuthBrokerUnavailableError) {
+    return oneLine(err.message);
+  }
   if (err instanceof ConnectError) return err.code;
   if (err instanceof ProviderUnreachableError) return 'the provider could not be reached';
   if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {

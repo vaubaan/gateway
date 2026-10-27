@@ -477,11 +477,11 @@ has none (ADR
 [one-place-to-authorize-services-token-first](../docs/decisions/one-place-to-authorize-services-token-first.md)) —
 of one of three kinds:
 
-| Kind      | When                                         | You declare                                                                                                | `execute` receives                                           |
-| --------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `createUrl?`                                                       | `{ fields, metadata }`                                       |
-| `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `clientRegistration`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`… | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
-| `ssh-key` | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                        | `{ privateKeyPem, publicKey, fields, metadata }`             |
+| Kind      | When                                         | You declare                                                                                                                                      | `execute` receives                                           |
+| --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `createUrl?`                                                                                             | `{ fields, metadata }`                                       |
+| `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `clientRegistration`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`… — or `broker: { provider }`, `scopes` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
+| `ssh-key` | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                              | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
 **`api-key`** (the template):
 
@@ -513,7 +513,12 @@ client there the first time someone connects (ADR
 `definePlugin` refuses an `oauth2` spec without it: nobody declares an OAuth
 client by hand (ADR
 [gmail-over-imap-with-an-app-password](../docs/decisions/gmail-over-imap-with-an-app-password.md)).
-A provider with neither a key nor dynamic registration may offer another
+A provider with neither a key nor dynamic registration can take its client
+from an **OAuth broker** the instance is enrolled with: declare `broker: {
+provider }` and the `scopes`, nothing else (ADR
+[google-calendar-through-an-oauth-broker](../docs/decisions/google-calendar-through-an-oauth-broker.md);
+[`plugins/google-calendar/src/credential.ts`](./google-calendar/src/credential.ts)).
+It may also offer another
 protocol a person can open with a key (Gmail: IMAP with an app password,
 [`plugins/gmail/src/credential.ts`](./gmail/src/credential.ts)). Set
 `refreshable: true` when the token endpoint issues refresh tokens: the

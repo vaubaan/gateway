@@ -247,6 +247,26 @@ export interface BackupConfig {
   readonly keep: number;
 }
 
+/**
+ * An OAuth broker the instance is enrolled with (`oauth_brokers.<name>.*`; ADR
+ * google-calendar-through-an-oauth-broker D1): a service outside the gateway
+ * that owns an OAuth client at a provider and runs the authorization-code flow
+ * for the instance. The gateway is its client (handbook oauth-broker-contract).
+ */
+export interface OAuthBrokerConfig {
+  /** The block's name (`main`), as written. */
+  readonly name: string;
+  /** Base URL of the four calls: https (http for a loopback host only), no trailing slash. */
+  readonly url: URL;
+  /** The broker key, sent as a Bearer on every call. A secret. */
+  readonly key: string;
+  /**
+   * The broker providers it serves (`google`), lower-cased. Empty: the default
+   * broker, which serves every provider no other broker lists.
+   */
+  readonly providers: readonly string[];
+}
+
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
@@ -308,6 +328,11 @@ export interface InstanceConfig {
   readonly git: { readonly maxPackBytes: number; readonly requestTimeoutSeconds: number };
   /** Authorization server of the management door: token lifetimes, who may register. */
   readonly oauth: OAuthConfig;
+  /**
+   * The OAuth brokers of `oauth_brokers.<name>.*`, in the order of the tree.
+   * Empty: a plugin whose client is a broker's is listed as not configured.
+   */
+  readonly oauthBrokers: readonly OAuthBrokerConfig[];
   readonly log: { readonly level: LogLevel };
 }
 
@@ -324,6 +349,7 @@ export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   if (config.bootstrapToken) out.push(config.bootstrapToken);
   if ('mail' in config && config.mail?.smtpPassword) out.push(config.mail.smtpPassword);
   if (config.backup) out.push(config.backup.s3.secretAccessKey);
+  for (const broker of config.oauthBrokers) out.push(broker.key);
   // A presigned URL is the credential itself; a file path is harmless but treated alike.
   const from = config.restore.from;
   if (from) out.push(from.kind === 'url' ? from.url.href : from.path);

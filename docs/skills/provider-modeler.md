@@ -132,9 +132,10 @@ The numbers on the right are the steps of the kit.
 6. **Credential** (step 5). One `CredentialSpec`: `api-key` (with its
    `label`, `createUrl`, `guide` and `verify`) whenever a person can make a
    key at the provider, `oauth2` only where none exists — and then with
-   `clientRegistration`: the gateway registers its own client, no
-   administrator declares one (ADR gmail-over-imap-with-an-app-password) —,
-   or `ssh-key`. The host runs the flow and the standard `refresh_token`
+   `clientRegistration` (the gateway registers its own client, no
+   administrator declares one, ADR gmail-over-imap-with-an-app-password) or
+   `broker: { provider }` (the client is an OAuth broker's, ADR
+   google-calendar-through-an-oauth-broker) —, or `ssh-key`. The host runs the flow and the standard `refresh_token`
    grant; declare `refresh()` only for a non-standard one. The plugin never
    sees a client secret and never reads the environment.
 7. **Resources** (step 6). `discoverResources(ctx)` returns the refs the

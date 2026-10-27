@@ -2,7 +2,7 @@
 title: Integration tests
 status: current
 date: 2026-10-13
-last_synced: 2026-10-24
+last_synced: 2026-10-27
 tracks:
   - vitest.config.ts
   - scripts/release-lib.test.mjs
@@ -24,6 +24,7 @@ tracks:
   - plugins/context7/tests/
   - plugins/gmail/tests/
   - plugins/miro/tests/
+  - plugins/google-calendar/tests/
   - plugins/stripe/tests/
   - plugins/notion/tests/
   - packages/gateway-core/tests/
@@ -109,6 +110,7 @@ this table says where each requirement lives, and what is not written yet.
 
 | Suite                                                                                                                                                                                                                                                                                        |     Tests |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------: |
 | `apps/gateway/src/app/(app)/activity/change-lines.test.ts`                                                                                                                                                                                                                                   |         8 |
 | `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                                                                                                                                                                                                       |        13 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                                                                                                                                                                                                     |         2 |
@@ -145,6 +147,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/config/duration.test.ts`                                                                                                                                                                                                                                            |         2 |
 | `apps/gateway/src/server/config/instance-name.test.ts`                                                                                                                                                                                                                                       |        11 |
 | `apps/gateway/src/server/config/keys-doc.test.ts`                                                                                                                                                                                                                                            |        53 |
+| `apps/gateway/src/server/config/oauth-brokers.test.ts`                                                                                                                                                                                                                                       |         7 |
 | `apps/gateway/src/server/config/load.property.test.ts`                                                                                                                                                                                                                                       |         7 |
 | `apps/gateway/src/server/config/load.test.ts`                                                                                                                                                                                                                                                |        62 |
 | `apps/gateway/src/server/config/master-key-absent.test.ts`                                                                                                                                                                                                                                   |        11 |
@@ -159,6 +162,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/mapping.test.ts`                                                                                                                                                                                                                                        |         3 |
 | `apps/gateway/src/server/connections/oauth2.test.ts`                                                                                                                                                                                                                                         |        28 |
 | `apps/gateway/src/server/connections/oauth2-clients.test.ts`                                                                                                                                                                                                                                 |        14 |
+| `apps/gateway/src/server/connections/oauth-broker.test.ts`                                                                                                                                                                                                                                   |        18 |
 | `apps/gateway/src/server/connections/pending.test.ts`                                                                                                                                                                                                                                        |         7 |
 | `apps/gateway/src/server/connections/provider-revocation.test.ts`                                                                                                                                                                                                                            |        16 |
 | `apps/gateway/src/server/connections/service.test.ts`                                                                                                                                                                                                                                        |        24 |
@@ -394,13 +398,13 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                                                                                                                                                                                                      |        31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                                                                                                                                                                                                        |         4 |
 | `packages/plugin-sdk/tests/unit/created-resources.test.ts`                                                                                                                                                                                                                                   |         3 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                                                                                                                                                                                                       |        36 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                                                                                                                                                                                                       |        37 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                                                                                                                                                                                                              |         8 |
 | `packages/plugin-sdk/tests/unit/git-pack.test.ts`                                                                                                                                                                                                                                            |         9 |
 | `packages/plugin-sdk/tests/unit/git-wire.property.test.ts`                                                                                                                                                                                                                                   |         4 |
 | `packages/plugin-sdk/tests/unit/git-wire.test.ts`                                                                                                                                                                                                                                            |        32 |
 | `packages/plugin-sdk/tests/unit/identifiers-kit.test.ts`                                                                                                                                                                                                                                     |         9 |
-| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                                                                                                                                                                                                            |        12 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                                                                                                                                                                                                            |        13 |
 | `packages/plugin-sdk/tests/unit/slices.test.ts`                                                                                                                                                                                                                                              |        21 |
 | `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                                                                                                                                                                                                           |         9 |
 | `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                                                                                                                                                                                                         |        14 |
@@ -465,6 +469,10 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/gmail/tests/unit/q-parser.test.ts`                                                                                                                                                                                                                                                  |        32 |
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                                                                                                                                                                                                              |        48 |
 | `plugins/gmail/tests/unit/transport.test.ts`                                                                                                                                                                                                                                                 |        11 |
+| `plugins/google-calendar/tests/unit/classify.test.ts`                                                                                                                                                                                                                                        |        13 |
+| `plugins/google-calendar/tests/unit/execute.test.ts`                                                                                                                                                                                                                                         |         7 |
+| `plugins/google-calendar/tests/unit/identifiers.test.ts`                                                                                                                                                                                                                                     |        19 |
+| `plugins/google-calendar/tests/unit/plugin.test.ts`                                                                                                                                                                                                                                          |        14 |
 | `plugins/miro/tests/unit/classify.test.ts`                                                                                                                                                                                                                                                   |        17 |
 | `plugins/miro/tests/unit/created.test.ts`                                                                                                                                                                                                                                                    |         5 |
 | `plugins/miro/tests/unit/execute.test.ts`                                                                                                                                                                                                                                                    |        15 |
@@ -545,6 +553,7 @@ this table says where each requirement lives, and what is not written yet.
 | `scripts/lockfile-gate.test.mjs`                                                                                                                                                                                                                                                             |        12 |
 | `scripts/release-lib.test.mjs`                                                                                                                                                                                                                                                               |        55 |
 | `apps/gateway/tests/integration/authority/revoked-connection-drops-its-part.test.ts`                                                                                                                                                                                                         |         6 |
+| **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23)                                                                                     | **11958** |
 | **TOTAL** (`npm run ci`, both vitest projects, 2026-10-21, branch feature/miro-official-mcp-oauth; 420 files; 11917 passed, 1 skipped; + 18 tests from #93 on 2026-10-22; + 13 Miro, 9 audit 2026-10-23; + 233 CalDAV 2026-10-27, its rows of the per-plugin structural tests not recounted) | **12191** |
 
 The table is generated from the JSON reports of one run of each project
@@ -682,12 +691,13 @@ npx vitest run packages/policy-engine     # one package
   entry on the fallback is an error; an entry recognised by convention
   without `fallback: true` loads with a warning through `warn` and is
   still indexed as the fallback).
-- **`registry.test.ts`** (12) — ids in registration order, `has/get/require`,
+- **`registry.test.ts`** (13) — ids in registration order, `has/get/require`,
+  **`brokerProviderOf` / `brokerProviders`: the OAuth brokers the plugins need**,
   `providerForTool` (exact name, prefix rule for unlisted tools, null),
   `toolDeclarations`, `labels` (with `summary` when the plugin has one, and `icon` — `null` without one), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** (36) — fixture well-formed and frozen; **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); **a plugin that declares it must declare `createdResources`**, a function (ADR created-resources-join-the-mission); `summary` optional, a non-empty paragraph of at most 600 characters when present; `icon` optional, the path data of one SVG path when present (`SVG_PATH_DATA_PATTERN`: a drawing command first, then commands, numbers and separators — markup, `url(…)` and an empty string are issues; ADR service-icons-declared-by-the-plugin); **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
+- **`define-plugin.test.ts`** (37) — fixture well-formed and frozen; **an `oauth2` spec names one client source, `clientRegistration` or `broker: { provider }` — both, a malformed provider, or a field of the registered shape on a brokered spec are issues** (ADR google-calendar-through-an-oauth-broker D3); **`resourceCreatingTools` optional — a non-empty list of MCP tools of the plugin, once each** (an unknown name or a duplicate is an issue and `definePlugin` throws; ADR discovery-runs-after-a-creating-call); **a plugin that declares it must declare `createdResources`**, a function (ADR created-resources-join-the-mission); `summary` optional, a non-empty paragraph of at most 600 characters when present; `icon` optional, the path data of one SVG path when present (`SVG_PATH_DATA_PATTERN`: a drawing command first, then commands, numbers and separators — markup, `url(…)` and an empty string are issues; ADR service-icons-declared-by-the-plugin); **`toolTitles` optional — a title names a declared tool and reads as a headline** (one line, at most 60 characters, a capital first, no final period; an object, never a list); a `tokenHandouts` entry names a declared tool and risks of the catalog; **a preset that leaves a token-handing risk on `auto` is refused unless the plugin declares that risk read-only** (`readOnlyRiskIds`, a list of the handout's own risks; undeclared means write; refused where it is on `auto`, per preset and environment); every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -1277,6 +1287,37 @@ records the reason without calling the plugin, every Gmail tool is refused with
 the same sentence, and reconnecting with an app password keeps the account
 (signed in over IMAP first; nothing over HTTP).
 
+**Google Calendar** (53; plugin 0.1.0, a rewrap of Google's Calendar MCP
+server with a token from an OAuth broker — ADR
+[[google-calendar-through-an-oauth-broker]] D4) — `plugin.test.ts` (14): kit
+(9 tools, **the ten named risks touched, no fallback hit**,
+`assertIdentifiersRefused` with no path identifier), identity
+(`google_calendar__`), version, catalog path, presets `read-only` and
+`assistant` (**deleting and inviting outside ask first**, the fallback in
+none), **the credential: brokered at `google` with the four narrow scopes,
+never the full `calendar` scope**, the tool surface built from
+`upstream-tools.json` (**modelled from Google's reference on 2026-10-27,
+nine tools, no drift against itself**), **the schema check** (a tool gone,
+one added, arguments changed), the module refusing an unmodelled tool and
+**an unknown locating argument**, the deprecated arguments and the paging of
+`list_calendars` not offered. `classify` (13): every tool's slices, a
+calendar by ref, id, `primary` or omitted; **attendees zoned: oneself is no
+one, colleagues and meeting rooms internal, anyone else external, every zone
+present its marker**; a calendar without internal domains takes everyone as
+external; **a change or a deletion adds `notify` unless `notificationLevel`
+is `NONE`**; refusals: a calendar outside the mission, Google's subscribed
+calendars, a primary the mission lacks, event ids, **an attendee that is not
+exactly one address or carries other fields**, withheld, undeclared and
+ill-typed arguments, unknown tools. `identifiers` (19): the grammars and
+**hostile event and calendar ids refused by classify and by execute, nothing
+sent**. `execute` (7): the `tools/call` (bearer, reader's arguments,
+`calendarId` written as the id, addresses lower-cased), `list_calendars`
+without a request, a refused call sends nothing, `isError` passed through, 401;
+discovery page by page (**subscribed calendars left out, `internal_domains`
+seeded with the account's domain, never a consumer one**), nothing read from
+free text, a 403 as a `CredentialRefusal`. Not covered: a real Google
+account (the tool list is modelled, not captured).
+
 **Miro** (74; plugin 0.4.0, a rewrap of Miro's MCP server — ADR
 [[miro-rewraps-the-official-mcp-server]], amendment 2026-10-23) —
 `plugin.test.ts` (19): kit (28 tools, the thirteen named risks touched, no
@@ -1574,6 +1615,13 @@ enforced limits is pinned to what the code enforces today.
   `master_key.handed_over_at` and writes one `config-changed`, a second
   confirmation keeps the timestamp and writes nothing; a plain user and a
   foreign origin cannot confirm.
+- **`config/oauth-brokers.test.ts`** (7) — `oauth_brokers.<name>.*`: none by
+  default; **from the environment, the key from a `_FILE`, redacted and taken
+  out of the environment**; from the file with `${file:…}`; refused without
+  `url` or `key`, with a bad name, an http URL off the loopback interface, an
+  unknown field variable; **two default brokers and a provider served twice
+  refused**; `brokerFor`: the broker listing the provider, else the default,
+  else none; `parseBrokerUrl`.
 - **`config/keys-doc.test.ts`** (43) — **structural: the key table of the
   configuration handbook is the loader's.** The table of
   `docs/handbook/configuration.md` has the six columns the test reads and
@@ -2603,8 +2651,34 @@ Execution door".
   is `client-registration-failed` in the gateway's words, nothing stored; an
   exchange refused with `invalid_client` makes the next start register a new
   client.
-- `shipped-providers.test.ts` (8): Gmail and Miro the `oauth2` ways, Miro the
-  one whose client registers itself.
+- `shipped-providers.test.ts` (8): Miro and Google Calendar the `oauth2` ways,
+  Miro the one whose client registers itself, **Google Calendar the one whose
+  client is a broker's: not configured without a broker, withdrawn by the
+  broker**.
+
+### A client that is an OAuth broker's (ADR google-calendar-through-an-oauth-broker)
+
+- **`src/server/connections/oauth-broker.test.ts`** (18) — against
+  `FakeOAuthBroker`, the contract kit (`fake-oauth-broker.ts`, a real HTTP
+  server on the loopback interface). **Not configured**: the plugin listed
+  with the reason, `start` refused `broker-not-configured`. **The flow**:
+  `POST /flows` with the provider, the scopes, the return URL, the gateway's
+  `state` and the S256 challenge, **never the verifier**; the grant redeemed
+  with the verifier whose S256 is the challenge; **the sealed credential holds
+  the grant id and the access token, no refresh token, and the plugin's
+  discovery sees neither the grant nor the broker**; the account shown.
+  **The state checked as for any flow** (replayed, another user); a refusal at
+  the provider is `provider-denied`; a broker down at start is
+  `broker-failed`. **Refresh** through `POST /grants/<id>/token`, the grant
+  kept; **a broker down at refresh time is the broker's failure, the
+  connection stays `active` and discovery records "OAuth broker 'main'
+  answered 503"**; a grant the provider no longer accepts turns it `expired`.
+  **Revocation** deletes the grant at the broker (`revoked`); a broker down
+  says `failed`. **The contract's refusals at the client**: a grant redeemed
+  twice, late, by another instance, with the wrong verifier (`invalid_grant`,
+  the grant over), **a bad key (`invalid_key`, not a dead grant, the key never
+  in the message)**, a broker that answers 503 or is gone (status 0, not a
+  dead grant); the key only ever in the `Authorization` header.
 - `tests/integration/audit/admin-mutations.test.ts`: the three public
   methods of `OAuth2Clients` classified (a read, two system acts exempt with
   their reason).

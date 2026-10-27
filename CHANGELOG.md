@@ -23,6 +23,28 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Presets `read-only`, `own-agenda` and `assistant`. Google Calendar is not
   reachable this way (Google refuses app passwords over CalDAV): it is the
   `google-calendar` plugin. ADR google-calendar-through-an-oauth-broker, D5.
+- **Google Calendar.** A new plugin, `google-calendar` (0.1.0), relays Google's
+  official Calendar MCP server: list the calendars, list, search and read
+  events, suggest a time, create, change and delete events, answer
+  invitations — one resource per calendar. Inviting people of the company and
+  people outside it are separate permissions (each calendar's internal
+  domains decide), and so are letting Google email the guests of a change,
+  and deleting. Presets `read-only` and `assistant`. The scopes are the
+  narrowest that cover the tools, never the full calendar scope. ADR
+  google-calendar-through-an-oauth-broker.
+- **OAuth brokers.** An instance can be enrolled with an OAuth broker
+  (`oauth_brokers.<name>.url` and `.key`, the key a secret like every other;
+  `.providers` optional): a service that owns the OAuth client at a provider
+  offering no key and no dynamic registration, runs the sign-in and keeps the
+  refresh tokens. The instance keeps a grant id and a short-lived access
+  token; the provider's data never goes through the broker. A plugin whose
+  broker is not configured is listed as not configured, with the reason; a
+  broker that is down shows as the broker's failure, never as an expiry. The
+  contract a broker implements is the handbook page oauth-broker-contract,
+  with a fake broker in the test kit.
+- **SDK.** An `oauth2` spec names exactly one client source:
+  `clientRegistration` or `broker: { provider }` (`OAuth2BrokeredSpec`,
+  `isBrokeredSpec`, `PluginRegistry.brokerProviders()`).
 
 ## [2.0.0-alpha.9] - 2026-10-27
 

@@ -59,6 +59,8 @@ import {
   readFileSource,
   retiredConfigKeys,
   secretEnvVariables,
+  OAUTH_BROKER_BLOCK,
+  OAUTH_BROKER_ENV_PREFIX,
   SIGN_IN_ENV_PREFIX,
 } from './sources';
 import {
@@ -73,6 +75,7 @@ import {
   type InstanceConfig,
   LOG_LEVELS,
   type LogLevel,
+  type OAuthBrokerConfig,
   type OAuthConfig,
   isClientRegistrationPolicy,
   isLogLevel,
@@ -81,6 +84,13 @@ import {
   type MailConfig,
   type BackupConfig,
 } from './types';
+import {
+  brokerSetProblems,
+  isBrokerName,
+  isBrokerProvider,
+  OAUTH_BROKER_PROBLEMS,
+  parseBrokerUrl,
+} from './oauth-brokers';
 import { isBackupPeriod, isBucketName, parseBackupEndpoint, parseTimeOfDay } from './backup-config';
 
 /** `git.max_pack_mb` is in mebibytes. */
@@ -440,6 +450,7 @@ function validate(
   const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
   const gitRequestTimeout = r.duration(keySpec('git.request_timeout'));
   const oauth = readOAuth(r);
+  const oauthBrokers = readOAuthBrokers(r);
   const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
@@ -478,6 +489,7 @@ function validate(
       requestTimeoutSeconds: gitRequestTimeout,
     },
     oauth,
+    oauthBrokers,
     log: { level },
   };
 }
@@ -621,6 +633,54 @@ export const MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS = keySpec('oauth.access_token_tt
 export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = keySpec(
   'oauth.refresh_reuse_window_seconds',
 ).max;
+
+/**
+ * `oauth_brokers.<name>.*` (ADR google-calendar-through-an-oauth-broker D1): one
+ * broker per name, in the order of the tree; `url` and `key` required,
+ * `providers` optional (none: the default broker). The rules across brokers
+ * are `brokerSetProblems`'.
+ */
+function readOAuthBrokers(r: Reader): OAuthBrokerConfig[] {
+  const block = r.tree(OAUTH_BROKER_BLOCK.top);
+  if (!block) return [];
+  const out: OAuthBrokerConfig[] = [];
+  for (const [name, value] of Object.entries(block)) {
+    const base = `${OAUTH_BROKER_BLOCK.top}.${name}`;
+    if (!isBrokerName(name)) {
+      r.issues.add(base, OAUTH_BROKER_PROBLEMS.name, [`${OAUTH_BROKER_ENV_PREFIX}<NAME>_<FIELD>`]);
+      continue;
+    }
+    if (!isPlainObject(value)) {
+      r.issues.add(base, `expected a mapping of OAuth broker fields, got ${typeName(value)}`);
+      continue;
+    }
+    const before = r.issues.items.length;
+    const rawUrl = r.string(`${base}.url`, { required: true });
+    const key = r.string(`${base}.key`, { required: true });
+    let url: URL | undefined;
+    if (rawUrl !== undefined) {
+      const parsed = parseBrokerUrl(rawUrl);
+      if (parsed.ok) url = parsed.url;
+      else r.issues.add(`${base}.url`, parsed.problem, envNamesFor(`${base}.url`));
+    }
+    const providers = [...new Set(r.stringList(`${base}.providers`).map((p) => p.toLowerCase()))];
+    for (const provider of providers) {
+      if (!isBrokerProvider(provider)) {
+        r.issues.add(
+          `${base}.providers`,
+          `${OAUTH_BROKER_PROBLEMS.provider}: "${provider}"`,
+          envNamesFor(`${base}.providers`),
+        );
+      }
+    }
+    if (r.issues.items.length > before || !url || !key) continue;
+    out.push({ name, url, key, providers });
+  }
+  for (const problem of brokerSetProblems(out)) {
+    r.issues.add(problem.path, problem.message, envNamesFor(problem.path));
+  }
+  return out;
+}
 
 /**
  * The authorization server of the management door. The access token is capped

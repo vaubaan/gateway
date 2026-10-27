@@ -16,7 +16,7 @@
  * per provider inside this process, so two people connecting at once share
  * one client.
  */
-import type { OAuth2CredentialSpec, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { OAuth2RegisteredClientSpec, ProviderPlugin } from '@vaubaan/plugin-sdk';
 
 import type { Logger } from '../logging';
 import type { ConfigRepo } from '../store/repositories/config';
@@ -68,7 +68,7 @@ export class OAuth2Clients {
    */
   async forAuthorization(
     plugin: ProviderOf,
-    spec: OAuth2CredentialSpec,
+    spec: OAuth2RegisteredClientSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
     const stored = await this.stored(plugin.id, spec);
@@ -81,7 +81,10 @@ export class OAuth2Clients {
    * registered one as it is. Never registers: a grant belongs to the client
    * that obtained it. Throws `OAuth2ClientMissing`.
    */
-  async forTokenRequest(plugin: ProviderOf, spec: OAuth2CredentialSpec): Promise<OAuth2Client> {
+  async forTokenRequest(
+    plugin: ProviderOf,
+    spec: OAuth2RegisteredClientSpec,
+  ): Promise<OAuth2Client> {
     const stored = await this.stored(plugin.id, spec);
     if (!stored) throw new OAuth2ClientMissing(plugin.id);
     return stored.client;
@@ -92,7 +95,11 @@ export class OAuth2Clients {
    * client is forgotten (when it is still that one), so the next connection
    * registers again.
    */
-  async rejected(plugin: ProviderOf, _spec: OAuth2CredentialSpec, clientId: string): Promise<void> {
+  async rejected(
+    plugin: ProviderOf,
+    _spec: OAuth2RegisteredClientSpec,
+    clientId: string,
+  ): Promise<void> {
     const current = await this.deps.config.get(registeredClientKey(plugin.id, 'client_id'));
     if (current !== clientId) return;
     await this.deps.config.apply(
@@ -108,7 +115,7 @@ export class OAuth2Clients {
 
   private async stored(
     providerId: string,
-    spec: OAuth2CredentialSpec,
+    spec: OAuth2RegisteredClientSpec,
   ): Promise<{ readonly client: OAuth2Client; readonly redirectUri: string | null } | null> {
     const { config } = this.deps;
     const clientId = await config.get(registeredClientKey(providerId, 'client_id'));
@@ -127,7 +134,7 @@ export class OAuth2Clients {
 
   private register(
     providerId: string,
-    spec: OAuth2CredentialSpec,
+    spec: OAuth2RegisteredClientSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
     const inFlight = this.registering.get(providerId);
@@ -141,7 +148,7 @@ export class OAuth2Clients {
 
   private async registerNow(
     providerId: string,
-    spec: OAuth2CredentialSpec,
+    spec: OAuth2RegisteredClientSpec,
     redirectUri: string,
   ): Promise<OAuth2Client> {
     const client = await registerClient(

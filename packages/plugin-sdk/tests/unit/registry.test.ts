@@ -117,6 +117,16 @@ describe('PluginRegistry — derivations', () => {
     expect(r.toolPrefix).toBe('beta_cloud__');
     expect([...r.toolNames]).toEqual(['beta_cloud__list_things', 'beta_cloud__update_thing']);
   });
+
+  test('brokerProviderOf / brokerProviders: the OAuth brokers the plugins need', () => {
+    const brokered = (id: string) =>
+      cloneAs(id, { credential: { kind: 'oauth2', broker: { provider: 'google' }, scopes: [] } });
+    const withBrokers = createRegistry([acmePlugin, brokered('gamma'), brokered('delta')]);
+    expect(withBrokers.brokerProviderOf('acme')).toBeNull();
+    expect(withBrokers.brokerProviderOf('gamma')).toBe('google');
+    expect(withBrokers.brokerProviders()).toEqual(['google']);
+    expect(registry.brokerProviders()).toEqual([]);
+  });
 });
 
 describe('PluginRegistry — conflicts', () => {
