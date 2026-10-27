@@ -35,6 +35,7 @@ tracks:
   - packages/telemetry/src/
   - deploy/collector/
   - apps/website/tests/
+  - apps/oauth-broker/tests/
   - packages/shared/src/
 ---
 
@@ -73,7 +74,9 @@ reaches a provider: the v4 suites that could (and the `SKIP_LIVE` switch
 that guarded them) were deleted with the v4 application. One suite opens a
 socket, on loopback only: `plugins/ssh/tests/unit/host-key-pinning.test.ts`
 drives the real SSH transport against an ssh server started in the test
-process.
+process. The OAuth broker's suites open sockets too, loopback and a Unix
+socket in a temporary directory only: its two listeners, a fake provider,
+and a fake Confidential Space TEE server.
 
 ## Map — spec §10 to this file
 
@@ -5439,6 +5442,72 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   are plain Markdown; the trust center reads every accepted risk and the
   out-of-scope items of the threat model.
 
+## Scenarios — OAuth broker
+
+> Covers: spec [`oauth-broker.md`](../spec/oauth-broker.md) §2, §3, §4. Handbook
+> [[oauth-broker]]; contract [[oauth-broker-contract]]. ADRs
+> [[oauth-broker-stateless-in-an-attested-enclave]],
+> [[oauth-broker-runs-its-typescript-source-with-no-dependency]].
+> `apps/oauth-broker/tests/`. No test reaches Google: the provider is a local
+> HTTP server, the platform the `local` adapter or a fake TEE server.
+
+- **`integration/broker-flow.test.ts`** (28) — the whole broker over its two
+  listeners. **The full flow**: the consent URL carries the broker's client
+  id, its redirect URI, its own state and its own S256 challenge (not the
+  gateway's), `access_type=offline`, `prompt=consent`; the callback sends the
+  browser to the return URL with `grant` and the gateway's `state` only, and
+  **the code is not exchanged before the redeem**; the redeem answers the
+  refresh token, the access token, `expires_at`, the account of the ID token
+  and the scopes, the provider having received the broker's verifier and the
+  client secret; a second redeem is `invalid_grant`. One callback per flow. A
+  **refusal at the provider** comes back as `?error=access_denied&state=…`,
+  an unexpected error text as `server_error`, and the flow is gone. **One
+  answer, `invalid_grant`**, for another instance (and the grant is spent for
+  its owner too), a wrong verifier (no exchange attempted), a grant past five
+  minutes, a provider that refuses or is down, an unknown grant. **A flow
+  ends at ten minutes.** Starting a flow is refused for a return URL of
+  another instance (403), a scope outside the compiled-in list, no scope, an
+  unknown provider, `plain` PKCE, a short state, no key or a key not enrolled
+  (401 `invalid_key`), a body over 16 KiB (413) or not JSON. **Refresh** adds
+  the client secret and answers the access token; **revocation** is relayed,
+  idempotent, and the refresh is then `invalid_grant`; a provider down is
+  502, not `invalid_grant`. **Attestation** binds the gateway's nonce and the
+  SHA-256 of the SPKI the TLS connection presented, audience
+  `oauth-broker-attestation`; a malformed nonce is 400; **it answers without
+  a key** and **is rate-limited** (429 `rate_limited`). Each listener serves
+  its own paths, and survives a request target that is not a URL. **The logs
+  carry no secret, key, token, code, verifier, state or grant**, and name the
+  route of a refused call.
+- **`unit/gcp-confidential-space.test.ts`** (7) — the Confidential Space
+  adapter against a fake TEE server on a real Unix socket: the custom token is
+  `POST /v1/token` with `{audience: "oauth-broker-attestation", token_type:
+"OIDC", nonces}` and the JWT is the body; unsealing is `GET /v1/token`, the
+  STS token exchange (audience = the federation provider, subject token type
+  `jwt`, scope `cloud-platform`), then Secret Manager's
+  `secrets/<name>/versions/latest:access` with the federated token; a TEE or
+  STS refusal fails the start; malformed settings and secret names are
+  refused; the platform is chosen by name.
+- **`unit/config-and-flows.test.ts`** (13) — configuration: enrollment,
+  defaults, and refusals (not JSON, a provider the image does not serve, a key
+  digest malformed or repeated, a plain-http or missing return URL, a public
+  URL with a query); flows: ten minutes, five for a grant and never past the
+  flow, one callback, a grant spent by its first attempt, the cap and the
+  sweep, a distinct id and PKCE verifier per flow.
+- **`unit/crypto-and-tls.test.ts`** (5) — S256 against RFC 7636 appendix B;
+  the nonce is exactly 32 bytes of canonical base64url; the self-signed
+  certificate parses, verifies with its own key, matches the private key, is
+  P-256, and its SPKI digest is the one published; no two identities share a
+  key.
+- **`unit/rate-limit.test.ts`** (3) — the buckets of the unauthenticated
+  `POST /attest`: a burst per address then a refill, another address its own
+  bucket; a global cap over all addresses; the oldest address forgotten past
+  the memory bound.
+- **`unit/image.test.ts`** (3) — the Dockerfile: one base, pinned by version
+  and digest and equal to the gateway's, no `# syntax` frontend and no `ARG`;
+  nothing installed, the sources copied read-only, `USER node`; the platform
+  fixed and the launch policy (only `OAUTH_BROKER_CONFIG` overridable, no
+  command, capability, cgroup, mount or memory monitoring), ports 8443 and 8080.
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
@@ -5454,6 +5523,12 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   automated suite; the manual check is in [`e2e-tests.md`](./e2e-tests.md).
 
 ## Known gaps
+
+- **The OAuth broker in a real Confidential Space VM** — the adapter is
+  tested against a fake TEE server and fake Google endpoints only; the first
+  deployment checks the real attestation token, the federation and the
+  release's reproducibility on GitHub's runners (handbook
+  [[oauth-broker]], "Running it in Google Confidential Space").
 
 - **Miro tool calls against a real account** — on 2026-10-23 the capture
   script ran against the product owner's Miro account: the OAuth flow

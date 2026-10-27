@@ -56,9 +56,11 @@ updates:
   # The base image of deploy/docker/Dockerfile (node, pinned by version and
   # digest). A new version also needs the documentation that quotes it: the
   # structural test base-images-pinned fails until deploy/README.md and the
-  # coding workflow are updated on the same branch.
+  # coding workflow are updated on the same branch. The OAuth broker's image
+  # (apps/oauth-broker/Dockerfile) starts from the same pinned base, which its
+  # own test holds (apps/oauth-broker/tests/unit/image.test.ts).
   - package-ecosystem: docker
-    directory: /deploy/docker
+    directories: ['/deploy/docker', '/apps/oauth-broker']
     schedule:
       interval: monthly
       time: '06:00'

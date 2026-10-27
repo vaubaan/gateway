@@ -2,7 +2,7 @@
 title: Coding workflow
 status: current
 date: 2026-05-22
-last_synced: 2026-10-19
+last_synced: 2026-10-27
 tracks:
   - .github/
   - .semgrep/
@@ -48,6 +48,7 @@ The repository is an npm workspaces monorepo with three roots:
 
 ```
 apps/gateway/            the deployable: server + Next.js UI       @vaubaan/gateway-app (private)
+apps/oauth-broker/       the OAuth broker, its Dockerfile          @vaubaan/oauth-broker (private)
 packages/shared/         risk types, api-key, data-model            @vaubaan/shared
 packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget  @vaubaan/policy-engine
 packages/plugin-sdk/     plugin contract, registry, test kit        @vaubaan/plugin-sdk
@@ -670,6 +671,28 @@ end, in a temporary copy of the three files they touch.
 has no automated test: it needs a registry, and was rehearsed by hand
 against a local one.
 
+### The OAuth broker's image (`.github/workflows/oauth-broker-image.yml`)
+
+A release of its own, apart from the gateway's: the push of a tag
+`oauth-broker-v<version>` and nothing else (no pull request, no schedule, no
+manual run — CI minutes are billed). One job, `permissions: {}` at the top
+and `contents: write`, `packages: write`, `id-token: write` on the job. It
+refuses a tag that does not name the version of
+`apps/oauth-broker/package.json` or whose commit is not on `main`; builds
+`apps/oauth-broker/Dockerfile` for `linux/amd64` with `SOURCE_DATE_EPOCH` =
+the commit time, `rewrite-timestamp=true`, OCI media types and no provenance
+or SBOM manifest; pushes `ghcr.io/<owner>/oauth-broker:<version>`; rebuilds
+from scratch and fails unless the digest is the same; signs the digest
+keylessly with cosign (`sigstore/cosign-installer`, pinned by commit) and
+verifies the signature against this workflow's identity at that tag; then
+creates a GitHub release `oauth-broker-v<version>`, never marked latest,
+carrying the digest (the Confidential Space measurement), the epoch and the
+commands to verify it. The gateway's `release.yml` does not match these tags.
+Procedure and verification: handbook
+[oauth-broker](../handbook/oauth-broker.md), "Releasing" and "Verifying a
+release". The broker's tests run in `npm run test` with every other
+workspace's; its type-check and lint in `npm run ci`.
+
 ### Refreshing the base image digests
 
 The image is built on `node:<version>-bookworm-slim` pinned by digest
@@ -693,6 +716,9 @@ weekly image scan fails when a fixed vulnerability waits in the pinned image.
 2. Change the version and the digest **together** on the `FROM … AS base` line, and
    the version where the documentation quotes it (`deploy/README.md`, the
    "Docker image" section above). Same for Caddy in `deploy/compose.yaml`.
+   The OAuth broker's `apps/oauth-broker/Dockerfile` starts from the same
+   `node` reference and moves with it (its own test holds that they are equal;
+   a new base is a new broker measurement, so a broker release follows).
 3. `npm run docker:build && npm run docker:smoke`, and `npm run test`: the
    structural suite holds that both references are `name:tag@sha256:<64 hex>`
    and that the documentation quotes the pinned versions
