@@ -39,7 +39,7 @@ import { vercelToolTitles } from './tool-titles.ts';
 import { vercelTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const VERCEL_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const vercelCatalog = loadCatalogFile(VERCEL_CATALOG_PATH);

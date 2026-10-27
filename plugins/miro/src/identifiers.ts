@@ -3,9 +3,8 @@
  * shared by `classify`, `execute` and discovery. Each returns the value or
  * `null` ; a value outside its grammar is refused, never repaired.
  *
- * Handbook : docs/handbook/providers/miro.md §5.1, "Identifiers".
- * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md ;
- *            docs/decisions/miro-board-ref-tilde-spelling.md.
+ * Handbook : docs/handbook/providers/miro.md.
+ * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  */
 
 import { MIRO_BOARD_URL_BASE } from './identity.ts';

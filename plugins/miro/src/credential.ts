@@ -5,9 +5,8 @@
  * time someone connects (RFC 7591 dynamic client registration) : no Miro app
  * to create, nothing to paste, no administrator step.
  *
- * Handbook : docs/handbook/providers/miro.md §6.1.
- * ADR      : docs/decisions/miro-rewraps-the-official-mcp-server.md ;
- *            docs/decisions/oauth-client-registered-by-the-gateway.md.
+ * Handbook : docs/handbook/providers/miro.md.
+ * ADR      : docs/decisions/oauth-client-registered-by-the-gateway.md.
  *
  * Facts, from `https://mcp.miro.com/.well-known/oauth-authorization-server`
  * read unauthenticated on 2026-10-21 : authorization-code and refresh-token

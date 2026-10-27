@@ -139,14 +139,14 @@ The transport is an interface (`GmailTransport`, `src/transport.ts`):
 the `developer` preset's description). No risk is
 env-scoped (Gmail has no environment). No entry declares `caps` or
 `infra_limits`: the door enforces no stateless cap (ADR
-`scope-caps-not-enforced-in-v5-0`), so `gmail.read-from-zone-unknown` and
+`scope-caps-amplification-axis`), so `gmail.read-from-zone-unknown` and
 `gmail.bulk-read` are bounded by the mission's quota and rate limit only. The
 SDK coverage kit showed the v4 catalog left two slices uncovered or on the
 fallback: `draft-write` is the one id v5 adds, for the containment slice of
 a draft (the zone risk carries the exfiltration axis), and `read-mailbox`,
 an existing id, also matches the thread containment slice of `get_thread`.
-Plugin version 1.0.0: the plugin is no longer experimental (ADR
-`no-experimental-plugins`).
+Plugin version 1.0.0: the plugin is no longer experimental (see
+docs/handbook/plugin-sdk.md).
 
 | Preset      | Grants                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

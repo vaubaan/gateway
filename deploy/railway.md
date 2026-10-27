@@ -80,8 +80,8 @@ protect another resource of the hosting (a backup bucket, a second service),
 list it in `VAUBAAN_SELF_RESOURCES` (`<provider>:<ref>`, comma-separated).
 
 **`VAUBAAN_CLIENT_IP_HEADER=x-real-ip`: only after you verified it.** The
-trusted-edge mode reads the client address from `X-Real-IP` alone (ADR
-[client-address-from-a-trusted-edge-header](../docs/decisions/client-address-from-a-trusted-edge-header.md)).
+trusted-edge mode reads the client address from `X-Real-IP` alone (handbook
+[configuration](../docs/handbook/configuration.md)).
 It is safe only if Railway's edge **overwrites** that header on every request;
 if the edge passes a client's value through, any client picks the address it
 is limited and audited under. It is off by default. To verify on your
@@ -149,8 +149,8 @@ build reads it from there: check it before uploading with
 `git rev-parse HEAD`. Nothing else feeds that stamp: a service variable
 `GIT_COMMIT_SHA` is ignored (delete it if an older guide made you set it:
 it once kept an old commit on `/healthz` across deployments), and a tree
-that is not an archive builds `unknown` rather than a guess (ADR
-[deployed-commit-stamped-by-git-archive](../docs/decisions/deployed-commit-stamped-by-git-archive.md)).
+that is not an archive builds `unknown` rather than a guess (see
+[coding-workflow](../docs/workflow/coding-workflow.md)).
 
 Never run `railway up` from your working copy: it uploads the directory you
 are in. The repository's `.railwayignore` keeps `.env*`, keys (`*.pem`,
@@ -263,9 +263,7 @@ the right service and environment.
 
 To another Railway service, to a Fly machine, to a server of your own: the new
 instance starts from this one's store, and nobody drops a file on its volume
-by hand. ADR
-[restore-verifies-before-it-replaces-and-runs-at-first-boot](../docs/decisions/restore-verifies-before-it-replaces-and-runs-at-first-boot.md),
-handbook [store](../docs/handbook/store.md#restore).
+by hand. Handbook [store](../docs/handbook/store.md).
 
 1. **Back up the source** (§6) and note the copy's hash in the same session:
 

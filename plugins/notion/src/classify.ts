@@ -2,7 +2,7 @@
  * Classifier of the `notion` provider : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/notion.md §2, §5.
+ * Handbook : docs/handbook/providers/notion.md.
  *
  * Pure : no IO, no credential, no clock. One reader, `readCall`, turns the
  * arguments into a typed call — every identifier through its grammar, every

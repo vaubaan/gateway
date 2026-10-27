@@ -4,8 +4,7 @@
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and is never
  *            returned.
- * Handbook : docs/handbook/providers/miro.md §6.2, §6.3.
- * ADR      : docs/decisions/miro-rewraps-the-official-mcp-server.md.
+ * Handbook : docs/handbook/providers/miro.md.
  *
  * Rules :
  *   - the call is read by `readMiroCall`, the classifier's own reader : the
@@ -356,7 +355,7 @@ async function reportDrift(ctx: ConnectionContext, token: string): Promise<void>
     const drift = toolDrift(await mcpRequest(ctx, token, 'tools/list', {}));
     if (drift.gone.length + drift.unmodelled.length + Object.keys(drift.arguments).length > 0) {
       ctx.logger?.warn(
-        "Miro's MCP tools differ from the plugin's model; capture them again (handbook providers/miro §6.5)",
+        "Miro's MCP tools differ from the plugin's model; capture them again (handbook providers/miro, Procedures)",
         {
           locator: BOARD_LOCATOR,
           gone: drift.gone,

@@ -2,7 +2,7 @@
  * Data model of the `context7` provider.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/context7.md §1.
+ * Handbook : docs/handbook/providers/context7.md.
  *
  * One plane, `docs` : the library index one Context7 key can query (the
  * resource, one per connection) and the libraries in it. Libraries are

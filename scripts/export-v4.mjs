@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Exports one organization of the v4 SaaS as the bundle the v5 importer reads
-// (ADR import-from-v4-one-shot-importer; handbook docs/handbook/import-from-v4.md).
+// (handbook docs/handbook/import-from-v4.md).
 //
 //   node scripts/export-v4.mjs --org fidi --ssh-host vps-fidi \
 //     --ssh-host-key vps-fidi=SHA256:… | <importer in the container> --owner … [--apply]

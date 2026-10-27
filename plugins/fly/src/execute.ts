@@ -2,7 +2,7 @@
  * Upstream calls of the `fly` provider : the Machines API, and the logs
  * endpoint `fly logs` uses.
  *
- * Handbook : docs/handbook/providers/fly.md §5 and §6.3.
+ * Handbook : docs/handbook/providers/fly.md.
  *
  * The request is built from what `readFlyCall` returned, never from `args`.
  * Beyond routing, the executor holds these guards ; each declines with an

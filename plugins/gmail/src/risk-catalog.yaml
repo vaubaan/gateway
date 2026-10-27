@@ -5,7 +5,7 @@
 # Spec     : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps) ;
 #            docs/spec/vaubaan-gateway.md §3.2 (presets).
 # ADR      : docs/decisions/scope-caps-amplification-axis.md ;
-#            docs/decisions/scope-caps-not-enforced-in-v5-0.md ;
+#            docs/decisions/scope-caps-amplification-axis.md ;
 #            docs/decisions/plugin-contract-and-credential-spec.md.
 # Handbook : docs/handbook/providers/gmail.md.
 #
@@ -22,7 +22,7 @@
 #
 # No entry declares `caps` or `infra_limits` : the v5.0 door enforces none of
 # the stateless caps, and a catalog only states what the gateway applies
-# (ADR scope-caps-not-enforced-in-v5-0, which records the values modelled for
+# (ADR scope-caps-amplification-axis, which records the values modelled for
 # `gmail.bulk-read` and `gmail.read-from-zone-unknown`). The amplitude of a
 # mission on these two risks is bounded by its quota and rate limit.
 
@@ -32,7 +32,7 @@
 # the fallback). In the `developer` preset beside `gmail.label-write`.
 # `get_attachment` needs no new risk : it is classified like `get_thread`.
 # catalog_version 6 (2026-10-27) : the `developer` preset's description no
-# longer says "Experimental" (ADR no-experimental-plugins). No risk, pattern,
+# longer says "Experimental" (docs/handbook/plugin-sdk.md). No risk, pattern,
 # limit or entry changed.
 provider: gmail
 catalog_version: 6

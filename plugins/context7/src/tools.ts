@@ -2,9 +2,9 @@
  * MCP tools of the `context7` provider — rewrap of the official Context7 MCP
  * server at https://mcp.context7.com/mcp.
  *
- * ADR      : docs/decisions/railway-rewrap-remote-mcp.md (the shape) ;
+ * ADR      : docs/decisions/rewrap-official-mcps.md (the shape) ;
  *            docs/decisions/rewrap-official-mcps.md.
- * Handbook : docs/handbook/providers/context7.md §0, §2.
+ * Handbook : docs/handbook/providers/context7.md.
  *
  * `upstream-tools.json` is the `tools` array of `tools/list`, captured
  * verbatim from `mcp.context7.com` on 2026-10-16 : names, titles,

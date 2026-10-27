@@ -330,7 +330,7 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   `infra_limits.calls_per_minute_max` on a risk: the ceiling of the rate
   limit a mission can be issued with. Do not declare `caps` or another
   `infra_limits` key
-  ([ADR](../docs/decisions/scope-caps-not-enforced-in-v5-0.md)); a limit the
+  ([ADR](../docs/decisions/scope-caps-amplification-axis.md)); a limit the
   provider needs is refused by your classifier.
 - Unknown keys are refused, so a typo never silently disables a rule.
 
@@ -356,7 +356,7 @@ step 6) as an explicit argument. The one exception is a rewrapped upstream
 tool whose frozen schema has no resource argument: it is acceptable only
 when a connection has exactly one resource, so the classifier resolves the
 mission's single resource and refuses none or several, and the plugin's
-handbook argues why (`context7`, §1 and §2). The `properties` of the schema are the
+handbook argues why (`context7`). The `properties` of the schema are the
 whole argument surface of the tool: an argument is declared there before
 the classifier or the executor may use it (see "Only declared arguments"
 below).
@@ -445,7 +445,7 @@ The rules the template already applies and a plugin must keep:
 - **Only declared arguments.** An argument the classifier does not read was
   priced by no rule. Whether you must refuse it depends on how `execute`
   builds its request
-  ([ADR](../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md)):
+  ([ADR](../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)):
   - `execute` **forwards the arguments it was given** — a JSON body or a
     query string built from `args`, a rewrapped upstream tool that receives
     them whole: an undeclared argument would reach the provider unseen. Call
@@ -607,7 +607,7 @@ It runs only after the gateway allowed the call and counted it.
   confirmation of your own, as the template does.
 
 The full table is in the SDK handbook,
-["Errors of `execute`"](../docs/handbook/plugin-sdk.md#errors-of-execute).
+["The contract"](../docs/handbook/plugin-sdk.md#the-contract).
 
 **Optional: streamed results (`ctx.emitPart`).** For a tool whose provider
 answers progressively (logs, a long export). `execute` still returns the
@@ -626,7 +626,7 @@ return streamToolResult(ctx, textParts(response.body));
 Open the provider's response before the first part, let `streamToolResult`
 await every part, and throw when the provider's stream breaks. A plugin that
 never streams ignores `emitPart`; no shipped plugin uses it yet
-(handbook, ["Streamed results"](../docs/handbook/plugin-sdk.md#streamed-results-streamingts)).
+(handbook, ["The contract"](../docs/handbook/plugin-sdk.md#the-contract)).
 
 **Environment in the call.** When the environment is part of the call rather
 than a label on the resource (Vercel's `env[prod]` segment), declare
@@ -643,7 +643,7 @@ gateway reads them differently:
 Never answer `undefined` for the third case: the owner's label would price a
 call that reaches production as whatever the resource happens to be
 labelled. `envFromSliceSegment` already answers `NO_SINGLE_ENV` there
-([ADR](../docs/decisions/decision-stages-fail-closed-and-audited.md), D3).
+([risk model](../docs/spec/gateway-risk-model.md)).
 
 ## Step 8 — Wire and test (`src/index.ts`, `tests/unit/`)
 
@@ -671,7 +671,7 @@ export default acmePlugin;
 Load the catalog with `catalogPathNextTo(import.meta.url)` exactly as above.
 Never `new URL('./risk-catalog.yaml', import.meta.url)`: the application's
 bundler rewrites that expression and the build fails
-([ADR](../docs/decisions/plugin-catalog-path-and-standalone-tracing.md)).
+([plugin SDK handbook](../docs/handbook/plugin-sdk.md)).
 `definePlugin` validates the whole definition at import and reports every
 problem at once.
 
@@ -866,7 +866,7 @@ derives from it.
 Add the provider to no other list; if a test or a page needs the provider
 list, it reads the registry. Every registered plugin is offered in the
 connect and issuance flows and lists its tools to agents: there is no
-"experimental" state (ADR `no-experimental-plugins`); a young plugin says so
+"experimental" state (docs/handbook/plugin-sdk.md); a young plugin says so
 with a version below `1.0.0`.
 
 ```bash
@@ -917,7 +917,7 @@ Plugins have no changelog of their own.
 description, link the plugin request issue and state which provider
 documentation the classifier was written from. Expect the review to
 concentrate on the catalog, the classifier's refusals and the handbook's
-"Edge cases".
+Traps.
 
 Plugins live in this repository and are not published to npm for now
 ([layout ADR](../docs/decisions/repository-layout-and-contribution-workflow.md)).
@@ -961,7 +961,7 @@ change yourself:
 | `plugin-identifier-tests.test.ts` fails for `<id>`                                    | No test file of the plugin feeds `'..'` and an encoded or separator form (`%2e%2e`, `%2f`, `../`) to both `classify` and `execute` (step 8). The file is read with the TypeScript parser: the values must be string literals of the code, the classifier and the executor must be called, and at least one test must run (not `skip`, not `todo`). |
 
 More cases: SDK handbook,
-["How to debug"](../docs/handbook/plugin-sdk.md#how-to-debug).
+["Debug"](../docs/handbook/plugin-sdk.md#debug).
 
 ## Working with a coding agent
 

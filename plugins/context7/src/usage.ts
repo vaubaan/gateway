@@ -1,7 +1,7 @@
 /**
  * The REST side of the `context7` provider : `GET https://context7.com/api/v2/usage`.
  *
- * Handbook : docs/handbook/providers/context7.md §0, §6.
+ * Handbook : docs/handbook/providers/context7.md.
  *
  * The documentation tools go through the MCP server (`execute.ts`) ; the
  * REST API is used for three things around them only : checking a pasted

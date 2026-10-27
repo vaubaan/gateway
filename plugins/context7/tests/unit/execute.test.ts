@@ -1,6 +1,6 @@
 /**
  * `execute`, `discoverResources` and `verify` of the `context7` plugin against
- * `mockFetch` (handbook §6). No test calls Context7.
+ * `mockFetch` (handbook). No test calls Context7.
  */
 import { describe, expect, test } from 'vitest';
 

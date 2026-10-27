@@ -3,7 +3,7 @@
  * (`(tool, args, resources) → slices`).
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
- * Handbook : docs/handbook/providers/gmail.md, "Classification rules".
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,

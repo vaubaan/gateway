@@ -10,7 +10,7 @@ approval.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md);
 what the executor declines:
-[`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
 Plugin version 0.3.0, catalog version 3.
 Modelling handbook: [`docs/handbook/providers/resend.md`](../../docs/handbook/providers/resend.md).
 Provider spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).

@@ -2,7 +2,7 @@
  * Tools of the `caldav` provider.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins).
- * Handbook : docs/handbook/providers/caldav.md, "Tool → slice mapping".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * Six tools : the calendars, events over a time range, one event, and
  * creating, changing and deleting one. They read and write events as JSON

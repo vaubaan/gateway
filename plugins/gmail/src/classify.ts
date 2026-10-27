@@ -13,7 +13,7 @@
  * `bulk-marker`, `sensitive-label[l]`) the catalog matches.
  *
  * It fails closed : what it cannot read costs the worst case or refuses the
- * call, never less. Modelling rules (handbook, "Classification rules") :
+ * call, never less. Modelling rules (handbook) :
  *
  *   1. `get_thread` is classified worst-case `from-zone[unknown]` : the sender
  *      is unknown until the thread is fetched. Agents search first.

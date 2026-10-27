@@ -3,9 +3,8 @@
  * (https://mcp.miro.com/), plus `list_boards`, which the gateway answers
  * itself from the mission's boards.
  *
- * ADR      : docs/decisions/miro-rewraps-the-official-mcp-server.md ;
- *            docs/decisions/rewrap-official-mcps.md.
- * Handbook : docs/handbook/providers/miro.md §0, §2, §6.5.
+ * Handbook : docs/handbook/providers/miro.md, Procedures.
+ * ADR      : docs/decisions/rewrap-official-mcps.md.
  *
  * `upstream-tools.json` is Miro's `tools/list`, captured verbatim on
  * 2026-10-23 by `npm run capture-upstream-tools --workspace

@@ -1,7 +1,7 @@
 /**
  * The RFC 5322 message `create_draft` appends to the `\Drafts` folder.
  *
- * Handbook : docs/handbook/providers/gmail.md, "Execution".
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * The plugin builds the whole message itself ; nothing the agent writes is
  * copied into a header as it is :

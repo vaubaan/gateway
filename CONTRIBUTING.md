@@ -141,22 +141,20 @@ The order of work:
 
 Three rules about these documents:
 
-- An accepted **ADR is never edited** to say something else. A new ADR
-  supersedes it, or a dated `## Amendment` section is added at its end, after
-  the rejected alternatives, with a one-line pointer at its top. Name the file
-  after the decision (`docs/decisions/<slug>.md`, no number), with
-  `status: accepted` and the date in its frontmatter.
+- An **ADR states the decision in force.** When the decision changes, rewrite
+  the file and add one dated line to its `## History` section; a decision
+  replaced by another is deleted and summarised in one History line of its
+  successor. Name the file after the decision (`docs/decisions/<slug>.md`, no
+  number), with `status: accepted` and the date in its frontmatter.
 - A **handbook** starts with a `tracks:` list in its frontmatter: the source
   files it describes. Keep it complete; it is what lets a drift check compare
   the document with the code.
-- Documents under a `legacy/` folder, or carrying a banner saying they
-  predate v5, are history. Do not update them and do not rely on them.
 
 ## English only
 
 Code, comments, commit messages, documentation, issues and pull requests are
-written in English. Some pre-v5 documents are in French; they are either
-marked as legacy or scheduled for rewriting, and are not a model to follow.
+written in English. A few v4 decisions still in force are in French; they
+are not a model to follow.
 
 ## Rules the code follows
 

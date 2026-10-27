@@ -2,7 +2,7 @@
  * Gmail `q` query parser — a minimal extractor of the few operators the
  * classifier zones on.
  *
- * Handbook : docs/handbook/providers/gmail.md, "Classification rules".
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * Deliberately small surface :
  *

@@ -19,7 +19,7 @@ import { flyCredential } from './token.ts';
 import { flyToolTitles, flyTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const flyCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const flyPlugin = definePlugin({
@@ -40,7 +40,7 @@ export const flyPlugin = definePlugin({
   toolTitles: flyToolTitles,
   secretArguments: { [TOOL.setSecrets]: ['values'] },
   // An app is what a Fly connection lists : a created app is discovered at once
-  // (ADR discovery-runs-after-a-creating-call).
+  // (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createApp],
   // Read from the call's answer: the mission that created it reaches it at once
   // (ADR created-resources-join-the-mission).

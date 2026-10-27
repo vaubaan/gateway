@@ -2,7 +2,7 @@
  * Data model of the `upstash-redis` provider.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/upstash-redis.md §1.
+ * Handbook : docs/handbook/providers/upstash-redis.md.
  *
  * Upstash Redis exposes a single plane, `cache`. Every entity lives under
  * the `account` the Management API key belongs to, and every data operation

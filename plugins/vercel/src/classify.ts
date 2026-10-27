@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/vercel.md §2 (mapping), §5 (edge cases).
+ * Handbook : docs/handbook/providers/vercel.md.
  *
  * Pure : no IO, no credential, no `Date`. Every known tool maps to at least
  * one slice ; an unknown tool, a project the mission does not hold, an

@@ -12,10 +12,8 @@ first enables Miro's MCP server for the organisation.
 
 The model and the reasons behind it are in the handbook
 [`docs/handbook/providers/miro.md`](../../docs/handbook/providers/miro.md);
-the decisions in the ADRs
-[`miro-rewraps-the-official-mcp-server`](../../docs/decisions/miro-rewraps-the-official-mcp-server.md),
-[`oauth-client-registered-by-the-gateway`](../../docs/decisions/oauth-client-registered-by-the-gateway.md)
-and [`miro-board-ref-tilde-spelling`](../../docs/decisions/miro-board-ref-tilde-spelling.md).
+the decision in the ADR
+[`oauth-client-registered-by-the-gateway`](../../docs/decisions/oauth-client-registered-by-the-gateway.md).
 
 ## Files
 

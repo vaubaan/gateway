@@ -5,7 +5,7 @@
  * Spec : docs/spec/vaubaan-gateway.md §2.4, §5, §7.2.
  * ADR  : docs/decisions/gmail-over-imap-with-an-app-password.md (D2) ;
  *        docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
- * Handbook : docs/handbook/providers/gmail.md, "Execution".
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * `execute` takes its ids and labels from the classifier's grammar functions
  * only (`gmailId`, `writableLabel`) and its recipients from the same parser

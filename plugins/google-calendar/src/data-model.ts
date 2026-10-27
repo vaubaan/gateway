@@ -3,7 +3,7 @@
  * the catalog's patterns are written on.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/google-calendar.md §1.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  *
  * One plane, `calendar`. The resource is one calendar of the account (ADR
  * google-calendar-through-an-oauth-broker D4). `guests` is a synthetic marker

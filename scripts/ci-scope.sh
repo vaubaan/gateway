@@ -16,8 +16,8 @@
 # browser tests themselves, and the plugins (the reference and the mission form
 # are drawn from their catalogs, presets and tools). A pull request then gets a
 # notice asking for the label `e2e`, which runs the browser tests on it; the
-# weekly run and the release gates run them whatever changed (ADR
-# ci-billed-minutes-budget). `surface=true` too when there is no base to
+# weekly run and the release gates run them whatever changed (see
+# docs/workflow/coding-workflow.md). `surface=true` too when there is no base to
 # compare with.
 set -euo pipefail
 

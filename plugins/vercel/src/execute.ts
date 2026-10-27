@@ -3,9 +3,8 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
  *        in the context, is used for one call, never returned), §5.
- * ADRs : docs/decisions/rewrap-official-mcps.md (JSON-RPC forward to
- *        https://mcp.vercel.com/), docs/decisions/vercel-augment-with-rest-tools.md
- *        (custom tools on https://api.vercel.com).
+ * ADR  : docs/decisions/rewrap-official-mcps.md (JSON-RPC forward to
+ *        https://mcp.vercel.com/, custom tools on https://api.vercel.com).
  *
  * Two upstream surfaces, one bearer :
  *   - the 18 rewrapped tools are forwarded as a JSON-RPC `tools/call` to the

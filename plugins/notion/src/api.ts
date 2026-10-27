@@ -1,7 +1,7 @@
 /**
  * Requests to Notion's API.
  *
- * Handbook : docs/handbook/providers/notion.md §6.3 ; Notion's status codes
+ * Handbook : docs/handbook/providers/notion.md ; Notion's status codes
  *            and request limits pages.
  *
  *   - `ctx.fetch` only ; the token narrowed with `expectCredentialKind`,

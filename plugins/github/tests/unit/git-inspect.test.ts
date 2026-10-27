@@ -1,6 +1,6 @@
 /**
  * The inspection of a push before it leaves the gateway (ADR
- * git-push-inspected-before-it-leaves): packs written by the real
+ * gateway-as-git-remote): packs written by the real
  * `git pack-objects` the way `git push` writes them (every ref of the remote
  * left out), GitHub's git database served from a real bare repository. Every
  * way to change `.github/workflows/` is seen; what cannot be read counts as

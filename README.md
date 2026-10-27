@@ -225,10 +225,6 @@ domain — keeps the names it had. The same things, under both:
 | report a vulnerability                             | [`SECURITY.md`](SECURITY.md)                                                                                                                                                                                                                                                         |
 | see what changed                                   | [`CHANGELOG.md`](CHANGELOG.md)                                                                                                                                                                                                                                                       |
 
-Documents written before the on-prem version are kept under `legacy/`
-folders, or carry a banner saying so; several are in French and none is
-maintained.
-
 ## Repository layout
 
 ```

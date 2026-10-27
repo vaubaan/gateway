@@ -2,7 +2,7 @@
  * The ancestry check : proving that an object a call names is under the
  * root the call claims.
  *
- * Handbook : docs/handbook/providers/notion.md §5.1 ; Notion's parent object
+ * Handbook : docs/handbook/providers/notion.md ; Notion's parent object
  *            reference.
  *
  * The classifier prices a call on `root[<R>]` without being able to know

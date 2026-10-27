@@ -4,7 +4,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 (a classification error is a
  *            security hole).
- * Handbook : docs/handbook/providers/ssh.md §3 "Fail-closed rule".
+ * Handbook : docs/handbook/providers/ssh.md, Invariants, "Fail-closed rule".
  *
  * Pure. This is not a shell : it models only what it can model exactly —
  * single and double quotes, backslash escapes, line continuations, comments,

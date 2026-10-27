@@ -1,7 +1,7 @@
 # Risk catalog of the `context7` provider.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
-# Handbook : docs/handbook/providers/context7.md §3.
+# Handbook : docs/handbook/providers/context7.md.
 #
 # Rules the loader enforces at boot :
 #   - `provider` is the plugin id ; every risk id starts with it ;

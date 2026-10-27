@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *            §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/miro.md §2, §5.
+ * Handbook : docs/handbook/providers/miro.md.
  *
  * Pure. The call is read once by `readMiroCall` (board resolved against the
  * mission, identifiers through their grammars, the closed surface) ; this

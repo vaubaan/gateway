@@ -1,5 +1,5 @@
 /**
- * The classifier of the `context7` plugin, branch by branch (handbook §2, §5).
+ * The classifier of the `context7` plugin, branch by branch (handbook).
  */
 import { describe, expect, test } from 'vitest';
 

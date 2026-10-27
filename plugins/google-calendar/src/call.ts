@@ -2,9 +2,8 @@
  * The one reader of a `google-calendar` call, for `classify` and `execute`
  * alike.
  *
- * Handbook : docs/handbook/providers/google-calendar.md §2, §5.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md ;
- *            docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md ;
  *            docs/decisions/google-calendar-through-an-oauth-broker.md D4.
  *
  * `readCalendarCall(tool, args, resources)` checks the tool, the closed

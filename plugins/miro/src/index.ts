@@ -2,9 +2,7 @@
  * `@vaubaan/plugin-miro` — Miro boards, through Miro's official MCP server.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
- * ADR      : docs/decisions/miro-rewraps-the-official-mcp-server.md ;
- *            docs/decisions/oauth-client-registered-by-the-gateway.md ;
- *            docs/decisions/miro-board-ref-tilde-spelling.md.
+ * ADR      : docs/decisions/oauth-client-registered-by-the-gateway.md.
  * Handbook : docs/handbook/providers/miro.md ; guide : plugins/miro/README.md.
  *
  * Credential : `oauth2` against Miro's MCP authorization server, with a
@@ -26,7 +24,7 @@ import { miroToolTitles } from './tool-titles.ts';
 import { miroTools } from './tools.ts';
 
 // `catalogPathNextTo` keeps the path a filesystem path the bundler leaves alone
-// (ADR plugin-catalog-path-and-standalone-tracing).
+// (docs/handbook/plugin-sdk.md).
 export const miroCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const miroPlugin = definePlugin({
@@ -51,7 +49,7 @@ export const miroPlugin = definePlugin({
   classify: classifyMiro,
   execute: executeMiro,
   discoverResources: discoverMiroResources,
-  // A new board is a new resource of the account (ADR discovery-runs-after-a-creating-call),
+  // A new board is a new resource of the account (ADR created-resources-join-the-mission),
   // read from Miro's answer and reached by the mission that created it (ADR
   // created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.boardCreate],

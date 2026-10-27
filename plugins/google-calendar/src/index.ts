@@ -24,7 +24,7 @@ import { googleCalendarToolTitles } from './tool-titles.ts';
 import { googleCalendarTools } from './tools.ts';
 
 // `catalogPathNextTo` keeps the path a filesystem path the bundler leaves alone
-// (ADR plugin-catalog-path-and-standalone-tracing).
+// (docs/handbook/plugin-sdk.md).
 export const googleCalendarCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const googleCalendarPlugin = definePlugin({

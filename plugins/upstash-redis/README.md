@@ -26,8 +26,8 @@ only.
 `src/index.ts` resolves the YAML path with the SDK helper
 `catalogPathNextTo(import.meta.url)`, not with
 `new URL('./risk-catalog.yaml', import.meta.url)`: the bundler rewrites that
-pattern into an asset URL that Node's `fileURLToPath` rejects (ADR
-`plugin-catalog-path-and-standalone-tracing`).
+pattern into an asset URL that Node's `fileURLToPath` rejects (see
+docs/handbook/plugin-sdk.md).
 
 ## Data model
 

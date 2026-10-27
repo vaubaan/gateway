@@ -21,7 +21,7 @@ import { supabaseToolTitles } from './tool-titles.ts';
 import { supabaseTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const supabaseCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const supabasePlugin = definePlugin({

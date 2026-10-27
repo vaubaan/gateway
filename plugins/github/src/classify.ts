@@ -3,7 +3,7 @@
  *
  * Spec : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *        ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/github.md §2 (tool → slice mapping).
+ * Handbook : docs/handbook/providers/github.md.
  *
  * Pure : no IO, no credential, no `Date`. A call returns one OR MORE slices
  * (multi-slice tools : `merge_pull_request`, `create_pull_request`,

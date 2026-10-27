@@ -2,7 +2,7 @@
  * `@vaubaan/plugin-context7` — the Context7 provider plugin.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
- * ADRs     : docs/decisions/railway-rewrap-remote-mcp.md (the rewrap shape) ;
+ * ADRs     : docs/decisions/rewrap-official-mcps.md (the rewrap shape) ;
  *            docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/providers/context7.md ; guide : plugins/README.md.
  *
@@ -26,7 +26,7 @@ import { PROVIDER_ID } from './identity.ts';
 import { context7ToolTitles, context7Tools } from './tools.ts';
 
 // `catalogPathNextTo` keeps the path a filesystem path the bundler leaves
-// alone (ADR plugin-catalog-path-and-standalone-tracing).
+// alone (docs/handbook/plugin-sdk.md).
 export const context7Catalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const context7Plugin = definePlugin({

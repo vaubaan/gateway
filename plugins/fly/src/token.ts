@@ -1,7 +1,7 @@
 /**
  * The Fly connection : an organization token pasted by hand (`api-key`).
  *
- * Handbook : docs/handbook/providers/fly.md §6.1.
+ * Handbook : docs/handbook/providers/fly.md.
  *
  * Fly offers OAuth to extension partners only, with a `read` scope : a
  * token is the only way to create and deploy. The recommended token is

@@ -2,7 +2,7 @@
  * Data model of the `miro` provider.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/miro.md §1.
+ * Handbook : docs/handbook/providers/miro.md.
  *
  * One plane, `board`. The board is the resource ; no entity carries an
  * environment (a Miro board has none). Items, frames, connectors, tags and

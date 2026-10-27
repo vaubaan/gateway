@@ -1,10 +1,8 @@
 /**
  * The one reader of a `miro` call, for `classify` and `execute` alike.
  *
- * Handbook : docs/handbook/providers/miro.md §2, §5, §6.3.
- * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md ;
- *            docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md ;
- *            docs/decisions/miro-rewraps-the-official-mcp-server.md.
+ * Handbook : docs/handbook/providers/miro.md.
+ * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  *
  * `readMiroCall(tool, args, resources)` checks the tool, the closed argument
  * surface, the board (a board of the mission), the item and the comment

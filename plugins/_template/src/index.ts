@@ -23,7 +23,7 @@ import { templateTools, templateToolTitles } from './tools.ts';
 // `catalogPathNextTo` builds a filesystem path from `import.meta.url` ; never
 // write `new URL('./risk-catalog.yaml', import.meta.url)` here — the Next.js
 // bundler rewrites that literal into a static asset and the YAML cannot be
-// read at boot (ADR plugin-catalog-path-and-standalone-tracing).
+// read at boot (docs/handbook/plugin-sdk.md).
 export const templateCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const templatePlugin = definePlugin({

@@ -3,8 +3,7 @@
  * server at mcp.vercel.com (18 tools, frozen in `upstream-tools.json`), plus
  * 13 custom REST-backed tools (`custom-tools.ts`).
  *
- * ADRs : docs/decisions/rewrap-official-mcps.md (upstream forward),
- *        docs/decisions/vercel-augment-with-rest-tools.md (custom tools).
+ * ADR  : docs/decisions/rewrap-official-mcps.md (upstream forward, custom tools).
  *
  * Names are prefixed `vercel__` (the SDK prefix rule). Refresh procedure for
  * the upstream half : POST `tools/list` to mcp.vercel.com, copy each tool

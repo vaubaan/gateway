@@ -3,7 +3,7 @@
  * `classify`, `execute` and discovery. Each returns the value or `null`; a
  * value outside its grammar is refused, never repaired.
  *
- * Handbook : docs/handbook/providers/google-calendar.md §5 "Identifiers".
+ * Handbook : docs/handbook/providers/google-calendar.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
  */
 

@@ -4,7 +4,7 @@
  *
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4 ;
  *            docs/decisions/rewrap-official-mcps.md.
- * Handbook : docs/handbook/providers/google-calendar.md §2, §6.4.
+ * Handbook : docs/handbook/providers/google-calendar.md, Procedures.
  *
  * `upstream-tools.json` is Google's nine tools, modelled from Google's
  * published reference on 2026-10-27 (its `source` says how): the endpoint

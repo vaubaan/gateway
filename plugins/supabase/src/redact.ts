@@ -1,8 +1,8 @@
 /**
  * Redaction of the secret values some Supabase Management API answers carry.
  *
- * Handbook : docs/handbook/providers/supabase.md §3 (execution, "Answers
- * that carry secrets").
+ * Handbook : docs/handbook/providers/supabase.md, Invariants, "Answers
+ * that carry secrets".
  *
  * Two reads answer with the project's secrets in clear : `GET
  * /projects/{ref}/secrets` (every edge-function secret with its `value` —

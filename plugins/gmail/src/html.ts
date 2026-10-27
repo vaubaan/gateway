@@ -1,7 +1,7 @@
 /**
  * HTML body → readable text, for a message that has no text/plain part.
  *
- * Handbook : docs/handbook/providers/gmail.md, "Execution".
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * `html-to-text` (MIT) parses the HTML (htmlparser2) and writes text : the
  * target of a link is kept next to its words (`label [https://…]`, once when

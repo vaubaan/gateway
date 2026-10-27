@@ -341,7 +341,7 @@ risks:
 # env vars, project settings, domains, firewall) : the mission creator may
 # relax it at issuance. Env-qualified entries (`vercel[prod].deploy`) rely on
 # the host resolving the environment from the `env[<label>]` segment the
-# classifier emits — see docs/handbook/providers/vercel.md §Environment axis.
+# classifier emits — see docs/handbook/providers/vercel.md, Invariants, "Environment axis".
 
 presets:
   - id: read-only

@@ -4,7 +4,7 @@
  * Spec     : docs/spec/vaubaan-gateway.md §2.4, §5, §7.2.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5) ;
  *            docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md.
- * Handbook : docs/handbook/providers/caldav.md, "Discovery" and "Execution".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * Everything goes through `ctx.fetch` (`dav.ts`), signed with the account's
  * app password, to the server the person typed or a sibling host of it.

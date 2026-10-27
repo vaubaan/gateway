@@ -10,7 +10,7 @@
  * network call — not even the `service_role` key lookup of the data plane.
  *
  * The SQL of `execute_sql` / `apply_migration` is out of scope here
- * (docs/decisions/sql-classification-syntactic-only.md).
+ * (docs/decisions/pivot-to-risk-based-model.md).
  */
 import { describe, expect, test } from 'vitest';
 

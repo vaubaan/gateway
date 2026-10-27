@@ -3,7 +3,7 @@
 # `git archive` does for a deployed tree (.gitattributes: export-subst), so an
 # image built from a checkout (the CI's) reports that commit on /healthz.
 # Leaves the file modified: run it in a throw-away checkout only.
-# ADR docs/decisions/deployed-commit-stamped-by-git-archive.md.
+# See docs/workflow/coding-workflow.md.
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"

@@ -1,4 +1,4 @@
 # `git archive` writes the archived commit into this file (export-subst): a
 # deployed build reports the commit it was built from, never a variable set by
-# hand. ADR docs/decisions/deployed-commit-stamped-by-git-archive.md.
+# hand. See docs/workflow/coding-workflow.md.
 apps/gateway/build-commit.txt export-subst

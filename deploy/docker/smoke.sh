@@ -281,7 +281,7 @@ pass "backup ships, refuses root, copies the store as 10001 and never overwrites
 
 # 13. The restore ships beside the server: the command checks the step-12 copy and never
 #     replaces a live store; a new instance restores it at first boot from its
-#     configuration (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot).
+#     configuration (docs/handbook/store.md).
 SHA="$(docker exec "$ROOT_NAME" sha256sum /data/smoke-backup.sqlite | cut -d' ' -f1)"
 WRONG_SHA="$(printf '0%.0s' $(seq 1 64))"
 set +e

@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/upstash-redis.md §2 (mapping), §3 (execute routing).
+ * Handbook : docs/handbook/providers/upstash-redis.md.
  *
  * Pure : no IO, no credential, no `Date`. A dedicated tool maps to exactly
  * one slice ; an unknown tool, a database the mission does not hold, or an

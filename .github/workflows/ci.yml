@@ -1,6 +1,6 @@
 name: ci
 
-# Billed minutes are the budget of this file (ADR ci-billed-minutes-budget).
+# Billed minutes are the budget of this file (docs/workflow/coding-workflow.md).
 # GitHub bills every job rounded up to the next minute, so the code checks run
 # as one job, in series, cheapest first, instead of ten parallel jobs of a few
 # seconds each; and the expensive runs happen when they buy something:
@@ -261,7 +261,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The commit /healthz reports, written as `git archive` writes it
-      # (ADR deployed-commit-stamped-by-git-archive); no build argument.
+      # (docs/workflow/coding-workflow.md); no build argument.
       - name: Stamp the commit
         run: scripts/stamp-commit.sh
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

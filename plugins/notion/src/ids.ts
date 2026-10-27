@@ -2,7 +2,7 @@
  * Identifier grammars of the `notion` provider, shared by `classify` and
  * `execute` (ADR plugin-identifiers-one-grammar-for-classify-and-execute).
  *
- * Handbook : docs/handbook/providers/notion.md "Identifiers".
+ * Handbook : docs/handbook/providers/notion.md.
  *
  * A value outside its grammar is refused, never repaired. Reading the two
  * spellings Notion documents for one id (with or without dashes, "you may

@@ -10,7 +10,7 @@ The plugin **rewraps the official Context7 MCP server**
 their answers are Context7's own. The REST API
 (`GET https://context7.com/api/v2/usage`) is used around them only, to check
 a pasted key, for discovery and to explain a failed call. The shape is
-Railway's ([ADR](../../docs/decisions/railway-rewrap-remote-mcp.md)).
+Railway's ([ADR](../../docs/decisions/rewrap-official-mcps.md)).
 
 Handbook (the model and the reasons behind it):
 [`docs/handbook/providers/context7.md`](../../docs/handbook/providers/context7.md).

@@ -1,7 +1,7 @@
 /**
  * Vercel custom tools — REST-API-backed augmentations on top of the rewrap.
  *
- * ADR : docs/decisions/vercel-augment-with-rest-tools.md.
+ * ADR : docs/decisions/rewrap-official-mcps.md.
  *
  * The upstream MCP at mcp.vercel.com only exposes read + deploy + toolbar
  * tools — no mutation of project settings, env vars, domains or firewall. We

@@ -50,7 +50,7 @@ import {
 import type { SshRuntimeOptions } from './execute.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const SSH_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const sshCatalog = loadCatalogFile(SSH_CATALOG_PATH);

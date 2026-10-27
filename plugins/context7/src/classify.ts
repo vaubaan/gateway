@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/context7.md §2, §5.
+ * Handbook : docs/handbook/providers/context7.md.
  *
  * Pure : no IO, no credential, no clock. Both tools read : they send the
  * agent's question to Context7 and read documentation back.

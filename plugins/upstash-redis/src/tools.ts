@@ -2,7 +2,7 @@
  * MCP tools of the `upstash-redis` provider — all custom, no upstream MCP
  * server to rewrap.
  *
- * Handbook : docs/handbook/providers/upstash-redis.md §2.
+ * Handbook : docs/handbook/providers/upstash-redis.md.
  *
  * 21 tools :
  *   - 6 management tools (Management API, api.upstash.com/v2, Basic auth) ;

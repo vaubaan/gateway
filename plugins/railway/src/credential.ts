@@ -3,10 +3,7 @@
  * kind), the one way of connecting.
  *
  * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADRs
- *        one-place-to-authorize-services-token-first,
- *        token-connections-beside-the-integration-app (amendment of
- *        2026-10-14, "workspace token and the MCP server", for the facts
- *        checked against the service).
+ *        one-place-to-authorize-services-token-first.
  *
  * Which token (all three are created under Account settings, Tokens) :
  *   - workspace token (a workspace selected) : that workspace only — the

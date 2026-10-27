@@ -3,8 +3,7 @@
  * `rich_text`, `filter`, `sorts`, `icon`, `cover`, a block's new content),
  * shared by `classify` and `execute`.
  *
- * Handbook : docs/handbook/providers/notion.md §2 ("Refused by the
- *            classifier") ; Notion's request limits page.
+ * Handbook : docs/handbook/providers/notion.md ; Notion's request limits page.
  *
  * These values are forwarded to Notion as JSON, so the checks are what keeps
  * an agent inside the tool's scope :

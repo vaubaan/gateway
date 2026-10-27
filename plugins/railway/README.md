@@ -5,8 +5,8 @@ rewraps the official Railway MCP server (`https://mcp.railway.com/`, 10
 tools) and adds four GraphQL-backed environment-variable tools, under the
 `railway__` prefix. Written against `@vaubaan/plugin-sdk` only. Maintainer
 handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
-decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md),
-[`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+decisions: [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md),
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
 Plugin version 4.2.0, catalog version 3.
 
 ## Data model
@@ -78,7 +78,7 @@ arguments, GraphQL variables of a constant document). Every id that is
 forwarded is bound to the mission's project. Two arguments of the upstream
 tools cannot be — `deploymentId` of `get-logs` and `threadId` of
 `railway-agent` — and are refused, never forwarded (`UNBOUND_ARGUMENTS` in
-`src/tools.ts` ; handbook, "Identifiers") : the declared schemas do not offer
+`src/tools.ts` ; handbook, Invariants) : the declared schemas do not offer
 them.
 
 What `execute` declines — an unknown tool, an undeclared argument, a target
@@ -163,8 +163,7 @@ workspace token, which has no user behind it.
 
 Removing the account tells the person to delete the token under Account
 settings → Tokens. ADR
-[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md)
-(amendment of 2026-10-14).
+[`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md).
 
 ## Development
 

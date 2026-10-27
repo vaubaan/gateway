@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md §10
  *            ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/caldav.md, "Tool → slice mapping" and "Edge cases".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * Pure : no IO, no credential, no clock. Every slice is rooted at the
  * calendar the call names, one of the mission's resources. Rules :
@@ -22,7 +22,7 @@
  *   4. For a change or a deletion, who the server will notify is stated in
  *      `attendees` and priced here ; `execute` reads the event first and
  *      declines when it concerns somebody in a worse zone than the one
- *      priced (handbook, "Edge cases"). The classifier cannot read the
+ *      priced (handbook). The classifier cannot read the
  *      server, so the statement is what it classifies — and what the
  *      executor holds the call to.
  *   5. Identifiers are checked by the grammars `execute` uses (`calendarRef`,

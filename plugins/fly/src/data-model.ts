@@ -1,7 +1,7 @@
 /**
  * Data model of the `fly` provider.
  *
- * Spec : docs/spec/gateway-risk-model.md §2. Handbook : docs/handbook/providers/fly.md §1.
+ * Spec : docs/spec/gateway-risk-model.md §2. Handbook : docs/handbook/providers/fly.md.
  *
  * One plane, `apps`. The organization is the root (one per connection) ; the
  * app is the resource the owner labels `staging` or `prod`. Operations that

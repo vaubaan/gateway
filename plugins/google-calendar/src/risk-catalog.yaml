@@ -3,7 +3,7 @@
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2.
 # ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4.
-# Handbook : docs/handbook/providers/google-calendar.md §3.
+# Handbook : docs/handbook/providers/google-calendar.md.
 #
 # 10 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
 # instead). A calendar has no environment: no risk is env-scoped.

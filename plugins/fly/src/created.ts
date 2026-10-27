@@ -1,6 +1,6 @@
 /**
  * The app a successful `fly__create_app` created, read from the call
- * (ADR created-resources-join-the-mission). Handbook : docs/handbook/providers/fly.md §5.4.
+ * (ADR created-resources-join-the-mission). Handbook : docs/handbook/providers/fly.md.
  *
  * Fly's `POST /apps` answers the new app's id and its creation time
  * (`{"id":"z4k69dxd8r31p5mx","created_at":1708631799000}`), not its name : the
