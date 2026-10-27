@@ -3,11 +3,13 @@
 Google Calendar for Vaubaan Gateway, through **Google's official Calendar MCP
 server** (`https://calendarmcp.googleapis.com/mcp/v1`). The access token comes
 from the **OAuth broker** the instance is enrolled with: the broker owns the
-Google OAuth client and the refresh tokens; the instance keeps a grant id and
-the current access token. Calendar data never goes through the broker.
+Google OAuth client and keeps no token; the instance keeps the refresh token
+and the current access token, and verifies the broker's attestation before
+it sends it anything. Calendar data never goes through the broker.
 
 Handbook: [`docs/handbook/providers/google-calendar.md`](../../docs/handbook/providers/google-calendar.md).
-ADR: [`google-calendar-through-an-oauth-broker`](../../docs/decisions/google-calendar-through-an-oauth-broker.md).
+ADRs: [`google-calendar-through-an-oauth-broker`](../../docs/decisions/google-calendar-through-an-oauth-broker.md),
+[`oauth-broker-stateless-in-an-attested-enclave`](../../docs/decisions/oauth-broker-stateless-in-an-attested-enclave.md).
 Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/oauth-broker-contract.md).
 
 ## Files

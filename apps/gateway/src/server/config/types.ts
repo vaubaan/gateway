@@ -265,7 +265,18 @@ export interface OAuthBrokerConfig {
    * broker, which serves every provider no other broker lists.
    */
   readonly providers: readonly string[];
+  /**
+   * `required` (the default): every call goes over a TLS connection whose key
+   * an attestation of an admitted broker version carries (ADR
+   * oauth-broker-stateless-in-an-attested-enclave D4, D6). `none`: an
+   * administrator's own broker outside an enclave, reached as any HTTPS
+   * service; the interface says it is not attested.
+   */
+  readonly attestation: BrokerAttestationMode;
 }
+
+/** `oauth_brokers.<name>.attestation`. No value widens the allowlist shipped with the release. */
+export type BrokerAttestationMode = 'required' | 'none';
 
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */

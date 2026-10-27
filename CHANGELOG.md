@@ -31,6 +31,32 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   scratch agree. Spec `docs/spec/oauth-broker.md` (draft), handbook
   `docs/handbook/oauth-broker.md`.
 
+### Changed
+
+- **The OAuth broker keeps no token, and the gateway verifies it before it
+  sends anything** (ADR oauth-broker-stateless-in-an-attested-enclave). The
+  contract of 2.0.0-alpha.10 changes: the redeem answers the provider's
+  refresh token, which the instance seals with the connection; the refresh is
+  `POST /token {provider, refresh_token}` and the revocation
+  `POST /revoke {provider, refresh_token}`; an `invalid_grant` on a refresh
+  makes the connection expired; errors are `{error, message}`. Every call
+  goes over a TLS connection whose key an attestation of the broker carries
+  (`POST /attest`): a Google Confidential Space token, checked against
+  Google's keys, debug off, a stable image, the gateway's nonce and the
+  connection's key, and an image digest on the allowlist shipped with the
+  release (`broker-measurements.json`). The allowlist is empty until a
+  broker is released: an attested broker then gets nothing, and connecting
+  says "no attested broker version admitted by this release". No broker was
+  ever enrolled, so no connection or configuration needs migrating.
+
+### Added
+
+- `oauth_brokers.<name>.attestation` (`VAUBAAN_OAUTH_BROKER_<NAME>_ATTESTATION`):
+  `required` (the default) or `none`, for your own broker outside an enclave;
+  the connect page and the account page then say the broker is not attested.
+  It never widens the allowlist. An attested broker is reached over https
+  only.
+
 ## [2.0.0-alpha.10] - 2026-10-27
 
 ### Added

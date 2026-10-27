@@ -15,13 +15,15 @@ export class CredentialFormatError extends Error {
 }
 
 /**
- * The grant an OAuth broker holds for a connection (ADR
- * google-calendar-through-an-oauth-broker D2): which broker, and its grant id.
- * Kept in the sealed credential beside the secret, never handed to a plugin.
+ * The grant of a brokered connection (ADR
+ * oauth-broker-stateless-in-an-attested-enclave D1): the broker it was
+ * obtained through, by name, and the provider's refresh token, which the
+ * broker does not keep. Sealed beside the secret, never handed to a plugin:
+ * the plugin's secret carries the access token alone.
  */
 export interface BrokerGrant {
   readonly broker: string;
-  readonly grantId: string;
+  readonly refreshToken: string;
 }
 
 /** What the store seals: the plugin-facing secret, and the host-only broker grant. */
@@ -48,7 +50,7 @@ export function parseStoredCredential(text: string): StoredCredential {
     secret,
     brokerGrant: {
       broker: requireString(grant.broker, 'brokerGrant.broker'),
-      grantId: requireString(grant.grantId, 'brokerGrant.grantId'),
+      refreshToken: requireString(grant.refreshToken, 'brokerGrant.refreshToken'),
     },
   };
 }

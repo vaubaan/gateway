@@ -31,6 +31,8 @@ const ALLOWED: Record<string, string> = {
   'deploy/collector/README.md': 'the collector documents its own public host (the default URL)',
   'apps/gateway/src/server/config/sign-in.ts':
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (ADR sign-in-providers-admission-and-admin-rule)',
+  'apps/gateway/src/server/connections/attestation-gcp.ts':
+    "Google Cloud Attestation's issuer, the fixed root of trust a broker's Confidential Space attestation is checked against (ADR oauth-broker-stateless-in-an-attested-enclave D4, D7)",
   'deploy/config/gateway.example.yaml': 'documented placeholders',
   'deploy/config/.env.example': 'documented placeholders',
   'scripts/fetch-tool.sh':

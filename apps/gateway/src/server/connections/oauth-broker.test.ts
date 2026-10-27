@@ -1,24 +1,41 @@
 /**
- * The gateway as the client of an OAuth broker (ADR
- * google-calendar-through-an-oauth-broker D1, D2), against the fake broker of
- * the contract kit (`fake-oauth-broker.ts`), a real HTTP server on the loopback
- * interface. Every other provider call goes to a `mockFetch` that refuses all.
+ * The gateway as the client of an OAuth broker (ADRs
+ * google-calendar-through-an-oauth-broker D1, D2 and
+ * oauth-broker-stateless-in-an-attested-enclave D1, D4, D6), against the fake
+ * broker of the contract kit (`fake-oauth-broker.ts`), a real HTTPS server on
+ * the loopback interface with a key of its own and the test-only attestation
+ * platform. Every other provider call goes to a `mockFetch` that refuses all.
  *
  * What is pinned: the connect flow (`POST /flows` with the S256 challenge, the
  * `state` checked as for any flow, the grant redeemed with the verifier), what
- * is stored (the grant id and the access token, never a refresh token), the
- * refresh and the revocation through the broker, and the contract's refusals:
- * a grant redeemed twice or late, the wrong verifier, a bad key, a broker that
- * is down — a broker failure, never an expiry.
+ * is stored (the access token for the plugin, the refresh token sealed beside
+ * it, host only), the refresh (`POST /token`) and the revocation
+ * (`POST /revoke`) with the refresh token, the contract's refusals — a grant
+ * redeemed twice or late, the wrong verifier, a bad key, a broker that is down:
+ * a broker failure, never an expiry — and the attestation: nothing is sent to
+ * a broker whose connection key no admitted attestation carries.
  */
 import type { ConnectionContext, OAuth2BrokeredSpec } from '@vaubaan/plugin-sdk';
 import { UpstreamAuthError } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { productionAttestationKit } from './attestation-kit';
+import { GCP_CONFIDENTIAL_SPACE } from './attestation-gcp';
+import { AttestationVerifier, MAX_PIN_MS, NO_ADMITTED_VERSION } from './broker-attestation';
 import { parseStoredCredential } from './credential-codec';
 import { ConnectError, OAuthBrokerUnavailableError } from './errors';
-import { FAKE_AUTHORIZE_URL, FAKE_GRANT_TTL_MS, FakeOAuthBroker } from './fake-oauth-broker';
-import { challengeOf, OAuthBrokerClient, OAuthBrokerError } from './oauth-broker';
+import {
+  FAKE_AUTHORIZE_URL,
+  FAKE_BROKER_MEASUREMENT,
+  FAKE_GRANT_TTL_MS,
+  FakeOAuthBroker,
+} from './fake-oauth-broker';
+import {
+  challengeOf,
+  OAuthBrokerClient,
+  OAuthBrokerError,
+  type OAuthBrokerIo,
+} from './oauth-broker';
 import { REFRESH_SKEW_MS } from './credentials';
 import { connectionsHarness, fixturePlugin, type ConnectionsHarness } from './testing';
 
@@ -32,25 +49,34 @@ const BROKERED: OAuth2BrokeredSpec = {
 };
 
 let broker: FakeOAuthBroker;
-let fakeNow = Date.parse('2026-10-27T09:00:00.000Z');
-/** What the plugin received in its discovery: the proof it never sees the grant. */
+/** The broker and the gateway share one clock: the harness's, once it exists. */
+let clockNow: () => number = () => Date.parse('2026-10-27T09:00:00.000Z');
+/** What the plugin received in its discovery: the proof it never sees the refresh token. */
 let seenByPlugin: ConnectionContext['credential'][] = [];
 
-beforeEach(async () => {
-  fakeNow = Date.parse('2026-10-27T09:00:00.000Z');
-  seenByPlugin = [];
-  broker = await FakeOAuthBroker.start({
+async function startBroker(attestation?: 'none'): Promise<FakeOAuthBroker> {
+  return FakeOAuthBroker.start({
     keys: { [KEY]: 'instance-a', [OTHER_KEY]: 'instance-b' },
     account: 'alice@acme.example',
-    now: () => fakeNow,
+    now: () => clockNow(),
+    ...(attestation ? { attestation } : {}),
   });
+}
+
+beforeEach(async () => {
+  clockNow = () => Date.parse('2026-10-27T09:00:00.000Z');
+  seenByPlugin = [];
+  broker = await startBroker();
 });
 
 afterEach(async () => {
   await broker.stop();
 });
 
-function harness(key: string | null = KEY): ConnectionsHarness {
+function harness(
+  key: string | null = KEY,
+  allowlist: readonly string[] = [FAKE_BROKER_MEASUREMENT],
+): ConnectionsHarness {
   const h = connectionsHarness({
     plugins: [
       fixturePlugin({
@@ -64,10 +90,10 @@ function harness(key: string | null = KEY): ConnectionsHarness {
       }),
     ],
     brokers: key === null ? [] : [broker.configFor(key)],
+    ...(broker.spkiHash ? { brokerAttestation: broker.attestationKit([...allowlist]) } : {}),
   });
   broker.recordReturnUrl('instance-a', h.service.callbackUrl(PLUGIN).href);
-  // The broker and the gateway share one clock: the expiry it hands out is on the gateway's.
-  fakeNow = h.clock.now().getTime();
+  clockNow = () => h.clock.now().getTime();
   return h;
 }
 
@@ -85,13 +111,22 @@ async function connect(h: ConnectionsHarness) {
   return { alice, connection: done.connection, back };
 }
 
-async function expectConnectError(promise: Promise<unknown>, code: string): Promise<void> {
+async function storedOf(h: ConnectionsHarness, connectionId: string) {
+  return parseStoredCredential((await h.store.connections.getCredential(connectionId)) ?? '');
+}
+
+async function expectConnectError(promise: Promise<unknown>, code: string): Promise<ConnectError> {
   const err = await promise.then(
     () => null,
     (e: unknown) => e,
   );
   expect(err).toBeInstanceOf(ConnectError);
   expect((err as ConnectError).code).toBe(code);
+  return err as ConnectError;
+}
+
+function callsTo(path: string) {
+  return broker.calls.filter((c) => c.path === `/v1${path}`);
 }
 
 describe('a plugin whose client is an OAuth broker', () => {
@@ -99,45 +134,50 @@ describe('a plugin whose client is an OAuth broker', () => {
     const h = harness(null);
     const [provider] = await h.service.providers();
     expect(provider?.unavailable).toMatch(/OAuth broker .* none is configured for "google"/);
+    expect(provider?.brokerAttested).toBeNull();
     const alice = await h.actor('alice@example.com');
     await expectConnectError(h.service.start(alice, PLUGIN), 'broker-not-configured');
   });
 
-  it('starts at the broker with the S256 challenge, never the verifier, and the gateway’s state', async () => {
+  it('attests the broker, then starts at it with the S256 challenge, never the verifier, and the gateway’s state', async () => {
     const h = harness();
-    expect((await h.service.providers())[0]?.unavailable).toBeNull();
+    const [provider] = await h.service.providers();
+    expect(provider).toMatchObject({ unavailable: null, viaBroker: true, brokerAttested: true });
     const { authorizeUrl } = await startFlow(h);
     expect(authorizeUrl.startsWith(FAKE_AUTHORIZE_URL)).toBe(true);
-    const [call] = broker.calls;
-    expect(call).toMatchObject({ method: 'POST', path: '/v1/flows', instance: 'instance-a' });
-    expect(call?.body).toMatchObject({
+    const [attest, flows] = broker.calls;
+    expect(attest).toMatchObject({ method: 'POST', path: '/v1/attest', status: 200 });
+    expect(String(attest?.body?.nonce)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(flows).toMatchObject({ method: 'POST', path: '/v1/flows', instance: 'instance-a' });
+    expect(flows?.body).toMatchObject({
       provider: 'google',
       scopes: BROKERED.scopes,
       return_url: h.service.callbackUrl(PLUGIN).href,
       challenge_method: 'S256',
     });
-    expect(call?.body).not.toHaveProperty('verifier');
-    expect(typeof call?.body?.state).toBe('string');
+    expect(flows?.body).not.toHaveProperty('verifier');
+    expect(typeof flows?.body?.state).toBe('string');
   });
 
-  it('redeems the grant with the verifier and keeps the grant id and the access token, no refresh token', async () => {
+  it('redeems the grant with the verifier and seals the refresh token beside the access token, out of the plugin’s sight', async () => {
     const h = harness();
     const { connection } = await connect(h);
-    const redeem = broker.calls.find((c) => c.path === '/v1/grants/redeem');
-    const flows = broker.calls.find((c) => c.path === '/v1/flows');
+    const [redeem] = callsTo('/grants/redeem');
+    const [flows] = callsTo('/flows');
     expect(redeem?.status).toBe(200);
     expect(challengeOf(String(redeem?.body?.verifier))).toBe(flows?.body?.challenge);
 
-    const sealed = await h.store.connections.getCredential(connection.id);
-    const stored = parseStoredCredential(sealed ?? '');
-    expect(stored.brokerGrant).toEqual({ broker: 'main', grantId: broker.grantIds()[0] });
+    const stored = await storedOf(h, connection.id);
+    const [refreshToken] = [...broker.providerRefreshTokens.keys()];
+    expect(stored.brokerGrant).toEqual({ broker: 'main', refreshToken });
     expect(stored.secret).toMatchObject({ kind: 'oauth2', refreshToken: null });
     // The plugin's discovery saw an access token and nothing of the broker.
     expect(seenByPlugin).toHaveLength(1);
-    expect(JSON.stringify(seenByPlugin[0])).not.toContain(broker.grantIds()[0] ?? 'none');
+    expect(JSON.stringify(seenByPlugin[0])).not.toContain(refreshToken ?? 'none');
     expect(JSON.stringify(seenByPlugin[0])).not.toContain('brokerGrant');
     const view = (await h.service.listFor(await h.actor('alice@example.com')))[0];
     expect(view?.tokenAccount).toBe('alice@acme.example');
+    expect(view?.oauthBroker).toEqual({ name: 'main', attested: true });
   });
 
   it('checks the state as for any flow: replayed or opened by another user, it is refused', async () => {
@@ -167,17 +207,18 @@ describe('a plugin whose client is an OAuth broker', () => {
     await expectConnectError(h.service.start(alice, PLUGIN), 'broker-failed');
   });
 
-  it('refreshes through the broker, keeping the grant', async () => {
+  it('refreshes with POST /token and the sealed refresh token, keeping it', async () => {
     const h = harness();
     const { connection } = await connect(h);
-    const before = parseStoredCredential(
-      (await h.store.connections.getCredential(connection.id)) ?? '',
-    );
+    const before = await storedOf(h, connection.id);
     h.clock.advance(60 * 60_000 - REFRESH_SKEW_MS + 1_000);
     const resolved = await h.broker.resolve(connection.id);
-    expect(
-      broker.calls.some((c) => c.path === `/v1/grants/${before.brokerGrant?.grantId}/token`),
-    ).toBe(true);
+    const [refresh] = callsTo('/token');
+    expect(refresh).toMatchObject({ status: 200, instance: 'instance-a' });
+    expect(refresh?.body).toEqual({
+      provider: 'google',
+      refresh_token: before.brokerGrant?.refreshToken,
+    });
     expect(resolved.brokerGrant).toEqual(before.brokerGrant);
     expect(resolved.credential.kind === 'oauth2' && resolved.credential.accessToken).not.toBe(
       before.secret.kind === 'oauth2' && before.secret.accessToken,
@@ -195,26 +236,30 @@ describe('a plugin whose client is an OAuth broker', () => {
     // Discovery, once the token is about to expire, records the broker's failure, not an expiry.
     h.clock.advance(60 * 60_000);
     const record = await h.service.discover(await h.actor('alice@example.com'), connection.id);
-    expect(record.error).toMatch(/OAuth broker 'main' answered 503/);
+    expect(record.error).toMatch(/OAuth broker 'main' could not be attested \(token: answered 503/);
   });
 
-  it('a grant the provider no longer accepts turns the connection expired', async () => {
+  it('a refresh token the provider refuses (invalid_grant) turns the connection expired', async () => {
     const h = harness();
     const { connection } = await connect(h);
     broker.refusingProvider();
     await expect(h.broker.refresh(connection.id)).rejects.toBeInstanceOf(UpstreamAuthError);
     expect((await h.store.connections.getById(connection.id))?.status).toBe('expired');
+    expect(callsTo('/token')[0]).toMatchObject({ status: 400 });
   });
 
-  it('revoking the connection deletes the grant at the broker', async () => {
+  it('revoking the connection relays the refresh token to POST /revoke', async () => {
     const h = harness();
     const { alice, connection } = await connect(h);
-    const [grantId] = broker.grantIds();
+    const { brokerGrant } = await storedOf(h, connection.id);
     expect(h.service.providerGrantOf(connection).grant.withdrawnByGateway).toBe(true);
     const revoked = await h.service.revoke(alice, connection.id);
     expect(revoked.providerGrant).toBe('revoked');
-    expect(broker.revokedAtProvider).toEqual([grantId]);
-    expect(broker.grantIds()).toEqual([]);
+    expect(callsTo('/revoke')[0]?.body).toEqual({
+      provider: 'google',
+      refresh_token: brokerGrant?.refreshToken,
+    });
+    expect(broker.revokedAtProvider).toEqual([brokerGrant?.refreshToken]);
   });
 
   it('a broker down at revocation says the access was not withdrawn', async () => {
@@ -231,18 +276,18 @@ describe('the contract’s refusals, at the client', () => {
   async function pendingGrant(h: ConnectionsHarness) {
     const { authorizeUrl } = await startFlow(h);
     const back = broker.approve(authorizeUrl);
-    const flows = broker.calls.find((c) => c.path === '/v1/flows');
-    return {
-      grant: back.searchParams.get('grant') ?? '',
-      challenge: String(flows?.body?.challenge),
-    };
+    return { grant: back.searchParams.get('grant') ?? '' };
   }
 
   /** The client of the configured broker, as the gateway holds it. */
-  async function mainClient(h: ConnectionsHarness) {
+  function mainClient(h: ConnectionsHarness): OAuthBrokerClient {
     const client = h.brokers.byName('main');
     if (!client) throw new Error('no broker');
     return client;
+  }
+
+  function io(): OAuthBrokerIo {
+    return { fetch, attestation: broker.attestationKit(), now: () => clockNow() };
   }
 
   async function refusal(promise: Promise<unknown>): Promise<OAuthBrokerError> {
@@ -256,12 +301,10 @@ describe('the contract’s refusals, at the client', () => {
 
   it('a grant redeemed twice is refused the second time', async () => {
     const h = harness();
-    const { alice, back } = await connect(h);
-    void alice;
-    const client = await mainClient(h);
-    const redeem = broker.calls.find((c) => c.path === '/v1/grants/redeem');
+    const { back } = await connect(h);
+    const [redeem] = callsTo('/grants/redeem');
     const err = await refusal(
-      client.redeem(back.searchParams.get('grant') ?? '', String(redeem?.body?.verifier)),
+      mainClient(h).redeem(back.searchParams.get('grant') ?? '', String(redeem?.body?.verifier)),
     );
     expect(err).toMatchObject({ status: 400, code: 'invalid_grant', grantGone: true });
   });
@@ -269,52 +312,164 @@ describe('the contract’s refusals, at the client', () => {
   it('a grant redeemed late is refused', async () => {
     const h = harness();
     const { grant } = await pendingGrant(h);
-    fakeNow += FAKE_GRANT_TTL_MS + 1;
-    const err = await refusal((await mainClient(h)).redeem(grant, 'v'.repeat(43)));
+    h.clock.advance(FAKE_GRANT_TTL_MS + 1);
+    const err = await refusal(mainClient(h).redeem(grant, 'v'.repeat(43)));
     expect(err).toMatchObject({ status: 400, code: 'invalid_grant' });
   });
 
   it('a grant redeemed with the wrong verifier is refused', async () => {
     const h = harness();
     const { grant } = await pendingGrant(h);
-    const err = await refusal((await mainClient(h)).redeem(grant, 'w'.repeat(43)));
+    const err = await refusal(mainClient(h).redeem(grant, 'w'.repeat(43)));
     expect(err).toMatchObject({ status: 400, code: 'invalid_grant', grantGone: true });
   });
 
   it('a grant redeemed by another instance is refused', async () => {
     const h = harness();
     const { grant } = await pendingGrant(h);
-    const other = new OAuthBrokerClient(broker.configFor(OTHER_KEY, 'other'), { fetch });
+    const other = new OAuthBrokerClient(broker.configFor(OTHER_KEY, 'other'), io());
     const err = await refusal(other.redeem(grant, 'v'.repeat(43)));
     expect(err).toMatchObject({ status: 400, code: 'invalid_grant' });
   });
 
   it('a bad key is refused, and it is not a dead grant', async () => {
-    const client = new OAuthBrokerClient(broker.configFor('not-a-key'), { fetch });
-    const err = await refusal(client.token('g_abcdefghijkl'));
-    expect(err).toMatchObject({ status: 401, code: 'invalid_key', grantGone: false });
+    const client = new OAuthBrokerClient(broker.configFor('not-a-key'), io());
+    const err = await refusal(client.token('google', 'rt_abcdefghijkl'));
+    // The attestation itself is refused first: /attest carries the key too.
+    expect(err).toMatchObject({ status: 401, grantGone: false });
+    expect(err.message).toMatch(/could not be attested \(token: answered 401 to attest\)/);
     expect(err.message).not.toContain('not-a-key');
   });
 
   it('a broker that is down is a failure of the broker, not of the grant', async () => {
-    const client = new OAuthBrokerClient(broker.configFor(KEY), { fetch });
+    const client = new OAuthBrokerClient(broker.configFor(KEY), io());
+    await client.token('google', 'rt_unknown').catch(() => null);
     broker.down();
-    expect(await refusal(client.token('g_abcdefghijkl'))).toMatchObject({
+    expect(await refusal(client.token('google', 'rt_abcdefghijkl'))).toMatchObject({
       status: 503,
       grantGone: false,
     });
     await broker.stop();
-    expect(await refusal(client.token('g_abcdefghijkl'))).toMatchObject({
+    expect(await refusal(client.token('google', 'rt_abcdefghijkl'))).toMatchObject({
       status: 0,
       grantGone: false,
     });
     // Restarted for afterEach.
-    broker = await FakeOAuthBroker.start({ keys: {} });
+    broker = await startBroker();
   });
 
   it('never sends the key anywhere but the Authorization header', async () => {
     const h = harness();
     await connect(h);
     for (const call of broker.calls) expect(JSON.stringify(call.body)).not.toContain(KEY);
+  });
+});
+
+describe('the attestation of the broker', () => {
+  async function failedStart(h: ConnectionsHarness): Promise<ConnectError> {
+    const alice = await h.actor('alice@example.com');
+    return expectConnectError(h.service.start(alice, PLUGIN), 'broker-failed');
+  }
+
+  it('is obtained once and pinned: the calls that follow reuse it, until it is an hour old', async () => {
+    const h = harness();
+    const { connection } = await connect(h);
+    expect(callsTo('/attest')).toHaveLength(1);
+    expect(h.brokers.byName('main')?.admitted).toMatchObject({
+      platform: 'fake-enclave',
+      measurement: FAKE_BROKER_MEASUREMENT,
+      brokerVersion: 'fake',
+    });
+    h.clock.advance(MAX_PIN_MS + 1_000);
+    await h.broker.refresh(connection.id);
+    const attests = callsTo('/attest');
+    expect(attests).toHaveLength(2);
+    // A new nonce every time.
+    expect(attests[0]?.body?.nonce).not.toBe(attests[1]?.body?.nonce);
+  });
+
+  it('a release that admits no broker version sends the broker nothing', async () => {
+    const h = harness(KEY, []);
+    const err = await failedStart(h);
+    expect(err.message).toContain(NO_ADMITTED_VERSION);
+    expect(broker.calls).toEqual([]);
+  });
+
+  it('a broker version this release does not admit gets no flow, no verifier, no refresh token', async () => {
+    const h = harness();
+    broker.attestWith({ measurement: `sha256:${'0'.repeat(64)}` });
+    const err = await failedStart(h);
+    expect(err.message).toMatch(
+      /is not attested \(flows: the broker runs a version this release does not admit\)/,
+    );
+    expect(callsTo('/flows')).toEqual([]);
+  });
+
+  it('evidence for another TLS key than the connection’s is refused (someone else answers)', async () => {
+    const h = harness();
+    broker.attestWith({ spkiHash: 'A'.repeat(43) });
+    const err = await failedStart(h);
+    expect(err.message).toMatch(/not bound to this request and this connection’s key/);
+    expect(callsTo('/flows')).toEqual([]);
+  });
+
+  it('a debug image is refused', async () => {
+    const h = harness();
+    broker.attestWith({ debug: true });
+    expect((await failedStart(h)).message).toMatch(/debug image/);
+  });
+
+  it('a broker that restarted with a new key is attested again, then served', async () => {
+    const h = harness();
+    const { connection } = await connect(h);
+    broker.rotateTlsKey();
+    await h.broker.refresh(connection.id);
+    expect(callsTo('/attest')).toHaveLength(2);
+    expect(callsTo('/token')[0]?.status).toBe(200);
+  });
+
+  it('a key the broker presents and no attestation carries gets nothing', async () => {
+    const h = harness();
+    const { connection } = await connect(h);
+    // The enclave's key changes, and the new attestation still names the old one.
+    const old = broker.spkiHash ?? '';
+    broker.rotateTlsKey();
+    broker.attestWith({ spkiHash: old });
+    await expect(h.broker.refresh(connection.id)).rejects.toBeInstanceOf(
+      OAuthBrokerUnavailableError,
+    );
+    expect(callsTo('/token')).toEqual([]);
+    expect((await h.store.connections.getById(connection.id))?.status).toBe('active');
+  });
+});
+
+describe('a broker declared attestation: none', () => {
+  beforeEach(async () => {
+    await broker.stop();
+    broker = await startBroker('none');
+  });
+
+  it('is reached as any HTTPS service, without /attest, and every page says it is not attested', async () => {
+    const h = harness();
+    expect((await h.service.providers())[0]?.brokerAttested).toBe(false);
+    const { connection } = await connect(h);
+    expect(callsTo('/attest')).toEqual([]);
+    expect(callsTo('/grants/redeem')[0]?.status).toBe(200);
+    expect(
+      (await h.service.get(await h.actor('alice@example.com'), connection.id)).oauthBroker,
+    ).toEqual({
+      name: 'main',
+      attested: false,
+    });
+    expect(h.brokers.byName('main')?.admitted).toBeNull();
+  });
+});
+
+describe('the attestation kit of this release', () => {
+  it('verifies Google Confidential Space only: no test platform, and an empty allowlist admits nothing', () => {
+    const kit = productionAttestationKit({ fetch });
+    expect(kit.platforms.map((p) => p.platform)).toEqual([GCP_CONFIDENTIAL_SPACE]);
+    expect(kit.allowlist).toEqual([]);
+    expect(new AttestationVerifier(kit).admitsAny).toBe(false);
   });
 });

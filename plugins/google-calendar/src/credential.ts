@@ -8,7 +8,7 @@
  * Handbook : docs/handbook/providers/google-calendar.md §6.1.
  *
  * The host runs the flow and refreshes through the broker; this plugin
- * receives an access token and never sees the grant id or the broker key.
+ * receives an access token and never sees the refresh token or the broker key.
  * Calendar scopes are "sensitive", not "restricted", at Google.
  */
 

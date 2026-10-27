@@ -51,6 +51,7 @@ describe('OAuth brokers in the configuration', () => {
         url: new URL('https://broker.example.com/v1'),
         key: KEY,
         providers: ['google'],
+        attestation: 'required',
       },
     ]);
     expect(secretValues(config)).toContain(KEY);
@@ -112,6 +113,37 @@ describe('OAuth brokers in the configuration', () => {
     );
   });
 
+  it('attests a broker unless it says attestation: none, and accepts no other value', () => {
+    const base = {
+      VAUBAAN_OAUTH_BROKER_MAIN_URL: 'https://broker.example.com',
+      VAUBAAN_OAUTH_BROKER_MAIN_KEY: KEY,
+    };
+    expect(load(base).oauthBrokers[0]?.attestation).toBe('required');
+    expect(
+      load({ ...base, VAUBAAN_OAUTH_BROKER_MAIN_ATTESTATION: 'None' }).oauthBrokers[0]?.attestation,
+    ).toBe('none');
+    // No platform can be named, the test-only one included: the allowlist is the release's.
+    for (const other of ['fake-enclave', 'gcp-confidential-space', 'off', '*']) {
+      expect(problems({ ...base, VAUBAAN_OAUTH_BROKER_MAIN_ATTESTATION: other })).toMatch(
+        /oauth_brokers\.main\.attestation: must be required or none/,
+      );
+    }
+  });
+
+  it('reaches an attested broker over https only: http on the loopback needs attestation: none', () => {
+    const loopback = {
+      VAUBAAN_OAUTH_BROKER_MAIN_URL: 'http://127.0.0.1:8080/v1',
+      VAUBAAN_OAUTH_BROKER_MAIN_KEY: KEY,
+    };
+    expect(problems(loopback)).toMatch(
+      /oauth_brokers\.main\.url: an attested broker is reached over https only/,
+    );
+    expect(
+      load({ ...loopback, VAUBAAN_OAUTH_BROKER_MAIN_ATTESTATION: 'none' }).oauthBrokers[0]?.url
+        .protocol,
+    ).toBe('http:');
+  });
+
   it('refuses two default brokers and a provider served twice', () => {
     const two = {
       VAUBAAN_OAUTH_BROKER_A_URL: 'https://a.example.com',
@@ -136,6 +168,7 @@ describe('which broker serves a provider', () => {
     url: new URL(`https://${name}.example.com`),
     key: 'k',
     providers,
+    attestation: 'required',
   });
 
   it('the one listing it, else the default broker, else none', () => {

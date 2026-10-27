@@ -24,13 +24,15 @@
  * declares one (non-standard flow). The OAuth client secret never reaches a
  * plugin.
  *
- * A brokered `oauth2` connection (ADR google-calendar-through-an-oauth-broker)
- * is refreshed by the OAuth broker that holds its grant (`POST
- * /grants/<id>/token`) and withdrawn there (`DELETE /grants/<id>`). The grant
- * id sits in the sealed credential beside the secret (`BrokerGrant`) and never
- * reaches the plugin. A broker that is down or refuses the call is a
- * `OAuthBrokerUnavailableError`, which leaves the connection as it is; only a
- * grant the broker says is over turns it `expired`.
+ * A brokered `oauth2` connection (ADRs google-calendar-through-an-oauth-broker,
+ * oauth-broker-stateless-in-an-attested-enclave D1) is refreshed through the
+ * OAuth broker it was made with (`POST /token` with the refresh token) and
+ * withdrawn through it (`POST /revoke`). The refresh token sits in the sealed
+ * credential beside the secret (`BrokerGrant`) and never reaches the plugin;
+ * the broker keeps none. A broker that is down, not attested or refuses the
+ * call is a `OAuthBrokerUnavailableError`, which leaves the connection as it
+ * is; only `invalid_grant` (the provider refused the refresh token) turns it
+ * `expired`.
  */
 import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
@@ -274,7 +276,7 @@ export class CredentialBroker {
     }
     const spec = plugin.credential;
     if (spec.kind !== 'oauth2' || held.credential.kind !== 'oauth2') return { outcome: 'no-token' };
-    if (isBrokeredSpec(spec)) return this.withdrawAtBroker(held.brokerGrant);
+    if (isBrokeredSpec(spec)) return this.withdrawAtBroker(spec.broker.provider, held.brokerGrant);
     if (!spec.revocation) return { outcome: 'no-token' };
     return revokeGrant(
       spec.revocation,
@@ -284,8 +286,11 @@ export class CredentialBroker {
     );
   }
 
-  /** `DELETE /grants/<id>` at the broker that holds the grant. */
-  private async withdrawAtBroker(grant: BrokerGrant | null): Promise<RevocationAttempt> {
+  /** `POST /revoke` with the refresh token, through the broker the connection was made with. */
+  private async withdrawAtBroker(
+    provider: string,
+    grant: BrokerGrant | null,
+  ): Promise<RevocationAttempt> {
     if (grant === null) return { outcome: 'no-token' };
     const broker = this.deps.brokers.byName(grant.broker);
     if (!broker) {
@@ -296,7 +301,7 @@ export class CredentialBroker {
       };
     }
     try {
-      await broker.revoke(grant.grantId);
+      await broker.revoke(provider, grant.refreshToken);
       return { outcome: 'revoked' };
     } catch (err) {
       if (!(err instanceof OAuthBrokerError)) throw err;
@@ -486,15 +491,19 @@ async function refreshAtBroker(
       HTTP_UNAUTHORIZED,
     );
   }
+  const spec = plugin.credential;
+  if (spec.kind !== 'oauth2' || !isBrokeredSpec(spec)) {
+    throw new Error(`plugin '${plugin.id}' does not take its client from a broker`);
+  }
   const broker = brokers.byName(grant.broker);
   if (!broker) {
     throw new OAuthBrokerUnavailableError(
       grant.broker,
-      `OAuth broker '${grant.broker}' that holds this connection's grant is no longer configured`,
+      `OAuth broker '${grant.broker}' this connection was made through is no longer configured`,
     );
   }
   try {
-    const fresh = await broker.token(grant.grantId);
+    const fresh = await broker.token(spec.broker.provider, grant.refreshToken);
     return {
       kind: 'oauth2',
       accessToken: fresh.accessToken,
@@ -505,7 +514,7 @@ async function refreshAtBroker(
     };
   } catch (err) {
     if (!(err instanceof OAuthBrokerError)) throw err;
-    // Only a grant the broker says is over ends the connection.
+    // Only the provider's refusal of the refresh token (invalid_grant) ends the connection.
     if (err.grantGone) throw new UpstreamAuthError(err.message, err.status || HTTP_UNAUTHORIZED);
     throw new OAuthBrokerUnavailableError(grant.broker, err.message);
   }

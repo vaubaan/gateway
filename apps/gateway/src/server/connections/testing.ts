@@ -33,6 +33,7 @@ import type { GroupRecord, UserRecord } from '../store/types';
 import { CredentialBroker } from './credentials';
 import type { OAuthBrokerConfig } from '../config/types';
 import { OAuth2Clients, registeredClientKey } from './oauth2-clients';
+import type { BrokerAttestationKit } from './broker-attestation';
 import { OAuthBrokers } from './oauth-broker';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService, type Actor } from './service';
@@ -223,6 +224,12 @@ export interface HarnessOptions {
    * call goes to the `mockFetch` of `routes`.
    */
   readonly brokers?: readonly OAuthBrokerConfig[];
+  /**
+   * The attestation adapters and allowlist the brokers are verified with
+   * (`FakeOAuthBroker.attestationKit()`); by default none, which admits no
+   * attested broker.
+   */
+  readonly brokerAttestation?: BrokerAttestationKit;
 }
 
 export interface ConnectionsHarness extends TestStore {
@@ -256,8 +263,12 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
       ? globalThis.fetch(input, init)
       : fetch(input, init);
   };
-  const brokers = new OAuthBrokers(brokerConfigs, { fetch: outbound });
   const now = (): number => test.clock.now().getTime();
+  const brokers = new OAuthBrokers(brokerConfigs, {
+    fetch: outbound,
+    attestation: options.brokerAttestation ?? { platforms: [], allowlist: [] },
+    now,
+  });
   const sessions = new MemorySessionStore(now);
   const audit = new MemoryAuditWriter();
   const clients = new OAuth2Clients({

@@ -627,11 +627,20 @@ const RULES: Readonly<Record<string, Rule>> = {
   'OAuthBrokerClient.revoke': exempt(
     'a step of ConnectionService.revoke, whose connection-revoked entry carries what the broker answered (after.provider_grant)',
   ),
+  'AttestationVerifier.verify': READ,
+  'AttestedChannel.send': exempt(
+    'carries a broker call over a pinned TLS connection, attesting the broker first when no pin is in force (ADR oauth-broker-stateless-in-an-attested-enclave D6): the pin lives in memory, nothing is written in the store; the act it carries is classified on OAuthBrokerClient',
+  ),
+  'FetchChannel.send': exempt(
+    'carries a broker call to a broker declared attestation: none; nothing is written in the store; the act it carries is classified on OAuthBrokerClient',
+  ),
+  'FakeOAuthBroker.attestWith': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.attestationKit': exempt(FAKE_BROKER),
+  'FakeOAuthBroker.rotateTlsKey': exempt(FAKE_BROKER),
   'FakeOAuthBroker.approve': exempt(FAKE_BROKER),
   'FakeOAuthBroker.configFor': exempt(FAKE_BROKER),
   'FakeOAuthBroker.deny': exempt(FAKE_BROKER),
   'FakeOAuthBroker.down': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.grantIds': exempt(FAKE_BROKER),
   'FakeOAuthBroker.recordReturnUrl': exempt(FAKE_BROKER),
   'FakeOAuthBroker.refusingProvider': exempt(FAKE_BROKER),
   'FakeOAuthBroker.stop': exempt(FAKE_BROKER),

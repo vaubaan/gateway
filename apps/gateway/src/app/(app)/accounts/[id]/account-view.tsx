@@ -848,6 +848,14 @@ export function AccountView({
                     },
                   ]
                 : []),
+              ...(detail.oauthBroker
+                ? [
+                    {
+                      term: 'OAuth broker',
+                      value: oauthBrokerFact(detail.oauthBroker),
+                    },
+                  ]
+                : []),
               ...Object.entries(detail.fields).map(([name, value]) => ({
                 term: capitalize(name.replace(/_/g, ' ')),
                 value: <Mono>{value}</Mono>,
@@ -1081,4 +1089,12 @@ export function AccountView({
 function agoWords(iso: string, now: Date): string {
   const words = ago(iso, now);
   return words === 'now' || words === 'yesterday' ? words : `${words} ago`;
+}
+
+/** Which broker a brokered account renews through, and whether the gateway checks the code it runs. */
+function oauthBrokerFact(broker: NonNullable<ConnectionDetail['oauthBroker']>): string {
+  if (broker.attested === null) return `${broker.name} · no longer configured`;
+  return broker.attested
+    ? `${broker.name} · attested: the gateway checks the code it runs before each use`
+    : `${broker.name} · not attested (attestation: none): the gateway does not check the code it runs`;
 }

@@ -126,23 +126,25 @@ export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post
  *     the provider (`clientRegistration`, RFC 7591; Miro's MCP server) and
  *     runs the flow against the provider's endpoints;
  *   - `OAuth2BrokeredSpec` — the client is an OAuth broker's (`broker`): the
- *     broker the instance is enrolled with runs the flow with its own client
- *     and keeps the refresh token (Google Calendar).
+ *     broker the instance is enrolled with runs the flow with its own client;
+ *     it keeps no token (Google Calendar).
  *
  * No administrator declares a client (ADR gmail-over-imap-with-an-app-password).
  * Either way the plugin receives an access token (`OAuth2Secret`) and never
- * sees a client secret, a grant id or a broker key.
+ * sees a client secret, a refresh token of a broker or a broker key.
  */
 export type OAuth2CredentialSpec = OAuth2RegisteredClientSpec | OAuth2BrokeredSpec;
 
 /**
- * The OAuth client is an OAuth broker's (ADR google-calendar-through-an-oauth-broker
- * D1, D2): a service outside the gateway that owns a client at the provider
- * and runs the authorization-code flow for the instances enrolled with it.
- * The host asks the broker for the flow, redeems the one-time grant the
- * browser brings back, refreshes and revokes through the broker; it keeps a
- * grant id and the current access token, never a refresh token or a client
- * secret. A plugin whose broker is not configured is listed as not configured.
+ * The OAuth client is an OAuth broker's (ADRs google-calendar-through-an-oauth-broker
+ * D1, D2 and oauth-broker-stateless-in-an-attested-enclave D1): a service
+ * outside the gateway that owns a client at the provider and runs the
+ * authorization-code flow for the instances enrolled with it. The host asks
+ * the broker for the flow, redeems the one-time grant the browser brings
+ * back, and keeps the provider's refresh token sealed beside the access
+ * token, host only; it refreshes and revokes through the broker, which adds
+ * its client secret and keeps no token. The plugin receives the access token
+ * alone. A plugin whose broker is not configured is listed as not configured.
  *
  * The provider's endpoints, PKCE towards the provider, the client
  * authentication and the revocation are the broker's: they are not declared.
