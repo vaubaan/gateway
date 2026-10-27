@@ -185,9 +185,9 @@ the instance's, sealed beside the access token and presented to the broker
 at each refresh (`POST /token`); the broker keeps no token, and the gateway
 sends it nothing before it has verified the broker's attestation (or the
 broker is declared `attestation: none`, which the pages say). Without such a
-broker the plugin is listed as **not configured**, with the reason. While no
-broker version is admitted by the release (the allowlist is empty until the
-broker is released), connecting shows the broker's failure "no attested
+broker the plugin is listed as **not configured**, with the reason. A broker whose
+measurement is not admitted by the release (the allowlist lists each admitted
+broker version) shows the broker's failure "no attested
 broker version admitted by this release". The plugin sees an access token
 only.
 

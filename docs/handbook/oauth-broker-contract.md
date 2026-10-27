@@ -227,9 +227,8 @@ The broker versions a gateway release admits ship **in the release**, in
 A broker release publishes, for every supported platform, the measurement
 that platform reports for it (for Confidential Space, the image digest); a
 gateway release adds it. Nothing in the configuration widens the list: the
-only switch is `attestation: none` for one broker. While the list is empty
-(no broker released yet), an attested broker gets nothing and the connection
-shows the broker's failure "no attested broker version admitted by this
+only switch is `attestation: none` for one broker. A broker whose measurement is not on
+the list gets nothing and the connection shows the broker's failure "no attested broker version admitted by this
 release".
 
 ### `POST /flows` — start a flow
