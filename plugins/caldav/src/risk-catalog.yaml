@@ -1,0 +1,286 @@
+# CalDAV risk catalog — loaded by `@vaubaan/plugin-sdk` (`loadCatalogFile`) at
+# gateway boot. One catalog for every CalDAV server (iCloud, Fastmail,
+# Nextcloud, …), reached with an app password (ADR
+# google-calendar-through-an-oauth-broker, D5).
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/caldav.md.
+#
+# 9 named risks + 1 fallback = 10. Ids are never renamed or deleted
+# (deprecate instead). Every slice is rooted at `calendar[<ref>]`, a mission
+# resource ; the owner may label a calendar, but no risk is env-scoped.
+#
+# The vocabulary is the one a calendar catalog shares with `google-calendar.*`
+# (ADR google-calendar-through-an-oauth-broker, D5) : reading the calendars,
+# reading events over a time range and over a wide one, creating an event
+# versus changing or deleting one, and who the write notifies — attendees
+# inside the company domains, on the allowlist, or outside.
+#
+# A write is layered. Its containment slice (`event.W`, `event[id].W`,
+# `event[id].delete.W`) is matched by `event-create`, `event-change` or
+# `event-delete` ; when the event concerns somebody other than the account —
+# an attendee, or the organizer of an invitation — the classifier adds the
+# marker `attendee-zone[<worst zone>].W`, matched by one `attendees-*` risk.
+# A CalDAV server that implements scheduling (RFC 6638) mails those people
+# an invitation, an update, a cancellation or a reply : the marker is what a
+# mission accepts for that mail. Who is notified by a change or a deletion is
+# stated in the call (`attendees`) and checked by the executor against the
+# server's copy before anything is written (handbook, "Edge cases").
+#
+# No entry declares `caps` or `infra_limits` (ADR scope-caps-not-enforced-in-v5-0) :
+# the plugin itself caps a read at 366 days and 200 events.
+provider: caldav
+catalog_version: 1
+catalog_date: 2026-10-27
+
+risks:
+  # ─── READS ─────────────────────────────────────────────────────────────
+
+  - id: caldav.read-calendars
+    label: 'List the calendars (names, descriptions)'
+    reason: >-
+      The calendars of the mission, with their names and descriptions as the
+      server holds them. Metadata only, no event.
+    matches: 'caldav.calendar[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: caldav.read-events
+    label: 'Read events (times, titles, places, descriptions, attendees)'
+    reason: >-
+      Events over a time range of at most 31 days, or one event by its id :
+      what the account does and with whom, places and descriptions included.
+      Invitations land in a calendar without being asked for, so a
+      description may be written by a stranger : read it as untrusted text
+      (prompt injection, OWASP LLM01).
+    matches: 'caldav.calendar[*].event[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: caldav.read-wide-range
+    label: 'Read events over a wide time range (more than 31 days)'
+    reason: >-
+      One call returns up to 200 events over up to 366 days : a long
+      stretch of agenda — habits, recurring meetings, who is met how often —
+      at once. Needed beside `caldav.read-events` for any range longer than
+      31 days.
+    matches: 'caldav.calendar[*].wide-range.R'
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── WRITES — EVENTS ───────────────────────────────────────────────────
+
+  - id: caldav.event-create
+    label: 'Create events'
+    reason: >-
+      Adds an event to the calendar. Reversible : the event can be deleted.
+      Alone it concerns the account only ; inviting people also needs the
+      `attendees-*` permission of their zone.
+    matches: 'caldav.calendar[*].event.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: caldav.event-change
+    label: 'Change events (time, title, place, description, attendees)'
+    reason: >-
+      Rewrites an existing event, read first and written back only if it did
+      not change in between (`If-Match`). The previous version is not kept.
+      Changing an event others attend sends them an update : the
+      `attendees-*` permission of their zone is needed too. Invitations
+      organized by somebody else are never changed.
+    matches: 'caldav.calendar[*].event[*].W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: caldav.event-delete
+    label: 'Delete events'
+    reason: >-
+      Removes an event, recurring series included : CalDAV keeps no bin and
+      no history. Deleting a meeting others attend sends them a cancellation,
+      and deleting an invitation sends its organizer a decline : the
+      `attendees-*` permission of their zone is needed too.
+    matches: 'caldav.calendar[*].event[*].delete.W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  # ─── WRITES — WHO IS NOTIFIED ──────────────────────────────────────────
+
+  - id: caldav.attendees-internal
+    label: 'Invite, update or cancel attendees inside the company domains'
+    reason: >-
+      The write concerns colleagues only (addresses on the internal domains of
+      the calendar) : the server may mail them an invitation, an update or a
+      cancellation. Visible to the team, not outside.
+    matches: 'caldav.calendar[*].attendee-zone[internal].W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: caldav.attendees-allowlisted
+    label: 'Invite, update or cancel attendees on the allowlist'
+    reason: >-
+      The write concerns pre-approved contacts outside the company (the
+      allowlisted addresses and domains of the calendar), colleagues
+      possibly with them. The server may mail them : a message sent cannot
+      be taken back.
+    matches: 'caldav.calendar[*].attendee-zone[allowlist].W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+  - id: caldav.attendees-external
+    label: 'Invite, update or cancel attendees outside the company and the allowlist'
+    reason: >-
+      The write concerns at least one address neither internal nor
+      allowlisted (or that the plugin cannot read as one address). The
+      server may mail an invitation carrying the title, time, place and
+      description of the event to anybody : an exfiltration path, and a
+      message in the company's name. Ask me first is recommended.
+    matches: 'caldav.calendar[*].attendee-zone[external].W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+  # ─── FALLBACK (required) ───────────────────────────────────────────────
+
+  - id: caldav.uncategorized-write
+    label: 'Uncategorized CalDAV write'
+    reason: >-
+      Catch-all for writes no entry above covers. No tool of the plugin
+      reaches it today : a new write (a calendar created, an invitation
+      answered) lands here until it has its own permission. Never offered in
+      a preset.
+    matches: 'caldav.[**].W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: account
+      data: data
+      cost: free
+      visibility: public
+      persistence: posture
+
+# Presets are default suggestions copied into a mission at issuance (spec
+# §3.2). No risk is env-scoped, so no entry is env-qualified. Deliberately in
+# no preset : the fallback.
+presets:
+  - id: read-only
+    label: Read-only
+    description: List the calendars and read events over up to 31 days at a time; no change, nobody notified.
+    entries:
+      - risk_id: caldav.read-calendars
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.read-events
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: own-agenda
+    label: Own agenda
+    description: Read-only, plus creating and changing events that concern nobody else, so no invitation, update or cancellation is sent; deleting an event asks first.
+    entries:
+      - risk_id: caldav.read-calendars
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.read-events
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.event-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.event-change
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.event-delete
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+
+  - id: assistant
+    label: Scheduling assistant
+    description: Own agenda, plus reading wide time ranges and meetings with colleagues and allowlisted contacts; inviting anybody else and deleting an event ask first.
+    entries:
+      - risk_id: caldav.read-calendars
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.read-events
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.read-wide-range
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.event-create
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.event-change
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.event-delete
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: caldav.attendees-internal
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.attendees-allowlisted
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: caldav.attendees-external
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
