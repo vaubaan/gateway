@@ -30,6 +30,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `oauth-broker-v*` tags only, and pushes nothing before two builds from
   scratch agree. Spec `docs/spec/oauth-broker.md` (draft), handbook
   `docs/handbook/oauth-broker.md`.
+- `oauth_brokers.<name>.attestation` (`VAUBAAN_OAUTH_BROKER_<NAME>_ATTESTATION`):
+  `required` (the default) or `none`, for your own broker outside an enclave;
+  the connect page and the account page then say the broker is not attested.
+  It never widens the allowlist. An attested broker is reached over https
+  only.
 
 ### Changed
 
@@ -53,14 +58,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   broker is released: an attested broker then gets nothing, and connecting
   says "no attested broker version admitted by this release". No broker was
   ever enrolled, so no connection or configuration needs migrating.
+- **Service marks are drawn in their brand colour.** The icon of a service
+  (Accounts, the connect picker, the mission form, Reference) is drawn in the
+  colour its plugin declares (`ProviderPlugin.iconColor`, Simple Icons' hex
+  for the brand) on the same neutral square; a near-black brand (GitHub,
+  Notion, Vercel, Railway, Resend, Miro, Fly.io) takes the ink in the dark
+  theme. Every shipped plugin declares its colour; the released ones gain a
+  patch version.
+  ADR service-marks-in-brand-colour, amending
+  service-icons-declared-by-the-plugin.
 
-### Added
+### Removed
 
-- `oauth_brokers.<name>.attestation` (`VAUBAAN_OAUTH_BROKER_<NAME>_ATTESTATION`):
-  `required` (the default) or `none`, for your own broker outside an enclave;
-  the connect page and the account page then say the broker is not attested.
-  It never widens the allowlist. An attested broker is reached over https
-  only.
+- The mission page's **Modify permissions** button and its page. Adding or
+  removing a permission by hand is **Edit mission**, which has done the same,
+  with the rest of the mission, since alpha.8; the narrower editor remains the
+  screen that answers an agent's permission request.
 
 ## [2.0.0-alpha.10] - 2026-10-27
 
@@ -100,18 +113,6 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **SDK.** An `oauth2` spec names exactly one client source:
   `clientRegistration` or `broker: { provider }` (`OAuth2BrokeredSpec`,
   `isBrokeredSpec`, `PluginRegistry.brokerProviders()`).
-
-### Changed
-
-- **Service marks are drawn in their brand colour.** The icon of a service
-  (Accounts, the connect picker, the mission form, Reference) is drawn in the
-  colour its plugin declares (`ProviderPlugin.iconColor`, Simple Icons' hex
-  for the brand) on the same neutral square; a near-black brand (GitHub,
-  Notion, Vercel, Railway, Resend, Miro, Fly.io) takes the ink in the dark
-  theme. Every shipped plugin declares its colour; the released ones gain a
-  patch version.
-  ADR service-marks-in-brand-colour, amending
-  service-icons-declared-by-the-plugin.
 
 ## [2.0.0-alpha.9] - 2026-10-27
 

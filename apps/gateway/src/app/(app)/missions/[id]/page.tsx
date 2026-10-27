@@ -566,9 +566,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
               <ButtonLink href={`${missionPath}/edit`} size="sm" data-testid="edit-mission">
                 {MISSION_ACTIONS.editMission}
               </ButtonLink>
-              <ButtonLink href={`${missionPath}/permissions`} size="sm">
-                Modify permissions
-              </ButtonLink>
               <ButtonLink
                 href={`${missionPath}?edit=${EDIT_LIMITS}#permissions`}
                 size="sm"

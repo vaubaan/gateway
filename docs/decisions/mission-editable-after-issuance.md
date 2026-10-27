@@ -189,6 +189,10 @@ IMMEDIATE` transaction (`MissionsRepo.edit`) re-reads the mission, checks the
   disappears in between, the mission reads `orphaned` and serves nothing.
 - One more session event kind per moving section; old readers print an unknown kind
   as it is stored.
+- 2026-10-27: the mission page's "Modify permissions" button and its page
+  (`/missions/:id/permissions`, ADR mission-permissions-and-explicit-requests) are
+  gone: a strict subset of "Edit mission", kept by oversight. `changePermissions` and
+  its editor stay, for the answer to an agent's permission request only.
 
 ## Rejected alternatives
 

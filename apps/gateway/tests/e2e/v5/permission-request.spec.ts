@@ -51,13 +51,17 @@ test('the creator adds a requested permission, then removes it directly, with th
   expect(await executor.call('github__create_or_update_file', args)).toMatchObject({
     outcome: 'allowed',
   });
+  // Taking it back is "Edit mission": the creation screen prefilled, the list open.
   await page.goto(`/missions/${issued.mission_id}`);
-  await page.getByRole('link', { name: 'Modify permissions', exact: true }).click();
-  await page.getByRole('checkbox', { name: `Include ${risk}`, exact: true }).uncheck();
-  await page.getByRole('button', { name: 'Review permissions', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText(`Remove ${risk}`);
-  await page.getByRole('button', { name: 'Change permissions', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}#permissions$`));
+  await page.getByTestId('edit-mission').click();
+  await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}/edit$`));
+  await page.getByRole('button', { name: 'Edit the permissions one by one', exact: true }).click();
+  await page.getByRole('checkbox', { name: `Allow ${risk}`, exact: true }).uncheck();
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  const confirm = page.getByTestId('confirm-edit');
+  await expect(page.getByTestId('edit-changes')).toContainText('Refused from the next call');
+  await confirm.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}\\?edited=1$`));
   expect(await executor.call('github__create_or_update_file', args)).toMatchObject({
     outcome: 'refused',
     refusal: { code: 'risk-not-accepted' },

@@ -1123,11 +1123,14 @@ removed risk is added again. Removal closes earlier gate openings and retires
 unconsumed approvals covering the removed risk.
 
 `POST /api/missions/:id/permissions` requires a human session and same origin.
-The management door does not expose the method. `permissions-editor.tsx` is shared
-by `/missions/:id/permissions` (the mission's **Modify permissions** link) and a
-permission request in Waiting for you. It lists additions and removals in a
-confirmation, including the budgets and gates of additions and the impact on
-all keys. Server refusals and conflicts stay visible in that confirmation.
+The management door does not expose the method. Its one screen is
+`permissions-editor.tsx`, rendered by a permission request in Waiting for you: it
+lists additions and removals in a confirmation, including the budgets and gates of
+additions and the impact on all keys. Server refusals and conflicts stay visible in
+that confirmation. The mission page no longer offers it on its own (the "Modify
+permissions" button and `/missions/:id/permissions` left on 2026-10-27): adding or
+removing a permission by hand is "Edit mission", below, which does the same in the
+same form as everything else.
 
 An edit writes `permissions-changed` in the administrative audit with the full
 before/after policy, and on the session when one exists. Execution reads live
