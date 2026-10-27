@@ -18,7 +18,9 @@ with an access token from the **OAuth broker** the instance is enrolled
 with — no Google Cloud project, no redirect URI per instance, nothing to
 paste. Decision: ADR
 [google-calendar-through-an-oauth-broker](../../decisions/google-calendar-through-an-oauth-broker.md)
-(D3: the brokered `oauth2` spec; D4: this plugin). The broker contract:
+(D3: the brokered `oauth2` spec; D4: this plugin), amended by ADR
+[oauth-broker-stateless-in-an-attested-enclave](../../decisions/oauth-broker-stateless-in-an-attested-enclave.md)
+(the broker keeps no token and runs in an attested enclave). The broker contract:
 [oauth-broker-contract](../oauth-broker-contract.md). The host side of the
 flow: [connections](../connections.md). Contributor view:
 [`plugins/google-calendar/README.md`](../../../plugins/google-calendar/README.md).
@@ -178,9 +180,16 @@ unmodelled tool, and discovery logs it as drift.
 
 Never the full `calendar` scope. The host starts the flow at the broker that
 serves `google` (`oauth_brokers`, handbook [configuration](../configuration.md)),
-redeems the grant, refreshes and revokes through it. Without such a broker
-the plugin is listed as **not configured**, with the reason. The plugin sees
-an access token only.
+redeems the grant, refreshes and revokes through it. The refresh token is
+the instance's, sealed beside the access token and presented to the broker
+at each refresh (`POST /token`); the broker keeps no token, and the gateway
+sends it nothing before it has verified the broker's attestation (or the
+broker is declared `attestation: none`, which the pages say). Without such a
+broker the plugin is listed as **not configured**, with the reason. While no
+broker version is admitted by the release (the allowlist is empty until the
+broker is released), connecting shows the broker's failure "no attested
+broker version admitted by this release". The plugin sees an access token
+only.
 
 ### 6.2 Discovery
 

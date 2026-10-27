@@ -18,6 +18,7 @@ import { CredentialBroker } from './credentials';
 import { DiscoveryAfterCall } from './discovery-after-call';
 import { createConnectionHandlers, type ConnectionHandlers } from './handlers';
 import { OAuth2Clients } from './oauth2-clients';
+import { productionAttestationKit } from './attestation-kit';
 import { OAuthBrokers } from './oauth-broker';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService } from './service';
@@ -62,7 +63,10 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     clock,
     logger,
   });
-  const brokers = new OAuthBrokers(deps.config.oauthBrokers, { fetch: outbound });
+  const brokers = new OAuthBrokers(deps.config.oauthBrokers, {
+    fetch: outbound,
+    attestation: productionAttestationKit({ fetch: outbound }),
+  });
   const credentials = new CredentialBroker({
     connections: deps.store.connections,
     registry: deps.registry,

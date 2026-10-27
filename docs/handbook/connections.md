@@ -61,7 +61,9 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError,
                        registerClient (RFC 7591), OAuth2RegistrationError
   oauth2-clients.ts    OAuth2Clients: the client of an `oauth2` service, registered and kept
-  oauth-broker.ts      OAuthBrokerClient (the four calls of a broker), OAuthBrokers (which broker serves a provider), OAuthBrokerError
+  oauth-broker.ts      OAuthBrokerClient (the calls of a broker), OAuthBrokers (which broker serves a provider), OAuthBrokerError
+  broker-channel.ts    AttestedChannel (pinned TLS, /attest), FetchChannel (attestation: none)
+  broker-attestation.ts AttestationVerifier, the platform adapter interface, the allowlist; attestation-gcp.ts the Confidential Space adapter
   fake-oauth-broker.ts FakeOAuthBroker: the contract test kit, an in-memory HTTP broker on 127.0.0.1 — tests only
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
@@ -187,16 +189,43 @@ already kept: `ConnectionsHarness.seedClient(id, clientId, secret)` and
 
 A brokered spec (`OAuth2BrokeredSpec`, Google Calendar) declares no endpoint
 and no client: the broker that serves its provider runs the flow with its own
-client and keeps the refresh tokens. The contract — the four calls, their
-JSON, the status codes, the lifetime of a grant — is
-[oauth-broker-contract](oauth-broker-contract.md). Here, the host's side:
+client. The broker keeps no token: the instance keeps the refresh token and
+presents it at every refresh (ADR
+[oauth-broker-stateless-in-an-attested-enclave](../decisions/oauth-broker-stateless-in-an-attested-enclave.md)
+D1). The contract — the calls, their JSON, the status codes, the attestation
+— is [oauth-broker-contract](oauth-broker-contract.md). Here, the host's side:
 
-- **Which broker.** `OAuthBrokers(config.oauthBrokers, { fetch })`, built by
-  `createConnectionsModule`. `forProvider(provider)` is the broker whose
+- **Which broker.** `OAuthBrokers(config.oauthBrokers, { fetch, attestation:
+productionAttestationKit({ fetch }) })`, built by `createConnectionsModule`. `forProvider(provider)` is the broker whose
   `providers` lists it, else the default broker (one without `providers`),
   else none (`brokerFor`, handbook [configuration](configuration.md) "OAuth
   brokers"). At boot the module logs, once, the broker providers that plugins
   need and no broker serves.
+- **Attestation** (`broker-channel.ts`, `broker-attestation.ts`). A broker is
+  reached through a channel: `AttestedChannel` unless its block says
+  `attestation: none` (`FetchChannel`, plain `fetch`). The attested channel
+  opens a TLS socket of its own (`tls.connect`, chain unchecked on that
+  socket only), hashes the presented key's SPKI, and writes nothing before
+  that key is the pinned one. Without a pin it sends `POST /attest` on the
+  socket, with no body and without the broker key (sent only once the key is
+  pinned); the broker answers a cached evidence bound to its TLS key, at most
+  ten minutes old. The attestation is shared by the calls waiting for it and
+  runs on its own 15 s; a call through an attested broker may take an
+  attestation and its request (`ATTESTED_CALL_BUDGET_MS`, 30 s), which is
+  also the revocation's budget through a broker. `AttestationVerifier` picks
+  the platform adapter the answer
+  names (`gcpConfidentialSpace`, the only one of `productionAttestationKit`)
+  and requires the measurement on `broker-measurements.json` (empty today:
+  "no attested broker version admitted by this release", and nothing is
+  sent). The pin lasts min(evidence `exp`, 1 h, `MAX_PIN_MS`); another key
+  presented later means one new attestation. One verifier is shared by every
+  broker (Google's JWKS is discovered once and cached). A refused or failed
+  attestation is an `OAuthBrokerError` with status 0 (or the status `/attest`
+  answered): a broker failure.
+- **Attested or not, on the pages.** `ConnectableProvider.brokerAttested`
+  (the connect page adds a "not attested" paragraph when false) and
+  `ConnectionView.oauthBroker { name, attested }` (an "OAuth broker" row on
+  the account page: attested, not attested, or no longer configured).
 - **Not configured.** `ConnectableProvider.unavailable` carries the reason
   (`brokerNotConfiguredReason`) when no broker serves the plugin; the picker
   says "not configured on this gateway" and the connect page shows the
@@ -210,21 +239,24 @@ challenge_method: 'S256' }` and the browser is sent to the
 - **Callback** (`completeBrokered`). The same route and the same `state`
   check as any flow (single use, the session's user, this plugin). `error`
   is a protocol code (`provider-denied`); `grant` is redeemed at the broker
-  that started the flow (`POST /grants/redeem { grant, verifier }`). The
-  connection stores an `OAuth2Secret` with `refreshToken: null` and, beside
-  it in the sealed text, the `BrokerGrant { broker, grantId }`
-  (`serializeSecret(secret, grant)`), which `parseSecret` leaves out: a
-  plugin never receives it. `account` goes to the connection's metadata
+  that started the flow (`POST /grants/redeem { grant, verifier }`, answered
+  `{ refresh_token, access_token, expires_at, account, scopes }`). The
+  connection stores an `OAuth2Secret` with the access token and
+  `refreshToken: null` and, beside it in the sealed text, the
+  `BrokerGrant { broker, refreshToken }` (`serializeSecret(secret, grant)`),
+  which `parseSecret` leaves out: a plugin never receives the refresh token. `account` goes to the connection's metadata
   (`tokenAccount` on its page), `oauth_broker` names the broker.
 - **Failures.** `OAuthBrokerError { broker, call, status, code, grantGone }`;
   its message names the broker, the call, the status and the protocol code,
   never the broker's text or the key. At connect time a refused grant is
-  `token-exchange-failed`; anything else (down, timeout, bad key, refused
-  return URL) is `broker-failed`.
+  `token-exchange-failed`; anything else (down, timeout, bad key, not
+  attested, refused return URL) is `broker-failed`.
 
-Tests: `oauth-broker.test.ts` against `FakeOAuthBroker`, the harness routing
-the broker's URL to the network and everything else to its `mockFetch`
-(`connectionsHarness({ brokers })`).
+Tests: `oauth-broker.test.ts` against `FakeOAuthBroker` (HTTPS with its own
+key, the test-only `fake-enclave` platform), the harness routing the
+broker's URL to the network and everything else to its `mockFetch`
+(`connectionsHarness({ brokers, brokerAttestation: broker.attestationKit() })`);
+`attestation-gcp.test.ts` for the Confidential Space adapter.
 
 ## One way per service
 
@@ -556,13 +588,13 @@ plugin `revoke` ignoring its signal) and never throws.
 
 **How the provider is asked** — the plugin says, the host does:
 
-| The plugin declares                                                            | Who sends                | Request                                                                                                                                |
-| ------------------------------------------------------------------------------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `revoke(ctx)` on the contract                                                  | the plugin               | whatever its provider needs; it resolves when the provider confirmed and throws otherwise. Takes precedence. No shipped plugin has one |
-| `credential.revocation: { url, format: 'token-form' }` (`oauth2`)              | the host (`revokeGrant`) | `POST url`, form-encoded `token=<refresh token, else access token>`, no client authentication                                          |
-| `credential.revocation: { url, format: 'client-credentials-json' }` (`oauth2`) | the host                 | `POST url`, JSON `{ client_id, client_secret, refresh_token }`; nothing is sent without a stored refresh token                         |
-| `credential.broker` (`oauth2`, brokered)                                       | the host                 | `DELETE /grants/<grant_id>` at the broker that holds the grant (it revokes at the provider); 204, also when already gone               |
-| nothing                                                                        | nobody                   | —                                                                                                                                      |
+| The plugin declares                                                            | Who sends                | Request                                                                                                                                                |
+| ------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `revoke(ctx)` on the contract                                                  | the plugin               | whatever its provider needs; it resolves when the provider confirmed and throws otherwise. Takes precedence. No shipped plugin has one                 |
+| `credential.revocation: { url, format: 'token-form' }` (`oauth2`)              | the host (`revokeGrant`) | `POST url`, form-encoded `token=<refresh token, else access token>`, no client authentication                                                          |
+| `credential.revocation: { url, format: 'client-credentials-json' }` (`oauth2`) | the host                 | `POST url`, JSON `{ client_id, client_secret, refresh_token }`; nothing is sent without a stored refresh token                                         |
+| `credential.broker` (`oauth2`, brokered)                                       | the host                 | `POST /revoke { provider, refresh_token }` through the broker the connection was made with (it relays to the provider); 204, also when already revoked |
+| nothing                                                                        | nobody                   | —                                                                                                                                                      |
 
 The host sends the declarative shapes itself because one of them carries
 the OAuth client secret, which a plugin never receives. No shipped plugin
@@ -625,11 +657,11 @@ single-process only`: rotating refresh tokens are single use, a hosted
   credential, then:
   - the plugin declares `refresh()` → it is called with the plugin context
     (non-standard flows only);
-  - else a brokered `oauth2` spec with a stored `BrokerGrant` → `POST
-/grants/<grant_id>/token` at that broker; the new access token is sealed
-    with the same grant. A grant the broker says is over (`grant_not_found`,
-    `grant_revoked`, `invalid_grant`) is a rejection (→ `expired`); a broker
-    that is down, slow, refuses the key or is no longer configured is an
+  - else a brokered `oauth2` spec with a stored `BrokerGrant` → `POST /token
+{ provider, refresh_token }` through that broker; the new access token is
+    sealed with the same `BrokerGrant`. `400 invalid_grant` (the provider
+    refused the refresh token) is a rejection (→ `expired`); a broker that is
+    down, slow, refuses the key, is not attested or is no longer configured is an
     `OAuthBrokerUnavailableError` (a `ProviderUnreachableError`: the status
     is left alone, the failure is logged and recorded as the broker's —
     "OAuth broker 'main' answered 503 to token" —, never as an expiry);
@@ -1073,7 +1105,15 @@ by feature", the section on connecting).
   connection's: `401 (invalid_key)` a wrong key, `403
 (return_url_not_registered)` the broker has not recorded
   `<public_url>/connections/callback/<plugin>`, `503` or "could not be
-  reached" the broker is down. Nothing is expired; calls resume once the
+  reached" the broker is down. "could not be attested (…: answered 503 to
+  attest)" is the same outage on `/attest`, which takes no key.
+- **"OAuth broker '<name>' is not attested (…)"** — the gateway sent the
+  broker nothing: "no attested broker version admitted by this release" (the
+  release's allowlist names no broker version yet; upgrade, or declare your
+  own broker `attestation: none`), "a version this release does not admit"
+  (a broker newer than this release, or a modified one), "not bound to this
+  request and this connection's key" (someone else answers on the broker's
+  address), "debug image", "Google's attestation keys could not be fetched". Nothing is expired; calls resume once the
   broker answers (contract: [oauth-broker-contract](oauth-broker-contract.md)).
 - **`state-invalid` after consent** — the flow took more than 10 minutes,
   the callback was opened twice, the user's session changed between start

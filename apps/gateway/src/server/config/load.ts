@@ -89,6 +89,7 @@ import {
   isBrokerName,
   isBrokerProvider,
   OAUTH_BROKER_PROBLEMS,
+  parseBrokerAttestation,
   parseBrokerUrl,
 } from './oauth-brokers';
 import { isBackupPeriod, isBucketName, parseBackupEndpoint, parseTimeOfDay } from './backup-config';
@@ -637,7 +638,8 @@ export const MAX_OAUTH_REFRESH_REUSE_WINDOW_SECONDS = keySpec(
 /**
  * `oauth_brokers.<name>.*` (ADR google-calendar-through-an-oauth-broker D1): one
  * broker per name, in the order of the tree; `url` and `key` required,
- * `providers` optional (none: the default broker). The rules across brokers
+ * `providers` optional (none: the default broker), `attestation` `required`
+ * (the default) or `none`. The rules across brokers
  * are `brokerSetProblems`'.
  */
 function readOAuthBrokers(r: Reader): OAuthBrokerConfig[] {
@@ -673,8 +675,22 @@ function readOAuthBrokers(r: Reader): OAuthBrokerConfig[] {
         );
       }
     }
-    if (r.issues.items.length > before || !url || !key) continue;
-    out.push({ name, url, key, providers });
+    const attestation = parseBrokerAttestation(r.string(`${base}.attestation`));
+    if (attestation === null) {
+      r.issues.add(
+        `${base}.attestation`,
+        OAUTH_BROKER_PROBLEMS.attestation,
+        envNamesFor(`${base}.attestation`),
+      );
+    } else if (attestation === 'required' && url?.protocol === 'http:') {
+      r.issues.add(
+        `${base}.url`,
+        OAUTH_BROKER_PROBLEMS.attestedOverHttp,
+        envNamesFor(`${base}.url`),
+      );
+    }
+    if (r.issues.items.length > before || !url || !key || attestation === null) continue;
+    out.push({ name, url, key, providers, attestation });
   }
   for (const problem of brokerSetProblems(out)) {
     r.issues.add(problem.path, problem.message, envNamesFor(problem.path));

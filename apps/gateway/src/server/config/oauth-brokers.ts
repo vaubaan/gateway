@@ -7,12 +7,15 @@
  * providers its `providers` list names (`google`); a broker without a list is
  * the instance's default broker and serves every provider no other broker
  * lists. At most one default broker, and a provider is listed by one broker at
- * most: the broker of a plugin is never ambiguous (`brokerFor`).
+ * most: the broker of a plugin is never ambiguous (`brokerFor`). A broker is
+ * attested unless its block says `attestation: none` (ADR
+ * oauth-broker-stateless-in-an-attested-enclave D4); nothing in the
+ * configuration widens the allowlist of broker versions the release admits.
  *
  * Handbook: docs/handbook/configuration.md ("OAuth brokers"),
  * docs/handbook/oauth-broker-contract.md.
  */
-import type { OAuthBrokerConfig } from './types';
+import type { BrokerAttestationMode, OAuthBrokerConfig } from './types';
 
 /** A broker name: a lower-case letter, then letters, digits or hyphens (32 at most). */
 const BROKER_NAME = /^[a-z][a-z0-9-]{0,31}$/;
@@ -27,7 +30,21 @@ export const OAUTH_BROKER_PROBLEMS = {
   shape: 'must carry no user, password, query or fragment',
   provider: 'a broker provider is a lower-case letter, then letters, digits or hyphens',
   defaultTwice: 'at most one broker may leave providers unset (the default broker)',
+  attestation: 'must be required or none',
+  attestedOverHttp:
+    'an attested broker is reached over https only; http (a loopback host) needs attestation: none',
 } as const;
+
+export const BROKER_ATTESTATION_MODES: readonly BrokerAttestationMode[] = ['required', 'none'];
+
+/** `attestation`, as written (trimmed, lower-cased); `null` when it is not one of the modes. */
+export function parseBrokerAttestation(raw: string | undefined): BrokerAttestationMode | null {
+  if (raw === undefined) return 'required';
+  const mode = raw.trim().toLowerCase();
+  return (BROKER_ATTESTATION_MODES as readonly string[]).includes(mode)
+    ? (mode as BrokerAttestationMode)
+    : null;
+}
 
 export function isBrokerName(raw: string): boolean {
   return BROKER_NAME.test(raw);

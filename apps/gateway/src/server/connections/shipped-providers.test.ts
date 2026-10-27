@@ -58,8 +58,8 @@ describe('shipped plugins through the generic connect driver', () => {
     // The endpoints below are the ones read in the providers' documentation (ADR
     // provider-side-revocation-on-connection-revoke). A plugin joins this table with
     // its source, never by analogy. A pasted token is deleted by hand at the service. A
-    // brokered connection is withdrawn by its broker (`DELETE /grants/<id>`, ADR
-    // google-calendar-through-an-oauth-broker D2).
+    // brokered connection is withdrawn through its broker (`POST /revoke`, ADR
+    // oauth-broker-stateless-in-an-attested-enclave D1).
     const declared = new Map(
       SHIPPED_PLUGINS.filter((plugin) => canWithdraw(plugin)).map((plugin) => {
         const spec = plugin.credential;

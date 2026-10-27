@@ -164,6 +164,13 @@ export interface ConnectableProvider {
   readonly redirects: boolean;
   /** The service's `oauth2` client is an OAuth broker's (ADR google-calendar-through-an-oauth-broker). */
   readonly viaBroker: boolean;
+  /**
+   * The broker that serves it is attested (ADR
+   * oauth-broker-stateless-in-an-attested-enclave D4): false when the
+   * configuration declares it `attestation: none`; `null` when the service
+   * takes no broker or none is configured.
+   */
+  readonly brokerAttested: boolean | null;
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
   /** Where the user creates the key (`api-key`). */
@@ -238,6 +245,13 @@ export interface ConnectionView {
   readonly wayRetired: boolean;
   /** What the service said the pasted token acts as, at connect time (`octocat`); `null` when not said. */
   readonly tokenAccount: string | null;
+  /**
+   * The OAuth broker a brokered account was made through, and whether it is
+   * attested (false: declared `attestation: none`; ADR
+   * oauth-broker-stateless-in-an-attested-enclave D4). `null` for any other
+   * account, or when the broker is no longer configured (`attested` unknown).
+   */
+  readonly oauthBroker: { readonly name: string; readonly attested: boolean | null } | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
   readonly tokenExpiresAt: string | null;
   readonly ownerLabel: string;
@@ -429,6 +443,10 @@ export class ConnectionService {
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
       viaBroker: spec.kind === 'oauth2' && isBrokeredSpec(spec),
+      brokerAttested:
+        spec.kind === 'oauth2' && isBrokeredSpec(spec)
+          ? (this.deps.brokers.forProvider(spec.broker.provider)?.attested ?? null)
+          : null,
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
       createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
       label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
@@ -815,8 +833,9 @@ export class ConnectionService {
   /**
    * The browser is back from the broker with `grant` (and the `state` already
    * checked): the grant is redeemed with the verifier of the pending flow at
-   * the broker that started it. The grant id and the access token are sealed;
-   * no refresh token reaches the gateway.
+   * the broker that started it. The access token is the plugin's secret; the
+   * refresh token is sealed beside it, host only (`BrokerGrant`): the broker
+   * keeps no token (ADR oauth-broker-stateless-in-an-attested-enclave D1).
    */
   private async completeBrokered(
     actor: Actor,
@@ -859,7 +878,7 @@ export class ConnectionService {
         oauth_broker: broker.name,
         ...(redeemed.account ? { account: redeemed.account } : {}),
       },
-      brokerGrant: { broker: broker.name, grantId: redeemed.grantId },
+      brokerGrant: { broker: broker.name, refreshToken: redeemed.refreshToken },
     });
   }
 
@@ -1629,12 +1648,20 @@ export class ConnectionService {
       credentialKind: kind,
       wayRetired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
       tokenAccount: accountSaid && typeof metadata.account === 'string' ? metadata.account : null,
+      oauthBroker: this.oauthBrokerOf(metadata),
       tokenExpiresAt: pasted ? connection.credentialExpiresAt : null,
       ownerLabel: await this.ownerLabel(connection),
       publicKey: typeof metadata.public_key === 'string' ? metadata.public_key : null,
       fields: connectionPublicFields(connection),
       discovery: discoveryOf(metadata.discovery),
     };
+  }
+
+  /** The broker named at connect time (`metadata.oauth_broker`), as configured now. */
+  private oauthBrokerOf(metadata: Record<string, unknown>): ConnectionView['oauthBroker'] {
+    const name = metadata.oauth_broker;
+    if (typeof name !== 'string') return null;
+    return { name, attested: this.deps.brokers.byName(name)?.attested ?? null };
   }
 
   private async ownerLabel(connection: ConnectionRecord): Promise<string> {

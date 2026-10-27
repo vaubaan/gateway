@@ -106,11 +106,14 @@ export const OAUTH_BROKER_ENV_PREFIX = 'VAUBAAN_OAUTH_BROKER_';
  * (`oauth_brokers.<name>.<field>`, ADR google-calendar-through-an-oauth-broker
  * D1), with the suffix of its variable (`VAUBAAN_OAUTH_BROKER_<NAME>_<SUFFIX>`).
  * `key` is a secret like every other: a `_FILE` sibling or `${file:…}`.
+ * `attestation` is `required` (the default) or `none` (ADR
+ * oauth-broker-stateless-in-an-attested-enclave D4).
  */
 export const OAUTH_BROKER_FIELDS = [
   { field: 'url', env: 'URL', kind: 'string' },
   { field: 'key', env: 'KEY', kind: 'secret' },
   { field: 'providers', env: 'PROVIDERS', kind: 'list' },
+  { field: 'attestation', env: 'ATTESTATION', kind: 'string' },
 ] as const satisfies readonly NamedBlockField[];
 
 /** One field of a family of named blocks (`sign_in.<id>.*`, `oauth_brokers.<name>.*`). */

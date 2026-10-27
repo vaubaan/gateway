@@ -97,9 +97,16 @@ function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconne
       {provider.kind === 'oauth2' && provider.viaBroker && (
         <p>
           “Continue” sends you to {name}. You sign in there and allow the app of the OAuth broker
-          this gateway is enrolled with; the broker keeps the long-lived authorization and sends you
-          back here with a short-lived access, which is encrypted and kept under your name. Your{' '}
-          {name} data never goes through the broker.
+          this gateway is enrolled with; the broker sends you back here with the authorization,
+          which is encrypted and kept under your name. The broker keeps none of it and only renews
+          the access when this gateway asks; your {name} data never goes through it.
+        </p>
+      )}
+      {provider.kind === 'oauth2' && provider.viaBroker && provider.brokerAttested === false && (
+        <p>
+          This gateway’s OAuth broker is <strong>not attested</strong>: an administrator declared it
+          with <code>attestation: none</code>, so the gateway does not check which code the broker
+          runs before it sends it your authorization.
         </p>
       )}
       {provider.kind === 'api-key' && (

@@ -1,23 +1,33 @@
 ---
-title: OAuth broker contract — the four calls between the gateway and a broker
+title: OAuth broker contract — the calls between the gateway and a broker, and the attestation
 status: current
 date: 2026-10-27
 last_synced: 2026-10-27
 tracks:
   - apps/gateway/src/server/connections/oauth-broker.ts
+  - apps/gateway/src/server/connections/broker-channel.ts
+  - apps/gateway/src/server/connections/broker-attestation.ts
+  - apps/gateway/src/server/connections/attestation-gcp.ts
+  - apps/gateway/src/server/connections/attestation-kit.ts
+  - apps/gateway/src/server/connections/broker-measurements.json
   - apps/gateway/src/server/connections/fake-oauth-broker.ts
   - apps/gateway/src/server/connections/oauth-broker.test.ts
+  - apps/gateway/src/server/connections/attestation-gcp.test.ts
   - apps/gateway/src/server/config/oauth-brokers.ts
 ---
 
 # OAuth broker contract
 
 This page is the contract an **OAuth broker** implements so that a Vaubaan
-Gateway instance can connect a provider through it (ADR
-[google-calendar-through-an-oauth-broker](../decisions/google-calendar-through-an-oauth-broker.md),
-D1 and D2). It is written for whoever builds a broker; the gateway's side
-is `apps/gateway/src/server/connections/oauth-broker.ts`, and the reference
-behaviour is the fake broker of the test kit,
+Gateway instance can connect a provider through it (ADRs
+[google-calendar-through-an-oauth-broker](../decisions/google-calendar-through-an-oauth-broker.md)
+and
+[oauth-broker-stateless-in-an-attested-enclave](../decisions/oauth-broker-stateless-in-an-attested-enclave.md)).
+It is written for whoever builds a broker, and both sides code against this
+text: the gateway's side is `apps/gateway/src/server/connections/oauth-broker.ts`
+(the calls), `broker-channel.ts` (the pinned TLS connection) and
+`broker-attestation.ts` with one adapter per platform (`attestation-gcp.ts`);
+the reference behaviour is the fake broker of the test kit,
 `apps/gateway/src/server/connections/fake-oauth-broker.ts`, which the
 gateway's tests run against.
 
@@ -30,13 +40,18 @@ it: a broker is a base URL and a key in the instance's configuration
 
 What the broker keeps and what the instance keeps:
 
-| Kept by the broker                                                | Kept by the instance (encrypted)         |
-| ----------------------------------------------------------------- | ---------------------------------------- |
-| the client secret, the provider's **refresh token** of each grant | the `grant_id`, the current access token |
-| which instance each grant belongs to; the return URLs on record   | the broker key                           |
+| Kept by the broker                                                                          | Kept by the instance (encrypted)                           |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| the client secret of each provider it serves (sealed in the enclave platform's key service) | the provider's **refresh token**, the current access token |
+| the instances enrolled: the digest of each broker key, the return URLs on record            | the broker key                                             |
+| flows in progress, ten minutes at most                                                      |                                                            |
 
-Provider data never transits the broker: the instance calls the provider
-(for Google Calendar, Google's Calendar MCP server) with the access token.
+The broker keeps **no token and no account**: once a flow is redeemed it
+holds nothing of who connected what. At a refresh the instance presents the
+refresh token; the broker adds its client secret, calls the provider and
+writes nothing. Provider data never transits the broker: the instance calls
+the provider (for Google Calendar, Google's Calendar MCP server) with the
+access token.
 
 ## Shape
 
@@ -44,46 +59,180 @@ Provider data never transits the broker: the instance calls the provider
 sequenceDiagram
   participant B as Browser
   participant G as Gateway instance
-  participant K as OAuth broker
+  participant K as OAuth broker (enclave)
   participant P as Provider (Google)
+  G->>K: POST /attest (no body, no key, on the TLS connection)
+  K-->>G: 200 {platform, evidence}
+  Note over G: verify evidence, pin the TLS key
   G->>K: POST /flows {provider, scopes, return_url, state, challenge}
   K-->>G: 201 {authorize_url}
   G-->>B: 302 authorize_url
   B->>P: consent
-  P-->>B: 302 broker redirect URI ?code
-  B->>K: code
-  K->>P: code exchange (client secret) → refresh + access token
-  K-->>B: 302 return_url?grant=…&state=…
+  P-->>B: 302 broker callback ?code&state=<flow id>
+  B->>K: GET /oauth/callback/<provider>?code&state
+  K-->>B: 302 return_url?grant=…&state=<gateway state>
   B->>G: GET return_url?grant&state
   G->>K: POST /grants/redeem {grant, verifier}
-  K-->>G: 200 {grant_id, access_token, expires_at, account, scopes}
-  Note over G,K: later
-  G->>K: POST /grants/{grant_id}/token
-  K-->>G: 200 {access_token, expires_at, scopes}
-  G->>K: DELETE /grants/{grant_id}
+  K->>P: code exchange (client secret, the broker's own PKCE verifier)
+  K-->>G: 200 {refresh_token, access_token, expires_at, account, scopes}
+  Note over G,K: later, over a pinned connection
+  G->>K: POST /token {provider, refresh_token}
+  K-->>G: 200 {access_token, expires_at, scopes?}
+  G->>K: POST /revoke {provider, refresh_token}
   K-->>G: 204
 ```
 
 ## Transport and authentication
 
-- **HTTPS** only (the gateway accepts `http` for a loopback host only, for
-  tests). Requests and answers are JSON (`Content-Type: application/json`),
-  UTF-8. A request without a body (`DELETE`) carries no `Content-Type`.
-- **Base URL.** The instance is configured with a base URL that may carry a
-  path (`https://broker.example.com/v1`); the four paths below are appended
-  to it.
-- **The broker key** is sent on every call as `Authorization: Bearer <key>`.
-  It identifies the **instance**: the broker knows which instance a key
-  enrolls, and every grant is bound to that instance. The key never appears
-  in a body, a URL or a redirect.
-- The gateway follows **no redirect** on these calls and waits at most **15
-  seconds** for an answer.
+- **HTTPS, JSON.** Requests and answers are JSON
+  (`Content-Type: application/json`), UTF-8. Every call is a `POST`; all but
+  `/attest` carry a JSON body.
+- **Base URL.** A root URL with a port, such as
+  `https://api.broker.example.com:8443`: the reference broker serves its API
+  at the root, and the paths below are appended to it (`…:8443/token`). The
+  port is the TCP passthrough to the enclave (below); the browser callback is
+  on the public front.
+- **The broker key** is sent as `Authorization: Bearer <key>` on every call
+  but two: `/attest`, which carries **no** `Authorization` header, and the
+  browser's callback. The gateway sends the key only on a connection whose
+  TLS key is pinned and verified, so whoever answers on the broker's address
+  without being the enclave never sees it. A broker answers `/attest`
+  without a key. The key identifies
+  the **instance**: the broker knows which instance a key enrolls, and every
+  flow is bound to that instance. The key never appears in a body, a URL or a
+  redirect.
+- The gateway follows **no redirect**: a 3xx answer, to `/attest` or to a
+  call, is a broker failure.
+- **Time.** Each request — the attestation, a call — waits at most **15
+  seconds**. A call that needs an attestation first may therefore take 30
+  seconds: the attestation runs on its own 15 seconds, shared by every call
+  waiting for it, and a call that gives up waiting does not cut it short for
+  the others. The revocation of a connection allows the same 30 seconds.
+- **Answers** longer than 256 KiB are refused.
 - A broker that rotates a key gives the instance's administrator the new
   one; the gateway reads it at its next start.
 
-## The four calls
+### The TLS key is the enclave's, and the gateway pins it
 
-### 1. `POST /flows` — start a flow
+The gateway↔broker API is served over TLS with a key the enclave generates at
+start and never releases. It is **not** trusted through a certificate
+authority, so it is not on the public certificate chain (it needs a TCP
+passthrough to the enclave, beside the public HTTPS front that serves the
+browser callback).
+
+The gateway accepts a connection only when an attestation obtained on it
+carries the SPKI hash of the certificate that connection presented:
+
+1. It opens a TLS connection of its own to the broker (no shared agent, no
+   connection reuse), completes the handshake **without** checking the
+   chain, and computes `base64url(SHA-256(DER SubjectPublicKeyInfo))` of the
+   certificate presented. Nothing is written before this.
+2. With no pin in force, it sends `POST /attest` on that connection, without
+   a body and without the broker key, and verifies the answer (below). The
+   key is then **pinned** for min(the evidence's `exp`, 1 hour).
+3. Every call — `/flows`, `/grants/redeem`, `/token`, `/revoke` — goes over a
+   new connection whose presented key is the pinned one; the request is
+   written only after that comparison. A connection presenting another key
+   (the enclave restarted) makes the gateway attest again, once; a key that
+   no fresh attestation carries gets nothing.
+4. After the pin expires, the next call attests again.
+
+**One key per broker: the broker runs as a single replica.** The pin covers
+one TLS key; two replicas behind one address would each present a key of
+their own, and every call landing on the other one would force a new
+attestation (or be refused). Scaling the broker out needs one address per
+replica, each enrolled as its own `oauth_brokers` block.
+
+**Why there is no nonce, and why a replay is harmless.** The evidence binds
+the enclave's TLS **public** key, not a gateway's request: the broker serves
+one cached attestation to everyone, refreshed every five minutes, so
+`/attest` costs it nothing and cannot be used to exhaust the platform's
+attestation quota. Whoever replays that attestation (copied from a broker's
+answer) does not hold the enclave's private key: the TLS connection it
+answers on presents another key, its SPKI hash is not the one the evidence
+names, and the gateway sends nothing. Freshness comes from `iat` (at most 10
+minutes old) and `exp`.
+
+The certificate chain is unchecked on these connections **only**; every
+other HTTPS call of the gateway verifies certificates as usual.
+
+A broker an administrator declares `attestation: none` (their own broker,
+outside an enclave) is reached as any HTTPS service: certificate checked by
+the system's authorities, no `/attest` (http is accepted for a loopback host,
+for tests). The connect page and the account page say it is not attested.
+
+## The calls
+
+### `POST /attest` — the attestation
+
+No `Authorization` header and **no body**: the broker answers it to anyone.
+
+Answer `200 OK`:
+
+```json
+{ "platform": "gcp-confidential-space", "evidence": "eyJhbGciOiJSUzI1NiIs…" }
+```
+
+| Field      | Rule                                                                            |
+| ---------- | ------------------------------------------------------------------------------- |
+| `platform` | The enclave platform: one the gateway release has an adapter for.               |
+| `evidence` | The platform's attestation, in the platform's format (below for each platform). |
+
+The broker serves a **cached** evidence and refreshes it every **five
+minutes**; the gateway accepts one issued up to ten minutes ago.
+
+For `platform: "gcp-confidential-space"`, `evidence` is a **Confidential
+Space OIDC attestation token** (a JWT) that the broker requests from the
+Confidential Space launcher (`POST /v1/token` on
+`/run/container_launcher/teeserver.sock`, `token_type: "OIDC"`) with:
+
+- `audience`: **`oauth-broker-attestation`**
+  (`BROKER_ATTESTATION_AUDIENCE`);
+- `nonces`: exactly one,
+  `base64url(SHA-256(DER SubjectPublicKeyInfo of the broker's TLS key))`
+  (43 characters — within Google's 10 to 74 bytes). No nonce of the
+  gateway's.
+
+The gateway checks, and refuses on any miss:
+
+| What                                            | Expected                                                                                                                                                                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| signature                                       | RS256, a key of the JWKS named by `https://confidentialcomputing.googleapis.com/.well-known/openid-configuration` (`jwks_uri`), cached; a key not found or a JWKS that cannot be fetched runs the discovery again, once |
+| `iss`                                           | `https://confidentialcomputing.googleapis.com`                                                                                                                                                                          |
+| `aud`                                           | `oauth-broker-attestation`                                                                                                                                                                                              |
+| `exp`, `iat`                                    | not expired; issued within the last 10 minutes (60 s of clock tolerance)                                                                                                                                                |
+| `swname`                                        | `CONFIDENTIAL_SPACE`                                                                                                                                                                                                    |
+| `dbgstat`                                       | `disabled-since-boot` (the production image, not the debug one)                                                                                                                                                         |
+| `secboot`                                       | `true`                                                                                                                                                                                                                  |
+| `hwmodel`                                       | a confidential VM: `GCP_AMD_SEV`, `GCP_AMD_SEV_ES` or `GCP_INTEL_TDX` — not `GCP_SHIELDED_VM`, nor any other value                                                                                                      |
+| `submods.confidential_space.support_attributes` | contains `STABLE`                                                                                                                                                                                                       |
+| `submods.container.image_digest`                | `sha256:<64 hex>`, **on the allowlist** of the gateway release                                                                                                                                                          |
+| `eat_nonce`                                     | exactly the SPKI hash of the connection's key: `[<hash>]` (or `"<hash>"`, the shape Google may give one nonce)                                                                                                          |
+
+### The allowlist
+
+The broker versions a gateway release admits ship **in the release**, in
+`apps/gateway/src/server/connections/broker-measurements.json`:
+
+```json
+[
+  {
+    "platform": "gcp-confidential-space",
+    "measurement": "sha256:<image digest>",
+    "broker_version": "1.0.0"
+  }
+]
+```
+
+A broker release publishes, for every supported platform, the measurement
+that platform reports for it (for Confidential Space, the image digest); a
+gateway release adds it. Nothing in the configuration widens the list: the
+only switch is `attestation: none` for one broker. While the list is empty
+(no broker released yet), an attested broker gets nothing and the connection
+shows the broker's failure "no attested broker version admitted by this
+release".
+
+### `POST /flows` — start a flow
 
 Request:
 
@@ -121,16 +270,19 @@ Answer `201 Created`:
 ```
 
 `authorize_url` is an **https** URL of the provider's consent page, with the
-**broker's** client id, the broker's redirect URI and a state of the
-broker's own. For Google, the broker asks for offline access
-(`access_type=offline`) so that it receives a refresh token, and for
-consent when it needs a new one.
+**broker's** client id, the broker's redirect URI, the flow id as the state
+towards the provider, and a PKCE challenge of the broker's **own** (its
+verifier is generated and kept in the enclave, so a `code` read at the public
+front cannot be exchanged without it). For Google, the broker asks for
+offline access (`access_type=offline`) so that the provider issues a refresh
+token, and for consent when it needs a new one.
 
 ### The way back — browser → provider → broker → `return_url`
 
-The provider sends the browser to the broker's redirect URI. The broker
-exchanges the code with its client secret, keeps the refresh token, and
-sends the browser to:
+The provider sends the browser to the broker's callback,
+`GET /oauth/callback/<provider>?code&state=<flow id>` (no broker key: it is
+the browser). The broker does **not** exchange the code yet: it keeps it in
+the flow and sends the browser to:
 
 ```
 <return_url>?grant=<one-time grant>&state=<the gateway's state>
@@ -151,7 +303,7 @@ broker: 5 minutes). The gateway checks `state` itself (bound to the person's
 session, single use, minted for this plugin, 10 minutes) before it redeems
 the grant.
 
-### 2. `POST /grants/redeem` — turn the grant into a grant id and a token
+### `POST /grants/redeem` — the provider's tokens, once
 
 Request:
 
@@ -159,11 +311,15 @@ Request:
 { "grant": "gr_Qm9vU2VjcmV0…", "verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk" }
 ```
 
+The broker checks the instance of the key and the PKCE verifier against the
+flow's challenge, **then** exchanges the code at the provider (client secret,
+its own verifier), answers, and deletes the flow.
+
 Answer `200 OK`:
 
 ```json
 {
-  "grant_id": "g_7Hc2kP0q…",
+  "refresh_token": "1//0gL…",
   "access_token": "ya29.a0Af…",
   "expires_at": "2026-10-27T10:00:00.000Z",
   "account": "alice@acme.example",
@@ -176,23 +332,27 @@ Answer `200 OK`:
 }
 ```
 
-| Field          | Rule                                                                                                                                          |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `grant_id`     | The broker's id of the grant: 8 to 128 characters of `[A-Za-z0-9_-]` (it goes in a URL path). Stable for the life of the grant.               |
-| `access_token` | The provider's access token, as the provider issued it.                                                                                       |
-| `expires_at`   | ISO-8601 instant when the access token stops working. Omit or `null` when unknown; the gateway then refreshes only when the provider refuses. |
-| `account`      | The provider account the person signed in with (an email at Google), or `null`. Shown on the account's page; nothing is decided on it.        |
-| `scopes`       | The scopes the provider actually granted (a person may untick some at Google).                                                                |
+| Field           | Rule                                                                                                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `refresh_token` | **Opaque** to the gateway: the reference broker answers a sealed blob bound to the instance of the key, which only it can open, around the provider's refresh token. The instance seals it and presents it as is; the broker keeps no copy. |
+| `access_token`  | The provider's access token, as the provider issued it.                                                                                                                                                                                     |
+| `expires_at`    | ISO-8601 instant when the access token stops working. Omit or `null` when unknown; the gateway then refreshes only when the provider refuses.                                                                                               |
+| `account`       | The provider account the person signed in with (an email at Google), or `null`. Shown on the account's page; nothing is decided on it.                                                                                                      |
+| `scopes`        | The scopes the provider actually granted (a person may untick some at Google).                                                                                                                                                              |
 
 The broker refuses, with **one** answer, a grant that is unknown, already
-redeemed, past its lifetime, issued to another instance (another key), or
-redeemed with a verifier whose S256 is not the flow's challenge:
-`400 {"error":"invalid_grant"}`. A grant is spent by its first redeem
-attempt, successful or not.
+redeemed, past its lifetime, issued to another instance (another key),
+redeemed with a verifier whose S256 is not the flow's challenge, or whose
+code the provider refused: `400 {"error":"invalid_grant", "message": "…"}`.
+A grant is spent by its first redeem attempt, successful or not.
 
-### 3. `POST /grants/{grant_id}/token` — a fresh access token (the refresh)
+### `POST /token` — a fresh access token (the refresh)
 
-Request: an empty JSON object `{}`.
+Request:
+
+```json
+{ "provider": "google", "refresh_token": "1//0gL…" }
+```
 
 Answer `200 OK`:
 
@@ -201,62 +361,71 @@ Answer `200 OK`:
 ```
 
 `scopes` may be omitted; the gateway then keeps the ones it has. The broker
-uses the provider's refresh token it holds; when the provider rotates it,
-the broker keeps the new one. The gateway calls this when its access token
+adds its client secret, calls the provider's token endpoint (RFC 6749 §6) and
+answers; it writes nothing. The gateway calls this when its access token
 expires within a minute, and when the provider answers it 401 or 403.
 
-When the grant is over — the broker never had it, forgot it, or the provider
-no longer accepts the refresh token (the person removed the app at Google)
-— the broker answers `404 {"error":"grant_not_found"}` or
-`410 {"error":"grant_revoked"}` and forgets the grant. The gateway then marks
-the connection **expired**; its owner reconnects it.
+When the provider refuses the refresh token (the person removed the app at
+Google, or the client secret was rotated), the broker answers
+`400 {"error":"invalid_grant", …}`. The gateway then marks the connection
+**expired**; its owner reconnects it.
 
-### 4. `DELETE /grants/{grant_id}` — revoke and forget
+### `POST /revoke` — revoke at the provider
 
-No body. The broker revokes the grant at the provider (for Google,
-`https://oauth2.googleapis.com/revoke` with the refresh token) and forgets
-it. Answer `204 No Content` — also when the grant is already gone, so the
-call is idempotent. The gateway calls it when the connection is revoked
-(ADR
+Request:
+
+```json
+{ "provider": "google", "refresh_token": "1//0gL…" }
+```
+
+The broker relays the revocation to the provider's revocation endpoint (for
+Google, `https://oauth2.googleapis.com/revoke`, RFC 7009). Answer
+`204 No Content` — also when the token is already revoked, so the call is
+idempotent. The gateway calls it when the connection is revoked (ADR
 [provider-side-revocation-on-connection-revoke](../decisions/provider-side-revocation-on-connection-revoke.md))
 and tells the person whether the broker confirmed.
 
 ## Errors
 
-Every error answer is JSON `{"error": "<code>", "error_description": "<text>"}`.
-`error` is a protocol token, `[a-z_]{1,40}`; `error_description` is optional
-and the gateway never shows it or logs it (it keeps the status and the code
-only).
+Every error answer is JSON `{"error": "<code>", "message": "<text>"}`.
+`error` is a protocol token, `[a-z_]{1,40}`; `message` is for a person
+reading the broker's own logs — the gateway never shows it or logs it (it
+keeps the status and the code only).
 
-| Status | `error`                     | Where              | What the gateway does                            |
-| ------ | --------------------------- | ------------------ | ------------------------------------------------ |
-| 400    | `invalid_request`           | any                | broker failure                                   |
-| 400    | `unsupported_provider`      | `/flows`           | broker failure ("the broker could not complete") |
-| 400    | `invalid_scope`             | `/flows`           | broker failure                                   |
-| 403    | `return_url_not_registered` | `/flows`           | broker failure                                   |
-| 400    | `invalid_grant`             | `/grants/redeem`   | the connect fails: start again                   |
-| 404    | `grant_not_found`           | `/token`, `DELETE` | `/token`: connection **expired**; `DELETE`: done |
-| 410    | `grant_revoked`             | `/token`           | connection **expired**                           |
-| 401    | `invalid_key`               | any                | broker failure — never an expiry                 |
-| 429    | `rate_limited`              | any                | broker failure, retried later                    |
-| 5xx    | `temporarily_unavailable`…  | any                | broker failure, retried later                    |
-| —      | (no answer, timeout)        | any                | broker failure, retried later                    |
+| Status | `error`                     | Where             | What the gateway does                            |
+| ------ | --------------------------- | ----------------- | ------------------------------------------------ |
+| 400    | `invalid_request`           | any               | broker failure                                   |
+| 400    | `unsupported_provider`      | any               | broker failure                                   |
+| 400    | `invalid_scope`             | `/flows`          | broker failure                                   |
+| 403    | `return_url_not_registered` | `/flows`          | broker failure                                   |
+| 400    | `invalid_grant`             | `/grants/redeem`  | the connect fails: start again                   |
+| 400    | `invalid_grant`             | `/token`          | connection **expired**                           |
+| 401    | `invalid_key`               | any but `/attest` | broker failure — never an expiry                 |
+| 429    | `rate_limited`              | any               | broker failure, retried later                    |
+| 5xx    | `temporarily_unavailable`…  | any               | broker failure, retried later                    |
+| —      | (no answer, timeout)        | any               | broker failure, retried later                    |
+| —      | (attestation refused)       | before any call   | broker failure: nothing is sent, nothing expires |
 
-**A broker failure is never an expiry.** Only `grant_not_found` and
-`grant_revoked` on a grant end a connection. A broker that is down, slow,
-refuses the key or answers something else leaves every connection as it
-is; the person reads "OAuth broker '<name>' answered 503 to token" on the
-account page, and once the current access token expires (an hour at
-Google) calls to the provider fail until the broker is back.
+**A broker failure is never an expiry.** Only `invalid_grant` on `/token`
+ends a connection. A broker that is down, slow, not attested, refuses the
+key or answers something else leaves every connection as it is; the person
+reads the broker's failure on the account page — "OAuth broker 'main'
+answered 503 to token", "OAuth broker 'main' could not be attested (token:
+answered 503 to attest)", "OAuth broker 'main' is not attested (flows: no
+attested broker version admitted by this release)" — and once the current
+access token expires (an hour at Google) calls to the provider fail until
+the broker is back.
 
 ## Lifetimes
 
 | Thing            | Lifetime                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------- |
-| A flow (`state`) | 10 minutes at the gateway; the broker may keep its own flow as long.                  |
+| A flow (`state`) | 10 minutes at the gateway; the broker keeps its own flow as long, at most.            |
 | A grant          | single use, a few minutes (5 in the fake broker).                                     |
-| A `grant_id`     | until `DELETE`, or until the provider refuses its refresh token.                      |
+| A refresh token  | the provider's: until revoked, refused, or the client secret is rotated.              |
 | An access token  | the provider's (an hour at Google); the gateway refreshes a minute before it expires. |
+| A pinned TLS key | min(the evidence's `exp`, 1 hour); then the gateway attests again.                    |
+| An evidence      | served cached, refreshed every 5 minutes; accepted up to 10 minutes after `iat`.      |
 
 ## What a broker operator provides
 
@@ -279,14 +448,44 @@ For the `google` provider, a Google Cloud project with:
   sensitive scopes (verified domain, privacy policy, demonstration, scope
   justification); no CASA assessment, which only restricted scopes need.
 
+And the broker runs in an attested enclave (ADR
+[oauth-broker-stateless-in-an-attested-enclave](../decisions/oauth-broker-stateless-in-an-attested-enclave.md)
+D3, D7), its image built reproducibly and its measurement in a gateway
+release.
+
 ## The fake broker (test kit)
 
-`FakeOAuthBroker.start({ keys })` runs an in-memory server on `127.0.0.1`
-that implements this page: `recordReturnUrl` enrolls a return URL,
-`approve(authorizeUrl)` / `deny(authorizeUrl)` play the person at the
-provider and give the URL the browser comes back on, `down()` answers 503
-to everything, `refusingProvider()` makes refreshes `grant_revoked`, and
-`calls` records what the gateway sent. `oauth-broker.test.ts` pins against
-it: the whole flow, a grant redeemed twice, late, by another instance or
-with the wrong verifier, a bad key, a broker that is down or gone, the
-refresh, the revocation.
+`FakeOAuthBroker.start({ keys })` runs an in-memory **HTTPS** server on
+`127.0.0.1` with a throwaway self-signed key (`fake-tls-certificate.ts`) that
+implements this page at the root of `https://127.0.0.1:<port>`, `/attest`
+(no body, no key, a cached evidence refreshed every five minutes) included,
+on the **test-only** platform
+`fake-enclave`: `attestationKit()` hands the code under test that platform's
+adapter and an allowlist admitting the fake's measurement — the
+configuration can never name it, and the production kit
+(`productionAttestationKit`) does not contain it. `{ attestation: 'none' }`
+plays a broker outside an enclave (no `/attest`); `trustingFetch()` is a
+fetch that trusts its certificate as an authority, so the chain and the name
+are checked as for any HTTPS service.
+
+`recordReturnUrl` enrolls a return URL, `approve(authorizeUrl)` /
+`deny(authorizeUrl)` play the person at the provider and give the URL the
+browser comes back on, `down()` answers 503 to everything,
+`refusingProvider()` makes the provider refuse every refresh token
+(`invalid_grant`), `refusingCode()` makes it refuse the code at the redeem
+(`invalid_grant`), `attestWith({measurement, spkiHash, debug, ttlMs})` makes
+the evidence lie or last less, `rotateTlsKey()` plays an enclave restart,
+`holdAttest()` a slow attestation, `redirecting(route)` a 3xx answer, and
+`calls` records
+what the gateway sent (`withKey`: whether a call carried an `Authorization`
+header). Like a real broker it keeps no token: the refresh
+tokens it hands out are opaque values its fake provider knows, bound to the
+instance that redeemed them (`providerRefreshTokens`). `oauth-broker.test.ts` pins against it: the whole
+flow, a grant redeemed twice, late, by another instance or with the wrong
+verifier, a code the provider refuses, a bad key, a broker that is down or
+gone, the refresh, the revocation, the pin, its renewal and its end at a
+short `exp`, a caller that joins an attestation in progress while another
+times out, 3xx answers, and every refused attestation.
+`attestation-gcp.test.ts` pins the Confidential Space adapter on tokens
+signed by a key of its own, found through a discovery document as in
+production, and found again when the keys moved or the fetch failed.

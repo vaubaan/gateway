@@ -279,6 +279,30 @@ any instance was enrolled:
   only the broker opens. That project owner remains trusted for what a client
   secret alone allows at the provider.
 
+## Amendment 2026-10-27 — no gateway nonce; one key per broker
+
+Decided in the review of the gateway client and the broker, before any broker
+was enrolled. Changes D6 as follows; everything else stands. Handbook:
+[oauth-broker-contract](../handbook/oauth-broker-contract.md).
+
+- **`POST /attest` takes no body and no broker key.** A nonce chosen by each
+  gateway made every call of `/attest` cost the broker a request to the
+  platform's attestation service, a way to deny service by exhausting its
+  quota. The broker serves instead one cached attestation, refreshed every five
+  minutes, whose only nonce is the SHA-256 of its TLS public key (SPKI). The
+  gateway requires it issued at most ten minutes ago and pins the key for
+  min(`exp`, one hour), as before.
+- **A replayed attestation is harmless.** It names the enclave's TLS key, and
+  whoever replays it does not hold that key's private half: the connection it
+  answers on presents another key, and the gateway sends nothing.
+- **The broker key travels only on a pinned, verified connection**, never to
+  `/attest`, so whoever answers on the broker's address without being the
+  enclave never learns it.
+- **One key per broker: the broker runs as a single replica.** Scaling out is
+  one address per replica, each enrolled as its own broker.
+- **The refresh token the instance keeps is opaque** to it: the broker may
+  answer a sealed blob bound to the instance around the provider's token.
+
 ## Open points
 
 - Whether Google's verification of the shared client accepts a broker that
