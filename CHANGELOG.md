@@ -9,6 +9,28 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **The OAuth broker** (`apps/oauth-broker`, `@vaubaan/oauth-broker` 0.1.0):
+  the open-source broker of ADR oauth-broker-stateless-in-an-attested-enclave.
+  It keeps no token: the instance receives the refresh token at the redeem,
+  **sealed to that instance** (AES-256-GCM, opened only for the instance's own
+  broker key), and the broker opens it and adds the client secret only when
+  that instance refreshes or revokes. Flows live ten minutes in memory, at most
+  500 per instance; the instance and the PKCE verifier are checked before the
+  provider's code is exchanged, and every flow starts with a PKCE verifier of
+  the broker's own. Its gateway API speaks TLS with a key generated in the
+  enclave; `POST /attest` — no key, no body, rate-limited — answers a cached
+  attestation bound to that key. The configuration holds digests only (it is
+  readable from the attestation). Google Confidential Space adapter
+  (attestation token from the launcher; client secret and sealing key through
+  Workload Identity Federation and Secret Manager) and a development adapter.
+  No dependency outside Node; provider endpoints compiled in. The image is
+  reproducible and signed keylessly with cosign by a workflow that runs on
+  `oauth-broker-v*` tags only, and pushes nothing before two builds from
+  scratch agree. Spec `docs/spec/oauth-broker.md` (draft), handbook
+  `docs/handbook/oauth-broker.md`.
+
 ## [2.0.0-alpha.10] - 2026-10-27
 
 ### Added

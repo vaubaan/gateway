@@ -1,0 +1,179 @@
+name: oauth-broker-image
+
+# Publishes a release of the OAuth broker (apps/oauth-broker). Policy:
+# ADR oauth-broker-stateless-in-an-attested-enclave, D2; procedure and how to
+# verify: docs/handbook/oauth-broker.md ("Releasing", "Verifying a release").
+#
+#   push of a tag oauth-broker-vX.Y.Z   the only trigger (CI minutes are
+#   billed, ADR ci-billed-minutes-budget): the tagged commit must be on main
+#   and name the version of apps/oauth-broker/package.json. Then, in one job:
+#   the image is built twice from scratch to OCI tarballs (SOURCE_DATE_EPOCH =
+#   commit time, every file timestamp rewritten, no provenance or SBOM
+#   manifest, which would change the digest) and the two digests compared;
+#   only then is it pushed to ghcr.io (refused unless the pushed digest is the
+#   checked one), signed keylessly with cosign (the signature recorded in
+#   Rekor), verified as an operator would, and its digest — the measurement
+#   Confidential Space reports — published in a GitHub release. Nothing is
+#   public before the comparison passes.
+#
+# The gateway's release (release.yml, tags v2.*.*) is not triggered by these
+# tags, and this release is never marked latest.
+#
+# Actions are pinned by commit; the comment gives the version. Bump both together.
+
+on:
+  push:
+    tags: ['oauth-broker-v*']
+
+concurrency:
+  group: oauth-broker-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # the GitHub release
+      packages: write # the image on ghcr.io
+      id-token: write # the keyless signing certificate (Sigstore Fulcio)
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the tagged commit must be on main
+          persist-credentials: false
+
+      - name: Plan
+        id: plan
+        run: |
+          version="${TAG#oauth-broker-v}"
+          declared="$(jq -r .version apps/oauth-broker/package.json)"
+          if [ "$version" != "$declared" ]; then
+            echo "::error title=Release refused::${TAG} names ${version}; apps/oauth-broker/package.json says ${declared}."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error title=Release refused::the commit of ${TAG} is not on main."
+            exit 1
+          fi
+          prerelease=false
+          if [[ "$version" == *-* ]]; then prerelease=true; fi
+          {
+            echo "version=${version}"
+            echo "prerelease=${prerelease}"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/oauth-broker"
+            echo "epoch=$(git log -1 --pretty=%ct)"
+          } >>"$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Nothing is public before this passes. Two builds from scratch, each to
+      # an OCI tarball, must give the same digest: what anyone can do from the
+      # source (handbook "Verifying a release"), done here first.
+      - name: Build twice from scratch and compare
+        id: check
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.plan.outputs.epoch }}
+        run: |
+          for run in first second; do
+            docker buildx build --no-cache --platform linux/amd64 --provenance=false --sbom=false \
+              --output "type=oci,dest=${RUNNER_TEMP}/${run}.tar,oci-mediatypes=true,rewrite-timestamp=true" \
+              --metadata-file "${RUNNER_TEMP}/${run}.json" \
+              -f apps/oauth-broker/Dockerfile apps/oauth-broker
+          done
+          first="$(jq -r '."containerimage.digest"' "${RUNNER_TEMP}/first.json")"
+          second="$(jq -r '."containerimage.digest"' "${RUNNER_TEMP}/second.json")"
+          if [ -z "$first" ] || [ "$first" != "$second" ]; then
+            echo "::error title=Not reproducible::first build ${first}, second build ${second}."
+            exit 1
+          fi
+          echo "digest=${first}" >>"$GITHUB_OUTPUT"
+          echo "Two builds from scratch: ${first}."
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The same build with the same options, from the layers just checked,
+      # exported to the registry; refused unless it is the checked digest.
+      - name: Push the checked image
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.plan.outputs.epoch }}
+          IMAGE: ${{ steps.plan.outputs.image }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          DIGEST: ${{ steps.check.outputs.digest }}
+        run: |
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false \
+            --output "type=image,name=${IMAGE}:${VERSION},push=true,oci-mediatypes=true,rewrite-timestamp=true" \
+            --metadata-file "${RUNNER_TEMP}/pushed.json" \
+            -f apps/oauth-broker/Dockerfile apps/oauth-broker
+          pushed="$(jq -r '."containerimage.digest"' "${RUNNER_TEMP}/pushed.json")"
+          if [ "$pushed" != "$DIGEST" ]; then
+            echo "::error title=Pushed digest differs::checked ${DIGEST}, pushed ${pushed}; nothing is signed or released."
+            exit 1
+          fi
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign keylessly and verify as an operator would
+        env:
+          IMAGE: ${{ steps.plan.outputs.image }}
+          DIGEST: ${{ steps.check.outputs.digest }}
+        run: |
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          cosign verify "${IMAGE}@${DIGEST}" \
+            --certificate-identity "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/oauth-broker-image.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com >/dev/null
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE: ${{ steps.plan.outputs.image }}
+          DIGEST: ${{ steps.check.outputs.digest }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          EPOCH: ${{ steps.plan.outputs.epoch }}
+          PRERELEASE: ${{ steps.plan.outputs.prerelease }}
+        run: |
+          cat >notes.md <<NOTES
+          OAuth broker ${VERSION}, built from ${GITHUB_SHA}.
+
+          | | |
+          | --- | --- |
+          | Image | \`${IMAGE}@${DIGEST}\` |
+          | Measurement, Google Confidential Space | image digest \`${DIGEST}\` |
+          | SOURCE_DATE_EPOCH | \`${EPOCH}\` |
+
+          Verify the signature (Sigstore, recorded in Rekor):
+
+          \`\`\`bash
+          cosign verify ${IMAGE}@${DIGEST} \\
+            --certificate-identity ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows/oauth-broker-image.yml@refs/tags/${TAG} \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          \`\`\`
+
+          Rebuild it from the source and compare the digest:
+
+          \`\`\`bash
+          git checkout ${TAG}
+          SOURCE_DATE_EPOCH=${EPOCH} docker buildx build --no-cache --platform linux/amd64 \\
+            --provenance=false --sbom=false --metadata-file rebuild.json \\
+            --output type=oci,dest=broker.tar,oci-mediatypes=true,rewrite-timestamp=true \\
+            -f apps/oauth-broker/Dockerfile apps/oauth-broker
+          jq -r '."containerimage.digest"' rebuild.json   # ${DIGEST}
+          \`\`\`
+          NOTES
+          flags=(--latest=false)
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "OAuth broker ${VERSION}" --notes-file notes.md "${flags[@]}"
+          {
+            echo "## OAuth broker ${VERSION}"
+            echo
+            echo "\`${IMAGE}@${DIGEST}\`, signed and reproducible."
+          } >>"$GITHUB_STEP_SUMMARY"

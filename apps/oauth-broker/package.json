@@ -1,0 +1,15 @@
+{
+  "name": "@vaubaan/oauth-broker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OAuth broker that keeps no token and runs in an attested enclave",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "type-check": "tsc --noEmit"
+  }
+}

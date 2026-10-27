@@ -84,6 +84,10 @@ rules:
         # the browser, so the page derives and signs with Web Crypto; the
         # server half is server/crypto/recovery-proof.ts, held equal by test.
         - /apps/gateway/src/components/auth/recovery-proof.ts
+        # The OAuth broker is a separate app that imports nothing from the
+        # gateway (ADR oauth-broker-runs-its-typescript-source-with-no-dependency);
+        # its one cipher, the refresh-token sealing, lives in this file only.
+        - /apps/oauth-broker/src/sealing.ts
     pattern-either:
       - pattern: $C.createCipheriv(...)
       - pattern: $C.createDecipheriv(...)
