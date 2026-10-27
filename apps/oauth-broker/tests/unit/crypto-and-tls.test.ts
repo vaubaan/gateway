@@ -1,6 +1,6 @@
 import { X509Certificate, createHash, createPrivateKey } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { isBase64Url32, s256, safeEqual } from '../../src/crypto-util.ts';
+import { s256, safeEqual } from '../../src/crypto-util.ts';
 import { createTlsIdentity } from '../../src/tls-identity.ts';
 
 describe('crypto helpers', () => {
@@ -8,14 +8,6 @@ describe('crypto helpers', () => {
     expect(s256('dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk')).toBe(
       'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
     );
-  });
-
-  it('accepts exactly 32 bytes of canonical base64url', () => {
-    expect(isBase64Url32(Buffer.alloc(32, 7).toString('base64url'))).toBe(true);
-    expect(isBase64Url32(Buffer.alloc(31).toString('base64url'))).toBe(false);
-    expect(isBase64Url32(`${Buffer.alloc(32).toString('base64url')}=`)).toBe(false);
-    // Same length, non-zero trailing bits: not the canonical encoding of 32 bytes.
-    expect(isBase64Url32('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB')).toBe(false);
   });
 
   it('compares unequal lengths as unequal', () => {

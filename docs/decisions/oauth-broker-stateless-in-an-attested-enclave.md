@@ -225,6 +225,60 @@ session cookie opens the whole account instead of a calendar scope.
 Simpler, but ties the broker to one vendor's prices, regions and terms; the
 product owner asked to be able to move.
 
+## Amendment of 2026-10-27 — review
+
+An independent review of the first implementation (`apps/oauth-broker`,
+handbook [oauth-broker](../handbook/oauth-broker.md)) found that it lets
+through what this decision means to rule out. Settled the same day, before
+any instance was enrolled:
+
+- **Refresh tokens are sealed to their instance.** The redeem answers the
+  provider's refresh token as an opaque blob: AES-256-GCM under a key of the
+  broker's, a key id prefix (`v1.`), the instance's enrollment id and the
+  provider as additional data. `POST /token` and `POST /revoke` open it only
+  for the instance that authenticates with the same enrollment id; any other
+  key, or an altered blob, is `400 invalid_grant`, and the provider is not
+  called. The key (`refresh-token-sealing-key`, 32 random bytes) is a second
+  secret of the platform's key service, released under the same condition as
+  the client secret and unsealed at start by the platform adapter. The
+  instance already keeps the refresh token as an opaque string: the wire
+  contract does not change. The positive consequence "a stolen instance store
+  yields refresh tokens useless without the client secret" now holds against
+  everyone, **except whoever also holds that instance's broker key, until the
+  instance is unenrolled**: unenrolling it, or enrolling it again under
+  another id, ends every token it holds.
+- **The attestation is cached and bound to the TLS key only (D4, D6
+  read precisely).** `POST /attest` takes no body and no key, and answers a
+  token the broker fetched from the platform in the background, every five
+  minutes and again after a failure, whose only nonce is
+  base64url(SHA-256(DER SPKI)) of the API's TLS key. No nonce of the gateway's:
+  what secures the channel is that the token names the key of the very TLS
+  connection the gateway is on, and that it is recent (the gateway refuses
+  one issued more than ten minutes ago). A replayed token is harmless:
+  whoever replays it does not hold the enclave's private key, so it cannot
+  complete a TLS handshake for that key. Per-request attestation let anyone
+  exhaust the platform's quota and starve every gateway; a cached answer
+  cannot be made to reach the platform, and is rate-limited only generously.
+- **The configuration holds digests only.** The platform measures the
+  container's environment, values included, into the attestation (Confidential
+  Space: `submods.container.env` and `env_override`), which anyone can now
+  read. Instances are enrolled with an opaque id, the SHA-256 of their broker
+  key and the SHA-256 of each exact return URL; the broker compares the digest
+  of the URL a flow names and sends the browser to that URL. What stays
+  readable: the broker's public URL and ports, the client ids (public in every
+  consent URL), the platform settings (the federation provider and the project
+  holding the secrets), and how many instances are enrolled.
+- **Flows in progress are capped per instance** (500), beside the cap for the
+  whole broker, so that one instance cannot take the memory of the others.
+- **The client secret is not seen only once.** Whoever owns the provider's
+  project can create further client secrets at any time, not only when the
+  client is created; the "seen once" consequence reads: the owner of the
+  provider project can obtain a valid client secret whenever they choose.
+  With sealed refresh tokens, a client secret and a stolen instance store
+  together no longer reach a calendar: the store holds sealed blobs, which
+  only the broker opens. That project owner remains trusted for what a client
+  secret alone allows at the provider.
+
 ## Open points
 
 - Whether Google's verification of the shared client accepts a broker that

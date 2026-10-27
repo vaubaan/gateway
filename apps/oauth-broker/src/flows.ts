@@ -33,8 +33,14 @@ export interface FlowStoreOptions {
   readonly now?: () => number;
   readonly flowTtlMs?: number;
   readonly grantTtlMs?: number;
+  /** All instances together. */
   readonly maxFlows?: number;
+  /** One instance, so that one cannot take the whole store. */
+  readonly maxFlowsPerInstance?: number;
 }
+
+/** A new flow, or which cap refused it. */
+export type StartResult = { flow: Flow } | { full: 'instance' | 'broker' };
 
 export class FlowStore {
   readonly #flows = new Map<string, Flow>();
@@ -43,22 +49,27 @@ export class FlowStore {
   readonly #flowTtlMs: number;
   readonly #grantTtlMs: number;
   readonly #maxFlows: number;
+  readonly #maxPerInstance: number;
+  readonly #perInstance = new Map<string, number>();
 
   constructor(options: FlowStoreOptions = {}) {
     this.#now = options.now ?? Date.now;
     this.#flowTtlMs = options.flowTtlMs ?? 10 * 60_000;
     this.#grantTtlMs = options.grantTtlMs ?? 5 * 60_000;
     this.#maxFlows = options.maxFlows ?? 10_000;
+    this.#maxPerInstance = options.maxFlowsPerInstance ?? 500;
   }
 
   get size(): number {
     return this.#flows.size;
   }
 
-  /** A new flow, or undefined when the store is full. */
-  start(fields: FlowStart): Flow | undefined {
+  start(fields: FlowStart): StartResult {
     this.sweep();
-    if (this.#flows.size >= this.#maxFlows) return undefined;
+    if ((this.#perInstance.get(fields.instanceId) ?? 0) >= this.#maxPerInstance) {
+      return { full: 'instance' };
+    }
+    if (this.#flows.size >= this.#maxFlows) return { full: 'broker' };
     const flow: Flow = {
       ...fields,
       id: randomToken(),
@@ -66,7 +77,8 @@ export class FlowStore {
       startedAt: this.#now(),
     };
     this.#flows.set(flow.id, flow);
-    return flow;
+    this.#perInstance.set(flow.instanceId, (this.#perInstance.get(flow.instanceId) ?? 0) + 1);
+    return { flow };
   }
 
   /** A live flow still waiting for the provider's answer. */
@@ -95,13 +107,17 @@ export class FlowStore {
     if (id === undefined) return undefined;
     const flow = this.#flows.get(id);
     this.#byGrant.delete(grant);
-    this.#flows.delete(id);
-    return flow === undefined || this.#expired(flow) ? undefined : flow;
+    if (flow === undefined) return undefined;
+    this.end(flow);
+    return this.#expired(flow) ? undefined : flow;
   }
 
   end(flow: Flow): void {
-    this.#flows.delete(flow.id);
+    if (!this.#flows.delete(flow.id)) return;
     if (flow.grant !== undefined) this.#byGrant.delete(flow.grant);
+    const left = (this.#perInstance.get(flow.instanceId) ?? 1) - 1;
+    if (left > 0) this.#perInstance.set(flow.instanceId, left);
+    else this.#perInstance.delete(flow.instanceId);
   }
 
   sweep(): void {

@@ -93,11 +93,13 @@ function teeServer(socketPath: string, method: 'GET' | 'POST', body?: string): P
             resolve(text);
           }
         });
-        res.on('error', reject);
+        res.on('error', () => reject(new PlatformError('TEE server answer broken')));
       },
     );
     req.on('timeout', () => req.destroy(new PlatformError('TEE server timed out')));
-    req.on('error', reject);
+    req.on('error', (error) =>
+      reject(error instanceof PlatformError ? error : new PlatformError('TEE server unreachable')),
+    );
     req.end(body);
   });
 }
@@ -108,18 +110,30 @@ async function json(
   init: RequestInit,
   step: string,
 ): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(url, {
-    ...init,
-    redirect: 'error',
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
-  const text = await response.text();
+  let response: Response;
+  let text: string;
+  try {
+    response = await fetchImpl(url, {
+      ...init,
+      redirect: 'error',
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    text = await response.text();
+  } catch {
+    throw new PlatformError(`${step} could not be reached`);
+  }
   if (response.status !== 200 || text.length > MAX_ANSWER_BYTES) {
     throw new PlatformError(`${step} answered ${response.status}`);
   }
-  const parsed: unknown = JSON.parse(text);
-  if (typeof parsed !== 'object' || parsed === null)
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new PlatformError(`${step} answered no JSON`);
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new PlatformError(`${step} answered no object`);
+  }
   return parsed as Record<string, unknown>;
 }
 

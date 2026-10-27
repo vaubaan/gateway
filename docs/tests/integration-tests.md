@@ -5446,62 +5446,83 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 
 > Covers: spec [`oauth-broker.md`](../spec/oauth-broker.md) §2, §3, §4. Handbook
 > [[oauth-broker]]; contract [[oauth-broker-contract]]. ADRs
-> [[oauth-broker-stateless-in-an-attested-enclave]],
-> [[oauth-broker-runs-its-typescript-source-with-no-dependency]].
+> [[oauth-broker-stateless-in-an-attested-enclave]] (with its amendment
+> "review"), [[oauth-broker-runs-its-typescript-source-with-no-dependency]].
 > `apps/oauth-broker/tests/`. No test reaches Google: the provider is a local
 > HTTP server, the platform the `local` adapter or a fake TEE server.
 
-- **`integration/broker-flow.test.ts`** (28) — the whole broker over its two
+- **`integration/broker-flow.test.ts`** (33) — the whole broker over its two
   listeners. **The full flow**: the consent URL carries the broker's client
   id, its redirect URI, its own state and its own S256 challenge (not the
   gateway's), `access_type=offline`, `prompt=consent`; the callback sends the
   browser to the return URL with `grant` and the gateway's `state` only, and
   **the code is not exchanged before the redeem**; the redeem answers the
-  refresh token, the access token, `expires_at`, the account of the ID token
-  and the scopes, the provider having received the broker's verifier and the
-  client secret; a second redeem is `invalid_grant`. One callback per flow. A
+  refresh token **sealed** (`v1.…`, not the provider's), the access token,
+  `expires_at`, the account of the ID token and the scopes, the provider having
+  received the broker's verifier and the client secret; the sealed token then
+  refreshes; a second redeem is `invalid_grant`. One callback per flow. A
   **refusal at the provider** comes back as `?error=access_denied&state=…`,
   an unexpected error text as `server_error`, and the flow is gone. **One
   answer, `invalid_grant`**, for another instance (and the grant is spent for
   its owner too), a wrong verifier (no exchange attempted), a grant past five
   minutes, a provider that refuses or is down, an unknown grant. **A flow
   ends at ten minutes.** Starting a flow is refused for a return URL of
-  another instance (403), a scope outside the compiled-in list, no scope, an
-  unknown provider, `plain` PKCE, a short state, no key or a key not enrolled
-  (401 `invalid_key`), a body over 16 KiB (413) or not JSON. **Refresh** adds
-  the client secret and answers the access token; **revocation** is relayed,
-  idempotent, and the refresh is then `invalid_grant`; a provider down is
-  502, not `invalid_grant`. **Attestation** binds the gateway's nonce and the
-  SHA-256 of the SPKI the TLS connection presented, audience
-  `oauth-broker-attestation`; a malformed nonce is 400; **it answers without
-  a key** and **is rate-limited** (429 `rate_limited`). Each listener serves
-  its own paths, and survives a request target that is not a URL. **The logs
-  carry no secret, key, token, code, verifier, state or grant**, and name the
-  route of a refused call.
-- **`unit/gcp-confidential-space.test.ts`** (7) — the Confidential Space
+  another instance (403, compared by digest), a scope outside the compiled-in
+  list, no scope, an unknown provider, `plain` PKCE, a short state, no key or a
+  key not enrolled (401 `invalid_key`), a body over 16 KiB (413) or not JSON.
+  **Refresh** adds the client secret and answers the access token;
+  **revocation** is relayed, idempotent, and the refresh is then
+  `invalid_grant`; a provider down is 502, not `invalid_grant`. **A sealed
+  token works for its own instance only**: another instance's key, a blob
+  sealed for another instance, an altered blob or the provider's raw token is
+  `invalid_grant` at `/token` and `/revoke` without calling the provider; after
+  the instance is re-enrolled under another id its blobs are `invalid_grant`,
+  and once unenrolled its key is `invalid_key`. **500 flows per instance**
+  (40 in the test): the next is 429 `rate_limited`, another instance is not
+  affected. **Attestation** takes no key and no body, binds exactly the
+  SHA-256 of the SPKI the TLS connection presented (one nonce), audience
+  `oauth-broker-attestation`, is the same cached answer for every caller, and
+  is rate-limited (429 `rate_limited`). Each listener serves its own paths, and
+  survives a request target that is not a URL. **The logs carry no secret,
+  sealing key, key, token, code, verifier, state or grant**, and name the route
+  of a refused call.
+- **`unit/sealing-and-attestation.test.ts`** (8) — a sealed token opens for
+  its instance and provider only, not under another id, provider or key, not
+  when altered or prefixed otherwise; two seals of one token differ; the key
+  is read as 32 bytes of base64 or base64url, anything else refused. The
+  cached attestation asks the platform with the SPKI digest as the only
+  nonce and then answers from memory; serves nothing before a first success
+  or once older than its maximum age; keeps the last token across a failed
+  refresh; refreshes in the background, sooner after a failure.
+- **`unit/gcp-confidential-space.test.ts`** (13) — the Confidential Space
   adapter against a fake TEE server on a real Unix socket: the custom token is
   `POST /v1/token` with `{audience: "oauth-broker-attestation", token_type:
-"OIDC", nonces}` and the JWT is the body; unsealing is `GET /v1/token`, the
-  STS token exchange (audience = the federation provider, subject token type
-  `jwt`, scope `cloud-platform`), then Secret Manager's
-  `secrets/<name>/versions/latest:access` with the federated token; a TEE or
-  STS refusal fails the start; malformed settings and secret names are
-  refused; the platform is chosen by name.
-- **`unit/config-and-flows.test.ts`** (13) — configuration: enrollment,
-  defaults, and refusals (not JSON, a provider the image does not serve, a key
-  digest malformed or repeated, a plain-http or missing return URL, a public
-  URL with a query); flows: ten minutes, five for a grant and never past the
-  flow, one callback, a grant spent by its first attempt, the cap and the
-  sweep, a distinct id and PKCE verifier per flow.
-- **`unit/crypto-and-tls.test.ts`** (5) — S256 against RFC 7636 appendix B;
-  the nonce is exactly 32 bytes of canonical base64url; the self-signed
-  certificate parses, verifies with its own key, matches the private key, is
-  P-256, and its SPKI digest is the one published; no two identities share a
-  key.
-- **`unit/rate-limit.test.ts`** (3) — the buckets of the unauthenticated
+"OIDC", nonces}` and the JWT is the body, the one nonce the broker uses
+  being the SPKI digest; unsealing is `GET /v1/token`, the STS token exchange
+  (audience = the federation provider, subject token type `jwt`, scope
+  `cloud-platform`), then Secret Manager's `secrets/<name>/versions/latest:access`
+  with the federated token; a TEE or STS refusal fails the start; **every
+  failure names its step**: Secret Manager answering no JSON, no payload or an
+  empty secret, STS answering no JSON or unreachable, the TEE socket missing;
+  malformed settings and secret names are refused; the platform is chosen by
+  name.
+- **`unit/config-and-flows.test.ts`** (18) — configuration: enrollment **as
+  digests**, defaults, and refusals (not JSON, a provider the image does not
+  serve, a key digest malformed or repeated, an id repeated or too short to be
+  opaque, a return URL in clear instead of its digest, none, the former
+  `return_urls` key, a public URL with a query); flows: ten minutes, five for a
+  grant and never past the flow, one callback, a grant spent by its first
+  attempt, the global cap and the sweep, **the per-instance cap** (counted down
+  as flows end, are redeemed or expire; 500 by default; other instances free),
+  a distinct id and PKCE verifier per flow.
+- **`unit/crypto-and-tls.test.ts`** (4) — S256 against RFC 7636 appendix B;
+  the self-signed certificate parses, verifies with its own key, matches the
+  private key, is P-256, and its SPKI digest is the one published; no two
+  identities share a key.
+- **`unit/rate-limit.test.ts`** (4) — the buckets of the unauthenticated
   `POST /attest`: a burst per address then a refill, another address its own
-  bucket; a global cap over all addresses; the oldest address forgotten past
-  the memory bound.
+  bucket; a global cap over all addresses; the memory of addresses bounded,
+  **the least recently seen forgotten first**.
 - **`unit/image.test.ts`** (3) — the Dockerfile: one base, pinned by version
   and digest and equal to the gateway's, no `# syntax` frontend and no `ARG`;
   nothing installed, the sources copied read-only, `USER node`; the platform

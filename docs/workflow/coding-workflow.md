@@ -679,10 +679,12 @@ manual run — CI minutes are billed). One job, `permissions: {}` at the top
 and `contents: write`, `packages: write`, `id-token: write` on the job. It
 refuses a tag that does not name the version of
 `apps/oauth-broker/package.json` or whose commit is not on `main`; builds
-`apps/oauth-broker/Dockerfile` for `linux/amd64` with `SOURCE_DATE_EPOCH` =
-the commit time, `rewrite-timestamp=true`, OCI media types and no provenance
-or SBOM manifest; pushes `ghcr.io/<owner>/oauth-broker:<version>`; rebuilds
-from scratch and fails unless the digest is the same; signs the digest
+`apps/oauth-broker/Dockerfile` twice from scratch, for `linux/amd64`, to OCI
+tarballs, with `SOURCE_DATE_EPOCH` = the commit time, `rewrite-timestamp=true`,
+OCI media types and no provenance or SBOM manifest, and fails unless both
+digests are equal; only then pushes `ghcr.io/<owner>/oauth-broker:<version>`
+from the same layers, refusing a pushed digest that is not the checked one
+(nothing is public before the comparison passes); signs the digest
 keylessly with cosign (`sigstore/cosign-installer`, pinned by commit) and
 verifies the signature against this workflow's identity at that tag; then
 creates a GitHub release `oauth-broker-v<version>`, never marked latest,

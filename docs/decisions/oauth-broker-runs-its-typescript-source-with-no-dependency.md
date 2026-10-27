@@ -43,7 +43,9 @@ sets only environment variables (Confidential Space's `tee-env-*`).
    The unit test parses it with `X509Certificate` and verifies its signature.
 4. **The configuration is one JSON document in `OAUTH_BROKER_CONFIG`**, the
    only variable the image's launch policy lets the operator set; the
-   platform is fixed by the image (`ENV OAUTH_BROKER_PLATFORM`).
+   platform is fixed by the image (`ENV OAUTH_BROKER_PLATFORM`). Since the
+   platform measures it into the public attestation, it holds digests and
+   opaque ids only (amendment "review" of the stateless ADR).
 5. **Logs may leave the enclave** (`tee.launch_policy.log_redirect=always`),
    because the broker logs no sensitive value by construction (route
    templates, statuses, durations, error class names) and an operator without
@@ -56,7 +58,7 @@ sets only environment variables (Confidential Space's `tee-env-*`).
 
 ### Positive
 
-- The whole of what runs is about 1 500 lines in one folder, plus Node.
+- The whole of what runs is about 1 800 lines in one folder, plus Node.
 - No supply chain to audit beyond Node and the base image; nothing for an
   attacker to slip into a lockfile.
 - The image is two `COPY` layers on a pinned base: two builds give the same

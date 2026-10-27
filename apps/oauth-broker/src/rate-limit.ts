@@ -1,9 +1,10 @@
 /**
  * Token buckets for `POST /attest`, the one call anyone may make (it carries
  * no key: the gateway sends no secret before the connection is verified).
- * One bucket per source address, and one for all, kept under Confidential
- * Space's own limit of 5 attestation requests per second per project and
- * region, so that one caller cannot starve the others nor the quota.
+ * The answer is a token cached in memory (src/attestation.ts), so the limits
+ * are generous: they only stop one caller from occupying the listener. One
+ * bucket per source address, the least recently seen forgotten first, and one
+ * for all callers together.
  */
 interface Bucket {
   tokens: number;
@@ -15,7 +16,7 @@ export interface RateLimitOptions {
   /** Per address: burst and refill per second. */
   readonly perAddress?: { readonly burst: number; readonly perSecond: number };
   readonly global?: { readonly burst: number; readonly perSecond: number };
-  /** Addresses remembered at most; the oldest are forgotten beyond. */
+  /** Addresses remembered at most; the least recently seen are forgotten beyond. */
   readonly maxAddresses?: number;
 }
 
@@ -29,8 +30,8 @@ export class AttestRateLimit {
 
   constructor(options: RateLimitOptions = {}) {
     this.#now = options.now ?? Date.now;
-    this.#perAddress = options.perAddress ?? { burst: 5, perSecond: 0.5 };
-    this.#globalRate = options.global ?? { burst: 10, perSecond: 4 };
+    this.#perAddress = options.perAddress ?? { burst: 30, perSecond: 5 };
+    this.#globalRate = options.global ?? { burst: 1000, perSecond: 300 };
     this.#maxAddresses = options.maxAddresses ?? 10_000;
     this.#global = { tokens: this.#globalRate.burst, at: this.#now() };
   }
@@ -39,7 +40,11 @@ export class AttestRateLimit {
   allow(address: string): boolean {
     const now = this.#now();
     let bucket = this.#buckets.get(address);
-    if (bucket === undefined) {
+    if (bucket !== undefined) {
+      // Seen now: moved last. A Map iterates in insertion order, so the first is the least recently seen.
+      this.#buckets.delete(address);
+      this.#buckets.set(address, bucket);
+    } else {
       if (this.#buckets.size >= this.#maxAddresses) {
         const oldest = this.#buckets.keys().next().value;
         if (oldest !== undefined) this.#buckets.delete(oldest);

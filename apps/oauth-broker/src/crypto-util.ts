@@ -20,12 +20,3 @@ export function safeEqual(a: string | Buffer, b: string | Buffer): boolean {
   const right = typeof b === 'string' ? Buffer.from(b) : b;
   return left.length === right.length && timingSafeEqual(left, right);
 }
-
-const BASE64URL_32 = /^[A-Za-z0-9_-]{43}$/;
-
-/** True for exactly 32 bytes in canonical base64url without padding. */
-export function isBase64Url32(value: string): boolean {
-  return (
-    BASE64URL_32.test(value) && Buffer.from(value, 'base64url').toString('base64url') === value
-  );
-}

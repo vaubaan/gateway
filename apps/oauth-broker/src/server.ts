@@ -22,6 +22,8 @@ import { errorKind, type Logger } from './log.ts';
 import { type TlsIdentity } from './tls-identity.ts';
 
 const API_ROUTES = new Set(['/flows', '/grants/redeem', '/token', '/revoke', '/attest']);
+/** Per listener; beyond, new connections are dropped until some close. */
+const MAX_CONNECTIONS = 1024;
 const CALLBACK = /^\/oauth\/callback\/([a-z0-9-]{1,40})$/;
 
 function limit(server: Server): Server {
@@ -29,6 +31,7 @@ function limit(server: Server): Server {
   server.requestTimeout = 30_000; // a redeem waits for the provider (10 s at most)
   server.keepAliveTimeout = 5_000;
   server.maxHeadersCount = 50;
+  server.maxConnections = MAX_CONNECTIONS;
   return server;
 }
 
@@ -77,7 +80,7 @@ async function answer(
 
 export function createApiServer(broker: Broker, tls: TlsIdentity, log: Logger): Server {
   const server = createHttpsServer(
-    { key: tls.key, cert: tls.cert, minVersion: 'TLSv1.3' },
+    { key: tls.key, cert: tls.cert, minVersion: 'TLSv1.3', handshakeTimeout: 10_000 },
     (req, res) => {
       const { path } = pathOf(req);
       const route = API_ROUTES.has(path) ? path : 'unknown';

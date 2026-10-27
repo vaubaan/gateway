@@ -132,6 +132,53 @@ describe('gcp-confidential-space adapter', () => {
     await expect(adapter.unsealSecret('google-client-secret')).rejects.toThrow('STS answered 403');
   });
 
+  it.each([
+    ['Secret Manager answers no JSON', 'not json', 'Secret Manager answered no JSON'],
+    ['Secret Manager answers no payload', JSON.stringify({ name: 'x' }), 'no payload'],
+    [
+      'the secret is empty',
+      JSON.stringify({ payload: { data: Buffer.from(' \n').toString('base64') } }),
+      'empty',
+    ],
+  ])('fails with a named reason when %s', async (_label, secretAnswer, reason) => {
+    const fakeFetch: typeof fetch = async (input) =>
+      String(input).startsWith('https://sts.')
+        ? Response.json({ access_token: 'federated' })
+        : new Response(secretAnswer, { status: 200 });
+    const adapter = createGcpConfidentialSpaceAdapter(settings, { socketPath, fetch: fakeFetch });
+    await expect(adapter.unsealSecret('google-client-secret')).rejects.toThrow(reason);
+  });
+
+  it('fails with a named reason when STS answers no JSON or cannot be reached', async () => {
+    const html: typeof fetch = async () => new Response('<html>', { status: 200 });
+    await expect(
+      createGcpConfidentialSpaceAdapter(settings, { socketPath, fetch: html }).unsealSecret('s'),
+    ).rejects.toThrow('STS answered no JSON');
+    const down: typeof fetch = async () => {
+      throw new TypeError('fetch failed');
+    };
+    await expect(
+      createGcpConfidentialSpaceAdapter(settings, { socketPath, fetch: down }).unsealSecret('s'),
+    ).rejects.toThrow('STS could not be reached');
+  });
+
+  it('fails with a named reason when the TEE server socket is missing', async () => {
+    const adapter = createGcpConfidentialSpaceAdapter(settings, {
+      socketPath: join(dir, 'missing.sock'),
+    });
+    await expect(adapter.attest(['n'.repeat(43)])).rejects.toThrow('TEE server unreachable');
+  });
+
+  it('asks with the one nonce the broker uses: the SPKI digest', async () => {
+    const adapter = createGcpConfidentialSpaceAdapter(settings, { socketPath });
+    await adapter.attest(['k'.repeat(43)]);
+    expect(JSON.parse(calls[0]?.body ?? '')).toEqual({
+      audience: 'oauth-broker-attestation',
+      token_type: 'OIDC',
+      nonces: ['k'.repeat(43)],
+    });
+  });
+
   it('refuses malformed settings and secret names', async () => {
     expect(() =>
       parseGcpSettings({ workload_identity_provider: 'https://evil', secret_project: 'p' }),

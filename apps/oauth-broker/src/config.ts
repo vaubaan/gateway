@@ -4,6 +4,11 @@
  * (spec oauth-broker §4): where the public front is, which client id to use,
  * which instances are enrolled and where their browsers may be sent back.
  * Provider endpoints and scopes are not here (src/providers.ts).
+ *
+ * Confidential Space measures every environment variable, value included,
+ * into the attestation the broker hands to anyone: so the enrollment is held
+ * as digests and opaque ids only — the SHA-256 of each broker key and of each
+ * return URL, never a key, a URL or a customer's name.
  */
 import { type ProviderTable } from './providers.ts';
 
@@ -11,7 +16,8 @@ export interface Enrollment {
   readonly id: string;
   /** SHA-256 of the instance's broker key. The key itself is never configured. */
   readonly keyDigest: Buffer;
-  readonly returnUrls: ReadonlySet<string>;
+  /** Lowercase hex SHA-256 of each exact return URL on record. */
+  readonly returnUrlDigests: ReadonlySet<string>;
 }
 
 export interface ProviderClient {
@@ -35,7 +41,8 @@ export class ConfigError extends Error {
   override name = 'ConfigError';
 }
 
-const ID = /^[a-z0-9][a-z0-9_-]{0,62}$/;
+/** Opaque: random, never a name (it is readable from the attestation). */
+const ID = /^[A-Za-z0-9_-]{8,64}$/;
 const HEX_DIGEST = /^[0-9a-f]{64}$/;
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
@@ -112,18 +119,19 @@ export function parseConfig(json: string, providers: ProviderTable): BrokerConfi
     }
     seen.add(id);
     seen.add(`key:${digest}`);
-    if (!Array.isArray(entry.return_urls) || entry.return_urls.length === 0) {
-      throw new ConfigError(`instances.${id}.return_urls must be a non-empty list`);
+    const urls = entry.return_url_sha256;
+    if (!Array.isArray(urls) || urls.length === 0) {
+      throw new ConfigError(`instances.${id}.return_url_sha256 must be a non-empty list`);
     }
-    const returnUrls = new Set(
-      entry.return_urls.map((url: unknown) => {
-        const value = text(url, `instances.${id}.return_urls`);
-        if (!isAllowedUrl(value))
-          throw new ConfigError(`instances.${id}.return_urls: not an https URL`);
+    const returnUrlDigests = new Set(
+      urls.map((value: unknown) => {
+        if (typeof value !== 'string' || !HEX_DIGEST.test(value)) {
+          throw new ConfigError(`instances.${id}.return_url_sha256: 64 lowercase hex characters`);
+        }
         return value;
       }),
     );
-    return { id, keyDigest: Buffer.from(digest, 'hex'), returnUrls };
+    return { id, keyDigest: Buffer.from(digest, 'hex'), returnUrlDigests };
   });
 
   return {

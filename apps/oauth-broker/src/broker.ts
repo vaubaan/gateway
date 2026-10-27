@@ -1,11 +1,13 @@
 /**
  * The broker's core: the five calls of the gateway API and the browser
  * callback (handbook oauth-broker-contract). It knows no platform (the
- * adapter is behind `attest`) and no listener (src/server.ts).
+ * attestation is served from src/attestation.ts) and no listener
+ * (src/server.ts).
  */
 import { type IncomingMessage, type ServerResponse } from 'node:http';
-import { type BrokerConfig, type Enrollment } from './config.ts';
-import { isBase64Url32, s256, safeEqual, sha256 } from './crypto-util.ts';
+import { type AttestationCache } from './attestation.ts';
+import { type BrokerConfig, type Enrollment, isAllowedUrl } from './config.ts';
+import { s256, safeEqual, sha256 } from './crypto-util.ts';
 import { type Flow, type FlowStore } from './flows.ts';
 import {
   field,
@@ -17,27 +19,28 @@ import {
   sendText,
 } from './http-util.ts';
 import { type ClientCredentials, type OAuthClient } from './oauth-client.ts';
-import { type PlatformAdapter } from './platform/types.ts';
 import { type ProviderDefinition, type ProviderTable } from './providers.ts';
 import { type AttestRateLimit } from './rate-limit.ts';
+import { type TokenSealer } from './sealing.ts';
 
 export interface BrokerDeps {
   readonly config: BrokerConfig;
   readonly providers: ProviderTable;
   /** Provider id → client secret, unsealed at start. */
   readonly secrets: ReadonlyMap<string, string>;
-  readonly platform: PlatformAdapter;
-  readonly publicKeySha256: string;
+  readonly attestation: AttestationCache;
   readonly flows: FlowStore;
   readonly oauth: OAuthClient;
   readonly attestLimit: AttestRateLimit;
+  /** Seals the refresh tokens of the redeem to their instance. */
+  readonly sealer: TokenSealer;
 }
 
 const STATE = /^[A-Za-z0-9_-]{20,128}$/;
 const CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
 const VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/; // RFC 7636 §4.1
 const GRANT = /^[A-Za-z0-9_-]{16,128}$/;
-const TOKEN = /^[\x21-\x7e]{1,4096}$/;
+const SEALED_TOKEN = /^[\x21-\x7e]{1,8192}$/;
 const PROVIDER = /^[a-z0-9-]{1,40}$/;
 const ERROR_CODE = /^[a-z_]{1,40}$/;
 const BEARER = /^Bearer ([\x21-\x7e]{1,512})$/;
@@ -91,14 +94,15 @@ export class Broker {
   }
 
   async handleApi(req: IncomingMessage, res: ServerResponse, route: string): Promise<void> {
-    // `/attest` carries no key: the gateway sends no secret before it has
-    // verified the connection, and the evidence is public. It is rate-limited.
+    // `/attest` carries no key and no body: the gateway sends nothing before
+    // it has verified the connection, and the answer is the public token in
+    // memory. Rate-limited, generously.
     if (route === '/attest') {
       if (!this.#deps.attestLimit.allow(req.socket.remoteAddress ?? '')) {
-        res.setHeader('retry-after', '2');
+        res.setHeader('retry-after', '1');
         throw new HttpError(429, 'rate_limited', 'too many attestation requests');
       }
-      return sendJson(res, 200, await this.#attest(await readJsonObject(req)));
+      return sendJson(res, 200, this.#attest());
     }
     const instance = this.authenticate(req);
     const body = await readJsonObject(req);
@@ -108,9 +112,9 @@ export class Broker {
       case '/grants/redeem':
         return sendJson(res, 200, await this.#redeem(instance, body));
       case '/token':
-        return sendJson(res, 200, await this.#refresh(body));
+        return sendJson(res, 200, await this.#refresh(instance, body));
       case '/revoke':
-        await this.#revoke(body);
+        await this.#revoke(instance, body);
         return sendEmpty(res, 204);
       default:
         throw new HttpError(404, 'not_found', 'no such call');
@@ -141,8 +145,14 @@ export class Broker {
         'a scope is not one this provider may be asked for',
       );
     }
+    // On record as a digest only; the browser goes back to the URL the gateway sent.
     const returnUrl = body.return_url;
-    if (typeof returnUrl !== 'string' || !instance.returnUrls.has(returnUrl)) {
+    if (
+      typeof returnUrl !== 'string' ||
+      returnUrl.length > 2048 ||
+      !isAllowedUrl(returnUrl) ||
+      !instance.returnUrlDigests.has(sha256(returnUrl).toString('hex'))
+    ) {
       throw new HttpError(
         403,
         'return_url_not_registered',
@@ -158,7 +168,7 @@ export class Broker {
         'state, challenge or challenge_method is malformed',
       );
     }
-    const flow = this.#deps.flows.start({
+    const started = this.#deps.flows.start({
       instanceId: instance.id,
       provider: definition.id,
       scopes,
@@ -166,8 +176,12 @@ export class Broker {
       gatewayState: state,
       gatewayChallenge: challenge,
     });
-    if (flow === undefined)
-      throw new HttpError(503, 'temporarily_unavailable', 'too many flows in progress');
+    if ('full' in started) {
+      throw started.full === 'instance'
+        ? new HttpError(429, 'rate_limited', 'too many flows in progress for this instance')
+        : new HttpError(503, 'temporarily_unavailable', 'too many flows in progress');
+    }
+    const { flow } = started;
 
     const url = new URL(definition.authorizeEndpoint);
     const params: Record<string, string> = {
@@ -210,10 +224,13 @@ export class Broker {
       this.redirectUri(flow.provider),
       flow.brokerVerifier,
     );
-    if (!result.ok || result.value.refreshToken === undefined) throw invalidGrant();
+    if (!result.ok) throw invalidGrant();
     const tokens = result.value;
+    const refreshToken = tokens.refreshToken;
+    if (refreshToken === undefined) throw invalidGrant();
     return {
-      refresh_token: tokens.refreshToken,
+      // Sealed to this instance: worthless to any other key (src/sealing.ts).
+      refresh_token: this.#deps.sealer.seal(instance.id, flow.provider, refreshToken),
       access_token: tokens.accessToken,
       expires_at: tokens.expiresAt,
       account: tokens.account,
@@ -221,19 +238,28 @@ export class Broker {
     };
   }
 
-  #refreshToken(body: Record<string, unknown>): string {
-    const token = field(body, 'refresh_token', TOKEN);
-    if (token === undefined)
+  /** The provider's refresh token inside the blob, for the instance that sealed it only. */
+  #refreshToken(instance: Enrollment, served: Served, body: Record<string, unknown>): string {
+    const blob = field(body, 'refresh_token', SEALED_TOKEN);
+    if (blob === undefined) {
       throw new HttpError(400, 'invalid_request', 'refresh_token is malformed');
+    }
+    const token = this.#deps.sealer.open(instance.id, served.definition.id, blob);
+    if (token === undefined) {
+      throw new HttpError(400, 'invalid_grant', 'the refresh token is not this instance’s');
+    }
     return token;
   }
 
-  async #refresh(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async #refresh(
+    instance: Enrollment,
+    body: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     const served = this.#servedFor(body);
     const result = await this.#deps.oauth.refresh(
       served.definition,
       served.client,
-      this.#refreshToken(body),
+      this.#refreshToken(instance, served, body),
     );
     if (!result.ok) {
       throw result.reason === 'refused'
@@ -246,34 +272,22 @@ export class Broker {
       : { access_token: accessToken, expires_at: expiresAt, scopes };
   }
 
-  async #revoke(body: Record<string, unknown>): Promise<void> {
+  async #revoke(instance: Enrollment, body: Record<string, unknown>): Promise<void> {
     const served = this.#servedFor(body);
     const result = await this.#deps.oauth.revoke(
       served.definition,
       served.client,
-      this.#refreshToken(body),
+      this.#refreshToken(instance, served, body),
     );
     if (!result.ok) throw unavailable();
   }
 
-  async #attest(body: Record<string, unknown>): Promise<{ platform: string; evidence: string }> {
-    const nonce = body.nonce;
-    if (typeof nonce !== 'string' || !isBase64Url32(nonce)) {
-      throw new HttpError(
-        400,
-        'invalid_request',
-        'nonce must be 32 bytes in base64url without padding',
-      );
+  #attest(): { platform: string; evidence: string } {
+    const current = this.#deps.attestation.current();
+    if (current === undefined) {
+      throw new HttpError(503, 'temporarily_unavailable', 'no fresh attestation yet');
     }
-    try {
-      const { platform, evidence } = await this.#deps.platform.attest([
-        nonce,
-        this.#deps.publicKeySha256,
-      ]);
-      return { platform, evidence };
-    } catch {
-      throw new HttpError(503, 'temporarily_unavailable', 'the platform gave no attestation');
-    }
+    return { platform: current.platform, evidence: current.evidence };
   }
 
   // ---- browser callback -------------------------------------------------

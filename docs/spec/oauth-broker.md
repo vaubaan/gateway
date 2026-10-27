@@ -10,7 +10,8 @@ date: 2026-10-27
 > [oauth-broker-stateless-in-an-attested-enclave](../decisions/oauth-broker-stateless-in-an-attested-enclave.md)
 > (D1 to D7) and
 > [google-calendar-through-an-oauth-broker](../decisions/google-calendar-through-an-oauth-broker.md)
-> (D1, D2 as amended). It decides nothing beyond them; what they leave open is
+> (D1, D2 as amended), and the stateless ADR's amendment "review" of the same
+> day. It decides nothing beyond them; what they leave open is
 > listed in §7. _How_ it is built lives in the handbook
 > [oauth-broker](../handbook/oauth-broker.md); the calls between a gateway and
 > a broker are in [oauth-broker-contract](../handbook/oauth-broker-contract.md).
@@ -51,28 +52,38 @@ Four things for an instance, and the browser's way back between the first two
    refusal.
 3. **Redeem a grant**: only for the instance that started the flow, once,
    before it expires, and with the verifier of the instance's challenge;
-   **then** exchange the code and answer the refresh token, the access token
-   and what the provider said of the account and the scopes. The flow is gone
-   afterwards. Every failure gets the same answer.
-4. **Refresh**: given a refresh token, add the client secret, ask the
-   provider, answer the access token. **Revoke**: relay a refresh token to the
-   provider's revocation endpoint.
+   **then** exchange the code and answer the refresh token **sealed to that
+   instance**, the access token and what the provider said of the account and
+   the scopes. The flow is gone afterwards. Every failure gets the same answer.
+4. **Refresh**: given a sealed refresh token, open it — for the instance that
+   sealed it only —, add the client secret, ask the provider, answer the
+   access token. **Revoke**: the same, relayed to the provider's revocation
+   endpoint. A sealed token presented by another instance, or altered, is
+   refused as an invalid grant.
+
+Each instance may have a bounded number of flows in progress (500), beside a
+bound for the whole broker, so that no instance can take the broker's memory
+from the others.
 
 And one thing for the instance's trust (D4, D6): **attest** — answer the
-platform's evidence that this exact code runs in an enclave, bound to a nonce
-the instance chose and to the key of the connection it is talking on. Anyone
-may ask for it, without a key: the instance sends no secret before it has
-verified the connection, and the evidence is public; the broker limits how
-often it is asked.
+platform's evidence that this exact code runs in an enclave, bound to the key
+of the TLS connection the instance is talking on, and recent. It is one
+answer for everyone, kept in memory and renewed every few minutes: no nonce
+of the instance's. A replayed answer is harmless, since whoever replays it
+does not hold the enclave's private key, and the instance refuses an answer
+that is not recent. Anyone may ask for it, without a key and without a body:
+the instance sends nothing before it has verified the connection; the broker
+limits how often it is asked.
 
 ## 3. What it keeps, and what it never keeps
 
-| Kept                                                                              | Never kept                                                                  |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| The client secret of each provider it serves (unsealed into memory at start).     | A refresh token or an access token, past the call that carries it.          |
-| The enrolled instances: the digest of each broker key, the return URLs on record. | An account, an email, a record of who connected what once a flow is gone.   |
-| Flows in progress, ten minutes at most, in memory only.                           | Anything on disk. Request bodies, tokens, codes, verifiers or keys in logs. |
-| The private key of its own TLS identity, generated at start, never released.      |                                                                             |
+| Kept                                                                                                     | Never kept                                                                                                               |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| The client secret of each provider it serves (unsealed into memory at start).                            | A refresh token or an access token, past the call that carries it.                                                       |
+| The key that seals refresh tokens to their instance (unsealed into memory at start).                     | A refresh token in clear outside the call: what an instance keeps is sealed.                                             |
+| The enrolled instances, as digests: of each broker key, of each return URL on record, with an opaque id. | An account, an email, a record of who connected what once a flow is gone. A customer's name or URL in the configuration. |
+| Flows in progress, ten minutes at most, in memory only.                                                  | Anything on disk. Request bodies, tokens, codes, verifiers or keys in logs.                                              |
+| The private key of its own TLS identity, generated at start, never released.                             |                                                                                                                          |
 
 Provider data never transits the broker: the instance calls the provider with
 the access token.
@@ -101,9 +112,21 @@ the access token.
   (which keys, which return URLs) is configuration; the provider endpoints and
   the scopes a provider may be asked for are part of the measured code, never
   configuration, so that no configuration can send the client secret elsewhere.
-- **Remaining trust** (ADR consequences): the hardware vendor and the platform
-  that signs attestations; the one moment a person sees the client secret when
-  the client is created at the provider.
+- **The configuration is readable by anyone.** The enclave platform measures
+  the configuration into the attestation, which the broker gives to whoever
+  asks. So it holds digests and opaque ids only. What remains readable: the
+  broker's public URL and ports, each provider's client id (public anyway, it
+  is in every consent URL), the platform settings (for Confidential Space, the
+  Workload Identity Federation provider and the project holding the secrets),
+  the number of instances enrolled and their opaque ids.
+- **A stolen instance store is worthless on its own** (amendment "review"):
+  its refresh tokens are sealed to that instance and open only with that
+  instance's broker key, until the instance is unenrolled.
+- **Remaining trust** (ADR consequences, amendment "review"): the hardware
+  vendor and the platform that signs attestations; whoever owns the provider
+  project, who can see a client secret when one is created and can create
+  more at any time; whoever holds both an instance's store and its broker key,
+  until that instance is unenrolled.
 
 ## 5. Portability
 
@@ -142,7 +165,10 @@ Not settled by the ADRs; for the product owner.
 4. **Logs.** Whether the enclave may send its (non-sensitive) logs to the
    operator's logging, or must send none (the implementation chose to allow
    them; see the handbook).
-5. **Rate and size limits** a shared broker applies per instance (today: one
-   global cap on flows in progress).
-6. ADR open points stand: Google's verification of a broker that keeps no
+5. **Rate and size limits** a shared broker applies per instance beyond the
+   flows in progress (500 per instance).
+6. **Rotating the sealing key.** Sealed tokens carry a key id (`v1`); how a
+   second key is introduced and the first retired without disconnecting
+   every instance is not settled.
+7. ADR open points stand: Google's verification of a broker that keeps no
    token; creating the client secret inside the enclave.

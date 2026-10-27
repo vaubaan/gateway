@@ -41,4 +41,18 @@ describe('attestation rate limit', () => {
     expect(limit.allow('b')).toBe(true); // 'a' forgotten
     expect(limit.allow('a')).toBe(true);
   });
+
+  it('forgets the least recently seen address, not the first inserted', () => {
+    const limit = new AttestRateLimit({
+      now: () => 0,
+      perAddress: { burst: 2, perSecond: 0 },
+      maxAddresses: 2,
+    });
+    limit.allow('a');
+    limit.allow('b');
+    limit.allow('a'); // 'a' seen again: 'b' is now the least recent; 'a' has no token left
+    limit.allow('c'); // forgets 'b'
+    expect(limit.allow('a')).toBe(false); // remembered, still empty
+    expect(limit.allow('b')).toBe(true); // forgotten, so a fresh bucket
+  });
 });

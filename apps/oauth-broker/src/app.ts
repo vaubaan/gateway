@@ -5,6 +5,7 @@
  */
 import { type AddressInfo } from 'node:net';
 import { type Server } from 'node:http';
+import { AttestationCache, type AttestationCacheOptions } from './attestation.ts';
 import { Broker } from './broker.ts';
 import { type BrokerConfig } from './config.ts';
 import { FlowStore } from './flows.ts';
@@ -13,6 +14,7 @@ import { type Logger } from './log.ts';
 import { type Fetch, OAuthClient } from './oauth-client.ts';
 import { type PlatformAdapter } from './platform/types.ts';
 import { type ProviderTable } from './providers.ts';
+import { parseSealingKey, SEALING_KEY_SECRET, TokenSealer } from './sealing.ts';
 import { createApiServer, createCallbackServer } from './server.ts';
 import { createTlsIdentity } from './tls-identity.ts';
 
@@ -24,6 +26,8 @@ export interface StartOptions {
   readonly fetch?: Fetch;
   readonly now?: () => number;
   readonly attestLimit?: AttestRateLimit;
+  readonly attestation?: AttestationCacheOptions;
+  readonly flows?: { readonly maxFlows?: number; readonly maxFlowsPerInstance?: number };
   /** Listen address; all interfaces by default (the enclave has no other tenant). */
   readonly host?: string;
 }
@@ -57,17 +61,25 @@ export async function startBroker(options: StartOptions): Promise<RunningBroker>
   for (const [id, client] of config.clients) {
     secrets.set(id, await platform.unsealSecret(client.secretName));
   }
+  const sealer = new TokenSealer(parseSealingKey(await platform.unsealSecret(SEALING_KEY_SECRET)));
   const tls = createTlsIdentity();
-  const flows = new FlowStore(options.now === undefined ? {} : { now: options.now });
+  const now = options.now ?? Date.now;
+  const flows = new FlowStore({ ...options.flows, now });
+  // The first token before the listeners open; a failure is retried in the background.
+  const attestation = new AttestationCache(platform, tls.publicKeySha256, log, {
+    now,
+    ...options.attestation,
+  });
+  await attestation.start();
   const broker = new Broker({
     config,
     providers,
     secrets,
-    platform,
-    publicKeySha256: tls.publicKeySha256,
+    attestation,
     flows,
-    oauth: new OAuthClient(options.fetch ?? fetch, options.now ?? Date.now),
-    attestLimit: options.attestLimit ?? new AttestRateLimit(),
+    oauth: new OAuthClient(options.fetch ?? fetch, now),
+    attestLimit: options.attestLimit ?? new AttestRateLimit({ now }),
+    sealer,
   });
   const sweeper = setInterval(() => flows.sweep(), 60_000);
   sweeper.unref();
@@ -92,6 +104,7 @@ export async function startBroker(options: StartOptions): Promise<RunningBroker>
     certificate: tls.cert,
     async close() {
       clearInterval(sweeper);
+      attestation.stop();
       await Promise.all([close(api), close(http)]);
     },
   };

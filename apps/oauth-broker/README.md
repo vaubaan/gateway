@@ -6,8 +6,9 @@ An OAuth broker that **keeps no token**, runs in an **attested enclave**
 It lets a Vaubaan Gateway instance connect a provider that offers no key and
 no dynamic client registration — Google Calendar — through one verified OAuth
 client, without whoever operates the broker being able to use anyone's
-tokens. The instance keeps the refresh token; the broker adds the client
-secret when asked to refresh, and nothing else.
+tokens. The instance keeps the refresh token, sealed so that only its own
+broker key opens it; the broker adds the client secret when that instance
+asks to refresh, and keeps nothing.
 
 - **What and why**: spec [`docs/spec/oauth-broker.md`](../../docs/spec/oauth-broker.md),
   ADR [`oauth-broker-stateless-in-an-attested-enclave`](../../docs/decisions/oauth-broker-stateless-in-an-attested-enclave.md).
@@ -24,7 +25,12 @@ browser ──HTTPS front──▶ :8080  GET /oauth/callback/<provider>   GET /
 ```
 
 - No dependency outside Node 26; Node runs the TypeScript in `src/` as is.
-- Flows live ten minutes, in memory. Nothing is written to disk.
+- Flows live ten minutes, in memory, at most 500 per instance. Nothing is
+  written to disk.
+- `/attest` takes no key and no body: it answers a cached attestation bound
+  to the API's TLS key.
+- The configuration holds digests only: Confidential Space puts it in the
+  attestation, which anyone can read.
 - Provider endpoints and scopes are compiled in (`src/providers.ts`), never
   configured.
 - The platform adapter (`src/platform/`) attests and unseals the client

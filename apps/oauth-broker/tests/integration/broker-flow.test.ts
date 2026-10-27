@@ -16,12 +16,25 @@ import { s256 } from '../../src/crypto-util.ts';
 import { createLogger } from '../../src/log.ts';
 import { createLocalAdapter } from '../../src/platform/local.ts';
 import { type ProviderDefinition } from '../../src/providers.ts';
+import { AttestRateLimit } from '../../src/rate-limit.ts';
+import { TokenSealer } from '../../src/sealing.ts';
 
 const KEY_A = `bk_${randomBytes(24).toString('base64url')}`;
 const KEY_B = `bk_${randomBytes(24).toString('base64url')}`;
+const KEY_C = `bk_${randomBytes(24).toString('base64url')}`;
+const ID_A = 'i_7c1e93ab';
+const ID_B = 'i_02f4d6e8';
+const ID_C = 'i_9b5a0c31';
+const SEALING_KEY = randomBytes(32);
+/** The test knows the key, so it can seal a token the fake provider knows. */
+const testSealer = new TokenSealer(SEALING_KEY);
+const sealed = (token: string, instanceId = ID_A): string =>
+  testSealer.seal(instanceId, 'google', token);
+const PER_INSTANCE_CAP = 40;
 const CLIENT_SECRET = `cs_${randomBytes(16).toString('hex')}`;
 const RETURN_A = 'https://gw-a.example/connections/callback/google-calendar';
 const RETURN_B = 'https://gw-b.example/connections/callback/google-calendar';
+const RETURN_C = 'https://gw-c.example/connections/callback/google-calendar';
 const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/calendar.events'];
 const digest = (key: string): string => createHash('sha256').update(key).digest('hex');
 
@@ -92,6 +105,46 @@ function providerAnswer(
 let now = Date.parse('2026-10-27T10:00:00Z');
 let broker: RunningBroker;
 const logLines: string[] = [];
+let providers: Map<string, ProviderDefinition>;
+
+interface Enrolled {
+  id: string;
+  key: string;
+  returnUrl: string;
+}
+
+/** A broker with these instances, the test's sealing key and client secret. */
+async function launch(instances: Enrolled[]): Promise<RunningBroker> {
+  const config = parseConfig(
+    JSON.stringify({
+      public_url: 'https://broker.example.com',
+      providers: { google: { client_id: 'cid.example' } },
+      instances: instances.map((i) => ({
+        id: i.id,
+        key_sha256: digest(i.key),
+        return_url_sha256: [digest(i.returnUrl)],
+      })),
+    }),
+    providers,
+  );
+  return startBroker({
+    config: { ...config, apiPort: 0, httpPort: 0 },
+    providers,
+    platform: createLocalAdapter({
+      secrets: {
+        'google-client-secret': CLIENT_SECRET,
+        'refresh-token-sealing-key': SEALING_KEY.toString('base64'),
+      },
+    }),
+    log: createLogger((line) => logLines.push(line)),
+    now: () => now,
+    // The attestation keeps real time: the test clock jumps ahead by minutes.
+    attestation: { now: Date.now },
+    attestLimit: new AttestRateLimit({ perAddress: { burst: 6, perSecond: 0.1 } }),
+    flows: { maxFlowsPerInstance: PER_INSTANCE_CAP },
+    host: '127.0.0.1',
+  });
+}
 
 beforeAll(async () => {
   providerServer = createServer((req, res) => {
@@ -115,26 +168,12 @@ beforeAll(async () => {
     allowedScopes: new Set(SCOPES),
     authorizeParams: { access_type: 'offline', prompt: 'consent' },
   };
-  const providers = new Map([[fake.id, fake]]);
-  const config = parseConfig(
-    JSON.stringify({
-      public_url: 'https://broker.example.com',
-      providers: { google: { client_id: 'cid.example' } },
-      instances: [
-        { id: 'a', key_sha256: digest(KEY_A), return_urls: [RETURN_A] },
-        { id: 'b', key_sha256: digest(KEY_B), return_urls: [RETURN_B] },
-      ],
-    }),
-    providers,
-  );
-  broker = await startBroker({
-    config: { ...config, apiPort: 0, httpPort: 0 },
-    providers,
-    platform: createLocalAdapter({ secrets: { 'google-client-secret': CLIENT_SECRET } }),
-    log: createLogger((line) => logLines.push(line)),
-    now: () => now,
-    host: '127.0.0.1',
-  });
+  providers = new Map([[fake.id, fake]]);
+  broker = await launch([
+    { id: ID_A, key: KEY_A, returnUrl: RETURN_A },
+    { id: ID_B, key: KEY_B, returnUrl: RETURN_B },
+    { id: ID_C, key: KEY_C, returnUrl: RETURN_C },
+  ]);
 });
 
 afterAll(async () => {
@@ -160,20 +199,24 @@ function api(
   body: unknown,
   key: string | null = KEY_A,
   raw?: string,
+  target: RunningBroker = broker,
 ): Promise<Answer> {
   return new Promise((resolve, reject) => {
-    const payload = raw ?? JSON.stringify(body);
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    const payload = body === undefined && raw === undefined ? '' : (raw ?? JSON.stringify(body));
+    const headers: Record<string, string> =
+      payload === '' ? {} : { 'content-type': 'application/json' };
     if (key !== null) headers.authorization = `Bearer ${key}`;
     // No certificate authority: the key is pinned through the attestation instead.
     const req = httpsRequest(
       {
         host: '127.0.0.1',
-        port: broker.apiPort,
+        port: target.apiPort,
         path,
         method: 'POST',
         headers,
         rejectUnauthorized: false,
+        // A connection of its own each time, as the gateway pins per connection.
+        agent: false,
       },
       (res) => {
         const spki = (res.socket as TLSSocket)
@@ -268,12 +311,20 @@ describe('a flow from start to redeem', () => {
     const redeemed = await api('/grants/redeem', { grant, verifier: flow.verifier });
     expect(redeemed.status).toBe(200);
     expect(redeemed.json).toEqual({
-      refresh_token: expect.stringMatching(/^rt_/) as unknown,
+      // Sealed to instance A: not the provider's token.
+      refresh_token: expect.stringMatching(/^v1\.[A-Za-z0-9_-]+$/) as unknown,
       access_token: 'at_first',
       expires_at: new Date(now + 3599_000).toISOString(),
       account: 'alice@acme.example',
       scopes: SCOPES,
     });
+    expect(String(redeemed.json?.refresh_token)).not.toContain('rt_');
+    // What the instance stores refreshes for it.
+    const refreshed = await api('/token', {
+      provider: 'google',
+      refresh_token: redeemed.json?.refresh_token,
+    });
+    expect([refreshed.status, refreshed.json?.access_token]).toEqual([200, 'at_refreshed']);
     expect(provider.calls[0]?.form).toMatchObject({
       grant_type: 'authorization_code',
       redirect_uri: 'https://broker.example.com/oauth/callback/google',
@@ -417,7 +468,7 @@ describe('starting a flow is refused', () => {
 
 describe('refresh and revocation', () => {
   it('refreshes with the client secret added, and writes nothing', async () => {
-    const res = await api('/token', { provider: 'google', refresh_token: 'rt_alive' });
+    const res = await api('/token', { provider: 'google', refresh_token: sealed('rt_alive') });
     expect(res.status).toBe(200);
     expect(res.json).toEqual({
       access_token: 'at_refreshed',
@@ -432,61 +483,129 @@ describe('refresh and revocation', () => {
   });
 
   it('relays a revocation, idempotently, then the refresh is invalid_grant', async () => {
-    expect((await api('/revoke', { provider: 'google', refresh_token: 'rt_gone' })).status).toBe(
-      204,
-    );
-    expect((await api('/revoke', { provider: 'google', refresh_token: 'rt_gone' })).status).toBe(
-      204,
-    );
+    const gone = sealed('rt_gone');
+    for (let i = 0; i < 2; i += 1) {
+      expect((await api('/revoke', { provider: 'google', refresh_token: gone })).status).toBe(204);
+    }
     expect(provider.calls[0]?.form).toMatchObject({ token: 'rt_gone' });
-    const res = await api('/token', { provider: 'google', refresh_token: 'rt_gone' });
+    const res = await api('/token', { provider: 'google', refresh_token: gone });
     expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
   });
 
   it('says the provider is unavailable rather than invalid_grant when it is down', async () => {
     provider.down = true;
-    expect((await api('/token', { provider: 'google', refresh_token: 'rt_alive' })).status).toBe(
-      502,
+    const alive = sealed('rt_alive');
+    expect((await api('/token', { provider: 'google', refresh_token: alive })).status).toBe(502);
+    expect((await api('/revoke', { provider: 'google', refresh_token: alive })).status).toBe(502);
+  });
+});
+
+describe('a refresh token works for its own instance only', () => {
+  it.each([
+    ['another instance’s key', () => sealed('rt_alive', ID_A), KEY_B],
+    ['a blob sealed for another instance', () => sealed('rt_alive', ID_B), KEY_A],
+    ['a tampered blob', () => `${sealed('rt_alive').slice(0, -4)}AAAA`, KEY_A],
+    ['the provider’s raw token', () => 'rt_alive', KEY_A],
+  ])('refuses %s, at /token and /revoke, without calling the provider', async (_l, blob, key) => {
+    for (const path of ['/token', '/revoke']) {
+      const res = await api(path, { provider: 'google', refresh_token: blob() }, key);
+      expect([path, res.status, res.json?.error]).toEqual([path, 400, 'invalid_grant']);
+    }
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it('dies with its instance: unenrolled, or enrolled again under another id', async () => {
+    const blob = sealed('rt_alive', ID_A);
+    // The same broker key, enrolled again under a new opaque id.
+    const after = await launch([
+      { id: 'i_d00d1e5a', key: KEY_A, returnUrl: RETURN_A },
+      { id: ID_B, key: KEY_B, returnUrl: RETURN_B },
+    ]);
+    try {
+      const reenrolled = await api(
+        '/token',
+        { provider: 'google', refresh_token: blob },
+        KEY_A,
+        undefined,
+        after,
+      );
+      expect([reenrolled.status, reenrolled.json?.error]).toEqual([400, 'invalid_grant']);
+      const other = await api(
+        '/token',
+        { provider: 'google', refresh_token: blob },
+        KEY_B,
+        undefined,
+        after,
+      );
+      expect([other.status, other.json?.error]).toEqual([400, 'invalid_grant']);
+      expect(provider.calls).toHaveLength(0);
+    } finally {
+      await after.close();
+    }
+    const gone = await launch([{ id: ID_B, key: KEY_B, returnUrl: RETURN_B }]);
+    try {
+      const res = await api(
+        '/token',
+        { provider: 'google', refresh_token: blob },
+        KEY_A,
+        undefined,
+        gone,
+      );
+      expect([res.status, res.json?.error]).toEqual([401, 'invalid_key']);
+    } finally {
+      await gone.close();
+    }
+  });
+});
+
+describe('flows in progress per instance', () => {
+  it('caps one instance, and leaves the others free', async () => {
+    for (let i = 0; i < PER_INSTANCE_CAP; i += 1) await startFlow(KEY_C, RETURN_C);
+    const res = await api(
+      '/flows',
+      {
+        provider: 'google',
+        scopes: SCOPES,
+        return_url: RETURN_C,
+        state: 's'.repeat(32),
+        challenge: s256('v'.repeat(43)),
+        challenge_method: 'S256',
+      },
+      KEY_C,
     );
-    expect((await api('/revoke', { provider: 'google', refresh_token: 'rt_alive' })).status).toBe(
-      502,
-    );
+    expect([res.status, res.json?.error]).toEqual([429, 'rate_limited']);
+    await startFlow(KEY_A, RETURN_A);
   });
 });
 
 describe('attestation', () => {
-  it('binds the gateway nonce and the key of the TLS connection', async () => {
-    const nonce = randomBytes(32).toString('base64url');
-    const res = await api('/attest', { nonce });
+  const claimsOf = (evidence: unknown): Record<string, unknown> =>
+    JSON.parse(Buffer.from(String(evidence).split('.')[1] ?? '', 'base64url').toString()) as Record<
+      string,
+      unknown
+    >;
+
+  it('takes no key and no body, and binds the key of the TLS connection only', async () => {
+    const res = await api('/attest', undefined, null);
     expect(res.status).toBe(200);
     expect(res.json?.platform).toBe('none');
-    const claims = JSON.parse(
-      Buffer.from(String(res.json?.evidence).split('.')[1] ?? '', 'base64url').toString(),
-    ) as Record<string, unknown>;
-    expect(claims.eat_nonce).toEqual([nonce, res.peerKeySha256]);
+    const claims = claimsOf(res.json?.evidence);
+    expect(claims.eat_nonce).toEqual([res.peerKeySha256]);
     expect(res.peerKeySha256).toBe(broker.publicKeySha256);
     expect(claims.aud).toBe('oauth-broker-attestation');
   });
 
-  it('refuses a nonce that is not 32 bytes in base64url', async () => {
-    const res = await api('/attest', { nonce: 'short' });
-    expect([res.status, res.json?.error]).toEqual([400, 'invalid_request']);
-  });
-
-  it('answers without a key: the gateway sends no secret before it has verified', async () => {
-    const res = await api('/attest', { nonce: randomBytes(32).toString('base64url') }, null);
-    expect(res.status).toBe(200);
+  it('serves the token in memory: the same answer to every caller', async () => {
+    const first = await api('/attest', undefined, null);
+    const second = await api('/attest', { nonce: 'ignored' }, KEY_B);
+    expect(second.json?.evidence).toBe(first.json?.evidence);
   });
 
   it('is rate-limited, since anyone may call it', async () => {
     const statuses: number[] = [];
-    for (let i = 0; i < 8; i += 1) {
-      statuses.push(
-        (await api('/attest', { nonce: randomBytes(32).toString('base64url') })).status,
-      );
-    }
+    for (let i = 0; i < 8; i += 1) statuses.push((await api('/attest', undefined, null)).status);
     expect(statuses).toContain(429);
-    const refused = await api('/attest', { nonce: randomBytes(32).toString('base64url') });
+    const refused = await api('/attest', undefined, null);
     expect([refused.status, refused.json?.error]).toEqual([429, 'rate_limited']);
   });
 });
@@ -522,6 +641,8 @@ describe('logs', () => {
     const all = logLines.join('');
     for (const secret of [
       CLIENT_SECRET,
+      SEALING_KEY.toString('base64'),
+      SEALING_KEY.toString('base64url'),
       KEY_A,
       KEY_B,
       flow.verifier,
