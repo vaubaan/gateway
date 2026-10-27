@@ -45,7 +45,7 @@ export class TokenSealer {
 
   seal(instanceId: string, provider: string, token: string): string {
     const iv = randomBytes(IV_BYTES);
-    const cipher = createCipheriv('aes-256-gcm', this.#key, iv);
+    const cipher = createCipheriv('aes-256-gcm', this.#key, iv, { authTagLength: TAG_BYTES });
     cipher.setAAD(aad(instanceId, provider));
     const sealed = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
     return `${KEY_ID}.${Buffer.concat([iv, sealed, cipher.getAuthTag()]).toString('base64url')}`;
@@ -57,7 +57,9 @@ export class TokenSealer {
     const raw = Buffer.from(blob.slice(KEY_ID.length + 1), 'base64url');
     if (raw.length <= IV_BYTES + TAG_BYTES) return undefined;
     try {
-      const decipher = createDecipheriv('aes-256-gcm', this.#key, raw.subarray(0, IV_BYTES));
+      const decipher = createDecipheriv('aes-256-gcm', this.#key, raw.subarray(0, IV_BYTES), {
+        authTagLength: TAG_BYTES,
+      });
       decipher.setAAD(aad(instanceId, provider));
       decipher.setAuthTag(raw.subarray(raw.length - TAG_BYTES));
       const plain = Buffer.concat([
