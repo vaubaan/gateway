@@ -54,9 +54,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   image digest on the allowlist shipped with the release
   (`broker-measurements.json`). The broker's URL is a root URL with a port;
   the broker runs as a single replica (one pinned key). The refresh token is
-  opaque to the gateway. The allowlist is empty until a
-  broker is released: an attested broker then gets nothing, and connecting
-  says "no attested broker version admitted by this release". No broker was
+  opaque to the gateway. This release admits OAuth broker
+  0.1.0 on Google Confidential Space (image digest
+  `sha256:40d4ebfc018ce1dd283e4e820de084747f66a2d734129ca0e43305bb95a7d980`);
+  a broker reporting any other measurement gets nothing, and connecting says
+  "no attested broker version admitted by this release". No broker was
   ever enrolled, so no connection or configuration needs migrating.
 - **Service marks are drawn in their brand colour.** The icon of a service
   (Accounts, the connect picker, the mission form, Reference) is drawn in the

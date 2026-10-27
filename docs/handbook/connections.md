@@ -215,9 +215,9 @@ productionAttestationKit({ fetch }) })`, built by `createConnectionsModule`. `fo
   also the revocation's budget through a broker. `AttestationVerifier` picks
   the platform adapter the answer
   names (`gcpConfidentialSpace`, the only one of `productionAttestationKit`)
-  and requires the measurement on `broker-measurements.json` (empty today:
-  "no attested broker version admitted by this release", and nothing is
-  sent). The pin lasts min(evidence `exp`, 1 h, `MAX_PIN_MS`); another key
+  and requires the measurement on `broker-measurements.json` (today OAuth broker 0.1.0 on
+  Confidential Space; any other measurement: "a version this release does not
+  admit", and nothing is sent). The pin lasts min(evidence `exp`, 1 h, `MAX_PIN_MS`); another key
   presented later means one new attestation. One verifier is shared by every
   broker (Google's JWKS is discovered once and cached). A refused or failed
   attestation is an `OAuthBrokerError` with status 0 (or the status `/attest`
