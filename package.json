@@ -59,5 +59,12 @@
     "*.{md,json,yaml,yml,css,html}": [
       "prettier --check"
     ]
+  },
+  "harness": {
+    "lint": {
+      "ignore": [
+        "apps/website/public/**"
+      ]
+    }
   }
 }

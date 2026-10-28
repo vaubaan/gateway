@@ -127,7 +127,7 @@ jobs:
         run: npm run type-check
       - run: npm run format:check
       # Docs: the harness linters (schema, links, tracks, generated files fresh).
-      # Before the website build, which writes a copy of docs/ under public/.
+      # The site's generated copy under apps/website/public is ignored (package.json).
       - run: npx vaubaan-harness lint
       # The gateway is built by `e2e` (and by `docker`, in the image).
       - if: steps.scope.outputs.code == 'true'
