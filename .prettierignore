@@ -14,3 +14,11 @@ package-lock.json
 .build/
 BUILD_PROGRESS.md
 *.har
+
+# Rendered by @vaubaan/harness (npx @vaubaan/harness update .), never edited by hand.
+AGENTS.md
+CLAUDE.md
+.claude/
+.agents/
+.opencode/
+.harness-manifest.json

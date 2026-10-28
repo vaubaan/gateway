@@ -579,10 +579,15 @@ describe('a broker declared attestation: none', () => {
 });
 
 describe('the attestation kit of this release', () => {
-  it('verifies Google Confidential Space only: no test platform, and an empty allowlist admits nothing', () => {
+  it('verifies Google Confidential Space only, and admits only the released broker digests', () => {
     const kit = productionAttestationKit({ fetch });
     expect(kit.platforms.map((p) => p.platform)).toEqual([GCP_CONFIDENTIAL_SPACE]);
-    expect(kit.allowlist).toEqual([]);
-    expect(new AttestationVerifier(kit).admitsAny).toBe(false);
+    expect(kit.allowlist.length).toBeGreaterThan(0);
+    for (const entry of kit.allowlist) {
+      expect(entry.platform).toBe(GCP_CONFIDENTIAL_SPACE);
+      expect(entry.measurement).toMatch(/^sha256:[0-9a-f]{64}$/);
+      expect(entry.broker_version).toMatch(/^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
+    }
+    expect(new AttestationVerifier(kit).admitsAny).toBe(true);
   });
 });

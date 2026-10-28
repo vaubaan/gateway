@@ -40,8 +40,8 @@ an `attestation` mode ([configuration](configuration.md)).
   (chain not checked, no reuse), hashes the presented key (`base64url(SHA-256(DER SPKI))`), and
   without a pin calls `POST /attest` on it, **no body, no `Authorization`**. The evidence must name
   that hash as its only nonce, be issued ≤ 10 minutes ago, and carry a measurement on
-  `broker-measurements.json` (empty until a broker is released: "no attested broker version
-  admitted by this release"). The key is pinned for min(`exp`, 1 h); another key later means one
+  `broker-measurements.json` (today OAuth broker 0.1.0 on Confidential Space; any other: "no
+  attested broker version admitted by this release"). The key is pinned for min(`exp`, 1 h); another key later means one
   new attestation, then nothing.
 - **No gateway nonce**: the broker serves one cached evidence, refreshed every 5 minutes. A replay
   is harmless: the replayer cannot present the enclave's key. One TLS key per broker, so one

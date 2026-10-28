@@ -63,7 +63,7 @@ discovering and curating its resources. Spec:
 - **`state-invalid` after consent** → over 10 minutes, callback opened twice, session changed.
 - **`token-exchange-failed`** → `redirect_uri_mismatch` (not exactly `<public_url>/connections/callback/<provider>`) or `invalid_client`.
 - **"OAuth broker '<name>' answered …"** → the broker's failure, never the connection's: `401 (invalid_key)` wrong key, `403 (return_url_not_registered)` the callback is missing at the broker, `503` down; "could not be attested" is the same outage on `/attest`.
-- **"OAuth broker '<name>' is not attested (…)"** → nothing was sent: "no attested broker version admitted by this release" (empty allowlist: upgrade, or declare your own broker `attestation: none`), "a version this release does not admit" (newer or modified broker), "not bound to this connection’s key" (someone else answers on its address).
+- **"OAuth broker '<name>' is not attested (…)"** → nothing was sent: "no attested broker version admitted by this release" (measurement not on the allowlist: upgrade, or declare your own broker `attestation: none`), "a version this release does not admit" (newer or modified broker), "not bound to this connection’s key" (someone else answers on its address).
 - **"not configured on this gateway"** → no `oauth_brokers` entry serves the plugin; the boot log names it.
 - **A resource an agent created is not listed** → is the tool in `resourceCreatingTools`? Then the log `resource discovery after a creating call`. Resources created elsewhere appear on "Refresh" only.
 - **A connection turned `expired`** → log `credential refresh rejected`; "Reconnect" keeps id and missions. Calls failing while `active` → `ProviderUnreachableError`.

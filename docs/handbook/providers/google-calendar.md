@@ -59,8 +59,8 @@ common to every plugin: [providers README](README.md).
   (`oauth_brokers`, [configuration](../configuration.md)) holds the client. Without one the plugin
   is listed as not configured, with the reason.
 - The broker keeps no token: the refresh token is the instance's, sealed, presented at each
-  refresh. While the release's allowlist admits no broker version, connecting fails with "no
-  attested broker version admitted by this release" (or declare the broker `attestation: none`).
+  refresh. A broker whose measurement the release does not admit fails with "no attested
+  broker version admitted by this release" (or declare the broker `attestation: none`).
 - Four scopes, never the full `calendar` scope: `calendar.calendarlist.readonly`,
   `calendar.events.readonly`, `calendar.events.freebusy`, `calendar.events`.
 - Discovery seeds `internal_domains` with the account's domain unless it is a consumer one; the
