@@ -104,6 +104,14 @@ last_reviewed: 2026-10-27
 
 7. Check: log `started` with the TLS key digest, no `attestation_failed`; `/healthz` through the
    front; a gateway's attestation succeeds.
+8. Recommended hardening of the project. A project owner can read both secrets from the console,
+   and the two secrets plus a sealed refresh token from an instance's database or backup give
+   access to that user's account. Neither secret alone reaches an account.
+   - Data Access audit logs, `DATA_READ`, on the Secret Manager API (IAM & Admin → Audit Logs).
+     Every read of a secret is then logged with its caller, and any reader other than the
+     workload's federated principal deserves an alert.
+   - As few project owners and editors as possible, ideally one, each with two-step verification
+     enforced. No service account key on the project.
 
 ### Releasing
 
