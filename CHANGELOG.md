@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.11] - 2026-10-29
+
 ### Added
 
 - **The OAuth broker** (`apps/oauth-broker`, `@vaubaan/oauth-broker` 0.1.0):
@@ -1716,7 +1718,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.10...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.11...HEAD
+[2.0.0-alpha.11]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.10...v2.0.0-alpha.11
 [2.0.0-alpha.10]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.9...v2.0.0-alpha.10
 [2.0.0-alpha.9]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.8...v2.0.0-alpha.9
 [2.0.0-alpha.8]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.7...v2.0.0-alpha.8
