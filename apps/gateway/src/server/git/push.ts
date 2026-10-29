@@ -11,7 +11,7 @@
  *               hashed here, and the plugin asked what each tip changes in the
  *               CI workflows (`gitRemote.inspectPack`); a change found is
  *               prechecked again: a mission that may not change CI is refused
- *               before any byte leaves (ADR git-push-inspected-before-it-leaves)
+ *               before any byte leaves (ADR gateway-as-git-remote)
  *   4b. admit   the plugin asked whether its credential can carry the push
  *               (`gitRemote.admitPush`: a CI workflow change needs the
  *               provider permission to change workflows) — after the
@@ -172,7 +172,7 @@ export class Push {
 
   /**
    * The provisional updates with what the plugin found in the push's own
-   * objects (ADR git-push-inspected-before-it-leaves). Fail closed: a pack
+   * objects (ADR gateway-as-git-remote). Fail closed: a pack
    * whose objects cannot be read leaves them unknown, which the plugin counts
    * as changed; a plugin that fails refuses the push.
    */

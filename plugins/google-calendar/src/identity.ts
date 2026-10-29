@@ -2,7 +2,7 @@
  * Identity of the `google-calendar` provider — the one place its ids and
  * Google's own names are written.
  *
- * Handbook : docs/handbook/providers/google-calendar.md §0, §2.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4.
  *
  * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id

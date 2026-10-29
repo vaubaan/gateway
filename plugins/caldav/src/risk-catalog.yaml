@@ -25,9 +25,9 @@
 # an invitation, an update, a cancellation or a reply : the marker is what a
 # mission accepts for that mail. Who is notified by a change or a deletion is
 # stated in the call (`attendees`) and checked by the executor against the
-# server's copy before anything is written (handbook, "Edge cases").
+# server's copy before anything is written (handbook).
 #
-# No entry declares `caps` or `infra_limits` (ADR scope-caps-not-enforced-in-v5-0) :
+# No entry declares `caps` or `infra_limits` (ADR scope-caps-amplification-axis) :
 # the plugin itself caps a read at 366 days and 200 events.
 provider: caldav
 catalog_version: 1

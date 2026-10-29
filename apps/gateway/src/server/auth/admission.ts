@@ -1,6 +1,6 @@
 /**
  * Who may sign in (spec §0 "Open provider", "Invitation", §6 "human
- * authentication"; ADR sign-in-providers-admission-and-admin-rule). Decided
+ * authentication"; docs/handbook/authentication.md). Decided
  * after the provider vouched for the identity and before anything is written:
  * a refused sign-in creates no user, syncs no group and revokes no bootstrap
  * token.

@@ -70,7 +70,7 @@ export interface GitReviewedUpdate extends GitRefUpdate {
 /**
  * What a push's own objects change in the paths the provider guards (CI
  * workflow definitions), per ref update, read before the pack leaves the
- * gateway (ADR git-push-inspected-before-it-leaves). `workflow_files` is
+ * gateway (ADR gateway-as-git-remote). `workflow_files` is
  * empty when the tip of the update provably leaves them as they are.
  */
 export interface GitInspectedUpdate {

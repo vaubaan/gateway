@@ -1,7 +1,7 @@
 /**
  * MCP tools of the `notion` provider.
  *
- * Handbook : docs/handbook/providers/notion.md §2.
+ * Handbook : docs/handbook/providers/notion.md.
  *
  * Every tool that acts on content takes `root`, the id of one of the
  * mission's Notion resources (a top-level page or database shared with the

@@ -1,6 +1,6 @@
 /**
  * The rules a page shows a control on are the rules the service refuses on
- * (handbook web-app, "Everything that decides lives under `src/server/`"). Each
+ * (handbook web-app, Invariants, "Everything that decides is under `src/server/`"). Each
  * rule is stated once, next to the act it guards, and the page reads it from
  * the view it already loads. These tests tie the two ends: what the reader
  * says and what the act then answers, on the same state.

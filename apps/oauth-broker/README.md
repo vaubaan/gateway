@@ -14,7 +14,7 @@ asks to refresh, and keeps nothing.
   ADR [`oauth-broker-stateless-in-an-attested-enclave`](../../docs/decisions/oauth-broker-stateless-in-an-attested-enclave.md).
 - **The calls** between a gateway and a broker:
   [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/oauth-broker-contract.md).
-- **How it works, configuration, running it in Confidential Space, verifying a
+- **Enrolling, running it in Confidential Space, releasing and verifying a
   release**: [`docs/handbook/oauth-broker.md`](../../docs/handbook/oauth-broker.md).
 
 ## In one screen
@@ -43,7 +43,8 @@ OAUTH_BROKER_PLATFORM=local OAUTH_BROKER_CONFIG="$(cat broker.json)" \
   npm start --workspace @vaubaan/oauth-broker
 ```
 
-The configuration format is in the handbook ("Configuration").
+The configuration format is in `src/config.ts`; enrolling an instance is in the handbook
+("Enrolling an instance").
 
 ## Test it
 

@@ -1,6 +1,6 @@
 /**
  * `npm run demo` serves the existing build when it is the build of the sources
- * as they are (handbook demo-mode, "Starting it"): the stamp is a digest of
+ * as they are (handbook demo-mode, Traps): the stamp is a digest of
  * contents, an edit invalidates it, an unstamped build is never taken as fresh.
  */
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';

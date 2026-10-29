@@ -64,7 +64,7 @@ describe('the plugin catalog of the site', () => {
     }
   });
 
-  it('carries no experimental state (ADR no-experimental-plugins)', () => {
+  it('carries no experimental state (docs/handbook/plugin-sdk.md)', () => {
     for (const plugin of plugins) expect(plugin, plugin.id).not.toHaveProperty('experimental');
   });
 });

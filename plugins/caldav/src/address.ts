@@ -1,7 +1,7 @@
 /**
  * Strict e-mail address parsing for the `caldav` classifier and executor.
  *
- * Handbook : docs/handbook/providers/caldav.md, "Edge cases".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * The zone of a write is decided from addresses the agent writes, so an
  * address is **parsed, never searched for** : a value is one whole address or

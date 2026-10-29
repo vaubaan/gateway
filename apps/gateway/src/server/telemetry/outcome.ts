@@ -23,7 +23,7 @@
  *                         rejects, a tool that is not implemented)
  *                         → `executor_refused`. A provider failure is never
  *                         returned this way: plugins throw it (handbook
- *                         plugin-sdk, "Errors of `execute`")
+ *                         plugin-sdk, The contract)
  *   upstream-error        the provider, or the way to it, failed
  *                         → `http_<status>`, `network`, `timeout`,
  *                           `credential_rejected` (the connection's credential

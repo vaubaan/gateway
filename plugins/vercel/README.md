@@ -8,9 +8,8 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
   handbook [`plugin-sdk`](../../docs/handbook/plugin-sdk.md).
 - Modelling: handbook [`providers/vercel`](../../docs/handbook/providers/vercel.md)
   (data model, tool → slice mapping, catalog, edge cases).
-- Upstream: ADRs [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md)
-  and [`vercel-augment-with-rest-tools`](../../docs/decisions/vercel-augment-with-rest-tools.md).
-- Arguments and refusals: ADR [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+- Upstream: ADR [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md).
+- Arguments and refusals: ADR [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
 - Plugin version 3.0.0, catalog version 2.
 
 ## Layout
@@ -56,7 +55,7 @@ URL is forwarded only after the deployment was resolved through the REST API
 under the pinned team and found to belong to the mission's project ; a
 deployment argument the tool does not declare is refused. The five tools
 addressed by a toolbar thread id cannot be bound that way and are refused.
-See the handbook, §2 and §5.
+See the handbook.
 
 An identifier that reaches a request path has one grammar, shared by the
 classifier and the executor : `pathIdent` (`[A-Za-z0-9_-]{1,64}`) for the

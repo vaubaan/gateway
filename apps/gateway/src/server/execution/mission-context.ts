@@ -10,8 +10,7 @@
  *
  * - an explicit selection is exactly the rows whose id the mission stored —
  *   scope `all` with an empty list means "none known at issuance" and is never
- *   hydrated from the connection's live list (handbook missions, "Issuance"
- *   step 3);
+ *   hydrated from the connection's live list (handbook missions);
  * - scope `connection` (the creator chose "the whole account") is the
  *   connection's live list, read here on every request: a resource discovered
  *   after issuance is reached, a hidden one is not (ADR

@@ -1,6 +1,6 @@
 /**
- * The invitation list (spec §0 "Invitation", §4.2 People; ADR
- * sign-in-providers-admission-and-admin-rule): administrators allow an email
+ * The invitation list (spec §0 "Invitation", §4.2 People; see
+ * docs/handbook/authentication.md): administrators allow an email
  * address to sign in, through any sign-in provider that verified it. An
  * invitation sends nothing and signs nobody in; it is read at each sign-in
  * (`admission.ts`). Removing one stops the next sign-ins of that address that

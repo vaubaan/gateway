@@ -3,7 +3,7 @@
 # Spec : docs/spec/resend.md §5 (modelling), docs/spec/gateway-risk-model.md §4
 #        + §4bis (scope caps), docs/spec/vaubaan-gateway.md §3.2 (presets).
 # ADR  : docs/decisions/scope-caps-amplification-axis.md,
-#        docs/decisions/scope-caps-not-enforced-in-v5-0.md (only the rate ceiling
+#        docs/decisions/scope-caps-amplification-axis.md (only the rate ceiling
 #        `infra_limits.calls_per_minute_max` is declared : it is the one enforced),
 #        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
 #        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).

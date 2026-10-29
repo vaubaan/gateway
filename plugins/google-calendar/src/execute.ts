@@ -4,7 +4,7 @@
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and is never
  *            returned.
- * Handbook : docs/handbook/providers/google-calendar.md §6.2, §6.3.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4.
  *
  * Rules:
@@ -305,7 +305,7 @@ async function reportDrift(ctx: ConnectionContext, token: string): Promise<void>
     const drift = toolDrift(await mcpRequest(ctx, token, 'tools/list', {}));
     if (drift.gone.length + drift.unmodelled.length + Object.keys(drift.arguments).length > 0) {
       ctx.logger?.warn(
-        "Google's Calendar MCP tools differ from the plugin's model; model them again (handbook providers/google-calendar §6.4)",
+        "Google's Calendar MCP tools differ from the plugin's model; model them again (handbook providers/google-calendar, Procedures)",
         { gone: drift.gone, unmodelled: drift.unmodelled, arguments: drift.arguments },
       );
     }

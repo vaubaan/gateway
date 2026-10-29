@@ -2,7 +2,7 @@
  * `@vaubaan/plugin-railway` — the Railway provider plugin.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
- * ADRs     : docs/decisions/railway-rewrap-remote-mcp.md ;
+ * ADRs     : docs/decisions/rewrap-official-mcps.md ;
  *            docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/providers/railway.md ; guide : plugins/README.md.
  *
@@ -29,7 +29,7 @@ import { railwayToolTitles } from './tool-titles.ts';
 import { RAILWAY_TOOL_PREFIX, railwayTools, toUpstreamName } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const railwayPlugin = definePlugin({
@@ -48,7 +48,7 @@ export const railwayPlugin = definePlugin({
   tools: railwayTools,
   toolTitles: railwayToolTitles,
   // A project is what a Railway connection lists : a created project is
-  // discovered at once (ADR discovery-runs-after-a-creating-call).
+  // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: ['railway__create-project'],
   // Read from the call's answer: the mission that created it reaches it at once
   // (ADR created-resources-join-the-mission).

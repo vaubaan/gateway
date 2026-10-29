@@ -1,8 +1,7 @@
 /**
  * The mark of the service, as the web interface draws it: the `d` of one SVG
  * path on a 24×24 grid, filled with the brand colour declared below, on a
- * neutral fill beside the service's name (ADRs service-icons-declared-by-the-plugin,
- * service-marks-in-brand-colour).
+ * neutral fill beside the service's name (ADR service-icons-declared-by-the-plugin).
  *
  * Simple Icons, CC0 1.0, `googlecalendar` (Google Calendar), simple-icons 13.21.0.
  */

@@ -100,9 +100,7 @@ wrong without letting anything through, is not a vulnerability: use the
 
 Every instance runs the same image and the same dependencies, so the
 project's own supply chain is checked on every change. What runs, when,
-and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md#security-checks);
-why these tools: ADR
-[supply-chain-and-ci-security-checks](docs/decisions/supply-chain-and-ci-security-checks.md).
+and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md#security-checks).
 
 - **Secrets**: the whole git history is scanned (gitleaks) on every push of
   every branch. A secret that was committed is revoked at its issuer; the

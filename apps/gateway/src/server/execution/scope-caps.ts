@@ -1,5 +1,5 @@
 /**
- * Scope caps and the door (ADR scope-caps-not-enforced-in-v5-0).
+ * Scope caps and the door (ADR scope-caps-amplification-axis).
  *
  * The v5.0 door has no cap stage: `plugin.normalizeForCaps` is not called and
  * a catalog's `caps` block is applied nowhere. The one catalog limit the

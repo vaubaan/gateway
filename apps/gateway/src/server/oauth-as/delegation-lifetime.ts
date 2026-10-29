@@ -1,6 +1,6 @@
 /**
  * The absolute lifetime of a delegation (spec §0 "Delegation", §6; ADR
- * delegation-absolute-lifetime).
+ * management-door-authorization-server).
  *
  * A delegation ends `oauth.delegation_max_lifetime` after the user's consent
  * (`delegations.created_at`), whatever was renewed since. The deadline is

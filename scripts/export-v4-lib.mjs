@@ -1,7 +1,7 @@
 // The v4 exporter's logic (scripts/export-v4.mjs does the I/O): the one SQL
 // read of the v4 database, the decryption of the v4 secrets with the exact v4
-// scheme, and the bundle the importer reads (ADR
-// import-from-v4-one-shot-importer D2; handbook docs/handbook/import-from-v4.md).
+// scheme, and the bundle the importer reads (see
+// docs/handbook/import-from-v4.md).
 //
 // The bundle's shape is the importer's schema
 // (apps/gateway/src/server/import-v4/bundle.ts); an integration test runs the

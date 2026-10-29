@@ -61,8 +61,8 @@ export function endedByReplay(reason: DelegationRevokeReason | null): boolean {
  * stolen token may have issued, and whose mission token they would still
  * hold. `orphaned` is kept in: the authority may come back.
  *
- * They are **named, never revoked** (ADR
- * management-door-rotation-scope-and-replay-trace): most of the time the
+ * They are **named, never revoked** (see
+ * docs/spec/vaubaan-gateway.md): most of the time the
  * honest client issued them and its agents are at work; ending them is the
  * creator's decision, made on the Delegations page with the list in front of
  * them.

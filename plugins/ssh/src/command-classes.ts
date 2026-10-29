@@ -5,7 +5,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 (classification is the
  *            plugin's responsibility ; a classification error is a security hole).
- * Handbook : docs/handbook/providers/ssh.md §3.
+ * Handbook : docs/handbook/providers/ssh.md.
  *
  * Pure : no IO, no `Date`. **Fail closed** :
  *   - the read allow-list (`policy.ts`) is the only way to be a read, and it

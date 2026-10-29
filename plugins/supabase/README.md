@@ -237,7 +237,7 @@ tool runs with it. The gateway checks it with `GET /v1/organizations` and
 seals it; Supabase exposes no expiry and no deletion endpoint for these
 tokens, so removing the account tells the person to delete it under Account
 preferences → Access tokens. ADR
-[`token-connections-beside-the-integration-app`](../../docs/decisions/token-connections-beside-the-integration-app.md).
+[`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md).
 
 ## Tests
 

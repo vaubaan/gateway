@@ -5,8 +5,8 @@
  *   1. `VACUUM INTO` the target (the caller says through which handle: the command
  *      opens the store read-only, the running instance uses its own);
  *   2. into the copy, never into the live store: the sign-in providers the
- *      configuration sets, carried as store-held ones (ADR
- *      backup-carries-the-sign-in-configuration), and the removal of the instance's
+ *      configuration sets, carried as store-held ones (see
+ *      docs/handbook/authentication.md), and the removal of the instance's
  *      own backup record, so a restored instance does not report the source's backups;
  *   3. read back: `integrity_check`, schema version, the master-key versions its sealed
  *      secrets are under.

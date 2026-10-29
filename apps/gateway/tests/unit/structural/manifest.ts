@@ -70,8 +70,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'telemetry-shape',
     statement:
       'A telemetry report carries the fields of its kind and nothing else: no argument, no resource ref, no token, no token holder (member id, member email, token name), no label, no stable instance identifier — whatever a plugin returns or throws.',
-    source:
-      'spec §9, §10; ADRs telemetry-collector-shape, telemetry-two-levels-behind-a-vercel-collector',
+    source: 'spec §9, §10; ADR telemetry-two-levels-behind-a-vercel-collector',
     specBullet: 'no telemetry report, of either level, contains a forbidden field',
     proofs: [
       {
@@ -175,8 +174,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'resource-creating-tools-declared',
     statement:
       'The tools after whose success the gateway runs a discovery are declared by their plugin, are MCP tools of it, and are exactly the reviewed table: nothing is inferred from a tool name. Every plugin that declares one reads what it created from the answer, so the mission that made the call reaches it.',
-    source:
-      'ADR discovery-runs-after-a-creating-call; ADR created-resources-join-the-mission; spec §0 "Resource", §3.1',
+    source: 'ADR created-resources-join-the-mission; spec §0 "Resource", §3.1',
     proofs: [
       {
         file: `${STRUCTURAL}/resource-creating-tools.test.ts`,
@@ -367,8 +365,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'management-door-hard-deny',
     statement:
       'The management door cannot answer a request, open a gate, touch a connection or a share, or execute a tool: nothing of the instance but seven mission methods, static catalogs and its own rate-limit keys is reachable from it. Rotation reaches only the missions the calling delegation issued.',
-    source:
-      'spec §4.1 bis; ADR management-door-authorization-server; ADR management-door-rotation-scope-and-replay-trace',
+    source: 'spec §4.1 bis; ADR management-door-authorization-server',
     proofs: [
       {
         file: `${INTEGRATION}/management/hard-deny.test.ts`,
@@ -387,7 +384,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'no-test-file-in-the-build',
     statement:
       'The standalone output, and therefore the image, carries no test, fixture, simulated identity provider or demo launcher of this repository.',
-    source: 'ADR plugin-catalog-path-and-standalone-tracing; deploy/docker/smoke.sh step 7',
+    source: 'docs/handbook/plugin-sdk.md; deploy/docker/smoke.sh step 7',
     proofs: [
       {
         file: `${INTEGRATION}/standalone-plugin-catalogs.test.ts`,
@@ -405,7 +402,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'catalog-declares-only-enforced-limits',
     statement:
       'A shipped catalog declares no limit the door does not enforce: an operator never reads a control they do not have.',
-    source: 'ADR scope-caps-not-enforced-in-v5-0',
+    source: 'ADR scope-caps-amplification-axis',
     proofs: [
       {
         file: `${STRUCTURAL}/catalog-caps-enforced.test.ts`,
@@ -454,7 +451,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'deployed-commit-is-known',
     statement:
       'The commit /healthz reports is the one git archive stamped, else the checkout HEAD, else unknown: no build argument or environment variable feeds it.',
-    source: 'ADR deployed-commit-stamped-by-git-archive; deploy/railway.md §5',
+    source: 'docs/workflow/coding-workflow.md; deploy/railway.md §5',
     proofs: [
       {
         file: `${STRUCTURAL}/deployed-commit.test.ts`,
@@ -582,7 +579,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'every-slice-covered',
     statement:
       'A call is allowed only when every slice it executes matches a catalog entry and every risk touched is accepted: no slice, no risk, an uncovered slice and a missing catalog all refuse (a classifier that throws: see every-refused-call-audited).',
-    source: 'spec §3.1, §6; ADR execution-door-json-faithful-arguments-and-shared-throttle',
+    source: 'spec §3.1, §6',
     proofs: [
       {
         file: 'packages/policy-engine/tests/unit/risk-runtime.test.ts',
@@ -765,8 +762,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'shipped-plugin-icons',
     statement:
       'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid) and the brand colour it is drawn in: no service of the repository falls back to two letters or to the plain ink, and the interface keeps no provider → icon or colour list of its own.',
-    source:
-      'ADRs service-icons-declared-by-the-plugin, service-marks-in-brand-colour; style-guide §5 "Service mark"',
+    source: 'ADR service-icons-declared-by-the-plugin; style-guide §5 "Service mark"',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-icons.test.ts`,
@@ -790,7 +786,7 @@ export const INVARIANTS: readonly Invariant[] = [
     statement:
       'The session and pending sign-in cookies carry the __Host- prefix with what it requires (Secure, Path=/, no Domain), HttpOnly and SameSite=Lax.',
     source:
-      'spec §6 "Web sessions are short and bound to the instance’s origin"; ADR sign-in-hardening-host-cookies-group-overage',
+      'spec §6 "Web sessions are short and bound to the instance’s origin"; docs/handbook/authentication.md',
     proofs: [
       {
         file: `${SERVER}/auth/session-service.test.ts`,

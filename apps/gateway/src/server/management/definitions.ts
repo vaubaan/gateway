@@ -128,7 +128,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     ].join(' '),
     inputSchema: z
       .object({
-        // Retired with the experimental state (ADR no-experimental-plugins): every
+        // Retired with the experimental state (docs/handbook/plugin-sdk.md): every
         // connection is listed. Still accepted, and ignored, so that a client written
         // against an earlier build is not refused by the strict input.
         include_experimental: z

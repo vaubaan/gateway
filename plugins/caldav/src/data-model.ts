@@ -2,7 +2,7 @@
  * CalDAV data model — the `calendar` plane.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/caldav.md, "Data model".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * One connection is one CalDAV account (a server, a username, an app
  * password). Its principal has one calendar home holding the calendars ; each

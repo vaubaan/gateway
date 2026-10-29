@@ -1,6 +1,6 @@
 /**
  * "Change limits" in a browser (spec §3.2, §4.2 "On a mission"; ADR
- * mission-limits-editable-after-issuance). The executor holds the key of a mission
+ * mission-editable-after-issuance). The executor holds the key of a mission
  * whose read limit is two; it reaches the limit, the creator follows the limit page
  * to the mission's limits editor, raises the limit, confirms the list of what
  * changes, and the agent's next call passes. Lowered again under what was used, the

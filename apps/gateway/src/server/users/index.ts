@@ -2,7 +2,7 @@
  * Users administration (spec §2.3; ADR operator-deactivates-a-user): the
  * operator's deactivation and reactivation of a user, without the identity
  * provider. Built once by the composition root as `root.users`. Handbook:
- * docs/handbook/authentication.md, "Deactivating a user".
+ * docs/handbook/authentication.md.
  */
 import type { AdministratorsService } from '../auth/administrators';
 import type { Authenticator } from '../auth/authenticator';

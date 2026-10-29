@@ -20,7 +20,7 @@ import { NOTION_ICON, NOTION_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { notionToolTitles, notionTools } from './tools.ts';
 
-// A filesystem path next to this module (ADR plugin-catalog-path-and-standalone-tracing).
+// A filesystem path next to this module (docs/handbook/plugin-sdk.md).
 export const notionCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const notionPlugin = definePlugin({

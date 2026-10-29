@@ -272,7 +272,7 @@ function absenceReason(raw: RawTree): AbsentMasterKeyReason | null {
  * secret key): the values live on in the returned configuration only, so a dump of
  * `process.env` or a child process sees none of them. What it cannot reach: the
  * process's initial environment block, which `/proc/<pid>/environ` keeps showing to its
- * own user and to root (ADR secrets-leave-the-process-environment-after-load).
+ * own user and to root (docs/handbook/configuration.md).
  */
 export function loadProcessConfig(): LoadedConfig {
   const loaded = loadInstanceConfig({ env: process.env });
@@ -568,7 +568,7 @@ function readClientIpHeader(r: Reader, trustedProxies: readonly string[]): Clien
 }
 
 /**
- * `restore.*` (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot): the
+ * `restore.*` (docs/handbook/store.md): the
  * source is a secret — a problem with it is named, the value never echoed — and the
  * expected SHA-256 is required with it.
  */

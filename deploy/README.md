@@ -229,8 +229,8 @@ append the client address to `X-Forwarded-For`, and list the proxy's
 address in `trusted_proxies` so that header is believed. The gateway builds
 every URL from `public_url`, never from forwarded host or scheme headers.
 
-**The gateway sets the security headers itself**, on every response (ADR
-[security-headers-set-by-the-application](../docs/decisions/security-headers-set-by-the-application.md)):
+**The gateway sets the security headers itself**, on every response (handbook
+[configuration](../docs/handbook/configuration.md)):
 your proxy must not add or override them.
 
 | Header                      | Value                                                                                                     | Why                                                                                             |
@@ -271,7 +271,7 @@ environment.
   `VAUBAAN_BACKUP_KEEP`), encrypted under a key derived from the master key and
   restored into a temporary file before it leaves; Settings → Encryption and
   `GET /healthz` (`backup`) report the latest one, the activity each run (handbook
-  [store](../docs/handbook/store.md#scheduled-backup)). Restore one like any copy,
+  [store](../docs/handbook/store.md#backup)). Restore one like any copy,
   with the SHA-256 of the object and the master key of the version it names.
 - **Restore, moving hosts**: `node apps/gateway/restore.mjs <file or https URL>
 --sha256 <hex>` inside the container puts a copy back after checking its hash,
@@ -308,8 +308,7 @@ apps/gateway/restore.mjs …`.
   you upgrade an instance that already has users, let somebody sign in once
   **before** you change `idp.*`: the existing accounts are bound to the
   issuer of the first sign-in after the upgrade (handbook
-  [configuration](../docs/handbook/configuration.md), "Changing the identity
-  provider").
+  [configuration](../docs/handbook/configuration.md)).
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
   checks the fail-fast exit (within 60 seconds), the https rule,
@@ -398,8 +397,8 @@ and the smoke test loads both inside the image. The image takes **no
 build argument**: the commit shown by `/healthz` is read from
 `apps/gateway/build-commit.txt`, which `git archive` stamps
 (`export-subst`; the CI runs `scripts/stamp-commit.sh` on its checkout);
-a context that is not stamped builds `unknown` (ADR
-[deployed-commit-stamped-by-git-archive](../docs/decisions/deployed-commit-stamped-by-git-archive.md)). The base image is not an argument:
+a context that is not stamped builds `unknown` (see
+[coding-workflow](../docs/workflow/coding-workflow.md)). The base image is not an argument:
 it is written, with its digest, on the first `FROM` line. Nothing else than
 `node` runs in the container: the package managers of the base image (npm,
 npx, corepack, yarn) are removed from it, and the smoke test checks it.

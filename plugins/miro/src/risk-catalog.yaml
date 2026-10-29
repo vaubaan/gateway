@@ -1,7 +1,7 @@
 # Risk catalog of the `miro` provider.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4, docs/spec/vaubaan-gateway.md §3.2 (presets).
-# Handbook : docs/handbook/providers/miro.md §3.
+# Handbook : docs/handbook/providers/miro.md.
 #
 # 13 named risks + 1 fallback. Every slice of a tool that names a board lives
 # under `board[<ref>]`, the mission resource ; a new board (`board.W`) and
@@ -18,7 +18,7 @@
 # deletion risks on every call.
 #
 # Catalog 2 (2026-10-21) : the plugin rewraps Miro's official MCP server
-# (ADR miro-rewraps-the-official-mcp-server). The six risks of catalog 1 keep
+# (docs/handbook/providers/miro.md). The six risks of catalog 1 keep
 # their ids and their meaning ; their reasons name the new tools, and
 # `read-board-content` / `content-write` now cover comments. Two risks are
 # added : `board-create`, `read-format-guide`.
@@ -36,7 +36,7 @@
 #
 # `infra_limits.calls_per_minute_max` stays under the rate limits Miro
 # applies to its MCP server per user (⚠ the figures are not published ;
-# handbook §3, "Rate limits").
+# handbook).
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and

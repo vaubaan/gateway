@@ -2,9 +2,9 @@
  * The credential of the `notion` provider : an internal connection token,
  * pasted by hand (`api-key`).
  *
- * Handbook : docs/handbook/providers/notion.md §6.1 ; ADRs
- *            company-apps-kept-where-they-add-something (D2, token first),
- *            token-connections-beside-the-integration-app (D1).
+ * Handbook : docs/handbook/providers/notion.md ; ADRs
+ *            one-place-to-authorize-services-token-first (token first),
+ *            plugin-contract-and-credential-spec (label, guide, verify).
  *
  * Notion has three kinds of token. Only an internal connection's matches
  * the resource model ("what was shared with the connection") : a personal

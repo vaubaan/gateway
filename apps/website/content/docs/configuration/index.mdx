@@ -42,4 +42,4 @@ Each service's steps: [connect a provider](/docs/providers).
 
 ## Things that are not configurable
 
-Several lifetimes, rate-limit windows and timeouts look like settings but are constants of the code, and changing one is a release; the list is in the [configuration handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/configuration.md#fixed-in-code-not-configurable).
+Several lifetimes, rate-limit windows and timeouts look like settings but are constants of the code, and changing one is a release; the ones that shape behaviour (sessions, approvals, sign-in lockout, link lifetimes) are stated in the [product specification](https://github.com/vaubaan/gateway/blob/main/docs/spec/vaubaan-gateway.md).

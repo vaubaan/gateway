@@ -1,7 +1,7 @@
 /**
  * iCalendar (RFC 5545) content lines : read into a tree, written back folded.
  *
- * Handbook : docs/handbook/providers/caldav.md, "Libraries" and "Execution".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * A small codec of the syntax, not a calendar engine. It keeps every
  * component and property it does not know, in order, so that an event the

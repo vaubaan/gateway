@@ -2,8 +2,7 @@
  * Identity of the `miro` provider — the one place its ids and Miro's own
  * names are written.
  *
- * Handbook : docs/handbook/providers/miro.md §0, §2.
- * ADR      : docs/decisions/miro-rewraps-the-official-mcp-server.md.
+ * Handbook : docs/handbook/providers/miro.md.
  *
  * `PROVIDER_ID` is also written as `provider:` and as the prefix of every id
  * in `risk-catalog.yaml`, and in the package name. Everything else — the

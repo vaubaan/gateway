@@ -1,6 +1,6 @@
 /**
  * The effective environment of a connection's resource (spec §0 "Resource"; ADR
- * connection-default-environment-label): its own label, set by the owner or by
+ * connect-driver-and-resource-curation): its own label, set by the owner or by
  * the plugin, always wins; else the default its connection's owner chose; else
  * none. The connections repository applies it on every resource it reads, so that
  * issuance, the execution door, the management door and the pages read one value.

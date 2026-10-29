@@ -1,6 +1,6 @@
 /**
- * Where a restore reads a store copy from (ADR
- * restore-verifies-before-it-replaces-and-runs-at-first-boot): an absolute file
+ * Where a restore reads a store copy from (see
+ * docs/handbook/store.md): an absolute file
  * path, or an https URL — typically a presigned object-storage URL, which is a
  * secret. Shared by the configuration loader (`restore.from`) and the `restore`
  * command, so both accept and refuse the same values.

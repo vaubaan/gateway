@@ -110,7 +110,7 @@ function under(repository: string, prefix: string): boolean {
 }
 
 /**
- * The image guard (handbook §5.5) : an image runs with the app's secrets and
+ * The image guard (handbook, Invariants, "Image guard") : an image runs with the app's secrets and
  * volume, so a machine may only run an image pinned by digest and under one
  * of the connection's prefixes. `null` when the image passes ; otherwise the
  * refusal the agent reads.

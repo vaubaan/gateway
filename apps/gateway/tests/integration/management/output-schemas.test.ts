@@ -1,6 +1,6 @@
 /**
  * Every real answer of every management tool matches the output schema the
- * tool advertises (spec §4.1 bis; handbook management-door "Output schemas").
+ * tool advertises (spec §4.1 bis; handbook management-door, Traps).
  *
  * Why this test exists: the MCP SDK validates a successful answer against the
  * advertised schema **after the tool ran**, and replaces one that does not

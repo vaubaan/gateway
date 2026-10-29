@@ -1,5 +1,5 @@
 /**
- * Restore of a store copy (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot),
+ * Restore of a store copy (docs/handbook/store.md),
  * against real SQLite files in a temporary directory: the copy is made the way the
  * `backup` command makes it (`VACUUM INTO` of a store holding a sealed secret), then
  * restored from a file or from an https URL served by a fake `fetch`.

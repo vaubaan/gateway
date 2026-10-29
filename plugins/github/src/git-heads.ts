@@ -1,6 +1,6 @@
 /**
  * The branch heads of a repository as GitHub lists them now (ADR
- * gateway-as-git-remote D4 ter; ADR git-push-inspected-before-it-leaves):
+ * gateway-as-git-remote D4 ter):
  * the bases both the review and the inspection of a push may use.
  */
 import {

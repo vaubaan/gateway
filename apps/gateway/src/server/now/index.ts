@@ -1,5 +1,5 @@
 /**
- * The home's read models (handbook web-app, "The home — Now"). Server-only
+ * The home's read models (handbook web-app). Server-only
  * barrel; the pure derivations are in `derive.ts`.
  */
 import type { GatewayRoot } from '../compose';

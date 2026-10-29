@@ -128,7 +128,7 @@ export interface TelemetryConfig {
   /**
    * True when the mounted file or the environment sets `telemetry.enabled`,
    * to either value: the configuration then wins over the Admin toggle
-   * (handbook telemetry, "Who decides").
+   * (handbook telemetry, Start here).
    */
   readonly enabledSetByConfig: boolean;
   /**
@@ -205,7 +205,7 @@ export interface SelfResource {
 }
 
 /**
- * Restore at first boot (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot):
+ * Restore at first boot (docs/handbook/store.md):
  * where a store copy comes from, its expected SHA-256, and the largest copy accepted.
  * `from` is `null` when nothing is to be restored.
  */

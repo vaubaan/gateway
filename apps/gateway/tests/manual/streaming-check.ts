@@ -1,6 +1,6 @@
 /**
  * Manual check of streaming through the STANDALONE build (handbook
- * execution-door, "Streaming" and "Manual check: streaming"). Not part of the
+ * execution-door, Procedures, "Streaming check"). Not part of the
  * automated suite, never part of the image.
  *
  * The question it answers is about the process shape (ADR

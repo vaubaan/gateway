@@ -1,6 +1,6 @@
 /**
  * The limits of a mission, changed after issuance by its creator (spec §3.2; ADR
- * mission-limits-editable-after-issuance). Over the real composition root: the
+ * mission-editable-after-issuance). Over the real composition root: the
  * mission service, its HTTP handler, the store and the budget the execution door
  * decides with.
  *

@@ -15,7 +15,7 @@
  *
  * Before checking it, it writes into the copy (never into the live store) the
  * sign-in providers the configuration sets, as store-held ones, client secrets
- * sealed under the master key (ADR backup-carries-the-sign-in-configuration):
+ * sealed under the master key (docs/handbook/authentication.md):
  * restored elsewhere, the copy signs people in as this instance does. The
  * administrators need no carrying: they are rows of the store (ADR
  * administrators-live-in-the-instance). It prints the ids it carried, never a secret.

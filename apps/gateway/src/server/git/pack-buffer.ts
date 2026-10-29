@@ -1,6 +1,6 @@
 /**
  * The pack of a push, read whole and bounded before any byte of it leaves
- * the gateway (ADR git-push-inspected-before-it-leaves): the plugin inspects
+ * the gateway (ADR gateway-as-git-remote): the plugin inspects
  * its objects first, the pipeline decides on what it found, and only then is
  * it stored at the provider (`temporary-refs.ts`).
  *

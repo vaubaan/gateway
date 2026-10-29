@@ -27,7 +27,7 @@ import defaultExport, {
 } from '../../src/index.ts';
 import { DOCS_RESULT, ctx, index, mcpAnswers } from './support.ts';
 
-/** One table for the catalog coverage and for the identifier proof (handbook §4). */
+/** One table for the catalog coverage and for the identifier proof (handbook). */
 const SAMPLES: ToolSamples = {
   [TOOL.resolveLibraryId]: [
     { args: { libraryName: 'Next.js', query: 'app router middleware' } },

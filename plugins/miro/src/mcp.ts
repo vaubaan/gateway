@@ -2,8 +2,7 @@
  * The JSON-RPC client of Miro's MCP server (Streamable HTTP), for the
  * executor, discovery and the capture script.
  *
- * Handbook : docs/handbook/providers/miro.md §6.3.
- * ADR      : docs/decisions/miro-rewraps-the-official-mcp-server.md.
+ * Handbook : docs/handbook/providers/miro.md.
  *
  * One request per call when the server is stateless, as Railway's and
  * Context7's are. ⚠ Whether Miro's server needs an `initialize` first is not

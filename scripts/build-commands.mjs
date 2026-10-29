@@ -10,7 +10,7 @@
  *
  * The image copies the standalone tree whole (deploy/docker/Dockerfile), so
  * the commands ship with the server, at `/app/apps/gateway/<name>.mjs`
- * (ADR import-from-v4-one-shot-importer D1, ADR master-key-rotation-reseals-every-blob).
+ * (docs/handbook/import-from-v4.md, ADR master-key-rotation-reseals-every-blob).
  *
  * - The native addons stay external: they are already in the standalone
  *   `node_modules` because the server needs them (better-sqlite3, argon2,

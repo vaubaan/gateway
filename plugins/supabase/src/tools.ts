@@ -3,7 +3,7 @@
  * and the per-project data plane (GoTrue admin, Storage).
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
- * Handbook : docs/handbook/providers/supabase.md §2 (tool → slice).
+ * Handbook : docs/handbook/providers/supabase.md.
  *
  * Naming : `supabase__<verb>_<noun>`. Every tool takes the project ref
  * explicitly as `project_ref` (the resource ref the mission catalog lists) ;

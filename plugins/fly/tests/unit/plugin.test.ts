@@ -161,7 +161,7 @@ describe('fly plugin — structural kit', () => {
 
   test('creating an app is declared as creating a resource, and nothing else is', () => {
     // An app is what discovery lists : after fly__create_app the host runs
-    // discovery again (ADR discovery-runs-after-a-creating-call). A machine, a
+    // discovery again (ADR created-resources-join-the-mission). A machine, a
     // volume or a certificate lives inside an app and creates no resource.
     expect(flyPlugin.resourceCreatingTools).toEqual([TOOL.createApp]);
     expect(flyPlugin.tools.map((t) => t.name)).toContain(TOOL.createApp);

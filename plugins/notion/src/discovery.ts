@@ -2,7 +2,7 @@
  * Resource discovery of the `notion` provider : one resource per top-level
  * page or database shared with the connection.
  *
- * Handbook : docs/handbook/providers/notion.md §1 "Resource", §6.2.
+ * Handbook : docs/handbook/providers/notion.md.
  *
  * Search cannot enumerate everything a connection reaches, but "any pages
  * or databases that are directly shared with a connection are guaranteed to

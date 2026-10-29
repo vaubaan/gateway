@@ -61,7 +61,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
     expect((await rig.read(await rig.issueFor(rig.bob, [READ, PURGE]))).result).toBeDefined();
   });
 
-  describe('a co-owner cannot keep a share for the day they leave the group (ADR share-to-a-current-owner-refused)', () => {
+  describe('a co-owner cannot keep a share for the day they leave the group (docs/spec/vaubaan-gateway.md)', () => {
     const shareAs = async (actor: UserRecord, email: string) =>
       rig.root.shares.service.share(await rig.actor(actor), rig.connection.id, {
         target: { kind: 'user', email },

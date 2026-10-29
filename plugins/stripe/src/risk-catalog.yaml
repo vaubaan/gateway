@@ -3,7 +3,7 @@
 # Spec : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps),
 #        docs/spec/vaubaan-gateway.md §3.2 (presets).
 # ADR  : docs/decisions/scope-caps-amplification-axis.md,
-#        docs/decisions/scope-caps-not-enforced-in-v5-0.md,
+#        docs/decisions/scope-caps-amplification-axis.md,
 #        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
 #        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).
 #
@@ -21,7 +21,7 @@
 # out of the account, carry `infra_limits.calls_per_minute_max` : the ceiling
 # on the rate limit a mission may be issued with, the one catalog limit the
 # gateway enforces. No entry declares `caps` (ADR
-# scope-caps-not-enforced-in-v5-0) : a mission bounds them with its quota and
+# scope-caps-amplification-axis) : a mission bounds them with its quota and
 # rate limit.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.

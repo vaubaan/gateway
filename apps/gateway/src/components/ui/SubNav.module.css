@@ -1,5 +1,5 @@
 /* The local navigation of a place: a row of tabs under the path bar, as wide
-   as the page column (ADR shadcn-near-default-skin-and-path-bar). */
+   as the page column (docs/handbook/web-app.md). */
 .frame {
   display: flex;
   flex-direction: column;

@@ -2,7 +2,7 @@
  * The board a successful `miro__board_create` created, read from Miro's answer
  * (ADR created-resources-join-the-mission).
  *
- * Handbook : docs/handbook/providers/miro.md §6.2.
+ * Handbook : docs/handbook/providers/miro.md.
  *
  * Observed live on 2026-10-24 through the gateway : one text block whose text
  * is JSON, `{"miro_url":"https://miro.com/app/board/uXjVEVgYKSE=/","name":"…"}`.

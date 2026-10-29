@@ -47,7 +47,7 @@ FROM base AS build
 # No commit argument: the commit /healthz reports is read from
 # apps/gateway/build-commit.txt, which `git archive` stamps (export-subst);
 # a context that is not an archive builds `unknown`. A build argument could be
-# fed by a stale platform variable (ADR deployed-commit-stamped-by-git-archive).
+# fed by a stale platform variable (docs/workflow/coding-workflow.md).
 # The whole dependency tree: the hoisted node_modules and the ones npm nests
 # under a workspace when two majors of a package coexist (apps/gateway/node_modules).
 COPY --from=deps /app ./

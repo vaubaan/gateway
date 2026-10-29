@@ -4,7 +4,7 @@
  *
  * Spec     : docs/spec/vaubaan-gateway.md §0 "Connection", §5, §7.2.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D5).
- * Handbook : docs/handbook/providers/caldav.md, "Credential".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  * An app password carries no scope : it opens the whole account over CalDAV
  * (and, at most providers, CardDAV), so the guide lists no permission and
@@ -34,7 +34,7 @@ export const CALDAV_HANDBOOK_URL =
   'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/caldav.md';
 
 /** Where the handbook says, server by server, where an app password is made. */
-export const CALDAV_APP_PASSWORDS_URL = `${CALDAV_HANDBOOK_URL}#where-to-get-an-app-password`;
+export const CALDAV_APP_PASSWORDS_URL = `${CALDAV_HANDBOOK_URL}#outside-the-repo`;
 
 /** The servers the guide names, with the URL to type. */
 export const ICLOUD_CALDAV_URL = 'https://caldav.icloud.com';

@@ -554,8 +554,8 @@ describe('share → issue within the restriction → exceed → revoke → orpha
 });
 
 /**
- * A request does not wait for the authority (handbook requests, "A request on an
- * orphaned mission still expires"): its clock keeps running while the mission reads
+ * A request does not wait for the authority (handbook requests, Traps, "A request of
+ * an orphaned mission still expires"): its clock keeps running while the mission reads
  * `orphaned`, the sweeper expires it on the normal `requests.expiry` delay and erases
  * its sealed arguments, and once the authority is back the executor's next refused
  * call opens a new one.

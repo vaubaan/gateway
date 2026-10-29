@@ -3,7 +3,7 @@
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7 ; docs/spec/vaubaan-gateway.md
  *            §10 ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/google-calendar.md §2, §5.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  *
  * Pure. The call is read once by `readCalendarCall`; this file places what
  * it read on the data model. Every slice of a call that names a calendar is

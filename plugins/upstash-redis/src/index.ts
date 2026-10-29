@@ -54,7 +54,7 @@ import { upstashRedisToolTitles } from './tool-titles.ts';
 import { upstashRedisTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const UPSTASH_REDIS_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const upstashRedisCatalog = loadCatalogFile(UPSTASH_REDIS_CATALOG_PATH);
@@ -75,7 +75,7 @@ export const upstashRedisPlugin = definePlugin({
   tools: upstashRedisTools,
   toolTitles: upstashRedisToolTitles,
   // A database is what an Upstash connection lists : a created one is
-  // discovered at once (ADR discovery-runs-after-a-creating-call).
+  // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: ['upstash_redis__create_database'],
   // Read from the call's answer: the mission that created it reaches it at once
   // (ADR created-resources-join-the-mission).

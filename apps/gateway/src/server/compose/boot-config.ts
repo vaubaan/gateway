@@ -90,7 +90,7 @@ export function loadBootConfigOrSetup(deps: BootConfigDeps = {}): BootConfigOutc
       ]);
     }
     // Setup mode: the final load reads a snapshot of the environment, so the
-    // process's own can be scrubbed now (ADR secrets-leave-the-process-environment-after-load).
+    // process's own can be scrubbed now (docs/handbook/configuration.md).
     const snapshot: Record<string, string | undefined> = { ...env };
     if (deps.scrub ?? true) scrubSecretEnv(env, outcome.secretEnvNames);
     return { kind: 'setup', setup: outcome, env: snapshot };

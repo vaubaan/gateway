@@ -95,7 +95,7 @@ function classifySafely(
 /**
  * Why this connection cannot run the tool, or `null`: the plugin's
  * `unavailableTools` for the way the connection was made (ADR
- * token-connections-beside-the-integration-app). The sentence names the tool
+ * one-place-to-authorize-services-token-first). The sentence names the tool
  * and the account, then the plugin's reason ("needs the GitHub App: …").
  */
 export function toolUnavailableOn(

@@ -4,7 +4,7 @@
  * Catalog : plugins/railway/src/risk-catalog.yaml (loaded by the SDK) ; handbook : docs/handbook/providers/railway.md.
  *
  * Verifies the catalog :
- *   - declares the 9 expected risks + 1 fallback (handbook, catalog section).
+ *   - declares the 9 expected risks + 1 fallback (handbook).
  *   - every entry has the required shape (`RiskEntry` invariants).
  *   - every `matches` pattern parses as a valid slice.
  *   - the catalog round-trips through `prepareCatalog` (RiskId regex,

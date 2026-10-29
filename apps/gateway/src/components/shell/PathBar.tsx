@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * The path, on the left of the bar above the page (ADR
- * shadcn-near-default-skin-and-path-bar): this gateway (its mark and its
+ * The path, on the left of the bar above the page (see
+ * docs/handbook/web-app.md): this gateway (its mark and its
  * name, leading home), the section the page is in, then what the page
  * declared in its header — its crumbs and its title — the last one strong and
  * not a link. Two neighbours that say the same thing are said once: the home

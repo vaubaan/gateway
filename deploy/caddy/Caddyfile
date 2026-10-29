@@ -8,7 +8,7 @@
 	# (HSTS, the Content-Security-Policy with its per-request nonce, framing,
 	# nosniff, referrer and permissions policies), so that every deployment has
 	# them whatever its proxy. A header set here too would be sent twice, and two
-	# policies are enforced together (ADR security-headers-set-by-the-application).
+	# policies are enforced together (docs/handbook/configuration.md).
 
 	reverse_proxy gateway:3000 {
 		# Do not buffer streamed MCP responses (SSE frames).

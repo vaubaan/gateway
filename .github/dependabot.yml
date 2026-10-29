@@ -1,8 +1,8 @@
 # Version updates, proposed as pull requests (docs/workflow/coding-workflow.md,
 # "Dependency updates"). Dependabot reads this file from the default branch only.
 #
-# Every pull request costs a CI run in billed minutes (ADR
-# ci-billed-minutes-budget), so the updates come in as few pull requests as
+# Every pull request costs a CI run in billed minutes (see
+# docs/workflow/coding-workflow.md), so the updates come in as few pull requests as
 # possible: npm once a week, every minor and patch together in one pull request
 # and every major together in another, a major only once it is a month old; the
 # base image, Caddy and the actions once a month.
@@ -39,8 +39,8 @@ updates:
         update-types: [version-update:semver-major]
       # TypeScript 7 ships no compiler API, which typescript-eslint's typed
       # rules and our structural tests need: stay on 6.x until
-      # typescript-eslint supports 7 (ADR typescript-7, status proposed,
-      # which says when to remove this entry).
+      # typescript-eslint supports 7 (docs/workflow/coding-workflow.md
+      # says when to remove this entry).
       - dependency-name: typescript
         versions: ['>=7.0.0']
     groups:

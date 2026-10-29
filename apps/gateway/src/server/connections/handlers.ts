@@ -54,8 +54,8 @@ export function connectPagePath(providerId: string): string {
 }
 /**
  * Where the connections that have no owner left are listed: the last region
- * of the Accounts page, shown to an administrator (ADR
- * ownerless-accounts-live-on-the-accounts-page).
+ * of the Accounts page, shown to an administrator (see
+ * docs/handbook/web-app.md).
  */
 export const OWNERLESS_CONNECTIONS_PAGE = `${CONNECTIONS_PATH}#without-owner`;
 /** The HTTP action that names a new owner for a connection that has none (operator). */

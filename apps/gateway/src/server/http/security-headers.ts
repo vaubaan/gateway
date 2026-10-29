@@ -1,6 +1,6 @@
 /**
  * The security headers of every response (spec §6 "browser hardening set by the
- * instance itself"; ADR security-headers-set-by-the-application). One source of
+ * instance itself"; docs/handbook/configuration.md). One source of
  * truth: `src/proxy.ts` applies them to every request it sees, and the reference
  * reverse proxy (`deploy/caddy/Caddyfile`) sets none of them, so a deployment
  * behind any TLS terminator — Railway's edge, a load balancer — has them.
@@ -70,7 +70,7 @@ export function securityHeaders(options: SecurityHeaderOptions): Record<string, 
     'X-Frame-Options': 'DENY',
     'X-Content-Type-Options': 'nosniff',
     // `same-origin`, not `no-referrer`: a same-origin form post without `Origin` is
-    // accepted on its `Referer` (handbook authentication, "Origin check").
+    // accepted on its `Referer` (handbook authentication, Invariants).
     'Referrer-Policy': 'same-origin',
     'Permissions-Policy': PERMISSIONS_POLICY,
     ...(options.https ? { 'Strict-Transport-Security': HSTS_VALUE } : {}),

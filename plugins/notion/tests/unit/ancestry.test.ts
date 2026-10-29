@@ -1,5 +1,5 @@
 /**
- * The ancestry check (handbook §5.1) : every id a call acts on is walked up
+ * The ancestry check (handbook) : every id a call acts on is walked up
  * to the call's root before anything is written or returned.
  */
 import { describe, expect, test } from 'vitest';

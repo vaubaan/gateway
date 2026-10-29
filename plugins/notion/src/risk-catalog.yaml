@@ -1,6 +1,6 @@
 # Risk catalog of the `notion` provider.
 #
-# Handbook : docs/handbook/providers/notion.md §3.
+# Handbook : docs/handbook/providers/notion.md.
 #
 # No risk is env-scoped (product owner, 2026-10-16) : the destructive
 # operations ask first in the presets instead. Write patterns do not

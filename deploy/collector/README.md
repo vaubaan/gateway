@@ -27,7 +27,7 @@ publishes, per plugin version, whether its users found it to work. Two parts:
   This directory holds its whole definition, `schema.sql`.
 
 Decisions and rationale: ADRs
-[telemetry-collector-shape](../../docs/decisions/telemetry-collector-shape.md)
+[telemetry-two-levels-behind-a-vercel-collector](../../docs/decisions/telemetry-two-levels-behind-a-vercel-collector.md)
 and
 [telemetry-two-levels-behind-a-vercel-collector](../../docs/decisions/telemetry-two-levels-behind-a-vercel-collector.md);
 the receiving side is specified in [website](../../docs/spec/website.md) §3;

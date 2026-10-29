@@ -333,7 +333,7 @@ function ResourceEditor({
 
 /**
  * The owner's default environment for the resources without a label of their own
- * (ADR connection-default-environment-label): one of the labels the service's
+ * (ADR connect-driver-and-resource-curation): one of the labels the service's
  * permissions know, or none.
  */
 function DefaultEnvForm({

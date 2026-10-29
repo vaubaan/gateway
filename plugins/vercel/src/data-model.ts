@@ -2,7 +2,7 @@
  * Data model of the `vercel` provider.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/vercel.md §1.
+ * Handbook : docs/handbook/providers/vercel.md.
  *
  * Vercel exposes a single plane, `runtime`. Every entity lives under a
  * `team` (itself under the `account` the credential belongs to) and almost

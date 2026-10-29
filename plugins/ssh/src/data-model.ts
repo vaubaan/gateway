@@ -2,7 +2,7 @@
  * Data model of the `ssh` provider — plane `host`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/ssh.md §1.
+ * Handbook : docs/handbook/providers/ssh.md.
  *
  * SSH stays the simplest provider of the gateway : one plane, one resource
  * (the host), one operation (a shell command). All the granularity lives in

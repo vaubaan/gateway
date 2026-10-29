@@ -42,7 +42,7 @@ describe('stripe risk-catalog — shape', () => {
       expect(entry, id).toBeDefined();
       expect(entry!.vector.cost).toBe('unbounded');
       expect(entry!.vector.reversibility).toBe('irreversible');
-      // ADR scope-caps-not-enforced-in-v5-0 : only the ceiling on a mission's rate limit.
+      // ADR scope-caps-amplification-axis : only the ceiling on a mission's rate limit.
       expect(entry!.infra_limits).toEqual({ calls_per_minute_max: 30 });
       expect(entry!.caps).toBeUndefined();
     }

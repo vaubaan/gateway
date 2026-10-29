@@ -1,6 +1,6 @@
 /**
- * How a v4 secret becomes the form of a v5 plugin (ADR
- * import-from-v4-one-shot-importer D3). This is a translation table, not a
+ * How a v4 secret becomes the form of a v5 plugin (see
+ * docs/handbook/import-from-v4.md). This is a translation table, not a
  * provider list: a provider is importable only when it is ALSO in the
  * registry of the instance (the single provider list), and every other v4
  * account is reported as "to connect by hand".

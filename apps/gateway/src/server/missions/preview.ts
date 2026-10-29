@@ -525,7 +525,7 @@ export function laterResourcesNotice(
   where: Where,
 ): PreviewNotice[] {
   // A connection default labels every resource found later (ADR
-  // connection-default-environment-label): nothing to wait for.
+  // connect-driver-and-resource-curation): nothing to wait for.
   if (connection.derives_env || connection.default_env !== null) return [];
   const envScoped = connection.risks.filter((r) => r.env !== null);
   if (envScoped.length === 0) return [];

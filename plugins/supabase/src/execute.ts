@@ -4,7 +4,7 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
  *        in the context, is used for one call, never returned to the executor).
- * Handbook : docs/handbook/providers/supabase.md §3 (execution).
+ * Handbook : docs/handbook/providers/supabase.md.
  *
  * Rules :
  *   - `fetch` comes from the context, never from the global ;

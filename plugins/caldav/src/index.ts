@@ -29,7 +29,7 @@ import { caldavToolTitles } from './tool-titles.ts';
 import { caldavTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const caldavCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): ProviderPlugin {

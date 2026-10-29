@@ -1,7 +1,7 @@
 /**
  * Next.js proxy (the request hook that runs before every route): sets the
- * security headers of the response (`server/http/security-headers.ts`; ADR
- * security-headers-set-by-the-application) and hands Next the nonce of the
+ * security headers of the response (`server/http/security-headers.ts`; see
+ * docs/handbook/configuration.md) and hands Next the nonce of the
  * Content-Security-Policy through the request headers, so that the scripts it
  * renders carry it. It decides nothing else: authentication and the origin
  * check stay in the handlers, where the public origin is known.

@@ -1,6 +1,6 @@
 /**
  * The bundle the v4 exporter (`scripts/export-v4.mjs`) writes on its stdout
- * and the importer reads on its stdin (ADR import-from-v4-one-shot-importer
+ * and the importer reads on its stdin (docs/handbook/import-from-v4.md
  * D2). It is checked whole, strictly, before anything is written: an unknown
  * key anywhere refuses it, so a field the exporter adds later is never
  * silently ignored, and a secret is accepted only where the importer uses one.

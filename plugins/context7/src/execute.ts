@@ -4,8 +4,8 @@
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *            decrypted in the context, is used for one call, and never
  *            reaches the executor's result.
- * ADR      : docs/decisions/railway-rewrap-remote-mcp.md (the shape).
- * Handbook : docs/handbook/providers/context7.md §6.
+ * ADR      : docs/decisions/rewrap-official-mcps.md (the shape).
+ * Handbook : docs/handbook/providers/context7.md.
  *
  * Two upstreams :
  *   - the official Context7 MCP server, https://mcp.context7.com/mcp
@@ -36,7 +36,7 @@
  *
  * The JSON-RPC client is a copy of Railway's, stricter (a type guard on the
  * result, a null id accepted for an error frame only) ; extracting one
- * `callRemoteMcpTool` into the SDK is a follow-up (handbook §7).
+ * `callRemoteMcpTool` into the SDK is a follow-up.
  */
 
 import {

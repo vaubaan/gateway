@@ -4,7 +4,7 @@
  * Spec : docs/spec/vaubaan-gateway.md §2.4 — the credential arrives
  *        decrypted in the context, is used for one call, and never reaches
  *        the executor.
- * ADR  : docs/decisions/railway-rewrap-remote-mcp.md.
+ * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
  * Two upstreams :
  *   - the official Railway MCP server, https://mcp.railway.com/ (Streamable

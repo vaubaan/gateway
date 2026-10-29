@@ -101,7 +101,7 @@ export type AdminAct =
    *  owner) or `after-a-call` (the gateway, after a call that created a
    *  resource; the actor is the human behind the call's key, `after` adds
    *  `mission_id`, `tool`, `added`, `attempts`). ADR
-   *  discovery-runs-after-a-creating-call. */
+   *  created-resources-join-the-mission. */
   | 'resources-discovered'
   /** The owner edited one resource (name, environment label, hidden flag,
    *  editable settings). Object: the connection; `before` / `after` name the

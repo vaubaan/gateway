@@ -1,6 +1,6 @@
 /**
  * The inspection of a push before it leaves the gateway (ADR
- * git-push-inspected-before-it-leaves): does the tip of each ref update
+ * gateway-as-git-remote): does the tip of each ref update
  * change the CI workflow definitions (`.github/workflows/`)? Decided from the
  * push's own objects — hashed by the host, so found only under the id their
  * content hashes to — and from GitHub's existing objects, read with the read

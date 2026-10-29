@@ -22,7 +22,7 @@ import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
-// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+// filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const GITHUB_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 
 export const githubCatalog = loadCatalogFile(GITHUB_CATALOG_PATH);

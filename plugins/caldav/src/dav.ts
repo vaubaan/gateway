@@ -3,7 +3,7 @@
  * multistatus answers it reads, and where the app password may be sent.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §2.4 (the executor), §5.
- * Handbook : docs/handbook/providers/caldav.md, "Libraries" and "Execution".
+ * Handbook : docs/handbook/providers/caldav.md.
  *
  *   - **Where** : the server URL the person typed is the anchor. A request
  *     goes to the same scheme, port and host, or to a sibling host of the

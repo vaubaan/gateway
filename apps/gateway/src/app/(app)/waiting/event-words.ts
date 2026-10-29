@@ -2,7 +2,7 @@
  * One event of a mission's session, in the words of the interface — pure.
  *
  * The page of a request is read by the creator of its mission and nobody else
- * (handbook requests, "Access rule"), and only the creator answers a request
+ * (handbook requests, Invariants), and only the creator answers a request
  * or edits what a permission does: the acts of a person are therefore said as
  * "you". A call is said with its tool and its refusal code as the protocol
  * spells them — the page prints them in mono.

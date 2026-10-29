@@ -1,356 +1,194 @@
 ---
 title: Style guide — the attention budget, tokens and components
-status: current
-date: 2026-10-13
+status: stable
 ---
 
 # Style guide — spec
 
-> **Status:** current. The visual and verbal vocabulary of the web interface
-> ([vaubaan-gateway](./vaubaan-gateway.md) §4.2) and the rules a screen must
-> follow. Rewritten for the redesign decided on 2026-10-13 (ADR
-> [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md);
-> skin and shell amended on 2026-10-23, ADR
-> [shadcn-near-default-skin-and-path-bar](../decisions/shadcn-near-default-skin-and-path-bar.md)).
-> How it is built is in the handbook [web-app](../handbook/web-app.md); every
-> component can be seen, in every state and both themes, on the gallery page of
-> a running gateway (`/design`).
+> **Status:** stable. The visual and verbal rules of the web interface
+> ([vaubaan-gateway](./vaubaan-gateway.md) §4.2). Decision:
+> [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md).
+> Build: handbook [web-app](../handbook/web-app.md); every component in every state and both themes:
+> the gallery page `/design` of a running gateway.
 >
-> **Stance.** A quiet control room: what waits for the person, answerable
-> where they see it, and what is running — in quiet lists, hairlines instead of
-> boxes, nothing decorative. A page shows the exception and not the rule.
+> **Stance.** A quiet control room: what waits for the person, answerable where they see it, and
+> what is running. A page shows the exception, not the rule.
 
 ## 0. Vocabulary
 
-- **Token** — a named variable that carries one visual decision. Tokens are the
-  only source of visual values.
-- **Component** — a shared part of the interface built from tokens only. No
-  screen rebuilds one.
-- **Theme** — one mapping of every colour token. Two exist: light and dark.
-- **Hairline** — a one-pixel line told apart only by its luminance: the
-  preferred separator after whitespace.
-- **Region** — a group of content separated from the others by whitespace or a
-  heading.
-- **Data point** — a value a person could read as a fact: a name, a count, a
-  time, a state.
-- **Exception** — a state that differs from normal and may need the person:
-  something waits for them, something is stopped.
+- **Token** — a named variable carrying one visual decision; the only source of visual values.
+- **Component** — a shared part built from tokens only. No screen rebuilds one.
+- **Theme** — one mapping of every colour token: light or dark.
+- **Hairline** — a one-pixel line told apart by luminance only; the preferred separator after
+  whitespace.
+- **Region** — content separated from the rest by whitespace or a heading.
+- **Data point** — a value read as a fact: a name, a count, a time, a state.
+- **Exception** — a state that differs from normal and may need the person.
 - **Detail** — what a default view leaves out and gives back on demand.
 
 ## 1. The attention budget
 
-Binding on every default view. Measured on a window of 1440×900.
+Binding on every default view, at 1440×900.
 
-1. **Above the fold: at most three regions, one focal point, fifteen to
-   twenty-five data points.** Every extra unit of information competes with the
-   relevant ones.
-2. **Overview first, details on demand.** Counts and links where the content is
-   not needed now ("All 26", "Show the 14 unused").
-3. **One primary action per screen**, at most two secondary ones visible, the
-   rest behind "···". When something waits for the person, answering it is the
-   primary action and the page's usual one steps down.
-4. **Whitespace before borders.** A border, a fill and a shadow are each a claim
-   that something is a separate object. Lists are rows with hairlines, not
-   cards; the navigation is a fill, not a box; a filled box is used **once per
-   page at most**, for the thing that needs the person.
-5. **Nothing decorative.** No zebra, no double separator, no decorative icon, no
-   uppercase tracked label, no repeated unit, no bar that says what the number
-   beside it already says.
-6. **Four text sizes and two weights** (§3.2). Sentence case everywhere. Prose
-   lines stay under about 75 characters.
-7. **One accent colour**, for the primary action and links. **Status colour
-   only where a status differs from normal**: amber for "needs you", red for
-   "stopped, refused, limit reached". Nothing is ever labelled "active" or
-   "allowed" in colour.
-8. **A number only where someone would act on it.** A meter appears when a
-   limit is near; otherwise a dash.
+1. **Above the fold: at most three regions, one focal point, 15 to 25 data points.**
+2. **Overview first, details on demand**: counts and links ("All 26").
+3. **One primary action per screen**, at most two secondary visible, the rest behind "···". When
+   something waits for the person, answering it is the primary action.
+4. **Whitespace before borders**: rows with hairlines, not cards; a filled box **once per page at
+   most**, for what needs the person.
+5. **Nothing decorative**: no zebra, double separator, decorative icon, uppercase tracked label,
+   repeated unit, or bar restating its number.
+6. **Four text sizes, two weights.** Sentence case. Prose under ~75 characters a line.
+7. **One accent colour**, for the primary action and links. **Status colour only where a status
+   differs from normal**: amber "needs you", red "stopped, refused, limit reached". Never "active"
+   or "allowed" in colour. One exception: a service mark in its brand colour, which carries no
+   meaning and is never read as a state.
+8. **A number only where someone would act on it**: a meter near a limit, otherwise a dash.
 9. **At most seven navigation entries.**
-10. **Tables of five columns by default**, the others on demand; seven at most.
-    The activity record is the one exception, at six: a log is rows.
+10. **Tables of five columns by default**, seven at most; the activity record shows six.
 11. **No page-level help longer than one sentence.**
-12. **The five-second test and the squint test** pass on every default view:
-    after five seconds one knows what the page is for and what to do next;
-    blurred, it shows one focal point and at most three groups.
+12. **The five-second and squint tests** pass on every default view.
 
 ### 1.1 Detail is per page
 
-A default view shows what a person acts on. The rest is reached through
-disclosures on the page — "show details", "All 26", "Edit the permissions one by
-one" — **which remember their state, per page and per region**. An
-administrator wants the detail on this mission during an incident, not on every
-page.
-
-What a page becomes when nothing needs the person is its smallest form: one
-sentence that says so, and where to go.
+Detail is reached through disclosures that **remember their state, per page and per region**. When
+nothing needs the person, a page shrinks to one sentence saying so, and where to go.
 
 ### 1.2 Explicitly out of scope
 
-- **No global density setting.** Density is decided per page, by its
-  disclosures.
-- **No theme customisation** per person or per company beyond light and dark.
-- **No illustrations or mascots.**
-- **No choreographed animation.** Motion is an atomic transition of 150 ms at
-  most.
-- **No design-tool source of truth.** The tokens in the code are the reference.
-- **No local redefinition of a token.** If a need has no token, a token is
-  added.
-- **No side sheet that stays open**, no status footer in the navigation. The
-  one bar above the page is the path bar (§4): the path, the theme and the
-  person, nothing else.
+- No global density setting, no theme customisation beyond light and dark, no illustrations or
+  mascots.
+- No choreographed animation: an atomic transition of 150 ms at most.
+- No design-tool source of truth: the tokens in the code are the reference; no local redefinition of
+  a token.
+- No side sheet that stays open, no status footer. The one bar above the page is the path bar (§4).
 
 ## 2. Words
 
-The interface names each thing with one word, and a person never has to learn
-the word the protocol uses.
+One word per thing; a person never learns the protocol's word. The word list is
+[vaubaan-gateway](./vaubaan-gateway.md) §0.
 
-| The spec and the protocol say             | A person reads                                           |
-| ----------------------------------------- | -------------------------------------------------------- |
-| connection                                | **account**                                              |
-| share; shares received                    | **access**: Who has access, Give access, Shared with you |
-| risk                                      | **permission**; its severity is one word                 |
-| preset                                    | preset                                                   |
-| gate: auto / approval                     | **runs freely** / **ask me first**                       |
-| budget, quota, rate limit                 | **limits**, per day and per minute                       |
-| mission token, member token               | **key**, your key                                        |
-| named token                               | **machine key**                                          |
-| rotate                                    | **Replace key**                                          |
-| request: a claim, an approval request     | **Waiting for you**                                      |
-| delegation, OAuth client                  | **connected app**                                        |
-| provider app                              | **OAuth client** (of a service)                          |
-| provider (the vendor); the provider pages | **service**; **Reference**                               |
-| session, audit                            | **Activity**                                             |
-| member                                    | **teammate**                                             |
-| operator                                  | **administrator**                                        |
-| group                                     | **team**                                                 |
-| mission                                   | mission                                                  |
-
-Rules:
-
-- **Protocol names do not change.** Tool names, refusal codes, risk ids, catalog
-  entries, stored and transmitted field names and configuration keys keep the
-  names the spec gives them. An identifier is printed as the protocol spells it,
-  in the monospace face, where a person may need to quote it; the words around
-  it are the interface's.
-- **Roles are said in sentences** where they matter: "you own it with Platform",
-  "· you · creator", "waiting for Alice's yes". "Principal" and "beneficiary" are
-  never shown.
-- **The six axes of a risk are said in words**, behind "why?": Undo, Blast
-  radius, Data, Cost, Visible to, Lasts.
-- **A state is a word**, never a colour alone; the normal state is written
-  plainly or not at all.
-- **Routes follow the words**: accounts, waiting, activity, reference, settings;
-  the home is the root. A path the interface had before answers with a permanent
-  redirect. A path that is part of a protocol keeps its name.
-- **One list of words.** The interface takes its words and sentence patterns
-  from a single place, so that a page cannot drift.
+- **Protocol names do not change**: tool names, refusal codes, risk ids, stored and transmitted
+  fields, configuration keys. Quoted, they are printed as spelled, in monospace.
+- **Who reads the sentence decides its words**: text for a person (the setup kit, mission API
+  messages, authorization pages, catalog prose about the product) uses the interface's words; text
+  for an agent or a program (refusal hints, preview messages, management-door descriptions) keeps
+  the protocol's.
+- **Roles are said in sentences** ("you own it with Platform", "waiting for Alice's yes"); never
+  "principal" or "beneficiary".
+- **The six risk axes are words**, behind "why?": Undo, Blast radius, Data, Cost, Visible to, Lasts.
+- **A state is a word**, never colour alone; the normal state is plain or unsaid.
+- **Routes follow the words**; an older path answers with a permanent redirect; a protocol path
+  keeps its name.
+- **One list of words**: words and sentence patterns come from one place.
 
 ## 3. Tokens
 
-Tokens live in **one root style sheet**, as custom properties. Components are
-styled in files scoped to the component, which reference tokens and nothing
-else.
-
 ### 3.1 Colour
 
-| Group      | Tokens                                                                                    | Use                                                                                                                                                                                                                 |
-| ---------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Paper      | `paper`, `paper-side`, `paper-raised`, `fill`, `hover`                                    | the page; the navigation and quiet fills; controls and dialogs; the current entry and neutral pills; a row under the pointer                                                                                        |
-| Hairlines  | `line`, `line-strong`                                                                     | separators; the border of a control                                                                                                                                                                                 |
-| Ink        | `ink`, `ink-2`, `ink-3`, `ink-4`                                                          | text; secondary text; ledes, hints, captions; placeholders only                                                                                                                                                     |
-| Accent     | `accent`, `accent-ink`, `accent-soft`, `accent-line`, `on-accent`                         | the primary action and links                                                                                                                                                                                        |
-| Exceptions | `warn…`, `bad…`, `ok…` — each with `-soft` and `-line`; `on-warn`                         | needs you; stopped, refused, limit reached; done (checklists only)                                                                                                                                                  |
-| Code       | `code-bg`, `code-ink`, `code-dim`, `code-key`, `code-string`, `code-btn`, `code-btn-line` | code blocks, dark in both themes                                                                                                                                                                                    |
-| Overlay    | `scrim`, `shadow-overlay`, `knob`                                                         | what floats above the page                                                                                                                                                                                          |
-| Marks      | `hue-0` … `hue-5`, `on-hue`                                                               | the mark of a person (and of a service whose plugin declares no icon); never a status. A service with an icon is drawn in the brand colour its plugin declares, the one colour that is neither a token nor a status |
-| Focus      | `focus-ring`                                                                              | a gap in the colour of the page, then the accent                                                                                                                                                                    |
-
-`ink-4` is below AA on purpose and carries no information: a placeholder, a
-disabled mark.
-
-The values are shadcn/ui's near-default **slate** neutrals with a **sky**
-accent, in both themes: the neutrals from slate 50 to 950, the accent on sky
-700 in light (sky 500 is below AA on white) and sky 400 in dark, the
-exceptions on amber, red and green. A skin is a change of these values; the
-names, and what reads them, do not change.
+- Families: paper, hairlines, ink (four levels), accent, exceptions (warn, bad, ok — done, on
+  checklists only), code (dark in both themes), overlay, marks (a person's mark, never a status),
+  focus. A service's brand colour is the one colour that is neither a token nor a status.
+- The lowest ink level is below AA on purpose and carries no information (placeholder, disabled
+  mark).
+- A skin changes values only; names and readers stay.
 
 ### 3.2 Type
 
-| Token        | Size  | Use                                                     |
-| ------------ | ----- | ------------------------------------------------------- |
-| `text-title` | 18 px | the page title; the one statement of a request          |
-| `text-base`  | 13 px | body text, rows, tables, controls; section headings     |
-| `text-sm`    | 12 px | ledes, hints, the secondary line of a row               |
-| `text-xs`    | 11 px | captions, chips, table heads, identifiers under a label |
-
-Two weights: regular (400) and strong (600). Two families: a sans-serif for all
-interface text and a monospace for identifiers and code, both bundled with the
-application. The letters inside a mark (an avatar, a step number, the lettered
-fallback of a service mark) are sized with the mark and are not text sizes.
+Four sizes (title; body, rows, controls and section headings; secondary lines; captions and
+identifiers), weights 400 and 600, a sans-serif and a monospace for identifiers and code, both
+bundled.
 
 ### 3.3 Space, radius, motion
 
-- **Space**: a 4 px base — 2, 4, 8, 12, 16, 20, 24, 32, 40, 48.
-- **Rhythm of a page**: a column of 1120 px (860 px for one object or a form,
-  1240 px for a table), 44 px of side padding, **36 px between two regions**,
-  a row of 36 px, a navigation of 220 px (56 px collapsed), a path bar of
-  44 px.
-- **Controls**: three heights — 28, 32 and 36 px.
-- **Radius**: 4 px (tags, checkboxes, inline code), 6 px (buttons, inputs,
-  navigation entries), 8 px (the one filled box, callouts, dialogs, code
-  blocks), full (pills, avatars, dots).
-- **Motion**: 100 ms and 150 ms, one ease-out, on colour, background, border
-  colour, opacity and transform only.
-- **Shadow**: one, on what floats above the page (a dialog, a toast, the
-  person's menu). Nothing in the flow of a page casts a shadow.
+One spacing scale, three page measures, three control heights, a few radii. Motion on colour,
+opacity and transform only. **One shadow**, for what floats; nothing in the page flow casts one.
 
 ### 3.4 Themes
 
-Light is the default. Dark is the same tokens with other values, equally
-finished on every page.
-
-A person chooses among **three states: System, Light, Dark**. The choice is
-remembered and applied before the first paint: a page never flashes in the other
-theme while loading. System follows the device.
-
-A part of a page may be drawn in the other theme (the gallery shows both side by
-side): a theme applies to an element and everything inside it.
+Light by default; dark is the same tokens with other values, equally finished. **System, Light,
+Dark**, remembered and applied before first paint; part of a page may use the other theme.
 
 ## 4. The shell
 
-- **A side navigation**, a fill without a border: the product and where this
-  gateway lives; **Now**, **Waiting for you** with its count, **Missions**,
-  **Accounts**, **Activity**, **Reference**; then, after a hairline,
-  **Settings**. The count of what waits is the one coloured mark of the
-  navigation.
-- **A path bar above the page**, 44 px, a hairline under it, sticky: on the
-  left the **path** — this gateway (its mark and its name, leading home), the
-  section, then the page's crumbs and its title, the last one strong and not a
-  link; on the right the theme toggle and the person — their name, and behind
-  it what they are here and "Sign out". The bar holds nothing else: no search,
-  no action of the page.
-- **A local navigation is a row of tabs under the path**, as wide as the page
-  column: Settings ("You", then "Administration") and the Reference (every
-  service). A group's name is a quiet word before its entries; the current
-  entry is the strong word with a rule under it. No local column.
-- **It is navigation, not a status panel**: no health line, no version string.
-  The build is said once, quietly, where a page ends.
-- **The current section** is marked by a fill and the strong weight, not by a
-  colour. Every page belongs to exactly one section.
-- **In a narrow window** the navigation collapses to its icons, each still named
-  for assistive technology and on hover; on a phone it becomes a bar at the
-  foot of the page, a word under each icon, with the less frequent sections
-  behind "More".
-- **One home**: the root. The brand and the sign-in both lead there.
-- **Administration is part of Settings**: the same shell and the same global
-  navigation, with the local navigation of Settings under the path. No label is
-  used for two things.
-- **A page column** of one of three measures, chosen by the page.
+- **A side navigation**: Now, Waiting for you with its count (its one coloured mark), Missions,
+  Accounts, Activity, Reference; after a hairline, Settings. The current section is a fill and the
+  strong weight, not a colour; every page belongs to exactly one section.
+- **A path bar above the page**: the path (this gateway leading home, the section, crumbs, the
+  title), then the theme toggle and the person. No search, no page action.
+- **Local navigation is a row of tabs under the path** (Settings: You, Administration; the
+  Reference); no local column. Administration is part of Settings.
+- **Navigation, not a status panel**: no health line, no version; the build is said once, quietly,
+  where a page ends.
+- **Narrow window**: icons only, still named; **phone**: a bar at the foot, rarer sections behind
+  "More".
+- **One home**, the root.
 
 ## 5. Components
 
-| Component                     | What it is, and its rule                                                                                                                                                                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Page header**               | where one is, the title, one sentence of lede, one primary action, at most two secondary ones, the rest behind "···"; optionally a mark before the title and the exception beside it                                                       |
-| **Section heading**           | a heading, an optional count, one short note or link on the right                                                                                                                                                                          |
-| **Summary line**              | the counts that lead elsewhere; a count that leads to a list is a link                                                                                                                                                                     |
-| **Quiet list row**            | a title, one line of facts, at most one thing beside it, and at the end an action or a short fact; hairlines between rows, no card                                                                                                         |
-| **Data table**                | five columns by default; detail columns on demand; row actions on hover and on keyboard focus; a tint on the exception row, whose text says why; a quiet title per group; no zebra                                                         |
-| **Meter**                     | shown only near a limit — the caller gives the threshold; a dash below it; red and "limit reached" at the limit                                                                                                                            |
-| **Status mark**               | a pill with a dot for an exception; a dot beside a word that says the state; a squared tag for a fact that is not a state (an environment)                                                                                                 |
-| **Avatar, key holder**        | a person is a round mark with initials, a machine key a dashed square, a team a squared mark; the name, then what they are here, in words; a masked key in mono with a key                                                                 |
-| **Service mark**              | the brand icon its plugin declares, in the brand colour it declares, on a neutral fill (a near-black brand takes the ink in the dark theme); never a status; its name beside it; two letters of the name on a hue when it declares no icon |
-| **Identifier**                | mono, as the protocol spells it; wraps between its words, never inside one                                                                                                                                                                 |
-| **Permission row**            | what it allows in words, its id in mono, one severity word, limits per day and per minute, runs freely or ask me first, and "why?" — the reason, the six words, the tools, the reference                                                   |
-| **Can / Asks first / Cannot** | the summary of a mission in three lines, a fourth when one limit is near; says how many permissions it sums up; never replaces the explicit list                                                                                           |
-| **Inline answer row**         | who asks, what exactly, where, how long ago, then the answers (approve, refuse, raise) on the same row; as the one filled box of a page when a mission waits for its creator                                                               |
-| **Empty and first-run**       | one sentence that says what is the case and one action; for a first run, what the product is, the model in a few nodes, the steps; a checklist with done, partly done, to do                                                               |
-| **Callout**                   | a note that interrupts on purpose: neutral, where to go next, needs you, stopped, done; never a tinted paragraph of help                                                                                                                   |
-| **Dialog**                    | one question, **the consequence stated before anything happens**, optionally a choice between ways of doing it, a button named after the act, Cancel; a typed phrase for what cannot be undone                                             |
-| **Show details**              | a quiet link that says what will appear, and the panel it opens; or one toggle for a region; the state is remembered per page                                                                                                              |
-| **Tabs**                      | for peers of a reference; never to hide the one thing a newcomer needs                                                                                                                                                                     |
-| **Filters**                   | segments for one choice among a few; chips for facets that add up; a quiet search field                                                                                                                                                    |
-| **Form field**                | says the expected shape in its label and again in the error, with what to do; required unless it says optional; no success state; checkbox, radio and a switch labelled by what happens                                                    |
-| **Code**                      | inline for a name; a block for what a person copies, with a button that copies exactly that; a secret is shown once                                                                                                                        |
-| **Toast**                     | confirms what the person just did and leaves; a failure stays; never the only copy of something that matters                                                                                                                               |
-| **Skeleton**                  | the shape of what is loading, in place of it                                                                                                                                                                                               |
-| **Button**                    | primary (the accent), secondary, ghost, danger (red words, never a red fill); three sizes; a control that navigates is a link with the same look                                                                                           |
-| **Card**                      | a bordered box, once per page at most                                                                                                                                                                                                      |
-| **Local navigation**          | a short column beside the content of a page that is a small place of its own (Settings, Reference)                                                                                                                                         |
+A feature screen uses **only** tokens and components. A need neither provides is stated, then this
+guide and the design system are extended, then the screen is built. Rules a component holds:
 
-A feature screen uses **only** tokens and components. When a screen needs
-something neither provides, the order is: state the need; extend this guide and
-the design system (a token, a variant, a component); then build the screen. Not
-"hard-code it now and factor it later".
+- **Page header** — title, one sentence of lede, one primary action, at most two secondary.
+- **Quiet list row** and **data table** — hairlines, no card, no zebra; five columns by default; row
+  actions on hover and on keyboard focus; an exception row tinted, its text saying why.
+- **Meter** — shown only near a limit (the caller gives the threshold), a dash below, red and "limit
+  reached" at it.
+- **Status mark** — a pill for an exception; a squared tag for a fact that is not a state (an
+  environment).
+- **Avatar** — a person round with initials, a machine key a dashed square, a team squared; then
+  what they are here, in words.
+- **Service mark** — the icon its plugin declares, in the brand colour it declares, on a neutral
+  fill; a near-black brand takes the ink in the dark theme; never a status; two letters of its name
+  on a hue without an icon.
+- **Identifier** — mono, as the protocol spells it; wraps between words, never inside one.
+- **Permission row** — what it allows in words, its id, one severity word, limits, gate, and "why?".
+- **Can / Asks first / Cannot** — a mission's summary; says how many permissions it sums up; never
+  replaces the explicit list.
+- **Dialog** — one question, **the consequence stated before anything happens**, a button named
+  after the act; a typed phrase for what cannot be undone.
+- **Form field** — the expected shape in its label and again in the error, with what to do; required
+  unless it says optional.
+- **Code** — a block a person copies has a button copying exactly that; a secret is shown once.
+- **Toast** — confirms what the person just did; a failure stays; never the only copy of something
+  that matters.
+- **Button** — danger is red words, never a red fill; a control that navigates is a link.
+- **Card** — once per page at most. **Tabs** — never hide the one thing a newcomer needs.
 
 ## 6. Accessibility
 
-- **Landmarks and headings**: one main region, one navigation named "Main", one
-  title per page; a region is named by its heading.
-- **Keyboard**: everything is reachable; the first stop leads straight to the
-  page; row actions shown on hover also show on focus; a dialog keeps the focus
-  inside itself, closes on Escape and gives the focus back.
-- **Focus always visible**: a ring in the accent, never removed.
-- **Never colour alone**: a status carries its word, a meter its figure, an
-  exception row its reason, a mark its shape.
-- **Contrast**: AA at least for every pairing of text and surface, in both
-  themes, including text on a tinted surface.
-- **Reduced motion is respected**: transitions and animations take no time, the
-  end state is the same.
-- **Click targets of 32 px at least**, whatever the drawn height of a control.
-- **Errors** are announced, and tied to the field they are about.
+- One main region, one navigation named "Main", one title per page; a region is named by its
+  heading.
+- Everything reachable by keyboard; a dialog traps focus, closes on Escape and returns focus.
+- Focus always visible; never colour alone (a status has its word, a meter its figure, a mark its
+  shape).
+- AA contrast for every text–surface pair in both themes; reduced motion takes no time; click
+  targets of 32 px at least; errors announced and tied to their field.
 
 ## 7. Tests
 
-Tokens are the specification; tests check what must hold of them, not "this
-button is blue":
-
-- a **contrast probe** over the documented pairs of text and surface, in both
-  themes;
-- the two definitions of the dark theme (chosen, and from the system) hold the
-  same values;
-- **no dead token and no unknown token**: every token is used, every reference
-  resolves; **no raw colour** outside the token sheet;
-- the **column budget** of a table is enforced where the table is built;
-- every page sits under exactly one navigation entry, and every old path
-  redirects to a page that exists;
-- a **gallery** renders every component in every state, on a light and a dark
-  island; a browser test walks it.
-
-How a page looks is judged by eye, against the gallery, at 1440×900 and
-1280×800, in both themes.
+- A contrast probe over the documented text–surface pairs, both themes; the two dark-theme
+  definitions hold the same values.
+- No dead or unknown token, no raw colour outside the token sheet.
+- The column budget of a table is enforced where it is built.
+- Every page sits under one navigation entry; every old path redirects to a page that exists.
+- A gallery renders every component in every state, light and dark, walked by a browser test. Looks
+  are judged by eye against it.
 
 ## 8. Decisions and open questions
 
 ### 8.1 Settled
 
-- Proposal D at the Balanced density; the attention budget of §1.
-- Light by default, dark equally finished, three states, no flash.
-- One accent; amber and red for exceptions; green on checklist ticks.
-- Four sizes, two weights, sentence case.
-- Components written for this interface, with no component library.
-- Detail per page, remembered; no global density setting.
+- Components written for this interface, no component library.
 
 ### 8.2 Open
 
-- **A search across the gateway** (the mockups draw a field in the navigation).
-  Not provided: nothing would answer it yet.
-- **Notifications** outside the interface (mail, chat) for what waits.
-- **The phone**: pages hold at 390 px — tables become labelled lines, row
-  actions are always drawn, nothing scrolls sideways — but no page was designed
-  for it first.
+- **A search across the gateway**: not provided.
+- **Notifications** outside the interface for what waits.
+- **The phone**: pages hold at 390 px, none designed phone-first.
 
 ## 9. Known gaps between this guide and the interface
 
-Stated so that nobody takes a rule for a fact:
-
-- **Every page was rebuilt on the design system** (Now and Waiting for you;
-  the mission pages; Accounts, Reference, Activity, Settings and the
-  administration). The components of the first interface — a name with the
-  glyph of its kind, a legend of kinds, a one-line help with "More", the
-  earlier badge, banner and bare table — are deleted.
-- **Raw lengths remain** in the style sheets of those pages and, in the design
-  system, for the dimensions of marks and a few hairline adjustments.
-- **The consent pages of the authorization endpoint and the refusals of a
-  forwarded request URL** are separate documents sent under a content policy
-  that loads nothing: they cannot read the token sheet and repeat the tokens
-  they need, value for value, in both themes. A test keeps the two equal.
+- Raw lengths remain in page style sheets and for mark dimensions.
+- The consent pages and the refusals of a forwarded request URL load nothing and repeat the tokens
+  they need, value for value; a test keeps them equal.

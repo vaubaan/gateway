@@ -1,5 +1,5 @@
 /**
- * Structural test (ADR scope-caps-not-enforced-in-v5-0): a shipped catalog
+ * Structural test (ADR scope-caps-amplification-axis): a shipped catalog
  * never declares a limit the gateway does not enforce.
  *
  * The v5.0 door has no cap stage, so a `caps` block, or an `infra_limits` key

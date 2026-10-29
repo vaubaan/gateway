@@ -22,8 +22,8 @@
  * lockfile cannot be read.
  *
  * The same checks as the lockfile-lint package, written here so the gate adds
- * no dependency to the supply chain it guards (ADR
- * supply-chain-and-ci-security-checks). `checkLockfile()` is pure and
+ * no dependency to the supply chain it guards (see
+ * docs/workflow/coding-workflow.md). `checkLockfile()` is pure and
  * unit-tested (scripts/lockfile-gate.test.mjs).
  */
 import { readFileSync } from 'node:fs';

@@ -108,7 +108,7 @@ describe('shipped plugins through the generic connect driver', () => {
     expect(ways).toContain('ssh-key');
     expect(ways).not.toContain('app-install');
     // Miro offers no key a person can use (its REST token needs an app an organisation may
-    // refuse, ADR miro-rewraps-the-official-mcp-server): the one OAuth way shipped, with a
+    // refuse, docs/handbook/providers/miro.md): the one OAuth way shipped, with a
     // client the gateway registers itself (ADR oauth-client-registered-by-the-gateway). Gmail
     // connects with an app password (ADR gmail-over-imap-with-an-app-password). Google
     // Calendar's client is an OAuth broker's (ADR google-calendar-through-an-oauth-broker):

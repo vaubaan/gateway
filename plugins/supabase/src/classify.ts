@@ -3,7 +3,7 @@
  *
  * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10
  *        ("a classification error is a security hole").
- * Handbook : docs/handbook/providers/supabase.md §2 (tool → slice), §5 (edge cases).
+ * Handbook : docs/handbook/providers/supabase.md.
  *
  * Pure : no IO, no credential, no `Date`. Every tool maps to at least one
  * slice ; a call the plugin cannot place on the data model is `denied`,

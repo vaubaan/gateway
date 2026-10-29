@@ -223,7 +223,7 @@ describe('refresh', () => {
 
   it('expires an unowned connection whose refresh is rejected: it stops serving', async () => {
     // A serving connection with a dead credential is `expired`, owned or not (handbook
-    // connections, "Status and credential"). It stays ownerless: the operator reassigns
+    // connections, Debug). It stays ownerless: the operator reassigns
     // an owner (`listOwnerless`), who reconnects.
     const h = await configured(
       oauthHarness([

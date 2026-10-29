@@ -1,10 +1,10 @@
 /**
  * Vaubaan design tokens — the quiet control room, in shadcn's near-default
- * slate and sky (ADR shadcn-near-default-skin-and-path-bar).
+ * slate and sky (values: docs/spec/style-guide.md).
  *
  * Spec: docs/spec/style-guide.md. Decisions: docs/decisions/
  * interface-redesign-vocabulary-and-design-system.md (the names and what
- * reads them), shadcn-near-default-skin-and-path-bar.md (the values).
+ * reads them).
  *
  * One layer of named decisions. A component reads these and nothing else: no
  * raw colour, no raw type size, no raw radius.

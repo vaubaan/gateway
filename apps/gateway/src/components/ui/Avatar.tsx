@@ -12,8 +12,7 @@
  * - `ServiceMark` — the icon the service's plugin declares, in its brand
  *   colour on a neutral fill (a near-black brand takes the ink in the dark
  *   theme, `darkThemeMarkColor`); two letters on a hue (GitHub → GH) when it
- *   declares none (ADRs service-icons-declared-by-the-plugin,
- *   service-marks-in-brand-colour).
+ *   declares none (ADR service-icons-declared-by-the-plugin).
  * - `KeyMark` — a masked key in mono with the key icon.
  * - `AgentLabel` — the name an agent gave itself (never verified).
  */

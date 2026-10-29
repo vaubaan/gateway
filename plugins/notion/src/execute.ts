@@ -1,7 +1,7 @@
 /**
  * Execution of the `notion` tools.
  *
- * Handbook : docs/handbook/providers/notion.md §5, §6.3.
+ * Handbook : docs/handbook/providers/notion.md.
  *
  * Order, for every tool :
  *   1. the undeclared-argument rule and `readCall`, the classifier's own

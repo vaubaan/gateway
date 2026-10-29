@@ -1,5 +1,5 @@
 /**
- * Discovery after a creating call (ADR discovery-runs-after-a-creating-call).
+ * Discovery after a creating call (ADR created-resources-join-the-mission).
  *
  * A call that succeeded through the execution door, of a tool its plugin lists
  * in `resourceCreatingTools` (`fly__create_app`), created a resource the

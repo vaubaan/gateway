@@ -4,7 +4,7 @@
  * provider credential").
  *
  * The credential comes from the connections' `CredentialBroker` only
- * (handbook connections, "Credentials and refresh"): `resolve()` decrypts
+ * (handbook connections, Start here): `resolve()` decrypts
  * and refreshes an OAuth token about to expire; `refresh()` forces a refresh
  * and marks the connection `expired` when the provider rejects it. This
  * module never reads a sealed blob.

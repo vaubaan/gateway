@@ -1,6 +1,6 @@
 # Risk catalog of the `fly` provider (Fly.io Machines API).
 #
-# Handbook : docs/handbook/providers/fly.md §3. Spec : docs/spec/gateway-risk-model.md §4.
+# Handbook : docs/handbook/providers/fly.md. Spec : docs/spec/gateway-risk-model.md §4.
 #
 # Write patterns are exact : each write slice touches the risk named for it.
 # A call that does several things (create a machine, replace a config,

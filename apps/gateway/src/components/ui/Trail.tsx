@@ -2,7 +2,7 @@
 
 /**
  * The trail of a page: what the path bar of the shell draws after the section
- * (ADR shadcn-near-default-skin-and-path-bar). A page declares it once, in its
+ * (docs/handbook/web-app.md). A page declares it once, in its
  * `PageHeader`: its crumbs and its title. The bar reads it; nothing else does.
  *
  * `TrailProvider` wraps the shell; `TrailSetter` is rendered by the header and

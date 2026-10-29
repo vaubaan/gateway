@@ -46,7 +46,7 @@ export interface ConnectionsModule {
   readonly handlers: ConnectionHandlers;
   /**
    * Runs a connection's discovery after a call that created one of its
-   * resources (ADR discovery-runs-after-a-creating-call): the execution door's
+   * resources (ADR created-resources-join-the-mission): the execution door's
    * hook, stopped by `root.close()`.
    */
   readonly discoveryAfterCall: DiscoveryAfterCall;

@@ -1,5 +1,5 @@
 /**
- * Restore at first boot (ADR restore-verifies-before-it-replaces-and-runs-at-first-boot,
+ * Restore at first boot (docs/handbook/store.md,
  * D5): called by `openEmbeddedStore` before the store is opened.
  *
  * - `restore.from` unset: nothing.

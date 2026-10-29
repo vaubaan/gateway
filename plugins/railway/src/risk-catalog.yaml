@@ -1,7 +1,7 @@
 # Risk catalog of the `railway` provider.
 #
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
-# ADR  : docs/decisions/railway-rewrap-remote-mcp.md ; docs/decisions/plugin-contract-and-credential-spec.md.
+# ADR  : docs/decisions/rewrap-official-mcps.md ; docs/decisions/plugin-contract-and-credential-spec.md.
 # Handbook : docs/handbook/providers/railway.md.
 #
 # Loaded by the plugin SDK at boot (`loadCatalogFile`) ; this file is the only

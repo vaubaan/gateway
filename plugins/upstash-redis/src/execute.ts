@@ -3,7 +3,7 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4 (the credential arrives decrypted
  *        in the context, is used for one call, never returned), §5.
- * Handbook : docs/handbook/providers/upstash-redis.md §4.
+ * Handbook : docs/handbook/providers/upstash-redis.md.
  *
  * Two upstream surfaces, one credential :
  *   - the 6 management tools hit the Management API (`api.upstash.com/v2`)

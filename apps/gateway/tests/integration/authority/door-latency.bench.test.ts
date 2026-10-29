@@ -1,6 +1,6 @@
 /**
  * What the authority re-check adds to a call at the execution door (handbook
- * authority, "The door"). A measurement, not an assertion: timing bounds are
+ * authority, Start here). A measurement, not an assertion: timing bounds are
  * flaky on shared runners, so the suite is skipped unless asked for.
  *
  *   VAUBAAN_BENCH=1 npx vitest run apps/gateway/tests/integration/authority/door-latency.bench.test.ts

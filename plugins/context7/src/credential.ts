@@ -2,7 +2,7 @@
  * Credential of the `context7` provider : a Context7 API key pasted by hand.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2.
- * Handbook : docs/handbook/providers/context7.md §6.1.
+ * Handbook : docs/handbook/providers/context7.md.
  *
  * The key is kept by the gateway as a connection, encrypted ; it is never in
  * an environment variable or in an MCP client's configuration. It is sent

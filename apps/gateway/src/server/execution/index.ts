@@ -48,7 +48,7 @@ export interface ExecutionModuleDeps {
   readonly missions: Pick<MissionsModule, 'service'>;
   /** `discoveryAfterCall`: the connection's discovery after a call that created a resource. */
   readonly connections: Pick<ConnectionsModule, 'credentials' | 'discoveryAfterCall'>;
-  /** Re-checks the creator's authority on every request (handbook authority, "The door"). */
+  /** Re-checks the creator's authority on every request (handbook authority, Start here). */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** The budget's session service (quota, rate windows, gate) — one per process. */
   readonly budget: SessionService;
@@ -161,7 +161,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     pipeline,
     // What a creating call made joins the mission on the request path (local writes),
     // then the connection's discovery runs off it (ADRs created-resources-join-the-mission,
-    // discovery-runs-after-a-creating-call).
+    // created-resources-join-the-mission).
     afterCall: async (ctx, call) => {
       const created = await createdResources.record(ctx, call);
       deps.connections.discoveryAfterCall.afterCall(ctx, call, created);

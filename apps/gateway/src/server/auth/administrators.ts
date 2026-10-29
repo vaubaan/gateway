@@ -480,7 +480,7 @@ export class AdministratorsService {
    * Recorded (`administrators.seeded_rule`) and audited once. Returns whether it applied.
    */
   async seedFromConfiguration(): Promise<boolean> {
-    // A copy made by a backup between ADR backup-carries-the-sign-in-configuration and
+    // A copy made by a backup that carries the sign-in configuration (docs/handbook/authentication.md) and
     // this one carries its source's rule: read once, with the configuration's.
     const carried = parseRestoredAdminRule(
       await this.deps.store.config.get(RESTORED_ADMIN_RULE_KEY),

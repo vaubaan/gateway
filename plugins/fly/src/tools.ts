@@ -4,7 +4,7 @@
  * Every tool that acts on an app takes `app`, the app name — one of the
  * mission's Fly apps ; absent, the mission's single app. The `properties` of
  * each schema are the whole argument surface of the tool : the classifier
- * refuses any other argument (handbook §2, "Only declared arguments").
+ * refuses any other argument (handbook).
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';

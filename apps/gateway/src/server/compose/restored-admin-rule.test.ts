@@ -1,5 +1,5 @@
 /**
- * The admin rule a backup carried (ADR backup-carries-the-sign-in-configuration) is
+ * The admin rule a backup carried (docs/handbook/authentication.md) is
  * read once, by the seed, while the store names no administrator (ADR
  * administrators-live-in-the-instance): its people become administrators like the
  * configuration's, and the key is deleted.

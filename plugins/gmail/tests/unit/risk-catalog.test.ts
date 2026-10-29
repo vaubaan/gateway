@@ -132,7 +132,7 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
     }
   });
 
-  test('no entry declares a cap the door does not enforce (ADR scope-caps-not-enforced-in-v5-0)', () => {
+  test('no entry declares a cap the door does not enforce (ADR scope-caps-amplification-axis)', () => {
     for (const id of ['gmail.bulk-read', 'gmail.read-from-zone-unknown']) {
       const entry = parsedCatalog.risks.find((r) => r.id === id);
       expect(entry, id).toBeDefined();

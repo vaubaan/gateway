@@ -2,7 +2,7 @@
  * Classifier of the `ssh` provider : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/ssh.md §3.
+ * Handbook : docs/handbook/providers/ssh.md.
  *
  * Pure. The host is a mission resource : named by `host`, or the mission's
  * single SSH host when the argument is absent ; a host the mission does not

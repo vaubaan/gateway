@@ -74,7 +74,7 @@ describe('PageHeader', () => {
     expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).toContain('A cloud account connected once.');
     // The crumbs are not drawn in the header: the path bar of the shell says them
-    // (ADR shadcn-near-default-skin-and-path-bar).
+    // (docs/handbook/web-app.md).
     expect(html).not.toContain('aria-label="Breadcrumb"');
     expect(html).not.toContain('Home');
     // Secondary actions come before the primary one.

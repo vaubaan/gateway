@@ -3,7 +3,7 @@
  * D5): the pack stored at the provider under `refs/vaubaan/<random>` so that
  * the provider can say what it brings, then deleted — on every path. The pack
  * reaches this module read whole, inspected and decided on (`push.ts`, ADR
- * git-push-inspected-before-it-leaves): a push its mission refuses for what
+ * gateway-as-git-remote): a push its mission refuses for what
  * its objects change never gets here.
  *
  *   names     random, carrying no mission id: every reader of the repository

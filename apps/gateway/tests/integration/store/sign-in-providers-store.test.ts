@@ -1,6 +1,6 @@
 /**
- * Migration 0014 and what it gives the store (spec §0 "Invitation"; ADR
- * sign-in-providers-admission-and-admin-rule): the invitation list, IdP groups
+ * Migration 0014 and what it gives the store (spec §0 "Invitation"; see
+ * docs/handbook/authentication.md): the invitation list, IdP groups
  * bound to the sign-in provider that claims them, and the end of the sessions of
  * a removed provider's users.
  */

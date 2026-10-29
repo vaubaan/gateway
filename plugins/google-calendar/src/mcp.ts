@@ -2,7 +2,7 @@
  * The JSON-RPC client of Google's Calendar MCP server (Streamable HTTP), for the
  * executor and discovery.
  *
- * Handbook : docs/handbook/providers/google-calendar.md §6.3.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4.
  *
  * One request per call when the server is stateless, as Google's reference

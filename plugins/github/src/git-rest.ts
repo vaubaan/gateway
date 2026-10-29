@@ -2,7 +2,7 @@
  * GitHub's REST API as the git remote uses it (ADR gateway-as-git-remote
  * D4): the value of a ref, the default branch, a comparison, the paths of
  * one commit and, for the inspection before a push leaves the gateway (ADR
- * git-push-inspected-before-it-leaves), one commit, tag or tree of the git
+ * gateway-as-git-remote), one commit, tag or tree of the git
  * database — reads, with the read grant — and the ref writes of a create and
  * a fast-forward, with the write grant.
  */

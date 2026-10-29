@@ -1,6 +1,6 @@
 /**
  * Manual check of the execution door on a local instance (handbook
- * execution-door, "Manual check"). Not part of the automated suite.
+ * execution-door, Procedures, "Manual smoke"). Not part of the automated suite.
  *
  * Builds the composition root from the SAME environment the server will start
  * with (`VAUBAAN_*`, including `VAUBAAN_STORE_PATH`), then seeds what an

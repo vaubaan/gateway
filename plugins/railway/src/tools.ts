@@ -3,7 +3,7 @@
  * server at mcp.railway.com, plus four GraphQL-backed variable tools.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5.
- * ADR  : docs/decisions/railway-rewrap-remote-mcp.md.
+ * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
  * The 10 upstream tools were fetched verbatim from `mcp.railway.com
  * tools/list` on 2026-05-30 (with a Bearer scoped to

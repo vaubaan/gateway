@@ -2,7 +2,7 @@
  * Data model of the `notion` provider.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Handbook : docs/handbook/providers/notion.md §1.
+ * Handbook : docs/handbook/providers/notion.md.
  *
  * One plane, `content`. Notion's tree is recursive (pages hold blocks, blocks
  * hold blocks and sub-pages, to any depth) and a slice cannot say "any depth

@@ -43,7 +43,7 @@ describe('resend risk-catalog — shape', () => {
   });
 
   test('the bulk entries declare only the limit the gateway enforces', () => {
-    // ADR scope-caps-not-enforced-in-v5-0 : no `caps`, and of `infra_limits` only the
+    // ADR scope-caps-amplification-axis : no `caps`, and of `infra_limits` only the
     // ceiling on a mission's rate limit. The 100-email batch limit is the classifier's.
     const batch = catalog.risks.find((r) => r.id === 'resend.send-batch')!;
     expect(batch.caps).toBeUndefined();

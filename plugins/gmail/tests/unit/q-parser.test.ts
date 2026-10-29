@@ -1,7 +1,7 @@
 /**
  * Unit tests for `parseQ` — the minimal Gmail `q` query parser.
  *
- * Handbook : docs/handbook/providers/gmail.md, "Classification rules".
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * The parser reports what it cannot bound (`hasDisjunction`, `hasNegation`,
  * `hasUnknownOps`) ; the classifier turns each of them into the worst case.

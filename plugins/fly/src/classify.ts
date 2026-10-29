@@ -1,7 +1,7 @@
 /**
  * Classifier of the `fly` provider : `(tool, args, resources) → slices`.
  *
- * Spec : docs/spec/gateway-risk-model.md §7. Handbook : docs/handbook/providers/fly.md §2.
+ * Spec : docs/spec/gateway-risk-model.md §7. Handbook : docs/handbook/providers/fly.md.
  *
  * Pure. Every identifier and value is read by `readFlyCall`, the reader
  * `execute` uses too ; this module only says what the call touches. The
