@@ -47,6 +47,7 @@ function platform(answers: Array<'ok' | 'fail'>): PlatformAdapter & { calls: str
   let n = 0;
   return {
     name: 'test',
+    attested: true,
     calls,
     async attest(nonces) {
       calls.push([...nonces]);

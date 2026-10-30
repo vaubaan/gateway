@@ -7,6 +7,10 @@ author: Renaud Pelissier (product owner), drafted with Claude
 
 # The OAuth broker keeps no token and runs only in an attested enclave the gateway verifies
 
+> Amended on 2026-10-30 by
+> [oauth-broker-can-run-without-an-enclave](oauth-broker-can-run-without-an-enclave.md): the same
+> image may also run without an enclave, declared unattested.
+
 ## Context
 
 Google Calendar is reached through one verified OAuth client owned by a shared broker. A broker

@@ -1,10 +1,12 @@
 /**
  * Entry point: `node src/main.ts` (Node runs the TypeScript as is, so the
  * image holds the very source a reviewer reads). Reads two environment
- * variables only:
+ * variables, and the `unattested` platform its secrets:
  *
- *   OAUTH_BROKER_PLATFORM  fixed by the release image; `local` for development
+ *   OAUTH_BROKER_PLATFORM  set by the release image to Confidential Space;
+ *                          `unattested` without an enclave, `local` for development
  *   OAUTH_BROKER_CONFIG    the operator's JSON configuration (src/config.ts)
+ *   OAUTH_BROKER_SECRET_*  `unattested` only (src/platform/unattested.ts)
  *
  * Any failure at start stops the process with a named, non-sensitive reason.
  */

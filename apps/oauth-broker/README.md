@@ -1,7 +1,8 @@
 # OAuth broker
 
 An OAuth broker that **keeps no token**, runs in an **attested enclave**
-(Google Confidential Space first), and is small enough to be read in an hour.
+(Google Confidential Space first) or, declared unattested, without one, and is
+small enough to be read in an hour.
 
 It lets a Vaubaan Gateway instance connect a provider that offers no key and
 no dynamic client registration — Google Calendar — through one verified OAuth
@@ -14,8 +15,8 @@ asks to refresh, and keeps nothing.
   ADR [`oauth-broker-stateless-in-an-attested-enclave`](../../docs/decisions/oauth-broker-stateless-in-an-attested-enclave.md).
 - **The calls** between a gateway and a broker:
   [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/oauth-broker-contract.md).
-- **Enrolling, running it in Confidential Space, releasing and verifying a
-  release**: [`docs/handbook/oauth-broker.md`](../../docs/handbook/oauth-broker.md).
+- **Enrolling, running it in Confidential Space or without an enclave,
+  releasing and verifying a release**: [`docs/handbook/oauth-broker.md`](../../docs/handbook/oauth-broker.md).
 
 ## In one screen
 
@@ -23,6 +24,10 @@ asks to refresh, and keeps nothing.
 gateway ──TLS (enclave key, attested)──▶ :8443  POST /flows /grants/redeem /token /revoke /attest
 browser ──HTTPS front──▶ :8080  GET /oauth/callback/<provider>   GET /healthz
 ```
+
+Without an enclave (`OAUTH_BROKER_PLATFORM=unattested`), both go to `:8080`
+in plain HTTP behind the platform's TLS, `/attest` answers 404, and the
+secrets come from `OAUTH_BROKER_SECRET_<NAME>` variables.
 
 - No dependency outside Node 26; Node runs the TypeScript in `src/` as is.
 - Flows live ten minutes, in memory, at most 500 per instance. Nothing is
@@ -34,7 +39,8 @@ browser ──HTTPS front──▶ :8080  GET /oauth/callback/<provider>   GET /
 - Provider endpoints and scopes are compiled in (`src/providers.ts`), never
   configured.
 - The platform adapter (`src/platform/`) attests and unseals the client
-  secret; `local` is for development and says `platform: "none"`.
+  secret; `unattested` attests nothing and reads the environment; `local` is
+  for development and says `platform: "none"`.
 
 ## Run it locally
 

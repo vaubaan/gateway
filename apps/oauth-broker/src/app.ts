@@ -1,7 +1,8 @@
 /**
  * Assembles a running broker from its parts. src/main.ts calls it with the
- * compiled-in providers and the platform the image names; tests call it with
- * a fake provider and the local adapter.
+ * compiled-in providers and the platform the environment names; tests call it
+ * with a fake provider and the local or unattested adapter. A platform that
+ * does not attest gets one plain HTTP listener and no TLS identity.
  */
 import { type AddressInfo } from 'node:net';
 import { type Server } from 'node:http';
@@ -15,7 +16,7 @@ import { type Fetch, OAuthClient } from './oauth-client.ts';
 import { type PlatformAdapter } from './platform/types.ts';
 import { type ProviderTable } from './providers.ts';
 import { parseSealingKey, SEALING_KEY_SECRET, TokenSealer } from './sealing.ts';
-import { createApiServer, createCallbackServer } from './server.ts';
+import { createApiServer, createCallbackServer, createSingleServer } from './server.ts';
 import { createTlsIdentity } from './tls-identity.ts';
 
 export interface StartOptions {
@@ -33,11 +34,13 @@ export interface StartOptions {
 }
 
 export interface RunningBroker {
-  readonly apiPort: number;
+  /** The TLS API listener's port; `null` without an enclave (the API is on `httpPort`). */
+  readonly apiPort: number | null;
   readonly httpPort: number;
-  readonly publicKeySha256: string;
+  /** The API's TLS key and certificate; `null` without an enclave. */
+  readonly publicKeySha256: string | null;
   /** The PEM certificate of the API listener (public). */
-  readonly certificate: string;
+  readonly certificate: string | null;
   close(): Promise<void>;
 }
 
@@ -62,39 +65,59 @@ export async function startBroker(options: StartOptions): Promise<RunningBroker>
     secrets.set(id, await platform.unsealSecret(client.secretName));
   }
   const sealer = new TokenSealer(parseSealingKey(await platform.unsealSecret(SEALING_KEY_SECRET)));
-  const tls = createTlsIdentity();
   const now = options.now ?? Date.now;
   const flows = new FlowStore({ ...options.flows, now });
+  const sweeper = setInterval(() => flows.sweep(), 60_000);
+  sweeper.unref();
+  const deps = {
+    config,
+    providers,
+    secrets,
+    flows,
+    oauth: new OAuthClient(options.fetch ?? fetch, now),
+    attestLimit: options.attestLimit ?? new AttestRateLimit({ now }),
+    sealer,
+  };
+  const host = options.host ?? '0.0.0.0';
+  const started = {
+    platform: platform.name,
+    providers: [...secrets.keys()].join(','),
+    instances: config.instances.length,
+  };
+
+  if (!platform.attested) {
+    // No enclave: one plain HTTP listener behind the platform's TLS.
+    const single = createSingleServer(new Broker({ ...deps, attestation: null }), log);
+    const httpPort = await listen(single, config.httpPort, host);
+    log.info('started', { ...started, http_port: httpPort, attested: false });
+    return {
+      apiPort: null,
+      httpPort,
+      publicKeySha256: null,
+      certificate: null,
+      async close() {
+        clearInterval(sweeper);
+        await close(single);
+      },
+    };
+  }
+
+  const tls = createTlsIdentity();
   // The first token before the listeners open; a failure is retried in the background.
   const attestation = new AttestationCache(platform, tls.publicKeySha256, log, {
     now,
     ...options.attestation,
   });
   await attestation.start();
-  const broker = new Broker({
-    config,
-    providers,
-    secrets,
-    attestation,
-    flows,
-    oauth: new OAuthClient(options.fetch ?? fetch, now),
-    attestLimit: options.attestLimit ?? new AttestRateLimit({ now }),
-    sealer,
-  });
-  const sweeper = setInterval(() => flows.sweep(), 60_000);
-  sweeper.unref();
-
-  const host = options.host ?? '0.0.0.0';
+  const broker = new Broker({ ...deps, attestation });
   const api = createApiServer(broker, tls, log);
   const http = createCallbackServer(broker, log);
   const apiPort = await listen(api, config.apiPort, host);
   const httpPort = await listen(http, config.httpPort, host);
   log.info('started', {
-    platform: platform.name,
+    ...started,
     api_port: apiPort,
     http_port: httpPort,
-    providers: [...secrets.keys()].join(','),
-    instances: config.instances.length,
     tls_public_key_sha256: tls.publicKeySha256,
   });
   return {
