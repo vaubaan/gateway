@@ -1,7 +1,8 @@
 /**
  * Picks the platform adapter named by OAUTH_BROKER_PLATFORM. The release
- * image fixes it (`ENV` in the Dockerfile) and its launch policy forbids
- * overriding it; it is not part of the operator's configuration.
+ * image sets it to Confidential Space (`ENV` in the Dockerfile), and the
+ * launch policy forbids overriding it there; outside an enclave the operator
+ * sets `unattested`. It is not part of the operator's configuration.
  */
 import {
   createGcpConfidentialSpaceAdapter,
@@ -9,6 +10,7 @@ import {
   PLATFORM as GCP,
 } from './gcp-confidential-space.ts';
 import { createLocalAdapter } from './local.ts';
+import { createUnattestedAdapter, PLATFORM as UNATTESTED } from './unattested.ts';
 import { type PlatformAdapter, PlatformError } from './types.ts';
 
 export function selectPlatform(
@@ -18,9 +20,11 @@ export function selectPlatform(
   switch (name) {
     case GCP:
       return createGcpConfidentialSpaceAdapter(parseGcpSettings(settings[GCP]));
+    case UNATTESTED:
+      return createUnattestedAdapter();
     case 'local':
       return createLocalAdapter(settings.local);
     default:
-      throw new PlatformError(`OAUTH_BROKER_PLATFORM must be "${GCP}" or "local"`);
+      throw new PlatformError(`OAUTH_BROKER_PLATFORM must be "${GCP}", "${UNATTESTED}" or "local"`);
   }
 }

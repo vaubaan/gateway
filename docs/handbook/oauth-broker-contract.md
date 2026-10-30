@@ -53,7 +53,8 @@ an `attestation` mode ([configuration](configuration.md)).
 
 - JSON, UTF-8, every call a `POST`; base URL a root with a port (`https://api.broker.example:8443`,
   a TCP passthrough to the enclave), a path kept as prefix. The browser callback is on a separate
-  public HTTPS front.
+  public HTTPS front. An unattested broker may serve both on one host, port 443 implied
+  (`https://broker.example.com`).
 - `Authorization: Bearer <key>` on every call but `/attest`; the key identifies the **instance**,
   every flow is bound to it; never in a body, URL or redirect.
 - No redirect followed (3xx is a failure); answers ≤ 256 KiB; 15 s per request, 30 s for a call

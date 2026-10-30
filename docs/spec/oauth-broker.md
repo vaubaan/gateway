@@ -63,8 +63,11 @@ operator.
 
 - **The code is public, minimal, reproducible and signed**: anyone rebuilds the same digest; each
   release publishes the digest and, per platform, the measurement.
-- **It runs only in an attested enclave** (memory encrypted, no shell, debug off); the secrets are
-  released only to an enclave whose evidence carries a published measurement.
+- **It runs in an attested enclave** (memory encrypted, no shell, debug off); the secrets are
+  released only to an enclave whose evidence carries a published measurement. The same image may
+  run without one, behind the platform's TLS, with its secrets in the platform's environment: it
+  then attests nothing, its operator can read both secrets and run other code that sees every
+  token, and gateways reach it only declared unattested.
 - **The instance verifies before it sends**: no verifier and no refresh token before the evidence
   is checked against the allowlist shipped with the gateway release and binds the connection's
   key. A broker its own administrator declares unattested is the only exception, and says so.
@@ -82,7 +85,8 @@ operator.
 ## 5. Portability
 
 The core knows no platform. Adding one is an adapter, its published measurement and a gateway
-release naming it; no data moves. A development adapter's evidence says "no enclave".
+release naming it; no data moves. A development adapter's evidence says "no enclave"; the
+`unattested` adapter has no evidence at all.
 
 ## 6. Out of scope
 

@@ -150,6 +150,7 @@ export function createGcpConfidentialSpaceAdapter(
   const fetchImpl = options.fetch ?? fetch;
   return {
     name: PLATFORM,
+    attested: true,
     async attest(nonces): Promise<Attestation> {
       const body = JSON.stringify({ audience: ATTESTATION_AUDIENCE, token_type: 'OIDC', nonces });
       return { platform: PLATFORM, evidence: await teeServer(socketPath, 'POST', body) };

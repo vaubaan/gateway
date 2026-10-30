@@ -28,7 +28,8 @@ export interface BrokerDeps {
   readonly providers: ProviderTable;
   /** Provider id → client secret, unsealed at start. */
   readonly secrets: ReadonlyMap<string, string>;
-  readonly attestation: AttestationCache;
+  /** `null` without an enclave (platform `unattested`): `/attest` then answers 404. */
+  readonly attestation: AttestationCache | null;
   readonly flows: FlowStore;
   readonly oauth: OAuthClient;
   readonly attestLimit: AttestRateLimit;
@@ -98,6 +99,9 @@ export class Broker {
     // it has verified the connection, and the answer is the public token in
     // memory. Rate-limited, generously.
     if (route === '/attest') {
+      if (this.#deps.attestation === null) {
+        throw new HttpError(404, 'not_attested', 'this broker runs without an enclave');
+      }
       if (!this.#deps.attestLimit.allow(req.socket.remoteAddress ?? '')) {
         res.setHeader('retry-after', '1');
         throw new HttpError(429, 'rate_limited', 'too many attestation requests');
@@ -283,7 +287,7 @@ export class Broker {
   }
 
   #attest(): { platform: string; evidence: string } {
-    const current = this.#deps.attestation.current();
+    const current = this.#deps.attestation?.current();
     if (current === undefined) {
       throw new HttpError(503, 'temporarily_unavailable', 'no fresh attestation yet');
     }

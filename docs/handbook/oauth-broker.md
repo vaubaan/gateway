@@ -1,31 +1,36 @@
 ---
-title: OAuth broker — running it in Confidential Space, releasing and verifying its image
+title: OAuth broker — running it in Confidential Space or without an enclave, releasing and verifying its image
 tracks:
   - apps/oauth-broker/src/
   - apps/oauth-broker/Dockerfile
   - apps/oauth-broker/package.json
   - apps/oauth-broker/tests/
   - .github/workflows/oauth-broker-image.yml
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-30
 ---
 
 # OAuth broker — handbook
 
-`apps/oauth-broker`, the broker that keeps no token and runs in Google Confidential Space. Spec:
+`apps/oauth-broker`, the broker that keeps no token and runs in Google Confidential Space, or
+without an enclave behind the platform's TLS (`unattested`). Spec:
 [oauth-broker](../spec/oauth-broker.md); the wire contract:
 [oauth-broker-contract](oauth-broker-contract.md); ADRs
 [oauth-broker-stateless-in-an-attested-enclave](../decisions/oauth-broker-stateless-in-an-attested-enclave.md),
+[oauth-broker-can-run-without-an-enclave](../decisions/oauth-broker-can-run-without-an-enclave.md),
 [oauth-broker-runs-its-typescript-source-with-no-dependency](../decisions/oauth-broker-runs-its-typescript-source-with-no-dependency.md).
 
 ## Start here
 
-- [`src/app.ts`](../../apps/oauth-broker/src/app.ts) — the start: unseal secrets, TLS identity,
-  first attestation, both listeners.
+- [`src/app.ts`](../../apps/oauth-broker/src/app.ts) — the start: unseal secrets, then TLS
+  identity, first attestation and both listeners; or, for a platform that does not attest, one
+  plain HTTP listener.
 - [`src/broker.ts`](../../apps/oauth-broker/src/broker.ts) — authentication by key digest, the
   calls, the browser callback.
 - [`src/config.ts`](../../apps/oauth-broker/src/config.ts) — the `OAUTH_BROKER_CONFIG` format.
 - [`src/platform/gcp-confidential-space.ts`](../../apps/oauth-broker/src/platform/gcp-confidential-space.ts)
   — attest and unseal through the launcher's socket, STS and Secret Manager.
+- [`src/platform/unattested.ts`](../../apps/oauth-broker/src/platform/unattested.ts) — no
+  enclave: secrets from `OAUTH_BROKER_SECRET_<NAME>`, nothing to attest.
 
 ## Invariants
 
@@ -41,7 +46,7 @@ last_reviewed: 2026-10-27
 
 ## Traps
 
-- Port 8443 (the API, TLS ending in the enclave) needs a **TCP passthrough**, never a TLS-ending
+- In an enclave, port 8443 (the API, TLS ending in the enclave) needs a **TCP passthrough**, never a TLS-ending
   load balancer; 8080 (callback, `/healthz`) sits behind the public HTTPS front.
 - The return URL is hashed exactly as the gateway sends it (no slash added or removed).
 - `refresh-token-sealing-key` is never rotated by a new version while instances are enrolled:
@@ -50,7 +55,9 @@ last_reviewed: 2026-10-27
 - `OAUTH_BROKER_CONFIG` must not contain `~`, the metadata delimiter below. Any other `tee-env-*`,
   `tee-cmd` or mount is refused by the image's launch policy (its labels, so measured).
 - Locally: `OAUTH_BROKER_PLATFORM=local`, secrets under `platform.local.secrets`; its evidence says
-  `platform: "none"`, so a gateway reaches it only with `attestation: none`.
+  `platform: "none"`, so a gateway reaches it only with `attestation: none`. It keeps the enclave's
+  two listeners and self-signed TLS key, which no ordinary client accepts: in production outside an
+  enclave, use `unattested`.
 
 ## Procedures
 
@@ -112,6 +119,31 @@ last_reviewed: 2026-10-27
      workload's federated principal deserves an alert.
    - As few project owners and editors as possible, ideally one, each with two-step verification
      enforced. No service account key on the project.
+
+### Running it without an enclave
+
+Platform `unattested` (ADR
+[oauth-broker-can-run-without-an-enclave](../decisions/oauth-broker-can-run-without-an-enclave.md)).
+Whoever operates the platform can read both secrets and can run other code in the image's place,
+seeing every token that passes; the gateways say the broker is not attested.
+
+1. Steps 2 (OAuth client) and 3 (the two secrets) as above, except that each secret goes into an
+   environment secret of the platform, pasted, never in a file or the configuration:
+   `OAUTH_BROKER_SECRET_GOOGLE_CLIENT_SECRET` and `OAUTH_BROKER_SECRET_REFRESH_TOKEN_SEALING_KEY`.
+   The broker removes each from `process.env` once read (the platform's store keeps them).
+2. The published image, by digest, with `OAUTH_BROKER_PLATFORM=unattested` and
+   `OAUTH_BROKER_CONFIG` (same format; `api_port` unused). One listener on `http_port` (8080)
+   serves the API, the callback and `/healthz`, in plain HTTP: the platform ends TLS for one
+   public host, which is both `public_url` and the gateways' `oauth_brokers.<name>.url`
+   (`https://broker.example.com`, port 443 implied). Route the platform to 8080 (the broker
+   ignores `PORT`; set `http_port` to the platform's port instead, and ignore the image's
+   `EXPOSE 8443`). One machine: flows live in its memory.
+3. Each gateway declares the broker `attestation: none`; `/attest` answers 404 `not_attested`.
+4. Check: log `started` with `attested: false`; `/healthz`; a gateway's connect page says
+   "not attested".
+5. Moving to an enclave: the same sealing key into Secret Manager, the Confidential Space steps
+   above, then each gateway back to `attestation: required`. Enrolled instances and their tokens
+   carry over.
 
 ### Releasing
 

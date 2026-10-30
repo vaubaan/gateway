@@ -1,4 +1,5 @@
-# OAuth broker — the image a Confidential Space VM runs as is.
+# OAuth broker — the image a Confidential Space VM runs as is; outside an
+# enclave, the same image with OAUTH_BROKER_PLATFORM=unattested.
 # Reproducible: anyone rebuilds the same digest from the same commit
 # (docs/handbook/oauth-broker.md, "Verifying a release"):
 #
@@ -27,7 +28,8 @@ COPY --chmod=0444 package.json ./
 COPY --chmod=0444 src/*.ts ./src/
 COPY --chmod=0444 src/platform/*.ts ./src/platform/
 
-# The platform is part of the image, not of the operator's configuration.
+# The platform is part of the image, not of the operator's configuration; the
+# launch policy below keeps it fixed in Confidential Space.
 ENV NODE_ENV=production \
     OAUTH_BROKER_PLATFORM=gcp-confidential-space
 

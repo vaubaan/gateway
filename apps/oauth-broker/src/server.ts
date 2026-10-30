@@ -1,13 +1,17 @@
 /**
- * The two listeners (handbook oauth-broker, "Listeners"):
+ * The listeners (handbook oauth-broker, "Listeners"). In an enclave, two:
  *
  * - the gateway API, TLS with the in-memory identity, on its own port, meant
  *   for a TCP passthrough so that TLS ends in the enclave;
  * - plain HTTP for the browser callback and /healthz, meant to sit behind
  *   the operator's public HTTPS front.
  *
- * Each serves its own paths only. The access log names the route, never the
- * URL: the callback's query carries the provider's code.
+ * Without an enclave (platform `unattested`), one plain HTTP listener serves
+ * every path, behind the platform's TLS: there is no key for an attestation
+ * to name, so ending TLS in the process would prove nothing.
+ *
+ * Each listener serves its own paths only. The access log names the route,
+ * never the URL: the callback's query carries the provider's code.
  */
 import {
   createServer as createHttpServer,
@@ -78,34 +82,56 @@ async function answer(
   });
 }
 
-export function createApiServer(broker: Broker, tls: TlsIdentity, log: Logger): Server {
-  const server = createHttpsServer(
-    { key: tls.key, cert: tls.cert, minVersion: 'TLSv1.3', handshakeTimeout: 10_000 },
-    (req, res) => {
-      const { path } = pathOf(req);
-      const route = API_ROUTES.has(path) ? path : 'unknown';
-      void answer(log, 'api', route, req, res, async () => {
-        if (route === 'unknown') throw new HttpError(404, 'not_found', 'no such call');
-        if (req.method !== 'POST') throw new HttpError(405, 'method_not_allowed', 'POST only');
-        await broker.handleApi(req, res, path);
-      });
-    },
-  );
-  return limit(server);
+type Handler = (req: IncomingMessage, res: ServerResponse) => void;
+
+/** The gateway API's paths, POST only. */
+function apiHandler(broker: Broker, log: Logger, listener: string): Handler {
+  return (req, res) => {
+    const { path } = pathOf(req);
+    const route = API_ROUTES.has(path) ? path : 'unknown';
+    void answer(log, listener, route, req, res, async () => {
+      if (route === 'unknown') throw new HttpError(404, 'not_found', 'no such call');
+      if (req.method !== 'POST') throw new HttpError(405, 'method_not_allowed', 'POST only');
+      await broker.handleApi(req, res, path);
+    });
+  };
 }
 
-export function createCallbackServer(broker: Broker, log: Logger): Server {
-  const server = createHttpServer((req, res) => {
+/** The browser callback and /healthz, GET only. */
+function browserHandler(broker: Broker, log: Logger, listener: string): Handler {
+  return (req, res) => {
     const { path, query } = pathOf(req);
     const provider = CALLBACK.exec(path)?.[1];
     const route =
       path === '/healthz' ? path : provider !== undefined ? '/oauth/callback/:provider' : 'unknown';
-    void answer(log, 'http', route, req, res, async () => {
+    void answer(log, listener, route, req, res, async () => {
       if (req.method !== 'GET') throw new HttpError(405, 'method_not_allowed', 'GET only');
       if (path === '/healthz') return sendJson(res, 200, { status: 'ok' });
       if (provider === undefined) throw new HttpError(404, 'not_found', 'no such page');
       broker.handleCallback(res, provider, query);
     });
-  });
+  };
+}
+
+export function createApiServer(broker: Broker, tls: TlsIdentity, log: Logger): Server {
+  const server = createHttpsServer(
+    { key: tls.key, cert: tls.cert, minVersion: 'TLSv1.3', handshakeTimeout: 10_000 },
+    apiHandler(broker, log, 'api'),
+  );
   return limit(server);
+}
+
+export function createCallbackServer(broker: Broker, log: Logger): Server {
+  return limit(createHttpServer(browserHandler(broker, log, 'http')));
+}
+
+/** Without an enclave: the API's paths and the browser's, on one plain HTTP listener. */
+export function createSingleServer(broker: Broker, log: Logger): Server {
+  const api = apiHandler(broker, log, 'http');
+  const browser = browserHandler(broker, log, 'http');
+  return limit(
+    createHttpServer((req, res) => {
+      (API_ROUTES.has(pathOf(req).path) ? api : browser)(req, res);
+    }),
+  );
 }

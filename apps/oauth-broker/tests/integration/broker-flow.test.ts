@@ -592,6 +592,10 @@ describe('attestation', () => {
     const claims = claimsOf(res.json?.evidence);
     expect(claims.eat_nonce).toEqual([res.peerKeySha256]);
     expect(res.peerKeySha256).toBe(broker.publicKeySha256);
+    // An attesting platform keeps the TLS API on its own listener.
+    expect(broker.apiPort).not.toBeNull();
+    expect(broker.apiPort).not.toBe(broker.httpPort);
+    expect(broker.certificate).toContain('BEGIN CERTIFICATE');
     expect(claims.aud).toBe('oauth-broker-attestation');
   });
 

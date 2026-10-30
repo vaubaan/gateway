@@ -9,6 +9,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **The OAuth broker runs without an enclave** (`@vaubaan/oauth-broker` 0.2.0,
+  ADR oauth-broker-can-run-without-an-enclave). The published image with
+  `OAUTH_BROKER_PLATFORM=unattested` opens one plain HTTP listener for the
+  API, the callback and `/healthz`, behind the platform's TLS. Its secrets
+  come from `OAUTH_BROKER_SECRET_GOOGLE_CLIENT_SECRET` and
+  `OAUTH_BROKER_SECRET_REFRESH_TOKEN_SEALING_KEY`, each removed from
+  `process.env` once read. `/attest` answers 404 `not_attested`. Tokens are
+  still sealed to their instance and the configuration still holds digests
+  only. Gateways reach such a broker only when declared `attestation: none`,
+  at a URL such as `https://broker.example.com` (port 443 implied), and say
+  "not attested". Whoever operates the platform can read both secrets and run other code in
+  the image's place. In
+  Confidential Space nothing changes: the launch policy still fixes the
+  platform.
+
 ## [2.0.0-alpha.11] - 2026-10-29
 
 ### Added

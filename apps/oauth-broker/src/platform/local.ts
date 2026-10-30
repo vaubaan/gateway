@@ -23,6 +23,7 @@ export function createLocalAdapter(settings: unknown): PlatformAdapter {
       : undefined;
   return {
     name: 'none',
+    attested: true,
     async attest(nonces): Promise<Attestation> {
       // An unsigned token of the same shape as an enclave's, so a gateway
       // parses both alike; `alg: none` says there is nothing to verify.
