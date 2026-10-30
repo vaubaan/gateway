@@ -149,7 +149,7 @@ jobs:
           | Measurement, Google Confidential Space | image digest \`${DIGEST}\` |
           | SOURCE_DATE_EPOCH | \`${EPOCH}\` |
 
-          Verify the signature (Sigstore, recorded in Rekor):
+          Verify the signature (Sigstore bundle, recorded in Rekor; cosign 3 or later):
 
           \`\`\`bash
           cosign verify ${IMAGE}@${DIGEST} \\

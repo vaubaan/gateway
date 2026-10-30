@@ -155,6 +155,9 @@ seeing every token that passes; the gateways say the broker is not attested.
 
 ### Verifying a release
 
+The signature is in Sigstore's bundle format, stored under the `sha256-<digest>` tag: verify with
+cosign 3 or later. cosign 2 answers "no signatures found".
+
 ```bash
 git checkout oauth-broker-v<version>
 SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) docker buildx build --no-cache \
