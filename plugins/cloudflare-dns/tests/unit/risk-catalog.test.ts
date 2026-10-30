@@ -29,7 +29,7 @@ describe('cloudflare-dns risk-catalog — shape', () => {
   test('11 named risks + 1 fallback, version 3', () => {
     expect(catalog.provider).toBe('cloudflare-dns');
     expect(catalog.risks).toHaveLength(12);
-    expect(catalog.catalog_version).toBe(3);
+    expect(catalog.catalog_version).toBe(4);
     expect(catalog.risks.filter((r) => r.fallback === true).map((r) => r.id)).toEqual([
       'cloudflare-dns.uncategorized-write',
     ]);

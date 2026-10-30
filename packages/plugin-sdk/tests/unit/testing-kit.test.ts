@@ -116,6 +116,9 @@ describe('assertCatalogCoverage', () => {
       catalog: {
         ...acmePlugin.catalog,
         risks: acmePlugin.catalog.risks.filter((r) => r.id !== 'acme.read-things'),
+        macro_actions: (acmePlugin.catalog.macro_actions ?? []).filter((a) =>
+          a.entries.every((e) => e.risk_id !== 'acme.read-things'),
+        ),
       },
     };
     // The reader preset now references a missing risk ; replace it so only

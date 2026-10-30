@@ -63,6 +63,18 @@ risks:
       visibility: internal
       persistence: session
 
+macro_actions:
+  - id: read
+    label: 'Read'
+    description: 'Read things.'
+    entries:
+      - { risk_id: acme.read-things, quota: 500, rate_limit: { max: 60, window_seconds: 60 } }
+  - id: write
+    label: 'Write'
+    description: 'Create and change things.'
+    entries:
+      - { risk_id: acme.thing-write, quota: 50, rate_limit: { max: 10, window_seconds: 60 } }
+
 presets:
   - id: reader
     label: Reader

@@ -33,7 +33,7 @@ export const miroPlugin = definePlugin({
   icon: MIRO_ICON,
   iconColor: MIRO_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.4.1',
+  version: '0.4.2',
   description:
     "Miro boards through Miro's own MCP server: read and draw on boards, tables, comments, prototypes — one resource per board.",
   summary:

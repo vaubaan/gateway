@@ -20,8 +20,21 @@ import {
 const FIXTURE = new URL('../fixtures/acme/risk-catalog.yaml', import.meta.url);
 const fixtureText = readFileSync(fileURLToPath(FIXTURE), 'utf8');
 
-/** Minimal valid document, mutated by the error tests. */
+/**
+ * Minimal valid document, mutated by the error tests. Unless a test gives its
+ * own, the macro-actions keep only the entries whose risk is still declared.
+ */
 function doc(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const base = baseDoc(overrides);
+  if ('macro_actions' in overrides || !Array.isArray(base.risks)) return base;
+  const ids = new Set((base.risks as { id?: unknown }[]).map((r) => r.id));
+  const actions = (base.macro_actions as { entries: { risk_id: string }[] }[])
+    .map((a) => ({ ...a, entries: a.entries.filter((e) => ids.has(e.risk_id)) }))
+    .filter((a) => a.entries.length > 0);
+  return { ...base, macro_actions: actions };
+}
+
+function baseDoc(overrides: Record<string, unknown>): Record<string, unknown> {
   return {
     provider: 'acme',
     risks: [
@@ -31,6 +44,24 @@ function doc(overrides: Record<string, unknown> = {}): Record<string, unknown> {
         acceptable_in_envs: ['staging', 'prod'],
       },
       { ...risk('acme.uncategorized-write', 'acme.**.W'), fallback: true },
+    ],
+    macro_actions: [
+      {
+        id: 'read',
+        label: 'Read',
+        description: 'Reads.',
+        entries: [
+          { risk_id: 'acme.read-things', quota: 100, rate_limit: { max: 10, window_seconds: 60 } },
+        ],
+      },
+      {
+        id: 'write',
+        label: 'Write',
+        description: 'Writes.',
+        entries: [
+          { risk_id: 'acme.thing-write', quota: 10, rate_limit: { max: 5, window_seconds: 60 } },
+        ],
+      },
     ],
     presets: [
       {
@@ -239,7 +270,8 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
 
   test('the uncategorized- id convention needs its dash', () => {
     // `acme.uncategorizedfoo` is an ordinary risk : without a flag and
-    // without the catch-all pattern, the catalog has no fallback.
+    // without the catch-all pattern, the catalog has no fallback, and the
+    // risk then needs a macro-action like any other.
     const d = doc({
       risks: [
         risk('acme.read-things', 'acme.space[**].R'),
@@ -248,6 +280,7 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     });
     expect(issuesOf(() => validateCatalog(d))).toEqual([
       "missing fallback risk: declare a 'acme.uncategorized-*' entry matching 'acme.**.W' with fallback: true (risk-model spec §4.3)",
+      "risks: 'acme.uncategorizedfoo' belongs to no macro-action",
     ]);
     // Flagged, it is the fallback — and then it is misnamed.
     const flagged = doc({
@@ -622,6 +655,89 @@ describe('wildcardIssues — two rules, one concatenation', () => {
     expect(wildcardIssues(catalog)).toEqual([
       ...riskIdWildcardIssues(catalog),
       ...presetWildcardIssues(catalog),
+    ]);
+  });
+});
+
+describe('macro-actions', () => {
+  const action = (id: string, riskIds: string[]) => ({
+    id,
+    label: id,
+    description: id,
+    entries: riskIds.map((risk_id) => ({
+      risk_id,
+      quota: 10,
+      rate_limit: { max: 5, window_seconds: 60 },
+    })),
+  });
+
+  test('none declared is an error, unless disabled', () => {
+    const d = doc({ macro_actions: [] });
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'macro_actions: every catalog groups its risks into macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy)',
+    ]);
+    expect(() => validateCatalog(d, { requireMacroActions: false })).not.toThrow();
+  });
+
+  test('every named risk in exactly one, never the fallback, never a qualified or foreign id', () => {
+    const d = doc({
+      macro_actions: [
+        action('read', ['acme.read-things', 'acme.uncategorized-write']),
+        action('again', ['acme.read-things', 'acme.thing-write[prod]', 'other.read-things']),
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      "macro_actions[0].entries[1].risk_id 'acme.uncategorized-write' is the fallback, which belongs to no macro-action",
+      "macro_actions[1].entries[0].risk_id 'acme.read-things' already belongs to macro-action 'read'",
+      "macro_actions[1].entries[1].risk_id 'acme.thing-write[prod]' is not an unqualified risk of the 'acme' catalog",
+      "macro_actions[1].entries[2].risk_id 'other.read-things' is not an unqualified risk of the 'acme' catalog",
+      "risks: 'acme.thing-write' belongs to no macro-action",
+    ]);
+  });
+
+  test('an empty macro-action, a gate or a bad budget is a structural error', () => {
+    const d = doc({
+      macro_actions: [
+        action('read', ['acme.read-things']),
+        action('empty', []),
+        {
+          ...action('write', []),
+          entries: [
+            {
+              risk_id: 'acme.thing-write',
+              quota: 0,
+              rate_limit: { max: 5, window_seconds: 60 },
+              gate: 'auto',
+            },
+          ],
+        },
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'macro_actions[1].entries: expected a non-empty list',
+      'macro_actions[2].entries[0].gate: unknown key',
+      'macro_actions[2].entries[0].quota: expected a positive integer (no infinite budget, spec §3.2)',
+    ]);
+  });
+
+  test('the reserved id and a repeated id', () => {
+    const d = doc({
+      macro_actions: [
+        action('anything-else', ['acme.read-things']),
+        action('anything-else', ['acme.thing-write']),
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      "macro_actions[0].id 'anything-else' is the gateway's own macro-action for the fallback",
+      "macro_actions[1].id 'anything-else' is the gateway's own macro-action for the fallback",
+      "macro_actions[1].id 'anything-else' is declared twice",
+    ]);
+  });
+
+  test('the acme fixture reads its macro-actions with their base budgets', () => {
+    expect(parseCatalogYaml(fixtureText).catalog.macro_actions.map((a) => a.id)).toEqual([
+      'read',
+      'write',
     ]);
   });
 });

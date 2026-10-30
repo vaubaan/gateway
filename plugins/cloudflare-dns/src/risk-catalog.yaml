@@ -22,9 +22,12 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor.
 
+# catalog_version 4 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: cloudflare-dns
-catalog_version: 3
-catalog_date: 2026-10-14
+catalog_version: 4
+catalog_date: 2026-10-30
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -235,6 +238,61 @@ risks:
 # actions per sliding window ; `approval` gates suggest a human in the loop
 # on the entries that take a domain down or are hard to undo. Values are a
 # starting point (ADR `mission-presets-default-values`, deferred).
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: look-up
+    label: 'Look up'
+    description: 'Metadata, records and export.'
+    entries:
+      - risk_id: cloudflare-dns.read-zone-metadata
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: cloudflare-dns.read-records
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: cloudflare-dns.export-zone-file
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: point
+    label: 'Point subdomains'
+    description: 'Ordinary records and cache purge.'
+    entries:
+      - risk_id: cloudflare-dns.record-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: cloudflare-dns.cache-purge
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: change-domain
+    label: 'Change the domain'
+    description: 'Apex, MX and NS records, deletions and imports.'
+    entries:
+      - risk_id: cloudflare-dns.critical-record-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: cloudflare-dns.record-delete
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: cloudflare-dns.import-records
+        quota: 10
+        rate_limit: { max: 3, window_seconds: 60 }
+  - id: rule-zone
+    label: 'Rule the zone'
+    description: 'Zone settings, DNSSEC and zone deletion.'
+    entries:
+      - risk_id: cloudflare-dns.zone-settings-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: cloudflare-dns.dnssec-write
+        quota: 10
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: cloudflare-dns.zone-delete
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+
 presets:
   - id: read-only
     label: Read-only

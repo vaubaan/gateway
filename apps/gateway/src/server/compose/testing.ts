@@ -66,6 +66,24 @@ const FAKE_CATALOG: RiskCatalog = {
       },
     },
   ],
+  macro_actions: [
+    {
+      id: 'read',
+      label: 'Read',
+      description: 'Read things.',
+      entries: [
+        { risk_id: 'acme.read-things', quota: 100, rate_limit: { max: 60, window_seconds: 60 } },
+      ],
+    },
+    {
+      id: 'write',
+      label: 'Write',
+      description: 'Write things.',
+      entries: [
+        { risk_id: 'acme.thing-write', quota: 100, rate_limit: { max: 60, window_seconds: 60 } },
+      ],
+    },
+  ],
   presets: [
     {
       id: 'reader',

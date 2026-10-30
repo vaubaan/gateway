@@ -18,9 +18,12 @@
 #   - `event[e].notify.W` when a change or a deletion lets Google email the
 #     event's current guests (any `notificationLevel` but `NONE`): the guests
 #     are not known before the call, so this is its own decision.
+# catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: google-calendar
-catalog_version: 1
-catalog_date: 2026-10-27
+catalog_version: 2
+catalog_date: 2026-10-30
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -204,6 +207,54 @@ risks:
 
 # Presets are default suggestions copied into a mission policy at issuance
 # (spec §3.2). Deliberately in no preset: the fallback.
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: read
+    label: 'Read the agenda'
+    description: 'Calendars, events and free/busy.'
+    entries:
+      - risk_id: google-calendar.calendar-list
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: google-calendar.event-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: google-calendar.free-busy-read
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+  - id: schedule
+    label: 'Schedule'
+    description: 'Create, change, delete and answer events.'
+    entries:
+      - risk_id: google-calendar.event-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: google-calendar.event-change
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: google-calendar.event-delete
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: google-calendar.event-respond
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: invite
+    label: 'Invite'
+    description: 'Invite people and let Google email them.'
+    entries:
+      - risk_id: google-calendar.invite-internal
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: google-calendar.invite-external
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: google-calendar.notify-guests
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+
 presets:
   - id: read-only
     label: Read-only

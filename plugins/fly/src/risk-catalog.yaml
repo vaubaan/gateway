@@ -8,9 +8,12 @@
 # Writes on an existing app's state are env-scoped ; reads, app creation,
 # empty volume creation and snapshots are not.
 
+# catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: fly
-catalog_version: 1
-catalog_date: 2026-10-16
+catalog_version: 2
+catalog_date: 2026-10-30
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────────
@@ -486,6 +489,104 @@ risks:
 # inside a machine always ask first. `fleet-upgrade` lets production image
 # changes run freely : the image guard (pinned digest, allowed prefix) and the
 # fresh-snapshot guard of the executor hold for every image change.
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: observe
+    label: 'Observe'
+    description: 'Apps, machines, volumes, secret names and logs.'
+    entries:
+      - risk_id: fly.read-org
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: fly.read-runtime
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: fly.read-secret-names
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: fly.read-logs
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: operate
+    label: 'Operate'
+    description: 'Deploy, power, resize, snapshot, certificates and shell.'
+    entries:
+      - risk_id: fly.deploy
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: fly.machine-power
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: fly.scale
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: fly.volume-snapshot
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: fly.volume-backup-settings
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: fly.certificate-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: fly.machine-exec
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: build
+    label: 'Build'
+    description: 'Create apps, machines, volumes and addresses.'
+    entries:
+      - risk_id: fly.app-create
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: fly.machine-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: fly.machine-config-write
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: fly.volume-create
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: fly.volume-extend
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: fly.volume-restore
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: fly.ip-write
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+  - id: secrets
+    label: 'Set secrets'
+    description: 'Set or remove app secrets.'
+    entries:
+      - risk_id: fly.secret-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: tear-down
+    label: 'Tear down'
+    description: 'Destroy machines, volumes, apps, addresses and certificates.'
+    entries:
+      - risk_id: fly.machine-destroy
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: fly.volume-destroy
+        quota: 2
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: fly.app-destroy
+        quota: 2
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: fly.ip-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: fly.certificate-remove
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
 
 presets:
   - id: read-only

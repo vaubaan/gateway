@@ -44,9 +44,12 @@
 #
 # Risk count : 25 named risks + 1 fallback.
 
+# catalog_version 6 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: supabase
-catalog_version: 5
-catalog_date: 2026-10-14
+catalog_version: 6
+catalog_date: 2026-10-30
 
 risks:
   # ───────────────────────────────────────────────────────────────────────
@@ -488,6 +491,104 @@ risks:
 # persisted policy is always the explicit enumeration (spec §3.2).
 # Quotas are actions per mission period ; rate limits per sliding window.
 # ─────────────────────────────────────────────────────────────────────────
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: query
+    label: 'Query'
+    description: 'Data, storage objects, functions, users and managed schemas.'
+    entries:
+      - risk_id: supabase.read-data
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: supabase.storage.object-read
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: supabase.storage.signed-url-read
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.functions.read
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: supabase.auth.read-users
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: supabase.read-managed-schemas
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: change-data
+    label: 'Change data'
+    description: 'Rows, storage objects, users and sign-in links.'
+    entries:
+      - risk_id: supabase.bulk-row-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.storage.object-write-one
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: supabase.storage.bulk-object-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.auth.user-write-one
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: supabase.auth.bulk-user-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.auth.generate-link
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: change-schema
+    label: 'Change the schema'
+    description: 'Migrations, row-level security, extensions and buckets.'
+    entries:
+      - risk_id: supabase.migration-write
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: supabase.policy-write
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: supabase.extension-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.bucket-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: ship-functions
+    label: 'Ship functions'
+    description: 'Code, deployment and secrets of Edge Functions.'
+    entries:
+      - risk_id: supabase.functions.body-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: supabase.functions.deploy
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.function-secret-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: administer
+    label: 'Administer'
+    description: 'Database roles, storage and auth configuration, SSO.'
+    entries:
+      - risk_id: supabase.db-role-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.storage-config-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.sso-provider-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.third-party-auth-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: supabase.auth-config-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
 
 presets:
   - id: read-only-analyst

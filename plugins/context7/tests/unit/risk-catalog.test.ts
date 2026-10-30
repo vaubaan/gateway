@@ -14,7 +14,7 @@ const { catalog, indexed } = context7Catalog;
 describe('context7 risk-catalog — YAML structural validation', () => {
   test('one named risk and the fallback, at catalog version 1', () => {
     expect(catalog.provider).toBe(PROVIDER_ID);
-    expect(catalog.catalog_version).toBe(1);
+    expect(catalog.catalog_version).toBe(2);
     expect(catalog.risks.map((r) => [r.id, r.fallback === true])).toEqual([
       [`${PROVIDER_ID}.query-docs`, false],
       [`${PROVIDER_ID}.uncategorized-write`, true],

@@ -176,6 +176,30 @@ export function depotPlugin(): DepotPlugin {
           vector: { ...VECTOR, reversibility: 'costly', blast: 'env' },
         },
       ],
+      macro_actions: [
+        {
+          id: 'read',
+          label: 'Read',
+          description: 'Read items and the profile.',
+          entries: [
+            { risk_id: `${DEPOT}.read`, quota: 100, rate_limit: { max: 60, window_seconds: 60 } },
+            {
+              risk_id: `${DEPOT}.profile`,
+              quota: 100,
+              rate_limit: { max: 60, window_seconds: 60 },
+            },
+          ],
+        },
+        {
+          id: 'change',
+          label: 'Change',
+          description: 'Write items and purge spaces.',
+          entries: [
+            { risk_id: `${DEPOT}.write`, quota: 100, rate_limit: { max: 60, window_seconds: 60 } },
+            { risk_id: `${DEPOT}.purge`, quota: 5, rate_limit: { max: 1, window_seconds: 60 } },
+          ],
+        },
+      ],
       presets: [
         {
           id: 'reader',

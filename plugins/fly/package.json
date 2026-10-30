@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-fly",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "description": "Fly.io provider plugin for Vaubaan Gateway — apps, machines, volumes, secrets, addresses and certificates through the Machines API",

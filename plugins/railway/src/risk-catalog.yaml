@@ -21,9 +21,12 @@
 # environment names : the classifier stamps the label of the project a call
 # touches into the `environment[...]` segment of the slice.
 
+# catalog_version 5 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: railway
-catalog_version: 4
-catalog_date: 2026-10-14
+catalog_version: 5
+catalog_date: 2026-10-30
 
 risks:
   # ───── Reads ────────────────────────────────────────────────────────────────
@@ -202,6 +205,55 @@ risks:
 # the explicit enumeration. Values are default suggestions (ADR plugin-contract
 # D5) ; `approval` is suggested on production deploys and production variable
 # writes, and on every destructive bulk replace or project creation.
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: watch
+    label: 'Watch'
+    description: 'Projects, services, deployments and logs.'
+    entries:
+      - risk_id: railway.read-account
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: railway.read-runtime
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: railway.read-logs
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: deploy
+    label: 'Deploy'
+    description: 'Redeploy and apply staged changes.'
+    entries:
+      - risk_id: railway.deploy
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: configure
+    label: 'Configure'
+    description: 'Read and write variables.'
+    entries:
+      - risk_id: railway.read-variables
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: railway.upsert-variable
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: railway.bulk-variables-replace
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+  - id: create
+    label: 'Create'
+    description: "Projects and Railway's agent."
+    entries:
+      - risk_id: railway.create-project
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: railway.agent-action
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+
 presets:
   - id: read-only
     label: Read-only

@@ -23,9 +23,12 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor, so existing missions keep working.
 
+# catalog_version 4 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: vercel
-catalog_version: 3
-catalog_date: 2026-10-14
+catalog_version: 4
+catalog_date: 2026-10-30
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -342,6 +345,80 @@ risks:
 # relax it at issuance. Env-qualified entries (`vercel[prod].deploy`) rely on
 # the host resolving the environment from the `env[<label>]` segment the
 # classifier emits — see docs/handbook/providers/vercel.md, Invariants, "Environment axis".
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: watch
+    label: 'Watch'
+    description: 'Projects, deployments, encrypted environment keys and firewall.'
+    entries:
+      - risk_id: vercel.read-account
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: vercel.read-deployment
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: vercel.read-env-var
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: vercel.firewall-read
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: deploy
+    label: 'Deploy and review'
+    description: 'Deploy, open a preview and comment.'
+    entries:
+      - risk_id: vercel.deploy
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vercel.fetch-deployment-url
+        quota: 300
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: vercel.mint-bypass-token
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vercel.toolbar-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: configure
+    label: 'Configure'
+    description: 'Environment variables, in clear and in writing.'
+    entries:
+      - risk_id: vercel.read-env-var-plaintext
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vercel.env-var-write
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vercel.env-var-fan-out
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: protect
+    label: 'Protect'
+    description: 'Firewall and IP rules.'
+    entries:
+      - risk_id: vercel.firewall-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vercel.firewall-rule-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: vercel.ip-rule-write
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+  - id: own
+    label: 'Own'
+    description: 'Project settings and domains.'
+    entries:
+      - risk_id: vercel.project-settings-write
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: vercel.domain-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
 
 presets:
   - id: read-only

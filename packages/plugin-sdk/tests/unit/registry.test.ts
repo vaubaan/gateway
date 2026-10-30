@@ -33,6 +33,10 @@ function cloneAs(id: string, overrides: Partial<ProviderPlugin> = {}): ProviderP
         ...p,
         entries: p.entries.map((e) => ({ ...e, risk_id: rename(e.risk_id) })),
       })),
+      macro_actions: (acmePlugin.catalog.macro_actions ?? []).map((a) => ({
+        ...a,
+        entries: a.entries.map((e) => ({ ...e, risk_id: rename(e.risk_id) })),
+      })),
     },
     ...overrides,
   };
