@@ -37,6 +37,7 @@ export const TOKEN = 'ya29.brokered-access-token-1234567890';
 export function context(
   fetch: MockFetch | typeof globalThis.fetch,
   resources: readonly Resource[] = [primary, team],
+  scopes: readonly string[] = [],
 ): ExecuteContext {
   return {
     credential: {
@@ -44,7 +45,7 @@ export function context(
       accessToken: TOKEN,
       refreshToken: null,
       expiresAt: null,
-      scopes: [],
+      scopes,
       metadata: {},
     },
     fetch,

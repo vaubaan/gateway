@@ -15,7 +15,7 @@ import {
   executeGoogleCalendar,
   resourcesOf,
 } from '../../src/execute.ts';
-import { CALENDAR_MCP_URL, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { CALENDAR_MCP_URL, PROVIDER_ID, SCOPES, TOOL } from '../../src/identity.ts';
 import { EVENT, TEAM, TEAM_ID, TOKEN, context, mcpRoute, rpcOf, textResult } from './fixtures.ts';
 
 describe('execute', () => {
@@ -152,5 +152,14 @@ describe('discovery', () => {
     await expect(discoverGoogleCalendarResources(context(fetch))).rejects.toBeInstanceOf(
       CredentialRefusal,
     );
+  });
+
+  test('a token Google granted fewer scopes than asked is refused before any request', async () => {
+    const fetch = mockFetch([]);
+    const granted = [SCOPES.eventsRead, SCOPES.freeBusy, SCOPES.events];
+    const refusal = discoverGoogleCalendarResources(context(fetch, [], granted));
+    await expect(refusal).rejects.toBeInstanceOf(CredentialRefusal);
+    await expect(refusal).rejects.toThrow(/missing: see the list of calendars\)/);
+    expect(fetch.calls).toHaveLength(0);
   });
 });

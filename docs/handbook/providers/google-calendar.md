@@ -75,4 +75,10 @@ common to every plugin: [providers README](README.md).
 
 - 403 at discovery, "A Google Workspace administrator may have to allow the app or the Calendar MCP
   server" → the Workspace admin allows them.
+- "Google did not grant every access asked for (missing: …)" at discovery → with granular consent
+  the person unticked a box; Google still issued the token. Reconnect and tick every box. Checked
+  against the scopes the broker reports at redeem; an empty list is "not reported", never refused.
+- "Connected, but … failed (Error)" with every scope granted → Google answered `isError` to
+  `list_calendars`; its text stays with the agent (ADR provider-error-text-stays-with-the-agent),
+  so read the `calendarmcp.googleapis.com` metrics of the broker's Google Cloud project.
 - A call refused for an attendee → one bare address per element, no display name in the string.

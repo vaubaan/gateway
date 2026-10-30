@@ -31,6 +31,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { readCalendarCall } from './call.ts';
+import { missingScopes, scopesNotGrantedMessage } from './credential.ts';
 import { calendarIdOf, calendarRefOf, parseAddress } from './identifiers.ts';
 import { PROVIDER_ID, UPSTREAM_TOOL } from './identity.ts';
 import { mcpRequest } from './mcp.ts';
@@ -56,6 +57,13 @@ export const MCP_SERVER_REFUSED =
 
 function tokenOf(ctx: ConnectionContext): string {
   return expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2').accessToken;
+}
+
+/** Refuses, before any request, a token Google issued with fewer scopes than asked. */
+function expectRequiredScopes(ctx: ConnectionContext): void {
+  const { scopes } = expectCredentialKind(PROVIDER_ID, ctx.credential, 'oauth2');
+  const missing = missingScopes(scopes);
+  if (missing.length > 0) throw new CredentialRefusal(scopesNotGrantedMessage(missing), 403);
 }
 
 export async function executeGoogleCalendar(
@@ -128,11 +136,13 @@ function contentBlock(block: unknown): McpToolContent {
  * domain unless it is a consumer one.
  *
  * Also compares Google's live `tools/list` with the plugin's model and logs
- * the differences (names only).
+ * the differences (names only). A token Google granted fewer scopes than
+ * asked is refused first, in the gateway's words (`CredentialRefusal`).
  */
 export async function discoverGoogleCalendarResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
+  expectRequiredScopes(ctx);
   const token = tokenOf(ctx);
   const found = new Map<string, FoundCalendar>();
   let pageToken: string | null = null;
