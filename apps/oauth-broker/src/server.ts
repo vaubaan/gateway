@@ -51,7 +51,8 @@ function pathOf(req: IncomingMessage): { path: string; query: URLSearchParams } 
 
 /**
  * Runs a handler and logs one line: the route (a template, never the URL),
- * the status, the duration.
+ * the status, the duration, and the broker's fixed reason code of a refusal
+ * that has one.
  */
 async function answer(
   log: Logger,
@@ -62,10 +63,12 @@ async function answer(
   handle: () => Promise<void>,
 ): Promise<void> {
   const started = performance.now();
+  let reason: string | undefined;
   try {
     await handle();
   } catch (error) {
     if (error instanceof HttpError) {
+      reason = error.reason;
       sendError(res, error);
     } else {
       log.warn('unexpected_error', { listener, route, kind: errorKind(error) });
@@ -79,6 +82,7 @@ async function answer(
     route,
     status: res.statusCode,
     ms: Math.round(performance.now() - started),
+    ...(reason === undefined ? {} : { reason }),
   });
 }
 

@@ -41,8 +41,9 @@ without an enclave behind the platform's TLS (`unattested`). Spec:
   no configuration can send the client secret elsewhere.
 - **An instance's `id` seals its tokens** (`sealing.ts`, additional data `v1|<id>|<provider>`):
   changing it, or unenrolling, ends every refresh token that instance holds.
-- **Nothing sensitive is logged** (route templates, statuses, durations, class names); logs leave
-  the enclave (`log_redirect=always`). The integration test asserts no secret in the logs.
+- **Nothing sensitive is logged** (route templates, statuses, durations, class names, a refusal's
+  fixed `reason` code); logs leave the enclave (`log_redirect=always`). The integration test
+  asserts no secret in the logs.
 
 ## Traps
 
@@ -169,6 +170,15 @@ cosign verify ghcr.io/<owner>/oauth-broker@<digest> \
   --certificate-identity "https://github.com/<owner>/<repo>/.github/workflows/oauth-broker-image.yml@refs/tags/oauth-broker-v<version>" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
+
+## Debug
+
+- **Redeem `400 invalid_grant`** → the `reason` of its `request` log line: `grant_unknown` (never
+  issued, already redeemed, or older than its lifetime: a double submit or a back navigation),
+  `consent_incomplete` (the callback brought no code), `flow_mismatch` (another instance's key or
+  verifier), `provider_not_served`, `provider_refused` (the provider answered `invalid_grant` to the
+  code: reused or expired code, redirect URI), `provider_unavailable` (the provider failed or did
+  not answer), `no_refresh_token`.
 
 ## What was verified
 
