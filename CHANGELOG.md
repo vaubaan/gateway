@@ -26,6 +26,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Confidential Space nothing changes: the launch policy still fixes the
   platform.
 
+### Changed
+
+- **The OAuth broker logs why a redeem was refused** (`@vaubaan/oauth-broker`
+  0.2.1). The gateway still gets one `invalid_grant`; the access log line of
+  `/grants/redeem` now carries a fixed `reason`: `grant_unknown`,
+  `consent_incomplete`, `flow_mismatch`, `provider_not_served`,
+  `provider_refused`, `provider_unavailable` or `no_refresh_token`. Never
+  provider text.
+
 ## [2.0.0-alpha.11] - 2026-10-29
 
 ### Added

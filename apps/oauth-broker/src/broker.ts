@@ -47,8 +47,21 @@ const ERROR_CODE = /^[a-z_]{1,40}$/;
 const BEARER = /^Bearer ([\x21-\x7e]{1,512})$/;
 const MAX_SCOPES = 20;
 
-const invalidGrant = (): HttpError =>
-  new HttpError(400, 'invalid_grant', 'the grant cannot be redeemed');
+/**
+ * Why a redeem was refused, logged and never answered: the gateway gets one
+ * `invalid_grant` whatever the cause (the grant is spent either way).
+ */
+type RedeemRefusal =
+  | 'grant_unknown' // no flow: never issued, spent or past its lifetime
+  | 'consent_incomplete' // the flow has no code: the callback never brought one
+  | 'flow_mismatch' // another instance's key, or a verifier that does not match
+  | 'provider_not_served'
+  | 'provider_refused' // the provider answered invalid_grant to the code exchange
+  | 'provider_unavailable' // the provider failed or did not answer
+  | 'no_refresh_token';
+
+const invalidGrant = (reason: RedeemRefusal): HttpError =>
+  new HttpError(400, 'invalid_grant', 'the grant cannot be redeemed', reason);
 const unavailable = (): HttpError =>
   new HttpError(502, 'temporarily_unavailable', 'the provider could not be reached');
 
@@ -210,16 +223,17 @@ export class Broker {
     const verifier = field(body, 'verifier', VERIFIER);
     // Spent by this attempt, whatever follows.
     const flow = grant === undefined ? undefined : this.#deps.flows.takeByGrant(grant);
+    if (flow === undefined) throw invalidGrant('grant_unknown');
+    if (flow.code === undefined) throw invalidGrant('consent_incomplete');
     if (
-      flow?.code === undefined ||
       verifier === undefined ||
       flow.instanceId !== instance.id ||
       !safeEqual(s256(verifier), flow.gatewayChallenge)
     ) {
-      throw invalidGrant();
+      throw invalidGrant('flow_mismatch');
     }
     const served = this.#served.get(flow.provider);
-    if (served === undefined) throw invalidGrant();
+    if (served === undefined) throw invalidGrant('provider_not_served');
     // Only now does the code leave the flow (ADR D1).
     const result = await this.#deps.oauth.exchangeCode(
       served.definition,
@@ -228,10 +242,12 @@ export class Broker {
       this.redirectUri(flow.provider),
       flow.brokerVerifier,
     );
-    if (!result.ok) throw invalidGrant();
+    if (!result.ok) {
+      throw invalidGrant(result.reason === 'refused' ? 'provider_refused' : 'provider_unavailable');
+    }
     const tokens = result.value;
     const refreshToken = tokens.refreshToken;
-    if (refreshToken === undefined) throw invalidGrant();
+    if (refreshToken === undefined) throw invalidGrant('no_refresh_token');
     return {
       // Sealed to this instance: worthless to any other key (src/sealing.ts).
       refresh_token: this.#deps.sealer.seal(instance.id, flow.provider, refreshToken),

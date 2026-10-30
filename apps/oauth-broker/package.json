@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/oauth-broker",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "OAuth broker that keeps no token and runs in an attested enclave, or declared unattested without one",
   "license": "Apache-2.0",

@@ -47,6 +47,8 @@ interface ProviderCall {
 const provider = {
   calls: [] as ProviderCall[],
   down: false,
+  /** Answers the code exchange without a refresh token. */
+  noRefreshToken: false,
   /** code → the S256 challenge the authorize URL carried for it */
   codes: new Map<string, string>(),
   revoked: new Set<string>(),
@@ -81,7 +83,9 @@ function providerAnswer(
       status: 200,
       body: {
         access_token: 'at_first',
-        refresh_token: `rt_${randomBytes(8).toString('hex')}`,
+        ...(provider.noRefreshToken
+          ? {}
+          : { refresh_token: `rt_${randomBytes(8).toString('hex')}` }),
         expires_in: 3599,
         scope: SCOPES.join(' '),
         token_type: 'Bearer',
@@ -183,6 +187,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   provider.down = false;
+  provider.noRefreshToken = false;
   provider.calls = [];
 });
 
@@ -365,12 +370,19 @@ describe('a flow from start to redeem', () => {
   });
 });
 
+/** The reason code the access log gave the last redeem. */
+function lastRedeemReason(): string | undefined {
+  const line = logLines.filter((l) => l.includes('"route":"/grants/redeem"')).at(-1);
+  return line === undefined ? undefined : (JSON.parse(line) as { reason?: string }).reason;
+}
+
 describe('a redeem is refused with one answer', () => {
   it('for another instance, and the grant is spent', async () => {
     const flow = await startFlow();
     const { grant } = await consent(flow);
     const res = await api('/grants/redeem', { grant, verifier: flow.verifier }, KEY_B);
     expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('flow_mismatch');
     expect((await api('/grants/redeem', { grant, verifier: flow.verifier })).status).toBe(400);
     expect(provider.calls).toHaveLength(0);
   });
@@ -383,6 +395,7 @@ describe('a redeem is refused with one answer', () => {
       verifier: randomBytes(32).toString('base64url'),
     });
     expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('flow_mismatch');
     expect(provider.calls).toHaveLength(0);
   });
 
@@ -392,6 +405,7 @@ describe('a redeem is refused with one answer', () => {
     now += 5 * 60_000;
     const res = await api('/grants/redeem', { grant, verifier: flow.verifier });
     expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('grant_unknown');
   });
 
   it('when the provider refuses the code or is down', async () => {
@@ -400,11 +414,29 @@ describe('a redeem is refused with one answer', () => {
     provider.down = true;
     const res = await api('/grants/redeem', { grant, verifier: flow.verifier });
     expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('provider_unavailable');
+  });
+
+  it('when the provider refuses the code, or gives no refresh token: each logged apart', async () => {
+    const refused = await startFlow();
+    const first = await consent(refused);
+    provider.codes.clear();
+    const res = await api('/grants/redeem', { grant: first.grant, verifier: refused.verifier });
+    expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('provider_refused');
+
+    const offline = await startFlow();
+    const second = await consent(offline);
+    provider.noRefreshToken = true;
+    const res2 = await api('/grants/redeem', { grant: second.grant, verifier: offline.verifier });
+    expect([res2.status, res2.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('no_refresh_token');
   });
 
   it('for an unknown grant', async () => {
     const res = await api('/grants/redeem', { grant: 'g'.repeat(43), verifier: 'v'.repeat(43) });
     expect([res.status, res.json?.error]).toEqual([400, 'invalid_grant']);
+    expect(lastRedeemReason()).toBe('grant_unknown');
   });
 });
 

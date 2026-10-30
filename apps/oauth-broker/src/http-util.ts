@@ -7,11 +7,17 @@ export class HttpError extends Error {
   override name = 'HttpError';
   readonly status: number;
   readonly code: string;
+  /**
+   * For the access log only, never answered: which of several causes behind
+   * one answer it was, as a fixed code of the broker's (never provider text).
+   */
+  readonly reason: string | undefined;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, reason?: string) {
     super(message);
     this.status = status;
     this.code = code;
+    this.reason = reason;
   }
 }
 
