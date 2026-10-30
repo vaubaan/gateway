@@ -12,9 +12,12 @@
  *
  * The guard answers with the principal or with the reason of the refusal;
  * each handler shapes the response its surface answers with (JSON, redirect,
- * page). `refusalResponse` is the JSON shape most of them share.
+ * page). `refusalResponse` is the JSON shape most of them share — except for a
+ * page's form posted without a session (one left open until the session
+ * expired): that is sent to sign in, then back to the page it came from.
  */
 import type { Authenticator, Principal, UserPrincipal } from './authenticator';
+import { resolveReturnTo } from '../http/return-to';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 
 /** `user`: an identified user (never the bootstrap operator). `operator`: the admin rule. */
@@ -27,6 +30,12 @@ export interface GuardRefusal {
   readonly ok: false;
   readonly reason: GuardRefusalReason;
   readonly status: 401 | 403;
+  /**
+   * `no-session` on a page's form (a top-level navigation): where to sign in,
+   * with the page to come back to. Absent for a script's request, which keeps
+   * the JSON answer.
+   */
+  readonly signIn?: string;
 }
 
 export interface GuardPass<P extends Principal> {
@@ -46,6 +55,8 @@ export interface GuardDeps extends SessionGuardDeps {
 
 const UNAUTHENTICATED = 401;
 const FORBIDDEN = 403;
+const SEE_OTHER = 303;
+const LOGIN_PAGE = '/login';
 
 function refuse(reason: GuardRefusalReason): GuardRefusal {
   return { ok: false, reason, status: reason === 'no-session' ? UNAUTHENTICATED : FORBIDDEN };
@@ -103,7 +114,20 @@ export async function guardMutation(
   role: GuardRole,
 ): Promise<GuardResult<Principal>> {
   if (!isSameOrigin(request.headers, deps.publicUrl)) return refuse('origin-mismatch');
-  return authorize(request, deps, role);
+  const result = await authorize(request, deps, role);
+  if (result.ok || result.reason !== 'no-session' || !isNavigation(request)) return result;
+  return { ...result, signIn: signInLocation(request, deps.publicUrl) };
+}
+
+/** A form a page posted (the browser navigates), not a script's `fetch`. */
+function isNavigation(request: Request): boolean {
+  return request.headers.get('sec-fetch-mode') === 'navigate';
+}
+
+/** The sign-in page, returning to the page the form was on when it is the instance's. */
+function signInLocation(request: Request, publicUrl: URL): string {
+  const back = resolveReturnTo(request.headers.get('referer'), publicUrl);
+  return back ? `${LOGIN_PAGE}?return_to=${encodeURIComponent(back)}` : LOGIN_PAGE;
 }
 
 /** How a surface words its JSON refusals: the key of the sentence, and the sentences. */
@@ -125,6 +149,12 @@ export const OPERATOR_REFUSALS: RefusalWording = {
 /** The JSON answer to a refusal; `origin-mismatch` is worded once, in `origin.ts`. */
 export function refusalResponse(refusal: GuardRefusal, wording: RefusalWording): Response {
   if (refusal.reason === 'origin-mismatch') return forbiddenOriginResponse();
+  if (refusal.signIn) {
+    return new Response(null, {
+      status: SEE_OTHER,
+      headers: { Location: refusal.signIn, 'Cache-Control': 'no-store' },
+    });
+  }
   const unauthenticated = refusal.reason === 'no-session';
   return new Response(
     JSON.stringify({

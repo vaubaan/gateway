@@ -37,6 +37,9 @@ web sessions, the bootstrap token and recovery. Spec:
   never forwarded headers); every page and route under `admin/(guarded)`
   authorizes itself, the layout is no boundary. `mutation-guard.test.ts` and
   `admin-guard.test.ts` discover the handlers and fail an unclassified one.
+- A mutation without a session answers JSON 401, except a page's form (`Sec-Fetch-Mode:
+navigate`, a page left open past its session): 303 to `/login?return_to=<the referring page>`,
+  the referer kept only when it is the instance's (`resolveReturnTo`).
 - `web_sessions.id` holds the key's SHA-256. The port cannot list a user's
   sessions: ending them all is `users.sessions_ended_at`.
 - A stored client secret is never sent to another issuer: a blank secret on

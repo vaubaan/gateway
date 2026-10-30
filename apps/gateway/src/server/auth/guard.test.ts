@@ -163,3 +163,39 @@ describe('refusalResponse', () => {
     });
   });
 });
+
+describe('a page’s form posted without a session', () => {
+  const page = `${PUBLIC_URL.origin}/accounts/c-1?tab=resources`;
+
+  async function refusalOf(headers: Record<string, string>): Promise<Response> {
+    const refusal = await guardMutation(
+      request({ origin: PUBLIC_URL.origin, ...headers }),
+      depsFor(null).deps,
+      'user',
+    );
+    if (refusal.ok) throw new Error('expected a refusal');
+    return refusalResponse(refusal, OPERATOR_REFUSALS);
+  }
+
+  it('is sent to sign in, then back to the page it came from', async () => {
+    const response = await refusalOf({ 'sec-fetch-mode': 'navigate', referer: page });
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe(
+      `/login?return_to=${encodeURIComponent('/accounts/c-1?tab=resources')}`,
+    );
+  });
+
+  it('a page of another origin is not returned to', async () => {
+    const response = await refusalOf({
+      'sec-fetch-mode': 'navigate',
+      referer: 'https://evil.example/x',
+    });
+    expect(response.headers.get('location')).toBe('/login');
+  });
+
+  it('a script’s request keeps the JSON answer', async () => {
+    const response = await refusalOf({ 'sec-fetch-mode': 'cors', referer: page });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'unauthenticated', reason: 'no session' });
+  });
+});
