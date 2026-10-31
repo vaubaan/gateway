@@ -9,6 +9,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  catalogPathIssues,
   CredentialKindMismatch,
   type EnvOf,
   type ExecuteContext,
@@ -16,15 +17,21 @@ import {
   parseSlice,
   type Resource,
   serializeSlice,
+  UpstreamHttpError,
+  UpstreamProtocolError,
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   envResolverFor,
+  isEnvScopedEntry,
   mockFetch,
   policyFromMacroActions,
+  prepareCatalog,
+  risksTouchedBy,
   type RecordedCall,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
@@ -32,6 +39,7 @@ import {
 import {
   classifyVercel,
   DISCOVERY_MAX_PAGES,
+  TOOL,
   vercelAuth,
   vercelCredential,
   vercelEnvOf,
@@ -142,7 +150,10 @@ describe('vercel plugin — structural kit', () => {
     vercel__list_deployments: [{ args: p }],
     vercel__get_deployment: [{ args: { ...p, idOrUrl: 'dpl_1' } }],
     vercel__get_deployment_build_logs: [{ args: { ...p, idOrUrl: 'dpl_1' } }],
-    vercel__get_runtime_logs: [{ args: { ...p, deploymentId: 'dpl_1' } }],
+    vercel__get_runtime_logs: [
+      { args: { ...p, deploymentId: 'dpl_1' } },
+      { args: { ...p, environment: 'production' } },
+    ],
     vercel__web_fetch_vercel_url: [{ args: { url: 'https://app-git-main.vercel.app/' } }],
     vercel__list_toolbar_threads: [{ args: p }],
     vercel__get_toolbar_thread: [{ args: { ...p, threadId: 'thr_1' }, expectDenied: true }],
@@ -206,6 +217,44 @@ describe('vercel plugin — structural kit', () => {
     expect(report.fallbackHits).toEqual([]);
   });
 
+  test('every slice is a path of the data model, every catalog pattern too', () => {
+    // Cardinalities off : the model's are documentary (`project` and `team` declare `bounded` only).
+    assertSlicesOnDataModel(vercelPlugin, SAMPLES, {
+      resources: [app, foreign],
+      cardinalities: false,
+    });
+    expect(catalogPathIssues(vercelPlugin)).toEqual([]);
+  });
+
+  test('a slice that names no single environment touches no env-scoped risk', () => {
+    // `env[*]` resolves to no environment (`NO_SINGLE_ENV`) : harmless only while
+    // no risk qualified by environment matches it.
+    const catalog = prepareCatalog(vercelPlugin.catalog);
+    const envScoped = new Set(
+      vercelPlugin.catalog.risks.filter((r) => isEnvScopedEntry(r)).map((r) => r.id),
+    );
+    let anyEnv = 0;
+    for (const [tool, calls] of Object.entries(SAMPLES)) {
+      for (const { args } of calls) {
+        const out = classifyVercel(tool, args, [app]);
+        if ('denied' in out) continue;
+        for (const slice of out.slices.filter((s) => vercelEnvOf(s) === NO_SINGLE_ENV)) {
+          anyEnv += 1;
+          const touched = risksTouchedBy(slice, catalog);
+          expect(
+            touched.filter((id) => envScoped.has(id)),
+            serializeSlice(slice),
+          ).toEqual([]);
+        }
+      }
+    }
+    expect(anyEnv).toBeGreaterThan(0);
+  });
+
+  test('TOOL names every declared tool, and only those', () => {
+    expect(vercelPlugin.tools.map((t) => t.name).sort()).toEqual(Object.values(TOOL).sort());
+  });
+
   // What is executed is what was classified (SDK kit) : every string argument of
   // every sample above is fed the hostile identifiers, through `classify` and
   // through `execute`. The finer cases are in this plugin's identifier tests.
@@ -249,7 +298,7 @@ describe('classifyVercel — project resolution against mission resources', () =
     // belongs to this project before the upstream call (binding.test.ts).
     expect(
       slices('vercel__get_access_to_vercel_url', { url: 'https://x.vercel.app/' }, [app]),
-    ).toEqual(['vercel.project[prj_abc].deployment[*].bypass-token.W']);
+    ).toEqual(['vercel.project[prj_abc].env[*].deployment[*].bypass-token.W']);
   });
 
   test('refuses a project the mission does not hold, an ambiguous or missing one, a malformed ref', () => {
@@ -354,11 +403,17 @@ describe('vercelEnvOf — the environment a slice touches', () => {
     },
   );
 
-  test('no slice the classifier emits names several environments', () => {
+  test('an env-var write names one environment per slice', () => {
     // `upsert_env_var` without a target reaches all three: one slice per environment.
     const out = classifyVercel('vercel__upsert_env_var', { key: 'K', value: 'v' }, [app]);
     if (!('slices' in out)) throw new Error('expected slices');
     expect(out.slices.map((s) => vercelEnvOf(s))).not.toContain(NO_SINGLE_ENV);
+  });
+
+  test('an env-var listing names no single environment (env[*])', () => {
+    const out = classifyVercel('vercel__list_env_vars', { projectId: 'prj_abc' }, [app]);
+    if (!('slices' in out)) throw new Error('expected slices');
+    expect(out.slices.map((s) => vercelEnvOf(s))).toEqual([NO_SINGLE_ENV]);
   });
 });
 
@@ -527,9 +582,9 @@ describe('executeVercel with mockFetch', () => {
     const rpc = mockFetch([
       { url: VERCEL_MCP_URL, respond: (c) => sseError(c, -32602, 'invalid args') },
     ]);
-    await expect(
-      vercelPlugin.execute(ctx(rpc), 'vercel__get_project', { projectId: 'prj_abc' }),
-    ).rejects.toThrow(/invalid args/);
+    const rpcCall = vercelPlugin.execute(ctx(rpc), 'vercel__get_project', { projectId: 'prj_abc' });
+    await expect(rpcCall).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(rpcCall).rejects.toThrow(/invalid args/);
 
     const http = mockFetch([{ url: /\/v9\/projects\/prj_abc\?/, status: 500, body: 'boom' }]);
     await expect(
@@ -543,6 +598,43 @@ describe('executeVercel with mockFetch', () => {
     await expect(
       vercelPlugin.execute(ctx(mcp), 'vercel__get_project', { projectId: 'prj_abc' }),
     ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 502 });
+  });
+
+  test('an MCP answer that is not a tool result is an UpstreamProtocolError', async () => {
+    const odd = mockFetch([{ url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, ['not', 'one']) }]);
+    await expect(
+      vercelPlugin.execute(ctx(odd), 'vercel__list_deployments', { projectId: 'prj_abc' }),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
+  });
+
+  test('a 404 of the MCP server is an UpstreamHttpError : no session is opened, one request is sent', async () => {
+    const mcp = mockFetch([{ url: VERCEL_MCP_URL, status: 404, body: 'not found' }]);
+    const call = vercelPlugin.execute(ctx(mcp), 'vercel__list_deployments', {
+      projectId: 'prj_abc',
+    });
+    await expect(call).rejects.toBeInstanceOf(UpstreamHttpError);
+    await expect(call).rejects.toMatchObject({ status: 404 });
+    expect(mcp.calls.map((c) => c.json)).toEqual([
+      expect.objectContaining({ method: 'tools/call' }),
+    ]);
+  });
+
+  test('a REST answer that is not JSON is an UpstreamProtocolError', async () => {
+    const html = mockFetch([{ url: /\/v9\/projects\/prj_abc\/domains\?/, body: '<html>' }]);
+    await expect(
+      vercelPlugin.execute(ctx(html), 'vercel__list_project_domains', { projectId: 'prj_abc' }),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
+  });
+
+  test('a REST answer without content reads {}', async () => {
+    const empty = mockFetch([
+      { method: 'DELETE', url: /\/v9\/projects\/prj_abc\/env\/env_1\?/, status: 204 },
+    ]);
+    const result = await vercelPlugin.execute(ctx(empty), 'vercel__delete_env_var', {
+      projectId: 'prj_abc',
+      id: 'env_1',
+    });
+    expect(result).toEqual({ content: [{ type: 'text', text: '{}' }] });
   });
 
   test('a network failure is thrown as it is, not turned into a result', async () => {
@@ -884,6 +976,16 @@ describe('discoverVercelResources with mockFetch', () => {
       name: 'UpstreamAuthError',
       upstreamStatus: 403,
     });
+  });
+
+  test('a project listing Vercel did not shape as projects is an UpstreamProtocolError', async () => {
+    const fetch = mockFetch([
+      { url: /\/v2\/teams\//, body: { id: 'team_abc' } },
+      { url: /\/v10\/projects\?/, body: { projects: [{ id: 42, name: 'a' }] } },
+    ]);
+    await expect(vercelPlugin.discoverResources(ctx(fetch))).rejects.toBeInstanceOf(
+      UpstreamProtocolError,
+    );
   });
 
   test('an invalid token surfaces as UpstreamAuthError from the team check', async () => {

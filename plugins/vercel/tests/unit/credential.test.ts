@@ -4,7 +4,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { CredentialRefusal, UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import {
+  CredentialRefusal,
+  UpstreamAuthError,
+  UpstreamProtocolError,
+  type ConnectionContext,
+} from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -78,5 +83,10 @@ describe('vercel token — verify at paste', () => {
     const check = verifyVercelToken(ctx(fetch));
     await expect(check).rejects.toBeInstanceOf(UpstreamAuthError);
     await expect(check).rejects.not.toBeInstanceOf(CredentialRefusal);
+  });
+
+  test('an answer that is not JSON is an UpstreamProtocolError', async () => {
+    const fetch = mockFetch([{ method: 'GET', url: CURRENT, body: '<html>' }]);
+    await expect(verifyVercelToken(ctx(fetch))).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 });

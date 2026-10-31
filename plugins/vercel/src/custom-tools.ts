@@ -17,19 +17,7 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
-export const UPDATE_PROJECT_SETTINGS = 'vercel__update_project_settings';
-export const UPSERT_ENV_VAR = 'vercel__upsert_env_var';
-export const LIST_ENV_VARS = 'vercel__list_env_vars';
-export const DELETE_ENV_VAR = 'vercel__delete_env_var';
-export const LIST_DOMAINS = 'vercel__list_project_domains';
-export const ADD_DOMAIN = 'vercel__add_project_domain';
-export const VERIFY_DOMAIN = 'vercel__verify_project_domain';
-export const REMOVE_DOMAIN = 'vercel__remove_project_domain';
-export const GET_FIREWALL_CONFIG = 'vercel__get_firewall_config';
-export const TOGGLE_FIREWALL = 'vercel__toggle_firewall';
-export const UPSERT_FIREWALL_RULE = 'vercel__upsert_firewall_rule';
-export const REMOVE_FIREWALL_RULE = 'vercel__remove_firewall_rule';
-export const MANAGE_IP_BLOCKING = 'vercel__manage_ip_blocking';
+import { TOOL } from './identity.ts';
 
 const projectIdArg = {
   projectId: {
@@ -48,7 +36,7 @@ const teamIdArg = {
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
-    name: UPDATE_PROJECT_SETTINGS,
+    name: TOOL.updateProjectSettings,
     description:
       'Update common project settings on Vercel (root directory, framework, build/dev/install commands, output directory, node version). Backed by PATCH /v9/projects/{projectId}.',
     inputSchema: {
@@ -91,7 +79,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: UPSERT_ENV_VAR,
+    name: TOOL.upsertEnvVar,
     description:
       'Create or update an environment variable on a Vercel project. Backed by POST /v10/projects/{projectId}/env?upsert=true. Omitting `target` applies the variable to all three environments (production included) — a fan-out the catalog treats as its own risk.',
     inputSchema: {
@@ -137,7 +125,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: LIST_ENV_VARS,
+    name: TOOL.listEnvVars,
     description:
       'List environment variables on a Vercel project. Values are returned encrypted by default; pass `decrypt: true` to receive plaintext (a distinct, high-severity risk of the catalog). Backed by GET /v10/projects/{projectId}/env.',
     inputSchema: {
@@ -155,7 +143,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: DELETE_ENV_VAR,
+    name: TOOL.deleteEnvVar,
     description:
       'Delete an environment variable on a Vercel project by its Vercel-issued id. The Vercel API removes the variable from every environment it lives in at once, so the gateway always classifies this call as touching all three environments. Backed by DELETE /v9/projects/{projectId}/env/{id}.',
     inputSchema: {
@@ -179,7 +167,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: LIST_DOMAINS,
+    name: TOOL.listProjectDomains,
     description:
       'List custom domains attached to a Vercel project (including verification status). Backed by GET /v9/projects/{projectId}/domains.',
     inputSchema: {
@@ -189,7 +177,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: ADD_DOMAIN,
+    name: TOOL.addProjectDomain,
     description:
       'Attach a custom domain to a Vercel project. Backed by POST /v10/projects/{projectId}/domains. If `verified: false` in the response, call `verify_project_domain` after configuring DNS.',
     inputSchema: {
@@ -219,7 +207,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: VERIFY_DOMAIN,
+    name: TOOL.verifyProjectDomain,
     description:
       'Trigger Vercel re-check of a domain attachment (re-runs the verification challenge after DNS records are in place). Backed by POST /v9/projects/{projectId}/domains/{domain}/verify.',
     inputSchema: {
@@ -233,7 +221,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: REMOVE_DOMAIN,
+    name: TOOL.removeProjectDomain,
     description:
       'Detach a custom domain from a Vercel project. Backed by DELETE /v9/projects/{projectId}/domains/{domain}.',
     inputSchema: {
@@ -250,7 +238,7 @@ export const customTools: readonly McpToolDeclaration[] = [
   // ─── Firewall / WAF tools ─────────────────────────────────────────────────
 
   {
-    name: GET_FIREWALL_CONFIG,
+    name: TOOL.getFirewallConfig,
     description:
       'Read the active firewall (WAF) configuration for a Vercel project — returns firewallEnabled flag, custom rules, IP blocking rules, managed rulesets, and OWASP CRS settings. Backed by GET /v1/security/firewall/config/active.',
     inputSchema: {
@@ -260,7 +248,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: TOGGLE_FIREWALL,
+    name: TOOL.toggleFirewall,
     description:
       'Enable or disable the firewall (WAF) on a Vercel project. Backed by PATCH /v1/security/firewall/config.',
     inputSchema: {
@@ -277,7 +265,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: UPSERT_FIREWALL_RULE,
+    name: TOOL.upsertFirewallRule,
     description:
       'Create or update a custom firewall rule on a Vercel project. When `ruleId` is provided the existing rule is updated ; otherwise a new rule is inserted. Backed by PATCH /v1/security/firewall/config with action `rules.insert` or `rules.update`.',
     inputSchema: {
@@ -387,7 +375,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: REMOVE_FIREWALL_RULE,
+    name: TOOL.removeFirewallRule,
     description:
       'Remove a custom firewall rule from a Vercel project by its rule id. Backed by PATCH /v1/security/firewall/config with action `rules.remove`.',
     inputSchema: {
@@ -404,7 +392,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: MANAGE_IP_BLOCKING,
+    name: TOOL.manageIpBlocking,
     description:
       'Add or remove an IP-based blocking / challenge / bypass / log rule in the Vercel project firewall. Use `operation: "insert"` to add an IP rule, `operation: "remove"` to delete one by its id. Backed by PATCH /v1/security/firewall/config with action `ip.insert` or `ip.remove`.',
     inputSchema: {
