@@ -177,7 +177,7 @@ describe('what the page reads is what the act answers', () => {
     expect(await editable()).toBe(true);
     expect(await setGate('approval')).toMatchObject({ ok: true });
 
-    await shares.service.revoke(await ada(), share.id);
+    await shares.service.revoke(await ada(), share.id, share.connectionId);
     expect(await editable()).toBe(false);
     expect(await setGate('auto')).toEqual({ ok: false, reason: 'inactive', state: 'orphaned' });
 

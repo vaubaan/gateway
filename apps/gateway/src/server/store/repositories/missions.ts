@@ -102,6 +102,17 @@ export interface AddedMissionResources {
 /** What the `missions.status` column may hold: every `MissionStatus` but the derived one. */
 export type StoredMissionStatus = Exclude<MissionStatus, 'orphaned'>;
 
+/**
+ * One token, named by its mission and its id together: no repository method reads or
+ * changes a token by its id alone, so a caller that forgot to check the mission
+ * reaches nothing (security audit 2026-10-31, L8). A token of another mission reads
+ * as missing.
+ */
+export interface MissionTokenKey {
+  readonly missionId: string;
+  readonly tokenId: string;
+}
+
 export interface MissionsRepo {
   /**
    * The creator's edit of the whole mission after issuance (ADR
@@ -223,13 +234,17 @@ export interface MissionsRepo {
   findTokenByPrefix(
     prefix: string,
   ): Promise<{ token: MissionTokenRecord; mission: MissionRecord } | null>;
-  getToken(tokenId: string): Promise<MissionTokenRecord | null>;
+  /** The token, if it belongs to that mission; `null` otherwise. */
+  getToken(key: MissionTokenKey): Promise<MissionTokenRecord | null>;
   /** Every token of the mission, whatever its status, oldest first. */
   listTokens(missionId: string): Promise<MissionTokenRecord[]>;
   /** Revokes every non-retired token of the mission; returns how many were revoked. */
   revokeTokens(missionId: string): Promise<number>;
-  /** Revokes one active token; `null` (nothing written) when it is not active or unknown. */
-  revokeToken(tokenId: string): Promise<MissionTokenRecord | null>;
+  /**
+   * Revokes one active token of that mission; `null` (nothing written) when it is not
+   * active, unknown, or another mission's.
+   */
+  revokeToken(key: MissionTokenKey): Promise<MissionTokenRecord | null>;
   /**
    * Revokes every active member token this user holds on a mission they did not
    * create — the tokens of a deactivated member. Their tokens on their own missions
@@ -242,7 +257,7 @@ export interface MissionsRepo {
    * per `granularitySeconds`: the column says "about when", not "exactly when", so a
    * busy agent does not turn every call into a write. Returns whether a row was written.
    */
-  markTokenUsed(tokenId: string, granularitySeconds: number): Promise<boolean>;
+  markTokenUsed(key: MissionTokenKey, granularitySeconds: number): Promise<boolean>;
   /**
    * Replaces the stored proof of one token by another proof of the SAME secret
    * (a row an earlier build stored as argon2id, moved to the SHA-256 digest once
@@ -674,6 +689,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const revokeOne = db.prepare<[string, string]>(
     `UPDATE mission_tokens SET status = 'revoked', retired_at = ? WHERE id = ? AND status = 'active'`,
   );
+  const tokenOfMission = db.prepare<[string, string], TokenRow>(
+    `SELECT ${TOKEN_COLUMNS} FROM mission_tokens WHERE mission_id = ? AND id = ?`,
+  );
+  const revokeOneOfMission = db.prepare<[string, string, string]>(
+    `UPDATE mission_tokens SET status = 'revoked', retired_at = ?
+     WHERE mission_id = ? AND id = ? AND status = 'active'`,
+  );
   const activeHeldAsMember = db.prepare<[string, string], TokenRow>(
     `SELECT ${TOKEN_COLUMNS} FROM mission_tokens
      WHERE holder_user_id = ? AND kind = 'member' AND status = 'active'
@@ -682,9 +704,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   );
   // Written only when the stored instant is older than the granularity: one statement,
   // so two concurrent calls write once.
-  const markUsed = db.prepare<[string, string, string]>(
+  const markUsed = db.prepare<[string, string, string, string]>(
     `UPDATE mission_tokens SET last_used_at = ?
-     WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)`,
+     WHERE mission_id = ? AND id = ? AND (last_used_at IS NULL OR last_used_at < ?)`,
   );
   const rehash = db.prepare<[string, string, string, string]>(
     'UPDATE mission_tokens SET hash = ?, hash_alg = ? WHERE id = ? AND hash = ?',
@@ -1351,15 +1373,15 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async listTokens(missionId) {
       return tokensOf.all(missionId).map(tokenToRecord);
     },
-    async getToken(tokenId) {
-      const row = tokenById.get(tokenId);
+    async getToken({ missionId, tokenId }) {
+      const row = tokenOfMission.get(missionId, tokenId);
       return row ? tokenToRecord(row) : null;
     },
     async revokeTokens(missionId) {
       return revokeTokensStmt.run(nowIso(ctx), missionId).changes;
     },
-    async revokeToken(tokenId) {
-      const changed = revokeOne.run(nowIso(ctx), tokenId).changes;
+    async revokeToken({ missionId, tokenId }) {
+      const changed = revokeOneOfMission.run(nowIso(ctx), missionId, tokenId).changes;
       return changed === 1 ? requireToken(tokenId) : null;
     },
     async revokeMemberTokensOf(userId) {
@@ -1370,9 +1392,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       });
       return ids.map(requireToken);
     },
-    async markTokenUsed(tokenId, granularitySeconds) {
+    async markTokenUsed({ missionId, tokenId }, granularitySeconds) {
       const stale = new Date(ctx.clock.now().getTime() - granularitySeconds * MS_PER_SECOND);
-      return markUsed.run(nowIso(ctx), tokenId, stale.toISOString()).changes === 1;
+      return markUsed.run(nowIso(ctx), missionId, tokenId, stale.toISOString()).changes === 1;
     },
     async rehashToken(tokenId, change) {
       return rehash.run(change.hash, change.hashAlg, tokenId, change.fromHash).changes === 1;

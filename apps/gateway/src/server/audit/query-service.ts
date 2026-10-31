@@ -30,7 +30,7 @@ import {
 } from '@vaubaan/gateway-core';
 import type { MissionTokenKind, Principal, RefusalCode, RiskId } from '@vaubaan/shared';
 
-import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, Store } from '../store';
+import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, ShareKey, Store } from '../store';
 import type { ConnectionRecord, MissionRecord } from '../store/types';
 import type { AuditFilters } from './filters';
 import { parseHolderParam } from './session-view';
@@ -451,9 +451,9 @@ class NameCache {
   }
 
   /** "<connection> → <the user's email or the group's name>". */
-  share(id: string): Promise<string | null> {
-    return memo(this.labels, `share:${id}`, async () => {
-      const share = await this.store.shares.getById(id);
+  share(key: ShareKey): Promise<string | null> {
+    return memo(this.labels, `share:${key.connectionId}:${key.shareId}`, async () => {
+      const share = await this.store.shares.get(key);
       if (!share) return null;
       const connection = (await this.connection(share.connectionId)).display_name;
       const target =
@@ -567,7 +567,7 @@ async function toView(
     object: {
       type: record.object.type,
       id: record.object.id,
-      label: await objectLabel(record.object, names),
+      label: await objectLabel(record, names),
     },
     before: withoutArguments(record.before, standing),
     after: withoutArguments(record.after, standing),
@@ -585,10 +585,30 @@ async function tokenRef(
   return { kind, key, label: (await names.email(key)) ?? key };
 }
 
+/**
+ * The connection a share entry names in its `before` or `after` (every share entry
+ * carries it): a share is read with its connection, never by its id alone.
+ */
+function shareConnectionOf(record: {
+  readonly before: unknown;
+  readonly after: unknown;
+}): string | null {
+  for (const side of [record.after, record.before]) {
+    if (typeof side !== 'object' || side === null || !('connection_id' in side)) continue;
+    if (typeof side.connection_id === 'string') return side.connection_id;
+  }
+  return null;
+}
+
 async function objectLabel(
-  object: { readonly type: AdminObjectType; readonly id: string },
+  record: {
+    readonly object: { readonly type: AdminObjectType; readonly id: string };
+    readonly before: unknown;
+    readonly after: unknown;
+  },
   names: NameCache,
 ): Promise<string | null> {
+  const { object } = record;
   // One case per object type and no `default`: a new type does not compile until it
   // says what names it. The scope is the store's: a label only names an object whose
   // entry the viewer was already given.
@@ -597,8 +617,10 @@ async function objectLabel(
       return (await names.mission(object.id)).name;
     case 'connection':
       return (await names.connection(object.id)).display_name;
-    case 'share':
-      return names.share(object.id);
+    case 'share': {
+      const connectionId = shareConnectionOf(record);
+      return connectionId === null ? null : names.share({ connectionId, shareId: object.id });
+    }
     case 'group':
       return names.group(object.id);
     case 'oauth-client':

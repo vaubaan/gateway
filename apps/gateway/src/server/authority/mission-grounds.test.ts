@@ -117,7 +117,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const connection = await connect(user(ada));
       const granted = await share(connection, user(bob), [READ, WRITE_STAGING]);
       const m = await mission(bob, [connection], [READ, WRITE_STAGING]);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       await share(connection, user(bob), [READ]);
       expect(await authority.grounds.check(m)).toEqual({
         grounded: false,
@@ -218,7 +218,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       // A share of one connection never covers the risks of another: its revocation
       // takes that connection's part, and the other part still serves.
       const [granted] = await store.shares.listForConnection(other.id);
-      await store.shares.revoke(granted!.id);
+      await store.shares.revoke({ connectionId: granted!.connectionId, shareId: granted!.id });
       expect(await authority.grounds.check(m)).toEqual({
         grounded: true,
         lost: [{ connectionId: other.id, cause: 'access-withdrawn', uncovered: [OTHER_READ] }],
@@ -263,7 +263,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const granted = await share(other, user(bob), [OTHER_READ]);
       const m = await mission(bob, [acme, other], [READ, OTHER_READ]);
       await store.connections.revoke(acme.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       expect(await authority.grounds.check(m)).toMatchObject({
         grounded: false,
         cause: 'authority-lost',
@@ -278,7 +278,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const granted = await share(acme, user(bob), [READ, WRITE_STAGING]);
       await share(other, user(bob), [OTHER_READ]);
       const m = await mission(bob, [acme, other], [READ, WRITE_STAGING, OTHER_READ]);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       await share(acme, user(bob), [READ]);
       expect(await authority.grounds.check(m)).toEqual({
         grounded: false,
@@ -340,7 +340,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const m = await mission(bob, [acme, other], [READ, OTHER_READ]);
 
       const revoking = await authority.grounds.watchConnection(other.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       expect((await revoking.settle(ada.id)).partsLost.map((x) => x.id)).toEqual([m.id]);
 
       const supposed = { connectionId: other.id, target: user(bob), restriction: [OTHER_READ] };
@@ -375,7 +375,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const connection = await connect(user(ada));
       const granted = await share(connection, user(bob), [READ]);
       const m = await mission(bob, [connection], [READ]);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
 
       const inspected = await authority.grounds.inspect(m);
       expect(inspected.mission).toEqual({ ...m, status: 'orphaned' });
@@ -393,7 +393,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const connection = await connect(user(ada));
       const granted = await share(connection, user(bob), [READ]);
       const m = await mission(bob, [connection], [READ]);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       expect((await authority.grounds.derive(m)).status).toBe('orphaned');
 
       await share(connection, user(bob), [READ]);
@@ -436,7 +436,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const statuses = async () => (await reads.listForCreator(bob.id)).map((m) => m.status);
 
       expect(await statuses()).toEqual(['active', 'revoked']);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       expect(await statuses()).toEqual(['orphaned', 'revoked']);
       await share(connection, user(bob), [READ]);
       expect(await statuses()).toEqual(['active', 'revoked']);
@@ -455,7 +455,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await mission(bob, [elsewhere], [READ]);
 
       const watch = await authority.grounds.watchConnection(connection.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       const shift = await watch.settle(ada.id);
 
       expect(shift.orphaned.map((m) => m.id)).toEqual([lost.id]);
@@ -484,7 +484,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const connection = await connect(user(ada));
       const granted = await share(connection, user(bob), [READ]);
       const m = await mission(bob, [connection], [READ]);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
 
       const watch = await authority.grounds.watchConnection(connection.id);
       await share(connection, user(bob), [READ]);
@@ -524,7 +524,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       });
 
       const replaced = await authority.grounds.watchConnection(connection.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       await share(connection, user(bob), [READ, WRITE_STAGING]);
       expect(await replaced.settle(ada.id)).toEqual({
         orphaned: [],
@@ -543,7 +543,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await store.missions.setStatus(alreadyRevoked.id, 'revoked');
 
       const watch = await authority.grounds.watchConnection(connection.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       await store.missions.setStatus(revokedMeanwhile.id, 'revoked');
       expect(await watch.settle(ada.id)).toEqual({
         orphaned: [],
@@ -589,7 +589,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const revocation = await authority.grounds.watchConnection(connection.id);
       const signIn = await authority.grounds.watchCreator(bob.id);
       clock.advance(1_000);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       const first = await revocation.settle(ada.id);
       clock.advance(1_000);
       // The sign-in changed nothing that mattered; it settles second.
@@ -628,7 +628,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       const m = await mission(bob, [connection], [READ]);
 
       const revoking = await authority.grounds.watchConnection(connection.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       await revoking.settle(ada.id);
       // The authority comes back by a path nothing watched: no `mission-restored`.
       clock.advance(60_000);
@@ -636,7 +636,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       clock.advance(60_000);
 
       const second = await authority.grounds.watchConnection(connection.id);
-      await store.shares.revoke(again.id);
+      await store.shares.revoke({ connectionId: again.connectionId, shareId: again.id });
       expect((await second.settle(ada.id)).orphaned.map((x) => x.id)).toEqual([m.id]);
       expect((await adminTrail()).map((e) => e.act)).toEqual([
         'mission-orphaned',
@@ -650,7 +650,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await mission(bob, [connection], [READ]);
 
       const revoking = await authority.grounds.watchConnection(connection.id);
-      await store.shares.revoke(granted.id);
+      await store.shares.revoke({ connectionId: granted.connectionId, shareId: granted.id });
       // Another act, complete before this one settles, restores the mission.
       const restoring = await authority.grounds.watchConnection(connection.id);
       await share(connection, user(bob), [READ]);

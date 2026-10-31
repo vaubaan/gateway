@@ -161,7 +161,7 @@ describe('ConnectionAuthorityService', () => {
       const connection = await connect({ kind: 'user', id: ada.id });
       const direct = await share(connection, { kind: 'user', id: bob.id }, [READ, WRITE_PROD]);
       expect((await authority.authorityOf(bob, connection)).riskIds).toEqual([READ, WRITE_PROD]);
-      await store.shares.revoke(direct.id);
+      await store.shares.revoke({ connectionId: direct.connectionId, shareId: direct.id });
       expect(await authority.authorityOf(bob, connection)).toMatchObject({
         basis: 'none',
         riskIds: [],

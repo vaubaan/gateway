@@ -258,10 +258,22 @@ describe('ownership and orphan states in the store', () => {
       });
 
       expect(second.replaced?.id).toBe(first.created.id);
-      expect((await store.shares.getById(first.created.id))?.status).toBe('revoked');
+      expect(
+        (
+          await store.shares.get({
+            connectionId: first.created.connectionId,
+            shareId: first.created.id,
+          })
+        )?.status,
+      ).toBe('revoked');
       expect(second.created).toMatchObject({ status: 'active', restriction: ['github.code-read'] });
-      expect((await store.shares.getById(toGroup.id))?.status).toBe('active');
-      expect((await store.shares.getById(other.id))?.status).toBe('active');
+      expect(
+        (await store.shares.get({ connectionId: toGroup.connectionId, shareId: toGroup.id }))
+          ?.status,
+      ).toBe('active');
+      expect(
+        (await store.shares.get({ connectionId: other.connectionId, shareId: other.id }))?.status,
+      ).toBe('active');
     });
 
     it('replaceForTarget writes nothing when a risk is unknown: the previous share stays active', async () => {

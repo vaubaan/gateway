@@ -20,6 +20,7 @@ import {
   seedCall,
   type OperatorRig,
 } from './support';
+import { heldArguments } from '../../../src/server/store/testing.ts';
 
 const byRisk = (a: readonly unknown[], b: readonly unknown[]) =>
   String(a[0]).localeCompare(String(b[0]));
@@ -251,7 +252,7 @@ describe('mission session view', () => {
       approval_url: `${rig.root.config.publicUrl.origin}/r/${approval.result.request_id}`,
     });
     // The sealed arguments exist in the store and reach neither the view nor the audit page.
-    expect(await rig.root.store.requests.getArguments(approval.result.request_id ?? '')).toEqual({
+    expect(await heldArguments(rig.root.store, approval.result.request_id ?? '')).toEqual({
       pull_number: 12,
       note: ARGUMENT_MARKER,
     });

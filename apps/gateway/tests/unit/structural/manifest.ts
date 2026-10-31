@@ -827,6 +827,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'lookups-keyed-by-parent',
+    statement:
+      'A mission token, a share and the arguments a request holds are read and changed only with their parent (mission, connection, mission): no repository method takes their id alone.',
+    source: 'Security audit 2026-10-31, L8; handbook store',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/keyed-lookups.test.ts`,
+        tests: [
+          'a token, a share and held arguments take a key with their parent, never an id alone',
+          'the repositories name the parent in every statement that reads or changes one by its id',
+        ],
+      },
+    ],
+  },
+  {
     id: 'no-french-vocabulary',
     statement:
       'The repository speaks English: no file names the trust level, its tier or the three levels by their first, French names, except the changelog, the applied migrations that stored them and the History of their ADR.',

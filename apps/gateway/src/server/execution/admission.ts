@@ -41,7 +41,7 @@ import type { InstanceConfig } from '../config';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import type { Logger } from '../logging';
 import { prefixOfBearer, type TokenRetirement } from '../missions';
-import type { Store } from '../store';
+import type { MissionTokenKey, Store } from '../store';
 import type { MissionRecord } from '../store/types';
 import { loadMissionContext } from './mission-context';
 import { clientOriginOf, trustedProxyList } from './request-meta';
@@ -60,7 +60,7 @@ export interface DelegatedTokenResolver {
 
 /** `MissionsRepo.markTokenUsed`: the doors' only write outside the pipeline. */
 export interface TokenUseRecorder {
-  markTokenUsed(tokenId: string, granularitySeconds: number): Promise<boolean>;
+  markTokenUsed(key: MissionTokenKey, granularitySeconds: number): Promise<boolean>;
 }
 
 export interface MissionAdmissionDeps {
@@ -182,7 +182,10 @@ export class MissionAdmission {
    */
   private async noteTokenUse(ctx: MissionContext): Promise<void> {
     try {
-      await this.deps.tokenUse.markTokenUsed(ctx.token.id, TOKEN_LAST_USED_GRANULARITY_SECONDS);
+      await this.deps.tokenUse.markTokenUsed(
+        { missionId: ctx.mission.id, tokenId: ctx.token.id },
+        TOKEN_LAST_USED_GRANULARITY_SECONDS,
+      );
     } catch (err) {
       this.deps.logger.warn('token use not recorded', {
         mission_id: ctx.mission.id,

@@ -20,9 +20,21 @@ export interface CreateShareInput {
   readonly createdByUserId: string;
 }
 
+/**
+ * One share, named by its connection and its id together: no repository method reads
+ * or changes a share by its id alone, so a caller that forgot the connection reaches
+ * nothing (security audit 2026-10-31, L8). A share of another connection reads as
+ * missing.
+ */
+export interface ShareKey {
+  readonly connectionId: string;
+  readonly shareId: string;
+}
+
 export interface SharesRepo {
   create(input: CreateShareInput): Promise<ShareRecord>;
-  getById(id: string): Promise<ShareRecord | null>;
+  /** The share, if it is one of that connection's; `null` otherwise. */
+  get(key: ShareKey): Promise<ShareRecord | null>;
   listForConnection(connectionId: string): Promise<ShareRecord[]>;
   /**
    * Active shares whose target is any of the principals (a user and their groups),
@@ -41,7 +53,11 @@ export interface SharesRepo {
   replaceForTarget(
     input: CreateShareInput,
   ): Promise<{ created: ShareRecord; replaced: ShareRecord | null }>;
-  revoke(id: string): Promise<ShareRecord>;
+  /**
+   * Revokes an active share of that connection. `NotFoundError` for an unknown share or
+   * another connection's; `InvariantError` when it is already revoked.
+   */
+  revoke(key: ShareKey): Promise<ShareRecord>;
 }
 
 interface ShareRow {
@@ -64,6 +80,9 @@ const MAX_ACTIVE_STATEMENTS = 64;
 export function createSharesRepo(ctx: RepoContext): SharesRepo {
   const { db } = ctx;
   const byId = db.prepare<[string], ShareRow>(`SELECT ${COLUMNS} FROM shares WHERE id = ?`);
+  const byKey = db.prepare<[string, string], ShareRow>(
+    `SELECT ${COLUMNS} FROM shares WHERE connection_id = ? AND id = ?`,
+  );
   const byConnection = db.prepare<[string], ShareRow>(
     `SELECT ${COLUMNS} FROM shares WHERE connection_id = ? ORDER BY created_at`,
   );
@@ -80,6 +99,10 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
   );
   const revokeActive = db.prepare<[string, string]>(
     `UPDATE shares SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'`,
+  );
+  const revokeActiveOfConnection = db.prepare<[string, string, string]>(
+    `UPDATE shares SET status = 'revoked', revoked_at = ?
+     WHERE connection_id = ? AND id = ? AND status = 'active'`,
   );
 
   // The execution door asks `listActiveForTargets` on every call of a mission grounded
@@ -162,8 +185,8 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
       });
       return { created: requireShare(id), replaced: replaced.at(-1) ?? null };
     },
-    async getById(id) {
-      const row = byId.get(id);
+    async get({ connectionId, shareId }) {
+      const row = byKey.get(connectionId, shareId);
       return row ? toRecord(row) : null;
     },
     async listForConnection(connectionId) {
@@ -179,12 +202,13 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
         .all(...pred.params, ...(connectionId === undefined ? [] : [connectionId]))
         .map(toRecord);
     },
-    async revoke(id) {
+    async revoke({ connectionId, shareId }) {
       // The conditional UPDATE is the check; the re-read only picks the error.
-      const changed = revokeActive.run(nowIso(ctx), id).changes;
-      const current = requireShare(id);
-      if (changed === 0) throw new InvariantError(`share ${id} is already revoked`);
-      return current;
+      const changed = revokeActiveOfConnection.run(nowIso(ctx), connectionId, shareId).changes;
+      const row = byKey.get(connectionId, shareId);
+      if (!row) throw new NotFoundError('share', shareId);
+      if (changed === 0) throw new InvariantError(`share ${shareId} is already revoked`);
+      return toRecord(row);
     },
   };
 }

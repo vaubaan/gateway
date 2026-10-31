@@ -109,7 +109,10 @@ describe('store rows with a value outside a closed set', () => {
       createdByUserId: userId,
     });
     corrupt('shares', 'status', 'id', share.id);
-    await expectLoudFailure(() => store.shares.getById(share.id), 'shares.status');
+    await expectLoudFailure(
+      () => store.shares.get({ connectionId: share.connectionId, shareId: share.id }),
+      'shares.status',
+    );
   });
 
   it('refuses an unknown missions.status', async () => {

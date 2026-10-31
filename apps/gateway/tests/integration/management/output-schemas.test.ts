@@ -217,7 +217,11 @@ describe('management door — every answer matches its advertised output schema'
 
     // ── an orphaned mission: `orphan` is set, in the list and in detail ──
     const [share] = await rig.root.store.shares.listForConnection(github);
-    await rig.root.shares.service.revoke(await rig.actor(rig.seeded.ada), share?.id ?? '');
+    await rig.root.shares.service.revoke(
+      await rig.actor(rig.seeded.ada),
+      share?.id ?? '',
+      share?.connectionId ?? '',
+    );
     const orphaned = await yes<MissionsAnswer>(agent, 'list_my_missions');
     expect(orphaned.missions.map((m) => m.state)).toEqual(['orphaned', 'orphaned']);
     expect(orphaned.missions[0]?.orphan).not.toBeNull();

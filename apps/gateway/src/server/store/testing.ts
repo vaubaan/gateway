@@ -203,3 +203,17 @@ export function agePastStaleGrace(store: Pick<Store, 'db'>, connectionId: string
     .prepare('UPDATE connection_resources SET first_seen_at = ? WHERE connection_id = ?')
     .run('2000-01-01T00:00:00.000Z', connectionId);
 }
+
+/**
+ * The arguments a request holds, read the way the request page reads them: with
+ * the request's mission (`RequestsRepo.getArguments` takes both). `null` for an
+ * unknown request.
+ */
+export async function heldArguments(
+  store: Pick<Store, 'requests'>,
+  requestId: string,
+): Promise<unknown> {
+  const request = await store.requests.getById(requestId);
+  if (!request) return null;
+  return store.requests.getArguments({ missionId: request.missionId, requestId });
+}
