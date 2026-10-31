@@ -436,8 +436,10 @@ The rules the template already applies and a plugin must keep:
   The call is then classified on every instance of the entity, so only a
   mission whose pattern covers them all accepts it. Never drop the
   identifier (the slice would match a narrower pattern than the call
-  deserves) and never escape it (the slice would no longer be the name an
-  owner writes). The value sent to the provider is unchanged.
+  deserves) and never escape or repair it (the slice would no longer be the
+  name an owner writes). The value sent to the provider is unchanged.
+  `plugin-identifier-helpers.test.ts` refuses an `ANY_IDENT` of your own and
+  a `.replace` of the characters an identifier may not hold.
 - **No glob inside an executed identifier.** A slice your classifier emits
   names what the call touches: a `*` inside an identifier (`feature/*`), or
   in a value of a list, is read by the matcher as a pattern, and the gateway

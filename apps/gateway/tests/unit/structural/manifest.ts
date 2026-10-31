@@ -232,6 +232,22 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugin-identifiers-never-repaired',
+    statement:
+      'A plugin writes "every instance" with the SDK\'s ANY_IDENT / identSegment, never a copy of its own, and never repairs an identifier by replacing the characters it may not hold.',
+    source: 'ADR plugin-identifiers-one-grammar-for-classify-and-execute; plugins/README.md step 4',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-identifier-helpers.test.ts`,
+        tests: [
+          'the check reads an identifier repair, and not a printable-text filter',
+          'declares no ANY_IDENT of its own',
+          'replaces no character an identifier may not hold',
+        ],
+      },
+    ],
+  },
+  {
     id: 'catalogs-on-their-data-model',
     statement:
       "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only. Known gaps are pinned and only shrink.",
