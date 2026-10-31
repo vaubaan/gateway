@@ -412,7 +412,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
     if ('denied' in out) throw new Error(out.denied);
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(['ssh[prod].exec-write']),
+      accepted_risks: new Set(['ssh[prod].exec-write']),
       catalog: indexed,
       envResolver: resourceEnvResolver([prod]),
     });
@@ -429,7 +429,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
     if ('denied' in out) throw new Error(out.denied);
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(['ssh.exec-read']),
+      accepted_risks: new Set(['ssh.exec-read']),
       catalog: indexed,
       envResolver: resourceEnvResolver([prod]),
     });
@@ -446,7 +446,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
       if ('denied' in out) throw new Error(out.denied);
       const decision = evaluateCall({
         executed_slices: out.slices,
-        token_accepted_risks: new Set([
+        accepted_risks: new Set([
           'ssh.exec-write',
           'ssh[dev].exec-write',
           'ssh[staging].exec-write',
@@ -469,7 +469,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
       expect(
         evaluateCall({
           executed_slices: read.slices,
-          token_accepted_risks: new Set(['ssh.exec-read']),
+          accepted_risks: new Set(['ssh.exec-read']),
           catalog: indexed,
           envResolver: resourceEnvResolver([host]),
         }).outcome,
@@ -504,7 +504,7 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     if ('denied' in out) return 'denied';
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(policy.map((e) => e.risk_id)),
+      accepted_risks: new Set(policy.map((e) => e.risk_id)),
       catalog: indexed,
       envResolver: resourceEnvResolver([host]),
     });

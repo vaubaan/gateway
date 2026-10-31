@@ -11,7 +11,7 @@
  */
 import {
   acceptedRisksOf,
-  evaluateCallForToken,
+  evaluateCallForMission,
   type CallVerdict,
   type RiskStage,
 } from '@vaubaan/gateway-core';
@@ -24,13 +24,13 @@ export function createRiskStage(deps: { readonly registry: PluginRegistry }): Ri
     async evaluate(ctx, call, target): Promise<CallVerdict> {
       const registered = deps.registry.get(target.connection.provider);
       if (!registered) return { kind: 'no-catalog', provider: target.connection.provider };
-      return evaluateCallForToken({
+      return evaluateCallForMission({
         tool: call.tool,
         args: call.args,
         resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
         connection: classifyConnectionOf(target.connection),
         // v5 missions carry no explicit denies: the policy is the enumeration.
-        token: { id: ctx.token.id, accepted_risks: acceptedRisksOf(ctx) },
+        mission: { id: ctx.token.id, accepted_risks: acceptedRisksOf(ctx) },
         adapter: registered.plugin,
         catalog: registered.catalog,
       });

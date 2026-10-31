@@ -2,7 +2,7 @@
  * Decision-path suite of the Stripe plugin : each case goes through the real
  * classifier, the real YAML catalog and the engine's `evaluateCall` with the
  * resolver the host builds (`envResolverFor(resources, plugin.envOf)`) — the
- * same composition as `evaluateCallForToken` in `@vaubaan/gateway-core`,
+ * same composition as `evaluateCallForMission` in `@vaubaan/gateway-core`,
  * which a plugin does not import.
  *
  * Covers what the tool-by-tool suite cannot see : an argument that changes
@@ -64,7 +64,7 @@ function decide(
   if ('denied' in classified) return { kind: 'classify-denied', reason: classified.denied };
   const decision = evaluateCall({
     executed_slices: classified.slices,
-    token_accepted_risks: new Set(accepted),
+    accepted_risks: new Set(accepted),
     catalog: stripeCatalog.indexed,
     envResolver: envResolverFor(resources, plugin.envOf?.bind(plugin)),
   });
@@ -323,7 +323,7 @@ describe('the mode of a call : resolved from the resource, refused when it canno
     ]) {
       const decision = evaluateCall({
         executed_slices: [parseSlice(raw)],
-        token_accepted_risks: new Set([...everything, ...baseIds]),
+        accepted_risks: new Set([...everything, ...baseIds]),
         catalog: stripeCatalog.indexed,
         envResolver: resourceEnvResolver([unlabelled]),
       });

@@ -12,7 +12,7 @@ import type { Resource, RiskCatalog, Slice } from '@vaubaan/shared';
 import { indexCatalog, noEnvResolver } from '@vaubaan/policy-engine';
 
 import {
-  evaluateCallForToken,
+  evaluateCallForMission,
   type AcceptedRisksSnapshot,
   type Classifier,
 } from '../../src/risk-gateway.ts';
@@ -108,19 +108,18 @@ function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): Classifier {
   };
 }
 
-describe('evaluateCallForToken', () => {
+describe('evaluateCallForMission', () => {
   const token: AcceptedRisksSnapshot = {
     id: 'tok1',
     accepted_risks: ['supabase.read-data', 'supabase.row-write-one'],
-    denied_risks: [],
   };
 
   test('allow when classified slice intersects an accepted risk', () => {
-    const verdict = evaluateCallForToken({
+    const verdict = evaluateCallForMission({
       tool: 'supabase__execute_sql',
       args: { query: 'select 1' },
       resources,
-      token,
+      mission: token,
       adapter: makeAdapter('read'),
       catalog: indexed,
     });
@@ -135,11 +134,11 @@ describe('evaluateCallForToken', () => {
     // bulk-row-write is in the catalog but not in token.accepted_risks
     // (which has read + row-write-one) → deny with it missing. The fallback
     // is not co-touched by a categorized write (ADR fallback-risk-only-when-uncategorized).
-    const verdict = evaluateCallForToken({
+    const verdict = evaluateCallForMission({
       tool: 'supabase__bulk_update',
       args: {},
       resources,
-      token,
+      mission: token,
       adapter: makeAdapter('bulk'),
       catalog: indexed,
     });
@@ -160,11 +159,11 @@ describe('evaluateCallForToken', () => {
         return { denied: 'stop' };
       },
     };
-    evaluateCallForToken({
+    evaluateCallForMission({
       tool: 'supabase__execute_sql',
       args: { query: 'select 1' },
       resources,
-      token,
+      mission: token,
       adapter,
       catalog: indexed,
     });
@@ -185,13 +184,12 @@ describe('evaluateCallForToken', () => {
     const qualifiedToken: AcceptedRisksSnapshot = {
       id: 'tok3',
       accepted_risks: ['supabase[staging].bulk-row-write'],
-      denied_risks: [],
     };
-    const verdict = evaluateCallForToken({
+    const verdict = evaluateCallForMission({
       tool: 'supabase__bulk_update',
       args: {},
       resources: [staging],
-      token: qualifiedToken,
+      mission: qualifiedToken,
       adapter: makeAdapter('bulk'),
       catalog: envCatalog,
     });
@@ -206,17 +204,16 @@ describe('evaluateCallForToken', () => {
     const prodToken: AcceptedRisksSnapshot = {
       id: 'tok4',
       accepted_risks: ['supabase[prod].bulk-row-write'],
-      denied_risks: [],
     };
     const envOfAdapter: Classifier = {
       ...makeAdapter('bulk'),
       envOf: (slice) => (slice.action === 'W' ? 'prod' : undefined),
     };
-    const derived = evaluateCallForToken({
+    const derived = evaluateCallForMission({
       tool: 'supabase__bulk_update',
       args: {},
       resources: [staging],
-      token: prodToken,
+      mission: prodToken,
       adapter: envOfAdapter,
       catalog: envCatalog,
     });
@@ -226,11 +223,11 @@ describe('evaluateCallForToken', () => {
     }
     // ...and an `envOf` that abstains falls back to the label.
     const abstaining: Classifier = { ...makeAdapter('bulk'), envOf: () => undefined };
-    const labelled = evaluateCallForToken({
+    const labelled = evaluateCallForMission({
       tool: 'supabase__bulk_update',
       args: {},
       resources: [staging],
-      token: qualifiedToken,
+      mission: qualifiedToken,
       adapter: abstaining,
       catalog: envCatalog,
     });
@@ -239,11 +236,11 @@ describe('evaluateCallForToken', () => {
     // An explicit resolver replaces the default one. One that knows no
     // environment leaves the env-scoped risk unqualified, where no mission
     // can hold it : the call is refused.
-    const unqualified = evaluateCallForToken({
+    const unqualified = evaluateCallForMission({
       tool: 'supabase__bulk_update',
       args: {},
       resources: [staging],
-      token: qualifiedToken,
+      mission: qualifiedToken,
       adapter: makeAdapter('bulk'),
       catalog: envCatalog,
       envResolver: noEnvResolver,
@@ -265,11 +262,11 @@ describe('evaluateCallForToken', () => {
       env: 'staging',
       displayName: 'staging',
     };
-    const verdict = evaluateCallForToken({
+    const verdict = evaluateCallForMission({
       tool: 'supabase__bulk_update',
       args: {},
       resources: [staging],
-      token: { id: 'tok_u', accepted_risks: ['supabase.bulk-row-write'], denied_risks: [] },
+      mission: { id: 'tok_u', accepted_risks: ['supabase.bulk-row-write'] },
       adapter: makeAdapter('bulk'),
       catalog: envCatalog,
       envResolver: 'unqualified',
@@ -280,24 +277,12 @@ describe('evaluateCallForToken', () => {
     }
   });
 
-  test('`denied_risks` may be left out : a v5 mission carries none', () => {
-    const verdict = evaluateCallForToken({
-      tool: 'supabase__select',
-      args: {},
-      resources,
-      token: { id: 'tok3', accepted_risks: ['supabase.read-data'] },
-      adapter: makeAdapter('read'),
-      catalog: indexed,
-    });
-    expect(verdict.kind).toBe('allow');
-  });
-
   test('classify-denied surfaces the adapter denial reason', () => {
-    const verdict = evaluateCallForToken({
+    const verdict = evaluateCallForMission({
       tool: 'whatever',
       args: {},
       resources,
-      token,
+      mission: token,
       adapter: makeAdapter('deny'),
       catalog: indexed,
     });
@@ -308,30 +293,14 @@ describe('evaluateCallForToken', () => {
   });
 
   test('no-catalog when catalog is undefined', () => {
-    const verdict = evaluateCallForToken({
+    const verdict = evaluateCallForMission({
       tool: 't',
       args: {},
       resources,
-      token,
+      mission: token,
       adapter: makeAdapter('read'),
       catalog: undefined,
     });
     expect(verdict.kind).toBe('no-catalog');
-  });
-
-  test('explicit denied_risks deny even when accepted_risks would allow', () => {
-    const verdict = evaluateCallForToken({
-      tool: 'supabase__select',
-      args: {},
-      resources,
-      token: {
-        id: 'tok2',
-        accepted_risks: ['supabase.read-data'],
-        denied_risks: ['supabase.read-data'],
-      },
-      adapter: makeAdapter('read'),
-      catalog: indexed,
-    });
-    expect(verdict.kind).toBe('deny');
   });
 });

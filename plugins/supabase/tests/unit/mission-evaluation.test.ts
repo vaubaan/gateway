@@ -2,7 +2,7 @@
  * The whole decision, not the classifier alone : real catalog, real
  * classifier, and the engine's `evaluateCall` with the resolver the gateway
  * builds (`envResolverFor(mission resources, plugin.envOf)` — the exact
- * composition of `evaluateCallForToken` in `@vaubaan/gateway-core`).
+ * composition of `evaluateCallForMission` in `@vaubaan/gateway-core`).
  *
  * Pins what the per-slice tests cannot see :
  *   - an env-scoped risk touched on a project the owner did not label, or
@@ -66,7 +66,7 @@ function decide(
   if ('denied' in outcome) throw new Error(`${tool} denied by the classifier: ${outcome.denied}`);
   return evaluateCall({
     executed_slices: outcome.slices,
-    token_accepted_risks: new Set(accepted),
+    accepted_risks: new Set(accepted),
     catalog: indexed,
     envResolver: envResolverFor(mission, plugin.envOf?.bind(plugin)),
   });

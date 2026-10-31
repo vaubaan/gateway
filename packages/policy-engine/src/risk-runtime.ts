@@ -41,19 +41,12 @@ export interface EvaluateCallInput {
   /** The concrete slice(s) the plugin classified for this call. */
   readonly executed_slices: readonly Slice[];
   /** The mission's accepted risks — the keys of its policy. */
-  readonly token_accepted_risks: ReadonlySet<RiskId>;
-  /**
-   * Explicit opt-outs, when the caller keeps them ; they trump acceptance.
-   * Legacy of the v4 token : a v5 mission carries none (spec §4.1 has no
-   * explicit deny) and the execution door always passes an empty list.
-   * Kept while a caller still passes the field.
-   */
-  readonly token_denied_risks?: ReadonlySet<RiskId>;
+  readonly accepted_risks: ReadonlySet<RiskId>;
   /** The indexed catalog of the provider in question. */
   readonly catalog: IndexedRiskCatalog;
   /**
    * How the touched risks are env-qualified before the subset check
-   * against `token_accepted_risks`, which are stored qualified (spec §4.4).
+   * against `accepted_risks`, which are stored qualified (spec §4.4).
    *
    *   - an `EnvResolver` — the host mode. Each slice's environment is
    *     resolved, the touched risks are qualified
@@ -80,15 +73,15 @@ export interface EvaluateCallInput {
  *
  *   const decision = evaluateCall({
  *     executed_slices: outcome.slices,
- *     token_accepted_risks: new Set(acceptedRisksOf(mission)),
+ *     accepted_risks: new Set(acceptedRisksOf(mission)),
  *     catalog: registry.catalogOf(provider),
  *     envResolver: envResolverFor(missionResources, plugin.envOf),
  *   });
  *   if (decision.outcome === 'allowed') { budget, gate, execute } else { refuse }
  */
 export function evaluateCall(input: EvaluateCallInput): RiskDecision {
-  const { executed_slices, token_accepted_risks, token_denied_risks, catalog } = input;
-  const accepted = (r: RiskId): boolean => token_accepted_risks.has(r);
+  const { executed_slices, accepted_risks, catalog } = input;
+  const accepted = (r: RiskId): boolean => accepted_risks.has(r);
 
   if (executed_slices.length === 0) {
     return denied(
@@ -152,18 +145,6 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
       [],
       `no risk in the '${catalog.provider}' catalog matches the executed slice(s). ` +
         `Add a catalog entry — at minimum extend the '<provider>.uncategorized-*' fallback.`,
-    );
-  }
-
-  // Explicit denies trump acceptance (legacy input, see `token_denied_risks`).
-  const explicitly_denied = risks_touched.filter((r) => token_denied_risks?.has(r) ?? false);
-  if (explicitly_denied.length > 0) {
-    return denied(
-      executed_slices,
-      explicitly_denied,
-      risks_touched.filter(accepted),
-      `this mission explicitly denies [${explicitly_denied.join(', ')}]. ` +
-        `Ask the creator to re-issue without the explicit deny, or restrict the operation.`,
     );
   }
 
@@ -300,7 +281,7 @@ export function evaluateCallSimple(
 ): RiskDecision {
   return evaluateCall({
     executed_slices: slices,
-    token_accepted_risks: new Set(acceptedRisks),
+    accepted_risks: new Set(acceptedRisks),
     catalog: indexCatalog(catalog),
     envResolver: UNQUALIFIED,
   });
