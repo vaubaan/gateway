@@ -134,6 +134,7 @@ export class GithubRest {
   async write(method: 'POST' | 'PATCH', path: string, body: unknown): Promise<Response> {
     const res = await this.ctx.fetch(this.url(path), {
       method,
+      redirect: 'error',
       headers: { ...githubApiHeaders(githubTokenOf(this.ctx)), 'content-type': 'application/json' },
       body: JSON.stringify(body),
       ...(this.ctx.signal ? { signal: this.ctx.signal } : {}),

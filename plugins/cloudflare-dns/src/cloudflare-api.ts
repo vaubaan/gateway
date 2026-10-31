@@ -111,6 +111,7 @@ export async function callCloudflareText(
   const what = `GET ${url}`;
   const res = await io.fetch(url, {
     method: 'GET',
+    redirect: 'error',
     headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
     ...(io.signal ? { signal: io.signal } : {}),
   });

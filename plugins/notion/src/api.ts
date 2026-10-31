@@ -60,7 +60,7 @@ export async function request<T>(
   const seen: { retryAfter: string | null } = { retryAfter: null };
   const io = {
     fetch: async (...call: Parameters<typeof fetch>) => {
-      const res = await ctx.fetch(...call);
+      const res = await ctx.fetch(call[0], { ...call[1], redirect: 'error' });
       seen.retryAfter = res.headers.get('retry-after');
       return res;
     },

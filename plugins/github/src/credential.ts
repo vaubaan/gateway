@@ -111,7 +111,7 @@ export async function verifyGithubToken(ctx: ConnectionContext): Promise<Credent
   // kept by the fetch it is given.
   let expiration: string | null = null;
   const fetchKeepingExpiry: typeof fetch = async (input, init) => {
-    const res = await ctx.fetch(input, init);
+    const res = await ctx.fetch(input, { ...init, redirect: 'error' });
     expiration = res.headers.get(GITHUB_TOKEN_EXPIRATION_HEADER);
     return res;
   };
