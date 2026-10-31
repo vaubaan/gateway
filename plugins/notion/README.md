@@ -137,8 +137,8 @@ the root page, which also touches `root-trash`.
 
 ## Macro-actions
 
-A creator ticks macro-actions, each at a trust level (Prudent / Confiant /
-Autonome, risk model §4.6); the trust level sets each risk's gate from its vector and
+A creator ticks macro-actions, each at a trust level (Careful / Trusting /
+Autonomous, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
 | Macro-action | What it covers                                             | Its risks                                                                                      |
@@ -148,7 +148,7 @@ multiplies the base budget. The fallback sits apart, under "Anything else".
 | `write`      | Create and edit pages, their content and database entries. | `page-create`, `page-update`, `content-append`, `block-update`, `entry-create`, `entry-update` |
 | `reorganize` | Delete blocks, move to the trash and restore.              | `block-delete`, `page-trash`, `page-restore`, `root-trash`                                     |
 
-At Confiant, `block-update`, `block-delete`, `page-trash` and `root-trash`
+At Trusting, `block-update`, `block-delete`, `page-trash` and `root-trash`
 ask first; everything else runs freely. The saved mission holds the explicit
 list of risks.
 

@@ -39,7 +39,7 @@ describe('missions: HTTP handlers', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          trust_levels: { read: 'confiant', propose: 'confiant' },
+          trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },
@@ -146,7 +146,7 @@ describe('missions: HTTP handlers', () => {
             {
               provider: 'github',
               // Trust levels beside a policy decide nothing: they only redraw the form.
-              trust_levels: { read: 'confiant', propose: 'confiant' },
+              trust_levels: { read: 'trusting', propose: 'trusting' },
               resources: { scope: 'selected', resource_refs: ['acme/app'] },
               policy: [
                 {
@@ -172,7 +172,7 @@ describe('missions: HTTP handlers', () => {
     expect(preview.resolved[0]?.connection_id).toBe(seeded.github.connection.id);
     expect(preview.resolved[0]?.resources).toMatchObject({ scope: 'selected' });
     expect(preview.resolved[0]?.resources).toHaveProperty('resource_ids', [expect.any(String)]);
-    expect(preview.resolved[0]?.trust_levels).toEqual({ read: 'confiant', propose: 'confiant' });
+    expect(preview.resolved[0]?.trust_levels).toEqual({ read: 'trusting', propose: 'trusting' });
     expect(preview.policy.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.merge-protected', 'approval'],

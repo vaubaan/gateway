@@ -405,7 +405,7 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
       connections: [
         {
           connection_id: seeded.connection.id,
-          trust_levels: { read: 'confiant', propose: 'confiant' },
+          trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },

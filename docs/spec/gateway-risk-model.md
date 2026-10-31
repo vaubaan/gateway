@@ -10,6 +10,12 @@ status: stable
 > [vaubaan-gateway](./vaubaan-gateway.md). Decision:
 > [pivot-to-risk-based-model](../decisions/pivot-to-risk-based-model.md). Section numbers are cited
 > by code: keep them.
+>
+> **History:** 2026-10-31 — the trust level (Careful, Trusting, Autonomous) and the tier of §4.6 got
+> their English names before publication, a breaking rename in the alpha window (owner decision,
+> recorded in the History of
+> [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md));
+> what each trust level writes did not change.
 
 ## 0. The idea — accepted risks, not granted capabilities
 
@@ -168,14 +174,14 @@ What a creator ticks per connection, in the connector's words
   fallback. A catalog breaking this does not load.
 - **Tier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
   reversible but `pii` or `secret` data, `bulk` or `account` blast, or `unbounded` cost → 2, else 1.
-- **Trust level**, one per ticked macro-action, `prudent` by default:
+- **Trust level**, one per ticked macro-action, `careful` by default:
 
-  | Tier | Prudent      | Confiant | Autonome |
-  | ---- | ------------ | -------- | -------- |
-  | 1    | auto         | auto     | auto     |
-  | 2    | approval     | auto     | auto     |
-  | 3    | approval     | approval | auto     |
-  | 4    | not accepted | approval | approval |
+  | Tier | Careful      | Trusting | Autonomous |
+  | ---- | ------------ | -------- | ---------- |
+  | 1    | auto         | auto     | auto       |
+  | 2    | approval     | auto     | auto       |
+  | 3    | approval     | approval | auto       |
+  | 4    | not accepted | approval | approval   |
 
 - The trust level multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
   ceiling (§4bis).

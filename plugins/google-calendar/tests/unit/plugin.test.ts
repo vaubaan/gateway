@@ -89,13 +89,13 @@ describe('google-calendar plugin — structural kit', () => {
     expect(defaultExport).toBe(googleCalendarPlugin);
   });
 
-  test('read, schedule, invite; the fallback in none; at Confiant deleting and inviting outside ask first', () => {
+  test('read, schedule, invite; the fallback in none; at Trusting deleting and inviting outside ask first', () => {
     const actions = googleCalendarCatalog.catalog.macro_actions ?? [];
     expect(actions.map((a) => a.id)).toEqual(['read', 'schedule', 'invite']);
     const policy = policyFromMacroActions(googleCalendarPlugin, {
-      read: 'confiant',
-      schedule: 'confiant',
-      invite: 'confiant',
+      read: 'trusting',
+      schedule: 'trusting',
+      invite: 'trusting',
     });
     const gate = (id: string) => policy.find((l) => l.risk_id === id)?.gate;
     expect(gate('google-calendar.event-delete')).toBe('approval');

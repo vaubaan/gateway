@@ -5,7 +5,7 @@
  * macro-actions-and-trust-levels-prefill-the-policy), in two views:
  *
  * - **Simple**: the service's macro-actions, each a row the creator ticks and
- *   sets to a trust level (Prudent, Confiant, Autonome). Each row says what its
+ *   sets to a trust level (Careful, Trusting, Autonomous). Each row says what its
  *   trust level yields here: how many run freely, ask first, are left out, and what
  *   the creator may not allow on this account.
  * - **Advanced**: every permission with its own limit and gate (the caller's

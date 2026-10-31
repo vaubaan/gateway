@@ -98,17 +98,17 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('issues')).toContainText(
     'GitHub · acme-org allows nothing yet: tick a macro-action or a permission, or leave the account out.',
   );
-  // A trust level ticks its macro-action: reads at Confiant, proposing and shipping at Prudent.
-  await pickTrustLevel(page, 'GitHub acme-org', 'Read', 'Confiant');
-  await pickTrustLevel(page, 'GitHub acme-org', 'Propose', 'Prudent');
-  await pickTrustLevel(page, 'GitHub acme-org', 'Ship', 'Prudent');
+  // A trust level ticks its macro-action: reads at Trusting, proposing and shipping at Careful.
+  await pickTrustLevel(page, 'GitHub acme-org', 'Read', 'Trusting');
+  await pickTrustLevel(page, 'GitHub acme-org', 'Propose', 'Careful');
+  await pickTrustLevel(page, 'GitHub acme-org', 'Ship', 'Careful');
   await includeWithTrustLevels(page, 'Supabase Acme Supabase', {
-    Query: 'Confiant',
-    'Change data': 'Prudent',
+    Query: 'Trusting',
+    'Change data': 'Careful',
   });
   await includeWithTrustLevels(page, 'Vercel Acme Vercel', {
-    Watch: 'Prudent',
-    'Deploy and review': 'Prudent',
+    Watch: 'Careful',
+    'Deploy and review': 'Careful',
   });
   await expect(page.getByTestId('issues')).toHaveCount(0);
 
@@ -134,12 +134,12 @@ test('create a three-account mission on one page, then replace its key and stop 
   // Each macro-action says, in the service's words, what its trust level yields here.
   const ship = page.getByTestId('macro-github-ship');
   await expect(ship).toContainText('ask first');
-  await expect(ship).toContainText('left out at Prudent');
+  await expect(ship).toContainText('left out at Careful');
   await expect(page.getByTestId('macro-github-read')).toContainText('limits ×3');
   // Administer is not ticked: no trust level is chosen for it.
   await expect(page.getByLabel('Administer on GitHub acme-org')).not.toBeChecked();
   await expect(
-    trustLevelChoice(page, 'GitHub acme-org', 'Administer', 'Prudent'),
+    trustLevelChoice(page, 'GitHub acme-org', 'Administer', 'Careful'),
   ).not.toBeChecked();
   const digest = page.getByTestId('policy-digest-github');
   await expect(digest).toContainText('run freely');
@@ -211,12 +211,12 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('adjusted-github')).toBeVisible();
   // A trust level would write the list again over those edits: the screen asks first, and says why.
   // (a click, not a check: the choice does not move until the person confirms)
-  await trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Confiant').click();
+  await trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Trusting').click();
   const discard = page.getByTestId('discard-dialog');
   await expect(discard).toContainText('Discard what you changed?');
   await expect(discard).toContainText('The trust levels write this account');
   await discard.getByRole('button', { name: 'Cancel' }).click();
-  await expect(trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Prudent')).toBeChecked();
+  await expect(trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Careful')).toBeChecked();
   await showView(page, 'GitHub acme-org', 'Advanced');
   await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('42');
   await snap(page, 'creation-editor');
@@ -584,25 +584,25 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(matrix.getByRole('columnheader')).toHaveText([
     'Permission',
     'Risk',
-    'Prudent',
-    'Confiant',
-    'Autonome',
+    'Careful',
+    'Trusting',
+    'Autonomous',
   ]);
-  await expect(page.getByTestId('trust-level-prudent')).toHaveAttribute('title', /left out/);
-  // A costly write (tier 3): asks first until Autonome, its limit ×1, ×3, ×10.
+  await expect(page.getByTestId('trust-level-careful')).toHaveAttribute('title', /left out/);
+  // A costly write (tier 3): asks first until Autonomous, its limit ×1, ×3, ×10.
   const bulkCell = (trustLevel: string) =>
     page.getByTestId(`cell-${trustLevel}-supabase.bulk-row-write`);
-  await expect(bulkCell('prudent')).toContainText('staging');
-  await expect(bulkCell('prudent')).toContainText('asks first');
-  await expect(bulkCell('prudent')).toContainText('50');
-  await expect(bulkCell('confiant')).toContainText('150');
-  await expect(bulkCell('autonome')).toContainText('500');
-  await expect(bulkCell('autonome')).not.toContainText('asks first');
-  // An irreversible one (tier 4): left out at Prudent, asks first above.
-  await expect(page.getByTestId('cell-prudent-supabase.storage.bulk-object-write')).toContainText(
+  await expect(bulkCell('careful')).toContainText('staging');
+  await expect(bulkCell('careful')).toContainText('asks first');
+  await expect(bulkCell('careful')).toContainText('50');
+  await expect(bulkCell('trusting')).toContainText('150');
+  await expect(bulkCell('autonomous')).toContainText('500');
+  await expect(bulkCell('autonomous')).not.toContainText('asks first');
+  // An irreversible one (tier 4): left out at Careful, asks first above.
+  await expect(page.getByTestId('cell-careful-supabase.storage.bulk-object-write')).toContainText(
     'left out',
   );
-  await expect(page.getByTestId('cell-confiant-supabase.storage.bulk-object-write')).toContainText(
+  await expect(page.getByTestId('cell-trusting-supabase.storage.bulk-object-write')).toContainText(
     'asks first',
   );
   await snap(page, 'provider-macro-actions');
@@ -678,8 +678,8 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(unfolded).toContainText('Write: project');
   await expect(unfolded).toContainText('supabase.project');
   await expect(unfolded).toContainText('Change data');
-  await expect(unfolded).toContainText('Prudent');
-  await expect(unfolded).toContainText('Autonome');
+  await expect(unfolded).toContainText('Careful');
+  await expect(unfolded).toContainText('Autonomous');
   await expect(unfolded).toContainText('Tier 3');
   await expect(unfolded).toContainText(/\d+\/min/);
   // The reader was on `auth`, which does not show this entry: its own part was opened.
@@ -720,13 +720,13 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(page.getByTestId('trust-level-matrix')).toContainText(
     'Modify a GitHub Actions workflow',
   );
-  await expect(page.getByTestId('cell-prudent-github.workflow-write-via-file')).toContainText(
+  await expect(page.getByTestId('cell-careful-github.workflow-write-via-file')).toContainText(
     'asks first',
   );
-  await expect(page.getByTestId('cell-autonome-github.workflow-write-via-file')).not.toContainText(
-    'asks first',
-  );
-  await expect(page.getByTestId('cell-prudent-github.delete-release')).toContainText('left out');
+  await expect(
+    page.getByTestId('cell-autonomous-github.workflow-write-via-file'),
+  ).not.toContainText('asks first');
+  await expect(page.getByTestId('cell-careful-github.delete-release')).toContainText('left out');
   // The earlier sections still lead somewhere: `#presets`, `#macro-actions` and `#risks`
   // open Permissions.
   for (const section of ['presets', 'macro-actions']) {

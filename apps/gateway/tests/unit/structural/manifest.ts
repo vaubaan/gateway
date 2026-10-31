@@ -955,4 +955,20 @@ export const INVARIANTS: readonly Invariant[] = [
       },
     ],
   },
+  {
+    id: 'no-french-vocabulary',
+    statement:
+      'The repository speaks English: no file names the trust level, its tier or the three levels by their first, French names, except the changelog, the applied migrations that stored them and the History of their ADR.',
+    source:
+      'ADR macro-actions-and-trust-levels-prefill-the-policy, History (owner decision of 2026-10-31)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/no-french-vocabulary.test.ts`,
+        tests: [
+          'scans a meaningful set of files',
+          'no scanned file names a trust level, a tier or a level in French',
+        ],
+      },
+    ],
+  },
 ];

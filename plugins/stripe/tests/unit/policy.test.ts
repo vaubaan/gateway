@@ -86,23 +86,23 @@ type TrustLevels = Parameters<typeof policyFromMacroActions>[1];
  */
 const MISSIONS: Readonly<Record<string, { trustLevels: TrustLevels; untick?: readonly string[] }>> =
   {
-    // Books at Prudent, customer PII unticked.
-    'read-only': { trustLevels: { books: 'prudent' }, untick: ['read-customer-pii'] },
+    // Books at Careful, customer PII unticked.
+    'read-only': { trustLevels: { books: 'careful' }, untick: ['read-customer-pii'] },
     'test-mode-developer': {
       trustLevels: {
-        books: 'autonome',
-        'set-up': 'autonome',
-        bill: 'autonome',
-        'money-out': 'autonome',
-        cancel: 'autonome',
+        books: 'autonomous',
+        'set-up': 'autonomous',
+        bill: 'autonomous',
+        'money-out': 'autonomous',
+        cancel: 'autonomous',
       },
     },
     'finance-operator': {
       trustLevels: {
-        books: 'confiant',
-        bill: 'confiant',
-        'money-out': 'confiant',
-        cancel: 'confiant',
+        books: 'trusting',
+        bill: 'trusting',
+        'money-out': 'trusting',
+        cancel: 'trusting',
       },
     },
   };

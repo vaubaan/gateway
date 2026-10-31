@@ -53,31 +53,31 @@ describe('macro-actions', () => {
       policyFromMacroActions(caldavPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('reading at Prudent reads freely, writes nothing ; a wide range asks first', () => {
-    expect(gates({ read: 'prudent' })).toEqual({
+  test('reading at Careful reads freely, writes nothing ; a wide range asks first', () => {
+    expect(gates({ read: 'careful' })).toEqual({
       'caldav.read-calendars': 'auto',
       'caldav.read-events': 'auto',
       'caldav.read-wide-range': 'approval',
     });
   });
 
-  test('scheduling writes events that notify nobody ; deleting is left out at Prudent, asks first above', () => {
-    const prudent = gates({ schedule: 'prudent' });
-    expect(Object.keys(prudent).some((id) => id.startsWith('caldav.attendees-'))).toBe(false);
-    expect(prudent['caldav.event-create']).toBe('auto');
-    expect(prudent['caldav.event-delete']).toBeUndefined();
-    expect(gates({ schedule: 'confiant' })['caldav.event-delete']).toBe('approval');
-    expect(gates({ schedule: 'autonome' })['caldav.event-delete']).toBe('approval');
+  test('scheduling writes events that notify nobody ; deleting is left out at Careful, asks first above', () => {
+    const careful = gates({ schedule: 'careful' });
+    expect(Object.keys(careful).some((id) => id.startsWith('caldav.attendees-'))).toBe(false);
+    expect(careful['caldav.event-create']).toBe('auto');
+    expect(careful['caldav.event-delete']).toBeUndefined();
+    expect(gates({ schedule: 'trusting' })['caldav.event-delete']).toBe('approval');
+    expect(gates({ schedule: 'autonomous' })['caldav.event-delete']).toBe('approval');
   });
 
-  test('inviting at Autonome invites colleagues freely, anybody else after approval', () => {
-    expect(gates({ invite: 'autonome' })).toEqual({
+  test('inviting at Autonomous invites colleagues freely, anybody else after approval', () => {
+    expect(gates({ invite: 'autonomous' })).toEqual({
       'caldav.attendees-internal': 'auto',
       'caldav.attendees-allowlisted': 'approval',
       'caldav.attendees-external': 'approval',
     });
-    // At Prudent, colleagues ask first and outsiders are left out.
-    expect(gates({ invite: 'prudent' })).toEqual({ 'caldav.attendees-internal': 'approval' });
+    // At Careful, colleagues ask first and outsiders are left out.
+    expect(gates({ invite: 'careful' })).toEqual({ 'caldav.attendees-internal': 'approval' });
   });
 
   test('the fallback is in no macro-action', () => {

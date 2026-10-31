@@ -25,19 +25,19 @@ import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
 /**
- * Read and propose at Confiant: reads, pushes and pull requests run freely,
+ * Read and propose at Trusting: reads, pushes and pull requests run freely,
  * a force-push or a branch delete asks first.
  */
-const DEVELOPER_TRUST_LEVELS = { read: 'confiant', propose: 'confiant' } as const;
+const DEVELOPER_TRUST_LEVELS = { read: 'trusting', propose: 'trusting' } as const;
 /** What the former Supabase `staging-developer` preset stood for: query, change data, schema and functions. */
 const SUPABASE_STAGING_TRUST_LEVELS = {
-  query: 'confiant',
-  'change-data': 'confiant',
-  'change-schema': 'confiant',
-  'ship-functions': 'confiant',
+  query: 'trusting',
+  'change-data': 'trusting',
+  'change-schema': 'trusting',
+  'ship-functions': 'trusting',
 } as const;
-/** Watch and deploy on Vercel at Confiant. */
-const VERCEL_DEVELOPER_TRUST_LEVELS = { watch: 'confiant', deploy: 'confiant' } as const;
+/** Watch and deploy on Vercel at Trusting. */
+const VERCEL_DEVELOPER_TRUST_LEVELS = { watch: 'trusting', deploy: 'trusting' } as const;
 
 describe('missions: issue, rotate, revoke', () => {
   let root: GatewayRoot;
@@ -146,7 +146,7 @@ describe('missions: issue, rotate, revoke', () => {
         trustLevels: DEVELOPER_TRUST_LEVELS,
       },
     ]);
-    // Every row of the two macro-actions: at Confiant, none is left out.
+    // Every row of the two macro-actions: at Trusting, none is left out.
     expect(mission.policy.map((e) => e.riskId).sort()).toEqual(
       githubActionRows(Object.keys(DEVELOPER_TRUST_LEVELS)).sort(),
     );
@@ -184,7 +184,7 @@ describe('missions: issue, rotate, revoke', () => {
     const { mission, token } = await issued(
       {
         name: 'Nothing to touch yet',
-        connections: [{ connection_id: empty.connection.id, trust_levels: { read: 'prudent' } }],
+        connections: [{ connection_id: empty.connection.id, trust_levels: { read: 'careful' } }],
         period: DAILY,
         expires_at: null,
       },
@@ -195,7 +195,7 @@ describe('missions: issue, rotate, revoke', () => {
         connectionId: empty.connection.id,
         resourceScope: 'all',
         resourceIds: [],
-        trustLevels: { read: 'prudent' },
+        trustLevels: { read: 'careful' },
       },
     ]);
 
@@ -596,7 +596,7 @@ describe('missions: issue, rotate, revoke', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          trust_levels: { read: 'prudent' },
+          trust_levels: { read: 'careful' },
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
         },
         {
@@ -622,7 +622,7 @@ describe('missions: issue, rotate, revoke', () => {
         provider,
       ).toBe(true);
     }
-    // Prudent on Read: the global search, of tier 2, asks first.
+    // Careful on Read: the global search, of tier 2, asks first.
     expect(result.preview.connections[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.read-meta', 'auto'],
@@ -679,7 +679,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(fromTrustLevels.ok).toBe(true);
     const leftOut = fromTrustLevels.connections[0]?.left_out ?? [];
     expect(leftOut.length).toBeGreaterThan(0);
-    // At Confiant no tier is left out: only the environments no project carries.
+    // At Trusting no tier is left out: only the environments no project carries.
     expect(leftOut.every((s) => s.reason === 'unresolvable-env' && s.env !== 'prod')).toBe(true);
     expect(leftOut.map((s) => s.risk_id)).toContain('supabase[staging].bulk-row-write');
     expect(fromTrustLevels.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);
@@ -920,7 +920,7 @@ describe('missions: issuance context', () => {
     const preview = await service.preview(seeded.ada, {
       name: 'On an expired connection',
       connections: [
-        { connection_id: seeded.github.connection.id, trust_levels: { read: 'prudent' } },
+        { connection_id: seeded.github.connection.id, trust_levels: { read: 'careful' } },
       ],
       period: DAILY,
       expires_at: null,

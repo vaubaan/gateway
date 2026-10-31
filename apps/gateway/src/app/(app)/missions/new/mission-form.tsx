@@ -601,7 +601,7 @@ export function MissionForm({
                     value={proposalText}
                     onChange={(e) => setProposalText(e.target.value)}
                     aria-label="Agent proposal (JSON)"
-                    placeholder='{"connections":[{"provider":"github","trust_levels":{"read":"prudent","propose":"confiant"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                    placeholder='{"connections":[{"provider":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
                     spellCheck={false}
                   />
                 </Field>

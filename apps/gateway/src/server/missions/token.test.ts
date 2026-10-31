@@ -91,7 +91,7 @@ describe('parseMissionDraft', () => {
     connections: [
       {
         provider: 'github',
-        trust_levels: { read: 'confiant', propose: 'prudent' },
+        trust_levels: { read: 'trusting', propose: 'careful' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
         policy: [{ risk_id: 'github.code-read', quota: 5, gate: 'approval' }],
       },
@@ -105,8 +105,8 @@ describe('parseMissionDraft', () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.ok && parsed.draft.connections[0]?.policy?.[0]?.gate).toBe('approval');
     expect(parsed.ok && parsed.draft.connections[0]?.trust_levels).toEqual({
-      read: 'confiant',
-      propose: 'prudent',
+      read: 'trusting',
+      propose: 'careful',
     });
   });
 

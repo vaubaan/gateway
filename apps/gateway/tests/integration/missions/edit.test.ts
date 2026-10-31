@@ -361,23 +361,23 @@ describe('editing a mission after issuance', () => {
       rig.seeded.ada,
       githubDraft(rig, {
         connections: [
-          { ...base, trust_levels: { read: 'confiant', 'no-such-action': 'autonome' } },
+          { ...base, trust_levels: { read: 'trusting', 'no-such-action': 'autonomous' } },
         ],
       }),
     );
     const stored = await rig.root.store.missions.getById(recorded.id);
-    expect(stored?.connections[0]?.trustLevels).toEqual({ read: 'confiant' });
+    expect(stored?.connections[0]?.trustLevels).toEqual({ read: 'trusting' });
 
     const current = await service().editView(rig.seeded.ada, recorded.id);
     if (!current) throw new Error('no edit view');
-    expect(githubLine(current.draft).trust_levels).toEqual({ read: 'confiant' });
+    expect(githubLine(current.draft).trust_levels).toEqual({ read: 'trusting' });
     const line = githubLine(current.draft);
     const draft: MissionDraft = {
       ...current.draft,
       connections: [
         {
           ...line,
-          trust_levels: { read: 'autonome' },
+          trust_levels: { read: 'autonomous' },
           policy: (line.policy ?? []).map((p) => (p.risk_id === READ ? { ...p, quota: 6 } : p)),
         },
       ],
@@ -386,7 +386,7 @@ describe('editing a mission after issuance', () => {
       await service().edit(rig.seeded.ada, recorded.id, { draft, revision: current.revision }),
     ).toMatchObject({ ok: true });
     const after = await rig.root.store.missions.getById(recorded.id);
-    expect(after?.connections[0]?.trustLevels).toEqual({ read: 'autonome' });
+    expect(after?.connections[0]?.trustLevels).toEqual({ read: 'autonomous' });
   });
 
   it('is the creator’s alone; a revoked mission is not edited, an expired one is and comes back', async () => {

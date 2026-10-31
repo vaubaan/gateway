@@ -47,8 +47,8 @@ const NOW = new Date('2026-10-13T09:00:00.000Z');
 const acme = acmeConnection();
 const context = [acme];
 
-/** Reads at Confiant, changes at Prudent: the usual start of a working mission. */
-const WORKING: MacroActionTrustLevels = { read: 'confiant', change: 'prudent' };
+/** Reads at Trusting, changes at Careful: the usual start of a working mission. */
+const WORKING: MacroActionTrustLevels = { read: 'trusting', change: 'careful' };
 
 function riskOf(id: string) {
   const risk = acme.risks.find((r) => r.risk_id === id);
@@ -117,7 +117,7 @@ describe('creation form — curated resources', () => {
         'res-archive',
       ]),
       'read',
-      'prudent',
+      'careful',
     );
     const state = { ...start, name: 'm', connections: { [curated.id]: cs } };
     const preview = previewDraft(
@@ -145,9 +145,9 @@ describe('creation form — macro-actions at a trust level', () => {
   it('fills the lines of each ticked macro-action from its trust level, and the draft is issuable', () => {
     const cs = included(WORKING);
     expect(cs.entries).toEqual({
-      // Tier 1 at Confiant: runs freely, base budget ×3.
+      // Tier 1 at Trusting: runs freely, base budget ×3.
       'acme.read': { quota: '300', rateMax: '180', rateWindow: '60', gate: 'auto' },
-      // Tier 3 (costly) at Prudent: asks first, base budget.
+      // Tier 3 (costly) at Careful: asks first, base budget.
       'acme[staging].write': { quota: '100', rateMax: '60', rateWindow: '60', gate: 'approval' },
       'acme[prod].write': { quota: '100', rateMax: '60', rateWindow: '60', gate: 'approval' },
     });
@@ -155,20 +155,20 @@ describe('creation form — macro-actions at a trust level', () => {
     expect(previewOf(cs).ok).toBe(true);
   });
 
-  it('leaves out an irreversible permission at Prudent and asks first above it', () => {
-    const prudent = macroActionRows(acme, included({ change: 'prudent' })).find(
+  it('leaves out an irreversible permission at Careful and asks first above it', () => {
+    const careful = macroActionRows(acme, included({ change: 'careful' })).find(
       (row) => row.id === 'change',
     );
-    expect(prudent).toMatchObject({
-      trustLevel: 'prudent',
+    expect(careful).toMatchObject({
+      trustLevel: 'careful',
       free: 0,
       asks: 2,
       leftOut: 1,
       total: 3,
     });
-    const autonome = setMacroAction(acme, included(), 'change', 'autonome');
-    expect(autonome.entries['acme[staging].write']?.gate).toBe('auto');
-    expect(autonome.entries['acme[staging].bulk-delete']).toEqual({
+    const autonomous = setMacroAction(acme, included(), 'change', 'autonomous');
+    expect(autonomous.entries['acme[staging].write']?.gate).toBe('auto');
+    expect(autonomous.entries['acme[staging].bulk-delete']).toEqual({
       quota: '50',
       rateMax: '10',
       rateWindow: '60',
@@ -177,7 +177,7 @@ describe('creation form — macro-actions at a trust level', () => {
   });
 
   it('keeps the rate under the catalog ceiling whatever the trust level multiplies', () => {
-    const cs = included({ administer: 'autonome' });
+    const cs = included({ administer: 'autonomous' });
     expect(cs.entries['acme.admin']).toMatchObject({ quota: '50', rateMax: '10' });
   });
 
@@ -224,7 +224,7 @@ describe('creation form — macro-actions at a trust level', () => {
   it('counts the policy and names its highest tier', () => {
     expect(policyCounts(acme, included(WORKING))).toEqual({ free: 1, asks: 2, notIncluded: 2 });
     expect(chosenTier(acme, included(WORKING))).toBe(3);
-    expect(chosenTier(acme, included({ read: 'prudent' }))).toBe(1);
+    expect(chosenTier(acme, included({ read: 'careful' }))).toBe(1);
     expect(chosenTier(acme, included())).toBeNull();
   });
 });
@@ -258,8 +258,8 @@ describe('creation form — Simple and Advanced', () => {
       rateWindow: '60',
       gate: 'auto',
     });
-    expect(defaultEntryFor(acme, { read: 'autonome' }, riskOf('acme.read')).quota).toBe('1000');
-    // Left out at Prudent: ticked by hand, it asks first at the base budget.
+    expect(defaultEntryFor(acme, { read: 'autonomous' }, riskOf('acme.read')).quota).toBe('1000');
+    // Left out at Careful: ticked by hand, it asks first at the base budget.
     expect(defaultEntryFor(acme, {}, riskOf('acme[staging].bulk-delete'))).toEqual({
       quota: '5',
       rateMax: '1',
@@ -309,7 +309,7 @@ describe('creation form — Simple and Advanced', () => {
     if (!line) throw new Error('no resolved line');
     const loaded = connectionOf(
       loadResolved(context, initialFormState(context), [
-        { ...line, trust_levels: { ...line.trust_levels, nonsense: 'autonome' } },
+        { ...line, trust_levels: { ...line.trust_levels, nonsense: 'autonomous' } },
       ]),
     );
     expect(loaded.trustLevels).toEqual(WORKING);
@@ -336,7 +336,7 @@ describe('creation form — per-risk detail', () => {
   });
 
   it('blocks issuance while a ticked risk has no budget, until the creator types one', () => {
-    let cs = toggleRisk(acme, included({ read: 'prudent' }), riskOf('acme.admin'));
+    let cs = toggleRisk(acme, included({ read: 'careful' }), riskOf('acme.admin'));
     cs = updateEntry(cs, 'acme.admin', { quota: '' });
     expect(previewOf(cs).issues.map((i) => i.code)).toEqual(['missing-budget']);
     cs = updateEntry(cs, 'acme.admin', { quota: '2', rateMax: '1', rateWindow: '60' });
@@ -457,7 +457,7 @@ describe('creation form — the advanced view', () => {
     });
     const picked = toggleRisk(
       narrow,
-      included({ read: 'prudent' }, narrow),
+      included({ read: 'careful' }, narrow),
       riskOf('acme[staging].write'),
     );
     const rows = editorRows(narrow, picked);

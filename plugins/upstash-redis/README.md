@@ -120,7 +120,7 @@ Risks (ids are stable, never renamed): `read-database-metadata`,
 as `upstash-redis[staging].write-data` etc. Reads and `create-database`
 (account-rooted) stay account-scoped.
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome),
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous),
 risk model §4.6; the trust level writes the explicit lines, one per environment the
 mission's databases carry.
 

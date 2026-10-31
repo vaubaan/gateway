@@ -176,8 +176,8 @@ describe('the reference of the shipped plugins', () => {
             if (cell.line) expect(cell.line.quota).toBeGreaterThan(0);
           }
         }
-        // Prudent leaves out tier 4 and nothing else.
-        for (const cell of entry.at_trust_level.prudent) {
+        // Careful leaves out tier 4 and nothing else.
+        for (const cell of entry.at_trust_level.careful) {
           expect(cell.line === null).toBe(cell.tier === 4);
         }
       }
@@ -252,7 +252,7 @@ describe('the reference of the shipped plugins', () => {
       declared_tools: [],
       macro_action: null,
     });
-    // Force-push is costly (tier 3): it asks first until Autonome.
+    // Force-push is costly (tier 3): it asks first until Autonomous.
     expect(
       Object.values(byId.get('github.force-push')?.at_trust_level ?? {}).map(
         (cells) => cells[0]?.line?.gate,

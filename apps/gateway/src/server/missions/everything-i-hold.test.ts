@@ -98,7 +98,7 @@ describe('everything I hold — the expansion', () => {
     expect(idsOf(connection, [])).toContain('acme[staging].bulk-delete');
   });
 
-  it('budgets: the macro-action base budget at Autonome, the rate at the catalog ceiling when it sets one; by level in no macro-action', () => {
+  it('budgets: the macro-action base budget at Autonomous, the rate at the catalog ceiling when it sets one; by level in no macro-action', () => {
     const connection = acmeConnection();
     const byId = new Map(
       everythingIHold(connection, ACME_RESOURCES).entries.map((e) => [e.risk_id, e]),

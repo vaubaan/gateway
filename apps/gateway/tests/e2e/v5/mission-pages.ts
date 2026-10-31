@@ -8,11 +8,11 @@ import { expect, type Locator, type Page } from '@playwright/test';
 export const KEY = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 
 /** A trust level as the interface names it. */
-export type TrustLevel = 'Prudent' | 'Confiant' | 'Autonome';
+export type TrustLevel = 'Careful' | 'Trusting' | 'Autonomous';
 
 /**
  * Includes an account in the mission being created and ticks macro-actions at a
- * trust level, by their labels: `{ Read: 'Confiant', Propose: 'Prudent' }`.
+ * trust level, by their labels: `{ Read: 'Trusting', Propose: 'Careful' }`.
  */
 export async function includeWithTrustLevels(
   page: Page,

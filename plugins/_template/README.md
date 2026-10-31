@@ -93,7 +93,7 @@ and a mission needs both.
 
 ## Macro-actions
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome),
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous),
 risk model §4.6: the trust level sets each risk's gate from its vector and scales its
 base budget; the mission stores the explicit lines.
 

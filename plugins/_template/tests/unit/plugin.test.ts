@@ -139,10 +139,10 @@ describe('template plugin — structural kit', () => {
   // A mission is composed by ticking macro-actions at a trust level (ADR
   // macro-actions-and-trust-levels-prefill-the-policy) ; `policyFromMacroActions`
   // writes the explicit lines the creation form would.
-  test('macro-actions : read runs freely ; at Prudent, prod writes ask first', () => {
+  test('macro-actions : read runs freely ; at Careful, prod writes ask first', () => {
     const policy = policyFromMacroActions(
       templatePlugin,
-      { read: 'prudent', write: 'prudent' },
+      { read: 'careful', write: 'careful' },
       { envs: ['staging', 'prod'] },
     );
     const gates = Object.fromEntries(policy.map((line) => [line.risk_id, line.gate]));

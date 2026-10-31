@@ -54,7 +54,7 @@ export interface EverythingIHold {
 }
 
 /**
- * The budget of a line: its macro-action's base budget at Autonome (the
+ * The budget of a line: its macro-action's base budget at Autonomous (the
  * widest trust level), the rate then the catalog ceiling per minute when the entry
  * sets one; by level for a risk in no macro-action.
  */
@@ -75,7 +75,7 @@ export function budgetFor(
       rate_limit: ceiling ?? { max: RATE_BY_LEVEL[risk.level], window_seconds: SECONDS_PER_MINUTE },
     };
   }
-  const widest = budgetAtTrustLevel(entry, 'autonome', risk.rate_ceiling_per_minute);
+  const widest = budgetAtTrustLevel(entry, 'autonomous', risk.rate_ceiling_per_minute);
   return { quota: widest.quota, rate_limit: ceiling ?? widest.rate_limit };
 }
 

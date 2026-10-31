@@ -145,7 +145,7 @@ describe('management door — every answer matches its advertised output schema'
     await yes(bob, 'preview_policy', {
       name: 'From trust levels',
       connections: [
-        { connection_id: github, trust_levels: { read: 'confiant', propose: 'confiant' } },
+        { connection_id: github, trust_levels: { read: 'trusting', propose: 'trusting' } },
       ],
       period: { kind: 'one-off' },
       expires_at: '2027-01-01T00:00:00.000Z',
@@ -160,8 +160,8 @@ describe('management door — every answer matches its advertised output schema'
     await yes(ada, 'preview_policy', {
       name: 'Two providers',
       connections: [
-        { connection_id: github, trust_levels: { read: 'prudent' } },
-        { provider: 'supabase', trust_levels: { query: 'prudent' }, resources: { scope: 'all' } },
+        { connection_id: github, trust_levels: { read: 'careful' } },
+        { provider: 'supabase', trust_levels: { query: 'careful' }, resources: { scope: 'all' } },
       ],
       period: { kind: 'recurring', length_seconds: 3600 },
       expires_at: null,
@@ -172,7 +172,7 @@ describe('management door — every answer matches its advertised output schema'
       connections: [
         {
           connection_id: supabase,
-          trust_levels: { query: 'prudent' },
+          trust_levels: { query: 'careful' },
           resources: { scope: 'connection' },
         },
       ],
@@ -196,7 +196,7 @@ describe('management door — every answer matches its advertised output schema'
     expect(issued.bootstrap_kit.env).toContain(issued.token.secret);
     const fromTrustLevels = await yes<IssuedMissionAnswer>(agent, 'issue_mission', {
       name: 'One-off from trust levels',
-      connections: [{ connection_id: github, trust_levels: { read: 'prudent' } }],
+      connections: [{ connection_id: github, trust_levels: { read: 'careful' } }],
       period: { kind: 'one-off' },
       expires_at: '2027-01-01T00:00:00.000Z',
     });

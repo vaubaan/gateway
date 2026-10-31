@@ -313,15 +313,15 @@ async function issueSmallMission(
 }
 
 /**
- * What a developer mission ticks on GitHub: Read and Propose at Confiant
+ * What a developer mission ticks on GitHub: Read and Propose at Trusting
  * (reads, pushes and pull requests run freely, a force-push or a branch delete
- * asks first, limits ×3), Administer at Prudent (a workflow file write asks
+ * asks first, limits ×3), Administer at Careful (a workflow file write asks
  * first, at its base budget of 50).
  */
 const DEVELOPER_TRUST_LEVELS = {
-  read: 'confiant',
-  propose: 'confiant',
-  administer: 'prudent',
+  read: 'trusting',
+  propose: 'trusting',
+  administer: 'careful',
 } as const;
 
 /**
@@ -693,7 +693,7 @@ async function main(): Promise<void> {
         const issued = await root.missions.service.issue(owner, {
           name: `Both accounts of ${name}`,
           connections: [
-            { connection_id: github.id, trust_levels: { read: 'prudent' } },
+            { connection_id: github.id, trust_levels: { read: 'careful' } },
             {
               connection_id: supabase.id,
               resources: { scope: 'all' },

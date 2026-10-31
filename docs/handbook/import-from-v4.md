@@ -31,7 +31,7 @@ The rest of the cut-over: [first-install](first-install.md).
 - Imports go through the services (key verified, discovery, sealing, audit);
   every admin entry carries `marker: imported-from-v4`.
 - v4 risk ids are translated one by one: dropped, never widened; a v4 denial
-  trumps acceptance. Each kept id is its macro-action's line at Confiant
+  trumps acceptance. Each kept id is its macro-action's line at Trusting
   (`IMPORT_TRUST_LEVEL`: base budget ×3, gate from its tier), the fallback in
   "Anything else" included; a quota is never invented for an id in no
   macro-action (`--carry-unbudgeted` keeps it under `approval` only).

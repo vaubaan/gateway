@@ -109,8 +109,8 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await page.goto('/missions/new');
   await page.getByLabel('Mission name').fill(MISSION);
   await page.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Read', 'Confiant');
-  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Propose', 'Prudent');
+  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Read', 'Trusting');
+  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Propose', 'Careful');
   await expect(page.getByTestId('summary-github')).toContainText('permissions.');
   // One code project, one repository: the other one is left out of the mission.
   await resourcesButton(page, `GitHub ${CONNECTION}`, '2 of 2').click();

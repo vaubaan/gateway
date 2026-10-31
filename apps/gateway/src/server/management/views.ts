@@ -84,7 +84,7 @@ export interface TrustLevelYieldView {
   readonly auto: number;
   /** Lines that ask the creator first. */
   readonly approval: number;
-  /** Risks the trust level does not accept (tier 4 at Prudent). */
+  /** Risks the trust level does not accept (tier 4 at Careful). */
   readonly left_out: number;
 }
 
@@ -148,12 +148,16 @@ function macroActionSummary(
     const approval = lines.filter((line) => line.gate === 'approval').length;
     return { auto: lines.length - approval, approval, left_out: left_out.length };
   };
-  const { unavailable } = expandMacroAction(connection, action, 'prudent', resources);
+  const { unavailable } = expandMacroAction(connection, action, 'careful', resources);
   return {
     id: action.id,
     label: action.label,
     description: action.description,
-    at_trust_level: { prudent: at('prudent'), confiant: at('confiant'), autonome: at('autonome') },
+    at_trust_level: {
+      careful: at('careful'),
+      trusting: at('trusting'),
+      autonomous: at('autonomous'),
+    },
     unavailable: unavailable.map((risk) => risk.risk_id),
   };
 }

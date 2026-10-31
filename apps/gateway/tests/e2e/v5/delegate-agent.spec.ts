@@ -239,7 +239,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   expect(github.resources.map((resource) => resource.ref)).toContain('acme/app');
   const readAction = github.macro_actions.find((action) => action.id === 'read');
   expect(readAction?.unavailable).toEqual([]);
-  expect(readAction?.at_trust_level.prudent?.auto).toBeGreaterThan(0);
+  expect(readAction?.at_trust_level.careful?.auto).toBeGreaterThan(0);
   expect(github.everything_i_hold.risks).toBeGreaterThan(0);
   const catalog = await manage<Catalog>(manager, 'get_catalog', {
     provider: 'github',
@@ -250,7 +250,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
     macro_action: 'read',
   });
   expect(catalog.macro_actions.map((action) => action.id)).toContain('read');
-  expect(catalog.trust_levels.confiant?.budget_factor).toBe(3);
+  expect(catalog.trust_levels.trusting?.budget_factor).toBe(3);
 
   // ── It ticks a macro-action at a trust level, previews it, issues the mission ─────
   const draft = {
@@ -258,7 +258,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
     connections: [
       {
         connection_id: github.connection_id,
-        trust_levels: { read: 'prudent' },
+        trust_levels: { read: 'careful' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
       },
     ],
@@ -276,7 +276,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
     'github.read-code',
     'auto',
   ]);
-  expect(preview.connections[0]).toMatchObject({ trust_levels: { read: 'prudent' }, left_out: [] });
+  expect(preview.connections[0]).toMatchObject({ trust_levels: { read: 'careful' }, left_out: [] });
 
   const issued = await manage<{
     mission: { mission_id: string; issued_via_client_id: string };

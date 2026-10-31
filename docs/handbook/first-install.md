@@ -29,7 +29,7 @@ Coming from v4, the earlier hosted product: import an organization with
 2. Sign in at `/admin/bootstrap`, configure the sign-in provider, sign in through it as an administrator, then "Finish setup" on `/admin` (it revokes the bootstrap token; see [authentication](authentication.md)).
 3. Connect each account; each ends "Connected" with its resources.
 4. Label environments (`staging`, `prod`) and hide what no mission should see **before** issuing missions: an env-qualified permission is only issued when a selected resource carries that label.
-5. One mission per code project, from the GitHub macro-actions Read and Propose at Confiant; copy the kit (the key is shown once), export `VAUBAAN_MISSION_TOKEN` where Claude Code runs, add the kit's `.mcp.json` entry and instructions, run its `curl`.
+5. One mission per code project, from the GitHub macro-actions Read and Propose at Trusting; copy the kit (the key is shown once), export `VAUBAAN_MISSION_TOKEN` where Claude Code runs, add the kit's `.mcp.json` entry and instructions, run its `curl`.
 6. Work a day on every project. **Log each refusal**: code, field to copy, expected or unexpected (Debug below). Zero unexpected refusal passes the run; each unexpected one goes back to a trust level, a catalog or a fix.
 
 ## Traps

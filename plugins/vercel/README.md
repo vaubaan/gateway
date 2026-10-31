@@ -125,7 +125,7 @@ with a `vector_overrides.prod` block, qualified as `vercel[prod].deploy` etc.
 | `protect`    | Firewall and IP rules.                                          | `firewall-write`, `firewall-rule-write`, `ip-rule-write`               |
 | `own`        | Project settings and domains.                                   | `project-settings-write`, `domain-write`                               |
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
 risk model §4.6); the trust level turns each risk's vector into a gate and scales its
 base budget. The persisted policy is the explicit list.
 Budgets are per period; see the YAML for the base numbers. A mission with

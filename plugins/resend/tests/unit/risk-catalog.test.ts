@@ -80,7 +80,7 @@ describe('resend risk-catalog — shape', () => {
       }
     }
     const trustLevels = Object.fromEntries(
-      (catalog.macro_actions ?? []).map((a) => [a.id, 'autonome' as const]),
+      (catalog.macro_actions ?? []).map((a) => [a.id, 'autonomous' as const]),
     );
     const ids = policyFromMacroActions(resendPlugin, trustLevels, {
       envs: ['prod', 'staging', 'dev'],
