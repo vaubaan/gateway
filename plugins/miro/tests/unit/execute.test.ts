@@ -6,7 +6,12 @@
  */
 import { describe, expect, test, vi } from 'vitest';
 
-import { CredentialRefusal, UpstreamAuthError, UpstreamHttpError } from '@vaubaan/plugin-sdk';
+import {
+  CredentialRefusal,
+  UpstreamAuthError,
+  UpstreamHttpError,
+  UpstreamProtocolError,
+} from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -142,7 +147,7 @@ describe('execute — one tools/call to Miro’s MCP server', () => {
     });
   });
 
-  test('401 and 403 are a rejected credential ; another status an HTTP failure ; an error frame Miro’s text', async () => {
+  test('401 and 403 are a rejected credential ; another status an HTTP failure ; an error frame a protocol failure with Miro’s text', async () => {
     for (const status of [401, 403]) {
       const fetch = mockFetch([{ url: MIRO_MCP_URL, status, body: { error: 'nope' } }]);
       await expect(
@@ -163,9 +168,10 @@ describe('execute — one tools/call to Miro’s MCP server', () => {
         }),
       },
     ]);
-    await expect(executeMiro(context(frame), TOOL.prototypeRead, { board: BOARD })).rejects.toThrow(
-      /Invalid params: svg/,
-    );
+    // A provider failure for the host (HTTP 502), Miro's words for the agent.
+    const failure = executeMiro(context(frame), TOOL.prototypeRead, { board: BOARD });
+    await expect(failure).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(failure).rejects.toThrow(/Invalid params: svg/);
   });
 
   test('a server that wants a session : initialize once, then the call again with its session id', async () => {
@@ -202,6 +208,18 @@ describe('discovery — the boards of the team, from board_search_boards', () =>
   function discoveryFetch(answer: unknown) {
     return mockFetch([mcpRoute((call) => (rpcOf(call).method === 'tools/list' ? tools : answer))]);
   }
+
+  test('Miro refusing the search is its failure, typed : a protocol error with its words', async () => {
+    const fetch = discoveryFetch({
+      content: [{ type: 'text', text: 'rate limited' }],
+      isError: true,
+    });
+    const discovery = discoverMiroResources(context(fetch));
+    await expect(discovery).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(discovery).rejects.toThrow(
+      'Miro MCP server, tool board_search_boards failed: rate limited',
+    );
+  });
 
   test('boards described as JSON objects, owners and items ignored', async () => {
     const fetch = discoveryFetch(

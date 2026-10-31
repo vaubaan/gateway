@@ -65,6 +65,7 @@ export async function httpJson<T>(
   const hasBody = request.body !== undefined;
   const res = await io.fetch(request.url, {
     method,
+    redirect: 'error',
     headers: {
       accept: 'application/json',
       ...(hasBody ? { 'content-type': 'application/json' } : {}),

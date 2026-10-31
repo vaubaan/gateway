@@ -14,6 +14,7 @@
  */
 
 import {
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
@@ -87,10 +88,6 @@ export const templateCredential: ApiKeyCredentialSpec = {
  * rejected key is the `UpstreamAuthError` `request` throws.
  */
 export async function verifyTemplateKey(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const me = await request(ctx, 'GET', '/me');
-  const name =
-    typeof me === 'object' && me !== null && typeof (me as { name?: unknown }).name === 'string'
-      ? (me as { name: string }).name
-      : null;
-  return { account: name, expiresAt: null };
+  const me = await request(ctx, 'GET', '/me', isRecord);
+  return { account: typeof me.name === 'string' ? me.name : null, expiresAt: null };
 }

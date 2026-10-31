@@ -10,7 +10,7 @@
  * discovery returns — is derived from this module.
  */
 
-import { toolPrefixFor } from '@vaubaan/plugin-sdk';
+import { toolPrefixFor, type UpstreamMcpServer } from '@vaubaan/plugin-sdk';
 
 /** The provider id. */
 export const PROVIDER_ID = 'miro';
@@ -24,6 +24,14 @@ export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
  * unauthenticated on 2026-10-21.
  */
 export const MIRO_MCP_URL = 'https://mcp.miro.com/';
+
+/**
+ * Miro's MCP server for the SDK's client (`callUpstreamTool`, `mcpRequest`).
+ * ⚠ Whether it needs an `initialize` first is not documented and could not
+ * be checked without an account : with the client's default session mode it
+ * is asked one only when it answers a bare request 400 or 404.
+ */
+export const MIRO_MCP_SERVER: UpstreamMcpServer = { url: MIRO_MCP_URL, name: 'Miro MCP server' };
 
 /** The endpoints of `https://mcp.miro.com/.well-known/oauth-authorization-server` (RFC 8414), 2026-10-21. */
 export const MIRO_OAUTH = {

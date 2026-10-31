@@ -11,9 +11,12 @@
  *     upstream arguments are the ones it returned (with `miro_url` written by
  *     the gateway), never `args`, so the executor is safe when called alone ;
  *   - `list_boards` is answered from the mission's boards, without a request ;
- *   - every other tool is one `tools/call` to Miro's MCP server (`mcp.ts`),
- *     with the OAuth access token of the connection ; Miro's tool result is
- *     passed through (its `isError` included) — the agent reads Miro's words ;
+ *   - every other tool is one `tools/call` to Miro's MCP server through the
+ *     SDK's client (`callUpstreamTool`), with the OAuth access token of the
+ *     connection ; Miro's tool result is passed through (its `isError`
+ *     included) — the agent reads Miro's words ; a failure is thrown typed
+ *     (401 / 403 `UpstreamAuthError`, another status `UpstreamHttpError`, a
+ *     JSON-RPC error frame `UpstreamProtocolError`) ;
  *   - what Miro answers is untrusted : discovery reads board ids through
  *     their grammar and keeps only what it recognises as a board.
  */
@@ -21,19 +24,26 @@
 import {
   CredentialRefusal,
   UpstreamAuthError,
+  UpstreamProtocolError,
+  callUpstreamTool,
   expectCredentialKind,
+  mcpRequest,
   refusalResult,
   type ConnectionContext,
   type ExecuteContext,
-  type McpToolContent,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
 import { readMiroCall } from './call.ts';
 import { boardIdOfUrl, boardRefOf, boardUrlOf, MIRO_BOARD_ID } from './identifiers.ts';
-import { BOARD_LOCATOR, MIRO_BOARD_URL_BASE, PROVIDER_ID, UPSTREAM_TOOL } from './identity.ts';
-import { mcpRequest } from './mcp.ts';
+import {
+  BOARD_LOCATOR,
+  MIRO_BOARD_URL_BASE,
+  MIRO_MCP_SERVER,
+  PROVIDER_ID,
+  UPSTREAM_TOOL,
+} from './identity.ts';
 import { UPSTREAM_TOOL_LIST, type UpstreamTool } from './tools.ts';
 
 /** Discovery keeps at most this many boards (a logger warning says so). */
@@ -63,11 +73,7 @@ export async function executeMiro(
   if ('denied' in read) return refusalResult(read.denied);
   const { call } = read;
   if (call.kind === 'list-boards') return listBoardsResult(call.boards);
-  const result = await mcpRequest(ctx, tokenOf(ctx), 'tools/call', {
-    name: call.upstream,
-    arguments: call.arguments,
-  });
-  return toolResultOf(result);
+  return callUpstreamTool(ctx, MIRO_MCP_SERVER, tokenOf(ctx), call.upstream, call.arguments);
 }
 
 /** `list_boards` : the mission's boards, as discovery described them. */
@@ -78,47 +84,6 @@ function listBoardsResult(boards: readonly Resource[]): McpToolResult {
     url: typeof board.metadata?.url === 'string' ? board.metadata.url : boardUrlOf(board.ref, null),
   }));
   return { content: [{ type: 'text', text: JSON.stringify({ boards: listed }, null, 2) }] };
-}
-
-/** Miro's tool result, passed through ; a block of a type MCP clients may not know becomes its JSON. */
-export function toolResultOf(result: unknown): McpToolResult {
-  if (
-    typeof result !== 'object' ||
-    result === null ||
-    !Array.isArray((result as Record<string, unknown>).content)
-  ) {
-    throw new Error(`${PROVIDER_ID}: the MCP server answered something that is not a tool result`);
-  }
-  const r = result as Record<string, unknown>;
-  const content = (r.content as unknown[]).map(contentBlock);
-  const structured = r.structuredContent;
-  return {
-    content,
-    ...(typeof structured === 'object' && structured !== null && !Array.isArray(structured)
-      ? { structuredContent: structured as Record<string, unknown> }
-      : {}),
-    ...(r.isError === true ? { isError: true } : {}),
-  };
-}
-
-function contentBlock(block: unknown): McpToolContent {
-  const b = (typeof block === 'object' && block !== null ? block : {}) as Record<string, unknown>;
-  if (b.type === 'text' && typeof b.text === 'string') return { type: 'text', text: b.text };
-  if (b.type === 'image' && typeof b.data === 'string' && typeof b.mimeType === 'string') {
-    return { type: 'image', data: b.data, mimeType: b.mimeType };
-  }
-  const resource = b.resource as Record<string, unknown> | undefined;
-  if (b.type === 'resource' && typeof resource?.uri === 'string') {
-    return {
-      type: 'resource',
-      resource: {
-        uri: resource.uri,
-        ...(typeof resource.mimeType === 'string' ? { mimeType: resource.mimeType } : {}),
-        ...(typeof resource.text === 'string' ? { text: resource.text } : {}),
-      },
-    };
-  }
-  return { type: 'text', text: JSON.stringify(block) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,11 +138,11 @@ async function searchBoards(
   token: string,
   offset: number,
 ): Promise<McpToolResult> {
-  let result: unknown;
+  let answer: McpToolResult;
   try {
-    result = await mcpRequest(ctx, token, 'tools/call', {
-      name: UPSTREAM_TOOL.boardSearchBoards,
-      arguments: { limit: DISCOVERY_PAGE_SIZE, offset },
+    answer = await callUpstreamTool(ctx, MIRO_MCP_SERVER, token, UPSTREAM_TOOL.boardSearchBoards, {
+      limit: DISCOVERY_PAGE_SIZE,
+      offset,
     });
   } catch (err) {
     if (err instanceof UpstreamAuthError && err.upstreamStatus === 403) {
@@ -185,9 +150,11 @@ async function searchBoards(
     }
     throw err;
   }
-  const answer = toolResultOf(result);
   if (answer.isError === true) {
-    throw new Error(`${PROVIDER_ID}: ${UPSTREAM_TOOL.boardSearchBoards} failed: ${textOf(answer)}`);
+    // Miro answered, and refused : its failure, not the plugin's.
+    throw new UpstreamProtocolError(
+      `${MIRO_MCP_SERVER.name}, tool ${UPSTREAM_TOOL.boardSearchBoards} failed: ${textOf(answer)}`,
+    );
   }
   return answer;
 }
@@ -352,7 +319,7 @@ export function toolDrift(
 /** Logs the drift of the live tool list ; never fails a discovery. */
 async function reportDrift(ctx: ConnectionContext, token: string): Promise<void> {
   try {
-    const drift = toolDrift(await mcpRequest(ctx, token, 'tools/list', {}));
+    const drift = toolDrift(await mcpRequest(ctx, MIRO_MCP_SERVER, token, 'tools/list', {}));
     if (drift.gone.length + drift.unmodelled.length + Object.keys(drift.arguments).length > 0) {
       ctx.logger?.warn(
         "Miro's MCP tools differ from the plugin's model; capture them again (handbook providers/miro, Procedures)",

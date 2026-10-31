@@ -17,21 +17,20 @@ the decision in the ADR
 
 ## Files
 
-| File                                | What is in it                                                                     |
-| ----------------------------------- | --------------------------------------------------------------------------------- |
-| `src/identity.ts`                   | `PROVIDER_ID`, Miro's URLs and OAuth endpoints, upstream names, locators, `TOOL`  |
-| `src/identifiers.ts`                | The grammars: board ref, board URL, item id, comment id; `boardUrlOf`             |
-| `src/upstream-tools.json`           | Miro's `tools/list`, captured verbatim on 2026-10-23 (51 tools)                   |
-| `src/tools.ts`                      | The 28 tools: Miro's, with `board` / `item_id` for `miro_url`, plus `list_boards` |
-| `src/call.ts`                       | `readMiroCall`: the one reader of a call, for `classify` and `execute`            |
-| `src/classify.ts`                   | The slices of a call                                                              |
-| `src/mcp.ts`                        | The JSON-RPC client of Miro's MCP server                                          |
-| `src/execute.ts`                    | Execution, discovery (`board_search_boards`), the drift check of the tool list    |
-| `src/created.ts`                    | The board `board_create` made, read from its answer (`createdResources`)          |
-| `src/credential.ts`                 | The `oauth2` spec with `clientRegistration`                                       |
-| `src/data-model.ts`                 | The `board` and `guide` planes                                                    |
-| `src/risk-catalog.yaml`             | Thirteen risks, the fallback, four macro-actions (catalog 5)                      |
-| `scripts/capture-upstream-tools.ts` | Captures `tools/list` into `src/upstream-tools.json` (needs a Miro account)       |
+| File                                | What is in it                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------ |
+| `src/identity.ts`                   | `PROVIDER_ID`, Miro's URLs, `MIRO_MCP_SERVER`, OAuth endpoints, upstream names, `TOOL`     |
+| `src/identifiers.ts`                | The grammars: board ref, board URL, item id, comment id; `boardUrlOf`                      |
+| `src/upstream-tools.json`           | Miro's `tools/list`, captured verbatim on 2026-10-23 (51 tools)                            |
+| `src/tools.ts`                      | The 28 tools: Miro's, with `board` / `item_id` for `miro_url`, plus `list_boards`          |
+| `src/call.ts`                       | `readMiroCall`: the one reader of a call, for `classify` and `execute`                     |
+| `src/classify.ts`                   | The slices of a call                                                                       |
+| `src/execute.ts`                    | Execution and discovery through the SDK's MCP client (`callUpstreamTool`), the drift check |
+| `src/created.ts`                    | The board `board_create` made, read from its answer (`createdResources`)                   |
+| `src/credential.ts`                 | The `oauth2` spec with `clientRegistration`                                                |
+| `src/data-model.ts`                 | The `board` and `guide` planes                                                             |
+| `src/risk-catalog.yaml`             | Thirteen risks, the fallback, four macro-actions (catalog 5)                               |
+| `scripts/capture-upstream-tools.ts` | Captures `tools/list` into `src/upstream-tools.json` (needs a Miro account)                |
 
 ## Credential and resources
 

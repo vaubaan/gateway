@@ -11,6 +11,7 @@ import { describe, expect, test } from 'vitest';
 import { risksTouchedBy } from '@vaubaan/policy-engine';
 
 import {
+  UpstreamProtocolError,
   catalogPathNextTo,
   parseSlice,
   serializeSlice,
@@ -342,8 +343,9 @@ describe('executeTemplate with mockFetch', () => {
     const fetch = mockFetch([
       { url: `${TEMPLATE_API_BASE}/workspaces`, body: { data: [{ id: 'ws-1' }] } },
     ]);
+    // A provider failure (`UpstreamProtocolError`, HTTP 502 for the host), never a plain `Error`.
     await expect(templatePlugin.discoverResources(ctx(fetch))).rejects.toThrow(
-      /unexpected workspace list/,
+      new UpstreamProtocolError('template GET /workspaces: unexpected answer'),
     );
   });
 

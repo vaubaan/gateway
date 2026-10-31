@@ -3,7 +3,7 @@ title: Miro provider plugin
 tracks:
   - plugins/miro/src/
   - plugins/miro/scripts/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Miro provider plugin — handbook
@@ -55,8 +55,10 @@ One resource per board; no environment. Rules common to every plugin:
   and numeric ids.
 - Miro's search lists a new board late (over two minutes observed): a board `board_create` made is
   read from the answer and joins the mission at once; its row is not marked stale for 15 minutes.
-- Whether the server needs `initialize` is undocumented: a 400/404 without a session triggers one,
-  then a resend with the `Mcp-Session-Id`.
+- Whether the server needs `initialize` is undocumented: the SDK's MCP client (`MIRO_MCP_SERVER`,
+  default session mode) answers a 400/404 without a session with one, then resends with the
+  `Mcp-Session-Id`. A JSON-RPC error frame, or `board_search_boards` answering `isError`, is an
+  `UpstreamProtocolError` (HTTP 502 for the host), never a plain `Error`.
 
 ## Outside the repo
 
