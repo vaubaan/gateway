@@ -47,11 +47,17 @@
  *     classified command by command and costs the union of their classes.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  ANY_IDENT,
+  isList,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { ACCOUNT_TOOL_NAMES, DATA_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
-
-export const PROVIDER = 'upstash-redis';
 
 /**
  * A database ref (Upstash database ids are UUIDs) : one path segment, no dot,
@@ -497,9 +503,9 @@ const ESCALATIONS: Readonly<Record<string, (command: readonly string[]) => boole
  * else — a nested array, an object, a boolean, `null`, a non-finite number.
  */
 export function redisCommandOf(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
+  if (!isList(value) || value.length === 0) return null;
   const words: string[] = [];
-  for (const element of value as readonly unknown[]) {
+  for (const element of value) {
     if (typeof element === 'string') words.push(element);
     else if (typeof element === 'number' && Number.isFinite(element)) words.push(String(element));
     else return null;
@@ -568,35 +574,24 @@ export function redisVerbOf(args: Readonly<Record<string, unknown>>): string {
 // Slices
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DATA_READS = new Set([
-  'upstash_redis__get',
-  'upstash_redis__keys',
-  'upstash_redis__scan',
-  'upstash_redis__ttl',
-  'upstash_redis__hgetall',
-  'upstash_redis__lrange',
-  'upstash_redis__smembers',
-  'upstash_redis__dbsize',
+const DATA_READS: ReadonlySet<string> = new Set([
+  TOOL.get,
+  TOOL.keys,
+  TOOL.scan,
+  TOOL.ttl,
+  TOOL.hgetall,
+  TOOL.lrange,
+  TOOL.smembers,
+  TOOL.dbsize,
 ]);
 
 /** Reads that send no `key` : they cover the key space, so no argument names a member. */
-const KEY_SPACE_READS = new Set([
-  'upstash_redis__keys',
-  'upstash_redis__scan',
-  'upstash_redis__dbsize',
-]);
+const KEY_SPACE_READS: ReadonlySet<string> = new Set([TOOL.keys, TOOL.scan, TOOL.dbsize]);
 
-const SET_TOOL = 'upstash_redis__set';
-
-const DATA_WRITES = new Set([
-  SET_TOOL,
-  'upstash_redis__hset',
-  'upstash_redis__lpush',
-  'upstash_redis__sadd',
-]);
+const DATA_WRITES: ReadonlySet<string> = new Set([TOOL.set, TOOL.hset, TOOL.lpush, TOOL.sadd]);
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER, path: segments, action };
+  return { provider: PROVIDER_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -606,10 +601,6 @@ function name(value: string): SliceSegment {
 function ident(value: string): SliceSegment {
   return { kind: 'ident', value };
 }
-
-/** Concrete placeholder for an unknown identifier : the matcher treats
- *  `ident('*')` on the concrete side as "any specific identifier". */
-const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
 /**
  * The key-space slice of a command class on a database. `arbitrary` and
@@ -652,7 +643,7 @@ export function resolveDatabase(
   resources: readonly Resource[],
   required: boolean,
 ): { ref: string | null } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER);
+  const own = resources.filter((r) => r.provider === PROVIDER_ID);
   const raw = databaseArg(args);
   if (raw !== undefined) {
     const explicit = pathIdent(raw);
@@ -700,46 +691,46 @@ export function classifyUpstashRedis(
   if (DATA_WRITES.has(tool)) {
     // `set` with a time to live : the executor appends `EX` / `PX` whenever the
     // argument is present, whatever its value, and so does this reading.
-    const expires = tool === SET_TOOL && (args.ex !== undefined || args.px !== undefined);
+    const expires = tool === TOOL.set && (args.ex !== undefined || args.px !== undefined);
     return { slices: [keySpaceSlice(expires ? 'delete' : 'write', dbSeg, keyIdent(args.key))] };
   }
 
   switch (tool) {
     // ─── Management reads ────────────────────────────────────────────
-    case 'upstash_redis__list_databases':
+    case TOOL.listDatabases:
       return { slices: [slice('R', [name('account'), name('database'), ANY_IDENT])] };
 
-    case 'upstash_redis__get_database':
+    case TOOL.getDatabase:
       return { slices: [slice('R', [name('database'), dbSeg])] };
 
-    case 'upstash_redis__get_database_stats':
+    case TOOL.getDatabaseStats:
       return { slices: [slice('R', [name('database'), dbSeg, name('stats')])] };
 
     // ─── Management writes ───────────────────────────────────────────
-    case 'upstash_redis__create_database':
+    case TOOL.createDatabase:
       return { slices: [slice('W', [name('account'), name('database')])] };
 
-    case 'upstash_redis__delete_database':
+    case TOOL.deleteDatabase:
       return {
         slices: [slice('W', [name('account'), name('database'), dbSeg, name('delete')])],
       };
 
-    case 'upstash_redis__rename_database':
+    case TOOL.renameDatabase:
       return { slices: [slice('W', [name('database'), dbSeg, name('credentials')])] };
 
     // ─── DEL : the `delete` marker ───────────────────────────────────
-    case 'upstash_redis__del': {
-      const keys = Array.isArray(args.keys) ? (args.keys as unknown[]) : [];
+    case TOOL.del: {
+      const keys = isList(args.keys) ? args.keys : [];
       const keySeg = keys.length === 1 ? keyIdent(keys[0]) : ANY_IDENT;
       return { slices: [keySpaceSlice('delete', dbSeg, keySeg)] };
     }
 
     // ─── EXPIRE : a deletion, now (a TTL of zero or less) or when it elapses ───
-    case 'upstash_redis__expire':
+    case TOOL.expire:
       return { slices: [keySpaceSlice('delete', dbSeg, keyIdent(args.key))] };
 
     // ─── Execute — routed on the command table ───────────────────────
-    case 'upstash_redis__execute': {
+    case TOOL.execute: {
       const slices: Slice[] = [];
       const seen = new Set<string>();
       for (const cls of classesOfExecute(args.command)) {

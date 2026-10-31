@@ -15,15 +15,17 @@
  *
  * Rules :
  *   - `fetch` comes from the context, never from the global ;
- *   - a provider failure is **thrown**, never returned : 401 / 403 from
- *     either surface → `UpstreamAuthError` (the host treats a 401 as a
- *     rejected credential — the connection ends up `expired` — and a 403 as
- *     a failed call), any other failed status → `UpstreamHttpError`, a
- *     network failure → the error itself. The host records it as
- *     `upstream_error` in the audit ;
+ *   - both surfaces are called with the SDK's `httpJson` : a provider failure
+ *     is **thrown**, never returned — 401 / 403 from either surface →
+ *     `UpstreamAuthError` (the host treats a 401 as a rejected credential —
+ *     the connection ends up `expired` — and a 403 as a failed call), any
+ *     other failed status → `UpstreamHttpError` (a Redis command the database
+ *     refuses is its HTTP 400 `{ error }`), an answer that is not JSON or not
+ *     the expected shape → `UpstreamProtocolError`, a network failure → the
+ *     error itself. The host records it as `upstream_error` in the audit ;
  *   - what this executor declines itself (a malformed argument, a database
- *     outside the mission, a tool that is not wired) is an `ExecutorRefusal`,
- *     returned as an `isError` result ;
+ *     outside the mission, a tool that is not wired) is a `refusalResult`,
+ *     or an `ExecutorRefusal` thrown inside `declining` ;
  *   - `execute` sends the command the classifier read (`redisCommandOf`) :
  *     one flat command of strings and finite numbers. A pipeline-shaped
  *     `command` is refused here — no pipeline endpoint is wired — whatever
@@ -43,22 +45,32 @@
  */
 
 import {
+  anyJson,
+  declining,
   ExecutorRefusal,
-  UpstreamAuthError,
-  UpstreamHttpError,
+  httpJson,
+  isList,
+  isRecord,
+  jsonResult,
+  refusalResult,
+  textResult,
+  UpstreamProtocolError,
   type ConnectionContext,
   type ExecuteContext,
+  type Guard,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER, databaseArg, redisCommandOf, resolveDatabase } from './classify.ts';
+import { databaseArg, redisCommandOf, resolveDatabase } from './classify.ts';
+import { databaseResource } from './created.ts';
 import {
   UPSTASH_MANAGEMENT_API,
   basicAuthHeader,
   upstashAuth,
   type UpstashAuth,
 } from './credential.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { ACCOUNT_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
 /** Databases kept by `discoverResources` (the list endpoint is unpaged upstream). */
@@ -106,23 +118,21 @@ export async function executeUpstashRedis(
   // path segment, or a refusal. Account tools need none but still refuse a
   // database outside the mission.
   const database = resolveDatabase(args, ctx.resources, !ACCOUNT_TOOL_NAMES.has(tool));
-  if ('denied' in database) return errorResult(database.denied);
+  if ('denied' in database) return refusalResult(database.denied);
+  const ref = database.ref;
 
-  try {
+  return declining(async () => {
     if (MANAGEMENT_TOOL_NAMES.has(tool)) {
       // A management tool acts on the database the call names : the mission's
       // single database is not a default for it (its schema requires the id).
-      const named = databaseArg(args) === undefined ? null : database.ref;
+      const named = databaseArg(args) === undefined ? null : ref;
       return toToolResult(await executeManagementTool(call, tool, args, named));
     }
-    if (database.ref === null) {
-      return errorResult(`Upstash Redis data tool '${tool}' requires a databaseId.`);
+    if (ref === null) {
+      throw new ExecutorRefusal(`Upstash Redis data tool '${tool}' requires a databaseId.`);
     }
-    return toToolResult(await executeDataTool(call, database.ref, tool, args));
-  } catch (e) {
-    if (e instanceof ExecutorRefusal) return errorResult(e.message);
-    throw e;
-  }
+    return toToolResult(await executeDataTool(call, ref, tool, args));
+  });
 }
 
 /**
@@ -140,84 +150,67 @@ export async function discoverUpstashRedisResources(
     auth: upstashAuth(ctx.credential),
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   };
-  const body: unknown = await callManagementApi(call, 'GET', '/redis/databases');
-  const all = (Array.isArray(body) ? (body as readonly unknown[]) : []).filter(isDatabaseDto);
+  const listed = await callManagementApi(call, 'GET', '/redis/databases', isList);
+  // An entry that names no database is skipped : the rest of the list stays usable.
+  const all = listed.filter(isNamedDatabase);
   if (all.length > MAX_DISCOVERED_DATABASES) {
-    ctx.logger?.warn('upstash-redis: more databases than the discovery cap, list truncated', {
+    ctx.logger?.warn(`${PROVIDER_ID}: more databases than the discovery cap, list truncated`, {
       total: all.length,
       cap: MAX_DISCOVERED_DATABASES,
     });
   }
-  return all.slice(0, MAX_DISCOVERED_DATABASES).map((d) => ({
-    provider: PROVIDER,
-    ref: d.database_id,
-    displayName: d.database_name ?? d.database_id,
-    metadata: {
-      ...(d.region ? { region: d.region } : {}),
-      ...(d.primary_region ? { primary_region: d.primary_region } : {}),
-      ...(Array.isArray(d.read_regions) ? { read_regions: d.read_regions } : {}),
-      ...(d.endpoint ? { endpoint: d.endpoint } : {}),
-      ...(d.state ? { state: d.state } : {}),
-      ...(d.database_type ? { database_type: d.database_type } : {}),
-      ...(typeof d.tls === 'boolean' ? { tls: d.tls } : {}),
-    },
-  }));
+  return all.slice(0, MAX_DISCOVERED_DATABASES).map((d) => databaseResource(d.database_id, d));
 }
 
-interface DatabaseDto {
-  readonly database_id: string;
-  readonly database_name?: string;
-  readonly database_type?: string;
-  readonly region?: string;
-  readonly primary_region?: string;
-  readonly read_regions?: readonly string[];
-  readonly endpoint?: string;
-  readonly rest_url?: string;
-  readonly rest_token?: string;
-  readonly state?: string;
-  readonly tls?: boolean;
-}
+/** A database the Management API describes : its other fields are read one by one, untrusted. */
+type NamedDatabase = Readonly<Record<string, unknown>> & { readonly database_id: string };
 
-/** An upstream answer that names a database : an object with a non-empty string `database_id`. */
-function isDatabaseDto(value: unknown): value is DatabaseDto {
-  if (typeof value !== 'object' || value === null) return false;
-  const id = (value as { database_id?: unknown }).database_id;
-  return typeof id === 'string' && id.length > 0;
+/** An object with a non-empty string `database_id`. */
+function isNamedDatabase(value: unknown): value is NamedDatabase {
+  return isRecord(value) && typeof value.database_id === 'string' && value.database_id.length > 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Management API (Basic auth)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function callManagementApi(
+/**
+ * One Management API call, its answer read through `guard`. `path` is under
+ * `/v2` ; the messages name it without its query string.
+ */
+async function callManagementApi<T>(
+  call: UpstashCall,
+  method: ManagementMethod,
+  path: string,
+  guard: Guard<T>,
+  body?: Record<string, unknown>,
+): Promise<T> {
+  const [pathname = path] = path.split('?');
+  return httpJson(
+    call,
+    {
+      url: `${UPSTASH_MANAGEMENT_API}${path}`,
+      method,
+      headers: { authorization: basicAuthHeader(call.auth) },
+      ...(body !== undefined ? { body } : {}),
+      what: `Upstash Management API ${method} ${pathname}`,
+    },
+    guard,
+  );
+}
+
+/**
+ * A Management API answer the agent reads as it is (redacted by the caller
+ * when it describes a database). An empty answer reads as `{}`, so the
+ * agent always gets a JSON document.
+ */
+async function passThroughManagementApi(
   call: UpstashCall,
   method: ManagementMethod,
   path: string,
   body?: Record<string, unknown>,
 ): Promise<unknown> {
-  const headers: Record<string, string> = {
-    Authorization: basicAuthHeader(call.auth),
-    Accept: 'application/json',
-  };
-  const init: RequestInit = { method, headers };
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json';
-    init.body = JSON.stringify(body);
-  }
-  if (call.signal) init.signal = call.signal;
-  const res = await call.fetch(`${UPSTASH_MANAGEMENT_API}${path}`, { ...init, redirect: 'error' });
-  const text = await res.text();
-  if (!res.ok) {
-    const msg = `Upstash Management API ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+  return (await callManagementApi(call, method, path, anyJson, body)) ?? {};
 }
 
 /**
@@ -232,36 +225,40 @@ async function executeManagementTool(
   databaseId: string | null,
 ): Promise<unknown> {
   switch (tool) {
-    case 'upstash_redis__list_databases':
-      return redactDatabases(await callManagementApi(call, 'GET', '/redis/databases'));
-    case 'upstash_redis__get_database':
+    case TOOL.listDatabases:
+      return redactDatabases(await passThroughManagementApi(call, 'GET', '/redis/databases'));
+    case TOOL.getDatabase:
       return redactDatabases(
         // `credentials=hide`: Upstash leaves the credentials out of the answer
         // itself; the redaction below stays (SEC 2026-10-15 re-check L-2).
-        await callManagementApi(
+        await passThroughManagementApi(
           call,
           'GET',
           `/redis/database/${databasePath(databaseId)}?credentials=hide`,
         ),
       );
-    case 'upstash_redis__create_database': {
+    case TOOL.createDatabase: {
       const body: Record<string, unknown> = { name: args.name, region: args.region };
       if (args.primary_region !== undefined) body.primary_region = args.primary_region;
       if (args.read_regions !== undefined) body.read_regions = args.read_regions;
       if (args.tls !== undefined) body.tls = args.tls;
       if (args.eviction !== undefined) body.eviction = args.eviction;
-      return redactDatabases(await callManagementApi(call, 'POST', '/redis/database', body));
+      return redactDatabases(await passThroughManagementApi(call, 'POST', '/redis/database', body));
     }
-    case 'upstash_redis__delete_database':
-      return callManagementApi(call, 'DELETE', `/redis/database/${databasePath(databaseId)}`);
-    case 'upstash_redis__rename_database':
+    case TOOL.deleteDatabase:
+      return passThroughManagementApi(
+        call,
+        'DELETE',
+        `/redis/database/${databasePath(databaseId)}`,
+      );
+    case TOOL.renameDatabase:
       return redactDatabases(
-        await callManagementApi(call, 'POST', `/redis/rename/${databasePath(databaseId)}`, {
+        await passThroughManagementApi(call, 'POST', `/redis/rename/${databasePath(databaseId)}`, {
           name: args.name,
         }),
       );
-    case 'upstash_redis__get_database_stats':
-      return callManagementApi(call, 'GET', `/redis/stats/${databasePath(databaseId)}`);
+    case TOOL.getDatabaseStats:
+      return passThroughManagementApi(call, 'GET', `/redis/stats/${databasePath(databaseId)}`);
     default:
       throw new ExecutorRefusal(`Upstash Redis management tool not implemented: ${tool}`);
   }
@@ -278,10 +275,10 @@ function databasePath(databaseId: string | null): string {
  * caught by its name too (SEC 2026-10-15 re-check L-2).
  */
 export function redactDatabases(payload: unknown): unknown {
-  if (Array.isArray(payload)) return payload.map(redactDatabases);
-  if (typeof payload !== 'object' || payload === null) return payload;
+  if (isList(payload)) return payload.map(redactDatabases);
+  if (!isRecord(payload)) return payload;
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(payload)) {
     if (!REDACTED_DATABASE_FIELDS.includes(k) && !CREDENTIAL_LIKE_FIELD.test(k)) {
       out[k] = redactDatabases(v);
     }
@@ -295,20 +292,21 @@ export function redactDatabases(payload: unknown): unknown {
 
 /**
  * The REST endpoint and token of a database, read from the Management API.
- * `databaseId` is a ref `resolveDatabase` returned : one path segment.
+ * `databaseId` is a ref `resolveDatabase` returned : one path segment. An
+ * answer that gives no usable endpoint or token is the provider's failure
+ * (`UpstreamProtocolError`) : nothing is sent.
  */
 async function databaseConnection(
   call: UpstashCall,
   databaseId: string,
 ): Promise<{ endpoint: string; restToken: string }> {
-  const answer: unknown = await callManagementApi(call, 'GET', `/redis/database/${databaseId}`);
-  const db: Partial<DatabaseDto> = isDatabaseDto(answer) ? answer : {};
+  const db = await callManagementApi(call, 'GET', `/redis/database/${databaseId}`, isRecord);
   const text = (value: unknown): string | undefined =>
     typeof value === 'string' && value.length > 0 ? value : undefined;
   const named = text(db.rest_url) ?? text(db.endpoint);
   const restToken = text(db.rest_token);
   if (!named || !restToken) {
-    throw new Error(
+    throw new UpstreamProtocolError(
       `Upstash database ${databaseId} does not expose a REST endpoint/token. ` +
         'Ensure the database is active and its REST API is enabled.',
     );
@@ -316,7 +314,7 @@ async function databaseConnection(
   const endpoint = restEndpointOf(named);
   if (endpoint === null) {
     // The token is the database's own credential: it goes to Upstash or nowhere.
-    throw new Error(
+    throw new UpstreamProtocolError(
       `Upstash database ${databaseId}: the Management API named a host that is not an Upstash REST endpoint ` +
         `(expected https://<name>${UPSTASH_REST_HOST_SUFFIX}); the call was not sent.`,
     );
@@ -373,30 +371,37 @@ async function executeDataTool(
 ): Promise<unknown> {
   const command = buildCommand(tool, args);
   const { endpoint, restToken } = await databaseConnection(call, databaseId);
-  const init: RequestInit = {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${restToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(command),
-  };
-  if (call.signal) init.signal = call.signal;
-  const res = await call.fetch(endpoint, { ...init, redirect: 'error' });
-  const text = await res.text();
-  if (!res.ok) {
-    const msg = `Upstash Data API ${res.status}: ${text.slice(0, 300)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+  return httpJson(
+    call,
+    {
+      url: endpoint,
+      method: 'POST',
+      headers: { authorization: `Bearer ${restToken}` },
+      body: command,
+      // The endpoint is not named : the messages say which surface failed, as the agent needs.
+      what: 'Upstash Data API',
+    },
+    isRedisAnswer,
+  );
+}
+
+/**
+ * What the REST endpoint answers a command : `{ result }`, or `{ error }`
+ * for a command Redis refuses — which Upstash sends with HTTP 400, thrown
+ * as `UpstreamHttpError` before this guard. The agent reads the document
+ * as it is.
+ */
+type RedisAnswer = Readonly<Record<string, unknown>> &
+  ({ readonly result: unknown } | { readonly error: string });
+
+function isRedisAnswer(value: unknown): value is RedisAnswer {
+  return isRecord(value) && ('result' in value || typeof value.error === 'string');
 }
 
 /** The Redis command array of a data tool. Throws on a malformed argument set. */
 export function buildCommand(tool: string, args: Readonly<Record<string, unknown>>): string[] {
   switch (tool) {
-    case 'upstash_redis__execute': {
+    case TOOL.execute: {
       // The same reading as the classifier : what was classified is what is sent.
       const command = redisCommandOf(args.command);
       if (command === null) {
@@ -406,9 +411,9 @@ export function buildCommand(tool: string, args: Readonly<Record<string, unknown
       }
       return command;
     }
-    case 'upstash_redis__get':
+    case TOOL.get:
       return ['GET', str(args.key, 'key')];
-    case 'upstash_redis__set': {
+    case TOOL.set: {
       const cmd = ['SET', str(args.key, 'key'), str(args.value, 'value')];
       if (args.ex !== undefined) cmd.push('EX', String(args.ex));
       if (args.px !== undefined) cmd.push('PX', String(args.px));
@@ -416,42 +421,42 @@ export function buildCommand(tool: string, args: Readonly<Record<string, unknown
       if (args.xx === true) cmd.push('XX');
       return cmd;
     }
-    case 'upstash_redis__del':
+    case TOOL.del:
       return ['DEL', ...stringList(args.keys, 'keys')];
-    case 'upstash_redis__keys':
+    case TOOL.keys:
       return ['KEYS', str(args.pattern, 'pattern')];
-    case 'upstash_redis__scan': {
+    case TOOL.scan: {
       const cmd = ['SCAN', String(args.cursor ?? 0)];
       if (args.match !== undefined) cmd.push('MATCH', str(args.match, 'match'));
       if (args.count !== undefined) cmd.push('COUNT', String(args.count));
       return cmd;
     }
-    case 'upstash_redis__ttl':
+    case TOOL.ttl:
       return ['TTL', str(args.key, 'key')];
-    case 'upstash_redis__expire':
+    case TOOL.expire:
       return ['EXPIRE', str(args.key, 'key'), String(args.seconds)];
-    case 'upstash_redis__hset': {
+    case TOOL.hset: {
       const cmd = ['HSET', str(args.key, 'key')];
       const fields = args.fields;
-      if (typeof fields !== 'object' || fields === null || Array.isArray(fields)) {
+      if (!isRecord(fields)) {
         throw new ExecutorRefusal('fields must be an object of field-value pairs.');
       }
-      for (const [field, value] of Object.entries(fields as Record<string, unknown>)) {
+      for (const [field, value] of Object.entries(fields)) {
         cmd.push(field, String(value));
       }
       return cmd;
     }
-    case 'upstash_redis__hgetall':
+    case TOOL.hgetall:
       return ['HGETALL', str(args.key, 'key')];
-    case 'upstash_redis__lpush':
+    case TOOL.lpush:
       return ['LPUSH', str(args.key, 'key'), ...stringList(args.values, 'values')];
-    case 'upstash_redis__lrange':
+    case TOOL.lrange:
       return ['LRANGE', str(args.key, 'key'), String(args.start), String(args.stop)];
-    case 'upstash_redis__sadd':
+    case TOOL.sadd:
       return ['SADD', str(args.key, 'key'), ...stringList(args.members, 'members')];
-    case 'upstash_redis__smembers':
+    case TOOL.smembers:
       return ['SMEMBERS', str(args.key, 'key')];
-    case 'upstash_redis__dbsize':
+    case TOOL.dbsize:
       return ['DBSIZE'];
     default:
       throw new ExecutorRefusal(`Upstash Redis data tool not implemented: ${tool}`);
@@ -464,7 +469,7 @@ function str(value: unknown, arg: string): string {
 }
 
 function stringList(value: unknown, arg: string): string[] {
-  if (!Array.isArray(value) || value.length === 0) {
+  if (!isList(value) || value.length === 0) {
     throw new ExecutorRefusal(`${arg} must be a non-empty array of strings.`);
   }
   return value.map((v) => String(v));
@@ -474,11 +479,7 @@ function stringList(value: unknown, arg: string): string[] {
 // Results
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** A JSON string answer (`"OK"`) is shown as its text ; anything else as indented JSON. */
 function toToolResult(payload: unknown): McpToolResult {
-  const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-  return { content: [{ type: 'text', text }] };
-}
-
-function errorResult(message: string): McpToolResult {
-  return { content: [{ type: 'text', text: message }], isError: true };
+  return typeof payload === 'string' ? textResult(payload) : jsonResult(payload);
 }

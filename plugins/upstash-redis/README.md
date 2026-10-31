@@ -15,6 +15,7 @@ only.
 | File                    | Role                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                                               |
+| `src/identity.ts`       | The provider id and the 21 tool names (`TOOL`), written once.                                                                                              |
 | `src/risk-catalog.yaml` | 10 risks + fallback, four macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                             |
 | `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                                                       |
 | `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                                              |
@@ -105,7 +106,9 @@ neither discover its databases nor reach the management tools.
 
 What `execute` declines itself (a database outside the mission, a malformed
 argument, a pipeline-shaped `command`) is an `isError` result; a provider
-failure is thrown.
+failure is thrown: a failed status (a command Redis refuses is the REST
+endpoint's HTTP 400 `{ error }`), and an answer that is not JSON or not the
+shape expected (`UpstreamProtocolError`), never passed to the agent as text.
 
 ## Catalog and macro-actions
 

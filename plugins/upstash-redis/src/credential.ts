@@ -35,6 +35,7 @@ import {
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
 import { upstashRedisTools } from './tools.ts';
 
 /** The Upstash Developer (Management) API. A fact about the provider. */
@@ -108,7 +109,7 @@ export interface UpstashAuth {
  * host bug, not a provider error, so neither is an `UpstreamAuthError`.
  */
 export function upstashAuth(secret: CredentialSecret): UpstashAuth {
-  const apiKey = expectCredentialKind('upstash-redis', secret, 'api-key');
+  const apiKey = expectCredentialKind(PROVIDER_ID, secret, 'api-key');
   const email = apiKey.fields.email;
   const key = apiKey.fields.api_key;
   if (typeof email !== 'string' || !new RegExp(UPSTASH_EMAIL_PATTERN).test(email)) {

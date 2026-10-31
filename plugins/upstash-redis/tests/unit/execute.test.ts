@@ -10,7 +10,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
+import {
+  UpstreamHttpError,
+  UpstreamProtocolError,
+  type ExecuteContext,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import { upstashRedisPlugin, UPSTASH_MANAGEMENT_API } from '../../src/index.ts';
@@ -130,6 +135,28 @@ describe('executeUpstashRedis — management tools', () => {
     );
     expect(call.json).toEqual({ name: 'new-name' });
   });
+
+  test('an empty answer reads as an empty object', async () => {
+    const { result } = await runManagement(
+      { method: 'DELETE', url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}` },
+      'upstash_redis__delete_database',
+      { databaseId: DATABASE_ID },
+    );
+    expect(textOf(result)).toEqual({});
+  });
+
+  test('an answer that is not JSON is an upstream protocol failure, never text for the agent', async () => {
+    const fetch = mockFetch([
+      { url: `${UPSTASH_MANAGEMENT_API}/redis/stats/${DATABASE_ID}`, body: '<html>', times: 1 },
+    ]);
+    const attempt = upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get_database_stats', {
+      databaseId: DATABASE_ID,
+    });
+    await expect(attempt).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(attempt).rejects.toThrow(
+      `Upstash Management API GET /redis/stats/${DATABASE_ID}: the answer is not JSON`,
+    );
+  });
 });
 
 describe('executeUpstashRedis — data tools build the Redis command', () => {
@@ -198,7 +225,6 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
     for (const body of [
       { database_id: DATABASE_ID, rest_url: 42, rest_token: 'tok' },
       { database_id: DATABASE_ID, rest_url: REST_URL, rest_token: { nested: true } },
-      'not an object',
     ]) {
       const fetch = mockFetch([
         {
@@ -209,12 +235,70 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
         },
       ]);
       // The provider's answer is unusable: an upstream failure, thrown for the host to record.
-      await expect(
-        upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' }),
-      ).rejects.toThrow(/REST endpoint\/token/);
+      const attempt = upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' });
+      await expect(attempt).rejects.toBeInstanceOf(UpstreamProtocolError);
+      await expect(attempt).rejects.toThrow(/REST endpoint\/token/);
       expect(fetch.calls).toHaveLength(1);
     }
   });
+
+  test('a database answer that is not an object is an upstream protocol failure, not a request', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
+        body: '"not an object"',
+        times: 1,
+      },
+    ]);
+    const attempt = upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' });
+    await expect(attempt).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(attempt).rejects.toThrow(/unexpected answer/);
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  /** The Management API route that gives the REST endpoint, then `rest` as the REST endpoint's answer. */
+  const restAnswering = (rest: { status?: number; body: unknown }) =>
+    mockFetch([
+      {
+        method: 'GET',
+        url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
+        body: { database_id: DATABASE_ID, rest_url: REST_URL, rest_token: 'tok' },
+        times: 1,
+      },
+      { method: 'POST', url: REST_URL, ...rest, times: 1 },
+    ]);
+
+  test('a command Redis refuses (HTTP 400 { error }) is thrown with its status and text, never an isError result', async () => {
+    const fetch = restAnswering({ status: 400, body: { error: 'ERR unknown command' } });
+    const attempt = upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__execute', {
+      command: ['NOPE'],
+    });
+    await expect(attempt).rejects.toBeInstanceOf(UpstreamHttpError);
+    await expect(attempt).rejects.toMatchObject({ status: 400 });
+    await expect(attempt).rejects.toThrow(
+      /Upstash Data API failed with HTTP 400: .*ERR unknown command/,
+    );
+  });
+
+  test.each([
+    ['text', '+PONG'],
+    ['a list', '["PONG"]'],
+    ['an object without result or error', '{"value":"PONG"}'],
+  ])(
+    'a REST answer that is %s is an upstream protocol failure, never text for the agent',
+    async (_what, body) => {
+      const attempt = upstashRedisPlugin.execute(
+        ctx(restAnswering({ body })),
+        'upstash_redis__execute',
+        {
+          command: ['PING'],
+        },
+      );
+      await expect(attempt).rejects.toBeInstanceOf(UpstreamProtocolError);
+      await expect(attempt).rejects.toThrow(/^Upstash Data API: /);
+    },
+  );
 
   test.each([
     ['another domain', { rest_url: 'https://collector.attacker.example' }],

@@ -21,8 +21,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const upstashRedisDataModel: DataModel = {
-  provider: 'upstash-redis',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'cache',
