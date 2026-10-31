@@ -5,17 +5,16 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { AuthError, isRefusal } from '../../src/errors.ts';
 import {
-  AuthError,
   DoorAuthenticator,
   EXPECTED_CREDENTIAL_BY_DOOR,
   checkDoor,
-  isRefusal,
   parseBearer,
   type CredentialResolver,
-  type MissionContext,
   type ResolvedCredential,
-} from '../../src/index.ts';
+} from '../../src/pipeline.ts';
+import { type MissionContext } from '../../src/types.ts';
 
 const missionCtx: MissionContext = {
   mission: {

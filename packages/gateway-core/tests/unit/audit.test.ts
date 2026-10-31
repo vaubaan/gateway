@@ -4,12 +4,8 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import {
-  MemoryAuditWriter,
-  fingerprintArguments,
-  type AdminAuditEntry,
-  type CallAuditEntry,
-} from '../../src/index.ts';
+import { MemoryAuditWriter, type AdminAuditEntry, type CallAuditEntry } from '../../src/audit.ts';
+import { fingerprintArguments } from '../../src/fingerprint.ts';
 
 const callEntry: CallAuditEntry = {
   kind: 'call',

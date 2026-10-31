@@ -11,7 +11,6 @@ import {
   AUTH_REQUIRED_RPC_CODE,
   AuthError,
   GatewayError,
-  REFUSAL_CODES,
   REFUSAL_RPC_CODE,
   isRefusal,
   isUnavailableConnectionStatus,
@@ -20,8 +19,8 @@ import {
   rpcError,
   rpcSuccess,
   type Refusal,
-  type RefusalCode,
-} from '../../src/index.ts';
+} from '../../src/errors.ts';
+import { REFUSAL_CODES, type RefusalCode } from '../../src/types.ts';
 
 const slice: Slice = {
   provider: 'github',
