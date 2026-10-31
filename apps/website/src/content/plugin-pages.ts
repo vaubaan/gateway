@@ -6,6 +6,8 @@
 import { githubBlob, githubTree } from '../site/constants';
 import { type Health, type HealthSnapshot, healthOf, healthWords } from './health';
 import { code, markdownTable, text } from './markdown';
+import type { GuideStep, TokenExpiry } from '@vaubaan/plugin-sdk';
+
 import type { CredentialInfo, MacroActionEntryInfo, PluginInfo } from './plugins';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
@@ -160,23 +162,42 @@ function credentialKindWords(c: CredentialInfo): string {
   }
 }
 
+/** One step of the guide: the sentence, its page as a link, its command as code. */
+function stepMarkdown(step: GuideStep, n: number): string {
+  const where = step.url ? ` ([open](${step.url}))` : '';
+  const command = step.code ? ` ${code(step.code)}` : '';
+  return `${n}. ${text(step.do)}${where}${command}`;
+}
+
+function expiryWords(expiry: TokenExpiry): string {
+  switch (expiry.kind) {
+    case 'provider-reports':
+      return 'Expiry: the service tells the gateway the date, and the account page warns before it.';
+    case 'person-types':
+      return `Expiry: about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
+    case 'none':
+      return `Expiry: ${text(expiry.reason)}`;
+  }
+}
+
 function credentialMarkdown(c: CredentialInfo): string[] {
   const lines: string[] = [`### The way: ${credentialKindWords(c)}`, ''];
+  if (c.reach) {
+    lines.push(`Grant: ${text(c.reach.what)}, ${text(c.reach.grant)}. ${text(c.reach.why)}`, '');
+  }
   if (c.steps.length > 0) {
-    lines.push(...c.steps.map((step, i) => `${i + 1}. ${text(step)}`), '');
+    lines.push(...c.steps.map((step, i) => stepMarkdown(step, i + 1)), '');
   }
   if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
   if (c.permissions.length > 0) {
     lines.push(
-      'Permissions to grant at the service, and no more:',
+      'Permissions to grant at the service, all of them: each mission narrows what an agent may do.',
       '',
       ...c.permissions.map((p) => `- ${text(p.name)}: ${p.access}`),
       '',
     );
   }
-  if (c.recommendedExpiryDays !== null) {
-    lines.push(`Recommended expiry: ${c.recommendedExpiryDays} days.`, '');
-  }
+  if (c.expiry) lines.push(expiryWords(c.expiry), '');
   if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
   if (c.fields.length > 0) {
     lines.push(

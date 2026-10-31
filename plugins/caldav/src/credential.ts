@@ -42,17 +42,38 @@ export const FASTMAIL_CALDAV_URL = 'https://caldav.fastmail.com';
 
 export const caldavGuide: TokenGuide = {
   steps: [
-    'Create an app password named "Vaubaan Gateway" at your calendar provider; never use the account password itself.',
-    'iCloud: at account.apple.com, Sign-In and Security, App-Specific Passwords (two-factor authentication must be on).',
-    'Fastmail: Settings, Privacy & Security, Manage app passwords, with access to "Calendars (CalDAV)". Nextcloud: Personal settings, Security, Devices & sessions, Create new app password.',
-    `Type the server URL: ${ICLOUD_CALDAV_URL} for iCloud, ${FASTMAIL_CALDAV_URL} for Fastmail, https://<your cloud>/remote.php/dav for Nextcloud.`,
-    'For another server, its address is enough when it publishes /.well-known/caldav; otherwise give the CalDAV address it documents.',
-    'Type the username of the account (iCloud: the Apple Account e-mail; Fastmail: the full address; Nextcloud: the login name) and paste the app password.',
-    'An app password has no scopes to choose: it opens the whole calendar account, and what an agent may do is decided by the missions of this gateway. Each calendar becomes a resource you can select per mission.',
-    'Google Calendar cannot be connected here: Google refuses app passwords over CalDAV. Use the Google Calendar service instead.',
+    {
+      do: 'Create an app password named "Vaubaan Gateway" at your calendar provider; never use the account password itself.',
+    },
+    {
+      do: 'iCloud: at account.apple.com, Sign-In and Security, App-Specific Passwords (two-factor authentication must be on).',
+    },
+    {
+      do: 'Fastmail: Settings, Privacy & Security, Manage app passwords, with access to "Calendars (CalDAV)". Nextcloud: Personal settings, Security, Devices & sessions, Create new app password.',
+    },
+    {
+      do: `Type the server URL: ${ICLOUD_CALDAV_URL} for iCloud, ${FASTMAIL_CALDAV_URL} for Fastmail, https://<your cloud>/remote.php/dav for Nextcloud.`,
+    },
+    {
+      do: 'For another server, its address is enough when it publishes /.well-known/caldav; otherwise give the CalDAV address it documents.',
+    },
+    {
+      do: 'Type the username of the account (iCloud: the Apple Account e-mail; Fastmail: the full address; Nextcloud: the login name) and paste the app password.',
+    },
+    {
+      do: 'Google Calendar cannot be connected here: Google refuses app passwords over CalDAV. Use the Google Calendar service instead.',
+    },
   ],
   permissions: [],
-  recommendedExpiryDays: null,
+  reach: {
+    what: 'App password',
+    grant: 'The whole calendar account: an app password has no scopes to choose',
+    why: 'Each calendar becomes a resource you give to missions one by one, and what an agent may do is decided by its mission.',
+  },
+  expiry: {
+    kind: 'none',
+    reason: 'App passwords do not expire: revoke it where you created it to end this account.',
+  },
   docsUrl: CALDAV_APP_PASSWORDS_URL,
 };
 

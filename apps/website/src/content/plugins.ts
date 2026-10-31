@@ -12,7 +12,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type { CredentialSpec, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type {
+  CredentialSpec,
+  GuideStep,
+  ProviderPlugin,
+  TokenExpiry,
+  TokenReach,
+} from '@vaubaan/plugin-sdk';
 import type { RiskEntry } from '@vaubaan/shared';
 
 import { severityOf, type Severity } from './severity';
@@ -67,9 +73,10 @@ export interface CredentialInfo {
   readonly label: string | null;
   readonly fields: readonly CredentialFieldInfo[];
   readonly createUrl: string | null;
-  readonly steps: readonly string[];
+  readonly steps: readonly GuideStep[];
+  readonly reach: TokenReach | null;
   readonly permissions: readonly { readonly name: string; readonly access: string }[];
-  readonly recommendedExpiryDays: number | null;
+  readonly expiry: TokenExpiry | null;
   readonly docsUrl: string | null;
   readonly scopes: readonly string[];
   /** `oauth2` whose client the gateway registers itself: nobody declares anything. */
@@ -193,8 +200,9 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     })),
     createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
     steps: guide ? [...guide.steps] : [],
+    reach: guide?.reach ?? null,
     permissions: guide ? guide.permissions.map((p) => ({ name: p.name, access: p.access })) : [],
-    recommendedExpiryDays: guide ? guide.recommendedExpiryDays : null,
+    expiry: guide?.expiry ?? null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
     registersItself: spec.kind === 'oauth2',

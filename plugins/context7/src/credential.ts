@@ -54,13 +54,22 @@ export const context7CredentialSpec: ApiKeyCredentialSpec = {
   ],
   guide: {
     steps: [
-      'Sign in to Context7 and open the dashboard.',
-      'In the API Keys card, choose Create API Key. Context7 shows the key once.',
-      "A Context7 key carries no permission choice: it reaches what its teamspace's policies allow, and Vaubaan decides which agent may ask what.",
-      'Copy the key and paste it here.',
+      { do: 'Sign in to Context7 and open the dashboard.' },
+      { do: 'In the API Keys card, choose Create API Key. Context7 shows the key once.' },
+      { do: 'Copy the key and paste it here.' },
     ],
     permissions: [],
-    recommendedExpiryDays: null,
+    reach: {
+      what: 'API key',
+      grant:
+        "A key of the teamspace: Context7 offers no permission choice, it reaches what the teamspace's policies allow",
+      why: 'This gateway decides, mission by mission, which agent may ask what.',
+    },
+    expiry: {
+      kind: 'none',
+      reason:
+        'Context7 API keys do not expire: delete the key in the dashboard to end this account.',
+    },
     docsUrl: 'https://context7.com/docs/howto/api-keys',
   },
   verify: verifyContext7Key,

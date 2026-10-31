@@ -51,7 +51,7 @@ export function TokenGuide({
       <FormStep n={1} title={TOKEN_CONNECT.stepsTitle(service)}>
         <ol className={styles.steps}>
           {guide.steps.map((step) => (
-            <li key={step}>{step}</li>
+            <li key={step.do}>{step.do}</li>
           ))}
         </ol>
         {provider.createUrl && (
@@ -62,9 +62,9 @@ export function TokenGuide({
           </p>
         )}
         <Hint>
-          {guide.recommendedExpiryDays === null
-            ? TOKEN_CONNECT.noExpiry(service)
-            : TOKEN_CONNECT.expiry(guide.recommendedExpiryDays)}
+          {guide.expiry.kind === 'person-types'
+            ? TOKEN_CONNECT.expiry(guide.expiry.recommendedDays)
+            : TOKEN_CONNECT.noExpiry(service)}
         </Hint>
       </FormStep>
 

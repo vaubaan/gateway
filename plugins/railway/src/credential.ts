@@ -75,14 +75,29 @@ export const railwayCredential: ApiKeyCredentialSpec = {
   createUrl: RAILWAY_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to Railway as the account the agents will act as; a shared service account that is a member of the workspace is fine.',
-      'Open Account settings, Tokens, and create a token with the workspace selected: a workspace token reaches that workspace only.',
-      'An account token, created with No workspace selected, works too but reaches every workspace of the account. A project token is not accepted: it reaches one environment of one project.',
-      'Railway tokens carry no permission choice: the token reaches what its workspace or account allows, and Vaubaan decides who may do what.',
-      'Copy the token and paste it here. Railway shows it once.',
+      {
+        do: 'Sign in to Railway as the account the agents will act as; a shared service account that is a member of the workspace is fine.',
+      },
+      {
+        do: 'Open Account settings, Tokens, and create a token with the workspace selected: a workspace token reaches that workspace only.',
+      },
+      {
+        do: 'An account token, created with No workspace selected, works too but reaches every workspace of the account. A project token is not accepted: it reaches one environment of one project.',
+      },
+      { do: 'Copy the token and paste it here. Railway shows it once.' },
     ],
     permissions: [],
-    recommendedExpiryDays: null,
+    reach: {
+      what: 'Workspace',
+      grant:
+        'The workspace to connect: a workspace token reaches that workspace only, with everything it allows',
+      why: 'Railway tokens carry no permission choice: this gateway gives an agent only the projects and permissions its mission names.',
+    },
+    expiry: {
+      kind: 'none',
+      reason:
+        'Railway tokens do not expire: delete the token under Account settings, Tokens to end this account.',
+    },
     docsUrl: 'https://docs.railway.com/integrations/api',
   },
   verify: verifyRailwayToken,

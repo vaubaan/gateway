@@ -86,14 +86,25 @@ export const flyCredential: ApiKeyCredentialSpec = {
   ],
   guide: {
     steps: [
-      'Install flyctl and sign in as a member of the organization the agents will work in.',
-      'Create an organization token: fly tokens create org --org <slug> --name vaubaan-gateway --expiry 2160h.',
-      'Attenuate it so it cannot touch billing, membership or the organization itself: write [{"type":"NoAdminFeatures","body":{}}] to caveats.json, then run fly tokens attenuate -f caveats.json -t "<token>".',
-      'Paste the attenuated token here, with the organization slug. Keep the organization that hosts this gateway separate: never connect it here.',
-      'Fly tokens carry no permission choice beyond their caveats: Vaubaan decides who may do what.',
+      { do: 'Install flyctl and sign in as a member of the organization the agents will work in.' },
+      {
+        do: 'Create an organization token: fly tokens create org --org <slug> --name vaubaan-gateway --expiry 2160h.',
+      },
+      {
+        do: 'Attenuate it so it cannot touch billing, membership or the organization itself: write [{"type":"NoAdminFeatures","body":{}}] to caveats.json, then run fly tokens attenuate -f caveats.json -t "<token>".',
+      },
+      {
+        do: 'Paste the attenuated token here, with the organization slug. Keep the organization that hosts this gateway separate: never connect it here.',
+      },
     ],
     permissions: [],
-    recommendedExpiryDays: 90,
+    reach: {
+      what: 'Organization',
+      grant: 'One organization token for the organization the agents work in',
+      why: 'Fly tokens carry no permission choice beyond their caveats: this gateway gives an agent only the apps and permissions its mission names.',
+    },
+    // Fly's token description read at paste carries no expiry: the person chose it.
+    expiry: { kind: 'person-types', recommendedDays: 90 },
     docsUrl: 'https://fly.io/docs/security/tokens/',
   },
   verify: verifyFlyToken,

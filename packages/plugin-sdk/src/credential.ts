@@ -63,23 +63,73 @@ export interface TokenPermission {
 }
 
 /**
+ * One thing the person does at the provider, in the imperative ("Open
+ * Settings, Developer settings, then Generate new token."). One plain
+ * sentence, no markup: a command to type goes in `code`, a page to open in
+ * `url`, and the connect page renders them as a copyable block and a link.
+ */
+export interface GuideStep {
+  readonly do: string;
+  /** The provider page this step happens on (https). */
+  readonly url?: string;
+  /** A command or a value to type, shown as code the person can copy. */
+  readonly code?: string;
+}
+
+/**
+ * How wide the grant is at the provider (ADR
+ * one-place-to-authorize-services-token-first, amendment 2026-10-31): the
+ * person grants the widest the provider offers for what this account
+ * connects, once, and each mission narrows it. The connect page shows it
+ * above the steps.
+ */
+export interface TokenReach {
+  /** What the token reaches, in the provider's words: "Repository access", "Zone Resources". */
+  readonly what: string;
+  /** What to pick there, wide: "All repositories", "All zones", "Full access". */
+  readonly grant: string;
+  /** Why wide is safe and saves a second visit: one sentence, the gateway's argument. */
+  readonly why: string;
+}
+
+/**
+ * Who knows when the token stops working:
+ *
+ *   `provider-reports` `verify` reads the expiry from the provider, so the
+ *                      account page shows the date and warns before it;
+ *   `person-types`     the person picks a lifetime at the provider, which the
+ *                      gateway cannot read back: the page says so;
+ *   `none`             the provider's tokens do not expire; `reason` says how
+ *                      the person ends one.
+ */
+export type TokenExpiry =
+  | { readonly kind: 'provider-reports' }
+  | { readonly kind: 'person-types'; readonly recommendedDays: number }
+  | { readonly kind: 'none'; readonly reason: string };
+
+export const TOKEN_EXPIRY_KINDS = ['provider-reports', 'person-types', 'none'] as const;
+export type TokenExpiryKind = TokenExpiry['kind'];
+
+/**
  * How a person creates the token by hand at the provider: the guide the
- * connect page shows, derived from this declaration.
+ * connect page shows, derived from this declaration. Required of every
+ * `api-key` way: the instructions are part of the plugin contract.
  */
 export interface TokenGuide {
-  /** Where to click at the provider, one plain sentence per step, no markup. */
-  readonly steps: readonly string[];
+  /** Where to click at the provider, in order, ending with the copy. */
+  readonly steps: readonly GuideStep[];
+  /** How wide to grant, and why wide. */
+  readonly reach: TokenReach;
   /**
    * The permissions to grant. Every tool of the plugin that this way of
    * connecting can run is served by at least one of them (`definePlugin`).
-   * Empty when the provider's token carries no permission choice (the steps
-   * then say so).
+   * Empty when the provider's token carries no permission choice (`reach`
+   * then says what it opens).
    */
   readonly permissions: readonly TokenPermission[];
-  /** The lifetime to choose at the provider, in days ; `null` when the provider offers no expiry. */
-  readonly recommendedExpiryDays: number | null;
-  /** The provider's documentation of this kind of token. */
-  readonly docsUrl?: string;
+  readonly expiry: TokenExpiry;
+  /** The provider's documentation of this kind of token (https). */
+  readonly docsUrl: string;
 }
 
 /**
@@ -91,13 +141,18 @@ export interface CredentialCheck {
   readonly account: string | null;
   /** ISO-8601 ; `null` when the credential does not expire or the provider does not say. */
   readonly expiresAt: string | null;
+  /**
+   * The permission names (`TokenPermission.name`) the provider confirmed the
+   * token holds, for a plugin that can read them; absent when it cannot.
+   */
+  readonly granted?: readonly string[];
 }
 
 /** The user pastes one or more values (API token, account id). */
 export interface ApiKeyCredentialSpec {
   readonly kind: 'api-key';
   readonly fields: readonly CredentialField[];
-  /** URL of the provider page where the user creates the key. */
+  /** URL of the provider page where the user creates the key: the token page itself, not a dashboard. */
   readonly createUrl?: string;
   /**
    * What the person creates, in the provider's words, lower case
@@ -108,9 +163,9 @@ export interface ApiKeyCredentialSpec {
   readonly guide?: TokenGuide;
   /**
    * Ask the provider about the pasted values before anything is stored. A
-   * rejection throws `UpstreamAuthError` (nothing is stored, the person reads
-   * the provider's message) ; an expiry in the past is refused by the host.
-   * Absent: the first resource discovery is the only check.
+   * cause the plugin can name throws `CredentialRefusal` with its own
+   * sentence ; a rejection otherwise throws `UpstreamAuthError` (nothing is
+   * stored) ; an expiry in the past is refused by the host.
    */
   verify?(ctx: ConnectionContext): Promise<CredentialCheck>;
 }

@@ -67,10 +67,16 @@ export const notionCredential: ApiKeyCredentialSpec = {
   ],
   guide: {
     steps: [
-      "Open Notion's Developer portal, go to Build, Internal connections and create a connection in the workspace you want to connect (you must be a Workspace Owner).",
-      'On the Configuration tab, tick the capabilities listed below and choose No user information.',
-      'Copy the token from the Configuration tab and paste it here.',
-      'Give the connection access only to the pages and databases the agents need: on each top-level page, open the ••• menu, Connections, Add connection, or use the Content access tab. Sharing a page includes everything under it.',
+      {
+        do: "Open Notion's Developer portal, go to Build, Internal connections and create a connection in the workspace you want to connect (you must be a Workspace Owner).",
+      },
+      {
+        do: 'On the Configuration tab, tick the capabilities listed below and choose No user information.',
+      },
+      { do: 'Copy the token from the Configuration tab and paste it here.' },
+      {
+        do: 'Give the connection access only to the pages and databases the agents need: on each top-level page, open the ••• menu, Connections, Add connection, or use the Content access tab. Sharing a page includes everything under it.',
+      },
     ],
     permissions: [
       {
@@ -106,7 +112,16 @@ export const notionCredential: ApiKeyCredentialSpec = {
       { name: 'Read comments', access: 'read', tools: [TOOL.listComments] },
       { name: 'Insert comments', access: 'read-write', tools: [TOOL.createComment] },
     ],
-    recommendedExpiryDays: null,
+    reach: {
+      what: 'Capabilities and shared pages',
+      grant: 'Every capability below, and every top-level page the agents may ever work in',
+      why: 'This gateway gives an agent only the pages and capabilities its mission names; a page not shared with the connection is out of reach of every mission until you share it and refresh the account.',
+    },
+    expiry: {
+      kind: 'none',
+      reason:
+        'Notion gives internal connection tokens no expiry: delete the connection in the Developer portal to end this account.',
+    },
     docsUrl: 'https://developers.notion.com/guides/get-started/internal-connections',
   },
   verify: verifyNotionToken,

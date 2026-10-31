@@ -75,11 +75,13 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
   createUrl: SUPABASE_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to Supabase as the account the agents will act as.',
-      'Open Account preferences, Access tokens, then generate a new token.',
-      'Make it a scoped token: pick the organisation and only the projects the missions need.',
-      'Grant the permissions below, choose an expiry, and generate the token.',
-      'Copy the token and paste it here. Supabase shows it once.',
+      { do: 'Sign in to Supabase as the account the agents will act as.' },
+      { do: 'Open Account preferences, Access tokens, then generate a new token.' },
+      {
+        do: 'Make it a scoped token: pick the organisation and only the projects the missions need.',
+      },
+      { do: 'Grant the permissions below, choose an expiry, and generate the token.' },
+      { do: 'Copy the token and paste it here. Supabase shows it once.' },
     ],
     permissions: [
       { name: 'Project Settings', access: 'read', tools: ['supabase__get_project'] },
@@ -151,7 +153,13 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
         tools: ['supabase__create_function_secrets', 'supabase__delete_function_secrets'],
       },
     ],
-    recommendedExpiryDays: 90,
+    reach: {
+      what: 'Organization and projects',
+      grant: 'The organization, all of its projects, and every permission below',
+      why: 'This gateway gives an agent only the projects and permissions its mission names; a token that lacks a project or a permission means a new token.',
+    },
+    // Supabase exposes no expiry for a token in what was read: the person chose it.
+    expiry: { kind: 'person-types', recommendedDays: 90 },
     docsUrl: 'https://supabase.com/docs/guides/platform/personal-access-tokens',
   },
   verify: verifySupabaseToken,

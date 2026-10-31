@@ -35,7 +35,7 @@ export const context7Plugin = definePlugin({
   icon: CONTEXT7_ICON,
   iconColor: CONTEXT7_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.4',
+  version: '0.1.5',
   description:
     'Look up current library documentation with Context7, through the official Context7 MCP server.',
   summary:

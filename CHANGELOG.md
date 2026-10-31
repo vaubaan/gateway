@@ -76,6 +76,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   names the published pre-releases; the pull-request and issue templates ask
   for macro-actions, not presets, and offer the three credential kinds that
   exist. Test fixtures name an imaginary company.
+- **Plugin SDK 0.2.0: the token guide is structured, and says how wide to
+  grant** (ADR one-place-to-authorize-services-token-first, amended
+  2026-10-31). Breaking for plugin authors: `TokenGuide.steps` are
+  `GuideStep { do, url?, code? }` instead of strings; a guide declares
+  `reach { what, grant, why }` and `expiry` (`provider-reports`,
+  `person-types` with `recommendedDays`, or `none` with a `reason`) in place
+  of `recommendedExpiryDays`; `docsUrl` is required. `CredentialCheck` may
+  carry `granted`, the permissions the provider confirmed. The test kit
+  gains `guideText`. The GitHub, Supabase, Notion, CalDAV, Fly, Context7,
+  Railway and Gmail guides move to the new shape (`@vaubaan/plugin-github`
+  4.0.5, `-supabase` 5.0.5, `-notion` 0.1.5, `-caldav` 0.1.3, `-fly` 0.3.4,
+  `-context7` 0.1.5, `-railway` 5.1.4, `-gmail` 1.1.1).
 - **Every risk catalog groups its risks into macro-actions** (ADR
   macro-actions-and-trust-crans-prefill-the-policy), 3 to 5 per connector in
   its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,

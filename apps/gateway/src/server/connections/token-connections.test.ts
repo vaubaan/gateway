@@ -23,9 +23,11 @@ function tokenSpec(verify?: () => Promise<CredentialCheck>): ApiKeyCredentialSpe
     createUrl: 'https://provider.example.com/tokens',
     fields: [{ name: 'token', label: 'Personal access token', secret: true }],
     guide: {
-      steps: ['Create a token.'],
+      steps: [{ do: 'Create a token.' }],
+      reach: { what: 'Things', grant: 'All things', why: 'Each mission narrows it.' },
       permissions: [{ name: 'Things', access: 'read', tools: ['dual__list_things'] }],
-      recommendedExpiryDays: 90,
+      expiry: { kind: 'person-types', recommendedDays: 90 },
+      docsUrl: 'https://provider.example.com/docs/tokens',
     },
     ...(verify ? { verify } : {}),
   };

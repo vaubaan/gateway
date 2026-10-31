@@ -62,14 +62,23 @@ export const githubCredential: ApiKeyCredentialSpec = {
   createUrl: GITHUB_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to GitHub as the account the agents will act as.',
-      'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
-      'Choose the organisation as resource owner, and only the repositories the missions need.',
-      'Tick the permissions below; GitHub adds Metadata (read) by itself.',
-      'Generate the token, copy it, and paste it here. GitHub shows it once.',
+      { do: 'Sign in to GitHub as the account the agents will act as.' },
+      {
+        do: 'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
+      },
+      {
+        do: 'Choose the organisation as resource owner, and only the repositories the missions need.',
+      },
+      { do: 'Tick the permissions below; GitHub adds Metadata (read) by itself.' },
+      { do: 'Generate the token, copy it, and paste it here. GitHub shows it once.' },
     ],
     permissions: GITHUB_TOKEN_PERMISSIONS,
-    recommendedExpiryDays: 90,
+    reach: {
+      what: 'Repository access',
+      grant: 'All repositories of the resource owner, with every permission below',
+      why: 'GitHub is the ceiling and each mission the narrowing: this gateway gives an agent only the repositories and permissions its mission names, and a token that lacks one means a new token.',
+    },
+    expiry: { kind: 'provider-reports' },
     docsUrl:
       'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens',
   },
