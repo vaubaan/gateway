@@ -61,7 +61,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...catalogIssues(plugin),
     ...credentialSpecIssues(plugin.credential, declaredToolNames(plugin)),
     ...hookIssues(plugin),
-    ...tokenHandoutIssues(plugin),
+    ...retiredTokenHandoutIssues(plugin),
     ...resourceCreatingToolIssues(plugin),
     ...gitRemoteIssues(plugin),
     ...toolReasonIssues(plugin.unboundTools, declaredToolNames(plugin), 'unboundTools'),
@@ -127,68 +127,18 @@ function gitRemoteIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-/** A handout names a declared tool and risks of the plugin's own catalog. */
-function tokenHandoutIssues(plugin: ProviderPlugin): string[] {
-  const handouts: unknown = plugin.tokenHandouts;
-  if (handouts === undefined) return [];
-  if (!isList(handouts)) return ['tokenHandouts: expected a list when present'];
-  const tools = new Set(isList(plugin.tools) ? plugin.tools.map((t) => t?.name) : []);
-  const risks = new Set((plugin.catalog?.risks ?? []).map((r) => r.id));
-  const issues: string[] = [];
-  handouts.forEach((handout, i) => {
-    if (!isRecord(handout) || typeof handout.tool !== 'string' || !isList(handout.riskIds)) {
-      issues.push(`tokenHandouts[${i}]: expected { tool, riskIds }`);
-      return;
-    }
-    if (!tools.has(handout.tool)) {
-      issues.push(`tokenHandouts[${i}].tool '${handout.tool}' is not a tool of this plugin`);
-    }
-    if (handout.riskIds.length === 0) {
-      issues.push(`tokenHandouts[${i}].riskIds: expected at least one risk`);
-    }
-    for (const riskId of handout.riskIds) {
-      if (typeof riskId !== 'string' || !risks.has(riskId)) {
-        issues.push(
-          `tokenHandouts[${i}].riskIds: '${String(riskId)}' is not a risk of the catalog`,
-        );
-      }
-    }
-    const readOnly: unknown = handout.readOnlyRiskIds;
-    if (readOnly === undefined) return;
-    if (!isList(readOnly)) {
-      issues.push(`tokenHandouts[${i}].readOnlyRiskIds: expected a list when present`);
-      return;
-    }
-    for (const riskId of readOnly) {
-      if (typeof riskId !== 'string' || !handout.riskIds.includes(riskId)) {
-        issues.push(
-          `tokenHandouts[${i}].readOnlyRiskIds: '${String(riskId)}' is not one of its riskIds`,
-        );
-      }
-    }
-  });
-  return issues;
+/**
+ * `tokenHandouts` is retired (owner decision of 2026-10-31, spec §2.4): no
+ * tool hands the agent a provider token. A plugin that still declares one is
+ * refused, rather than loaded with a tool nothing gates any more.
+ */
+function retiredTokenHandoutIssues(plugin: ProviderPlugin): string[] {
+  return Object.hasOwn(plugin, 'tokenHandouts') ? [RETIRED_TOKEN_HANDOUTS_ISSUE] : [];
 }
 
-/**
- * The risks whose call hands the agent a token that can write at the provider :
- * every handout risk the plugin did not declare read-only. Unqualified ids.
- * Spec §2.4 : a trust level never runs one freely, its line asks first
- * (`TrustLevelCandidate.hands_write_token`).
- */
-export function writeHandoutRiskIds(plugin: Pick<ProviderPlugin, 'tokenHandouts'>): Set<string> {
-  const write = new Set<string>();
-  const handouts: unknown = plugin.tokenHandouts;
-  if (!isList(handouts)) return write;
-  for (const handout of handouts) {
-    if (!isRecord(handout) || !isList(handout.riskIds)) continue;
-    const readOnly = new Set(isList(handout.readOnlyRiskIds) ? handout.readOnlyRiskIds : []);
-    for (const riskId of handout.riskIds) {
-      if (typeof riskId === 'string' && !readOnly.has(riskId)) write.add(riskId);
-    }
-  }
-  return write;
-}
+/** What a plugin that still declares `tokenHandouts` reads. */
+export const RETIRED_TOKEN_HANDOUTS_ISSUE =
+  'tokenHandouts: retired, no tool may hand the agent a provider token (spec §2.4) ; remove the key and route the work through the gateway';
 
 function identityIssues(plugin: ProviderPlugin): string[] {
   const issues: string[] = [];

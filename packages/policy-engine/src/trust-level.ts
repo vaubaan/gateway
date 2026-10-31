@@ -100,11 +100,6 @@ export interface TrustLevelCandidate {
   readonly vector: RiskVector;
   readonly base: Budget;
   readonly rate_ceiling_per_minute: number | null;
-  /**
-   * True for a risk whose tool hands the agent a provider token that can write
-   * (spec §2.4) : a trust level never runs it freely, its line asks first.
-   */
-  readonly hands_write_token?: boolean;
 }
 
 /** A policy line a trust level wrote, with the tier that chose its gate. */
@@ -136,7 +131,7 @@ export function expandAtTrustLevel(
     }
     lines.push({
       risk_id: candidate.risk_id,
-      gate: candidate.hands_write_token === true ? 'approval' : gate,
+      gate,
       tier,
       ...budgetAtTrustLevel(candidate.base, trustLevel, candidate.rate_ceiling_per_minute),
     });

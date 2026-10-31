@@ -623,7 +623,6 @@ export const REFERENCE_WORDS = {
   hideHowToRead: 'Hide how to read this page',
   noMatch: 'Nothing matches.',
   byArguments: 'by arguments',
-  handsToken: 'hands a token to the agent',
   anythingElse: 'anything not named',
   retired: 'being retired',
 } as const;

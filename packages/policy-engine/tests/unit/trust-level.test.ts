@@ -119,11 +119,4 @@ describe('expandAtTrustLevel', () => {
     expect(lines.map((l) => l.gate)).toEqual(['auto', 'auto', 'auto', 'approval']);
     expect(lines[0]).toMatchObject({ quota: 100, rate_limit: { max: 50, window_seconds: 60 } });
   });
-
-  test('a risk handing the agent a token that can write asks first at every trust level', () => {
-    const minted = { ...candidate('acme.mint-token', mild), hands_write_token: true };
-    expect(expandAtTrustLevel([minted], 'autonomous').lines.map((l) => [l.gate, l.tier])).toEqual([
-      ['approval', 1],
-    ]);
-  });
 });

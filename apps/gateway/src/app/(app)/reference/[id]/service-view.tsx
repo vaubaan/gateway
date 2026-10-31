@@ -165,8 +165,7 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
           ...group,
           entries: group.entries.filter(
             (entry) =>
-              inPlane(entry.planes) &&
-              matches(needle, entry.label, entry.base_id, entry.reason, ...entry.declared_tools),
+              inPlane(entry.planes) && matches(needle, entry.label, entry.base_id, entry.reason),
           ),
         }))
         .filter((group) => group.entries.length > 0),

@@ -44,17 +44,6 @@ describe('missionGitView', () => {
     ]);
     expect(view?.cannot).toContain('push and delete tags');
     expect(view?.cannot.some((w) => w.startsWith('push to main'))).toBe(true);
-    expect(view?.rawTokenTools).toEqual([]);
     expect(view?.provider).toBe('GitHub');
-  });
-
-  it('names no raw-token tool: the GitHub plugin hands none since catalog v9', () => {
-    const view = missionGitView({
-      registry,
-      publicUrl,
-      connections,
-      policy: [{ risk_id: 'github.mint-install-token-push', gate: 'approval' }],
-    });
-    expect(view?.rawTokenTools).toEqual([]);
   });
 });

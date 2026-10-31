@@ -145,7 +145,6 @@ describe('previewDraft — partition per connection', () => {
       },
     ],
     authority: [],
-    write_token_risks: [],
   });
 
   it('checks each partition against the authority on its own connection', () => {
@@ -573,14 +572,6 @@ describe('previewDraft — macro-actions at a trust level', () => {
       },
     ]);
     expect(codes(noLabel)).toEqual(['no-accepted-risk']);
-  });
-
-  it('pre-fills a write-token risk asking first at every trust level', () => {
-    const p = preview(
-      [{ connection_id: 'conn-acme', trust_levels: { read: 'autonomous' } }],
-      [acmeConnection({ write_token_risks: ['acme.read'] })],
-    );
-    expect(p.policy.map((e) => [e.risk_id, e.gate])).toEqual([['acme.read', 'approval']]);
   });
 
   it('beside explicit lines the trust levels decide nothing: the lines are the policy, each with its budget', () => {

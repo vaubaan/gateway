@@ -208,23 +208,8 @@ describe('the reference of the shipped plugins', () => {
     expect(tool?.description).not.toBe('');
   });
 
-  it('marks no tool and no risk as handing a provider token: no shipped plugin declares one', () => {
-    // The GitHub App's install-token mint is gone (ADR one-place-to-authorize-services-token-first):
-    // its two risks stay in the catalog, deprecated, with no tool declared for them.
-    for (const reference of references) {
-      expect(
-        reference.tools.some((t) => t.hands_token),
-        reference.id,
-      ).toBe(false);
-      expect(
-        reference.tools.filter((t) => t.declared_risks !== null),
-        reference.id,
-      ).toEqual([]);
-      const handed = reference.risk_groups
-        .flatMap((group) => group.entries)
-        .filter((entry) => entry.hands_token);
-      expect(handed, reference.id).toEqual([]);
-    }
+  it('lists no tool that mints a provider token: the GitHub App and its mint are gone', () => {
+    // ADR one-place-to-authorize-services-token-first: the two risks stay in the catalog, deprecated.
     const github = referenceOf('github');
     expect(github.tools.find((t) => t.name === 'github__mint_install_token')).toBeUndefined();
   });
@@ -241,17 +226,14 @@ describe('the reference of the shipped plugins', () => {
     });
   });
 
-  it('names, on each risk, its macro-action and the tools declared for it', () => {
+  it('names, on each risk, its macro-action', () => {
     const github = referenceOf('github');
     const entries = github.risk_groups.flatMap((group) => group.entries);
     const byId = new Map(entries.map((entry) => [entry.base_id, entry]));
     expect(byId.get('github.read-code')?.macro_action?.id).toBe('read');
     expect(byId.get('github.uncategorized-write')?.macro_action?.id).toBe('anything-else');
-    // The deprecated mint risk of the App: no macro-action, no tool.
-    expect(byId.get('github.mint-install-token-push')).toMatchObject({
-      declared_tools: [],
-      macro_action: null,
-    });
+    // The deprecated mint risk of the App: no macro-action.
+    expect(byId.get('github.mint-install-token-push')).toMatchObject({ macro_action: null });
     // Force-push is costly (tier 3): it asks first until Autonomous.
     expect(
       Object.values(byId.get('github.force-push')?.at_trust_level ?? {}).map(

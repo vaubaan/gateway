@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 
 import type { RiskCatalog } from '@vaubaan/shared';
 
-import type { ProviderPlugin } from '../../src/plugin.ts';
 import { policyFromMacroActions } from '../../src/testing/index.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
@@ -60,20 +59,6 @@ describe('policyFromMacroActions', () => {
     expect(() => policyFromMacroActions(acmePlugin, { admin: 'careful' })).toThrow(
       /'admin' is not a macro-action of the 'acme' catalog/,
     );
-  });
-
-  test('a write-token handout asks first at every trust level ; a read-only one follows its tier', () => {
-    const [tool] = acmePlugin.tools;
-    const handing = (
-      readOnlyRiskIds?: string[],
-    ): Pick<ProviderPlugin, 'catalog' | 'tokenHandouts'> => ({
-      catalog: acmePlugin.catalog,
-      tokenHandouts: [{ tool: tool!.name, riskIds: ['acme.read-things'], readOnlyRiskIds }],
-    });
-    expect(policyFromMacroActions(handing(), { read: 'autonomous' })[0]!.gate).toBe('approval');
-    expect(
-      policyFromMacroActions(handing(['acme.read-things']), { read: 'autonomous' })[0]!.gate,
-    ).toBe('auto');
   });
 
   test('the catalog rate ceiling caps the rate ; a deprecated entry is left out', () => {

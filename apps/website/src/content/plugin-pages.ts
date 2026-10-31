@@ -127,14 +127,6 @@ export function pluginPageMarkdown(
       '',
     );
   }
-  if (plugin.tokenHandouts.length > 0) {
-    lines.push(
-      'Tools that hand the agent a short-lived provider token (the one exception to "the agent never holds a credential"), each a permission of its own:',
-      '',
-      ...plugin.tokenHandouts.map((h) => `- ${code(h.tool)}: ${h.riskIds.map(code).join(', ')}`),
-      '',
-    );
-  }
   if (plugin.gitRemote) {
     lines.push(
       "The instance is also the agents' git remote for this service: `git clone` and `git push` go through the gateway with the mission key, every pushed ref decided like a tool call ([git remote](/docs/missions/git-remote)).",
