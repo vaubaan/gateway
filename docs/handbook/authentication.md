@@ -58,7 +58,10 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   cookie a sibling may plant); a name present twice reads as none.
 - 50 wrong bootstrap tokens revoke the token for good: anyone can close the
   bootstrap path of an instance with no provider, so deploy guides set the
-  provider in the configuration first.
+  provider in the configuration first. In setup mode (no store yet) the count
+  is the file `setup-misses` next to the key file, so a restart does not reset
+  it; it is removed when the setup completes, and deleting it by hand is how an
+  operator unlocks a setup that reached 50.
 - Entra: designate an administrator group by object id (groups claim "Groups
   assigned to the application"), not an email: tenant User Administrators can
   set `mail`. An email rule needs the optional claim `xms_edov` mapped as

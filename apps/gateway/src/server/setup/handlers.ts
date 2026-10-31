@@ -4,7 +4,8 @@
  * the key file). Origin-checked against `public_url`; the bootstrap token of
  * the configuration is the only credential there is before a store exists,
  * compared in constant time, throttled (`AUTH_LIMITS.bootstrapPerInstance`)
- * and revoked for this process after `BOOTSTRAP_MAX_MISSES` wrong tokens.
+ * and refused for good after `BOOTSTRAP_MAX_MISSES` wrong tokens — a count
+ * kept next to the key file, so a restart does not reset it (`misses.ts`).
  *
  * The key must be 32 bytes in base64 (the file the download hands out, or
  * what `gen-master-key` printed). It is written to the configured path
@@ -49,7 +50,7 @@ export const SETUP_ERROR_MESSAGES: Readonly<Record<SetupErrorCode, string>> = {
   'bootstrap-refused': 'That is not the bootstrap token of the configuration.',
   'too-many-attempts': 'Too many attempts. Wait ten minutes and try again.',
   'setup-locked':
-    'The bootstrap token was presented wrongly too many times: this start accepts no more. Restart the gateway and try again with the right token.',
+    'The bootstrap token was presented wrongly too many times: the setup accepts no more. Delete the file setup-misses next to the key file on the host, restart the gateway and try again with the right token.',
   'key-missing': 'Choose the key file first.',
   'key-invalid':
     'That file does not hold an encryption key: expected 32 bytes in base64 on one line, as the download of the former instance handed it out.',
@@ -121,6 +122,7 @@ export function createSetupHandlers(state: SetupState): SetupHandlers {
       const presented = form.get(TOKEN_FIELD);
       if (typeof presented !== 'string' || !timingSafeEqual(digest(presented), digest(token))) {
         state.misses += 1;
+        state.missesFile.write(state.misses);
         logger.warn('setup: bootstrap token refused', { misses: state.misses });
         return refused(state.misses >= BOOTSTRAP_MAX_MISSES ? 'setup-locked' : 'bootstrap-refused');
       }
@@ -161,6 +163,8 @@ export function createSetupHandlers(state: SetupState): SetupHandlers {
         });
         return refused('restore-refused');
       }
+      // The restored store counts from here (`bootstrap.misses`).
+      state.missesFile.remove();
       clearSetup();
       logger.info('setup complete: the store is restored and the gateway serves', { path });
       return redirect(SETUP_PAGE);

@@ -13,6 +13,7 @@
 import type { BuildInfo, SetupConfig } from '../config';
 import type { Logger, Redactor } from '../logging';
 import type { RateLimiter } from '../compose/ports';
+import type { SetupMissesFile } from './misses';
 
 export interface SetupRefusal {
   /** What the boot said when the received key did not complete it; never the source, never the key. */
@@ -29,8 +30,10 @@ export interface SetupState {
   readonly build: BuildInfo;
   readonly startedAt: Date;
   readonly rateLimiter: RateLimiter;
-  /** Wrong bootstrap tokens presented since the start (durable for the process only). */
+  /** Wrong bootstrap tokens presented, this start and the earlier ones (`missesFile`). */
   misses: number;
+  /** Where `misses` is kept across restarts: next to the key file. */
+  readonly missesFile: SetupMissesFile;
   lastRefusal: SetupRefusal | null;
   /** Builds the composition root with the key now on disk; rejects when the boot refuses. */
   complete(): Promise<void>;

@@ -15,6 +15,7 @@
 import { buildInfoFromEnv, ConfigError, secretValues, type LoadOptions } from '../config';
 import { createLogger, createRedactor, guardConsole } from '../logging';
 import { SlidingWindowRateLimiter } from '../rate-limit';
+import { setupMissesFile } from '../setup/misses';
 import { currentSetup, publishSetup } from '../setup/state';
 import { loadBootConfig, loadBootConfigOrSetup } from './boot-config';
 import { getRoot, rootStarted, type RootDeps } from './root';
@@ -90,6 +91,7 @@ export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
     bootstrap_configured: bootstrapConfigured,
     remedy: 'open /admin/bootstrap and hand the gateway the key file of the copy',
   });
+  const missesFile = setupMissesFile(setup.masterKeyFile, logger);
   publishSetup({
     config: setup.config,
     masterKeyFile: setup.masterKeyFile,
@@ -98,7 +100,8 @@ export async function startInstance(deps: BootDeps = {}): Promise<BootState> {
     build: rootDeps.build ?? buildInfoFromEnv(),
     startedAt: new Date(),
     rateLimiter: new SlidingWindowRateLimiter(),
-    misses: 0,
+    misses: missesFile.read(),
+    missesFile,
     lastRefusal: null,
     complete: async () => {
       await getRoot({
