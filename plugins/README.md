@@ -562,7 +562,7 @@ return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w
 - Do not set `env` unless the provider itself tells production from test
   (Stripe's live and test modes): the environment is the owner's label.
 - **The provider's answer is untrusted.** Read it through a type guard,
-  never a cast: `httpJson`'s third argument, or `readShape(value, guard,
+  never a cast (`plugin-transport.test.ts` refuses an `as …Dto`): `httpJson`'s third argument, or `readShape(value, guard,
 what)` for a value you hold already. A payload the guard refuses is the
   provider's failure (`UpstreamProtocolError`, naming the request), never a
   `TypeError` deep in your code. Pass every id it carries through the grammar

@@ -147,6 +147,31 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   (`@vaubaan/plugin-github` 4.0.6) imports the git wire code from
   `@vaubaan/plugin-sdk/git`. A plugin, its tests included, may import nothing
   of the gateway but the SDK (lint rule).
+- **Every provider plugin calls its provider through the SDK, declares its
+  names once and takes its identifiers from the SDK** (audit of the plugin
+  SDK, findings M2, M4, M5, M6, M9). No plugin reads a response with
+  `.json()` / `.text()` or casts an answer to a `…Dto` type: answers go
+  through `httpJson`, `readBounded` and type guards, the rewrapped MCP
+  servers through the SDK's client, and an answer the plugin cannot read —
+  not JSON, a JSON-RPC error frame, a shape the guard refuses — is the
+  provider's failure (`UpstreamProtocolError`, HTTP 502), no longer a plain
+  error filed as a fault of the plugin. Executors decline only with
+  `refusalResult` / `ExecutorRefusal`. Every plugin has a `src/identity.ts`
+  (provider id, tool names) and no other file writes them; `ANY_IDENT`
+  comes from the SDK. GitHub writes an identifier the slice grammar cannot
+  carry as "any" instead of repairing it, declares its global search as an entity, and
+  its job slices and Vercel's deployment and environment-variable slices go
+  through their declared parents; no catalog changes. New versions:
+  `@vaubaan/plugin-github` 5.0.0, `-supabase` 6.0.0, `-railway` 6.0.0,
+  `-vercel` 4.0.0, `-cloudflare-dns` 4.0.0, `-upstash-redis` 4.0.0, `-gmail`
+  2.0.0 (a refusal no longer carries `structuredContent`), `-ssh` 2.0.5
+  (`command-classes.ts` split into `src/command/`), `-stripe` 0.5.0 (an
+  undeclared argument is declined by the executor too), `-resend` 0.6.0,
+  `-fly` 0.4.0, `-notion` 0.2.0, `-context7` 0.2.0, `-google-calendar`
+  0.2.0. Structural tests hold the rules: `plugin-transport`,
+  `plugin-names-declared-once`, `plugin-identifier-helpers`,
+  `plugin-versions` (a plugin README states no version any more) and
+  `plugin-data-model-paths` (no known gap left).
 
 ### Removed
 
@@ -210,6 +235,9 @@ minor version may break a plugin, and every breaking change is listed here.
 The package is now publishable (`dist/` with declarations, three entry points)
 but not published.
 
+- **0.3.1** — `httpJson` takes `rawBody` (a form, a multipart `FormData`,
+  bytes) instead of a JSON `body`, never both: Stripe, Cloudflare's zone
+  import and Supabase Storage send it.
 - **0.3.0** — the contract slimmed, one way to call a provider (ADR
   plugin-contract-and-credential-spec, amendment of 2026-10-31). Breaking:
   - `ProviderPlugin.normalizeForCaps` and `ProviderPlugin.normalizeArgs` are
