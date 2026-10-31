@@ -23,7 +23,7 @@ import { BOOTSTRAP_MAX_MISSES } from '../../../src/server/auth/bootstrap';
 import { bootOrExit, EXIT_CONFIG_ERROR, startInstance } from '../../../src/server/compose/boot';
 import { getRoot, resetRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { createEncryptor } from '../../../src/server/crypto';
 import { setupResponse } from '../../../src/server/http';
 import {

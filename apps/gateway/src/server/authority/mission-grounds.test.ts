@@ -3,12 +3,12 @@ import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RegistryCatalogIndex } from '../compose/registry';
-import { fakePlugin } from '../compose/testing';
-import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
+import { fakePlugin } from '../../../tests/support/compose/testing';
+import { API_KEY_SPEC, fixturePlugin } from '../../../tests/support/connections/testing';
 import { silentLogger } from '../logging';
 import { openMemoryStore, type Store } from '../store';
 import { ManualClock } from '../store/clock';
-import { StubEncryptor } from '../store/testing';
+import { StubEncryptor } from '../../../tests/support/store/testing';
 import type { ConnectionRecord, MissionRecord, Principal, UserRecord } from '../store/types';
 import {
   createAuthorityModule,

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AuditRetentionSweeper, RETENTION_SWEEP_INTERVAL_MS } from '../../../src/server/audit';
 import { silentLogger, type Logger } from '../../../src/server/logging';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing';
+import { openTestStore, type TestStore } from '../../support/store/testing';
 import { buildTestRoot } from '../missions/support';
 
 const NOW = '2026-10-13T09:00:00.000Z';

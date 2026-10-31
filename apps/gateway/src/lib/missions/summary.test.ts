@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { DraftConnection, DraftPeriod } from './model';
 import { previewDraft } from './preview';
 import { expiryPhrase, periodPhrase, reloadPhrase, shortLabel } from './summary';
-import { acmeConnection } from '../../server/missions/testing';
+import { acmeConnection } from '../../../tests/support/missions/testing';
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 

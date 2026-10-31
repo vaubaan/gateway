@@ -27,7 +27,7 @@ import {
   TEST_PUBLIC_URL,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import type { ConnectionRecord } from '../../../src/server/store/types';
 
 const INSTALLATION_ID = '4242';

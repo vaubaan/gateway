@@ -9,7 +9,7 @@ import { createRegistry } from '@vaubaan/plugin-sdk';
 import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it, vi } from 'vitest';
 
-import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
+import { API_KEY_SPEC, fixturePlugin } from '../../../tests/support/connections/testing';
 import type { MissionService, TokenVerification, VerifiedToken } from '../missions';
 import type { MissionRecord } from '../store/types';
 import { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
@@ -22,7 +22,7 @@ import {
   trustedProxyList,
 } from './request-meta';
 import { citedRefs, createResourceStage, toolUnavailableOn } from './resource-stage';
-import { depotPlugin } from './testing';
+import { depotPlugin } from '../../../tests/support/execution/testing';
 import { TokenVerifier } from './token-verifier';
 import { callableProviders, callableTools } from './tools';
 

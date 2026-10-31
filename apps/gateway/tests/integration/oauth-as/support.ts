@@ -12,21 +12,21 @@
 import type { OAuthClientMetadata } from '@modelcontextprotocol/client';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { isSecondFactorStep, passSecondFactor } from '../../../src/server/auth/testing';
+import { isSecondFactorStep, passSecondFactor } from '../../support/auth/testing';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import {
   CONSENT_DECISION_PATH,
   CONSENT_FIELD,
   DECISION_FIELD,
   type TokenResponse,
 } from '../../../src/server/oauth-as';
-import { pkcePair, type PkcePair } from '../../../src/server/oauth-as/testing';
+import { pkcePair, type PkcePair } from '../../support/oauth-as/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 export const PUBLIC_URL = 'https://gateway.example.com';
 export const MANAGEMENT_URL = `${PUBLIC_URL}/mcp/manage`;

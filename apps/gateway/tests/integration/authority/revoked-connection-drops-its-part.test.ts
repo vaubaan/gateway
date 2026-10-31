@@ -12,7 +12,7 @@
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { fakePlugin } from '../../../src/server/compose/testing';
+import { fakePlugin } from '../../support/compose/testing';
 import { serializeSecret } from '../../../src/server/connections';
 import type { MissionCatalog } from '../../../src/server/execution';
 import {
@@ -21,7 +21,7 @@ import {
   TEST_PUBLIC_URL,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import { missionView } from '../../../src/server/management/views';
 import type { ConnectionRecord, UserRecord } from '../../../src/server/store/types';
 

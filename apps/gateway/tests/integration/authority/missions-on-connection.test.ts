@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { line } from '../../../src/server/execution/testing';
+import { line } from '../../support/execution/testing';
 import { isShareError } from '../../../src/server/shares';
 import { authorityRig, READ, WRITE_STAGING, type AuthorityRig } from './support';
 

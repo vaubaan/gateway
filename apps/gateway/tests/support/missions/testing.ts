@@ -12,12 +12,12 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { Principal, RiskCatalog } from '@vaubaan/shared';
 
-import { fullCatalogRiskIds } from '../authority';
-import type { Store } from '../store';
-import type { ConnectionRecord, ConnectionResourceRecord } from '../store/types';
-import { enumerateCatalog } from '../../lib/missions/catalog-view';
-import { macroActionsOf } from '../../lib/missions/macro-actions';
-import type { IssuanceConnection, IssuanceResource } from '../../lib/missions/model';
+import { fullCatalogRiskIds } from '../../../src/server/authority';
+import type { Store } from '../../../src/server/store';
+import type { ConnectionRecord, ConnectionResourceRecord } from '../../../src/server/store/types';
+import { enumerateCatalog } from '../../../src/lib/missions/catalog-view';
+import { macroActionsOf } from '../../../src/lib/missions/macro-actions';
+import type { IssuanceConnection, IssuanceResource } from '../../../src/lib/missions/model';
 
 const READ_VECTOR = {
   reversibility: 'reversible',

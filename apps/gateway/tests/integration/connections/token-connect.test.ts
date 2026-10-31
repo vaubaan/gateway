@@ -16,10 +16,10 @@ import githubPlugin from '@vaubaan/plugin-github';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { NOTICE_PARAM } from '../../../src/server/connections';
 
 const PUBLIC_URL = 'https://gateway.example.com';

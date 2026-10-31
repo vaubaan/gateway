@@ -8,14 +8,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
-import { passSecondFactor } from '../../../src/server/auth/testing';
+import { passSecondFactor } from '../../support/auth/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { FakeIdp } from './fake-idp';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };

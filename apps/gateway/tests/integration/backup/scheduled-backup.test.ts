@@ -31,7 +31,7 @@ import {
 import { CATCH_UP_DELAY_MS } from '../../../src/server/backup/scheduled';
 import { backupStatusStore } from '../../../src/server/backup/status';
 import { loadInstanceConfig, secretValues, type InstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { createEncryptor } from '../../../src/server/crypto';
 import {
   BACKUP_FORMAT_V1,

@@ -2,9 +2,9 @@ import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RegistryCatalogIndex } from '../compose/registry';
-import { fakePlugin } from '../compose/testing';
+import { fakePlugin } from '../../../tests/support/compose/testing';
 import { openMemoryStore, type Store } from '../store';
-import { StubEncryptor } from '../store/testing';
+import { StubEncryptor } from '../../../tests/support/store/testing';
 import type { ConnectionRecord, Principal, UserRecord } from '../store/types';
 import { ConnectionAuthorityService } from './authority-service';
 import {

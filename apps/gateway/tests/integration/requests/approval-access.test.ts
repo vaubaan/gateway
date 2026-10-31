@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { seedConnection } from '../../support/missions/testing';
 import { ADDRESSED_TO_CREATOR, type ApprovalView } from '../../../src/server/requests';
 import type { MissionRecord, UserRecord } from '../../../src/server/store/types';
 import {

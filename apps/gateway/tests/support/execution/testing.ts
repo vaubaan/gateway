@@ -24,18 +24,18 @@ import { apiKeyCredentialFixture } from '@vaubaan/plugin-sdk/testing';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 
-import { buildRoot, type GatewayRoot, type RootDeps } from '../compose/root';
+import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../compose/testing';
-import { loadInstanceConfig } from '../config';
+import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../config/testing';
-import { serializeSecret } from '../connections';
-import type { MissionDraft } from '../missions';
+import { serializeSecret } from '../../../src/server/connections';
+import type { MissionDraft } from '../../../src/server/missions';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
   MissionRecord,
   UserRecord,
-} from '../store/types';
+} from '../../../src/server/store/types';
 
 export const DEPOT = 'depot';
 export const DEPOT_API_KEY = 'sk-depot-never-returned';

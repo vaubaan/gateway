@@ -20,7 +20,7 @@ import {
   seedCall,
   type OperatorRig,
 } from './support';
-import { heldArguments } from '../../../src/server/store/testing.ts';
+import { heldArguments } from '../../support/store/testing.ts';
 
 const byRisk = (a: readonly unknown[], b: readonly unknown[]) =>
   String(a[0]).localeCompare(String(b[0]));

@@ -1,7 +1,7 @@
 /**
  * Test doubles of the authority module. Test files only.
  */
-import type { MissionGrounds } from './mission-grounds';
+import type { MissionGrounds } from '../../../src/server/authority/mission-grounds';
 
 /**
  * `MissionGrounds` for a fixture that has no connection, share or group to

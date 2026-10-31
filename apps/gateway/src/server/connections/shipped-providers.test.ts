@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
 import { toolTitleOf } from '../providers/tool-titles';
 import { canWithdraw } from './credentials';
-import { connectionsHarness, stateOf } from './testing';
+import { connectionsHarness, stateOf } from '../../../tests/support/connections/testing';
 
 describe('shipped plugins through the generic connect driver', () => {
   it('registers every shipped plugin once', () => {

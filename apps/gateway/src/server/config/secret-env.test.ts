@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig, loadProcessConfig, scrubSecretEnv } from './load';
 import { CONFIG_FILE_ENV, isSecretKeyPath, secretEnvVariables } from './sources';
-import { TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
+import { TEST_MASTER_KEY, fakeFiles, validEnv } from '../../../tests/support/config/testing';
 
 describe('secret variables leave the environment once loaded (H3)', () => {
   it('names every secret key of the table, the sign-in secrets, their _FILE siblings, and every retired provider variable', () => {

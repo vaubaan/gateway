@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { createEncryptor } from '../crypto';
 import { openStore, SetCatalogIndex } from '../store';
 import {

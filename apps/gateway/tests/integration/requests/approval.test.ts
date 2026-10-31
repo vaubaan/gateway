@@ -18,7 +18,7 @@ import {
   type RecordCallRefused,
   type RecordCallResult,
 } from '../../../src/server/budget/index.ts';
-import { alwaysGrounded } from '../../../src/server/authority/testing.ts';
+import { alwaysGrounded } from '../../support/authority/testing.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import {
   RequestService,
@@ -36,7 +36,7 @@ import {
   WRITE,
   type BudgetFixture,
 } from '../budget/fixture.ts';
-import { heldArguments } from '../../../src/server/store/testing.ts';
+import { heldArguments } from '../../support/store/testing.ts';
 
 const PUBLIC_URL = new URL('https://gateway.example.com');
 const DAY1 = '2026-10-14T00:00:00.000Z';

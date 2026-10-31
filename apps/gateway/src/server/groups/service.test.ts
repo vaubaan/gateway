@@ -8,7 +8,7 @@ import {
 import { currentAuthority } from '../auth';
 import { findActiveUserByEmail } from '../authority';
 import { GROUP_NAME_MAX_LENGTH } from './service';
-import { saveTestOidcProvider } from '../auth/testing';
+import { saveTestOidcProvider } from '../../../tests/support/auth/testing';
 
 const ADMIN_GROUP = 'gateway-admins';
 

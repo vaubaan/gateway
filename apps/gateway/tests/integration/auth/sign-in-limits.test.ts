@@ -7,10 +7,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { AUTH_LIMITS, BOOTSTRAP_MAX_MISSES, BOOTSTRAP_REVOKED_KEY } from '../../../src/server/auth';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../src/server/config/testing';
+import { TEST_BOOTSTRAP_TOKEN, validEnv } from '../../support/config/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 

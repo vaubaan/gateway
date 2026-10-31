@@ -29,19 +29,19 @@ import {
 import { parseSlice } from '@vaubaan/policy-engine';
 import { MemoryAuditWriter } from '@vaubaan/gateway-core';
 
-import { createAuthorityModule } from '../authority';
-import { MemoryRateLimiter, MemorySessionStore } from '../compose/memory';
-import { silentLogger } from '../logging';
-import type { ConfigRepo } from '../store/repositories/config';
+import { createAuthorityModule } from '../../../src/server/authority';
+import { MemoryRateLimiter, MemorySessionStore } from '../../../src/server/compose/memory';
+import { silentLogger } from '../../../src/server/logging';
+import type { ConfigRepo } from '../../../src/server/store/repositories/config';
 import { openTestStore, type TestStore } from '../store/testing';
-import type { GroupRecord, UserRecord } from '../store/types';
-import { CredentialBroker } from './credentials';
-import type { OAuthBrokerConfig } from '../config/types';
-import { OAuth2Clients, registeredClientKey } from './oauth2-clients';
-import type { BrokerAttestationKit } from './broker-attestation';
-import { OAuthBrokers } from './oauth-broker';
-import { NoticeStore, PendingConnectStore } from './pending';
-import { ConnectionService, type Actor } from './service';
+import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
+import { CredentialBroker } from '../../../src/server/connections/credentials';
+import type { OAuthBrokerConfig } from '../../../src/server/config/types';
+import { OAuth2Clients, registeredClientKey } from '../../../src/server/connections/oauth2-clients';
+import type { BrokerAttestationKit } from '../../../src/server/connections/broker-attestation';
+import { OAuthBrokers } from '../../../src/server/connections/oauth-broker';
+import { NoticeStore, PendingConnectStore } from '../../../src/server/connections/pending';
+import { ConnectionService, type Actor } from '../../../src/server/connections/service';
 
 export const PUBLIC_URL = new URL('https://gateway.example.com');
 

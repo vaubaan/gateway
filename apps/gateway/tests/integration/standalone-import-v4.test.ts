@@ -22,9 +22,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RegistryCatalogIndex } from '../../src/server/compose/registry';
 import { buildShippedRegistry } from '../../src/server/compose/shipped-plugins';
 import { loadInstanceConfig } from '../../src/server/config';
-import { validEnv } from '../../src/server/config/testing';
+import { validEnv } from '../support/config/testing';
 import { createEncryptor } from '../../src/server/crypto';
-import { fixtureBundle } from '../../src/server/import-v4/testing';
+import { fixtureBundle } from '../support/import-v4/testing';
 import { openStore } from '../../src/server/store';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');

@@ -15,7 +15,7 @@ import {
   line,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const READ = 'depot.read';
 const TOOL = 'depot__read_item';

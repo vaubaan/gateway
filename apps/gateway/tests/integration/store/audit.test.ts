@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AdminAuditEntry, CallAuditEntry } from '@vaubaan/gateway-core';
 import { SqliteAuditWriter, type Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const READ = 'github.code-read';
 const WRITE = 'github.write-feature-branch';

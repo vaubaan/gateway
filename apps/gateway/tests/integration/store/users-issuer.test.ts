@@ -15,7 +15,7 @@ import { MEMORY_PATH, openDb, type StoreDb } from '../../../src/server/store/db.
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { identityKeyOf } from '../../../src/server/store/repositories/users.ts';
 import { InvariantError } from '../../../src/server/store/errors.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const OLD_IDP = 'https://old-idp.example.com';
 const NEW_IDP = 'https://new-idp.example.com';

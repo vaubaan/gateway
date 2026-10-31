@@ -22,7 +22,7 @@ import {
   type AuditFilters,
   type AuditViewer,
 } from '../../../src/server/audit';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { seedConnection } from '../../support/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,

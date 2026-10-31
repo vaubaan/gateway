@@ -11,7 +11,7 @@ import { createRedactor } from '../logging/redact';
 import { ConfigError } from './errors';
 import { loadInstanceConfig } from './load';
 import { CONFIG_FILE_ENV } from './sources';
-import { fakeFiles, validEnv } from './testing';
+import { fakeFiles, validEnv } from '../../../tests/support/config/testing';
 import { secretValues } from './types';
 
 const OPS_TOKEN = 'ops-' + randomBytes(24).toString('hex');

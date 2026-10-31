@@ -6,7 +6,12 @@ import { loadInstanceConfig, MASTER_KEY_BYTES } from './load';
 import { CONFIG_FILE_ENV } from './sources';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import { KEYS, secretEnvVariables } from './sources';
-import { TEST_BOOTSTRAP_TOKEN, TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
+import {
+  TEST_BOOTSTRAP_TOKEN,
+  TEST_MASTER_KEY,
+  fakeFiles,
+  validEnv,
+} from '../../../tests/support/config/testing';
 import { secretValues } from './types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

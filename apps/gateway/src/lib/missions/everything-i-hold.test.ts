@@ -18,7 +18,11 @@ import {
 } from './everything-i-hold';
 import type { IssuanceConnection, IssuanceResource, MissionDraft } from './model';
 import { budgetProblem, previewDraft } from './preview';
-import { ACME_CATALOG, ACME_RESOURCES, acmeConnection } from '../../server/missions/testing';
+import {
+  ACME_CATALOG,
+  ACME_RESOURCES,
+  acmeConnection,
+} from '../../../tests/support/missions/testing';
 
 const NOW = new Date('2026-10-18T09:00:00.000Z');
 

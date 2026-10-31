@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { openTestStore, type TestStore } from '../store/testing';
+import { openTestStore, type TestStore } from '../../../tests/support/store/testing';
 import { connectionCredentialKind, connectionOwnerOf, connectionSummaryOf } from './mapping';
 
 describe('connectionCredentialKind', () => {

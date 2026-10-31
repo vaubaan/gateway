@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { buildRoot } from '../compose/root';
-import { memoryStoreDeps } from '../compose/testing';
+import { memoryStoreDeps } from '../../../tests/support/compose/testing';
 import { openMemoryStore } from '../store';
 import { healthHandler, healthResponse, type HealthDeps } from './healthz';
 

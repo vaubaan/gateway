@@ -11,7 +11,7 @@ import {
   issueFirstRefreshToken,
   openTestStore,
   type TestStore,
-} from '../../../src/server/store/testing.ts';
+} from '../../support/store/testing.ts';
 
 const LOOPBACK = 'http://127.0.0.1/callback';
 const DAY_MS = 86_400_000;

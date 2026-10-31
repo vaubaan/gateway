@@ -10,7 +10,13 @@ import {
   mintRefreshToken,
   REFRESH_TOKEN_PREFIX,
 } from './secrets';
-import { openOAuthRig, pkcePair, WEB_REDIRECT, type Granted, type OAuthRig } from './testing';
+import {
+  openOAuthRig,
+  pkcePair,
+  WEB_REDIRECT,
+  type Granted,
+  type OAuthRig,
+} from '../../../tests/support/oauth-as/testing';
 import { delegationLifetime } from './delegation-lifetime';
 import { DelegatedTokenVerifier } from './verifier';
 import {

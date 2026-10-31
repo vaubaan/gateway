@@ -25,13 +25,9 @@ import type { MissionPolicyEntry } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { budgetMissionOf } from '../../../src/server/budget';
-import {
-  executionInstance,
-  line,
-  type ExecutionInstance,
-} from '../../../src/server/execution/testing';
+import { executionInstance, line, type ExecutionInstance } from '../../support/execution/testing';
 import type { MissionDraft } from '../../../src/server/missions';
-import { agePastStaleGrace } from '../../../src/server/store/testing';
+import { agePastStaleGrace } from '../../support/store/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   githubDraft,

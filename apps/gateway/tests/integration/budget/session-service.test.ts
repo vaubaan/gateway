@@ -14,11 +14,7 @@ import {
   type RecordCallRefused,
   type RecordCallResult,
 } from '../../../src/server/budget/index.ts';
-import {
-  grantApprovalRequest,
-  heldArguments,
-  refuseRequest,
-} from '../../../src/server/store/testing.ts';
+import { grantApprovalRequest, heldArguments, refuseRequest } from '../../support/store/testing.ts';
 import {
   ANCHOR,
   APPROVAL_VALIDITY_SECONDS,

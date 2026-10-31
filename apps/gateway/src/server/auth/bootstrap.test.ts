@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { openTestStore, type TestStore } from '../store/testing';
+import { openTestStore, type TestStore } from '../../../tests/support/store/testing';
 import { BOOTSTRAP_REVOKED_KEY, BootstrapService } from './bootstrap';
 
 const TOKEN = 'bootstrap-token-of-at-least-32-characters-long';

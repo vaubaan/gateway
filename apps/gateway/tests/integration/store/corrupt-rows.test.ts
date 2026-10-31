@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import { InvariantError, type Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const RISK = 'github.code-read';
 const BOGUS = 'bogus';

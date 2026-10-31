@@ -23,7 +23,7 @@
  * Everything runs in the process, on the root's host-agnostic handlers
  * (`Request → Response`): no browser and no HTTP round trip to the pages.
  */
-import { isSecondFactorStep, passSecondFactor } from '../../src/server/auth/testing';
+import { isSecondFactorStep, passSecondFactor } from '../support/auth/testing';
 import { randomBytes } from 'node:crypto';
 
 import type { MissionPolicyEntry, RiskId } from '@vaubaan/shared';

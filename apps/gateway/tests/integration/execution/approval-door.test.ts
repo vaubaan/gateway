@@ -22,7 +22,7 @@ import {
   type ExecutionInstance,
   type IssuedMission,
   type RpcBody,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const PAT = 'github_pat_11AAAAAAA0TEST_0123456789abcdefghijklmnopqrstuvwxyz';
 const GATED = 'github.workflow-write-via-file';

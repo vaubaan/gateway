@@ -2,9 +2,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { ConfigError, loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { buildRoot } from './root';
-import { memoryStoreDeps } from './testing';
+import { memoryStoreDeps } from '../../../tests/support/compose/testing';
 
 function rootWith(selfResources: string) {
   return buildRoot({

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RESTORED_ADMIN_RULE_KEY } from '../auth/restored-admin-rule';
 import { SignInProvidersService } from '../auth/sign-in-providers';
 import { loadInstanceConfig, type InstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { createEncryptor } from '../crypto';
 import { openStore, SetCatalogIndex, type Store } from '../store';
 import { EXIT_OK, runBackupCli } from './cli';

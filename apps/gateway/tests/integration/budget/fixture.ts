@@ -12,7 +12,7 @@ import {
 } from '../../../src/server/budget/index.ts';
 import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit/index.ts';
 import type { Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 export const READ = 'github.code-read';
 export const WRITE = 'github.write-feature-branch';

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ConfigError, loadInstanceConfig, secretValues } from '.';
-import { validEnv } from './testing';
+import { validEnv } from '../../../tests/support/config/testing';
 
 const SECRET = 'backup-secret-not-real-0123456789';
 const BUCKET_ENV = {

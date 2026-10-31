@@ -5,7 +5,7 @@
  * that still have grounds, nobody can share or reconnect it — and the
  * operator's reassignment, their only act on the domain.
  */
-import { throughSecondFactor } from '../../../src/server/auth/testing';
+import { throughSecondFactor } from '../../support/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
@@ -13,7 +13,7 @@ import { ConnectError } from '../../../src/server/connections';
 import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
 import { authorityRig, OPERATOR_EMAIL, PURGE, READ, type AuthorityRig } from './support';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };

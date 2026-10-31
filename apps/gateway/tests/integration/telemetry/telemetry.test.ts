@@ -22,7 +22,7 @@ import {
   TEST_PUBLIC_URL,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import {
   ENABLED_FIELD,
   PROBLEM_PARAM,

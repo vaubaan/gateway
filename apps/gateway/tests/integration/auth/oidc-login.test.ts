@@ -5,18 +5,18 @@
  * (`openid-client`) talking to the in-process `FakeIdp` through `customFetch`,
  * the host-agnostic handlers driven with web-standard `Request`s.
  */
-import { throughSecondFactor } from '../../../src/server/auth/testing';
-import { switchOnForTests } from '../../../src/server/auth/testing';
+import { throughSecondFactor } from '../../support/auth/testing';
+import { switchOnForTests } from '../../support/auth/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
 import { BOOTSTRAP_REVOKED_KEY, LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../src/server/config/testing';
+import { TEST_BOOTSTRAP_TOKEN, validEnv } from '../../support/config/testing';
 import { FakeIdp } from './fake-idp';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const ADMIN_GROUP = 'gateway-admins';

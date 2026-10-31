@@ -4,7 +4,7 @@
  */
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 
-import { BUNDLE_FORMAT, BUNDLE_VERSION, type V4Bundle } from './bundle';
+import { BUNDLE_FORMAT, BUNDLE_VERSION, type V4Bundle } from '../../../src/server/import-v4/bundle';
 
 export const ORG_ID = '0b6a1a3e-0000-4000-8000-000000000001';
 export const PROJECT_WEB = '0b6a1a3e-0000-4000-8000-0000000000a1';

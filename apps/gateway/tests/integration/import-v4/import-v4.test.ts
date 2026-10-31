@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RegistryCatalogIndex } from '../../../src/server/compose/registry';
 import { loadInstanceConfig, type LoadedConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { serializeSecret } from '../../../src/server/connections';
 import { createEncryptor } from '../../../src/server/crypto';
 import { runImportCli, type CliDeps } from '../../../src/server/import-v4';

@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MAX_TEMPORARY_REFS_PER_MISSION } from '../../../src/server/git';
 import type { AuditCallRecord } from '../../../src/server/store';
-import { line, type IssuedMission } from '../../../src/server/execution/testing';
+import { line, type IssuedMission } from '../../support/execution/testing';
 import { isolatedGitEnv } from './fake-github-host';
 import {
   DEVELOPER_TRUST_LEVELS,

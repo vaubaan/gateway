@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { holderColumns } from '../../../src/server/store/repositories/sessions.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const AT = '2026-10-13T08:00:00.000Z';
 const READ = 'github.code-read';
