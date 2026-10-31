@@ -5,19 +5,12 @@ import { nowIso, parseEnum, placeholders, requireRow, type RepoContext } from '.
 import { GROUP_SOURCES } from './enums.ts';
 import { userColumns, userRowToRecord, type UserRow } from './users.ts';
 
-/**
- * The provider an IdP-sourced group is created for when none is named: the one
- * provider an instance had before several existed (`LEGACY_PROVIDER_ID`).
- */
-const DEFAULT_IDP_PROVIDER = 'idp';
-
 export interface GroupsRepo {
   /**
-   * The group of that name, created when absent. An IdP-sourced group is created for
-   * `provider` (default: the single provider of earlier versions, `idp`); a local one
-   * for none.
+   * The group of that name, created when absent: an IdP-sourced one for `provider`, a
+   * local one for none (`provider` is then ignored).
    */
-  getOrCreate(name: string, source: GroupSource, provider?: string): Promise<GroupRecord>;
+  getOrCreate(name: string, source: GroupSource, provider: string | null): Promise<GroupRecord>;
   /**
    * Creates a local group (operator-kept). Returns `null` when the name is already held,
    * by a local group or by one the IdP claimed: a name designates one group.
@@ -35,12 +28,12 @@ export interface GroupsRepo {
    * everything as it was. Local groups are never touched: a name held by a
    * local group is skipped and returned in `skipped`, and so is a name held by a
    * group another sign-in provider claimed — a group belongs to its provider.
-   * `provider` is the sign-in provider of the user (default `idp`).
+   * `provider` is the sign-in provider of the user.
    */
   syncIdpMemberships(
     userId: string,
     names: readonly string[],
-    provider?: string,
+    provider: string,
   ): Promise<{ skipped: string[] }>;
   /** Idempotent. `true` when the membership was added, `false` when it already existed. */
   addMember(groupId: string, userId: string): Promise<boolean>;
@@ -124,7 +117,7 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
   }
 
   return {
-    async getOrCreate(name, source, provider = DEFAULT_IDP_PROVIDER) {
+    async getOrCreate(name, source, provider) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => getOrCreateSync(name, source, provider, now));
     },
@@ -133,7 +126,7 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
       const created = insertIfAbsent.run(id, name, 'local', null, nowIso(ctx)).changes > 0;
       return created ? requireGroup(id) : null;
     },
-    async syncIdpMemberships(userId, names, provider = DEFAULT_IDP_PROVIDER) {
+    async syncIdpMemberships(userId, names, provider) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const skipped: string[] = [];

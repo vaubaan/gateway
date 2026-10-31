@@ -96,7 +96,7 @@ describe('store rows with a value outside a closed set', () => {
   });
 
   it('refuses an unknown groups.source', async () => {
-    const group = await store.groups.getOrCreate('platform', 'idp');
+    const group = await store.groups.getOrCreate('platform', 'idp', 'idp');
     corrupt('groups', 'source', 'id', group.id);
     await expectLoudFailure(() => store.groups.getById(group.id), 'groups.source');
   });

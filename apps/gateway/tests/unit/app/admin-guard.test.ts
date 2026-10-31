@@ -18,6 +18,7 @@ import { loadInstanceConfig } from '@/server/config';
 import { validEnv } from '@/server/config/testing';
 
 import { appDir, outcomeOf, renderPage, surfaceFiles } from './guard-harness';
+import { saveTestOidcProvider } from '../../../src/server/auth/testing';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 vi.mock('next/headers', () => ({ headers: async () => request.headers }));
@@ -60,7 +61,7 @@ describe('the Administration surface authorizes in every page and route', () => 
       subject,
       email,
     });
-    await root.store.groups.syncIdpMemberships(user.id, groups);
+    await root.store.groups.syncIdpMemberships(user.id, groups, 'idp');
     const session = await root.auth.sessions.create({
       kind: 'user',
       userId: user.id,
@@ -74,7 +75,7 @@ describe('the Administration surface authorizes in every page and route', () => 
   }
 
   async function configureIdp(): Promise<void> {
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: ISSUER,
       clientId: CLIENT_ID,
       clientSecret: 'admin-guard-client-secret',

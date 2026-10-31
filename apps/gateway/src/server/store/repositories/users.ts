@@ -42,15 +42,6 @@ export interface UsersRepo {
    */
   countActive(): Promise<number>;
   /**
-   * Binds every account created before migration 0011 (no issuer recorded) to
-   * `issuer`, and returns how many were bound. Called with the issuer of a sign-in
-   * that was just validated, before the account is looked up: the first sign-in after
-   * the upgrade names the identity provider those accounts came from, for all of them
-   * at once, so none stays open to be matched by another issuer later. A no-op once
-   * done.
-   */
-  bindUnboundTo(issuer: string): Promise<number>;
-  /**
    * Deactivation: the user is `removed`. They hold no authority from then on, so their
    * missions read `orphaned` (derived, `MissionGrounds`), and every session they had
    * open is ended (`sessions_ended_at`). Idempotent on the status; the instants move.
@@ -160,15 +151,6 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
   const activeCount = db.prepare<[], { readonly n: number }>(
     "SELECT COUNT(*) AS n FROM users WHERE status = 'active'",
   );
-  // An account that would collide with one already bound to this issuer is left unbound
-  // (and therefore unreachable) rather than failing the sign-in that triggered the bind.
-  const bindUnbound = db.prepare<[string, string, string]>(
-    `UPDATE users SET issuer = ?, identity_key = ? || ' ' || subject
-     WHERE issuer IS NULL
-       AND NOT EXISTS (
-         SELECT 1 FROM users bound WHERE bound.identity_key = ? || ' ' || users.subject
-       )`,
-  );
   const remove = db.prepare<[string, string, string]>(
     `UPDATE users SET status = 'removed', removed_at = ?, sessions_ended_at = ? WHERE id = ?`,
   );
@@ -244,11 +226,6 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
     },
     async countActive() {
       return activeCount.get()?.n ?? 0;
-    },
-    async bindUnboundTo(issuer) {
-      // Validates the issuer the same way a key is built.
-      identityKeyOf(issuer, 'x');
-      return withImmediateTransaction(db, () => bindUnbound.run(issuer, issuer, issuer).changes);
     },
     async markRemoved(id) {
       const now = nowIso(ctx);

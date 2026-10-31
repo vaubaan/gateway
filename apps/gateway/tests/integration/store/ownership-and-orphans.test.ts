@@ -39,7 +39,7 @@ describe('ownership and orphan states in the store', () => {
         email: 'bob@x',
       })
     ).id;
-    group = (await store.groups.getOrCreate('github-admins', 'local')).id;
+    group = (await store.groups.getOrCreate('github-admins', 'local', null)).id;
   });
   afterEach(() => store.close());
 
@@ -56,7 +56,7 @@ describe('ownership and orphan states in the store', () => {
     it('marks unowned exactly the active connections whose owner group has no member', async () => {
       const empty = await connect(byGroup);
       const users = await connect({ kind: 'user', id: ada });
-      const populated = await store.groups.getOrCreate('populated', 'local');
+      const populated = await store.groups.getOrCreate('populated', 'local', null);
       await store.groups.addMember(populated.id, bob);
       const owned = await connect({ kind: 'group', id: populated.id });
       const revoked = await connect(byGroup);
@@ -320,18 +320,18 @@ describe('ownership and orphan states in the store', () => {
       const created = await store.groups.createLocal('platform');
       expect(created).toMatchObject({ name: 'platform', source: 'local' });
       expect(await store.groups.createLocal('platform')).toBeNull();
-      await store.groups.getOrCreate('claimed', 'idp');
+      await store.groups.getOrCreate('claimed', 'idp', 'idp');
       expect(await store.groups.createLocal('claimed')).toBeNull();
       expect((await store.groups.getByName('claimed'))?.source).toBe('idp');
     });
 
     it('a user’s groups are the IdP-sourced and the local ones together; a claim sync touches only the first', async () => {
       await store.groups.addMember(group, bob);
-      await store.groups.syncIdpMemberships(bob, ['dev', 'github-admins']);
+      await store.groups.syncIdpMemberships(bob, ['dev', 'github-admins'], 'idp');
       const names = async () =>
         (await store.groups.groupsOf(bob)).map((g) => `${g.source}:${g.name}`);
       expect(await names()).toEqual(['idp:dev', 'local:github-admins']);
-      await store.groups.syncIdpMemberships(bob, []);
+      await store.groups.syncIdpMemberships(bob, [], 'idp');
       expect(await names()).toEqual(['local:github-admins']);
     });
   });

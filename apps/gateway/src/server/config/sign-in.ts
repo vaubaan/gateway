@@ -21,12 +21,12 @@ export function isSignInKind(raw: string): raw is SignInKind {
   return (SIGN_IN_KINDS as readonly string[]).includes(raw);
 }
 
-/**
- * The id of the provider the single-provider keys (`idp.*`, `VAUBAAN_IDP_*`) and the
- * settings saved before several providers existed describe. Its callback stays the
- * one an identity provider already has registered: `<public_url>/auth/callback`.
- */
-export const LEGACY_PROVIDER_ID = 'idp';
+/** The claims an OpenID Connect provider is read with unless it names others. */
+export const DEFAULT_CLAIM_MAPPING: IdpClaimMapping = {
+  sub: 'sub',
+  email: 'email',
+  groups: 'groups',
+};
 
 /** Lower-case letter first, then letters, digits and hyphens; at most 32 characters. */
 const PROVIDER_ID = /^[a-z][a-z0-9-]{0,31}$/;
@@ -256,10 +256,9 @@ export function splitAdminGroup(raw: string): { prefix: string; name: string } |
  * - `<provider>:<group>` with a configured provider id → that provider's group;
  * - otherwise the whole value is a group name, and it belongs to the one provider
  *   when exactly one is configured — except that a value written as
- *   `<provider>:<group>` whose provider is not configured names nobody, unless the
- *   one provider is `idp` (the single provider of earlier versions, whose group
- *   names may contain a colon): a rule written for a provider that was removed
- *   must not fall to another one;
+ *   `<provider>:<group>` whose provider is not configured names nobody: a rule
+ *   written for a provider that was removed must not fall to another one (a group
+ *   name that contains a colon is written with its provider, `idp:team:admins`);
  * - with several providers and no provider named, the rule is ambiguous and
  *   matches nobody (`null`): a group claimed by provider A never satisfies a rule
  *   meant for provider B.
@@ -275,7 +274,7 @@ export function resolveAdminGroup(
   }
   const [only, ...others] = providerIds;
   if (only === undefined || others.length > 0) return null;
-  if (split && only !== LEGACY_PROVIDER_ID) return null;
+  if (split) return null;
   return { provider: only, name: raw };
 }
 
@@ -291,7 +290,7 @@ export function adminGroupProblem(
   if (resolveAdminGroup(raw, providerIds) !== null) return null;
   return (
     `the admin rule's group "${raw}" does not say which sign-in provider claims it, and there are ${providerIds.length} ` +
-    `(${providerIds.join(', ')}): write it as "<provider>:<group>", for instance "${providerIds[0] ?? 'idp'}:${raw}"`
+    `(${providerIds.join(', ')}): write it as "<provider>:<group>", for instance "${providerIds[0] ?? '<provider>'}:${raw}"`
   );
 }
 
@@ -305,36 +304,6 @@ export function reservedGroupNames(raw: string | null): string[] {
 /* ------------------------------------------------------------------------ */
 /* The providers the configuration sets                                      */
 /* ------------------------------------------------------------------------ */
-
-/** The single-provider settings (`idp.*`, or the ones saved before several providers) as provider `idp`. */
-export function legacyProviderOf(idp: {
-  readonly issuer: URL;
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly claims: IdpClaimMapping;
-  readonly allowedEmailDomains: readonly string[];
-  readonly invitationOnly: boolean;
-}): OidcSignInProvider {
-  return {
-    kind: 'oidc',
-    id: LEGACY_PROVIDER_ID,
-    name: idp.issuer.hostname,
-    issuer: idp.issuer,
-    clientId: idp.clientId,
-    clientSecret: idp.clientSecret,
-    claims: idp.claims,
-    allowedEmailDomains: idp.allowedEmailDomains,
-    invitationOnly: idp.invitationOnly,
-  };
-}
-
-/** Every provider the mounted configuration and the environment set: `idp.*` first, then `sign_in.*`. */
-export function fileSignInProviders(config: {
-  readonly idp: Parameters<typeof legacyProviderOf>[0] | null;
-  readonly signIn: readonly SignInProvider[];
-}): SignInProvider[] {
-  return [...(config.idp ? [legacyProviderOf(config.idp)] : []), ...config.signIn];
-}
 
 /* ------------------------------------------------------------------------ */
 /* The presets of the form: Google and Entra ID are OpenID Connect providers */

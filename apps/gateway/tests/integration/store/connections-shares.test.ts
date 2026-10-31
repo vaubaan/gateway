@@ -24,7 +24,7 @@ describe('connections repository', () => {
         email: 'o@x',
       })
     ).id;
-    group = (await store.groups.getOrCreate('github-admins', 'idp')).id;
+    group = (await store.groups.getOrCreate('github-admins', 'idp', 'idp')).id;
   });
   afterEach(() => store.close());
 
@@ -406,7 +406,7 @@ describe('shares repository', () => {
         email: 't@x',
       })
     ).id;
-    group = (await store.groups.getOrCreate('devs', 'idp')).id;
+    group = (await store.groups.getOrCreate('devs', 'idp', 'idp')).id;
     connection = (
       await store.connections.create({
         provider: 'github',

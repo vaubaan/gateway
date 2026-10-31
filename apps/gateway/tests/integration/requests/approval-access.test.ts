@@ -43,7 +43,7 @@ describe('the arguments of an approval request are for the creator only', () => 
       subject: 'idp|carol',
       email: 'carol@example.com',
     });
-    const team = await root.store.groups.getOrCreate('platform', 'local');
+    const team = await root.store.groups.getOrCreate('platform', 'local', null);
     await root.store.groups.setMembers(team.id, [seeded.ada.id, carol.id]);
     const connection = await seedConnection(root.store, {
       provider: 'github',

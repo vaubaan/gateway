@@ -25,7 +25,7 @@
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import type { RateLimiter } from '../compose/ports';
-import { entraIssuer, LEGACY_PROVIDER_ID } from '../config/sign-in';
+import { entraIssuer } from '../config/sign-in';
 import { resolveReturnTo } from '../http/return-to';
 import { LimitReachedError } from '../limits';
 import type { Logger } from '../logging';
@@ -43,7 +43,7 @@ import { auditActorId, type Authenticator, type Principal } from './authenticato
 import { BOOTSTRAP_MAX_MISSES, type BootstrapService } from './bootstrap';
 import { IdpSettingsError, LOGIN_ERROR_MESSAGES, LoginError, type LoginErrorCode } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
-import { splitList } from './idp-settings';
+import { splitList } from '../http/form';
 import type { LoginDeps } from './login';
 import type { FinishSignIn } from './local-handlers';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
@@ -141,7 +141,7 @@ export interface AuthHandlers {
   /** `providerId` from the path; absent on `/auth/login`. */
   loginStart(request: Request, providerId?: string): Promise<Response>;
   /** `providerId` from the path; absent on `/auth/callback` (the provider `idp`). */
-  loginCallback(request: Request, providerId?: string): Promise<Response>;
+  loginCallback(request: Request, providerId: string): Promise<Response>;
   logout(request: Request): Promise<Response>;
   bootstrapLogin(request: Request): Promise<Response>;
   /** Saves a sign-in provider from the Settings form (the single-provider form included). */
@@ -251,7 +251,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       }
     },
 
-    async loginCallback(request, providerId = LEGACY_PROVIDER_ID) {
+    async loginCallback(request, providerId) {
       const clearPending = deps.sessions.clearPendingCookie();
       if (
         !(await admitted(
@@ -348,8 +348,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
 
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      // The single-provider form of earlier versions sends no id: it edits `idp`.
-      const id = stringField(form, 'provider_id') || LEGACY_PROVIDER_ID;
+      const id = stringField(form, 'provider_id');
       const kind = stringField(form, 'kind') || 'oidc';
       const requested = stringField(form, 'mode');
       const mode: SaveMode =
@@ -376,8 +375,8 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           email: stringField(form, 'claim_email') || 'email',
           groups: stringField(form, 'claim_groups') || 'groups',
         },
-        // The page's three admission rules (`admission`); the single-provider form sends
-        // the domains and `invitation_only` alone.
+        // The page's three admission rules (`admission`); a client that posts the form
+        // itself may send the domains and `invitation_only` instead.
         allowedEmailDomains:
           admission === 'everyone' || admission === 'invited'
             ? []
@@ -430,9 +429,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
             const value = stringField(form, field);
             if (value) params.set(field, value);
           }
-          // The single-provider form has no page of its own for a new provider: back to the list.
-          const page = stringField(form, 'provider_id') ? NEW_SIGN_IN_PROVIDER_PAGE : IDP_PAGE;
-          return redirect(`${page}?${params.toString()}`);
+          return redirect(`${NEW_SIGN_IN_PROVIDER_PAGE}?${params.toString()}`);
         }
         throw err;
       }

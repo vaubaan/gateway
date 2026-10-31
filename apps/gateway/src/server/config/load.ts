@@ -30,8 +30,6 @@ import {
   isSignInProviderId,
   localProviderOf,
   issuerKey,
-  LEGACY_PROVIDER_ID,
-  legacyProviderOf,
   normalizeEmailDomains,
   SIGN_IN_KINDS,
   type SignInProvider,
@@ -58,6 +56,8 @@ import {
   readEnvSource,
   readFileSource,
   retiredConfigKeys,
+  RETIRED_IDP_ENV_PREFIX,
+  RETIRED_IDP_KEY,
   secretEnvVariables,
   OAUTH_BROKER_BLOCK,
   OAUTH_BROKER_ENV_PREFIX,
@@ -71,7 +71,6 @@ import {
   CLIENT_REGISTRATION_POLICIES,
   type ClientRegistrationPolicy,
   type EncryptionConfig,
-  type IdpConfig,
   type InstanceConfig,
   LOG_LEVELS,
   type LimitsConfig,
@@ -445,9 +444,9 @@ function validate(
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const restore = readRestore(r);
   const encryption = readEncryption(r, masterKey, restore.from !== null);
-  const idp = readIdp(r);
+  refuseSingleProviderKeys(r, raw, env);
   const signIn = readSignIn(r);
-  const signInProviders = checkSignInProviders(r, idp, signIn);
+  const signInProviders = checkSignInProviders(r, signIn);
   const admin = readAdmin(r, signInProviders);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
   const limits = readLimits(r);
@@ -490,7 +489,6 @@ function validate(
     store: { path: storePath },
     restore,
     encryption,
-    idp,
     signIn,
     admin,
     retiredKeys: retiredConfigKeys(raw, env),
@@ -1123,38 +1121,22 @@ function normalizeBase64(text: string): string {
   return padded + '='.repeat((4 - (padded.length % 4)) % 4);
 }
 
-function readIdp(r: Reader): IdpConfig | null {
-  const block = r.tree('idp');
-  if (!block || Object.keys(block).length === 0) return null;
-  // The block exists: its three connection keys are now required.
-  const issuerKey = keySpec('idp.issuer');
-  const issuer = r.url(issuerKey.path, {
-    required: isKeyRequired(issuerKey, true),
-    https: issuerKey.https,
-  });
-  const clientId = r.string('idp.client_id', {
-    required: isKeyRequired(keySpec('idp.client_id'), true),
-  });
-  const clientSecret = r.string('idp.client_secret', {
-    required: isKeyRequired(keySpec('idp.client_secret'), true),
-  });
-  const claims = {
-    sub: r.text(keySpec('idp.claims.sub')),
-    email: r.text(keySpec('idp.claims.email')),
-    groups: r.text(keySpec('idp.claims.groups')),
-  };
-  if (issuer && isGithubDotComHost(issuer)) {
-    // The idp.* keys describe an OpenID Connect provider; GitHub goes under sign_in.<id>.
-    r.issues.add(
-      issuerKey.path,
-      `${GITHUB_IS_NOT_OIDC} (sign_in.<id>.kind: github)`,
-      envNamesFor(issuerKey.path),
-    );
-  }
-  const allowedEmailDomains = r.stringList('idp.allowed_email_domains').map((d) => d.toLowerCase());
-  const invitationOnly = r.bool(keySpec('idp.invitation_only'));
-  if (!issuer || !clientId || !clientSecret) return null;
-  return { issuer, clientId, clientSecret, claims, allowedEmailDomains, invitationOnly };
+/**
+ * The single-provider keys of earlier builds (`idp.*`, `VAUBAAN_IDP_*`) are refused:
+ * ignored, they would leave the instance without the provider people sign in with.
+ * The same provider is `sign_in.idp.*`, whose callback is `<public_url>/auth/callback/idp`
+ * (gateway audit 2026-10-31, F7; CHANGELOG upgrade note).
+ */
+function refuseSingleProviderKeys(r: Reader, raw: RawTree, env: EnvSource): void {
+  const variables = Object.keys(env)
+    .filter((name) => name.startsWith(RETIRED_IDP_ENV_PREFIX) && env[name] !== undefined)
+    .sort();
+  if (raw[RETIRED_IDP_KEY] === undefined && variables.length === 0) return;
+  r.issues.add(
+    RETIRED_IDP_KEY,
+    'the single-provider keys are retired: write the same provider as sign_in.idp.* (kind oidc, issuer, client_id, client_secret, claims, allowed_email_domains, invitation_only; VAUBAAN_SIGN_IN_IDP_KIND=oidc, VAUBAAN_SIGN_IN_IDP_ISSUER, …) and register <public_url>/auth/callback/idp at the identity provider',
+    variables,
+  );
 }
 
 /**
@@ -1296,17 +1278,12 @@ function normalizeDomainsAt(r: Reader, path: string): string[] {
 }
 
 /**
- * The rules across the providers the configuration sets: one id each (`idp.*` is
- * the provider `idp`), one issuer each (a user is (issuer, subject): two providers
+ * The rules across the providers the configuration sets: one issuer each (a user is (issuer, subject): two providers
  * of one issuer would be one population with two admission rules), and an
  * admission rule for every open provider.
  */
-function checkSignInProviders(
-  r: Reader,
-  idp: IdpConfig | null,
-  signIn: readonly SignInProvider[],
-): SignInProvider[] {
-  const all = [...(idp ? [legacyProviderOf(idp)] : []), ...signIn];
+function checkSignInProviders(r: Reader, signIn: readonly SignInProvider[]): SignInProvider[] {
+  const all = [...signIn];
   const issuers = new Map<string, string>();
   const locals = all.filter((p) => p.kind === 'local');
   if (locals.length > 1) {
@@ -1316,17 +1293,7 @@ function checkSignInProviders(
     );
   }
   for (const provider of all) {
-    const path = provider.id === LEGACY_PROVIDER_ID && idp ? 'idp' : `sign_in.${provider.id}`;
-    if (
-      provider.id === LEGACY_PROVIDER_ID &&
-      idp &&
-      signIn.some((p) => p.id === LEGACY_PROVIDER_ID)
-    ) {
-      r.issues.add(
-        'sign_in.idp',
-        "the id 'idp' is the provider the idp.* keys describe; set one or the other",
-      );
-    }
+    const path = `sign_in.${provider.id}`;
     const key = issuerKey(provider.issuer);
     const other = issuers.get(key);
     if (other !== undefined && other !== provider.id) {
@@ -1339,18 +1306,10 @@ function checkSignInProviders(
     issuers.set(key, provider.id);
     const problem = admissionProblem(provider);
     if (problem) {
-      r.issues.add(
-        provider.id === LEGACY_PROVIDER_ID && idp
-          ? 'idp.allowed_email_domains'
-          : `${path}.allowed_email_domains`,
-        problem,
-        provider.id === LEGACY_PROVIDER_ID && idp
-          ? [...envNamesFor('idp.allowed_email_domains'), ...envNamesFor('idp.invitation_only')]
-          : [
-              ...envNamesFor(`${path}.allowed_email_domains`),
-              ...envNamesFor(`${path}.invitation_only`),
-            ],
-      );
+      r.issues.add(`${path}.allowed_email_domains`, problem, [
+        ...envNamesFor(`${path}.allowed_email_domains`),
+        ...envNamesFor(`${path}.invitation_only`),
+      ]);
     }
   }
   return all;

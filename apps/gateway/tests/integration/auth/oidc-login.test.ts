@@ -10,17 +10,13 @@ import { switchOnForTests } from '../../../src/server/auth/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
-import {
-  BOOTSTRAP_REVOKED_KEY,
-  IDP_CONFIG_KEYS,
-  LOGIN_COOKIE,
-  SESSION_COOKIE,
-} from '../../../src/server/auth';
+import { BOOTSTRAP_REVOKED_KEY, LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
 import { TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../src/server/config/testing';
 import { FakeIdp } from './fake-idp';
+import { saveTestOidcProvider } from '../../../src/server/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const ADMIN_GROUP = 'gateway-admins';
@@ -71,7 +67,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
   });
 
   async function configureIdp(): Promise<void> {
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -80,7 +76,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     });
   }
 
-  /** The browser's round trip: /auth/login → IdP consent → /auth/callback. */
+  /** The browser's round trip: /auth/login → IdP consent → /auth/callback/idp. */
   async function signIn(
     b: Browser,
     claims: Record<string, unknown>,
@@ -105,6 +101,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     }
     const finish = await root.auth.handlers.loginCallback(
       new Request(seen.href, { headers: { cookie: cookieHeader(b) } }),
+      'idp',
     );
     absorbCookies(b, finish);
     // The gateway's own second factor, answered as the person's app would.
@@ -159,7 +156,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|bob', email: 'bob@example.com', groups: ['dev', 'ops'] });
     const bob = (await root.store.users.getByIdentity(idp.iss, 'idp|bob'))!;
-    const local = await root.store.groups.getOrCreate('local-reviewers', 'local');
+    const local = await root.store.groups.getOrCreate('local-reviewers', 'local', null);
     await root.store.groups.addMember(local.id, bob.id);
 
     const b2: Browser = { cookies: new Map() };
@@ -175,7 +172,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
 
   it('ignores a claim that collides with a local group instead of granting it', async () => {
     await configureIdp();
-    await root.store.groups.getOrCreate('finance', 'local');
+    await root.store.groups.getOrCreate('finance', 'local', null);
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|eve', email: 'eve@example.com', groups: ['finance'] });
     const eve = (await root.store.users.getByIdentity(idp.iss, 'idp|eve'))!;
@@ -275,6 +272,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
 
     // the bootstrap operator configures the IdP through the form (secret sealed, audited)
     const form = new URLSearchParams({
+      provider_id: 'idp',
       issuer: idp.issuer.href,
       client_id: CLIENT.clientId,
       client_secret: CLIENT.clientSecret,
@@ -296,7 +294,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=idp');
     // Saved off (ADR administrators-live-in-the-instance): switched on as after a passed test.
     await switchOnForTests(root.store.config, 'idp');
-    expect(await root.store.config.getSecret(IDP_CONFIG_KEYS.clientSecret)).toBe(
+    expect(await root.store.config.getSecret('sign_in.idp.client_secret')).toBe(
       CLIENT.clientSecret,
     );
     const audit = (await root.store.audit.list({ kind: 'admin' })).filter(
@@ -307,7 +305,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       kind: 'admin',
       user_id: BOOTSTRAP_ACTOR_ID,
       act: 'config-changed',
-      object: { type: 'instance-config', id: 'idp' },
+      object: { type: 'instance-config', id: 'sign-in:idp' },
     });
     expect(JSON.stringify(audit[0])).not.toContain(CLIENT.clientSecret);
 
@@ -377,7 +375,8 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(b.cookies.has(LOGIN_COOKIE)).toBe(false);
 
     const expired = await root.auth.handlers.loginCallback(
-      new Request(`${PUBLIC_URL}/auth/callback?code=c&state=s`),
+      new Request(`${PUBLIC_URL}/auth/callback/idp?code=c&state=s`),
+      'idp',
     );
     expect(expired.headers.get('location')).toBe('/login?error=login-expired');
 
@@ -388,7 +387,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
   });
 
   it('refuses an email outside the allowed domains and missing claims', async () => {
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -498,6 +497,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
           'content-type': 'application/x-www-form-urlencoded',
         }),
         body: new URLSearchParams({
+          provider_id: 'idp',
           issuer: idp.issuer.href,
           client_id: CLIENT.clientId,
           client_secret: CLIENT.clientSecret,
@@ -511,13 +511,15 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     vi.restoreAllMocks();
     // The settings are stored (one transaction); the missing entry is an error line naming the actor.
     expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=idp');
-    expect((await root.auth.idp.current())?.settings.clientId).toBe(CLIENT.clientId);
+    expect((await root.auth.providers.resolve('idp'))?.provider).toMatchObject({
+      clientId: CLIENT.clientId,
+    });
     const errorLine = lines.find((l) => l.includes('audit entry not written'));
     expect(errorLine).toBeDefined();
     expect(JSON.parse(errorLine ?? '{}')).toMatchObject({
       level: 'error',
       actor: BOOTSTRAP_ACTOR_ID,
-      object: 'idp',
+      object: 'sign-in:idp',
     });
     expect(errorLine).not.toContain(CLIENT.clientSecret);
   });
@@ -683,39 +685,22 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       expect((await root.store.users.getById(ada.id))?.status).toBe('removed');
     });
 
-    it('accounts from before the issuer was recorded are bound by the first sign-in, all of them, once', async () => {
+    it('an account from before the issuer was recorded is bound to nothing: its person signs in as somebody new', async () => {
       await configureIdp();
-      // Two accounts as migration 0011 leaves them: Ada, and Bob whom an operator deactivated.
-      const legacy = root.store.db.prepare(
-        `INSERT INTO users (id, identity_key, issuer, subject, email, status, created_at)
-         VALUES (?, ?, NULL, ?, ?, ?, '2026-10-01T00:00:00.000Z')`,
-      );
-      legacy.run('usr_ada', 'unbound idp|ada', 'idp|ada', 'ada@example.com', 'active');
-      legacy.run('usr_bob', 'unbound idp|bob', 'idp|bob', 'bob@example.com', 'removed');
-
+      // As migration 0011 leaves an account of a build before 2.0.0-alpha.1.
+      root.store.db
+        .prepare(
+          `INSERT INTO users (id, identity_key, issuer, subject, email, status, created_at)
+           VALUES ('usr_ada', 'unbound idp|ada', NULL, 'idp|ada', 'ada@example.com', 'active', '2026-10-01T00:00:00.000Z')`,
+        )
+        .run();
       const b: Browser = { cookies: new Map() };
-      const res = await signIn(b, { sub: 'idp|ada', email: 'ada@example.com' });
-      expect(res.headers.get('location')).toBe('/admin');
-
-      // Ada is back in her own account, not a new one.
+      expect(
+        (await signIn(b, { sub: 'idp|ada', email: 'ada@example.com' })).headers.get('location'),
+      ).toBe('/admin');
       const principal = await root.auth.authenticator.authenticate(headersOf(b));
-      expect(principal?.kind === 'user' && principal.user.id).toBe('usr_ada');
-      expect(await root.store.users.list()).toHaveLength(2);
-      expect(lines.some((line) => line.includes('existing accounts bound'))).toBe(true);
-      // Bob did not sign in and is bound too: his deactivation still holds at this issuer…
-      const bob = await signIn(
-        { cookies: new Map() },
-        { sub: 'idp|bob', email: 'bob@example.com' },
-      );
-      expect(bob.headers.get('location')).toBe('/login?error=account-deactivated');
-
-      // …and nothing is left for another issuer to take.
-      idp = other;
-      await configureIdp();
-      await signIn({ cookies: new Map() }, { sub: 'idp|ada', email: 'mallory@example.com' });
-      const mallory = (await root.store.users.getByIdentity(other.iss, 'idp|ada'))!;
-      expect(mallory.id).not.toBe('usr_ada');
-      expect((await root.store.users.getById('usr_ada'))?.email).toBe('ada@example.com');
+      expect(principal?.kind === 'user' && principal.user.id).not.toBe('usr_ada');
+      expect((await root.store.users.getById('usr_ada'))?.issuer).toBeNull();
     });
   });
 

@@ -8,6 +8,7 @@ import {
 import { currentAuthority } from '../auth';
 import { findActiveUserByEmail } from '../authority';
 import { GROUP_NAME_MAX_LENGTH } from './service';
+import { saveTestOidcProvider } from '../auth/testing';
 
 const ADMIN_GROUP = 'gateway-admins';
 
@@ -48,7 +49,7 @@ describe('GroupService — local groups kept by the operator', () => {
 
     it('refuses a name already held, by a local group or by one the IdP claimed', async () => {
       await groups().create(op(), 'platform');
-      await rig.root.store.groups.getOrCreate('from-idp', 'idp');
+      await rig.root.store.groups.getOrCreate('from-idp', 'idp', 'idp');
       await expect(groups().create(op(), 'platform')).rejects.toMatchObject({ code: 'name-taken' });
       await expect(groups().create(op(), 'from-idp')).rejects.toMatchObject({ code: 'name-taken' });
       // The IdP group was not turned local by the attempt.
@@ -64,8 +65,14 @@ describe('GroupService — local groups kept by the operator', () => {
 
     it('never makes an operator of a member of a local group, whatever its name', async () => {
       const { store } = rig.root;
+      // The provider whose group the rule names.
+      await saveTestOidcProvider(store.config, {
+        issuer: 'https://idp.example.com',
+        clientId: 'c',
+        clientSecret: 's',
+      });
       // A local group that carries the admin rule's name (created before the rule named it).
-      const local = await store.groups.getOrCreate(ADMIN_GROUP, 'local');
+      const local = await store.groups.getOrCreate(ADMIN_GROUP, 'local', null);
       await store.groups.addMember(local.id, rig.bob.id);
       const rule = await rig.root.auth.administrators.current();
       expect(await currentAuthority(store, rig.bob, rule)).toMatchObject({
@@ -157,7 +164,7 @@ describe('GroupService — local groups kept by the operator', () => {
     });
 
     it('never edits a group that comes from the IdP', async () => {
-      const idp = await rig.root.store.groups.getOrCreate('from-idp', 'idp');
+      const idp = await rig.root.store.groups.getOrCreate('from-idp', 'idp', 'idp');
       await rig.root.store.groups.addMember(idp.id, rig.bob.id);
       await expect(groups().addMember(op(), idp.id, 'ada@example.com')).rejects.toMatchObject({
         code: 'not-local',

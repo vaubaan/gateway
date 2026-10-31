@@ -156,9 +156,9 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(res.headers.get('location')).toBe('/login?return_to=%2Fmissions');
   });
 
-  it('each provider has its own callback; the provider idp keeps /auth/callback', () => {
+  it('each provider has its own callback, the provider idp too', () => {
     expect(root.auth.flows.callbackUrl('github').href).toBe(`${PUBLIC_URL}/auth/callback/github`);
-    expect(root.auth.flows.callbackUrl('idp').href).toBe(`${PUBLIC_URL}/auth/callback`);
+    expect(root.auth.flows.callbackUrl('idp').href).toBe(`${PUBLIC_URL}/auth/callback/idp`);
   });
 
   it('signs in through the company directory on an allowed domain', async () => {

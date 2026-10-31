@@ -10,7 +10,6 @@
  * refusal comes before anything is written (no row refreshed, no group
  * synced, no bootstrap revocation).
  */
-import { LEGACY_PROVIDER_ID } from '../config/sign-in';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -89,7 +88,7 @@ export async function syncIdpGroups(
   userId: string,
   claimedNames: readonly string[],
   logger: Logger,
-  providerId: string = LEGACY_PROVIDER_ID,
+  providerId: string,
 ): Promise<void> {
   const { skipped } = await store.groups.syncIdpMemberships(userId, claimedNames, providerId);
   for (const name of skipped) {
@@ -128,20 +127,6 @@ export async function completeLogin(
   claims: IdentityClaims,
   context: LoginContext,
 ): Promise<LoginOutcome> {
-  // Accounts from before the store recorded an issuer belong to the identity provider
-  // the instance was using — the single provider, `idp`: its first validated sign-in
-  // after the upgrade names it, for all of them, before any is looked up (migration
-  // 0011). A sign-in through any other provider binds nothing.
-  const bound =
-    context.providerId === LEGACY_PROVIDER_ID
-      ? await deps.store.users.bindUnboundTo(claims.issuer)
-      : 0;
-  if (bound > 0) {
-    deps.logger.warn('existing accounts bound to the identity provider of this sign-in', {
-      issuer: claims.issuer,
-      accounts: bound,
-    });
-  }
   // A user is (issuer, subject): the same subject from another issuer is somebody else.
   const known = await deps.store.users.getByIdentity(claims.issuer, claims.subject);
   if (known && known.status !== 'active') {

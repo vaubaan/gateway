@@ -4,14 +4,13 @@
  *
  * Two sources, merged by id:
  *
- * - `file` — the mounted configuration and the environment (`idp.*` as the
- *   provider `idp`, `sign_in.<id>.*`). Read-only in the interface; it wins over a
- *   saved provider of the same id.
- * - `store` — saved by an administrator in Settings → Sign-in. The provider `idp`
- *   keeps the keys of the single-provider settings (`IdpSettingsService`,
- *   `idp.*` in `instance_config`); any other is `sign_in.<id>` (its settings, as
- *   JSON) and `sign_in.<id>.client_secret` (sealed by the `Encryptor`, associated
- *   data `instance_config:sign_in.<id>.client_secret`).
+ * - `file` — the mounted configuration and the environment (`sign_in.<id>.*`).
+ *   Read-only in the interface; it wins over a saved provider of the same id.
+ * - `store` — saved by an administrator in Settings → Sign-in: `sign_in.<id>` (its
+ *   settings, as JSON) and `sign_in.<id>.client_secret` (sealed by the `Encryptor`,
+ *   associated data `instance_config:sign_in.<id>.client_secret`). The settings an
+ *   earlier build kept under `idp.*` are moved there at boot
+ *   (`single-provider-upgrade.ts`).
  *
  * `views()` never decrypts a secret: it is what the authenticator reads on every
  * request (which providers exist, their issuers) and what the pages show.
@@ -19,15 +18,13 @@
  */
 import {
   admissionProblem,
-  fileSignInProviders,
+  DEFAULT_CLAIM_MAPPING,
   GITHUB_DOT_COM,
   GITHUB_IS_NOT_OIDC,
   isGithubDotComHost,
   isSignInKind,
   isSignInProviderId,
   issuerKey,
-  LEGACY_PROVIDER_ID,
-  legacyProviderOf,
   normalizeEmailDomains,
   resolveAdminGroup,
   type AdminGroup,
@@ -43,7 +40,6 @@ import {
 import type { IdpClaimMapping, InstanceConfig } from '../config/types';
 import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
 import { IdpSettingsError } from './errors';
-import { DEFAULT_CLAIM_MAPPING, IDP_CONFIG_KEYS, type IdpSettingsService } from './idp-settings';
 
 /** A provider without its secret (the union kept: `kind` still tells the two apart). */
 export type SignInProviderWithoutSecret =
@@ -296,6 +292,25 @@ function storedSettingsOf(
   };
 }
 
+/**
+ * What stores a provider that redirects (OpenID Connect, GitHub): its settings and its
+ * sealed client secret, written together. A local provider has no secret: its
+ * settings alone (`carriedWritesOf`, `saveSettings`).
+ */
+export function storedProviderWrites(
+  provider: OidcSignInProvider | GithubSignInProvider,
+  createdAt: string,
+): ConfigWrite[] {
+  return [
+    {
+      kind: 'value',
+      key: settingsKey(provider.id),
+      value: JSON.stringify(storedSettingsOf(provider, createdAt)),
+    },
+    { kind: 'secret', key: secretKey(provider.id), plain: provider.clientSecret },
+  ];
+}
+
 function viewOf(
   provider: SignInProvider,
   source: SignInProviderSource,
@@ -396,9 +411,9 @@ export function signInProviderAuditView(
   };
 }
 
-/** The audit object id of a provider's settings: `sign-in:<id>` (`idp` keeps the id `idp`). */
+/** The audit object id of a provider's settings: `sign-in:<id>`. */
 export function signInAuditObjectId(id: string): string {
-  return id === LEGACY_PROVIDER_ID ? 'idp' : `sign-in:${id}`;
+  return `sign-in:${id}`;
 }
 
 function sameGroup(a: AdminGroup | null, b: AdminGroup | null): boolean {
@@ -411,19 +426,18 @@ export class SignInProvidersService {
   private readonly publicUrl: URL;
 
   constructor(
-    config: Pick<InstanceConfig, 'idp' | 'signIn' | 'publicUrl'>,
+    config: Pick<InstanceConfig, 'signIn' | 'publicUrl'>,
     /**
      * The groups designated without a provider (a bare `admin.group` carried over from
      * the configuration): they name the group of the one provider, so a change of the
      * provider list must not make them ambiguous or move them.
      */
     private readonly bareAdminGroups: () => Promise<readonly string[]>,
-    private readonly legacy: IdpSettingsService,
     private readonly store: ConfigRepo,
     private readonly clock: { now(): Date },
     private readonly options: SignInProvidersOptions = {},
   ) {
-    this.file = fileSignInProviders(config);
+    this.file = config.signIn;
     this.publicUrl = config.publicUrl;
   }
 
@@ -588,9 +602,6 @@ export class SignInProvidersService {
     if (before && before.kind !== kind) {
       problems.push('the kind of a provider cannot change: remove it and add another');
     }
-    if (id === LEGACY_PROVIDER_ID && kind !== 'oidc') {
-      problems.push(`the id '${LEGACY_PROVIDER_ID}' is kept for an OpenID Connect provider`);
-    }
     const others = (await this.views()).filter((p) => p.id !== id);
     if (kind === 'local') {
       // Nothing to register anywhere: an id and a name. One per instance.
@@ -697,27 +708,10 @@ export class SignInProvidersService {
             ...(keptOidc?.requireVerifiedEmail === true ? { requireVerifiedEmail: true } : {}),
           };
 
-    if (id === LEGACY_PROVIDER_ID && saved.kind === 'oidc') {
-      // The single-provider keys: what an instance saved before several providers existed.
-      const legacy = await this.legacy.save({
-        issuer: saved.issuer.href,
-        clientId,
-        clientSecret,
-        claims: saved.claims,
-        allowedEmailDomains,
-        invitationOnly: input.invitationOnly,
-      });
-      return { saved: legacyProviderOf(legacy), before };
-    }
-    const stored = storedSettingsOf(
-      saved,
-      (await this.createdAt(id)) ?? this.clock.now().toISOString(),
-    );
     // One transaction: never the settings of one provider with the secret of another.
-    await this.store.apply([
-      { kind: 'value', key: settingsKey(id), value: JSON.stringify(stored) },
-      { kind: 'secret', key: secretKey(id), plain: clientSecret },
-    ]);
+    await this.store.apply(
+      storedProviderWrites(saved, (await this.createdAt(id)) ?? this.clock.now().toISOString()),
+    );
     return { saved, before };
   }
 
@@ -733,15 +727,11 @@ export class SignInProvidersService {
     const remaining = (await this.views()).map((p) => p.id).filter((other) => other !== id);
     const ruleProblems = await this.adminRuleChange([...remaining, id], remaining);
     if (ruleProblems.length > 0) throw new IdpSettingsError(ruleProblems);
-    const writes: ConfigWrite[] =
-      id === LEGACY_PROVIDER_ID
-        ? Object.values(IDP_CONFIG_KEYS).map((key) => ({ kind: 'delete', key }))
-        : [
-            { kind: 'delete', key: settingsKey(id) },
-            { kind: 'delete', key: secretKey(id) },
-          ];
-    writes.push({ kind: 'delete', key: stateKey(id) });
-    await this.store.apply(writes);
+    await this.store.apply([
+      { kind: 'delete', key: settingsKey(id) },
+      { kind: 'delete', key: secretKey(id) },
+      { kind: 'delete', key: stateKey(id) },
+    ]);
     return existing.provider;
   }
 
@@ -749,9 +739,8 @@ export class SignInProvidersService {
    * Writes every provider the configuration sets into this store as store-held ones
    * (docs/handbook/authentication.md). Run by the `backup` command on
    * its copy, never on a live store: the copy restored elsewhere signs people in as
-   * the source did. The client secrets are sealed like any stored secret; the
-   * provider `idp` goes to the single-provider keys. One transaction. The
-   * administrators need no carrying: they are rows of the store being copied (ADR
+   * the source did. The client secrets are sealed like any stored secret. One
+   * transaction. The administrators need no carrying: they are rows of the store being copied (ADR
    * administrators-live-in-the-instance), so no `restored.admin_rule` is written.
    */
   async carryIntoStore(): Promise<CarriedSignIn> {
@@ -779,35 +768,10 @@ export class SignInProvidersService {
         { kind: 'delete', key: secretKey(provider.id) },
       ];
     }
-    if (provider.id === LEGACY_PROVIDER_ID && provider.kind === 'oidc') {
-      return [
-        { kind: 'value', key: IDP_CONFIG_KEYS.issuer, value: provider.issuer.href },
-        { kind: 'value', key: IDP_CONFIG_KEYS.clientId, value: provider.clientId },
-        { kind: 'secret', key: IDP_CONFIG_KEYS.clientSecret, plain: provider.clientSecret },
-        { kind: 'value', key: IDP_CONFIG_KEYS.claimSub, value: provider.claims.sub },
-        { kind: 'value', key: IDP_CONFIG_KEYS.claimEmail, value: provider.claims.email },
-        { kind: 'value', key: IDP_CONFIG_KEYS.claimGroups, value: provider.claims.groups },
-        {
-          kind: 'value',
-          key: IDP_CONFIG_KEYS.allowedEmailDomains,
-          value: JSON.stringify(provider.allowedEmailDomains),
-        },
-        {
-          kind: 'value',
-          key: IDP_CONFIG_KEYS.invitationOnly,
-          value: String(provider.invitationOnly),
-        },
-      ];
-    }
-    const createdAt = (await this.createdAt(provider.id)) ?? this.clock.now().toISOString();
-    return [
-      {
-        kind: 'value',
-        key: settingsKey(provider.id),
-        value: JSON.stringify(storedSettingsOf(provider, createdAt)),
-      },
-      { kind: 'secret', key: secretKey(provider.id), plain: provider.clientSecret },
-    ];
+    return storedProviderWrites(
+      provider,
+      (await this.createdAt(provider.id)) ?? this.clock.now().toISOString(),
+    );
   }
 
   /**
@@ -826,7 +790,7 @@ export class SignInProvidersService {
       if (after === null && afterIds.length > 1) {
         problems.push(
           `the administrators' group "${raw}" does not say which provider claims it, and this change leaves ${afterIds.length} providers: ` +
-            `name the group with its provider first in Administration → Users (for instance "${before?.provider ?? afterIds[0] ?? LEGACY_PROVIDER_ID}:${before?.name ?? raw}"), then remove the one without`,
+            `name the group with its provider first in Administration → Users (for instance "${before?.provider ?? afterIds[0] ?? '<provider>'}:${before?.name ?? raw}"), then remove the one without`,
         );
       } else if (before !== null && after !== null && !sameGroup(before, after)) {
         problems.push(
@@ -876,28 +840,15 @@ export class SignInProvidersService {
   }
 
   /**
-   * The providers saved in Settings, in the order they were added; the provider
-   * `idp` (the single-provider keys) first. With `withSecrets` false the secret is
-   * an empty string and never decrypted.
+   * The providers saved in Settings, in the order they were added. With `withSecrets`
+   * false the secret is an empty string and never decrypted.
    */
   private async storedProviders(withSecrets: boolean): Promise<SignInProvider[]> {
     const out: { provider: SignInProvider; createdAt: string }[] = [];
-    if (!this.legacy.readOnly) {
-      const legacy = withSecrets ? await this.legacy.current() : null;
-      const stored = withSecrets ? null : await this.legacy.stored();
-      if (legacy) out.push({ provider: legacyProviderOf(legacy.settings), createdAt: '' });
-      if (stored) {
-        out.push({
-          provider: legacyProviderOf({ ...stored, clientSecret: '' }),
-          createdAt: '',
-        });
-      }
-    }
     for (const key of await this.store.keys()) {
       const match = SETTINGS_KEY.exec(key);
       if (!match) continue;
       const id = match[1] ?? '';
-      if (id === LEGACY_PROVIDER_ID) continue;
       const raw = await this.store.get(key);
       const settings = raw ? parseStored(raw) : null;
       if (!settings) continue;

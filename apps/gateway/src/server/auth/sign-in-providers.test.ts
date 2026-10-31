@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { SignInProvider } from '../config/sign-in';
-import type { AdminRule, IdpConfig } from '../config/types';
+import type { AdminRule } from '../config/types';
 import { openTestStore, type TestStore } from '../store/testing';
-import { IdpSettingsService } from './idp-settings';
 import {
   setUpElsewhere,
   SignInProvidersService,
@@ -43,16 +42,13 @@ describe('SignInProvidersService', () => {
 
   function service(
     options: {
-      file?: { idp?: IdpConfig | null; signIn?: SignInProvider[] };
+      file?: { signIn?: SignInProvider[] };
       rule?: AdminRule;
     } = {},
   ): SignInProvidersService {
-    const idp = options.file?.idp ?? null;
-    const legacy = new IdpSettingsService(idp, t.store.config);
     return new SignInProvidersService(
-      { idp, signIn: options.file?.signIn ?? [], publicUrl: PUBLIC_URL },
+      { signIn: options.file?.signIn ?? [], publicUrl: PUBLIC_URL },
       async () => (options.rule?.group ? [options.rule.group] : []),
-      legacy,
       t.store.config,
       CLOCK,
     );
@@ -65,9 +61,8 @@ describe('SignInProvidersService', () => {
     expect(setUpElsewhere((await s.views())[0]!, PUBLIC_URL)).toBeNull();
     // The same store under another address: a restore on a new host.
     const moved = new SignInProvidersService(
-      { idp: null, signIn: [], publicUrl: new URL('https://restored.example') },
+      { signIn: [], publicUrl: new URL('https://restored.example') },
       async () => [],
-      new IdpSettingsService(null, t.store.config),
       t.store.config,
       CLOCK,
     );
@@ -126,13 +121,14 @@ describe('SignInProvidersService', () => {
     ).rejects.toMatchObject({ problems: [expect.stringContaining('issuer changes')] });
   });
 
-  it('saves the provider idp under the single-provider keys, which earlier versions read', async () => {
+  it('saves a provider named idp like any other: its settings and its sealed secret', async () => {
     const s = service();
     await s.save({ ...COMPANY, id: 'idp' }, 'create');
-    expect(await t.store.config.get('idp.issuer')).toBe('https://login.example.com/realms/acme');
+    expect(await t.store.config.get('idp.issuer')).toBeNull();
+    expect(await t.store.config.getSecret('sign_in.idp.client_secret')).toBe('company-secret');
     expect((await s.views()).map((p) => p.id)).toEqual(['idp']);
     await s.remove('idp');
-    expect(await t.store.config.get('idp.issuer')).toBeNull();
+    expect(await t.store.config.get('sign_in.idp')).toBeNull();
   });
 
   it('shows a provider of the file read-only and refuses to change or remove it', async () => {
@@ -203,9 +199,8 @@ describe('SignInProvidersService — what an OpenID Connect issuer must be', () 
 
   function service(): SignInProvidersService {
     return new SignInProvidersService(
-      { idp: null, signIn: [], publicUrl: PUBLIC_URL },
+      { signIn: [], publicUrl: PUBLIC_URL },
       async () => [],
-      new IdpSettingsService(null, t.store.config),
       t.store.config,
       CLOCK,
       {

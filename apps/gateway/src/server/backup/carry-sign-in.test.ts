@@ -10,7 +10,6 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RESTORED_ADMIN_RULE_KEY } from '../auth/restored-admin-rule';
-import { IdpSettingsService } from '../auth/idp-settings';
 import { SignInProvidersService } from '../auth/sign-in-providers';
 import { loadInstanceConfig, type InstanceConfig } from '../config';
 import { validEnv } from '../config/testing';
@@ -66,13 +65,7 @@ async function open(path: string, config: InstanceConfig): Promise<Store> {
 
 function providersOf(config: InstanceConfig, store: Store) {
   return {
-    service: new SignInProvidersService(
-      config,
-      async () => [],
-      new IdpSettingsService(config.idp, store.config),
-      store.config,
-      clock,
-    ),
+    service: new SignInProvidersService(config, async () => [], store.config, clock),
   };
 }
 

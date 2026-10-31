@@ -16,8 +16,7 @@
 import * as oidc from 'openid-client';
 
 import { errorMessage } from '../config/errors';
-import { issuerKey, LEGACY_PROVIDER_ID } from '../config/sign-in';
-import type { IdpConfig } from '../config/types';
+import { issuerKey, type OidcSignInProvider } from '../config/sign-in';
 import type { RawClaims } from './claims';
 import { LoginError } from './errors';
 
@@ -74,13 +73,11 @@ export interface OidcRelyingParty {
 }
 
 /** What discovery and the code grant need of a provider. */
-export type RelyingPartySettings = Pick<IdpConfig, 'issuer' | 'clientId' | 'clientSecret'>;
+export type RelyingPartySettings = Pick<OidcSignInProvider, 'issuer' | 'clientId' | 'clientSecret'>;
 
 export interface RelyingPartyFactory {
-  /** `redirectUri`: the provider's callback (default: the single provider's, `redirectUri`). */
-  for(settings: RelyingPartySettings, redirectUri?: URL): OidcRelyingParty;
-  /** The redirect URI of the single provider `idp`: `<public_url><CALLBACK_PATH>`. */
-  readonly redirectUri: URL;
+  /** `redirectUri`: the provider's callback (`callbackUrl`). */
+  for(settings: RelyingPartySettings, redirectUri: URL): OidcRelyingParty;
   /**
    * Fetches the issuer's discovery document the way a sign-in does, before an OpenID
    * Connect provider is saved: `null` when it is valid (its `issuer` is this issuer),
@@ -92,22 +89,13 @@ export interface RelyingPartyFactory {
 /** How long the form waits for an issuer's discovery document. */
 const ISSUER_CHECK_TIMEOUT_SECONDS = 10;
 
-/**
- * The callback of a sign-in provider: `<public_url>/auth/callback/<id>`, and for the
- * provider `idp` the address an identity provider already has registered,
- * `<public_url>/auth/callback`. Without an id: that legacy address.
- */
-export function callbackUrl(publicUrl: URL, providerId?: string): URL {
+/** The callback of a sign-in provider: `<public_url>/auth/callback/<id>`. */
+export function callbackUrl(publicUrl: URL, providerId: string): URL {
   const base = `${publicUrl.pathname.replace(/\/$/, '')}${CALLBACK_PATH}`;
-  const path =
-    providerId === undefined || providerId === LEGACY_PROVIDER_ID
-      ? base
-      : `${base}/${encodeURIComponent(providerId)}`;
-  return new URL(path, publicUrl.origin);
+  return new URL(`${base}/${encodeURIComponent(providerId)}`, publicUrl.origin);
 }
 
 export function createRelyingPartyFactory(options: RelyingPartyOptions): RelyingPartyFactory {
-  const redirectUri = callbackUrl(options.publicUrl);
   // single-process only — a discovery cache; every replica rediscovers for itself.
   const configurations = new Map<string, Promise<oidc.Configuration>>();
 
@@ -129,7 +117,6 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
   }
 
   return {
-    redirectUri,
     async checkIssuer(issuer) {
       try {
         await discoveryOf(issuer, options, { timeoutSeconds: ISSUER_CHECK_TIMEOUT_SECONDS });
@@ -138,7 +125,7 @@ export function createRelyingPartyFactory(options: RelyingPartyOptions): Relying
         return issuerCheckProblem(issuer, err);
       }
     },
-    for(settings, providerRedirectUri = redirectUri) {
+    for(settings, providerRedirectUri) {
       return {
         async describe() {
           const config = await configurationFor(settings);

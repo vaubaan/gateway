@@ -121,7 +121,7 @@ describe('restore of a store copy', () => {
       loadInstanceConfig({ env: envFor(source) }).config.encryption,
     );
     const store = openStore({ path: source, encryptor, catalog: new SetCatalogIndex([]) });
-    await store.config.setSecret('idp.client_secret', SECRET);
+    await store.config.setSecret('sign_in.company.client_secret', SECRET);
     await store.close();
     backup = join(dir, 'old', 'backup.sqlite');
     const db = openReadonlyDb(source);
@@ -149,7 +149,7 @@ describe('restore of a store copy', () => {
       encryptor: await encryptorFor(),
       catalog: new SetCatalogIndex([]),
     });
-    expect(await store.config.getSecret('idp.client_secret')).toBe(SECRET);
+    expect(await store.config.getSecret('sign_in.company.client_secret')).toBe(SECRET);
     await store.close();
   });
 
@@ -429,7 +429,7 @@ describe('restore of a store copy', () => {
       const env = { VAUBAAN_RESTORE_FROM: URL_TEXT, VAUBAAN_RESTORE_SHA256: backupSha };
       const root = await bootWith(env, lines, net.fetch);
       roots.push(root);
-      expect(await root.store.config.getSecret('idp.client_secret')).toBe(SECRET);
+      expect(await root.store.config.getSecret('sign_in.company.client_secret')).toBe(SECRET);
       const log = lines.join('\n');
       expect(log).toContain('"msg":"store restored"');
       expect(log).toContain('"msg":"store opened"');
@@ -472,7 +472,7 @@ describe('restore of a store copy', () => {
         lines,
       );
       roots.push(root);
-      expect(await root.store.config.getSecret('idp.client_secret')).toBe(SECRET);
+      expect(await root.store.config.getSecret('sign_in.company.client_secret')).toBe(SECRET);
     });
   });
 });

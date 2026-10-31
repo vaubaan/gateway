@@ -79,7 +79,7 @@ describe('authority is recomputed, never snapshotted', () => {
 
     beforeEach(async () => {
       rig = await authorityRig();
-      const team = await rig.root.store.groups.getOrCreate('team', 'idp');
+      const team = await rig.root.store.groups.getOrCreate('team', 'idp', 'idp');
       teamId = team.id;
       await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
         target: { kind: 'group', groupId: teamId },
@@ -126,7 +126,7 @@ describe('authority is recomputed, never snapshotted', () => {
     });
 
     it('ownership through a group follows the membership too', async () => {
-      const owners = await rig.root.store.groups.getOrCreate('owners', 'local');
+      const owners = await rig.root.store.groups.getOrCreate('owners', 'local', null);
       await rig.root.store.groups.addMember(owners.id, rig.ada.id);
       await rig.root.connections.service.transfer(
         await rig.actor(rig.ada),

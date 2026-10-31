@@ -92,7 +92,10 @@ describe('master key generated at the first start', () => {
     const paths = dataDir();
     const first = await boot(paths);
     const key = readFileSync(paths.key, 'utf8');
-    await first.store.config.setSecret('idp.client_secret', 'sealed-under-the-generated-key');
+    await first.store.config.setSecret(
+      'sign_in.company.client_secret',
+      'sealed-under-the-generated-key',
+    );
     await first.close();
     roots.splice(roots.indexOf(first), 1);
 
@@ -100,7 +103,7 @@ describe('master key generated at the first start', () => {
     const second = await boot(paths, lines);
     expect(readFileSync(paths.key, 'utf8')).toBe(key);
     expect(lines.join('\n')).not.toContain('master key generated');
-    await expect(second.store.config.getSecret('idp.client_secret')).resolves.toBe(
+    await expect(second.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
       'sealed-under-the-generated-key',
     );
     expect((await second.masterKey.service.state()).generatedAt).not.toBeNull();

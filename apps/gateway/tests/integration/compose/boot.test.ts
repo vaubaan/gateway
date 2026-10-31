@@ -75,12 +75,12 @@ describe('composition root over the embedded SQLite store', () => {
   it('seals store secrets with the encryptor built from the configuration, and reopens without re-migrating', async () => {
     const path = join(tempDir(), 'gateway.db');
     const first = await boot(path);
-    await first.store.config.setSecret('idp.client_secret', 's3cret-value');
+    await first.store.config.setSecret('sign_in.company.client_secret', 's3cret-value');
     const raw = first.store.db
       .prepare<[string], { secret_blob: Buffer; key_version: number }>(
         'SELECT secret_blob, key_version FROM instance_config WHERE key = ?',
       )
-      .get('idp.client_secret');
+      .get('sign_in.company.client_secret');
     expect(raw?.key_version).toBe(first.encryptor.currentKeyVersion);
     expect(raw?.secret_blob.toString('utf8')).not.toContain('s3cret-value');
     await first.close();
@@ -94,7 +94,9 @@ describe('composition root over the embedded SQLite store', () => {
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
     ).toBe(27);
-    await expect(second.store.config.getSecret('idp.client_secret')).resolves.toBe('s3cret-value');
+    await expect(second.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
+      's3cret-value',
+    );
   });
 
   it('refuses to persist a risk id the registry does not know', async () => {

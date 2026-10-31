@@ -136,7 +136,7 @@ describe('audit search: visibility, filters, paging', () => {
   });
 
   it('a member of the owning group sees the connection, a non-member does not', async () => {
-    const group = await rig.root.store.groups.getOrCreate('platform', 'idp');
+    const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
     const shared = await seedConnection(rig.root.store, {
       provider: 'github',
@@ -284,7 +284,7 @@ describe('audit search: visibility, filters, paging', () => {
     await rig.root.missions.team.addMember(rig.seeded.ada, mission.id, {
       email: rig.seeded.bob.email,
     });
-    const group = await rig.root.store.groups.getOrCreate('platform', 'idp');
+    const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
     const groupOwned = await seedConnection(rig.root.store, {
       provider: 'github',

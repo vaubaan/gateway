@@ -31,7 +31,6 @@ describe('secret variables leave the environment once loaded (H3)', () => {
     expect(isSecretKeyPath('encryption.master_key')).toBe(true);
     expect(isSecretKeyPath('encryption.previous_keys.3')).toBe(true);
     expect(isSecretKeyPath('bootstrap_token')).toBe(true);
-    expect(isSecretKeyPath('idp.client_secret')).toBe(true);
     expect(isSecretKeyPath('sign_in.entra.client_secret')).toBe(true);
     // The retired block is never read; whatever it references is treated as a secret's.
     expect(isSecretKeyPath('providers.gmail.client_secret')).toBe(true);

@@ -246,7 +246,7 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     const picked = await browser.get(authorization.href);
     expect(picked.status).toBe(303);
     const callback = new URL(locationOf(picked));
-    expect(callback.pathname).toBe('/auth/callback');
+    expect(callback.pathname).toBe('/auth/callback/idp');
 
     // Alice administers the demo: she enrols the gateway's own second factor first.
     const asked = await browser.get(callback.href);
