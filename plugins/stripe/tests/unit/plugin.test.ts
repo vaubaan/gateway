@@ -8,6 +8,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  UpstreamProtocolError,
   parseSlice,
   serializeSlice,
   type ConnectionContext,
@@ -28,8 +29,13 @@ import {
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { STRIPE_API_BASE } from '../../src/execute.ts';
-import { classifyStripe, modeOf, stripePlugin, stripeResourceRef } from '../../src/index.ts';
+import {
+  STRIPE_API_BASE,
+  classifyStripe,
+  modeOf,
+  stripePlugin,
+  stripeResourceRef,
+} from '../../src/index.ts';
 
 const testRes: Resource = {
   provider: 'stripe',
@@ -454,11 +460,13 @@ describe('discoverStripeResources with mockFetch', () => {
     expect(fetch.calls).toHaveLength(0);
   });
 
-  test('an answer without an account id is refused, never a resource named undefined', async () => {
+  test('an answer without an account id is a protocol failure, never a resource named undefined', async () => {
     const fetch = mockFetch([{ url: `${STRIPE_API_BASE}/account`, body: { object: 'account' } }]);
-    await expect(
-      stripePlugin.discoverResources(ctx(fetch, { live_key: 'sk_live_xyz' })),
-    ).rejects.toThrow(/returned no account id/);
+    const run = stripePlugin.discoverResources(ctx(fetch, { live_key: 'sk_live_xyz' }));
+    await expect(run).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(run).rejects.toThrow(
+      'stripe: GET /account with the live-mode key: unexpected answer',
+    );
   });
 
   test('a rejected key surfaces as UpstreamAuthError', async () => {

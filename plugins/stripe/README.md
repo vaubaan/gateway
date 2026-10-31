@@ -91,7 +91,7 @@ Writes (17): `create_product`, `update_product`, `create_price`,
 
 The properties a tool declares are its whole argument surface: the
 classifier refuses a call carrying any other key (`expand`, an undeclared
-Stripe parameter) and `execute` forwards the declared ones only. Two
+Stripe parameter), and `execute` declines it with the same sentence. Two
 declared arguments change what a call costs:
 
 - `update_subscription` with `cancel_at_period_end` or `cancel_at` set also
@@ -110,11 +110,13 @@ percent-escape or any other character is refused by `classify` and by
 reaches the request.
 
 What `execute` declines itself — an account outside the mission, a malformed
-identifier, a mode the connection holds no key for, an unknown tool — is an
-`isError` result carrying the reason (`ExecutorRefusal` under the SDK's
-`declining`), returned before any request: nothing failed at Stripe and the
-audit records no upstream failure. What Stripe fails is thrown
-(`UpstreamAuthError` on 401/403, `UpstreamHttpError` otherwise).
+identifier, an undeclared argument, a mode the connection holds no key for,
+an unknown tool — is an `isError` result carrying the reason
+(`ExecutorRefusal` under the SDK's `declining`), returned before any request:
+nothing failed at Stripe and the audit records no upstream failure. What Stripe fails is thrown
+(`UpstreamAuthError` on 401/403, `UpstreamHttpError` otherwise, and
+`UpstreamProtocolError` for an answer that is not JSON or, at discovery, an
+account without an id).
 
 Reads whose answer carries customer fields — `list_invoices`,
 `list_charges`, `list_payment_intents`, and `list_events` unless `type`

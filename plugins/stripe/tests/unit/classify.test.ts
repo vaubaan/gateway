@@ -343,7 +343,8 @@ describe('classifyStripe — arguments', () => {
     expect(
       classifyStripe('stripe__list_invoices', { expand: ['data.customer'] }, [liveResource]),
     ).toEqual({
-      denied: "expand: not an argument of 'stripe__list_invoices' — nothing classifies it",
+      denied:
+        "expand: not an argument of 'stripe__list_invoices' — nothing classifies it, so it is not sent.",
     });
     expect(
       classifyStripe('stripe__create_invoice', { customer: 'cus_x', collection_method: 'x' }, [
@@ -351,7 +352,7 @@ describe('classifyStripe — arguments', () => {
       ]),
     ).toEqual({
       denied:
-        "collection_method: not an argument of 'stripe__create_invoice' — nothing classifies it",
+        "collection_method: not an argument of 'stripe__create_invoice' — nothing classifies it, so it is not sent.",
     });
   });
 

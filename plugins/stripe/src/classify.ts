@@ -19,7 +19,8 @@
  *      (mode) must be the same fact.
  *   2. **Only declared arguments.** An argument the tool's schema does not
  *      declare (`expand`, a Stripe parameter nobody classified) refuses the
- *      call ; `execute` forwards the declared ones only.
+ *      call (`undeclaredStripeArgument`) ; `execute` declines it with the
+ *      same sentence.
  *   3. **Refund hierarchy** — `payment-intent[PI].charge[CH].refund.W`, with
  *      whichever of `charge` / `payment_intent` the call names.
  *   4. **Webhook secret as a synthetic entity** — `create_webhook_endpoint`
@@ -44,15 +45,24 @@
  * touches an unknown member).
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  ANY_IDENT,
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
-import { STRIPE_PROVIDER, modeOf, readIdArgs, resolveStripeResource } from './resources.ts';
-import { declaredArgsOf } from './tools.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
+import { modeOf, readIdArgs, resolveStripeResource } from './resources.ts';
+import { stripeTools } from './tools.ts';
 
 type Args = Readonly<Record<string, unknown>>;
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: STRIPE_PROVIDER, path: segments, action };
+  return { provider: PROVIDER_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -62,8 +72,6 @@ function name(value: string): SliceSegment {
 function ident(value: string): SliceSegment {
   return { kind: 'ident', value };
 }
-
-const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
 /** The ident segment of an identifier argument : the glob when the call does not carry it. */
 function segmentOf(id: string | null): SliceSegment {
@@ -109,17 +117,31 @@ function eventsMayCarryCustomerData(args: Args): boolean {
   return typeof args.type !== 'string' || !EVENT_TYPE_WITHOUT_CUSTOMER_DATA.test(args.type);
 }
 
+/** The argument names each tool declares (`account` included) : its whole argument surface. */
+export const DECLARED_ARGUMENTS = declaredArgumentsOf(stripeTools);
+
+/**
+ * The refusal of the first argument the tool does not declare, or `null`.
+ * `classify` refuses with it before the budget ; `execute` declines with the
+ * same sentence for a caller that skipped the classifier, since it forwards
+ * the arguments it was given to Stripe.
+ */
+export function undeclaredStripeArgument(tool: string, args: Args): string | null {
+  return undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args);
+}
+
+function unknownTool(tool: string): string {
+  return `unknown ${PROVIDER_ID} tool '${tool}'.`;
+}
+
 export function classifyStripe(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  const declared = declaredArgsOf(tool);
-  if (!declared) return { denied: `unknown stripe tool '${tool}'.` };
-  const undeclared = Object.keys(args).find((key) => !declared.has(key));
-  if (undeclared !== undefined) {
-    return { denied: `${undeclared}: not an argument of '${tool}' — nothing classifies it` };
-  }
+  if (!DECLARED_ARGUMENTS.has(tool)) return { denied: unknownTool(tool) };
+  const undeclared = undeclaredStripeArgument(tool, args);
+  if (undeclared !== null) return { denied: undeclared };
 
   const target = resolveStripeResource(args, resources);
   if ('denied' in target) return target;
@@ -143,50 +165,50 @@ export function classifyStripe(
 
   switch (tool) {
     // ─── Reads — catalog ──────────────────────────────────────────────────
-    case 'stripe__list_products':
+    case TOOL.listProducts:
       return { slices: [slice('R', [...root, name('product'), ANY_IDENT])] };
-    case 'stripe__list_prices':
+    case TOOL.listPrices:
       return {
         slices: [slice('R', [...root, name('product'), product, name('price'), ANY_IDENT])],
       };
 
     // ─── Reads — customers (business payload + PII overlay) ───────────────
-    case 'stripe__list_customers':
+    case TOOL.listCustomers:
       return { slices: [slice('R', [...root, name('customer'), ANY_IDENT]), pii(ANY_IDENT)] };
-    case 'stripe__retrieve_customer':
+    case TOOL.retrieveCustomer:
       return { slices: [slice('R', [...root, name('customer'), id]), pii(id)] };
 
     // ─── Reads — billing history ──────────────────────────────────────────
-    case 'stripe__list_subscriptions':
+    case TOOL.listSubscriptions:
       // A subscription names its customer by id only : no PII overlay.
       return {
         slices: [
           slice('R', [...root, name('customer'), customer, name('subscription'), ANY_IDENT]),
         ],
       };
-    case 'stripe__list_invoices':
+    case TOOL.listInvoices:
       return {
         slices: [
           slice('R', [...root, name('customer'), customer, name('invoice'), ANY_IDENT]),
           pii(customer),
         ],
       };
-    case 'stripe__list_charges':
+    case TOOL.listCharges:
       return {
         slices: [
           slice('R', [...root, name('payment-intent'), payment_intent, name('charge'), ANY_IDENT]),
           pii(customer),
         ],
       };
-    case 'stripe__list_payment_intents':
+    case TOOL.listPaymentIntents:
       return {
         slices: [slice('R', [...root, name('payment-intent'), ANY_IDENT]), pii(customer)],
       };
 
     // ─── Reads — monitoring ───────────────────────────────────────────────
-    case 'stripe__get_balance':
+    case TOOL.getBalance:
       return { slices: [slice('R', [...root, name('balance')])] };
-    case 'stripe__list_events':
+    case TOOL.listEvents:
       // Events mirror the ledger for the cardinal events ; both slices so the
       // `read-balance` risk covers either pattern. An event embeds the whole
       // object it is about (a customer, an invoice, a charge).
@@ -199,23 +221,23 @@ export function classifyStripe(
       };
 
     // ─── Writes — catalog ─────────────────────────────────────────────────
-    case 'stripe__create_product':
+    case TOOL.createProduct:
       return { slices: [slice('W', [...root, name('product')])] };
-    case 'stripe__update_product':
+    case TOOL.updateProduct:
       return { slices: [slice('W', [...root, name('product'), id])] };
-    case 'stripe__create_price':
+    case TOOL.createPrice:
       return { slices: [slice('W', [...root, name('product'), product, name('price')])] };
-    case 'stripe__update_price':
+    case TOOL.updatePrice:
       return {
         slices: [slice('W', [...root, name('product'), ANY_IDENT, name('price'), id])],
       };
-    case 'stripe__create_coupon':
+    case TOOL.createCoupon:
       return { slices: [slice('W', [...root, name('coupon')])] };
-    case 'stripe__create_promotion_code':
+    case TOOL.createPromotionCode:
       return { slices: [slice('W', [...root, name('coupon'), coupon, name('promotion-code')])] };
 
     // ─── Writes — subscriptions ───────────────────────────────────────────
-    case 'stripe__create_subscription':
+    case TOOL.createSubscription:
       // Worst case : immediate proration charges the customer at creation.
       return {
         slices: [
@@ -223,8 +245,8 @@ export function classifyStripe(
           slice('W', [...root, name('payment-intent')]),
         ],
       };
-    case 'stripe__update_subscription':
-    case 'stripe__pause_subscription': {
+    case TOOL.updateSubscription:
+    case TOOL.pauseSubscription: {
       // Pause is an update carrying `pause_collection` ; same risk as update.
       // Scheduling a cancellation through the update endpoint is a cancel.
       const subscription = [...root, name('customer'), ANY_IDENT, name('subscription'), id];
@@ -235,7 +257,7 @@ export function classifyStripe(
         ],
       };
     }
-    case 'stripe__cancel_subscription':
+    case TOOL.cancelSubscription:
       return {
         slices: [
           slice('W', [
@@ -250,7 +272,7 @@ export function classifyStripe(
       };
 
     // ─── Writes — invoices ────────────────────────────────────────────────
-    case 'stripe__create_invoice': {
+    case TOOL.createInvoice: {
       const invoice = [...root, name('customer'), customer, name('invoice')];
       return {
         slices: [
@@ -259,13 +281,13 @@ export function classifyStripe(
         ],
       };
     }
-    case 'stripe__finalize_invoice':
+    case TOOL.finalizeInvoice:
       return {
         slices: [
           slice('W', [...root, name('customer'), ANY_IDENT, name('invoice'), id, name('finalize')]),
         ],
       };
-    case 'stripe__void_invoice':
+    case TOOL.voidInvoice:
       return {
         slices: [
           slice('W', [...root, name('customer'), ANY_IDENT, name('invoice'), id, name('void')]),
@@ -273,7 +295,7 @@ export function classifyStripe(
       };
 
     // ─── Writes — money out ───────────────────────────────────────────────
-    case 'stripe__create_refund':
+    case TOOL.createRefund:
       return {
         slices: [
           slice('W', [
@@ -286,16 +308,16 @@ export function classifyStripe(
           ]),
         ],
       };
-    case 'stripe__create_payout':
+    case TOOL.createPayout:
       return { slices: [slice('W', [...root, name('payout')])] };
 
     // ─── Writes — customers ───────────────────────────────────────────────
-    case 'stripe__delete_customer':
+    case TOOL.deleteCustomer:
       if (id === ANY_IDENT) return { denied: 'id: missing' };
       return { slices: [slice('W', [...root, name('customer'), id, name('delete')])] };
 
     // ─── Writes — webhooks (config + credential mint) ─────────────────────
-    case 'stripe__create_webhook_endpoint':
+    case TOOL.createWebhookEndpoint:
       return {
         slices: [
           slice('W', [...root, name('webhook-endpoint')]),
@@ -304,6 +326,6 @@ export function classifyStripe(
       };
 
     default:
-      return { denied: `unknown stripe tool '${tool}'.` };
+      return { denied: unknownTool(tool) };
   }
 }

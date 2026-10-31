@@ -31,7 +31,6 @@ const NOT_YET_ON_THE_TRANSPORT: readonly string[] = [
   'google-calendar',
   'notion',
   'railway',
-  'stripe',
   'supabase',
   'upstash-redis',
   'vercel',

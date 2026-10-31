@@ -28,8 +28,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const stripeDataModel: DataModel = {
-  provider: 'stripe',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'billing',

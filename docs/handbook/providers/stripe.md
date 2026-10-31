@@ -30,8 +30,9 @@ discovery writes one resource per mode (`acct_…/test`, `acct_…/live`).
   and a live call is never judged as `stripe[test].…`. Both layers are pinned in `policy.test.ts`;
   the host keeps the plugin-set label read-only.
 - The fallback is env-scoped too, so a mission on the test mode never accepts a live write.
-- **Only declared arguments**: the classifier refuses any key outside `declaredArgsOf(tool)`;
-  declaring a property means deciding its cost in `classify.ts`.
+- **Only declared arguments**: the classifier and the executor refuse any key the tool does not
+  declare (`undeclaredStripeArgument`, the SDK's `undeclaredArgumentDenial`); declaring a property
+  means deciding its cost in `classify.ts`.
 - **Customer PII overlay**: every read whose answer carries customer fields (invoices, charges,
   payment intents, events embedding their object) also emits `customer[C].pii.R`, so billing history
   is grantable without identities. `list_events` drops it only for a `type` naming a family without

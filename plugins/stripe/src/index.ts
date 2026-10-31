@@ -18,6 +18,7 @@ import { classifyStripe } from './classify.ts';
 import { stripeCredential } from './credential.ts';
 import { stripeDataModel } from './data-model.ts';
 import { discoverStripeResources, executeStripe } from './execute.ts';
+import { PROVIDER_ID } from './identity.ts';
 import { STRIPE_ICON, STRIPE_ICON_COLOR } from './icon.ts';
 import { stripeToolTitles } from './tool-titles.ts';
 import { stripeTools } from './tools.ts';
@@ -27,11 +28,11 @@ import { stripeTools } from './tools.ts';
 export const stripeCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const stripePlugin = definePlugin({
-  id: 'stripe',
+  id: PROVIDER_ID,
   displayName: 'Stripe',
   icon: STRIPE_ICON,
   iconColor: STRIPE_ICON_COLOR,
-  version: '0.4.5',
+  version: '0.5.0',
   description:
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
     'refunds, payouts, webhooks — test and live modes as separate resources.',
@@ -54,8 +55,8 @@ export default stripePlugin;
 
 export { classifyStripe, stripeDataModel, stripeTools };
 export { STRIPE_KEYS_PAGE, stripeCredential, verifyStripeKeys } from './credential.ts';
+export { PROVIDER_ID, STRIPE_API_BASE, TOOL, TOOL_PREFIX } from './identity.ts';
 export {
-  STRIPE_API_BASE,
   discoverStripeResources,
   executeStripe,
   stripeAccounts,
