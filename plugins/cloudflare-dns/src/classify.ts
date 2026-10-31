@@ -35,6 +35,7 @@
  */
 
 import {
+  ANY_IDENT,
   declaredArgumentsOf,
   undeclaredArgumentDenial,
   type ClassifyOutcome,
@@ -43,8 +44,8 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import {
-  CLOUDFLARE_DNS_PROVIDER,
   accountIdOf,
   pathIdent,
   recordSensitivity,
@@ -70,7 +71,7 @@ export function undeclaredArgument(
 }
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: CLOUDFLARE_DNS_PROVIDER, path: segments, action };
+  return { provider: PROVIDER_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -80,8 +81,6 @@ function name(value: string): SliceSegment {
 function ident(value: string): SliceSegment {
   return { kind: 'ident', value };
 }
-
-const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
 type RecordIdent = { readonly segment: SliceSegment } | { readonly denied: string };
 
@@ -100,15 +99,19 @@ function accountSegment(resource: Resource): SliceSegment {
   return id === null ? ANY_IDENT : ident(id);
 }
 
+function unknownTool(tool: string): string {
+  return `unknown ${PROVIDER_ID} tool '${tool}'.`;
+}
+
 export function classifyCloudflareDns(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  if (!KNOWN_TOOLS.has(tool)) return { denied: `unknown cloudflare-dns tool '${tool}'.` };
+  if (!KNOWN_TOOLS.has(tool)) return { denied: unknownTool(tool) };
 
-  if (tool === 'cloudflare_dns__list_zones') {
-    const own = resources.filter((r) => r.provider === CLOUDFLARE_DNS_PROVIDER);
+  if (tool === TOOL.listZones) {
+    const own = resources.filter((r) => r.provider === PROVIDER_ID);
     if (own.length === 0) return { denied: 'the mission touches no Cloudflare DNS zone' };
     const undeclared = undeclaredArgument(tool, args);
     if (undeclared !== null) return { denied: undeclared };
@@ -132,31 +135,31 @@ export function classifyCloudflareDns(
 
   switch (tool) {
     // ─── Reads ────────────────────────────────────────────────────────────
-    case 'cloudflare_dns__get_zone':
+    case TOOL.getZone:
       return { slices: [slice('R', root)] };
-    case 'cloudflare_dns__list_records':
+    case TOOL.listRecords:
       return { slices: [slice('R', [...root, name('record'), ANY_IDENT])] };
-    case 'cloudflare_dns__get_record': {
+    case TOOL.getRecord: {
       const record = recordIdent(args);
       if ('denied' in record) return record;
       return { slices: [slice('R', [...root, name('record'), record.segment])] };
     }
-    case 'cloudflare_dns__export_records':
+    case TOOL.exportRecords:
       return { slices: [slice('R', [...root, name('zone-export')])] };
-    case 'cloudflare_dns__get_zone_settings':
+    case TOOL.getZoneSettings:
       return { slices: [slice('R', [...root, name('zone-settings')])] };
-    case 'cloudflare_dns__get_dnssec':
+    case TOOL.getDnssec:
       return { slices: [slice('R', [...root, name('dnssec')])] };
 
     // ─── Writes — records ─────────────────────────────────────────────────
-    case 'cloudflare_dns__create_record': {
+    case TOOL.createRecord: {
       const slices = [slice('W', [...root, name('record')])];
       if (recordSensitivity(args, zoneNameOf(zone)) === 'critical') {
         slices.push(slice('W', [...root, name('record'), name('critical')]));
       }
       return { slices };
     }
-    case 'cloudflare_dns__update_record': {
+    case TOOL.updateRecord: {
       const record = recordIdent(args);
       if ('denied' in record) return record;
       const slices = [slice('W', [...root, name('record'), record.segment])];
@@ -165,7 +168,7 @@ export function classifyCloudflareDns(
       }
       return { slices };
     }
-    case 'cloudflare_dns__delete_record': {
+    case TOOL.deleteRecord: {
       const record = recordIdent(args);
       if ('denied' in record) return record;
       const slices = [slice('W', [...root, name('record'), record.segment, name('delete')])];
@@ -176,20 +179,20 @@ export function classifyCloudflareDns(
       }
       return { slices };
     }
-    case 'cloudflare_dns__import_records':
+    case TOOL.importRecords:
       return { slices: [slice('W', [...root, name('zone-import')])] };
 
     // ─── Writes — zone-level ──────────────────────────────────────────────
-    case 'cloudflare_dns__edit_zone_settings':
+    case TOOL.editZoneSettings:
       return { slices: [slice('W', [...root, name('zone-settings')])] };
-    case 'cloudflare_dns__purge_cache':
+    case TOOL.purgeCache:
       return { slices: [slice('W', [...root, name('cache')])] };
-    case 'cloudflare_dns__edit_dnssec':
+    case TOOL.editDnssec:
       return { slices: [slice('W', [...root, name('dnssec')])] };
-    case 'cloudflare_dns__delete_zone':
+    case TOOL.deleteZone:
       return { slices: [slice('W', root)] };
 
     default:
-      return { denied: `unknown cloudflare-dns tool '${tool}'.` };
+      return { denied: unknownTool(tool) };
   }
 }

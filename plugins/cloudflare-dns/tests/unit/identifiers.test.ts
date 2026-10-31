@@ -19,7 +19,7 @@ import { serializeSlice, type ExecuteContext, type Resource } from '@vaubaan/plu
 import { declaredOnly, mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
-import { CLOUDFLARE_API_BASE } from '../../src/execute.ts';
+import { CLOUDFLARE_API_BASE } from '../../src/identity.ts';
 import { cloudflareDnsPlugin } from '../../src/index.ts';
 import {
   accountIdOf,

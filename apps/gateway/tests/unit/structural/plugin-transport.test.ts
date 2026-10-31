@@ -25,7 +25,6 @@ const PLUGINS = join(REPO, 'plugins');
 
 /** The plugins still on their own reads, until the migration wave moves them to the transport. */
 const NOT_YET_ON_THE_TRANSPORT: readonly string[] = [
-  'cloudflare-dns',
   'context7',
   'github',
   'google-calendar',

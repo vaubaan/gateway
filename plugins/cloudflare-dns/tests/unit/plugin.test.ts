@@ -7,6 +7,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  UpstreamProtocolError,
   parseSlice,
   serializeSlice,
   type ConnectionContext,
@@ -659,7 +660,7 @@ describe('executeCloudflareDns with mockFetch', () => {
 
   test('the guard refuses when the record read has no usable result (fail closed)', async () => {
     for (const tool of ['cloudflare_dns__update_record', 'cloudflare_dns__delete_record']) {
-      for (const body of [{ success: true }, { result: null }, { result: { id: 'r1' } }, 'gone']) {
+      for (const body of [{ success: true }, { result: null }, { result: { id: 'r1' } }]) {
         const fetch = mockFetch([{ method: 'GET', url: `${BASE}/zones/z1/dns_records/r1`, body }]);
         expect(
           refusalOf(
@@ -674,6 +675,22 @@ describe('executeCloudflareDns with mockFetch', () => {
         ).toMatch(/the record is a critical record/);
         expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
       }
+    }
+  });
+
+  test('a record read that is not JSON is a protocol failure, thrown before any write', async () => {
+    for (const tool of ['cloudflare_dns__update_record', 'cloudflare_dns__delete_record']) {
+      const fetch = mockFetch([
+        { method: 'GET', url: `${BASE}/zones/z1/dns_records/r1`, body: 'gone' },
+      ]);
+      const run = cloudflareDnsPlugin.execute(ctx(fetch), tool, {
+        zone_id: 'z1',
+        record_id: 'r1',
+        type: 'A',
+        name: 'www.example.com',
+      });
+      await expect(run).rejects.toBeInstanceOf(UpstreamProtocolError);
+      expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
     }
   });
 
@@ -812,6 +829,23 @@ describe('executeCloudflareDns with mockFetch', () => {
     ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 429 });
   });
 
+  test('an answer that is not JSON is an UpstreamProtocolError ; list_zones reads its envelope', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: `${BASE}/zones/z1`, body: '<html>maintenance</html>' },
+      { method: 'GET', url: /\/zones\?/, body: { result: { id: 'z1' } } },
+    ]);
+    const notJson = cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__get_zone', {
+      zone_id: 'z1',
+    });
+    await expect(notJson).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(notJson).rejects.toThrow(`GET ${BASE}/zones/z1: the answer is not JSON`);
+    // A list it cannot filter to the mission's zones is never passed through.
+    const unfiltered = cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__list_zones', {
+      per_page: 5,
+    });
+    await expect(unfiltered).rejects.toBeInstanceOf(UpstreamProtocolError);
+  });
+
   test('unknown tool is an error result, not a call ; a secret of another kind is refused', async () => {
     const fetch = mockFetch([]);
     const result = await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__nope', {});
@@ -937,12 +971,13 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
     expect(silent.calls).toHaveLength(0);
   });
 
-  test('an answer whose result is not a list fails discovery instead of yielding resources', async () => {
-    for (const result of ['z1', { id: 'z1' }, 42]) {
+  test('an answer whose result is not a list of zones fails discovery instead of yielding resources', async () => {
+    const notZones = ['z1', { id: 'z1' }, 42, [{ id: 'z1' }], [{ name: 'example.com' }], undefined];
+    for (const result of notZones) {
       const fetch = mockFetch([{ method: 'GET', url: /\/zones\?/, body: { result } }]);
-      await expect(cloudflareDnsPlugin.discoverResources(ctx(fetch))).rejects.toThrow(
-        /GET \/zones: 'result' is not a list/,
-      );
+      const run = cloudflareDnsPlugin.discoverResources(ctx(fetch));
+      await expect(run).rejects.toBeInstanceOf(UpstreamProtocolError);
+      await expect(run).rejects.toThrow(`GET ${BASE}/zones: unexpected answer`);
     }
   });
 });

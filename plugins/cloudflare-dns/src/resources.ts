@@ -18,7 +18,7 @@
 
 import type { Resource } from '@vaubaan/plugin-sdk';
 
-export const CLOUDFLARE_DNS_PROVIDER = 'cloudflare-dns';
+import { PROVIDER_ID } from './identity.ts';
 
 /**
  * An identifier of the provider : exactly one path segment, no dot, no
@@ -117,7 +117,7 @@ export function resolveZoneResource(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ResolvedZone {
-  const own = resources.filter((r) => r.provider === CLOUDFLARE_DNS_PROVIDER);
+  const own = resources.filter((r) => r.provider === PROVIDER_ID);
   const explicit = args.zone_id;
   if (explicit !== undefined && explicit !== null && explicit !== '') {
     const zoneId = pathIdent(explicit);

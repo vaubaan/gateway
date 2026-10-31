@@ -100,7 +100,10 @@ support a new field, declare it in `src/tools.ts` and classify it.
 What `execute` declines itself — an unknown tool, an unresolved zone, an
 undeclared argument, a malformed identifier, the record guard below — is an
 `isError` result; what Cloudflare fails is thrown (`UpstreamAuthError` on
-401/403, `UpstreamHttpError` otherwise).
+401/403, `UpstreamHttpError` otherwise, `UpstreamProtocolError` for an answer
+that is not JSON — the BIND export excepted, passed through as text — or
+whose envelope is not the one read: a `result` that is not a list of zones
+at discovery, nor a list in `list_zones`).
 
 Three behaviours are specific to v5:
 

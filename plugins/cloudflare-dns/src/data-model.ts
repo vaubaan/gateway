@@ -19,8 +19,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const cloudflareDnsDataModel: DataModel = {
-  provider: 'cloudflare-dns',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'dns',

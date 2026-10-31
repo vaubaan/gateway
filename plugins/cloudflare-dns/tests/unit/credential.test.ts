@@ -4,7 +4,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { CredentialRefusal, UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import {
+  CredentialRefusal,
+  UpstreamAuthError,
+  UpstreamProtocolError,
+  type ConnectionContext,
+} from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -101,6 +106,11 @@ describe('cloudflare-dns token — verify at paste', () => {
     const refusal = verifyCloudflareToken(ctx(fetch));
     await expect(refusal).rejects.toBeInstanceOf(CredentialRefusal);
     await expect(refusal).rejects.toThrow(/Zone · Zone · Read.*All zones/);
+  });
+
+  test('an answer without the envelope Cloudflare documents is an UpstreamProtocolError', async () => {
+    const fetch = mockFetch([{ method: 'GET', url: VERIFY, body: { success: true } }]);
+    await expect(verifyCloudflareToken(ctx(fetch))).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('a rejected token is an UpstreamAuthError', async () => {
