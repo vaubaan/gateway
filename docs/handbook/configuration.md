@@ -10,6 +10,8 @@ tracks:
   - apps/gateway/src/proxy.ts
   - apps/gateway/next.config.ts
   - deploy/docker/Dockerfile
+  - deploy/compose.yaml
+  - deploy/config/
 last_reviewed: 2026-10-27
 ---
 

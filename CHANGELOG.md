@@ -9,6 +9,69 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Upgrade notes (from 2.0.0-alpha.11)
+
+Read these before starting the new image on a running instance:
+
+1. **Sign-in provider `idp`.** Its callback is now
+   `<public_url>/auth/callback/idp`: add it at the identity provider (beside
+   `/auth/callback`, which nothing serves any more) **before** upgrading, or
+   nobody signs in through it. Settings saved in Administration under the old
+   single-provider keys are moved to the provider `idp` at the first start; the
+   variables `VAUBAAN_IDP_*` / the `idp:` block stop the boot (exit 78) and are
+   written `VAUBAAN_SIGN_IN_IDP_KIND=oidc`, `VAUBAAN_SIGN_IN_IDP_ISSUER`,
+   `…_CLIENT_ID`, `…_CLIENT_SECRET`, `…_CLAIM_*`, `…_ALLOWED_EMAIL_DOMAINS`,
+   `…_INVITATION_ONLY` (`sign_in.idp.*`). An admin group whose name holds a
+   colon is written `idp:<group>`.
+2. **A source of client addresses.** The image refuses to start without
+   `VAUBAAN_TRUSTED_PROXIES` or `VAUBAAN_CLIENT_IP_HEADER`, unless
+   `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1`. The reference compose file now
+   trusts Caddy's fixed address `172.30.253.2` on a network of its own
+   (`172.30.253.0/29`): if your `.env` sets `VAUBAAN_TRUSTED_PROXIES=172.16.0.0/12`,
+   remove it. Railway: set `VAUBAAN_CLIENT_IP_HEADER=x-real-ip` once verified
+   (`deploy/railway.md`), `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1` until then.
+3. **The master key leaves the data volume (Compose).** `compose.yaml` reads
+   it from `/keys/master.key` on the new `gateway-key` volume: copy
+   `/data/master.key` there before the first start of the new file, then remove
+   the old copy (`deploy/README.md`, "Upgrading an instance whose key is on the
+   data volume"). A key missing on a store with data is still exit 78.
+4. **Mission tokens issued before 2.0.0-alpha.1 and never used since** are
+   revoked by migration 0027 (they were still stored as argon2id) and must be
+   re-issued: rotate the member's key, or replace the named key. Tokens used
+   once since then are not affected.
+5. **Accounts created before 2.0.0-alpha.1 that nobody signed in to since**
+   (stored without an issuer) are no longer bound at their next sign-in: the
+   person gets a new account; the boot log counts such accounts.
+
+### Security
+
+- **A deadline on every plugin call** (`execution.call_timeout_seconds`,
+  `VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS`, default 120). The plugin receives a
+  signal that fires when the caller leaves or the deadline passes, and the
+  gateway stops waiting at the deadline even for a plugin that ignores it: a
+  provider that never answers no longer pins the request, the decrypted
+  credential and the audit entry. Such a call is audited `upstream_error … (timeout)`,
+  stays counted, and the agent reads `Upstream error: timeout: …`. Discovery,
+  refresh and the git sweeper carry their own bounds; no plugin call runs
+  without a signal.
+- **The master key apart from the store by default.** The reference compose
+  file keeps the generated key on a volume of its own; the boot warns when the
+  key file and the store share a mount, unless
+  `encryption.accept_key_beside_store` (`VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1`).
+- **No shared address windows in production by accident.** With
+  `NODE_ENV=production` the boot refuses a configuration with neither
+  `trusted_proxies` nor `client_ip_header` unless
+  `accept_shared_address_windows`; the request page keys its window on the
+  signed-in user, so an anonymous flood never holds a creator out of an
+  approval link; the compose file no longer trusts the whole Docker pool.
+- **Wrong bootstrap tokens in setup mode survive a restart**: counted in
+  `setup-misses` beside the key file, removed once the setup completes.
+- **A token, a share and held arguments are reached with their parent only**:
+  the repositories take `(missionId, tokenId)`, `(connectionId, shareId)` and
+  `(missionId, requestId)`; a bare-id lookup does not compile.
+- **The argon2id token path is gone** (and the `argon2` native addon with it):
+  migration 0027 revokes the tokens still stored that way.
+
 ### Added
 
 - **Contributors sign off their commits** (Developer Certificate of Origin,
@@ -86,6 +149,29 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   platform.
 
 ### Changed
+
+- **The provider `idp` is an ordinary sign-in provider.** The single-provider
+  keys (`idp.*`, `VAUBAAN_IDP_*`), the settings form that saved them and the
+  `/auth/callback` route are gone; stored settings move to `sign_in.idp` at boot
+  (upgrade note 1). Administration audit entries of its settings say
+  `sign-in:idp`.
+- **The connect page keeps the plugin's sentence of a rejection** ("Gmail
+  refused the IMAP sign-in of x: the app password is wrong…"), masked of every
+  value of the pasted credential, instead of "the provider rejected the
+  credential (HTTP 401)"; refreshes, later discoveries and logs keep the status
+  alone.
+- **The account page names the permissions a token lacks**, when the service
+  says what the token holds (`CredentialCheck.granted`).
+- **Configuration**: `execution.call_timeout_seconds`,
+  `encryption.accept_key_beside_store`, `accept_shared_address_windows` are new;
+  the `idp.*` keys are refused.
+- **Code a visitor reads first**: the test fakes moved from `src/server` to
+  `apps/gateway/tests/support`; the pure rules a form runs from `src/server` to
+  `src/lib`; one form reader (`http/form.ts`) and one client `postJson` /
+  `useAction`; the barrels of `@vaubaan/shared`, `@vaubaan/gateway-core` and
+  `@vaubaan/policy-engine` name their exports; property tests cover the slice
+  matcher, the argument fingerprint, the audit reason and the trust-level
+  budget.
 
 - **The trust levels speak English** (owner decision of 2026-10-31, ADR
   macro-actions-and-trust-levels-prefill-the-policy, renamed from
