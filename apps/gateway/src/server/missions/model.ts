@@ -8,8 +8,10 @@
  * (spec §4.1 bis). Types only: this file is safe to import from a
  * client component.
  */
+import type { TrustCran } from '@vaubaan/policy-engine';
 import type {
   Gate,
+  MacroAction,
   MissionPolicyEntry,
   Preset,
   RateLimit,
@@ -80,6 +82,12 @@ export interface DraftConnection {
    */
   readonly preset?: string | null;
   readonly policy?: readonly DraftPolicyEntry[];
+  /**
+   * The trust cran of each macro-action the form ticked (risk model §4.7): kept
+   * with the mission only to redraw the form, it never changes the policy.
+   * Ids that are not macro-actions of the connection are dropped.
+   */
+  readonly crans?: Readonly<Record<string, string>>;
 }
 
 export type DraftPeriod =
@@ -180,6 +188,8 @@ export interface IssuanceConnection {
   /** The creator's authority on this connection: explicit ids, a subset of `risks`. */
   readonly authority: readonly RiskId[];
   readonly presets: readonly Preset[];
+  /** The catalog's macro-actions, then "Anything else" holding the fallback (`macroActionsOf`). */
+  readonly macro_actions: readonly MacroAction[];
 }
 
 /**
@@ -320,6 +330,8 @@ export interface ConnectionPreview {
    * policy): they inform, they do not block.
    */
   readonly skipped_from_preset: readonly SkippedPresetEntry[];
+  /** The draft's crans that name a macro-action of the connection (`knownCrans`). */
+  readonly crans: Readonly<Record<string, TrustCran>>;
 }
 
 /** The three lines of spec §4.2: what the mission can do, cannot do, in what quantity. */
@@ -340,6 +352,8 @@ export interface ResolvedDraftConnection {
     | { readonly scope: 'connection' };
   readonly preset: string | null;
   readonly policy: readonly MissionPolicyEntry[];
+  /** The draft's crans that name a macro-action of the connection. */
+  readonly crans: Readonly<Record<string, TrustCran>>;
 }
 
 export interface MissionPreview {

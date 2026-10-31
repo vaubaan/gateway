@@ -11,6 +11,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **New mission and Edit mission compose a policy from macro-actions at a
+  trust cran** (ADR macro-actions-and-trust-crans-prefill-the-policy, risk
+  model §4.7). Per account, the Simple view lists the service's
+  macro-actions, "Anything else" included; each ticked at Prudent, Confiant
+  or Autonome says what it writes here (runs freely, asks first, left out,
+  not available to you) and the account says its highest palier. The
+  Advanced view is the permission-by-permission editor; "Everything I hold
+  on this account" stays. The mission still stores the explicit list; the
+  crans are kept (migration 0025, `mission_connections.crans_json`) only to
+  redraw the form, which opens in the Advanced view when the lines differ
+  from what the crans write. A draft may carry `crans` per connection;
+  unknown macro-actions are dropped. The preset chips are gone from the form.
+
 - **The OAuth broker runs without an enclave** (`@vaubaan/oauth-broker` 0.2.0,
   ADR oauth-broker-can-run-without-an-enclave). The published image with
   `OAUTH_BROKER_PLATFORM=unattested` opens one plain HTTP listener for the

@@ -62,6 +62,15 @@ export const CRAN_BUDGET_FACTOR: Readonly<Record<TrustCran, number>> = {
 
 const SECONDS_PER_MINUTE = 60;
 
+/** The id the gateway gives the macro-action holding the fallback ; no catalog may declare it. */
+export const ANYTHING_ELSE_MACRO_ACTION = 'anything-else';
+
+/** The base budget of the fallback in "Anything else" : the catalogs' default base budget. */
+export const ANYTHING_ELSE_BASE_BUDGET: Budget = {
+  quota: 50,
+  rate_limit: { max: 10, window_seconds: SECONDS_PER_MINUTE },
+};
+
 /**
  * The base budget at a cran : quota and rate multiplied, the rate then held
  * under the catalog's per-minute ceiling when the entry declares one (never

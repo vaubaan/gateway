@@ -43,6 +43,8 @@ export interface MissionSnapshotConnection {
   readonly resource_scope: StoredResourceScope;
   readonly resource_ids: readonly string[];
   readonly policy: readonly MissionPolicyEntry[];
+  /** The crans the form recorded (risk model §4.7): they redraw it, they are no change. */
+  readonly crans?: Readonly<Record<string, string>>;
 }
 
 /** Everything an edit may move, and the period it may not. */
@@ -148,6 +150,7 @@ export function draftConnectionOf(c: MissionSnapshotConnection): DraftConnection
       rate_limit: { ...p.rate_limit },
       gate: p.gate,
     })),
+    ...(c.crans ? { crans: { ...c.crans } } : {}),
   };
 }
 

@@ -6,14 +6,15 @@
  *
  *   1. Name — or start from one of your missions, or paste an agent's proposal.
  *   2. Accounts and permissions — per account: its resources (all by default,
- *      "Change" opens the list), then a preset, each saying what it yields
- *      here; the permissions one by one are a click away (`CustomEditor`).
+ *      "Change" opens the list), then its macro-actions, each ticked at a
+ *      trust cran and saying what it yields here; the permissions one by one
+ *      are the Advanced view (`MacroActionPanel`, `CustomEditor`).
  *   3. Limits and lifetime — how often the limits reset, when the mission
  *      ends. People are added once it exists.
  *
  * "Create mission" asks once: the dialog lists **every permission with its
- * limit**, by account, and that list is what is created — a preset is never
- * stored. The decision shown is `previewDraft`, the function the server runs
+ * limit**, by account, and that list is what is created — the crans are
+ * kept only to redraw this form. The decision shown is `previewDraft`, the function the server runs
  * again at creation; the browser's copy only saves a round trip.
  *
  * Once created, the screen becomes the key, shown once, with the kit
@@ -87,6 +88,7 @@ import type {
 } from '@/server/missions/model';
 import { hasChanges, judgeEdit } from '@/server/missions/mission-edit';
 import { defaultResources, previewDraft } from '@/server/missions/preview';
+import type { TrustCran } from '@/server/missions/macro-actions';
 import type { RiskPlanes } from '@/server/providers/planes';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
@@ -94,11 +96,10 @@ import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
 import { CustomEditor } from './custom-editor';
 import {
-  applyPreset,
-  backToPreset,
+  applyCrans,
+  applyEverything,
   discardsEdits,
   draftOf,
-  enterCustom,
   EXPIRY_CHOICES,
   expiryOf,
   initialFormState,
@@ -107,11 +108,13 @@ import {
   PERIOD_CHOICES,
   periodChoiceOf,
   periodOf,
+  resetEdits,
   RESOURCE_CHOICES,
   setIncluded,
+  setMacroAction,
   setResourceScope,
   setResources,
-  startEmpty,
+  setView,
   type ConnectionState,
   type ExpiryChoice,
   type FormState,
@@ -119,7 +122,7 @@ import {
 } from './form-state';
 import { changeLines, editDraftOf, initialEditState, type EditSource } from './edit-state';
 import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
-import { PresetPanel } from './preset-panel';
+import { MacroActionPanel } from './macro-action-panel';
 
 export interface InitialDraft {
   readonly name: string;
@@ -169,14 +172,20 @@ function startState(
  */
 type PendingDiscard =
   | { readonly kind: 'reset'; readonly connectionId: string }
-  | { readonly kind: 'preset'; readonly connectionId: string; readonly presetId: string }
-  | { readonly kind: 'empty'; readonly connectionId: string };
+  | {
+      readonly kind: 'cran';
+      readonly connectionId: string;
+      readonly actionId: string;
+      readonly cran: TrustCran | null;
+    }
+  | { readonly kind: 'everything'; readonly connectionId: string };
 
 const EMPTY: ConnectionState = {
   included: false,
-  mode: 'preset',
+  view: 'simple',
   resourceScope: 'all',
   resourceIds: [],
+  crans: {},
   presetId: '',
   entries: {},
   edited: false,
@@ -203,7 +212,6 @@ export function MissionForm({
     edit ? initialEditState(context, edit.snapshot) : startState(context, initial),
   );
   const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
-  const [openEditors, setOpenEditors] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<PendingDiscard | null>(null);
   const [now] = useState(() => new Date());
   const [busy, setBusy] = useState(false);
@@ -264,28 +272,26 @@ export function MissionForm({
       });
   }
   const toggleResources = toggle(setOpenResources);
-  const toggleEditor = toggle(setOpenEditors);
 
-  /** A preset chip. Changing it over edits asks first; nothing is dropped silently. */
-  function pickPreset(connection: IssuanceConnection, cs: ConnectionState, presetId: string) {
+  /** A macro-action ticked, moved or unticked. Over edits it asks first; nothing is dropped silently. */
+  function pickCran(
+    connection: IssuanceConnection,
+    cs: ConnectionState,
+    actionId: string,
+    cran: TrustCran | null,
+  ) {
     if (discardsEdits(cs)) {
-      setPending({ kind: 'preset', connectionId: connection.id, presetId });
+      setPending({ kind: 'cran', connectionId: connection.id, actionId, cran });
       return;
     }
-    patchConnection(connection.id, applyPreset(connection, { ...cs, mode: 'preset' }, presetId));
+    patchConnection(connection.id, setMacroAction(connection, cs, actionId, cran));
   }
-  function pickCustom(connection: IssuanceConnection, cs: ConnectionState) {
+  function pickEverything(connection: IssuanceConnection, cs: ConnectionState) {
     if (discardsEdits(cs)) {
-      setPending({ kind: 'empty', connectionId: connection.id });
+      setPending({ kind: 'everything', connectionId: connection.id });
       return;
     }
-    patchConnection(connection.id, startEmpty(cs));
-    toggleEditor(connection.id, true);
-  }
-  function openEditor(connection: IssuanceConnection, cs: ConnectionState, open: boolean) {
-    // The editor opens on what is there: the preset's values are its starting point.
-    if (open && cs.mode === 'preset') patchConnection(connection.id, enterCustom(cs));
-    toggleEditor(connection.id, open);
+    patchConnection(connection.id, applyEverything(connection, cs));
   }
   function confirmDiscard() {
     if (!pending) return;
@@ -293,16 +299,15 @@ export function MissionForm({
     const cs = connection ? state.connections[connection.id] : undefined;
     setPending(null);
     if (!connection || !cs) return;
-    if (pending.kind === 'reset') patchConnection(connection.id, backToPreset(connection, cs));
-    if (pending.kind === 'preset') {
+    if (pending.kind === 'reset') patchConnection(connection.id, resetEdits(connection, cs));
+    if (pending.kind === 'cran') {
       patchConnection(
         connection.id,
-        applyPreset(connection, { ...cs, mode: 'preset' }, pending.presetId),
+        setMacroAction(connection, cs, pending.actionId, pending.cran),
       );
     }
-    if (pending.kind === 'empty') {
-      patchConnection(connection.id, startEmpty(cs));
-      toggleEditor(connection.id, true);
+    if (pending.kind === 'everything') {
+      patchConnection(connection.id, applyEverything(connection, cs));
     }
   }
 
@@ -413,8 +418,6 @@ export function MissionForm({
         setServerIssues([]);
         setProposalReport(body.preview);
         setPending(null);
-        // A loaded list is read first, edited on demand.
-        setOpenEditors(new Set());
       } else {
         setError(problemsOf(body) ?? messageOf(body, res.status));
       }
@@ -648,7 +651,6 @@ export function MissionForm({
                 const whole = cs.resourceScope === 'connection';
                 const selected = connection.resources.filter((r) => cs.resourceIds.includes(r.id));
                 const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
-                const editorOpen = openEditors.has(connection.id);
                 // The expansion of "Everything I hold" is said by the preset panel, in its words.
                 const notices = preview.notices.filter(
                   (n) =>
@@ -796,13 +798,32 @@ export function MissionForm({
                       )}
 
                     {cs.included && (
-                      <PresetPanel
+                      <MacroActionPanel
                         connection={connection}
                         state={cs}
-                        editorOpen={editorOpen}
-                        onPick={(presetId) => pickPreset(connection, cs, presetId)}
-                        onCustom={() => pickCustom(connection, cs)}
-                        onEditor={(open) => openEditor(connection, cs, open)}
+                        onView={(view) => patchConnection(connection.id, setView(cs, view))}
+                        onCran={(actionId, cran) => pickCran(connection, cs, actionId, cran)}
+                        onEverything={() => pickEverything(connection, cs)}
+                        onLeaveEverything={() =>
+                          patchConnection(
+                            connection.id,
+                            applyCrans(connection, { ...cs, crans: {} }),
+                          )
+                        }
+                        advanced={
+                          <CustomEditor
+                            connection={connection}
+                            state={cs}
+                            planes={planes[connection.provider] ?? null}
+                            limitLabel={limitColumn(periodSeconds)}
+                            onChange={(next) => patchConnection(connection.id, next)}
+                            onReset={
+                              cs.edited && (cs.presetId || Object.keys(cs.crans).length > 0)
+                                ? () => setPending({ kind: 'reset', connectionId: connection.id })
+                                : null
+                            }
+                          />
+                        }
                       />
                     )}
                     {cs.included &&
@@ -818,22 +839,6 @@ export function MissionForm({
                           or leave the resource out. <Mono quiet>{n.risk_ids.join(', ')}</Mono>
                         </details>
                       ))}
-                    {cs.included && editorOpen && (
-                      <div id={`editor-${connection.id}`}>
-                        <CustomEditor
-                          connection={connection}
-                          state={cs}
-                          planes={planes[connection.provider] ?? null}
-                          limitLabel={limitColumn(periodSeconds)}
-                          onChange={(next) => patchConnection(connection.id, next)}
-                          onReset={
-                            cs.presetId && cs.edited
-                              ? () => setPending({ kind: 'reset', connectionId: connection.id })
-                              : null
-                          }
-                        />
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -1001,10 +1006,10 @@ export function MissionForm({
         title="Discard what you changed?"
         consequence={
           pending?.kind === 'reset'
-            ? 'The permissions, limits and "ask me first" you changed on this account go back to the preset as it is.'
-            : pending?.kind === 'empty'
-              ? 'Custom starts from an empty list: the permissions, limits and "ask me first" you changed on this account are dropped.'
-              : 'Another preset replaces the permissions, limits and "ask me first" you changed on this account.'
+            ? 'The permissions, limits and "ask me first" you changed on this account go back to what the crans write.'
+            : pending?.kind === 'everything'
+              ? 'Everything you hold on this account replaces the permissions, limits and "ask me first" you changed there.'
+              : 'The crans write this account\'s list again: the permissions, limits and "ask me first" you changed there are dropped.'
         }
         confirmLabel="Discard my changes"
         tone="danger"

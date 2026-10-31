@@ -51,11 +51,11 @@ test('the creator adds a requested permission, then removes it directly, with th
   expect(await executor.call('github__create_or_update_file', args)).toMatchObject({
     outcome: 'allowed',
   });
-  // Taking it back is "Edit mission": the creation screen prefilled, the list open.
+  // Taking it back is "Edit mission": the creation screen prefilled; a mission issued line by
+  // line, with no crans, opens on its list in the advanced view.
   await page.goto(`/missions/${issued.mission_id}`);
   await page.getByTestId('edit-mission').click();
   await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}/edit$`));
-  await page.getByRole('button', { name: 'Edit the permissions one by one', exact: true }).click();
   await page.getByRole('checkbox', { name: `Allow ${risk}`, exact: true }).uncheck();
   await page.getByRole('button', { name: 'Save changes' }).click();
   const confirm = page.getByTestId('confirm-edit');

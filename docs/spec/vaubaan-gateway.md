@@ -573,10 +573,11 @@ stands in without one.
 - **Missions** — mine and those I am a teammate of; a row says when it waits for my answer and names
   the connected app that prepared it. **Creating**, on one screen: a name (or a copy of a mission,
   or a pasted agent proposal); the accounts and their resources (every resource known now, the whole
-  account including later ones, or a pick); per account a preset, each saying what it yields within
-  what I may allow — `everything-i-hold` says how many permissions it writes out, the most severe,
-  which critical ones run freely and that it includes uncategorized writes — or the permissions one
-  by one; preset or one by one is a mode of the screen, never sent; the period and the end; a
+  account including later ones, or a pick); per account its macro-actions, each ticked at a trust cran
+  and saying what it yields within what I may allow ([risk model](gateway-risk-model.md) §4.7), or
+  `everything-i-hold`, which says how many permissions it writes out, the most severe, which critical
+  ones run freely and that it includes uncategorized writes; the permissions one by one in an
+  Advanced view; the view is never sent, the crans only to redraw the screen; the period and the end; a
   summary (can do, asks first, cannot). **Creating confirms the explicit list** (every permission by
   account, with limits and gate), which is what is sent and checked again; then the key, shown once,
   with the setup kit. **On a mission**: its state, a waiting request (the way to answer for the
