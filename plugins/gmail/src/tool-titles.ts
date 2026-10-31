@@ -16,6 +16,8 @@ export const gmailToolTitles: Readonly<Record<string, string>> = {
   gmail__get_attachment: 'Download an attachment',
   gmail__list_drafts: 'List the drafts',
   gmail__create_draft: 'Save a draft (never sent)',
+  gmail__send_message: 'Send a message',
+  gmail__send_draft: 'Send a draft',
   gmail__list_labels: 'List the labels',
   gmail__create_label: 'Create a label',
   gmail__label_message: 'Add a label to a message',

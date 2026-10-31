@@ -31,6 +31,8 @@ function fakeImap(): GmailTransport & { sessions: string[] } {
     store: async () => undefined,
     download: async () => null,
     createMailbox: async (segments) => ({ path: segments.join('/'), created: true }),
+    source: async () => null,
+    remove: async () => undefined,
   };
   return {
     sessions,

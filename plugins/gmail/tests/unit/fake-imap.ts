@@ -12,6 +12,7 @@ import type {
   GmailAccount,
   GmailImapSession,
   GmailSessionOptions,
+  GmailSmtpTransport,
   GmailTransport,
   ImapAddress,
   ImapBody,
@@ -20,6 +21,7 @@ import type {
   ImapMessage,
   ImapSearch,
   ImapStore,
+  SmtpMail,
 } from '../../src/index.ts';
 
 export const ALL = '[Gmail]/Tous les messages';
@@ -50,6 +52,8 @@ export interface FakeMessage {
   subject: string;
   from: ImapAddress[];
   to: ImapAddress[];
+  cc?: ImapAddress[];
+  bcc?: ImapAddress[];
   date: string;
   text: string | null;
   /** An HTML body, used when `text` is null (an HTML-only message). */
@@ -69,7 +73,9 @@ export type FakeCall =
   | { op: 'append'; path: string; message: string; flags: readonly string[] }
   | { op: 'store'; path: string; uids: readonly number[]; change: ImapStore }
   | { op: 'download'; path: string; uid: number; part: string; maxBytes: number }
-  | { op: 'create'; segments: readonly string[] };
+  | { op: 'create'; segments: readonly string[] }
+  | { op: 'source'; path: string; uid: number; maxBytes: number }
+  | { op: 'remove'; path: string; uids: readonly number[] };
 
 export interface FakeGmail extends GmailTransport {
   readonly calls: FakeCall[];
@@ -144,7 +150,8 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
       subject: m.subject,
       from: m.from,
       to: m.to,
-      cc: [],
+      cc: m.cc ?? [],
+      bcc: m.bcc ?? [],
       body,
       attachments: structure
         ? (m.attachments ?? []).map((a) => ({
@@ -204,6 +211,20 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
         truncated: a.content.length > maxBytes,
       };
     },
+    async source(path, uid, maxBytes) {
+      calls.push({ op: 'source', path, uid, maxBytes });
+      const m = inFolder(path).find((x) => x.uid === uid);
+      if (!m || m.raw === undefined) return null;
+      const bytes = Buffer.from(m.raw, 'utf8');
+      return { content: bytes.subarray(0, maxBytes), truncated: bytes.length > maxBytes };
+    },
+    async remove(path, uids) {
+      calls.push({ op: 'remove', path, uids });
+      for (const uid of uids) {
+        const i = messages.findIndex((m) => m.folder === path && m.uid === uid);
+        if (i >= 0) messages.splice(i, 1);
+      }
+    },
     async createMailbox(segments) {
       calls.push({ op: 'create', segments });
       const path = segments.join('/');
@@ -227,6 +248,32 @@ export function fakeGmail(messages: FakeMessage[] = []): FakeGmail {
         apply(m.labels, change.labels);
         apply(m.flags, change.flags);
       }
+    },
+  };
+  return fake;
+}
+
+/** A fake SMTP relay : every send recorded, nothing on the network. */
+export interface FakeSmtp extends GmailSmtpTransport {
+  readonly sent: { account: GmailAccount; options: GmailSessionOptions; mail: SmtpMail }[];
+  /** When set, the next sends throw it. */
+  failWith: Error | null;
+  /** Recipients the relay rejects (the others are accepted). */
+  rejecting: string[];
+}
+
+export function fakeSmtp(): FakeSmtp {
+  const fake: FakeSmtp = {
+    sent: [],
+    failWith: null,
+    rejecting: [],
+    async send(account, options, mail) {
+      if (fake.failWith) throw fake.failWith;
+      fake.sent.push({ account, options, mail });
+      return {
+        accepted: mail.to.filter((a) => !fake.rejecting.includes(a)),
+        rejected: mail.to.filter((a) => fake.rejecting.includes(a)),
+      };
     },
   };
   return fake;

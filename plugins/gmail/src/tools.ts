@@ -4,12 +4,11 @@
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
  * Handbook : docs/handbook/providers/gmail.md.
  *
- * The twelve tools are exposed and execute
- * over IMAP (`execute.ts`, ADR gmail-over-imap-with-an-app-password) — eleven
- * that read (attachments included), draft, label and create labels, plus one
- * synthetic Vaubaan tool,
- * `gmail__describe_zones`, which returns the mailbox zoning configuration
- * without any upstream call. No tool sends mail.
+ * The fourteen tools are exposed and execute over IMAP, and the two that
+ * send over SMTP (`execute.ts`, ADR gmail-over-imap-with-an-app-password) —
+ * thirteen that read (attachments included), draft, send, label and create
+ * labels, plus one synthetic Vaubaan tool, `gmail__describe_zones`, which
+ * returns the mailbox zoning configuration without any upstream call.
  *
  * Argument names are the ones the classifier reads (`q`, `id`,
  * `thread_id`, `message_id`, `part`, `label`, `name`, `to` / `cc` / `bcc`), and execute reads
@@ -21,7 +20,7 @@ import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 export const GMAIL_TOOL_PREFIX = 'gmail__';
 
-/** The twelve tools the classifier knows. Any other name is `denied`. */
+/** The fourteen tools the classifier knows. Any other name is `denied`. */
 export const GMAIL_CLASSIFIED_TOOLS = [
   'gmail__describe_zones',
   'gmail__search_threads',
@@ -29,6 +28,8 @@ export const GMAIL_CLASSIFIED_TOOLS = [
   'gmail__get_attachment',
   'gmail__list_drafts',
   'gmail__create_draft',
+  'gmail__send_message',
+  'gmail__send_draft',
   'gmail__list_labels',
   'gmail__create_label',
   'gmail__label_message',
@@ -65,7 +66,7 @@ const recipients = {
     'Addresses, one per element, as `addr@example.com` or `Name <addr@example.com>`. An element that is not exactly one address refuses the call.',
 };
 
-/** Declarations of the twelve tools, in `GMAIL_CLASSIFIED_TOOLS` order. */
+/** Declarations of the fourteen tools, in `GMAIL_CLASSIFIED_TOOLS` order. */
 export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
     name: 'gmail__describe_zones',
@@ -124,7 +125,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   },
   {
     name: 'gmail__list_drafts',
-    description: 'List the drafts of the mailbox.',
+    description: 'List the drafts of the mailbox, with their recipients (Bcc included).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -141,6 +142,40 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
         body: { type: 'string' },
       },
       required: ['subject', 'body'],
+    },
+  },
+  {
+    name: 'gmail__send_message',
+    description:
+      'Send a plain-text message over SMTP, from the mailbox; it cannot be called back. The risk depends on the recipients : self, internal, allowlisted or external (the worst recipient wins). 1 to 100 recipients. Gmail files the copy in Sent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        to: recipients,
+        cc: recipients,
+        bcc: recipients,
+        subject: { type: 'string' },
+        body: { type: 'string' },
+      },
+      required: ['subject', 'body'],
+    },
+  },
+  {
+    name: 'gmail__send_draft',
+    description:
+      'Send an existing draft as it is (attachments and formatting kept), then remove it from Drafts; it cannot be called back. Give its id and its recipients exactly as list_drafts shows them : the risk is priced on them, and the call is refused, unsent, when the draft holds others. Gmail files the copy in Sent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Draft id from list_drafts: up to 16 lower-case hexadecimal digits.',
+        },
+        to: recipients,
+        cc: recipients,
+        bcc: recipients,
+      },
+      required: ['id'],
     },
   },
   {

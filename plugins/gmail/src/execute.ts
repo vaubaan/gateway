@@ -1,6 +1,6 @@
 /**
  * Execution, verification and resource discovery of the `gmail` provider,
- * over IMAP.
+ * over IMAP, and over SMTP for the two sends.
  *
  * Spec : docs/spec/vaubaan-gateway.md §2.4, §5, §7.2.
  * ADR  : docs/decisions/gmail-over-imap-with-an-app-password.md (D2) ;
@@ -13,10 +13,13 @@
  * the credential, then runs the call in one IMAP session. Folders are found
  * by their SPECIAL-USE (`\All`, `\Drafts`), never by name. Ids leave as the
  * lower-case hexadecimal of `X-GM-THRID` / `X-GM-MSGID`, as the Gmail API
- * prints them. Nothing is ever sent : a draft is appended to `\Drafts`.
+ * prints them. A draft is appended to `\Drafts` ; a send is relayed over
+ * SMTP (`smtp.ts`) to the recipients checked here and to no other, and Gmail
+ * files its copy in Sent (nothing is appended).
  *
- * No `ctx.fetch` here : the upstream is IMAP, injected as a `GmailTransport`
- * (`createGmailRuntime({ transport })`) so tests never open a socket.
+ * No `ctx.fetch` here : the upstreams are IMAP and SMTP, injected as a
+ * `GmailTransport` and a `GmailSmtpTransport`
+ * (`createGmailRuntime({ transport, smtp })`) so tests never open a socket.
  */
 
 import type {
@@ -28,8 +31,9 @@ import type {
   Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { collectRecipients, type EmailAddress } from './address.ts';
+import { collectRecipients, parseBareAddress, type EmailAddress } from './address.ts';
 import {
+  MAX_SEND_RECIPIENTS,
   creatableLabel,
   gmailId,
   gmailPartId,
@@ -44,8 +48,15 @@ import {
   gmailCredentialFields,
   type GmailAccount,
 } from './credential.ts';
-import { buildDraft, draftProblem, hasControlCharacter } from './draft.ts';
+import { buildDraft, draftProblem, hasControlCharacter, withoutBccHeader } from './draft.ts';
 import { htmlToText, MAX_HTML_BYTES } from './html.ts';
+import {
+  GmailSmtpError,
+  nodemailerSmtpTransport,
+  type GmailSmtpTransport,
+  type SmtpMail,
+  type SmtpReceipt,
+} from './smtp.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 import {
   imapflowTransport,
@@ -81,6 +92,8 @@ export const MAX_TEXT_BYTES = 20_000;
 export const MAX_DRAFTS = 50;
 /** Largest attachment `get_attachment` returns, decoded, in bytes (5 MiB ; base64 adds a third). */
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+/** Largest draft `send_draft` relays, as stored (7 MiB : under the transport's 8 MiB literal cap). */
+export const MAX_SENT_DRAFT_BYTES = 7 * 1024 * 1024;
 
 // ─── Ids ───────────────────────────────────────────────────────────────────
 
@@ -191,7 +204,7 @@ const attachmentView = (a: ImapAttachment): Record<string, unknown> => ({
   size: a.size,
 });
 
-function messageView(m: ImapMessage, withText: boolean): Record<string, unknown> {
+function messageView(m: ImapMessage, withText: boolean, withBcc = false): Record<string, unknown> {
   return {
     id: imapIdToHex(m.messageId),
     thread_id: imapIdToHex(m.threadId),
@@ -199,6 +212,7 @@ function messageView(m: ImapMessage, withText: boolean): Record<string, unknown>
     from: addressList(m.from),
     to: addressList(m.to),
     cc: addressList(m.cc),
+    ...(withBcc ? { bcc: addressList(m.bcc) } : {}),
     subject: m.subject,
     labels: labelsOf(m),
     ...(withText ? { ...textOf(m.body), attachments: m.attachments.map(attachmentView) } : {}),
@@ -221,12 +235,20 @@ async function folder(session: GmailImapSession, specialUse: '\\All' | '\\Drafts
 // ─── Tools ─────────────────────────────────────────────────────────────────
 //
 // Each tool checks every argument first and returns either the refusal or the
-// work to do in a session : a call refused here opens no IMAP connection.
+// work to do : a call refused here opens no IMAP and no SMTP connection.
 
-type Work = (session: GmailImapSession) => Promise<McpToolResult>;
-type Plan = McpToolResult | Work;
+/** Relays one message over SMTP, signed in as the connection's mailbox. */
+type SendMail = (mail: SmtpMail) => Promise<SmtpReceipt>;
+/** Work in one IMAP session ; `send` opens an SMTP connection only when called. */
+type Work = (session: GmailImapSession, send: SendMail) => Promise<McpToolResult>;
+/** Work over SMTP alone : no IMAP session is opened. */
+interface SmtpWork {
+  readonly smtp: (send: SendMail) => Promise<McpToolResult>;
+}
+type Plan = McpToolResult | Work | SmtpWork;
 
 const isWork = (plan: Plan): plan is Work => typeof plan === 'function';
+const isSmtpWork = (plan: Plan): plan is SmtpWork => 'smtp' in plan;
 
 function planSearchThreads(args: Readonly<Record<string, unknown>>): Plan {
   const q = args.q;
@@ -418,7 +440,7 @@ const listDrafts: Work = async (session) => {
   const messages = [...(await session.fetch(drafts, uids, { bodyBytes: null }))].sort(
     (a, b) => b.uid - a.uid,
   );
-  return ok({ drafts: messages.map((m) => messageView(m, false)) });
+  return ok({ drafts: messages.map((m) => messageView(m, false, true)) });
 };
 
 /** Recipients of one field, with the classifier's parser ; the refusal when one does not parse. */
@@ -463,6 +485,160 @@ function planCreateDraft(
         : null,
       sent: false,
     });
+  };
+}
+
+/** Every recipient of a send, bounded ; the refusal when there is none or too many. */
+function sendRecipients(
+  fields: readonly (readonly EmailAddress[])[],
+): readonly string[] | McpToolResult {
+  const all = fields.flat();
+  if (all.length === 0) {
+    return fail('invalid_argument', 'a send needs at least one recipient in to, cc or bcc.');
+  }
+  if (all.length > MAX_SEND_RECIPIENTS) {
+    return fail('invalid_argument', `a send has at most ${MAX_SEND_RECIPIENTS} recipients.`);
+  }
+  return [...new Set(all.map((a) => a.address))];
+}
+
+/** What a send answers : who Gmail took, and that the copy is Gmail's to file. */
+function sentResult(receipt: SmtpReceipt, extra: Record<string, unknown> = {}): McpToolResult {
+  return ok({
+    sent: true,
+    accepted: receipt.accepted,
+    rejected: receipt.rejected,
+    sent_copy: 'filed in Sent by Gmail',
+    ...extra,
+  });
+}
+
+function planSendMessage(
+  account: GmailAccount,
+  args: Readonly<Record<string, unknown>>,
+  now: () => Date,
+): Plan {
+  const to = recipientsOf(args, 'to');
+  if (!Array.isArray(to)) return to as McpToolResult;
+  const cc = recipientsOf(args, 'cc');
+  if (!Array.isArray(cc)) return cc as McpToolResult;
+  const bcc = recipientsOf(args, 'bcc');
+  if (!Array.isArray(bcc)) return bcc as McpToolResult;
+  const envelope = sendRecipients([to, cc, bcc]);
+  if (!Array.isArray(envelope)) return envelope as McpToolResult;
+  const problem = draftProblem(args.subject, args.body);
+  if (problem !== null) return fail('invalid_argument', problem);
+  // The message a draft would be, without the Bcc header : Bcc travels in the envelope only.
+  const raw = buildDraft({
+    from: account.email,
+    to,
+    cc,
+    bcc: [],
+    subject: args.subject as string,
+    body: args.body as string,
+    date: now(),
+  });
+  const recipients: readonly string[] = envelope;
+  return {
+    smtp: async (send) => sentResult(await send({ from: account.email, to: recipients, raw })),
+  };
+}
+
+/** The bare addresses of one envelope field, sorted ; `null` when one is not exactly an address. */
+function envelopeAddresses(list: readonly ImapAddress[]): string[] | null {
+  const out: string[] = [];
+  for (const a of list) {
+    const parsed = parseBareAddress(a.address);
+    if (parsed === null) return null;
+    out.push(parsed.address);
+  }
+  return out.sort();
+}
+
+const sameAddresses = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+const SEND_FIELDS = ['to', 'cc', 'bcc'] as const;
+type SendField = (typeof SEND_FIELDS)[number];
+
+/**
+ * The draft's recipients checked against the declared ones, field by field ;
+ * the refusal when one is not an address or the sets differ.
+ */
+function draftRecipientsProblem(
+  hex: string,
+  draft: ImapMessage,
+  declared: Readonly<Record<SendField, readonly string[]>>,
+): McpToolResult | null {
+  const held: Readonly<Record<SendField, readonly ImapAddress[]>> = {
+    to: draft.to,
+    cc: draft.cc,
+    bcc: draft.bcc,
+  };
+  for (const field of SEND_FIELDS) {
+    const actual = envelopeAddresses(held[field]);
+    if (actual === null) {
+      return fail(
+        'invalid_argument',
+        `draft ${hex}: a ${field} recipient is not exactly one address; nothing was sent.`,
+      );
+    }
+    if (!sameAddresses(actual, declared[field])) {
+      return fail(
+        'recipients_mismatch',
+        `draft ${hex} is addressed ${field}: [${actual.join(', ')}], not [${declared[field].join(', ')}]; nothing was sent. Call again with the draft's recipients as list_drafts shows them.`,
+      );
+    }
+  }
+  return null;
+}
+
+function planSendDraft(account: GmailAccount, args: Readonly<Record<string, unknown>>): Plan {
+  const id = imapIdArg(args, 'id');
+  if (isRefusal(id)) return id;
+  const declared: Record<SendField, string[]> = { to: [], cc: [], bcc: [] };
+  const fields: (readonly EmailAddress[])[] = [];
+  for (const field of SEND_FIELDS) {
+    const parsed = recipientsOf(args, field);
+    if (isRefusal(parsed)) return parsed;
+    fields.push(parsed);
+    declared[field] = parsed.map((a) => a.address).sort();
+  }
+  const envelope = sendRecipients(fields);
+  if (!Array.isArray(envelope)) return envelope as McpToolResult;
+  const recipients: readonly string[] = envelope;
+  return async (session, send) => {
+    const drafts = await folder(session, '\\Drafts');
+    const [uid] = await session.search(drafts, { messageId: id.decimal });
+    if (uid === undefined) {
+      return fail('not_found', `no draft ${id.hex} in Drafts (list_drafts gives the ids).`);
+    }
+    const [draft] = await session.fetch(drafts, [uid], { bodyBytes: null });
+    if (!draft) return fail('not_found', `draft ${id.hex} could not be read.`);
+    // The call was classified on the declared recipients : the draft must hold exactly them.
+    const mismatch = draftRecipientsProblem(id.hex, draft, declared);
+    if (mismatch !== null) return mismatch;
+    const source = await session.source(drafts, uid, MAX_SENT_DRAFT_BYTES);
+    if (source === null) return fail('not_found', `draft ${id.hex} could not be read.`);
+    if (source.truncated) {
+      return fail(
+        'too_large',
+        `draft ${id.hex} is larger than ${MAX_SENT_DRAFT_BYTES} bytes (7 MiB), the most send_draft relays.`,
+      );
+    }
+    const receipt = await send({
+      from: account.email,
+      to: recipients,
+      raw: withoutBccHeader(source.content),
+    });
+    // Sent : it is no longer a draft. A failure here leaves it in Drafts, and says so.
+    let removed = true;
+    try {
+      await session.remove(drafts, [uid]);
+    } catch {
+      removed = false;
+    }
+    return sentResult(receipt, { draft_id: id.hex, draft_removed: removed });
   };
 }
 
@@ -553,6 +729,10 @@ function planOf(
       return listDrafts;
     case 'gmail__create_draft':
       return planCreateDraft(account, args, now);
+    case 'gmail__send_message':
+      return planSendMessage(account, args, now);
+    case 'gmail__send_draft':
+      return planSendDraft(account, args);
     case 'gmail__list_labels':
       return listLabels;
     default:
@@ -565,6 +745,8 @@ function planOf(
 export interface GmailRuntimeOptions {
   /** Defaults to the real `imapflow` transport. */
   readonly transport?: GmailTransport;
+  /** Defaults to the real `nodemailer` transport. */
+  readonly smtp?: GmailSmtpTransport;
   /** The clock a draft is dated with ; tests pin it. */
   readonly now?: () => Date;
 }
@@ -593,22 +775,20 @@ export function mailboxResource(email: string): Resource {
 
 export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRuntime {
   const transport = options.transport ?? imapflowTransport;
+  const smtp = options.smtp ?? nodemailerSmtpTransport;
   const now = options.now ?? (() => new Date());
+
+  const sessionOptions = (ctx: ConnectionContext) => ({
+    timeoutMs: SESSION_TIMEOUT_MS,
+    ...(ctx.signal ? { signal: ctx.signal } : {}),
+    ...(ctx.logger ? { logger: ctx.logger } : {}),
+  });
 
   const inSession = <T>(
     account: GmailAccount,
     ctx: ConnectionContext,
     work: (s: GmailImapSession) => Promise<T>,
-  ): Promise<T> =>
-    transport.session(
-      account,
-      {
-        timeoutMs: SESSION_TIMEOUT_MS,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-        ...(ctx.logger ? { logger: ctx.logger } : {}),
-      },
-      work,
-    );
+  ): Promise<T> => transport.session(account, sessionOptions(ctx), work);
 
   /** Signs in and checks the two folders every tool needs. */
   const signIn = async (ctx: ConnectionContext): Promise<GmailAccount> => {
@@ -650,12 +830,15 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
           `mailbox '${mailbox.ref}' is not the mailbox of this connection.`,
         );
       }
+      const send: SendMail = (mail) => smtp.send(account, sessionOptions(ctx), mail);
       try {
         const plan = planOf(tool, args, account, now);
-        if (!isWork(plan)) return plan;
-        return await inSession(account, ctx, plan);
+        if (isWork(plan)) return await inSession(account, ctx, (s) => plan(s, send));
+        if (isSmtpWork(plan)) return await plan.smtp(send);
+        return plan;
       } catch (err) {
         if (err instanceof GmailToolError) return fail(err.code, err.message);
+        if (err instanceof GmailSmtpError) return fail(err.code, err.message);
         throw err;
       }
     },

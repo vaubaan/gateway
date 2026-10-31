@@ -36,6 +36,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   asks first at every cran. The v4 import writes each kept risk at
   Confiant; "Everything I hold" takes its budgets from the macro-actions at
   Autonome.
+- **Gmail sends mail over SMTP** (`@vaubaan/plugin-gmail` 1.1.0, ADR
+  gmail-over-imap-with-an-app-password amended). Two tools: `send_message`
+  (a plain-text message) and `send_draft` (an existing draft as it is, by
+  its id, refused unsent unless its To, Cc and Bcc are the ones the call
+  declares; it leaves Drafts once sent). They go to `smtp.gmail.com:465`
+  with the app password the connection already holds, through `nodemailer`;
+  Bcc travels in the envelope only, and Gmail files the copy in Sent. Four
+  new risks price a send by its worst recipient: to the mailbox itself, to
+  internal recipients, to allowlisted contacts, to anyone else (irreversible,
+  personal data, public). They form the new "Send" macro-action:
+  an existing mission gains no send until its creator accepts one. A refused send opens no connection. Gmail catalog version 8.
 
 - **The OAuth broker runs without an enclave** (`@vaubaan/oauth-broker` 0.2.0,
   ADR oauth-broker-can-run-without-an-enclave). The published image with

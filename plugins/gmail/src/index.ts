@@ -1,19 +1,20 @@
 /**
  * `@vaubaan/plugin-gmail` — the Gmail provider plugin. It
- * classifies the twelve tools into the identity-zoned risks of its catalog and
- * executes them over IMAP, signed in with the mailbox's app password ; it
- * never sends mail.
+ * classifies the fourteen tools into the identity-zoned risks of its catalog
+ * and executes them over IMAP, and the two sends over SMTP, signed in with
+ * the mailbox's app password.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR      : docs/decisions/gmail-over-imap-with-an-app-password.md ;
  *            docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/providers/gmail.md ; guide : plugins/README.md.
  *
- * The plugin imports `@vaubaan/plugin-sdk` and `imapflow` only. `definePlugin`
+ * The plugin imports `@vaubaan/plugin-sdk`, `imapflow`, `nodemailer` and
+ * `html-to-text` only. `definePlugin`
  * validates the definition at import time ; the YAML catalog is loaded here,
  * once, when the module is first imported (that is, at gateway boot).
- * `createGmailPlugin({ transport })` builds the same plugin over a fake
- * transport for tests.
+ * `createGmailPlugin({ transport, smtp })` builds the same plugin over fake
+ * transports for tests.
  */
 
 import {
@@ -48,7 +49,7 @@ import {
   type GmailAccount,
 } from './credential.ts';
 import { gmailDataModel } from './data-model.ts';
-import { buildDraft, encodeHeaderValue } from './draft.ts';
+import { buildDraft, encodeHeaderValue, withoutBccHeader } from './draft.ts';
 import {
   GMAIL_PLUGIN_ID,
   createGmailRuntime,
@@ -66,6 +67,14 @@ import {
   gmailTools,
 } from './tools.ts';
 import { gmailToolTitles } from './tool-titles.ts';
+import {
+  GMAIL_SMTP_HOST,
+  GMAIL_SMTP_PORT,
+  GmailSmtpError,
+  createNodemailerSmtpTransport,
+  nodemailerSmtpTransport,
+  smtpError,
+} from './smtp.ts';
 import { htmlToText, MAX_HTML_BYTES } from './html.ts';
 import {
   attachmentsOf,
@@ -79,7 +88,7 @@ import {
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-export const GMAIL_PLUGIN_VERSION = '1.0.2';
+export const GMAIL_PLUGIN_VERSION = '1.1.0';
 
 export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPlugin {
   const runtime = createGmailRuntime(options);
@@ -90,9 +99,9 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
     iconColor: GMAIL_ICON_COLOR,
     version: GMAIL_PLUGIN_VERSION,
     description:
-      'Search, read (HTML and attachments included), draft, label and create labels in a Gmail mailbox over IMAP, with an app password, under risks zoned by who the sender or the recipient is. Never sends mail.',
+      'Search, read (HTML and attachments included), draft, label and create labels in a Gmail mailbox over IMAP, and send messages and drafts over SMTP, with an app password, under risks zoned by who the sender or the recipient is.',
     summary:
-      'One account is one Gmail or Google Workspace mailbox, connected with an app password and reached over IMAP; the mailbox is its single resource. Reads are priced by who the sender is, drafts by who the recipients are, and a draft to an address outside the internal domains and the allowlists is refused. Drafts are saved, never sent.',
+      'One account is one Gmail or Google Workspace mailbox, connected with an app password and reached over IMAP, and over SMTP to send; the mailbox is its single resource. Reads are priced by who the sender is, drafts and sends by who the recipients are. A draft to an address outside the internal domains and the allowlists is refused; a send there is its own risk, external and irreversible.',
     manualRevocation: `Delete the app password named "Vaubaan Gateway" at ${GMAIL_APP_PASSWORDS_URL}, in the Google Account of the mailbox.`,
     docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/gmail.md',
     tools: gmailTools,
@@ -127,13 +136,17 @@ export {
   GMAIL_IMAP_PORT,
   GMAIL_METADATA_KEYS,
   GMAIL_PLUGIN_ID,
+  GMAIL_SMTP_HOST,
+  GMAIL_SMTP_PORT,
   GMAIL_TOOL_PREFIX,
+  GmailSmtpError,
   buildDraft,
   classifyFromAddress,
   classifyGmail,
   classifyRecipients,
   createGmailRuntime,
   createImapflowTransport,
+  createNodemailerSmtpTransport,
   encodeHeaderValue,
   gmailAccount,
   gmailClassifiedToolDeclarations,
@@ -148,17 +161,29 @@ export {
   imapIdToHex,
   labelRef,
   mailboxResource,
+  nodemailerSmtpTransport,
   normalizeAppPassword,
   readMailboxMetadata,
   selectMailbox,
+  smtpError,
   textPartOf,
   userLabels,
+  withoutBccHeader,
   writableLabel,
 };
 export type { FromZone, GmailMailboxMetadata, ToZone } from './classify.ts';
 export type { GmailAccount };
 export type { GmailRuntime, GmailRuntimeOptions } from './execute.ts';
 export type { GmailClassifiedTool } from './tools.ts';
+export type {
+  GmailSmtpErrorCode,
+  GmailSmtpTransport,
+  SmtpClient,
+  SmtpClientFactory,
+  SmtpClientOptions,
+  SmtpMail,
+  SmtpReceipt,
+} from './smtp.ts';
 export type {
   GmailImapSession,
   GmailSessionOptions,

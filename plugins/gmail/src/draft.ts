@@ -1,5 +1,6 @@
 /**
- * The RFC 5322 message `create_draft` appends to the `\Drafts` folder.
+ * The RFC 5322 message `create_draft` appends to the `\Drafts` folder and
+ * `send_message` relays over SMTP (built without its `Bcc` header).
  *
  * Handbook : docs/handbook/providers/gmail.md.
  *
@@ -12,7 +13,9 @@
  *     not stripped) and is encoded as RFC 2047 words when it is not ASCII ;
  *   - the body is UTF-8, base64 in lines of 76 : whatever it holds, it cannot
  *     end the headers or start a MIME part.
- * The message is a draft only : it is never sent, and no SMTP client exists.
+ * A message to send is the same text with `bcc: []` : the Bcc recipients
+ * travel in the SMTP envelope only. `withoutBccHeader` takes the header out
+ * of a draft the owner wrote before `send_draft` relays it.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -109,4 +112,30 @@ export function buildDraft(input: DraftInput): string {
     'Content-Transfer-Encoding: base64',
   ];
   return `${headers.join('\r\n')}\r\n\r\n${base64Lines(input.body)}\r\n`;
+}
+
+/**
+ * The message with every `Bcc` header field (and its folded lines) removed
+ * from the header section ; the body is left byte for byte. A draft keeps its
+ * Bcc recipients in a header, and a relayed header is delivered to every
+ * recipient : the envelope carries them instead.
+ */
+export function withoutBccHeader(source: Buffer): Buffer {
+  // latin1 maps each byte to one character and back : no byte of the message changes.
+  const text = source.toString('latin1');
+  const blank = /\r?\n\r?\n/.exec(text);
+  const cut = blank === null ? text.length : blank.index + (text[blank.index] === '\r' ? 2 : 1);
+  const lines = text.slice(0, cut).split(/(?<=\n)/);
+  const kept: string[] = [];
+  let dropping = false;
+  for (const line of lines) {
+    // A line starting with a blank continues the field above it.
+    if (/^[ \t]/.test(line)) {
+      if (!dropping) kept.push(line);
+      continue;
+    }
+    dropping = /^bcc[ \t]*:/i.test(line);
+    if (!dropping) kept.push(line);
+  }
+  return Buffer.from(kept.join('') + text.slice(cut), 'latin1');
 }

@@ -65,6 +65,8 @@ export interface ImapMessage {
   readonly from: readonly ImapAddress[];
   readonly to: readonly ImapAddress[];
   readonly cc: readonly ImapAddress[];
+  /** Read from the envelope : Gmail keeps it on a draft and on a sent copy, never on received mail. */
+  readonly bcc: readonly ImapAddress[];
   /**
    * The body : the first inline text/plain part, else the first inline
    * text/html part, decoded, at most the requested bytes ; `null` when not
@@ -141,6 +143,10 @@ export interface GmailImapSession {
   ): Promise<ImapPartContent | null>;
   /** `CREATE` of a mailbox (a Gmail label) from its segments ; `created: false` when it existed. */
   createMailbox(segments: readonly string[]): Promise<{ path: string; created: boolean }>;
+  /** The whole RFC 5322 source of one message, at most `maxBytes` ; `null` when not found. */
+  source(path: string, uid: number, maxBytes: number): Promise<ImapPartContent | null>;
+  /** `\Deleted` then `EXPUNGE` of these messages, in this folder only. */
+  remove(path: string, uids: readonly number[]): Promise<void>;
 }
 
 export interface GmailSessionOptions {
@@ -395,6 +401,7 @@ class ImapflowSession implements GmailImapSession {
           from: addresses(m.envelope?.from),
           to: addresses(m.envelope?.to),
           cc: addresses(m.envelope?.cc),
+          bcc: addresses(m.envelope?.bcc),
           body,
           attachments: m.bodyStructure ? attachmentsOf(m.bodyStructure) : [],
         });
@@ -436,6 +443,32 @@ class ImapflowSession implements GmailImapSession {
     // modified UTF-7 and sends it quoted (never as a literal or a bare atom with a space).
     const result = await this.client.mailboxCreate([...segments]);
     return { path: result.path, created: result.created };
+  }
+
+  async source(path: string, uid: number, maxBytes: number): Promise<ImapPartContent | null> {
+    const lock = await this.client.getMailboxLock(path, { readOnly: true });
+    try {
+      // `BODY.PEEK[]<0.n>` : one byte more than allowed tells a message that is too large.
+      const m = await this.client.fetchOne(
+        String(uid),
+        { uid: true, source: { start: 0, maxLength: maxBytes + 1 } },
+        { uid: true },
+      );
+      if (!m || !m.source) return null;
+      return { content: m.source.subarray(0, maxBytes), truncated: m.source.length > maxBytes };
+    } finally {
+      lock.release();
+    }
+  }
+
+  async remove(path: string, uids: readonly number[]): Promise<void> {
+    if (uids.length === 0) return;
+    const lock = await this.client.getMailboxLock(path);
+    try {
+      await this.client.messageDelete([...uids], { uid: true });
+    } finally {
+      lock.release();
+    }
   }
 
   async store(path: string, uids: readonly number[], change: ImapStore): Promise<void> {
