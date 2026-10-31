@@ -21,6 +21,7 @@ import {
   type RiskKind,
   type SeverityLevel,
 } from './model';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /**
  * Rank of each axis value, mildest first — the order of `RISK_VECTOR_AXES`
@@ -293,7 +294,6 @@ export function noteBody(note: string): string {
   return body.charAt(0).toUpperCase() + body.slice(1);
 }
 
-const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
 
 /** A rate limit in a few characters: `120/min`, `10/hour`, `5 per 30s`. */

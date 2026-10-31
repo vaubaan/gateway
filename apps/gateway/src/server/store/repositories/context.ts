@@ -14,7 +14,8 @@ import type { Iso, Principal, PrincipalKind } from '../types.ts';
 
 /** Rows returned by a list when the caller gives no limit. */
 export const DEFAULT_LIST_LIMIT = 1000;
-export const MS_PER_DAY = 86_400_000;
+/** Re-exported for the repositories: the one constant lives in `@vaubaan/shared/time`. */
+export { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export interface RepoContext {
   readonly db: StoreDb;

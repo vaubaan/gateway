@@ -12,6 +12,7 @@
  */
 
 import type { Budget, Gate, RateLimit, RiskId, RiskVector } from '@vaubaan/shared';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** The four tiers, from the mildest. */
 export type Tier = 1 | 2 | 3 | 4;
@@ -60,8 +61,6 @@ export const TRUST_LEVEL_BUDGET_FACTOR: Readonly<Record<TrustLevel, number>> = {
   trusting: 3,
   autonomous: 10,
 };
-
-const SECONDS_PER_MINUTE = 60;
 
 /** The id the gateway gives the macro-action holding the fallback ; no catalog may declare it. */
 export const ANYTHING_ELSE_MACRO_ACTION = 'anything-else';

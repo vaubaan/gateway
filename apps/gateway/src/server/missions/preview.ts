@@ -49,7 +49,6 @@ export const MISSION_NAME_MAX_LENGTH = 120;
 /** Shortest recurring period: one minute. */
 export const MIN_PERIOD_SECONDS = 60;
 export const MAX_PERIOD_SECONDS = 366 * 24 * 3600;
-export { SECONDS_PER_MINUTE } from '@vaubaan/policy-engine';
 
 export interface PreviewContext {
   /** Connections the creator holds a non-empty authority on. */

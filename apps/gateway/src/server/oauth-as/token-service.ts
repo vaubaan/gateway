@@ -85,12 +85,13 @@ import {
   mintAccessToken,
   mintRefreshToken,
 } from './secrets';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 const MS_PER_SECOND = 1000;
 /** Expired codes and tokens are swept at most this often… */
 export const PURGE_INTERVAL_MS = 3_600_000;
 /** …once they have been expired for this long (a replayed token is still recognised until then). */
-export const PURGE_GRACE_MS = 86_400_000;
+export const PURGE_GRACE_MS = MS_PER_DAY;
 /**
  * Renewals one delegation may obtain per window. Counted once the refresh token
  * presented is recognised as one of this client's — a caller that only knows a

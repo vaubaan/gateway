@@ -17,6 +17,7 @@
 
 import type { Gate, RateLimit } from '@vaubaan/shared';
 import { GATES, isGate } from '@vaubaan/shared/domain';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** The three budget fields as they arrive : from YAML, from a TypeScript literal, from a form. */
 export interface BudgetInput {
@@ -41,8 +42,6 @@ export interface BudgetIssue {
   /** What was expected, without the path : callers prefix their own (`macro_actions[0].entries[2].quota: …`). */
   readonly message: string;
 }
-
-export const SECONDS_PER_MINUTE = 60;
 
 /** A whole number of at least 1. `Infinity`, `NaN`, fractions, zero and negatives are not. */
 export function isPositiveInteger(value: unknown): value is number {

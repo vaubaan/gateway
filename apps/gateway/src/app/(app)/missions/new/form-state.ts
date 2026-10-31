@@ -34,6 +34,7 @@ import {
   type TrustLevel,
 } from '@/server/missions/macro-actions';
 import { defaultResources, previewConnection } from '@/server/missions/preview';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The inputs of one accepted risk; strings, as typed. An empty string is "no value yet". */
 export interface EntryState {
@@ -145,7 +146,6 @@ export interface FormState {
 /** Limits that reset every day are the usual shape of "one key per code project". */
 export const DEFAULT_PERIOD: PeriodChoice = 'day';
 export const DEFAULT_EXPIRY: ExpiryChoice = 'never';
-const MS_PER_DAY = 86_400_000;
 
 export function initialConnectionState(connection: IssuanceConnection): ConnectionState {
   return {

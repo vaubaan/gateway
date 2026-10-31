@@ -51,10 +51,9 @@ import { isOperator } from '@/server/auth';
 import { issuerKey } from '@/server/config';
 import type { Designation } from '@/server/store';
 import { USERS_PAGE, type InvitationView, type UserView } from '@/server/users';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export const dynamic = 'force-dynamic';
-
-const MS_PER_DAY = 86_400_000;
 
 /** "now", "4 h", "yesterday", then the day: a sign-in of last month reads as a date. */
 function lastSignIn(iso: string | null, now: Date): string {

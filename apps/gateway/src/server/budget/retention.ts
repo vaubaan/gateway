@@ -29,8 +29,8 @@ import { CREDIT_EVENT_KINDS } from './consistency.ts';
 import { GATE_EVENT_KINDS } from './gates.ts';
 import { budgetPeriodOf } from './mapping.ts';
 import { currentPeriod } from './period.ts';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
-const MS_PER_DAY = 86_400_000;
 const MS_PER_SECOND = 1000;
 
 /**

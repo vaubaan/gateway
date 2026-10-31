@@ -101,19 +101,18 @@ import type { ValidationStatus } from '@/server/telemetry';
 
 import { RemoveAccess, TransferOwnership } from './account-actions';
 import styles from '../accounts.module.css';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The query parameters that unfold one row of the page. */
 export const ACCOUNT_PARAMS = { access: 'access', resource: 'resource' } as const;
 const RESOURCES_ANCHOR = 'resources';
 const ACCESS_ANCHOR = 'who-has-access';
 /** One day, for the token expiry notice. */
-const DAY_MS = 86_400_000;
 
 /** Resources listed before "All N". */
 const RESOURCES_SHOWN = 10;
 /** A person who has not signed in for this long is worth a word beside their name. */
 const QUIET_SIGN_IN_DAYS = 21;
-const MS_PER_DAY = 86_400_000;
 const ENV_LABEL_HTML_PATTERN = '[a-z][a-z0-9\\-]*';
 const MAX_NAME_LENGTH = 80;
 
@@ -700,7 +699,7 @@ export function AccountView({
     !revoked &&
     connection.status !== 'expired' &&
     detail.token_expires_at !== null &&
-    Date.parse(detail.token_expires_at) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * DAY_MS;
+    Date.parse(detail.token_expires_at) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * MS_PER_DAY;
 
   const details = <DetailToggle key="details" />;
   const reconnect = (

@@ -30,7 +30,8 @@
  * `approval` gate, always — every use waits for the owner's grant. Only that
  * reason is lifted; every other drop stays a drop.
  */
-import { SECONDS_PER_MINUTE, type TrustLevel } from '@vaubaan/policy-engine';
+import type { TrustLevel } from '@vaubaan/policy-engine';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 import {
   formatRiskId,
   parseRiskId,
