@@ -11,6 +11,7 @@ tracks:
   - apps/gateway/src/lib/dates.ts
   - apps/gateway/src/lib/theme.ts
   - apps/gateway/src/lib/auth/session.ts
+  - apps/gateway/src/lib/http/
   - apps/gateway/src/app/(app)/design/
   - apps/gateway/src/server/now/
   - apps/gateway/src/server/http/document.ts
@@ -39,7 +40,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 
 ## Invariants
 
-- **Everything that decides is under `src/server/`**, host-agnostic (never imports `next`), except the pure rules a form runs before it posts (`src/lib/{authority,missions,providers,shares}`), shared with the server and importing nothing from it; a client component imports only types from `@/server/` (**[inv: client-imports-no-server-value]**); a `route.ts` is one line over `root.<module>.handlers`. Pages are server components, `force-dynamic`, reading through `getRoot()`; the only browser `fetch` goes to `/api/missions/**`.
+- **Everything that decides is under `src/server/`**, host-agnostic (never imports `next`), except the pure rules a form runs before it posts (`src/lib/{authority,missions,providers,shares}`), shared with the server and importing nothing from it; a client component imports only types from `@/server/` (**[inv: client-imports-no-server-value]**); a `route.ts` is one line over `root.<module>.handlers`. Pages are server components, `force-dynamic`, reading through `getRoot()`; the only browser `fetch` goes to `/api/**`, through `postJson` / `useAction` (`lib/http/post-json.ts`: one busy flag, one error, "The gateway could not be reached." in one wording).
 - **A layout is navigation, never the authorization boundary**: the App Router can render a segment without its layout, so every page authenticates itself, first statement, before reading the root (`app-guard.test.ts`, `admin-guard.test.ts` discover every page and route). `src/proxy.ts` decides nothing: it sets the security headers and the CSP nonce.
 - **A page shows what its service decides**: a control shown or hidden follows a rule written once next to the act and read from the view (`ownerActRefusal`, `gateEditBlockedBy`, `transferTargets`, `reassignTargets`); a page never re-spells it. `tests/integration/authority/rules-read-by-pages.test.ts` holds both sides.
 - **Seven navigation entries is the budget**: a feature adds no entry; a page under none goes in `ALSO_UNDER` (`nav.ts`). Ownerless accounts are an admin-only region of Accounts (`/accounts#without-owner`), shown only when one exists; `/admin/connections` redirects there.

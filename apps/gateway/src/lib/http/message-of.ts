@@ -1,6 +1,6 @@
 /**
- * The sentence of a JSON refusal of the mission API (`{ error, message }`), as the
- * client components of the mission pages show it.
+ * The sentence of a JSON refusal of the gateway's API (`{ error, message }`), as the
+ * client components show it.
  */
 
 /** The `message` the instance stated, or `null` when the body carries none. */
@@ -11,5 +11,5 @@ export function statedMessageOf(body: unknown): string | null {
 
 /** The stated message, or a sentence naming the HTTP status. */
 export function messageOf(body: unknown, status: number): string {
-  return statedMessageOf(body) ?? `The instance answered ${status}.`;
+  return statedMessageOf(body) ?? `The gateway answered ${status}.`;
 }

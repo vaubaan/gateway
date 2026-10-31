@@ -12,7 +12,7 @@ describe('messageOf', () => {
   it('falls back to the status when the body states nothing usable', () => {
     for (const body of [null, undefined, 'text', 42, {}, { message: 7 }, { message: null }]) {
       expect(statedMessageOf(body)).toBeNull();
-      expect(messageOf(body, 502)).toBe('The instance answered 502.');
+      expect(messageOf(body, 502)).toBe('The gateway answered 502.');
     }
   });
 });

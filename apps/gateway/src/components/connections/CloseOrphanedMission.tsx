@@ -11,43 +11,28 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button, DangerConfirm } from '@/components/ui';
+import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import { ACCOUNT_ACTIONS } from '@/lib/vocabulary';
 
-function messageOf(body: unknown, status: number): string {
-  // The API answers "not found" to whoever may not close the mission: say what changed.
-  if (status === 404) {
-    return 'This mission runs again, or is no longer on an account you own.';
-  }
-  if (typeof body === 'object' && body !== null && 'message' in body) {
-    if (typeof body.message === 'string') return body.message;
-  }
-  return 'The gateway answered ' + String(status) + '.';
+/** The API answers "not found" to whoever may not close the mission: say what changed. */
+function refusalOf(answer: Extract<PostAnswer, { ok: false }>): string {
+  return answer.status === 404
+    ? 'This mission runs again, or is no longer on an account you own.'
+    : answer.message;
 }
 
 export function CloseOrphanedMission({ missionId, name }: { missionId: string; name: string }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
 
   async function close(): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/missions/${encodeURIComponent(missionId)}/revoke`, {
-        method: 'POST',
-      });
-      if (!res.ok) {
-        setError(messageOf(await res.json().catch(() => null), res.status));
-        return;
-      }
-      setConfirming(false);
-      router.refresh();
-    } catch {
-      setError('The gateway could not be reached.');
-    } finally {
-      setBusy(false);
-    }
+    const answer = await run(`/api/missions/${encodeURIComponent(missionId)}/revoke`, undefined, {
+      errorOf: refusalOf,
+    });
+    if (!answer.ok) return;
+    setConfirming(false);
+    router.refresh();
   }
 
   return (
