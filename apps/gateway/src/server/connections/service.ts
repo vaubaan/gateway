@@ -119,7 +119,11 @@ export const CONNECTIONS_PATH = '/accounts';
 export const CONNECT_CALLBACK_PATH = '/connections/callback';
 const SSH_KEY_COMMENT = 'vaubaan-gateway';
 
-/** The human behind a request, with their *current* groups (never a snapshot). */
+/**
+ * The human behind a request, with their *current* groups (never a snapshot):
+ * what an act on a connection is checked against. Not a `Subject` (authority),
+ * which is trusted by id only and reads nothing else from the caller.
+ */
 export interface Actor {
   readonly user: UserRecord;
   readonly groups: readonly GroupRecord[];

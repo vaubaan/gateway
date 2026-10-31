@@ -61,7 +61,7 @@ export {
   type AuthorityQuestion,
   type AuthorityRecheck,
   type AuthorityService,
-  type AuthoritySubject,
+  type Subject,
   type ConnectionAuthority,
   type ConnectionAuthorityDeps,
   type SupposedShare,

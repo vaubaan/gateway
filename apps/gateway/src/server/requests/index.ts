@@ -139,7 +139,6 @@ export {
   type ClaimView,
   type DecideResult,
   type GrantedApproval,
-  type RequestActor,
   type RequestServiceDeps,
   type RequestSummary,
   type RequestView,

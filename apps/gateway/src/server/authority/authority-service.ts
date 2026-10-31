@@ -41,19 +41,25 @@ export interface ConnectionAuthority {
   readonly riskIds: readonly RiskId[];
 }
 
-/** The user whose authority is asked; only the id is read. */
-export interface AuthoritySubject {
+/**
+ * The person acting — the session's user, a mission's creator, whoever reads
+ * or answers — trusted by id only: every service that needs more (their
+ * authority, their missions, their requests) reads it from the store. The one
+ * type for it in missions, requests, the audit and here. Not an `Actor`
+ * (connections), which carries the user's current groups.
+ */
+export interface Subject {
   readonly id: string;
 }
 
 export interface AuthorityService {
-  authorityOf(user: AuthoritySubject, connection: ConnectionRecord): Promise<ConnectionAuthority>;
+  authorityOf(user: Subject, connection: ConnectionRecord): Promise<ConnectionAuthority>;
   /**
    * The connections on which the user may hold some authority — the candidates
    * of an issuance: the ones they own and the ones shared with them. Every
    * status is returned: the caller decides what an `expired` connection allows.
    */
-  connectionsOf(user: AuthoritySubject): Promise<ConnectionRecord[]>;
+  connectionsOf(user: Subject): Promise<ConnectionRecord[]>;
 }
 
 /** "Do these ids of this connection still fall within the user's authority?" */
@@ -95,7 +101,7 @@ export interface SupposedShare {
  */
 export interface AuthorityRecheck {
   gapsOf(
-    user: AuthoritySubject,
+    user: Subject,
     questions: readonly AuthorityQuestion[],
     supposing?: SupposedShare,
   ): Promise<AuthorityGaps>;
@@ -115,10 +121,7 @@ type Principals = () => Promise<Principal[]>;
 export class ConnectionAuthorityService implements AuthorityService, AuthorityRecheck {
   constructor(private readonly deps: ConnectionAuthorityDeps) {}
 
-  async authorityOf(
-    user: AuthoritySubject,
-    connection: ConnectionRecord,
-  ): Promise<ConnectionAuthority> {
+  async authorityOf(user: Subject, connection: ConnectionRecord): Promise<ConnectionAuthority> {
     const base = { connectionId: connection.id, provider: connection.provider };
     const none: ConnectionAuthority = { ...base, basis: 'none', riskIds: [] };
     const registered = this.deps.registry.get(connection.provider);
@@ -137,7 +140,7 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
     return { ...base, basis: 'share', riskIds: catalog.filter((id) => held.has(id)) };
   }
 
-  async connectionsOf(user: AuthoritySubject): Promise<ConnectionRecord[]> {
+  async connectionsOf(user: Subject): Promise<ConnectionRecord[]> {
     if (!(await this.isActive(user))) return [];
     const principals = await this.principalsOf(user)();
     const owned = await this.deps.connections.listOwnedBy(principals);
@@ -159,7 +162,7 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
    * whether the catalog still lists them.
    */
   async gapsOf(
-    user: AuthoritySubject,
+    user: Subject,
     questions: readonly AuthorityQuestion[],
     supposing?: SupposedShare,
   ): Promise<AuthorityGaps> {
@@ -190,12 +193,12 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
     return { subjectRemoved: false, gaps };
   }
 
-  private async isActive(user: AuthoritySubject): Promise<boolean> {
+  private async isActive(user: Subject): Promise<boolean> {
     const record = await this.deps.users.getById(user.id);
     return record !== null && record.status === 'active';
   }
 
-  private principalsOf(user: AuthoritySubject): Principals {
+  private principalsOf(user: Subject): Principals {
     let pending: Promise<Principal[]> | null = null;
     return () => {
       pending ??= this.deps.groups
@@ -210,7 +213,7 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
 
   private async owns(
     connection: ConnectionRecord,
-    user: AuthoritySubject,
+    user: Subject,
     principals: Principals,
   ): Promise<boolean> {
     if (connection.owner.kind === 'user') return connection.owner.id === user.id;
