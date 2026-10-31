@@ -7,9 +7,10 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/plugin-sdk.md.
  *
- * A plugin imports this package (and, transitively, `@vaubaan/shared` and
- * `@vaubaan/policy-engine`) ; it never imports `@vaubaan/gateway-core` or
- * `apps/gateway`. The host builds one `PluginRegistry` from the plugins it
+ * A plugin imports this package and nothing else of the gateway, its tests
+ * included (the `no-restricted-imports` rule of `plugins/**`) ; what it needs
+ * of `@vaubaan/shared` and `@vaubaan/policy-engine` is re-exported here or
+ * from `/testing`. The host builds one `PluginRegistry` from the plugins it
  * ships — the single provider list every other list derives from.
  *
  * Two subpaths hold what most plugins never import :

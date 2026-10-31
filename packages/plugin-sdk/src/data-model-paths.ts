@@ -8,16 +8,19 @@
  *     descendant after `[**]` ;
  *   - the last name may instead be a **virtual leaf**, an act rather than an
  *     entity (`branch[main].merge-into`, spec §2.1) : nothing follows it but
- *     an identifier ;
+ *     an identifier ; a leaf one or two letters from a declared entity is
+ *     reported as its typo ;
  *   - each identifier follows a name, one at a time ;
  *   - for a slice a classifier emits, each named entity in a cardinality it
  *     declares : `[x]` or no identifier `one`, `[a,b]` `bounded`, `[*]`
  *     `unbounded` (plugins/README.md, step 2).
  *
  * Without it a slice naming an undeclared entity is accepted and falls to the
- * fallback, and a catalog pattern with a typo matches nothing, silently.
- * `definePlugin` runs it on every catalog pattern (`'pattern'`), the test
- * kit on every sample slice (`'slice'`, `assertSlicesOnDataModel`).
+ * fallback, and a catalog pattern with a typo matches nothing, silently. The
+ * test kit runs it on every sample slice (`'slice'`,
+ * `assertSlicesOnDataModel`) ; `catalogPathIssues` on every catalog pattern
+ * (`'pattern'`), held for the shipped plugins by
+ * `plugin-data-model-paths.test.ts` until it can join `definePlugin`.
  */
 
 import { parseSlice } from '@vaubaan/policy-engine';
