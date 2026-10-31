@@ -62,7 +62,7 @@ export const notionCredential: ApiKeyCredentialSpec = {
       placeholder: 'ntn_…',
       // Notion advises against validating its tokens with a pattern: bounded, no whitespace, nothing more.
       pattern: '^\\S{20,512}$',
-      help: 'Create an internal connection with only the capabilities the agents need, and share with it only the top-level pages and databases they may work in: everything under a shared page is reachable with this token, whatever the gateway allows.',
+      help: 'The token of an internal connection with every capability above, shared with every top-level page the agents may work in.',
     },
   ],
   guide: {

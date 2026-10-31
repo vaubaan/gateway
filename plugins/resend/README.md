@@ -48,8 +48,10 @@ Kind `api-key`, one secret field:
 | `api_key` | `^re_[A-Za-z0-9_-]+$` | A **Full access** key created at `https://resend.com/api-keys` |
 
 There is no company-registered app for Resend: the owner creates the key in
-the Resend dashboard and pastes it. A **Sending access** key cannot list
-domains or segments, so discovery refuses it (`UpstreamAuthError`).
+the Resend dashboard and pastes it (`src/credential.ts`). A **Sending
+access** key cannot list domains or segments, so the check at paste
+(`verifyResendKey`, `GET /domains`) refuses it with the permission to choose;
+a Full access key is named by its domains.
 
 `discoverResources` pages through `GET /domains` and `GET /segments` (100 per
 page, at most 500 per kind) and returns:

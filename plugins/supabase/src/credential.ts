@@ -10,8 +10,9 @@
  * projects and permissions chosen when it is created ; a classic one, marked
  * Legacy in the dashboard, carries the account's full access. Both are sent
  * as `Authorization: Bearer` to `https://api.supabase.com/v1`, so every tool
- * runs with either. The guide asks for a scoped
- * token ; a scoped token's permissions only narrow what the account's role
+ * runs with either. The guide asks for a scoped token over the whole
+ * organization with every permission the tools use (the missions narrow
+ * it) ; a scoped token's permissions only narrow what the account's role
  * already allows.
  *
  * Checked at paste : `GET /v1/organizations` names the organisations the
@@ -69,7 +70,7 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
       secret: true,
       pattern: '^sbp_[A-Za-z0-9_]{16,200}$',
       placeholder: 'sbp_…',
-      help: 'Prefer a scoped token: it reaches only the projects and permissions you chose.',
+      help: 'A scoped token over the organization, with every permission listed above.',
     },
   ],
   createUrl: SUPABASE_TOKENS_PAGE,
@@ -78,9 +79,11 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
       { do: 'Sign in to Supabase as the account the agents will act as.' },
       { do: 'Open Account preferences, Access tokens, then generate a new token.' },
       {
-        do: 'Make it a scoped token: pick the organisation and only the projects the missions need.',
+        do: 'Choose the organization itself as the resource, not single projects.',
       },
-      { do: 'Grant the permissions below, choose an expiry, and generate the token.' },
+      {
+        do: 'Grant every permission below at the access shown, choose an expiry, and generate the token.',
+      },
       { do: 'Copy the token and paste it here. Supabase shows it once.' },
     ],
     permissions: [

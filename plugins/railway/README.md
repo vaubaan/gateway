@@ -114,7 +114,9 @@ base budget. The persisted policy is the explicit list.
 one way of connecting (ADR
 [`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md)).
 An account is connected with a Railway token pasted once, created under
-railway.com/account/tokens. Every tool runs with it: discovery and the four
+railway.com/account/tokens. Railway tokens carry no permission choice, so
+the token reaches everything its workspace allows and the missions narrow
+what an agent may do. Every tool runs with it: discovery and the four
 variable tools on the GraphQL API, the ten tools of Railway's MCP server with
 the token sent as `Authorization: Bearer` to `https://mcp.railway.com/`.
 
@@ -124,8 +126,8 @@ the token sent as `Authorization: Bearer` to `https://mcp.railway.com/`.
 | account token ("No workspace")         | every workspace of the account | yes, second choice          | not checked; Railway documents the server for OAuth only  |
 | project token                          | one environment of one project | no: a resource is a project | —                                                         |
 
-A shared service account that is a member of the workspace is fine: Vaubaan
-decides who may do what.
+A shared service account that is a member of the workspace is fine: the
+missions of this gateway decide what an agent may do.
 
 **Check at paste** (`probeRailwayToken`): `query { me { name email } }`
 answers for an account token only (named by its email). Otherwise the

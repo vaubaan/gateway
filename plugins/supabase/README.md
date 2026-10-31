@@ -187,17 +187,20 @@ one way of connecting (ADR
 [`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md)).
 The person creates a **personal access token** at
 https://supabase.com/dashboard/account/tokens, as the account the agents
-will act as (a shared service account is fine), with the permissions the
-connect page lists (`guide.permissions`, each mapped to the tools it
-unlocks) and an expiry, and pastes it once. Every tool sends it as
+will act as (a shared service account is fine), scoped to **the whole
+organization** with every permission the connect page lists
+(`guide.permissions`, each mapped to the tools it unlocks) and an expiry, and
+pastes it once: the missions narrow what an agent may do, so a wide token is
+made once. Every tool sends it as
 `Authorization: Bearer` to the Management API; the data-plane tools read the
 project's `service_role` key through that API, which is why they need the
 `API Keys` and `API Key Secrets` permissions.
 
 **Check at paste** (`verifySupabaseToken`): `GET /v1/organizations` names the
 organisations the token reaches, shown as the account; a 401 or 403 is a
-rejected token. Supabase exposes no expiry for these tokens, so the account
-page cannot show one; it exposes no deletion endpoint either, so removing
+rejected token. Supabase exposes no expiry for these tokens
+(`expiry: person-types`: the person chose it), so the account page cannot
+show one; it exposes no deletion endpoint either, so removing
 the account tells the person to delete the token under Account preferences →
 Access tokens.
 

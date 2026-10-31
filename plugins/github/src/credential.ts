@@ -5,8 +5,10 @@
  * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADR
  *        one-place-to-authorize-services-token-first.
  *
- * A person creates a token at GitHub — often on a shared service account,
- * with Vaubaan deciding who may do what — and pastes it. The token is the
+ * A person creates a token at GitHub — often on a shared service account —
+ * over all the repositories of the organization, with every permission the
+ * tools use, and pastes it : this gateway decides, mission by mission, what
+ * an agent may do with it. The token is the
  * connection's secret ; every API tool and the git remote send it as the
  * bearer. GitHub enforces what it may do : the permissions its owner ticked.
  *
@@ -67,9 +69,11 @@ export const githubCredential: ApiKeyCredentialSpec = {
         do: 'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
       },
       {
-        do: 'Choose the organisation as resource owner, and only the repositories the missions need.',
+        do: 'Choose the organization as Resource owner, then All repositories.',
       },
-      { do: 'Tick the permissions below; GitHub adds Metadata (read) by itself.' },
+      {
+        do: 'Tick every permission below at the access shown; GitHub adds Metadata (read) by itself.',
+      },
       { do: 'Generate the token, copy it, and paste it here. GitHub shows it once.' },
     ],
     permissions: GITHUB_TOKEN_PERMISSIONS,

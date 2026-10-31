@@ -82,15 +82,20 @@ what Vercel fails is thrown (`UpstreamAuthError` on 401/403,
 
 `api-key` with two fields, collected by the host's generic form:
 
-| Field     | Secret | Value                                                                                                         |
-| --------- | ------ | ------------------------------------------------------------------------------------------------------------- |
-| `token`   | yes    | A Vercel access token (Account Settings → Tokens), scoped to the team you connect or to some of its projects. |
-| `team_id` | no     | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.           |
+| Field     | Secret | Value                                                                                               |
+| --------- | ------ | --------------------------------------------------------------------------------------------------- |
+| `token`   | yes    | A Vercel access token (Account Settings → Tokens), Scope: the team, All Projects.                   |
+| `team_id` | no     | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it. |
 
 There is no OAuth app to register: Vercel's REST API and MCP server are both
-reached with a personal access token, which is what works.
-The token does not refresh (`refresh` is absent); pick an expiration when
-creating it and reconnect when it expires. The team is pinned to the
+reached with a personal access token, which is what works. The guide asks for
+the team with All Projects (the missions narrow it to their projects). The
+Team ID stays a field: a wide token reaches every team of its owner, and the
+host keeps only what the form gives. The check at paste (`verifyVercelToken`)
+reads `GET /v5/user/tokens/current` for the expiry and `GET /v2/teams/{id}`
+for the team's name; a token that cannot open the team is refused.
+The token does not refresh (`refresh` is absent); the account page shows its
+expiry and the person reconnects before it. The team is pinned to the
 credential: a `teamId` argument that is not exactly the connection's team
 (another string, or any non-string) is refused before any network call, and
 the value sent to Vercel is always written from the credential. The four

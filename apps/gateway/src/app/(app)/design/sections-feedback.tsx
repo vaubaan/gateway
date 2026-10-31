@@ -478,22 +478,22 @@ export function FormSections() {
                 <Input id={`f-name-${theme}`} defaultValue="Acme payments" />
               </Field>
               <Field
-                label="Restricted key"
+                label="Secret key"
                 shape={
                   <>
-                    starts with <Code>rk_test_</Code> or <Code>rk_live_</Code>, 32 characters or
+                    starts with <Code>sk_test_</Code> or <Code>sk_live_</Code>, 32 characters or
                     more
                   </>
                 }
                 htmlFor={`f-key-${theme}`}
                 error={
                   <>
-                    This is a secret key. Create a restricted key at Stripe › Developers › API keys;
-                    it starts with <Code>rk_</Code>. A secret key is never stored.
+                    This is a restricted key. Reveal the secret key at Stripe › Developers › API
+                    keys; it starts with <Code>sk_</Code>. A key is never shown back.
                   </>
                 }
               >
-                <Input id={`f-key-${theme}`} mono defaultValue="sk_test_4eC39Hq…" />
+                <Input id={`f-key-${theme}`} mono defaultValue="rk_test_4eC39Hq…" />
               </Field>
               <Field
                 label="Mode of this key"

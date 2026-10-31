@@ -36,10 +36,15 @@ Kind `api-key`, one required secret field:
 | `api_token` | `^[A-Za-z0-9_-]{20,}$` | A Cloudflare API token. A Global API Key (`email\|key`) is refused. |
 
 There is no company-registered app for Cloudflare DNS: the owner creates the
-token at `https://dash.cloudflare.com/profile/api-tokens` and pastes it.
-Scope it to the zones the agent may touch, with **Zone:Read** and
-**DNS:Edit**, plus **Zone Settings:Edit**, **Cache Purge:Purge** and
-**Zone:Edit** only when the corresponding tools are wanted.
+token at `https://dash.cloudflare.com/profile/api-tokens` (Create Custom
+Token) and pastes it (`src/credential.ts`). The guide asks for **Zone
+Resources: Include, All zones** and every permission row the tools use —
+**Zone · Zone: Edit**, **Zone · DNS: Edit**, **Zone · Zone Settings: Edit**,
+**Zone · Cache Purge: Purge** — once: a mission is given its zones one by one
+and only the permissions it names. The check at paste
+(`verifyCloudflareToken`) reads `GET /user/tokens/verify` (status, and the
+expiry when a TTL was set) and names the accounts of the zones it lists; a
+token that is not active or lists no zone is refused with what to change.
 
 `discoverResources` pages through `GET /zones` (50 per page, at most 500
 zones, no account filter) and returns **one resource per zone**:

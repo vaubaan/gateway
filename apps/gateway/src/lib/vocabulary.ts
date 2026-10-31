@@ -505,7 +505,7 @@ export const THEME_WORDS = {
 export const ACCOUNT_PAGES = {
   connect: {
     title: 'Connect an account',
-    lede: 'Through the service’s own flow where it has one; with a key otherwise. The credential never leaves this gateway.',
+    lede: 'With a key you create once at the service, granted wide: each mission narrows it. A sign-in at the service only where it has no key. The credential never leaves this gateway.',
   },
   yours:
     'You own these, alone or with a team: all permissions, and you decide who else may use them.',
@@ -1282,9 +1282,10 @@ export function agoSentence(from: Date | string, now: Date = new Date()): string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Connecting with a token pasted by hand, beside the company app (ADR
-// one-place-to-authorize-services-token-first). The steps and permissions
-// themselves come from the plugin; only the frame is written here.
+// Connecting with a token pasted by hand (ADR
+// one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide
+// once, narrowed by each mission). The steps and permissions themselves come
+// from the plugin; only the frame is written here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TOKEN_CONNECT = {
@@ -1292,7 +1293,7 @@ export const TOKEN_CONNECT = {
   openTokenPage: (service: string) => `Open the token page at ${service}`,
   permissionsTitle: 'Permissions to tick',
   permissionsNote:
-    'Tick these and nothing else; a permission left out makes the tools that need it fail.',
+    'Tick all of them: each mission narrows what an agent may do, and a permission left out means a new token.',
   readAccess: 'read',
   writeAccess: 'read and write',
   usedBy: (titles: string) => `for ${titles}`,

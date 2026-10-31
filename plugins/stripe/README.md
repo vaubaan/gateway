@@ -42,10 +42,15 @@ Kind `api-key`, two optional secret fields; at least one must be filled:
 | `test_key` | `^(sk\|rk)_test_[A-Za-z0-9]+$` | Sandbox key (`sk_test_…`, `rk_test_…`) |
 | `live_key` | `^(sk\|rk)_live_[A-Za-z0-9]+$` | Live key (`sk_live_…`, `rk_live_…`)    |
 
-There is no company-registered app for Stripe: the owner creates the keys
-in the Stripe dashboard (`https://dashboard.stripe.com/apikeys`) and pastes
-them. A restricted key (`rk_…`) limited to the objects the agent should
-touch is preferable to the full secret key.
+There is no company-registered app for Stripe: the owner reveals the
+**secret keys** in the Stripe dashboard (`https://dashboard.stripe.com/apikeys`)
+and pastes them (`src/credential.ts`). The guide asks for the secret key, not
+a restricted one: Stripe refuses tool by tool what a restricted key lacks,
+while the gateway holds live refunds, payouts and prices behind their own
+permissions and a mission reaches only the modes it names. The check at paste
+(`verifyStripeKeys`) reads `GET /v1/account` with each key and names the
+account with its modes; a key whose prefix contradicts its field, or a
+restricted key that may not read its account, is refused with what to paste.
 
 `discoverResources` calls `GET /v1/account` once per key present and
 returns **one resource per mode**:
