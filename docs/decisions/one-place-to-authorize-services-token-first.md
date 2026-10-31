@@ -49,3 +49,41 @@ to a hosted offer whose keys never leave Vaubaan.
 ### Keep both ways and hide the app way
 
 Two paths per plugin in code, tests and docs for a way no instance is expected to use.
+
+## Amendment 2026-10-31: the breadth of the grant
+
+### Context
+
+Every guide asked for the narrowest token ("only the repositories the missions need", "tick these
+and nothing else"). The person then came back to the service each time a mission needed one more
+repository or permission, while the gateway already narrows every call: a mission reaches only its
+resources and its accepted risks. Five token plugins shipped with no guide at all.
+
+### Decision
+
+The person grants once the widest the service offers for what the account connects (every
+repository, every zone, every permission the plugin's tools use, a secret key rather than a
+restricted one); each mission is the narrowing. The guide says so and gives this reason. A key
+pasted once is the way whenever it does the job: no integration, OAuth app or service account to
+create for it. A plugin with a token way is accepted only with a complete guide: the token page
+itself, imperative steps, how wide to grant and why, the permissions mapped to the tools they
+unlock, who knows the expiry, the service's documentation, and a check at paste naming the account.
+
+### Consequences
+
+- `definePlugin` refuses an `api-key` way without `label`, `createUrl`, `guide` (`steps`, `reach`,
+  `permissions`, `expiry`, `docsUrl`) or `verify`: the instructions are part of the contract.
+- A leaked token reaches more at the service; its protection stays the master-key encryption at
+  rest, the service's own revocation and an expiry the person chose or the service reports.
+- Where the service lists no permission choice, the guide says what the token opens instead.
+
+### Rejected alternatives
+
+#### Least privilege at the service, as each service advises
+
+Each new need of a mission is a new token and a reconnect; the narrowing already happens, call by
+call, in the gateway.
+
+#### Optional guides, checked by review
+
+Five plugins shipped without one; only a rule at definition keeps a new plugin from doing the same.
