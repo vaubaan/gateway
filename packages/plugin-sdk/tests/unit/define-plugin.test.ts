@@ -441,6 +441,24 @@ describe('definePlugin', () => {
     );
   });
 
+  test('a live catalog pattern off the data model is refused ; a deprecated one is not read', () => {
+    const [first, ...rest] = acmePlugin.catalog.risks;
+    if (!first) throw new Error('the acme fixture has risks');
+    const typo = { ...first, matches: 'acme.space[**].thnig[**].R' };
+    const offModel: ProviderPlugin = {
+      ...acmePlugin,
+      catalog: { ...acmePlugin.catalog, risks: [typo, ...rest] },
+    };
+    expect(pluginIssues(offModel)).toEqual([
+      `catalog: risks[0] '${first.id}' matches 'acme.space[**].thnig[**].R': 'thnig' is not below 'space' : did you mean 'thing' ?`,
+    ]);
+    const retired: ProviderPlugin = {
+      ...acmePlugin,
+      catalog: { ...acmePlugin.catalog, risks: [{ ...typo, deprecated: true }, ...rest] },
+    };
+    expect(pluginIssues(retired).filter((m) => m.includes('thnig'))).toEqual([]);
+  });
+
   test('credential spec rules per kind', () => {
     const noSecret: ProviderPlugin = {
       ...acmePlugin,
