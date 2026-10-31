@@ -10,8 +10,11 @@
  * protocol spells it (in mono) and everything around it with these words.
  *
  * Pure and browser-safe, usable in server and client components. Its one
- * import is `lib/dates`, the one place a date becomes text.
+ * import is `lib/dates`, the one place a date becomes text (and the type of a
+ * trust level, which keys the words of each).
  */
+import type { TrustLevel } from '@vaubaan/policy-engine';
+
 import { formatDay } from './dates';
 
 /** The product, and how it names itself in the shell. */
@@ -641,6 +644,22 @@ export const ENVIRONMENT_WORDS = {
   'resource-label': 'set by the label of each resource',
   none: 'none: every permission is held once',
 } as const;
+
+/** A trust level as the interface names it (risk model §4.6). */
+export const TRUST_LEVEL_LABELS: Readonly<Record<TrustLevel, string>> = {
+  careful: 'Careful',
+  trusting: 'Trusting',
+  autonomous: 'Autonomous',
+};
+
+/** What each trust level does, in one line, wherever its chip shows a tooltip. */
+export const TRUST_LEVEL_HINTS: Readonly<Record<TrustLevel, string>> = {
+  careful:
+    'Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.',
+  trusting:
+    'Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.',
+  autonomous: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
+};
 
 /** "Tier 3" — the tier of a permission, 1 mild to 4 irreversible. */
 export function tierWord(tier: number): string {

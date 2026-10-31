@@ -26,6 +26,8 @@ import {
   REFERENCE_WORDS,
   SEVERITY_LABEL,
   TERMS,
+  TRUST_LEVEL_HINTS,
+  TRUST_LEVEL_LABELS,
 } from '@/lib/vocabulary';
 import {
   DEPRECATED_NOTE,
@@ -33,11 +35,7 @@ import {
   formatRate,
   noteBody,
 } from '@/server/missions/catalog-view';
-import {
-  TRUST_LEVEL_HINTS,
-  TRUST_LEVEL_LABELS,
-  TRUST_LEVELS,
-} from '@/server/missions/macro-actions';
+import { TRUST_LEVELS } from '@/server/missions/macro-actions';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
 import {
