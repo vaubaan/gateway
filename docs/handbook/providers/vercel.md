@@ -67,8 +67,9 @@ Resource: the project; the environment is a slice segment, not a resource label.
 
 ## Outside the repo
 
-- An API token plus its `team_id` (`team_…`). A project-scoped token only drops the team slug and
-  name at discovery (the team read answers 403).
+- An API token (Scope: the team, All Projects) plus its `team_id` (`team_…`). Checked at paste:
+  `GET /v5/user/tokens/current` gives the expiry, `GET /v2/teams/{id}` names the team; a
+  project-scoped token or a wrong Team ID (403/404 there) is refused at paste.
 
 ## Debug
 
