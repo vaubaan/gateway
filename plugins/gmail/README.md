@@ -161,9 +161,9 @@ docs/handbook/plugin-sdk.md); 1.1.0 sends over SMTP.
 | `draft`      | Write and edit drafts. Nothing leaves.                               | `draft-write`, `draft-to-zone-self`, `-internal`, `-allowlist`                         |
 | `tidy`       | Apply, remove and create labels.                                     | `label-write`, `label-create`, `bulk-label-write`                                      |
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
 risk model §4.6); the trust level sets each risk's gate from its vector and
-multiplies the base budget. The mission stores the explicit list. At Prudent the sensitive
+multiplies the base budget. The mission stores the explicit list. At Careful the sensitive
 and bulk reads and bulk labels ask first. In no macro-action:
 `gmail.draft-to-zone-external-unbounded` (the exfiltration vector — never
 acceptable: the classifier refuses the draft, and the entry is kept

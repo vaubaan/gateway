@@ -114,12 +114,12 @@ const connectionsAnswer = z.looseObject({
           description: z.string(),
           at_trust_level: z
             .looseObject({
-              prudent: trustLevelYield,
-              confiant: trustLevelYield,
-              autonome: trustLevelYield,
+              careful: trustLevelYield,
+              trusting: trustLevelYield,
+              autonomous: trustLevelYield,
             })
             .describe(
-              'Per trust level (`prudent`, `confiant`, `autonome`): what `trust_levels: { [id]: trust_level }` writes here with every resource known now.',
+              'Per trust level (`careful`, `trusting`, `autonomous`): what `trust_levels: { [id]: trust_level }` writes here with every resource known now.',
             ),
           unavailable: riskIds.describe(
             'Risks of the macro-action outside the authority here, or that no resource can reach.',
@@ -163,11 +163,11 @@ const catalogAnswer = z.looseObject({
       id: z.string(),
       label: z.string(),
       description: z.string(),
-      entries: z.array(policyLine).describe('Each risk with its base budget (×1 at Prudent).'),
+      entries: z.array(policyLine).describe('Each risk with its base budget (×1 at Careful).'),
     }),
   ),
   trust_levels: z
-    .looseObject({ prudent: trustLevelRule, confiant: trustLevelRule, autonome: trustLevelRule })
+    .looseObject({ careful: trustLevelRule, trusting: trustLevelRule, autonomous: trustLevelRule })
     .describe('Per trust level: the gate of each tier and the factor on the base budget.'),
   everything_i_hold: z
     .looseObject({ label: z.string(), entries: z.array(policyLine) })

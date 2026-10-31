@@ -112,7 +112,7 @@ Risks (ids stable, never renamed): `exec-read`, `exec-read-secret-files`,
 ¹ env-scoped: `acceptable_in_envs: [dev, staging, prod]`; `exec-write`,
 `exec-destructive` and `exec-service-control` carry a `vector_overrides.prod`.
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome),
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous),
 risk model §4.6; the trust level writes the explicit lines, one per labelled
 environment the mission's hosts carry.
 

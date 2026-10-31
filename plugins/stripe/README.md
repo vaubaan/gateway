@@ -156,11 +156,11 @@ resource the call targets.
 | `money-out`  | Refunds and payouts.                                   | `refund-create`, `payout-create`                                                         |
 | `cancel`     | Cancel subscriptions, void invoices, delete customers. | `subscription-cancel`, `invoice-void`, `customer-delete`                                 |
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
 risk model §4.6); the trust level turns each risk's vector into a gate and scales its
 base budget. The persisted policy is the explicit list. Each line is qualified with the mode of the
 selected resource (`stripe[live].refund-create`). Money-out and cancel are
-left out at Prudent and ask first above. The fallback sits in "Anything
+left out at Careful and ask first above. The fallback sits in "Anything
 else": the engine counts it only when no dedicated entry matched a write.
 
 ## Tests

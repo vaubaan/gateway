@@ -423,7 +423,7 @@ describe('import of a v4 organization', () => {
     expect(stderr).toContain('zone_web: left unlabelled');
 
     // `web` waits for GitHub; `ops` is issued with both SSH risks: the fallback
-    // comes from "Anything else", at its base budget at Confiant.
+    // comes from "Anything else", at its base budget at Trusting.
     expect(stderr).toContain('"web" (v4 token web-agent): deferred');
     expect(stderr).toContain('GitHub: no account connected yet');
     const missions = await store.missions.listForCreator(owner);
@@ -433,7 +433,7 @@ describe('import of a v4 organization', () => {
       'ssh.uncategorized-write',
     ]);
     const fallback = missions[0]!.policy.find((p) => p.riskId === 'ssh.uncategorized-write')!;
-    // The fallback is costly (tier 3): Confiant asks first.
+    // The fallback is costly (tier 3): Trusting asks first.
     expect([fallback.quota, fallback.gate]).toEqual([150, 'approval']);
     expect(missions[0]!.periodSeconds).toBe(86_400);
     expect(stderr).not.toContain('dropped ssh.uncategorized-write');

@@ -33,18 +33,18 @@ import type { CatalogRisk, IssuanceConnection, IssuanceResource, LeftOutEntry } 
 export type MacroActionTrustLevels = Readonly<Record<string, TrustLevel>>;
 
 export const TRUST_LEVEL_LABELS: Readonly<Record<TrustLevel, string>> = {
-  prudent: 'Prudent',
-  confiant: 'Confiant',
-  autonome: 'Autonome',
+  careful: 'Careful',
+  trusting: 'Trusting',
+  autonomous: 'Autonomous',
 };
 
 /** What each trust level does, in one line, wherever its chip shows a tooltip. */
 export const TRUST_LEVEL_HINTS: Readonly<Record<TrustLevel, string>> = {
-  prudent:
+  careful:
     'Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.',
-  confiant:
+  trusting:
     'Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.',
-  autonome: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
+  autonomous: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
 };
 
 /**
@@ -70,7 +70,7 @@ export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {
 /** One macro-action at one trust level, on this connection with these resources. */
 export interface MacroActionExpansion {
   readonly lines: readonly TrustLevelLine[];
-  /** Risks the trust level leaves out (tier 4 at Prudent). */
+  /** Risks the trust level leaves out (tier 4 at Careful). */
   readonly left_out: readonly { readonly risk_id: RiskId; readonly tier: Tier }[];
   /** Rows of the macro-action this creator cannot get here: outside the authority, or no resource carries the environment. */
   readonly unavailable: readonly CatalogRisk[];
@@ -182,7 +182,7 @@ export function macroActionOfRisk(
 
 /**
  * The line a risk ticked by hand starts with: its macro-action's base budget
- * at the trust level that macro-action has (Prudent when it is not ticked), and the
+ * at the trust level that macro-action has (Careful when it is not ticked), and the
  * gate that trust level gives its tier; a risk the trust level leaves out asks first.
  * `null` for a risk in no macro-action.
  */

@@ -20,7 +20,7 @@
  * (`denied-in-v4`).
  *
  * Each kept id takes its budget and gate from its macro-action at the trust level
- * Confiant (`IMPORT_TRUST_LEVEL`; the interface's rule for a hand-ticked risk,
+ * Trusting (`IMPORT_TRUST_LEVEL`; the interface's rule for a hand-ticked risk,
  * `defaultLineOf`): base budget ×3, gate from its tier. An id in no
  * macro-action has no budget to take: dropped and reported, since a quota is
  * never invented — unless the
@@ -68,7 +68,7 @@ export interface TranslatedEntry extends MissionPolicyEntry {
 }
 
 /** The trust level an imported mission's lines are written at: v4 missions ran without asking. */
-export const IMPORT_TRUST_LEVEL: TrustLevel = 'confiant';
+export const IMPORT_TRUST_LEVEL: TrustLevel = 'trusting';
 
 /**
  * `--carry-unbudgeted <quota>`: a risk dropped only because no macro-action

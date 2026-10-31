@@ -222,10 +222,10 @@ describe('ssh plugin — structural kit', () => {
     expect(ids('install')).toEqual(['ssh.exec-package-install', 'ssh.exec-sudo']);
   });
 
-  test('at Prudent, a credential-file read asks first and a destructive line is left out everywhere', () => {
+  test('at Careful, a credential-file read asks first and a destructive line is left out everywhere', () => {
     const policy = policyFromMacroActions(
       sshPlugin,
-      { look: 'prudent', fix: 'prudent' },
+      { look: 'careful', fix: 'careful' },
       { envs: ['dev', 'staging', 'prod'] },
     );
     const gate = (id: string) => policy.find((line) => line.risk_id === id)?.gate;
@@ -234,7 +234,7 @@ describe('ssh plugin — structural kit', () => {
     expect(
       policy.map((line) => line.risk_id).filter((id) => id.includes('exec-destructive')),
     ).toEqual([]);
-    // A write on prod is irreversible (vector_overrides) : left out at Prudent.
+    // A write on prod is irreversible (vector_overrides) : left out at Careful.
     expect(gate('ssh[prod].exec-write')).toBeUndefined();
   });
 });
@@ -551,7 +551,7 @@ describe('missions from macro-actions — evaluated through the policy engine, n
   test.each(INSPECTION)(
     'look, at any trust level, runs the inspection %j freely on every host',
     (cmd) => {
-      for (const trustLevel of ['prudent', 'confiant', 'autonome'] as const) {
+      for (const trustLevel of ['careful', 'trusting', 'autonomous'] as const) {
         for (const host of HOSTS) {
           expect(
             verdict(linesOf({ look: trustLevel }), cmd, host),
@@ -563,19 +563,19 @@ describe('missions from macro-actions — evaluated through the policy engine, n
   );
 
   test.each(NEVER_A_READ)(
-    'the plain read refuses %j on every host ; look at Prudent never runs it freely',
+    'the plain read refuses %j on every host ; look at Careful never runs it freely',
     (cmd) => {
       for (const host of HOSTS) {
         expect(verdict(READ_ONLY, cmd, host), host.env ?? 'unlabelled').toBe('denied');
-        expect(verdict(linesOf({ look: 'prudent' }), cmd, host), host.env ?? 'unlabelled').not.toBe(
+        expect(verdict(linesOf({ look: 'careful' }), cmd, host), host.env ?? 'unlabelled').not.toBe(
           'auto',
         );
       }
     },
   );
 
-  test('fix at Prudent : plain writes ask first on dev and staging, nothing on prod ; service control runs freely', () => {
-    const policy = linesOf({ look: 'prudent', fix: 'prudent' });
+  test('fix at Careful : plain writes ask first on dev and staging, nothing on prod ; service control runs freely', () => {
+    const policy = linesOf({ look: 'careful', fix: 'careful' });
     for (const cmd of ['touch /tmp/x', 'git pull --ff-only', './deploy.sh', 'bash deploy.sh']) {
       expect(verdict(policy, cmd, dev), cmd).toBe('approval');
       expect(verdict(policy, cmd, staging), cmd).toBe('approval');
@@ -584,8 +584,8 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     }
   });
 
-  test('fix at Autonome : plain writes and service control run freely off prod and ask first on prod', () => {
-    const policy = linesOf({ look: 'prudent', fix: 'autonome' });
+  test('fix at Autonomous : plain writes and service control run freely off prod and ask first on prod', () => {
+    const policy = linesOf({ look: 'careful', fix: 'autonomous' });
     for (const cmd of [
       'touch /tmp/x',
       'git pull --ff-only',
@@ -624,14 +624,14 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     'ssh other-host uptime',
     'systemctl poweroff',
     "python3 -c 'print(1)'",
-  ])('fix at Prudent, without look or install, refuses %j on dev and on staging', (cmd) => {
-    const policy = linesOf({ fix: 'prudent' });
+  ])('fix at Careful, without look or install, refuses %j on dev and on staging', (cmd) => {
+    const policy = linesOf({ fix: 'careful' });
     expect(verdict(policy, cmd, dev)).toBe('denied');
     expect(verdict(policy, cmd, staging)).toBe('denied');
   });
 
-  test('everything at Autonome : the classes that hurt and every prod write still ask first', () => {
-    const policy = linesOf({ look: 'prudent', fix: 'autonome', install: 'autonome' });
+  test('everything at Autonomous : the classes that hurt and every prod write still ask first', () => {
+    const policy = linesOf({ look: 'careful', fix: 'autonomous', install: 'autonomous' });
     const table: ReadonlyArray<readonly [string, Verdict, Verdict, Verdict]> = [
       ['touch /tmp/x', 'auto', 'auto', 'approval'],
       // Irreversible : asked first at every trust level.
@@ -642,7 +642,7 @@ describe('missions from macro-actions — evaluated through the policy engine, n
       ['systemctl restart app', 'auto', 'auto', 'approval'],
       ['sudo systemctl restart app', 'auto', 'auto', 'approval'],
       ['sudo -n true', 'auto', 'auto', 'approval'],
-      // A credential-file read asks first at Prudent.
+      // A credential-file read asks first at Careful.
       ['cat /etc/shadow', 'approval', 'approval', 'approval'],
       ['cat .env', 'approval', 'approval', 'approval'],
       // An opaque line carries the credential-file marker too.

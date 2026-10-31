@@ -453,13 +453,13 @@ function trustLevelCellsOf(
     for (const trustLevel of TRUST_TRUST_LEVELS) {
       const { lines, left_out } = expandMacroAction(whole, action, trustLevel, []);
       for (const line of lines) {
-        const row = cells.get(line.risk_id) ?? { prudent: null, confiant: null, autonome: null };
+        const row = cells.get(line.risk_id) ?? { careful: null, trusting: null, autonomous: null };
         row[trustLevel] = { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
         cells.set(line.risk_id, row);
       }
       for (const out of left_out) {
         if (!cells.has(out.risk_id)) {
-          cells.set(out.risk_id, { prudent: null, confiant: null, autonome: null });
+          cells.set(out.risk_id, { careful: null, trusting: null, autonomous: null });
         }
       }
     }

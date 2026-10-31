@@ -51,7 +51,7 @@ resource per project, the owner's label as environment.
   `SELECT` / `WITH` / `VALUES` / `TABLE` / `EXPLAIN` / `SHOW`, and **any function outside the inert
   list** (a function is how a query reads a relation it does not name: `query_to_xml`, `set_config`,
   `dblink`). The managed-schema list lives once, in `src/data-model.ts`.
-- `read-managed-schemas` (macro-action `query`) asks first at Prudent: reading identities and
+- `read-managed-schemas` (macro-action `query`) asks first at Careful: reading identities and
   secrets is deliberate, a person approves it.
 - **Answers that carry secrets** (function secrets, auth config) are redacted by an **allow-list**
   of non-secret fields: any other field with a value, one added upstream tomorrow included, becomes

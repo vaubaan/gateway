@@ -553,11 +553,11 @@ export function FormSections() {
               <Select
                 size="sm"
                 aria-label="TrustLevel"
-                defaultValue="confiant"
+                defaultValue="trusting"
                 style={{ width: 160 }}
               >
-                <option value="prudent">Prudent · ×1</option>
-                <option value="confiant">Confiant · ×3</option>
+                <option value="careful">Careful · ×1</option>
+                <option value="trusting">Trusting · ×3</option>
               </Select>
             </Line>
           )}

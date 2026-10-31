@@ -117,10 +117,10 @@ describe('railway plugin — structural kit', () => {
     assertNoWildcard(railwayPlugin);
   });
 
-  test('at Prudent, a deploy on staging runs freely and one on prod asks first ; no agent', () => {
+  test('at Careful, a deploy on staging runs freely and one on prod asks first ; no agent', () => {
     const lines = policyFromMacroActions(
       railwayPlugin,
-      { watch: 'prudent', deploy: 'prudent', configure: 'prudent' },
+      { watch: 'careful', deploy: 'careful', configure: 'careful' },
       { envs: ['staging', 'prod'] },
     );
     const gate = (id: string) => lines.find((e) => e.risk_id === id)?.gate;

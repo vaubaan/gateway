@@ -39,13 +39,13 @@ you are about to write are what those pages show.
 
 Five words used on every line below:
 
-| Word             | Meaning                                                                                                                                                                                                                                          |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Resource**     | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                |
-| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                      |
-| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.               |
-| **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust level (Prudent, Confiant, Autonome), which writes the explicit lines; the mission stores those lines. |
-| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                 |
+| Word             | Meaning                                                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Resource**     | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                  |
+| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                        |
+| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.                 |
+| **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust level (Careful, Trusting, Autonomous), which writes the explicit lines; the mission stores those lines. |
+| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                   |
 
 The interface shows these to people under other words: a provider is a
 **service**, a connection an **account**, a risk a **permission**, a gate
@@ -715,7 +715,7 @@ tier, budget scaled by the trust level, a write-token handout asked first):
 ```ts
 const policy = policyFromMacroActions(
   acmePlugin,
-  { read: 'prudent', change: 'confiant' },
+  { read: 'careful', change: 'trusting' },
   {
     envs: ['staging', 'prod'],
   },

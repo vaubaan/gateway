@@ -79,7 +79,7 @@ Rules a reviewer must know (`src/classify.ts`) :
   manages (`auth`, `vault`, `storage`…) or cannot be read with confidence
   (`src/query-sql.ts`, an allow-list : a function outside its inert list,
   `$$`, a statement that is not a plain query). The second slice is the
-  risk `supabase.read-managed-schemas`, which asks first at Prudent.
+  risk `supabase.read-managed-schemas`, which asks first at Careful.
   `execute.ts` enforces read-only by calling the Management API
   **read-only query endpoint**
   (`POST /v1/projects/{ref}/database/query/read-only`), where Postgres
@@ -164,7 +164,7 @@ should stay the exception.
 
 ## Macro-actions
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome),
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous),
 risk model §4.6; the trust level writes the explicit lines, one per environment the
 selected projects carry, and the stored policy is that list.
 

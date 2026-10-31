@@ -31,7 +31,7 @@ function connectionOf(
 }
 
 describe('v4 risk ids translated to the v5 catalog', () => {
-  it('keeps an id the v5 catalog has, its macro-action base budget at Confiant as the line', () => {
+  it('keeps an id the v5 catalog has, its macro-action base budget at Trusting as the line', () => {
     const github = connectionOf(githubPlugin);
     const propose = github.macro_actions.find((a) => a.id === 'propose');
     const base = propose?.entries.find((e) => e.risk_id === 'github.create-pr');

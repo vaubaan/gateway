@@ -452,7 +452,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   await seeder.issue(alice.user, {
     name: 'Migration dry-run (finished)',
     connections: [
-      { connection_id: github.id, resources: { scope: 'all' }, trust_levels: { read: 'prudent' } },
+      { connection_id: github.id, resources: { scope: 'all' }, trust_levels: { read: 'careful' } },
     ],
     period: { kind: 'one-off' },
     expires_at: expiresAt.toISOString(),
@@ -505,8 +505,8 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
       {
         connection_id: github.id,
         resources: onRepos([product.repositories[0] ?? '']),
-        // Ship at Confiant: merges, tags and releases ask first; reads run freely.
-        trust_levels: { read: 'confiant', propose: 'prudent', ship: 'confiant' },
+        // Ship at Trusting: merges, tags and releases ask first; reads run freely.
+        trust_levels: { read: 'trusting', propose: 'careful', ship: 'trusting' },
       },
     ],
     period: recurring,
@@ -519,7 +519,7 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
       {
         connection_id: cloudflare.id,
         resources: { scope: 'all' },
-        trust_levels: { 'look-up': 'confiant', point: 'confiant' },
+        trust_levels: { 'look-up': 'trusting', point: 'trusting' },
       },
     ],
     period: { kind: 'one-off' },

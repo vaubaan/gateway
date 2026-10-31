@@ -33,14 +33,14 @@ export const CONNECTION_TOKEN = 'github_pat_11AAAAAAA0GITRIG_0123456789abcdefghi
 export const REPOSITORY = 'acme/app';
 export const OTHER_REPOSITORY = 'acme/lib';
 /**
- * What the former `developer` preset stood for: read and propose at Confiant
+ * What the former `developer` preset stood for: read and propose at Trusting
  * (push and pull requests run freely, a force-push or a branch delete asks
- * first), administer at Confiant (a workflow file write asks first).
+ * first), administer at Trusting (a workflow file write asks first).
  */
 export const DEVELOPER_TRUST_LEVELS: Readonly<Record<string, string>> = {
-  read: 'confiant',
-  propose: 'confiant',
-  administer: 'confiant',
+  read: 'trusting',
+  propose: 'trusting',
+  administer: 'trusting',
 };
 
 /** The inline credential helper of the setup kit: the key comes from the environment. */

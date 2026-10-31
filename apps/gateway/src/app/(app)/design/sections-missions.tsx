@@ -40,31 +40,31 @@ export const MISSION_SECTION_ITEMS = [
 ] as const;
 
 function TrustLevels({ theme }: { theme: string }) {
-  const [value, setValue] = useState('confiant');
+  const [value, setValue] = useState('trusting');
   return (
     <ChoiceRow legend="Trust level of Propose on GitHub acme">
       <ChoiceChip
         name={`design-trust-level-${theme}`}
-        value="prudent"
-        checked={value === 'prudent'}
+        value="careful"
+        checked={value === 'careful'}
         onChange={setValue}
-        label="Prudent"
+        label="Careful"
         title="Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out."
       />
       <ChoiceChip
         name={`design-trust-level-${theme}`}
-        value="confiant"
-        checked={value === 'confiant'}
+        value="trusting"
+        checked={value === 'trusting'}
         onChange={setValue}
-        label="Confiant"
+        label="Trusting"
         title="Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3."
       />
       <ChoiceChip
         name={`design-trust-level-${theme}`}
-        value="autonome"
-        checked={value === 'autonome'}
+        value="autonomous"
+        checked={value === 'autonomous'}
         onChange={setValue}
-        label="Autonome"
+        label="Autonomous"
         unavailable="none you may allow here"
       />
     </ChoiceRow>

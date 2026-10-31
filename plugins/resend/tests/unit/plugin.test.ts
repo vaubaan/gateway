@@ -1100,10 +1100,10 @@ describe('credential spec and macro-actions', () => {
     expect(pattern.test('re_a b')).toBe(false);
   });
 
-  test('macro-actions : at Confiant, bulk sends, segment writes and domain mutations ask first', () => {
+  test('macro-actions : at Trusting, bulk sends, segment writes and domain mutations ask first', () => {
     const actions = resendPlugin.catalog.macro_actions ?? [];
     expect(actions.map((a) => a.id)).toEqual(['check', 'send', 'campaign', 'domains']);
-    const trustLevels = Object.fromEntries(actions.map((a) => [a.id, 'confiant' as const]));
+    const trustLevels = Object.fromEntries(actions.map((a) => [a.id, 'trusting' as const]));
     const approvals = policyFromMacroActions(resendPlugin, trustLevels)
       .filter((e) => e.gate === 'approval')
       .map((e) => e.risk_id);
@@ -1115,10 +1115,10 @@ describe('credential spec and macro-actions', () => {
         'resend.domain-write',
       ]),
     );
-    // Bulk sends are irreversible : they ask first even at Autonome.
-    const autonome = Object.fromEntries(actions.map((a) => [a.id, 'autonome' as const]));
+    // Bulk sends are irreversible : they ask first even at Autonomous.
+    const autonomous = Object.fromEntries(actions.map((a) => [a.id, 'autonomous' as const]));
     const gate = (id: string) =>
-      policyFromMacroActions(resendPlugin, autonome).find((e) => e.risk_id === id)?.gate;
+      policyFromMacroActions(resendPlugin, autonomous).find((e) => e.risk_id === id)?.gate;
     expect(gate('resend.send-batch')).toBe('approval');
     expect(gate('resend.broadcast-send')).toBe('approval');
     expect(gate('resend.read-email-status')).toBe('auto');

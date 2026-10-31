@@ -22,7 +22,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 - [`mission-service.ts`](../../apps/gateway/src/server/missions/mission-service.ts) — every act on a mission: issue, preview, edit, gate, limits, rotate, revoke, `verifyToken`, `access`.
 - [`preview.ts`](../../apps/gateway/src/server/missions/preview.ts) — `previewDraft`, the pure decision behind the form, the management door's `preview_policy`, `issue` and `edit`.
 - [`macro-actions.ts`](../../apps/gateway/src/server/missions/macro-actions.ts) — the connection's macro-actions ("Anything else" added for the fallback) and the lines a trust level writes (risk model §4.6); the form's Simple view is `missions/new/macro-action-panel.tsx`.
-- [`everything-i-hold.ts`](../../apps/gateway/src/server/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonome, the catalog ceiling as rate, by level for a risk in no macro-action (spec §3.2; `RATE_BY_LEVEL`, `QUOTA_BY_LEVEL`).
+- [`everything-i-hold.ts`](../../apps/gateway/src/server/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by level for a risk in no macro-action (spec §3.2; `RATE_BY_LEVEL`, `QUOTA_BY_LEVEL`).
 - [`team-service.ts`](../../apps/gateway/src/server/missions/team-service.ts) — teammates and keys (member and named tokens).
 - [`mission-reach.ts`](../../apps/gateway/src/server/store/mission-reach.ts) — what a mission reaches on a connection.
 - [`bootstrap-kit.ts`](../../apps/gateway/src/server/missions/bootstrap-kit.ts) — what the agent is told.

@@ -36,11 +36,11 @@ export function tierOf(vector: RiskVector): Tier {
   return 1;
 }
 
-export const TRUST_TRUST_LEVELS = ['prudent', 'confiant', 'autonome'] as const;
+export const TRUST_TRUST_LEVELS = ['careful', 'trusting', 'autonomous'] as const;
 export type TrustLevel = (typeof TRUST_TRUST_LEVELS)[number];
 
 /** The lowest trust level : where a new macro-action starts. */
-export const DEFAULT_TRUST_LEVEL: TrustLevel = 'prudent';
+export const DEFAULT_TRUST_LEVEL: TrustLevel = 'careful';
 
 export function isTrustLevel(raw: unknown): raw is TrustLevel {
   return typeof raw === 'string' && (TRUST_TRUST_LEVELS as readonly string[]).includes(raw);
@@ -49,16 +49,16 @@ export function isTrustLevel(raw: unknown): raw is TrustLevel {
 /** Per trust level and tier : the gate of the line, or `null` when the risk is not accepted. */
 export const TRUST_LEVEL_GATES: Readonly<Record<TrustLevel, Readonly<Record<Tier, Gate | null>>>> =
   {
-    prudent: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
-    confiant: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
-    autonome: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
+    careful: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
+    trusting: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
+    autonomous: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
   };
 
 /** What the trust level multiplies the base budget by (quota and rate). */
 export const TRUST_LEVEL_BUDGET_FACTOR: Readonly<Record<TrustLevel, number>> = {
-  prudent: 1,
-  confiant: 3,
-  autonome: 10,
+  careful: 1,
+  trusting: 3,
+  autonomous: 10,
 };
 
 const SECONDS_PER_MINUTE = 60;

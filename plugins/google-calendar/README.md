@@ -51,10 +51,10 @@ of the mission (ref or id), the primary one when omitted.
 | `schedule`   | Create, change, delete and answer events. | `event-create`, `event-change`, `event-delete`, `event-respond` |
 | `invite`     | Invite people and let Google email them.  | `invite-internal`, `invite-external`, `notify-guests`           |
 
-A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
 risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The mission stores the explicit list. Deleting an event asks
-first below Autonome; inviting outside the company and notifying guests are
+first below Autonomous; inviting outside the company and notifying guests are
 irreversible and never run freely.
 
 ## Refreshing the tool list

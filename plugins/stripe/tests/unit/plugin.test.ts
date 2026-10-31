@@ -528,14 +528,14 @@ describe('credential spec', () => {
       'stripe[live].refund-create',
       'stripe[live].subscription-cancel',
     ];
-    // Left out at Prudent ; asked first at Confiant and at Autonome.
-    const prudent = policyFromMacroActions(
+    // Left out at Careful ; asked first at Trusting and at Autonomous.
+    const careful = policyFromMacroActions(
       stripePlugin,
-      { 'money-out': 'prudent', cancel: 'prudent' },
+      { 'money-out': 'careful', cancel: 'careful' },
       { envs: ['live'] },
     );
-    expect(prudent).toEqual([]);
-    for (const trustLevel of ['confiant', 'autonome'] as const) {
+    expect(careful).toEqual([]);
+    for (const trustLevel of ['trusting', 'autonomous'] as const) {
       const lines = policyFromMacroActions(
         stripePlugin,
         { 'money-out': trustLevel, cancel: trustLevel },
@@ -550,7 +550,7 @@ describe('credential spec', () => {
     // One mode given, one mode written.
     const testMode = policyFromMacroActions(
       stripePlugin,
-      { books: 'confiant' },
+      { books: 'trusting' },
       { envs: ['test'] },
     );
     expect(testMode.every((e) => e.risk_id.startsWith('stripe[test].'))).toBe(true);

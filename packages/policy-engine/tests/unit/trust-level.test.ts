@@ -65,26 +65,26 @@ describe('budgetAtTrustLevel', () => {
   const base = { quota: 100, rate_limit: { max: 20, window_seconds: 60 } };
 
   test('×1, ×3, ×10', () => {
-    expect(budgetAtTrustLevel(base, 'prudent', null)).toEqual(base);
-    expect(budgetAtTrustLevel(base, 'confiant', null)).toEqual({
+    expect(budgetAtTrustLevel(base, 'careful', null)).toEqual(base);
+    expect(budgetAtTrustLevel(base, 'trusting', null)).toEqual({
       quota: 300,
       rate_limit: { max: 60, window_seconds: 60 },
     });
-    expect(budgetAtTrustLevel(base, 'autonome', null).quota).toBe(1000);
+    expect(budgetAtTrustLevel(base, 'autonomous', null).quota).toBe(1000);
   });
 
   test('the rate stays under the catalog ceiling, per its own window', () => {
-    expect(budgetAtTrustLevel(base, 'autonome', 50).rate_limit).toEqual({
+    expect(budgetAtTrustLevel(base, 'autonomous', 50).rate_limit).toEqual({
       max: 50,
       window_seconds: 60,
     });
     const hourly = { quota: 10, rate_limit: { max: 2, window_seconds: 3600 } };
-    expect(budgetAtTrustLevel(hourly, 'autonome', 1).rate_limit).toEqual({
+    expect(budgetAtTrustLevel(hourly, 'autonomous', 1).rate_limit).toEqual({
       max: 20,
       window_seconds: 3600,
     });
     expect(
-      budgetAtTrustLevel({ ...base, rate_limit: { max: 1, window_seconds: 10 } }, 'prudent', 1),
+      budgetAtTrustLevel({ ...base, rate_limit: { max: 1, window_seconds: 10 } }, 'careful', 1),
     ).toEqual({ quota: 100, rate_limit: { max: 1, window_seconds: 10 } });
   });
 });
@@ -103,8 +103,8 @@ describe('expandAtTrustLevel', () => {
     candidate('acme.destroy', { ...mild, reversibility: 'irreversible' }),
   ];
 
-  test('Prudent leaves the irreversible out and asks for the rest but tier 1', () => {
-    const { lines, left_out } = expandAtTrustLevel(candidates, 'prudent');
+  test('Careful leaves the irreversible out and asks for the rest but tier 1', () => {
+    const { lines, left_out } = expandAtTrustLevel(candidates, 'careful');
     expect(lines.map((l) => [l.risk_id, l.gate, l.tier])).toEqual([
       ['acme.read', 'auto', 1],
       ['acme.export', 'approval', 2],
@@ -113,8 +113,8 @@ describe('expandAtTrustLevel', () => {
     expect(left_out).toEqual([{ risk_id: 'acme.destroy', tier: 4 }]);
   });
 
-  test('Autonome accepts everything, asking only before the irreversible', () => {
-    const { lines, left_out } = expandAtTrustLevel(candidates, 'autonome');
+  test('Autonomous accepts everything, asking only before the irreversible', () => {
+    const { lines, left_out } = expandAtTrustLevel(candidates, 'autonomous');
     expect(left_out).toEqual([]);
     expect(lines.map((l) => l.gate)).toEqual(['auto', 'auto', 'auto', 'approval']);
     expect(lines[0]).toMatchObject({ quota: 100, rate_limit: { max: 50, window_seconds: 60 } });
@@ -122,7 +122,7 @@ describe('expandAtTrustLevel', () => {
 
   test('a risk handing the agent a token that can write asks first at every trust level', () => {
     const minted = { ...candidate('acme.mint-token', mild), hands_write_token: true };
-    expect(expandAtTrustLevel([minted], 'autonome').lines.map((l) => [l.gate, l.tier])).toEqual([
+    expect(expandAtTrustLevel([minted], 'autonomous').lines.map((l) => [l.gate, l.tier])).toEqual([
       ['approval', 1],
     ]);
   });

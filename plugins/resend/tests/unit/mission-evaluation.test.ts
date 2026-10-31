@@ -181,10 +181,10 @@ describe('resend — what a mission composed from macro-actions allows and refus
   type TrustLevels = Parameters<typeof policyFromMacroActions>[1];
   /** The missions of the table : macro-actions ticked at a trust level, no environment given. */
   const MISSIONS: Readonly<Record<string, TrustLevels>> = {
-    check: { check: 'prudent' },
-    'check and send': { check: 'prudent', send: 'prudent' },
-    campaign: { check: 'confiant', send: 'confiant', campaign: 'confiant' },
-    domains: { check: 'prudent', domains: 'prudent' },
+    check: { check: 'careful' },
+    'check and send': { check: 'careful', send: 'careful' },
+    campaign: { check: 'trusting', send: 'trusting', campaign: 'trusting' },
+    domains: { check: 'careful', domains: 'careful' },
   };
   const missionRisks = (id: string): readonly RiskId[] =>
     policyFromMacroActions(resendPlugin, MISSIONS[id]!).map((e) => e.risk_id);
@@ -270,9 +270,9 @@ describe('resend — what a mission composed from macro-actions allows and refus
     }
   });
 
-  test('at Prudent, sending reaches no external-unbounded recipient, on any domain', () => {
+  test('at Careful, sending reaches no external-unbounded recipient, on any domain', () => {
     const envs = ['prod', 'staging', 'dev'];
-    const accepted = policyFromMacroActions(resendPlugin, { send: 'prudent' }, { envs }).map(
+    const accepted = policyFromMacroActions(resendPlugin, { send: 'careful' }, { envs }).map(
       (e) => e.risk_id,
     );
     for (const from of [prod, staging, dev, unlabelled]) {
@@ -281,9 +281,9 @@ describe('resend — what a mission composed from macro-actions allows and refus
     }
   });
 
-  test('from Confiant, the external send is offered on staging and dev only, and asks first', () => {
+  test('from Trusting, the external send is offered on staging and dev only, and asks first', () => {
     const envs = ['prod', 'staging', 'dev'];
-    const lines = policyFromMacroActions(resendPlugin, { send: 'autonome' }, { envs });
+    const lines = policyFromMacroActions(resendPlugin, { send: 'autonomous' }, { envs });
     const external = lines.filter((e) => e.risk_id.endsWith('.send-email-external-unbounded'));
     expect(external.map((e) => [e.risk_id, e.gate])).toEqual([
       [qualified('staging'), 'approval'],

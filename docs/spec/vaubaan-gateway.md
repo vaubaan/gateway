@@ -9,6 +9,11 @@ status: draft
 > [pivot-v4-to-v5-on-prem-mission-tokens](../decisions/pivot-v4-to-v5-on-prem-mission-tokens.md)).
 > _Which_ risk a call touches is [gateway-risk-model](./gateway-risk-model.md); this spec says _who_
 > may accept _which_ risk, _how many times_, _how fast_, _under whose eyes_, on which instance.
+>
+> **History:** 2026-10-31 — the trust level (Careful, Trusting, Autonomous) and the tier got their
+> English names before publication, a breaking rename in the alpha window (owner decision,
+> recorded in the History of
+> [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 
 ## 0. Vocabulary
 
@@ -135,8 +140,8 @@ callback registered at a provider).
 - **Macro-action** — what an agent may do on one account, in the connector's own words ("Read",
   "Change", "Administer"): a group of `RiskId`s of one catalog, each with a base budget
   ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every connection also offers "Anything else"
-  (the fallback). A creator ticks macro-actions and sets each to a **trust level** (Prudent, Confiant,
-  Autonome), which pre-fills the gate and budget of each of its risks from the risk's tier. It
+  (the fallback). A creator ticks macro-actions and sets each to a **trust level** (Careful, Trusting,
+  Autonomous), which pre-fills the gate and budget of each of its risks from the risk's tier. It
   grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
   the token. Every connection also offers the built-in expansion **"Everything I hold on this
   account"** (`everything-i-hold`, §3.2).
@@ -367,7 +372,7 @@ a mission whose accepted risk has no resolved budget.
   covers now and the selected resources can reach (an environment-qualified id only when a selected
   resource carries that label, own or default, or the plugin derives the environment), the fallback
   included and named. Each line gets the catalog's rate ceiling (else its base budget's rate at
-  Autonome, else a value by severity), its base budget's quota at Autonome (else by severity) sized
+  Autonomous, else a value by severity), its base budget's quota at Autonomous (else by severity) sized
   for a daily period, and gate `auto`. The preview states the line count, the most severe,
   which critical lines run freely, and the fallback; no gate is added silently.
 - **Editing a mission**
@@ -782,7 +787,7 @@ values.
 - **No credential to the executor.** §2.4. No read returns a secret value under a non-secret risk:
   an answer that may carry secrets passes an allow-list of non-secret fields (others become
   `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk, tier 2 at least, so
-  Prudent asks before it.
+  Careful asks before it.
 - **Transport.** Plain HTTP on the local network, behind a TLS termination held by the company.
 - **Human authentication.** Each sign-in attempt carries its own `state`, nonce and PKCE verifier
   and is bound to the provider that started it. A sign-in is admitted only on an email the provider

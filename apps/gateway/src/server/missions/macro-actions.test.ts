@@ -40,7 +40,7 @@ describe('macro-actions of a connection', () => {
 
   it('expands per environment, and sets apart what the selection or the authority cannot give', () => {
     const prodOnly = ACME_RESOURCES.filter((r) => r.env === 'prod');
-    const change = expandMacroAction(acme, action('change'), 'confiant', prodOnly);
+    const change = expandMacroAction(acme, action('change'), 'trusting', prodOnly);
     expect(change.lines.map((l) => [l.risk_id, l.gate, l.tier, l.quota])).toEqual([
       ['acme[prod].write', 'approval', 3, 300],
     ]);
@@ -49,7 +49,7 @@ describe('macro-actions of a connection', () => {
       'acme[staging].bulk-delete',
     ]);
     const narrow = acmeConnection({ authority: ['acme.read'] });
-    expect(expandMacroAction(narrow, action('change'), 'autonome', ACME_RESOURCES).lines).toEqual(
+    expect(expandMacroAction(narrow, action('change'), 'autonomous', ACME_RESOURCES).lines).toEqual(
       [],
     );
   });
@@ -57,7 +57,7 @@ describe('macro-actions of a connection', () => {
   it('writes every ticked macro-action in catalog order, and nothing for an unticked one', () => {
     const lines = linesOfTrustLevels(
       acme,
-      { administer: 'prudent', read: 'prudent' },
+      { administer: 'careful', read: 'careful' },
       ACME_RESOURCES,
     );
     expect(lines.map((l) => l.risk_id)).toEqual(['acme.read', 'acme.admin']);
@@ -68,18 +68,18 @@ describe('macro-actions of a connection', () => {
     const bulk = acme.risks.find((r) => r.risk_id === 'acme[staging].bulk-delete');
     if (!bulk) throw new Error('fixture');
     expect(defaultLineOf(acme, {}, bulk)).toMatchObject({ quota: 5, gate: 'approval' });
-    expect(defaultLineOf(acme, { change: 'autonome' }, bulk)).toMatchObject({
+    expect(defaultLineOf(acme, { change: 'autonomous' }, bulk)).toMatchObject({
       quota: 50,
       gate: 'approval',
     });
   });
 
   it('keeps only trust levels, and only for macro-actions the connection has', () => {
-    expect(trustLevelsOf({ read: 'confiant', change: 'reckless', admin: 3 })).toEqual({
-      read: 'confiant',
+    expect(trustLevelsOf({ read: 'trusting', change: 'reckless', admin: 3 })).toEqual({
+      read: 'trusting',
     });
-    expect(knownTrustLevels(acme, { read: 'autonome', elsewhere: 'prudent' })).toEqual({
-      read: 'autonome',
+    expect(knownTrustLevels(acme, { read: 'autonomous', elsewhere: 'careful' })).toEqual({
+      read: 'autonomous',
     });
     expect(knownTrustLevels(acme, undefined)).toEqual({});
   });
@@ -95,7 +95,7 @@ describe('macro-actions of a connection', () => {
     const prodOnly = ACME_RESOURCES.filter((r) => r.env !== 'staging');
     const { lines, left_out } = prefillOfTrustLevels(
       narrow,
-      { read: 'prudent', change: 'prudent' },
+      { read: 'careful', change: 'careful' },
       prodOnly,
     );
     expect(lines.map((l) => l.risk_id)).toEqual(['acme.read']);
@@ -105,7 +105,7 @@ describe('macro-actions of a connection', () => {
       ['acme[staging].bulk-delete', 'outside-authority'],
     ]);
     expect(
-      prefillOfTrustLevels(acme, { change: 'prudent' }, ACME_RESOURCES).left_out.map(
+      prefillOfTrustLevels(acme, { change: 'careful' }, ACME_RESOURCES).left_out.map(
         (l) => l.reason,
       ),
     ).toEqual(['trust-level']);
@@ -113,13 +113,15 @@ describe('macro-actions of a connection', () => {
 
   it('asks first for a risk that hands a write token, at every trust level', () => {
     const minting = acmeConnection({ write_token_risks: ['acme.read'] });
-    expect(expandMacroAction(minting, action('read'), 'autonome', []).lines[0]?.gate).toBe(
+    expect(expandMacroAction(minting, action('read'), 'autonomous', []).lines[0]?.gate).toBe(
       'approval',
     );
   });
 
   it('names the trust levels of a draft that are no macro-action here', () => {
-    expect(unknownMacroActions(acme, { read: 'prudent', deploy: 'autonome' })).toEqual(['deploy']);
+    expect(unknownMacroActions(acme, { read: 'careful', deploy: 'autonomous' })).toEqual([
+      'deploy',
+    ]);
     expect(unknownMacroActions(acme, undefined)).toEqual([]);
   });
 });

@@ -304,13 +304,13 @@ export interface MacroActionRow {
   readonly description: string;
   /** The trust level it is ticked at, or `null` when not ticked. */
   readonly trustLevel: TrustLevel | null;
-  /** The trust level its counts are read at: its own, or Prudent when not ticked. */
+  /** The trust level its counts are read at: its own, or Careful when not ticked. */
   readonly shownTrustLevel: TrustLevel;
   /** Permissions the macro-action has in this catalog. */
   readonly total: number;
   readonly free: number;
   readonly asks: number;
-  /** Left out by the trust level (tier 4 at Prudent). */
+  /** Left out by the trust level (tier 4 at Careful). */
   readonly leftOut: number;
   /** Outside what the reader may allow, or no selected resource carries the environment. */
   readonly unavailable: number;
@@ -342,7 +342,7 @@ export function macroActionRows(
       unavailable: expansion.unavailable.length,
       // Nothing it holds is reachable here, at any trust level.
       empty:
-        expandMacroAction(connection, action, 'autonome', resources).lines.length === 0 &&
+        expandMacroAction(connection, action, 'autonomous', resources).lines.length === 0 &&
         trustLevel === null,
     };
   });
@@ -563,7 +563,7 @@ export function setResourceScope(
 
 /**
  * The budget a hand-ticked risk starts with: its macro-action's base budget at
- * the trust level that macro-action has (Prudent when not ticked), with the gate that
+ * the trust level that macro-action has (Careful when not ticked), with the gate that
  * trust level gives it (`defaultLineOf`) — else blank, and a blank budget blocks
  * issuance until the creator types one.
  */

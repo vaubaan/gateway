@@ -183,7 +183,7 @@ plugin declares one today: git goes through the gateway's own remote.
 **Permissions, not scopes.** Each plugin ships a catalog of named permissions
 (`github.merge-protected`, `supabase[staging].migration-write`), each with
 the reason it exists and how severe it is, grouped into macro-actions that
-a mission's creator ticks at a trust level (Prudent, Confiant, Autonome) to
+a mission's creator ticks at a trust level (Careful, Trusting, Autonomous) to
 pre-fill it. A mission stores an explicit list; nothing is ever "all". Reference,
 in the interface, shows every one of them, service by service.
 
@@ -208,7 +208,7 @@ domain — keeps the names it had. The same things, under both:
 | teammate, team                     | mission member, group                                 |
 | administrator                      | operator                                              |
 | service, OAuth client, Reference   | provider, provider app, the provider pages            |
-| mission, macro-action, trust level | mission, macro-action, trust level                    |
+| mission, macro-action, trust level | mission, macro-action, trust level, tier              |
 
 ## Documentation
 

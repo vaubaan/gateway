@@ -61,8 +61,8 @@ refactor/*` it touches `feature-branch-write`; any other branch name falls
 - `mint-install-token-clone` / `-push` are deprecated (they belonged to the
   removed GitHub App); no call touches them.
 
-A creator ticks macro-actions, each at a trust level (Prudent / Confiant /
-Autonome, risk model §4.6); the trust level sets each risk's gate from its vector and
+A creator ticks macro-actions, each at a trust level (Careful / Trusting /
+Autonomous, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
 | Macro-action | What it covers                                   | Its risks                                                                                                          |
@@ -73,8 +73,8 @@ multiplies the base budget. The fallback sits apart, under "Anything else".
 | `administer` | Branch protection and workflow files.            | `branch-protection-write`, `workflow-write-via-file`                                                               |
 
 `force-push`, `branch-delete`, protected merges, tags, releases and
-`administer` ask first below Autonome; `delete-release` is left out at
-Prudent and asks first above.
+`administer` ask first below Autonomous; `delete-release` is left out at
+Careful and asks first above.
 
 ## Classification and execution
 

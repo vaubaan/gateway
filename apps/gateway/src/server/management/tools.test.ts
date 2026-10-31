@@ -146,7 +146,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     const { tools, calls } = rig();
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     await tools.issueMission(ACTOR, within);
     const issue = calls.find((call) => call.method === 'issue');
@@ -187,7 +187,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
 
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     await tools.issueMission(ACTOR, within);
     const second = await tools.issueMission(ACTOR, within);
@@ -344,7 +344,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
   describe('the mission service decides last: its answer after the door’s own check stands', () => {
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     /** A mission of the user that serves calls, as `get` returns it. */
     const active = {
@@ -512,9 +512,9 @@ describe('views', () => {
     const change = owner.macro_actions.find((action) => action.id === 'change');
     // Writes are costly (tier 3), bulk deletes irreversible (tier 4).
     expect(change?.at_trust_level).toEqual({
-      prudent: { auto: 0, approval: 2, left_out: 1 },
-      confiant: { auto: 0, approval: 3, left_out: 0 },
-      autonome: { auto: 2, approval: 1, left_out: 0 },
+      careful: { auto: 0, approval: 2, left_out: 1 },
+      trusting: { auto: 0, approval: 3, left_out: 0 },
+      autonomous: { auto: 2, approval: 1, left_out: 0 },
     });
     expect(owner.macro_actions.map((action) => action.id)).toEqual([
       'read',
@@ -689,7 +689,7 @@ describe('views', () => {
       null,
     );
     expect(plain.macro_actions.map((action) => action.id)).toContain('anything-else');
-    expect(plain.trust_levels.prudent).toEqual({
+    expect(plain.trust_levels.careful).toEqual({
       gates: { '1': 'auto', '2': 'approval', '3': 'approval', '4': null },
       budget_factor: 1,
     });

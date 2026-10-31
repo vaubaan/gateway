@@ -76,15 +76,15 @@ function decide(
 /** The missions the decisions below are made for, written as the creation form writes them. */
 const MISSIONS = {
   /** Reads, no environment : nothing env-scoped. */
-  'read-only-analyst': policyFromMacroActions(plugin, { query: 'prudent' }),
+  'read-only-analyst': policyFromMacroActions(plugin, { query: 'careful' }),
   /** Everything but administration, on staging only. */
   'staging-developer': policyFromMacroActions(
     plugin,
     {
-      query: 'autonome',
-      'change-data': 'autonome',
-      'change-schema': 'autonome',
-      'ship-functions': 'autonome',
+      query: 'autonomous',
+      'change-data': 'autonomous',
+      'change-schema': 'autonomous',
+      'ship-functions': 'autonomous',
     },
     { envs: ['staging'] },
   ),
@@ -94,10 +94,10 @@ const MISSIONS = {
    * row write on prod whatever the mission holds (`acceptable_in_envs`).
    */
   'migration-operator': [
-    ...policyFromMacroActions(plugin, { query: 'prudent' }),
+    ...policyFromMacroActions(plugin, { query: 'careful' }),
     ...policyFromMacroActions(
       plugin,
-      { 'change-schema': 'confiant' },
+      { 'change-schema': 'trusting' },
       { envs: ['staging', 'prod'] },
     ),
     ...(['supabase[staging].bulk-row-write', 'supabase[staging].db-role-write'] as const).map(
@@ -473,7 +473,7 @@ describe('supabase missions from macro-actions — decisions on labelled project
     expectRows('migration-operator', rows);
   });
 
-  test('change-schema at Confiant gates what it allows on prod behind an approval', () => {
+  test('change-schema at Trusting gates what it allows on prod behind an approval', () => {
     const lines = MISSIONS['migration-operator'];
     for (const query of [DDL, RLS]) {
       const decision = decide(...migration(PROD, query), missionRisks('migration-operator'));

@@ -115,8 +115,8 @@ Things to try
      Any value of the right shape is accepted; each field says its shape.
      Gmail signs in over IMAP with an app password, which the demo does not simulate.
   3. Read what a service allows: Reference -> GitHub. Its permissions grouped
-     by macro-action and compared across the trust levels Prudent, Confiant and
-     Autonome ("why?" unfolds the reason and the six words behind a
+     by macro-action and compared across the trust levels Careful, Trusting and
+     Autonomous ("why?" unfolds the reason and the six words behind a
      severity), its tools, how it is modelled. Supabase adds a filter by part
      (db, storage, auth, functions).
   4. Create a mission on one screen: Missions -> New mission. Include an

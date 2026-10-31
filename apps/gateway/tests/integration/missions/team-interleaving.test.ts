@@ -42,7 +42,7 @@ describe('missions: a token insert that lost the race is refused', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          trust_levels: { read: 'confiant', propose: 'confiant' },
+          trust_levels: { read: 'trusting', propose: 'trusting' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },

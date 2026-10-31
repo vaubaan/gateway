@@ -26,8 +26,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **New mission and Edit mission compose a policy from macro-actions at a
   trust level** (ADR macro-actions-and-trust-levels-prefill-the-policy, risk
   model §4.6). Per account, the Simple view lists the service's
-  macro-actions, "Anything else" included; each ticked at Prudent, Confiant
-  or Autonome says what it writes here (runs freely, asks first, left out,
+  macro-actions, "Anything else" included; each ticked at Careful, Trusting
+  or Autonomous says what it writes here (runs freely, asks first, left out,
   not available to you) and the account says its highest tier. The
   Advanced view is the permission-by-permission editor; "Everything I hold
   on this account" stays. The mission still stores the explicit list; the
@@ -46,8 +46,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   permissions in one click; the Reference compares every permission across
   the three trust levels. A risk whose tool hands the agent a token that can write
   asks first at every trust level. The v4 import writes each kept risk at
-  Confiant; "Everything I hold" takes its budgets from the macro-actions at
-  Autonome.
+  Trusting; "Everything I hold" takes its budgets from the macro-actions at
+  Autonomous.
 - **Gmail sends mail over SMTP** (`@vaubaan/plugin-gmail` 1.1.0, ADR
   gmail-over-imap-with-an-app-password amended). Two tools: `send_message`
   (a plain-text message) and `send_draft` (an existing draft as it is, by
@@ -77,6 +77,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The trust levels speak English** (owner decision of 2026-10-31, ADR
+  macro-actions-and-trust-levels-prefill-the-policy, renamed from
+  `macro-actions-and-trust-crans-prefill-the-policy`). The trust level a
+  creator picks for a macro-action is Careful, Trusting or Autonomous, and
+  the tier of a risk (1 mild to 4 irreversible) decides what each writes;
+  what each level writes is unchanged. Breaking for agents using the
+  management door: `crans` is now `trust_levels`, values
+  `careful|trusting|autonomous` (were `prudent|confiant|autonome`);
+  `list_my_connections` says `at_trust_level` (was `at_cran`), `get_catalog`
+  gives each risk's `tier` (was `palier`) and the `trust_levels` table, and a
+  line a trust level leaves out has `reason: 'trust-level'`. Migration 0026
+  renames `mission_connections.crans_json` to `trust_levels_json` and
+  rewrites the stored values to the new names, so a running instance keeps
+  every mission's recorded levels on upgrade; agents holding a draft with
+  `crans` must send `trust_levels`.
+
 - **The documents say what the repository does.** `SECURITY.md` names the
   supported line (the latest `2.0.0-alpha` pre-release, cut from `main`) and
   when each scanner runs; `README.md` and `CONTRIBUTING.md` target `main` and
@@ -93,7 +109,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,
   Ship, Administer…), each risk listed once with a base budget. A catalog
   without them, or with a live risk in none or in two, no longer loads. The
-  policy engine gains the trust levels (Prudent, Confiant, Autonome) that turn
+  policy engine gains the trust levels (Careful, Trusting, Autonomous) that turn
   a macro-action into explicit lines: the gate follows the risk's tier, read
   from its vector, and the budget is multiplied ×1, ×3 or ×10. Every shipped
   plugin gains a patch version and a `catalog_version`.
