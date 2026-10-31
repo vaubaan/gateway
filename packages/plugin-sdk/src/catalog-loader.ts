@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { CORE_SCHEMA, YAMLException, load } from 'js-yaml';
 
 import {
+  ANYTHING_ELSE_MACRO_ACTION,
   budgetIssues,
   fallbackEntriesOf,
   fallbackRiskPrefix,
@@ -171,8 +172,7 @@ export function semanticIssues(catalog: RiskCatalog, options: LoadCatalogOptions
   return issues;
 }
 
-/** The id the gateway gives the macro-action holding the fallback ; no catalog may declare it. */
-export const ANYTHING_ELSE_MACRO_ACTION = 'anything-else';
+export { ANYTHING_ELSE_MACRO_ACTION };
 
 /**
  * Macro-action rules (ADR macro-actions-and-trust-crans-prefill-the-policy) :

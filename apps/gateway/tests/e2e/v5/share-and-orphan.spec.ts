@@ -27,7 +27,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { connectAgent, type Agent } from './agent';
 import { passSecondFactor, routeToInstance, seedShareScenario, signInAs } from './browser';
 import { controlUrl, E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
-import { createMission, permissionRow, pickPreset } from './mission-pages';
+import { createMission, permissionRow, showView } from './mission-pages';
 
 const READ_CODE = 'github.read-code';
 const READ_META = 'github.read-meta';
@@ -193,7 +193,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(joan.getByTestId('connection-github')).toContainText(
     /access given to you · may allow \d+ of \d+/,
   );
-  await pickPreset(joan, `GitHub ${connectionName}`, 'Custom');
+  await showView(joan, `GitHub ${connectionName}`, 'Advanced');
   // The editor shows what she may allow; what she may not is one filter away, listed with
   // the reason and without a usable tick.
   const editor = joan.getByTestId('risks-github');

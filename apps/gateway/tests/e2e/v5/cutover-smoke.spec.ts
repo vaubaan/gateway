@@ -17,7 +17,13 @@ import { expect, test, type Page } from '@playwright/test';
 import { connectAgent, kitToolsList, type Agent } from './agent';
 import { routeToInstance, signInAs, upstreamLog } from './browser';
 import { E2E_CUTOVER_USER, MOCK_GITHUB, PUBLIC_URL } from './instance';
-import { createMission, openCreatedMission, pickPreset, resourcesButton } from './mission-pages';
+import {
+  createMission,
+  openCreatedMission,
+  pickCran,
+  resourcesButton,
+  showView,
+} from './mission-pages';
 
 const CONNECTION = 'Cutover org';
 const MISSION = 'Cutover — acme/app';
@@ -99,11 +105,12 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   expect(connected.calls.some((call) => call.url.includes('/user/repos'))).toBe(true);
   expect(await page.content()).not.toContain(MOCK_GITHUB.token);
 
-  // ── 3. Issue a mission from the plugin's preset ───────────────────────────
+  // ── 3. Issue a mission from the plugin's macro-actions ────────────────────
   await page.goto('/missions/new');
   await page.getByLabel('Mission name').fill(MISSION);
   await page.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  await pickPreset(page, `GitHub ${CONNECTION}`, 'Developer');
+  await pickCran(page, `GitHub ${CONNECTION}`, 'Read', 'Confiant');
+  await pickCran(page, `GitHub ${CONNECTION}`, 'Propose', 'Prudent');
   await expect(page.getByTestId('summary-github')).toContainText('permissions.');
   // One code project, one repository: the other one is left out of the mission.
   await resourcesButton(page, `GitHub ${CONNECTION}`, '2 of 2').click();
@@ -112,8 +119,8 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByTestId('summary-github')).toContainText('Nor the other 1 resource.');
   await expect(page.getByTestId('summary-carries')).toContainText('never expires');
   // The one adjustment: a limit small enough to be reached in this test.
-  // The editor opens on the preset's values.
-  await page.getByRole('button', { name: 'Edit the permissions one by one' }).click();
+  // The advanced view opens on the lines the crans wrote.
+  await showView(page, `GitHub ${CONNECTION}`, 'Advanced');
   await page.getByLabel(`Limit for ${READ_CODE}`).fill(String(QUOTA));
 
   // The key, shown once, with the kit: the client configuration and the instructions.

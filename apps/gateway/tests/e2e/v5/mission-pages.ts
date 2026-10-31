@@ -7,25 +7,49 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 export const KEY = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 
-/** Includes an account in the mission being created and picks one of its presets. */
-export async function includeWithPreset(
+/** A trust cran as the interface names it. */
+export type Cran = 'Prudent' | 'Confiant' | 'Autonome';
+
+/**
+ * Includes an account in the mission being created and ticks macro-actions at a
+ * cran, by their labels: `{ Read: 'Confiant', Propose: 'Prudent' }`.
+ */
+export async function includeWithCrans(
   page: Page,
   account: string,
-  preset: string,
+  crans: Readonly<Record<string, Cran>>,
 ): Promise<void> {
   await page.getByLabel(`Include ${account}`).check();
-  await pickPreset(page, account, preset);
+  for (const [action, cran] of Object.entries(crans)) await pickCran(page, account, action, cran);
 }
 
-/** The radio of a preset (or of "Custom") in the choice row of an account. */
-export function presetChoice(page: Page, account: string, preset: string): Locator {
+/** The radio of one cran of a macro-action of an account. */
+export function cranChoice(page: Page, account: string, action: string, cran: Cran): Locator {
   return page
-    .getByRole('group', { name: `Preset for ${account}` })
-    .getByRole('radio', { name: new RegExp(`^${preset}\\b`) });
+    .getByRole('group', { name: `Cran of ${action} on ${account}` })
+    .getByRole('radio', { name: new RegExp(`^${cran}\\b`) });
 }
 
-export async function pickPreset(page: Page, account: string, preset: string): Promise<void> {
-  await presetChoice(page, account, preset).check();
+/** Ticks a macro-action at a cran (or moves it there). */
+export async function pickCran(
+  page: Page,
+  account: string,
+  action: string,
+  cran: Cran,
+): Promise<void> {
+  await cranChoice(page, account, action, cran).check();
+}
+
+/** The Simple or Advanced view of an account's permissions. */
+export async function showView(
+  page: Page,
+  account: string,
+  view: 'Simple' | 'Advanced',
+): Promise<void> {
+  await page
+    .getByRole('tablist', { name: `View of the permissions of ${account}` })
+    .getByRole('tab', { name: view })
+    .click();
 }
 
 /** The button that opens the resource list of an account; its name says "N of M resources". */

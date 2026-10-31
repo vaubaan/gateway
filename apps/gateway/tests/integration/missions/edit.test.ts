@@ -354,6 +354,39 @@ describe('editing a mission after issuance', () => {
     expect((await fresh()).updatedAt).toBe(mission.updatedAt);
   });
 
+  it('keeps the crans the form recorded, known macro-actions only, and an edit moves them', async () => {
+    const base = githubLine(githubDraft(rig));
+    const recorded = await issueMission(
+      rig,
+      rig.seeded.ada,
+      githubDraft(rig, {
+        connections: [{ ...base, crans: { read: 'confiant', 'no-such-action': 'autonome' } }],
+      }),
+    );
+    const stored = await rig.root.store.missions.getById(recorded.id);
+    expect(stored?.connections[0]?.crans).toEqual({ read: 'confiant' });
+
+    const current = await service().editView(rig.seeded.ada, recorded.id);
+    if (!current) throw new Error('no edit view');
+    expect(githubLine(current.draft).crans).toEqual({ read: 'confiant' });
+    const line = githubLine(current.draft);
+    const draft: MissionDraft = {
+      ...current.draft,
+      connections: [
+        {
+          ...line,
+          crans: { read: 'autonome' },
+          policy: (line.policy ?? []).map((p) => (p.risk_id === READ ? { ...p, quota: 6 } : p)),
+        },
+      ],
+    };
+    expect(
+      await service().edit(rig.seeded.ada, recorded.id, { draft, revision: current.revision }),
+    ).toMatchObject({ ok: true });
+    const after = await rig.root.store.missions.getById(recorded.id);
+    expect(after?.connections[0]?.crans).toEqual({ read: 'autonome' });
+  });
+
   it('is the creator’s alone; a revoked mission is not edited, an expired one is and comes back', async () => {
     const body = await edited((draft) => ({ ...draft, name: 'Not yours' }));
     expect(await service().edit(rig.seeded.bob, mission.id, body)).toEqual({

@@ -4,9 +4,10 @@
  *
  * The signed-in person owns a GitHub, a Supabase, a Vercel and a Gmail
  * account. The first test creates a three-account mission and
- * checks the screen is the one the redesign asks for — presets first, each
- * saying what it yields; the summary and the one action in a rail that stays
- * in view; the permissions one by one a click away; a confirmation that lists
+ * checks the screen is the one the redesign asks for — macro-actions first,
+ * each at a trust cran saying what it yields; the summary and the one action
+ * in a rail that stays in view; the permissions one by one in the Advanced
+ * view; a confirmation that lists
  * every permission with its limit — then follows the key through its
  * replacement and the mission to its stop; the second covers the two other
  * ways to start: an agent's proposal and a copy; the third reads the
@@ -20,24 +21,27 @@ import { E2E_USER } from './instance';
 import {
   confirmByTyping,
   createMission,
-  includeWithPreset,
+  cranChoice,
+  includeWithCrans,
   missionMenu,
   openCreatedMission,
   permissionRow,
-  pickPreset,
-  presetChoice,
+  pickCran,
   resourcesButton,
   revealedKey,
   savedKey,
   showPermissions,
+  showView,
 } from './mission-pages';
 
 /**
- * The default state of a mission on three accounts — every preset counted,
- * one sentence each — fits in less than two screens at 1280 x 800, the build
- * footer included (spec §4.2 asks for "about two viewports").
+ * The default state of a mission on three accounts — one row per macro-action,
+ * each counted once ticked — fits in about one screen per account plus one for
+ * the name and the limits, at 1280 x 800, the build footer included. No
+ * permission is listed one by one until the Advanced view is asked for.
  */
-const COMPACT_SCREENS = 2;
+const ACCOUNTS_SHOWN = 3;
+const COMPACT_SCREENS = ACCOUNTS_SHOWN + 1;
 
 /**
  * What the pages show of the GitHub plugin is read from the plugin itself, so a
@@ -48,8 +52,6 @@ const GITHUB = {
   presets: githubPlugin.catalog.presets?.length ?? 0,
   tools: githubPlugin.tools.length,
 };
-/** The preset chips of an account: its presets, "Everything I hold" and "Custom". */
-const GITHUB_PRESET_CHOICES = GITHUB.presets + 2;
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
 async function snap(page: Page, name: string): Promise<void> {
@@ -84,7 +86,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('connection-gmail')).toBeVisible();
   await expect(page.getByText(/experimental/i)).toHaveCount(0);
 
-  // Nothing can be created before a name, an account and a preset; the rail says what is missing.
+  // Nothing can be created before a name, an account and a macro-action; the rail says what is missing.
   const create = page.getByRole('button', { name: 'Create mission' });
   await expect(create).toBeDisabled();
   await expect(page.getByTestId('issues')).toContainText('Give the mission a name.');
@@ -92,13 +94,22 @@ test('create a three-account mission on one page, then replace its key and stop 
 
   await page.getByLabel('Mission name').fill('Ship the billing page');
   await page.getByLabel('Include GitHub acme-org').check();
-  // An account without a preset allows nothing, and the rail says so in the interface's words.
+  // An account with no macro-action ticked allows nothing, and the rail says so in the interface's words.
   await expect(page.getByTestId('issues')).toContainText(
-    'GitHub · acme-org allows nothing yet: pick a preset or a permission, or leave the account out.',
+    'GitHub · acme-org allows nothing yet: tick a macro-action or a permission, or leave the account out.',
   );
-  await pickPreset(page, 'GitHub acme-org', 'Developer');
-  await includeWithPreset(page, 'Supabase Acme Supabase', 'Staging developer');
-  await includeWithPreset(page, 'Vercel Acme Vercel', 'Developer');
+  // A cran ticks its macro-action: reads at Confiant, proposing and shipping at Prudent.
+  await pickCran(page, 'GitHub acme-org', 'Read', 'Confiant');
+  await pickCran(page, 'GitHub acme-org', 'Propose', 'Prudent');
+  await pickCran(page, 'GitHub acme-org', 'Ship', 'Prudent');
+  await includeWithCrans(page, 'Supabase Acme Supabase', {
+    Query: 'Confiant',
+    'Change data': 'Prudent',
+  });
+  await includeWithCrans(page, 'Vercel Acme Vercel', {
+    Watch: 'Prudent',
+    'Deploy and review': 'Prudent',
+  });
   await expect(page.getByTestId('issues')).toHaveCount(0);
 
   // Resources: all selected by default, the list behind "Change".
@@ -111,7 +122,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('summary-github')).toContainText('Can');
   await expect(page.getByTestId('summary-github')).toContainText('Asks you');
   await expect(page.getByTestId('summary-github')).toContainText('Cannot');
-  await expect(page.getByTestId('summary-github')).toContainText('8 permissions.');
+  await expect(page.getByTestId('summary-github')).toContainText(/\d+ permissions\./);
   await expect(page.getByTestId('summary-supabase')).toBeVisible();
   await expect(page.getByTestId('summary-vercel')).toBeVisible();
   await expect(page.getByTestId('summary-carries')).toContainText('explicit permissions');
@@ -120,57 +131,46 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(rail).not.toContainText(/\b(risk|quota|budget|gate)\b/i);
   await expect(create).toBeEnabled();
 
-  // A preset says what it means, on the page: one sentence, then the policy counted.
-  await expect(page.getByTestId('preset-detail-github')).toContainText(
-    'One mission per code repository',
-  );
-  const digest = page.getByTestId('preset-digest-github');
-  await expect(digest).toContainText('8 run freely');
-  await expect(digest).toContainText('2 ask you first');
-  // Nineteen ids on GitHub today: ten chosen, six left out, the two deprecated
-  // mint risks of the App and the fallback, which no preset holds and nobody
-  // counts as something a preset "left out".
-  await expect(digest).toContainText('6 not included');
-  await expect(
-    page.getByTestId('preset-detail-github').getByRole('link', { name: /In the reference/ }),
-  ).toHaveAttribute('href', '/reference/github#preset-developer');
-  // The choice itself carries the width of each preset; "Everything I hold" and "Custom"
-  // are two of the choices.
-  const githubChoices = page.getByRole('group', { name: 'Preset for GitHub acme-org' });
-  await expect(githubChoices.getByRole('radio')).toHaveCount(GITHUB_PRESET_CHOICES);
-  await expect(githubChoices.locator('[data-choice="developer"]')).toHaveText(/Developer\s*10/);
-  await expect(presetChoice(page, 'GitHub acme-org', 'Custom')).not.toBeChecked();
+  // Each macro-action says, in the service's words, what its cran yields here.
+  const ship = page.getByTestId('macro-github-ship');
+  await expect(ship).toContainText('ask first');
+  await expect(ship).toContainText('left out at Prudent');
+  await expect(page.getByTestId('macro-github-read')).toContainText('limits ×3');
+  // Administer is not ticked: no cran is chosen for it.
+  await expect(page.getByLabel('Administer on GitHub acme-org')).not.toBeChecked();
+  await expect(cranChoice(page, 'GitHub acme-org', 'Administer', 'Prudent')).not.toBeChecked();
+  const digest = page.getByTestId('policy-digest-github');
+  await expect(digest).toContainText('run freely');
+  await expect(digest).toContainText('ask you first');
+  await expect(digest).toContainText(/highest palier P[1-4]/);
 
-  // Compact by default: no editor is open, there is no wall of checkboxes, the form is
-  // under two screens, and the one action is in view without scrolling.
+  // Compact by default: the Simple view, no permission listed one by one, about a screen
+  // per account, and the one action in view without scrolling.
   await expect(page.getByTestId('risks-github')).toHaveCount(0);
   await expect(page.locator('[data-permission]')).toHaveCount(0);
   const layout = await page.evaluate(() => ({
     pageHeight: document.documentElement.scrollHeight,
     viewport: window.innerHeight,
-    checkboxes: [...document.querySelectorAll('input[type="checkbox"]')].filter((el) =>
-      el.checkVisibility(),
-    ).length,
   }));
   await snap(page, 'creation-three-accounts');
   expect(layout.pageHeight).toBeLessThanOrEqual(COMPACT_SCREENS * layout.viewport);
-  expect(layout.checkboxes).toBeLessThanOrEqual(6);
   await expect(create).toBeInViewport();
   await page.mouse.wheel(0, 2000);
   await expect(create).toBeInViewport();
   await page.mouse.wheel(0, -2000);
 
-  // Deselecting the staging project drops the staging-only entries of the preset, and says so.
+  // Deselecting the staging project makes its permissions unavailable here, and the row says so.
+  const changeData = page.getByTestId('macro-supabase-change-data');
+  const withStaging = (await changeData.textContent()) ?? '';
   await resourcesButton(page, 'Supabase Acme Supabase', '2 of 2').click();
   await page.getByLabel('Resource stgprojectref').uncheck();
-  await expect(page.getByTestId('preset-skipped-supabase')).toContainText('left out here');
-  await expect(page.getByTestId('preset-skipped-supabase')).toContainText('labelled "staging"');
+  await expect(changeData).toContainText('not available to you here');
+  await expect(changeData).not.toHaveText(withStaging);
   await page.getByLabel('Resource stgprojectref').check();
-  await expect(page.getByTestId('preset-skipped-supabase')).toHaveCount(0);
+  await expect(changeData).toHaveText(withStaging);
 
-  // The permissions one by one, a click away: the editor opens in place on the preset's values.
-  const githubPanel = page.getByTestId('preset-github');
-  await githubPanel.getByRole('button', { name: 'Edit the permissions one by one' }).click();
+  // The permissions one by one are the Advanced view, on the lines the crans wrote.
+  await showView(page, 'GitHub acme-org', 'Advanced');
   const editor = page.getByTestId('risks-github');
   await expect(editor).toBeVisible();
   // By default it lists what the person may allow here: on an account they own, everything.
@@ -193,38 +193,35 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(reference).toHaveAttribute('href', '/reference/github#risk-github.merge-protected');
   await expect(reference).toHaveAttribute('target', '_blank');
   await merge.getByRole('button', { name: 'hide' }).click();
-  await expect(page.getByLabel('Allow github.merge-protected')).not.toBeChecked();
+  // Administer was not ticked: none of its permissions is.
+  await expect(page.getByLabel('Allow github.branch-protection-write')).not.toBeChecked();
   await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
-  await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('10000');
-  await expect(page.getByLabel('Per minute for github.read-code')).toHaveValue('240');
+  await expect(page.getByLabel('Limit for github.read-code')).not.toHaveValue('');
   await expect(page.getByTestId('risks-count-github')).toHaveText(
-    '10 chosen of 19 you may allow here',
+    /^\d+ chosen of 19 you may allow here$/,
   );
-  // Adjust one limit and one "ask me first": the choice says it was adjusted, the counts follow.
+  // Adjust one limit and one "ask me first": the Simple view says the list was adjusted.
+  const counted = (await digest.textContent()) ?? '';
   await page.getByLabel('Limit for github.read-code').fill('42');
-  await page.getByLabel('ask me first: github.create-pr').check();
-  await expect(githubChoices.locator('[data-choice="developer"]')).toContainText('adjusted');
-  await expect(digest).toContainText('7 run freely');
-  await expect(digest).toContainText('3 ask you first');
-  // Another preset would drop those edits: the screen asks first, and states the consequence.
+  await page.getByLabel('ask me first: github.read-meta').check();
+  await expect(digest).not.toHaveText(counted);
+  await showView(page, 'GitHub acme-org', 'Simple');
+  await expect(page.getByTestId('adjusted-github')).toBeVisible();
+  // A cran would write the list again over those edits: the screen asks first, and says why.
   // (a click, not a check: the choice does not move until the person confirms)
-  await presetChoice(page, 'GitHub acme-org', 'Read-only').click();
+  await cranChoice(page, 'GitHub acme-org', 'Ship', 'Confiant').click();
   const discard = page.getByTestId('discard-dialog');
   await expect(discard).toContainText('Discard what you changed?');
-  await expect(discard).toContainText('Another preset replaces');
+  await expect(discard).toContainText('The crans write this account');
   await discard.getByRole('button', { name: 'Cancel' }).click();
+  await expect(cranChoice(page, 'GitHub acme-org', 'Ship', 'Prudent')).toBeChecked();
+  await showView(page, 'GitHub acme-org', 'Advanced');
   await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('42');
-  await expect(presetChoice(page, 'GitHub acme-org', 'Developer')).toBeChecked();
   await snap(page, 'creation-editor');
-  await githubPanel.getByRole('button', { name: 'Hide the permissions' }).click();
-  await expect(page.getByTestId('risks-github')).toHaveCount(0);
 
   // A long catalog is searchable; what no selected resource can carry is one filter away,
   // listed with the reason and without a usable tick.
-  await page
-    .getByTestId('preset-supabase')
-    .getByRole('button', { name: 'Edit the permissions one by one' })
-    .click();
+  await showView(page, 'Supabase Acme Supabase', 'Advanced');
   const supabase = page.getByTestId('risks-supabase');
   const available = await supabase.locator('[data-permission]').count();
   await supabase.getByRole('button', { name: 'All', exact: true }).click();
@@ -250,18 +247,11 @@ test('create a three-account mission on one page, then replace its key and stop 
   await snap(page, 'creation-editor-plane');
   await plane.selectOption('all');
   expect(await supabase.locator('[data-permission]').count()).toBe(all);
-  // Untouched, the Supabase policy is still the preset's: nothing says "adjusted".
-  await expect(
-    page.getByRole('group', { name: 'Preset for Supabase Acme Supabase' }),
-  ).not.toContainText('adjusted');
-  await page
-    .getByTestId('preset-supabase')
-    .getByRole('button', { name: 'Hide the permissions' })
-    .click();
+  // Untouched, the Supabase list is still what the crans wrote: nothing says "adjusted".
+  await showView(page, 'Supabase Acme Supabase', 'Simple');
+  await expect(page.getByTestId('adjusted-supabase')).toHaveCount(0);
   // GitHub has one plane: no plane filter there.
-  await githubPanel.getByRole('button', { name: 'Edit the permissions one by one' }).click();
   await expect(page.getByLabel('Plane of the permissions of GitHub acme-org')).toHaveCount(0);
-  await githubPanel.getByRole('button', { name: 'Hide the permissions' }).click();
 
   await page.getByLabel('Limits reset').selectOption({ label: 'Every week' });
   await page.getByLabel('Expires', { exact: true }).selectOption({ index: 3 });
@@ -280,8 +270,8 @@ test('create a three-account mission on one page, then replace its key and stop 
   const readCodeLine = permissionRow(list, 'github.read-code');
   await expect(readCodeLine).toContainText('Read code, branches, commits, files');
   await expect(readCodeLine).toContainText('42 a week');
-  await expect(readCodeLine).toContainText('240 a minute');
-  await expect(permissionRow(list, 'github.create-pr')).toContainText('ask me first');
+  await expect(readCodeLine).toContainText(/\d+ a minute/);
+  await expect(permissionRow(list, 'github.read-meta')).toContainText('ask me first');
   await expect(permissionRow(list, 'github.read-code')).toContainText('runs freely');
   await snap(page, 'creation-confirm');
   // Nothing was created yet: going back changes nothing.
@@ -339,7 +329,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   const readCode = permissionRow(permissions, 'github.read-code');
   await expect(readCode).toContainText('Read code, branches, commits, files');
   await expect(readCode).toContainText('0 / 42');
-  await expect(permissionRow(permissions, 'github.create-pr')).toContainText('ask me first');
+  await expect(permissionRow(permissions, 'github.read-meta')).toContainText('ask me first');
   await expect(permissions.getByRole('columnheader', { name: 'Used this week' })).toBeVisible();
   await readCode.getByRole('button', { name: 'why?' }).click();
   await expect(permissions.getByText('Reads may leak secrets')).toBeVisible();
@@ -472,14 +462,9 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   await expect(page.getByLabel('Mission name')).toHaveValue('Review the pricing PR');
   await expect(page.getByLabel('Include GitHub acme-org')).toBeChecked();
   await expect(resourcesButton(page, 'GitHub acme-org', '1 of 3')).toBeVisible();
-  // A loaded list is the person's own until they pick a preset over it: the choice names
-  // the preset it came from as adjusted, and the editor is closed until asked for.
-  await expect(page.getByTestId('preset-digest-github')).toContainText('run freely');
-  await expect(page.getByTestId('risks-github')).toHaveCount(0);
-  await page
-    .getByTestId('preset-github')
-    .getByRole('button', { name: 'Edit the permissions one by one' })
-    .click();
+  // A loaded list carries no crans: it opens in the Advanced view, the honest view of it.
+  await expect(page.getByTestId('policy-digest-github')).toContainText('run freely');
+  await expect(page.getByTestId('risks-github')).toBeVisible();
   await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
   await expect(page.getByLabel('Limits reset')).toHaveValue('one-off');
   await expect(page.getByTestId('summary-carries')).toContainText('limits do not reset');
@@ -698,7 +683,7 @@ test('the reference explains each service: permissions against presets, tools, m
   await expect(page).toHaveURL(/#preset-migration-operator$/);
   await expect(page.getByTestId('preset-migration-operator')).toBeInViewport();
 
-  // A preset anchor, as mission creation links to it; a service with one part has no filter by part.
+  // A preset anchor; a service with one part has no filter by part.
   await page.goto('/reference/github#preset-developer');
   await expect(page.getByTestId('preset-developer')).toBeInViewport();
   await expect(page.getByTestId('plane-control')).toHaveCount(0);

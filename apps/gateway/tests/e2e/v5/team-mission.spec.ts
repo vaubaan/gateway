@@ -25,7 +25,7 @@ import {
   missionMenu,
   openCreatedMission,
   permissionRow,
-  pickPreset,
+  showView,
   revealedKey,
   savedKey,
   showPermissions,
@@ -123,8 +123,8 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   const ines = await browserOf(browser, request, E2E_SHARE_OWNER, '/missions/new');
   await ines.getByLabel('Mission name').fill(MISSION);
   await ines.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  // Custom starts from an empty list, in the editor.
-  await pickPreset(ines, `GitHub ${CONNECTION}`, 'Custom');
+  // The advanced view: the permissions one by one, none ticked yet.
+  await showView(ines, `GitHub ${CONNECTION}`, 'Advanced');
   await ines.getByLabel(`Allow ${READ_CODE}`).check();
   const inesToken = await createMission(ines);
   // Right after creating, the page says how to work with others.

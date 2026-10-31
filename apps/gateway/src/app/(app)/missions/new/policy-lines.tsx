@@ -53,7 +53,7 @@ export function accountLines(
   const lines = allowLines(chosen, notIncluded, NAMED_IN_THE_RAIL);
   return {
     ...lines,
-    can: chosen.length === 0 ? 'Nothing yet: pick a preset.' : lines.can,
+    can: chosen.length === 0 ? 'Nothing yet: tick a macro-action.' : lines.can,
     cannot: `${lines.cannot}${leftOut}`,
   };
 }
@@ -74,7 +74,7 @@ export function RailSummary({
   if (accounts.length === 0) {
     return (
       <p className={styles.railEmpty} data-testid="summary">
-        Nothing yet. Include an account and pick a preset.
+        Nothing yet. Include an account and tick a macro-action.
       </p>
     );
   }

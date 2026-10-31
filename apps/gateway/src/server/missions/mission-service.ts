@@ -29,6 +29,7 @@ import {
   parseRiskId,
   type Gate,
   type Iso8601,
+  type MacroAction,
   type MissionPolicyEntry,
   type RateLimit,
   type RiskId,
@@ -84,6 +85,7 @@ import {
 } from './bootstrap-kit';
 import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from './catalog-view';
+import { knownCrans, macroActionsOf, type MacroActionCrans } from './macro-actions';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -629,15 +631,37 @@ function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): Issuanc
  * non-empty list for `selected`. Readers treat that row as "none".
  */
 function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnectionRecord {
+  const crans = Object.keys(resolved.crans).length > 0 ? { crans: resolved.crans } : {};
   if (resolved.resources.scope === 'connection') {
-    return { connectionId: resolved.connection_id, resourceScope: 'connection', resourceIds: [] };
+    return {
+      connectionId: resolved.connection_id,
+      resourceScope: 'connection',
+      resourceIds: [],
+      ...crans,
+    };
   }
   const resourceIds = resolved.resources.resource_ids;
   return {
     connectionId: resolved.connection_id,
     resourceScope: resourceIds.length > 0 ? 'selected' : 'all',
     resourceIds,
+    ...crans,
   };
+}
+
+/** The crans an edited draft records per connection, kept to the macro-actions each connection has. */
+function cransOfDraft(
+  context: readonly IssuanceConnection[],
+  draft: MissionDraft,
+): Map<string, MacroActionCrans> {
+  const crans = new Map<string, MacroActionCrans>();
+  for (const line of draft.connections) {
+    const connection = context.find(
+      (c) => c.id === line.connection_id || (!line.connection_id && c.provider === line.provider),
+    );
+    if (connection) crans.set(connection.id, knownCrans(connection, line.crans));
+  }
+  return crans;
 }
 
 /**
@@ -679,6 +703,8 @@ export class MissionService {
   private readonly mint: TokenMinter;
   /** Catalog rows per provider. The catalogs are immutable for the life of the registry. */
   private readonly catalogRows = new Map<string, readonly CatalogRisk[]>();
+  /** Macro-actions per provider, "Anything else" included; immutable like the catalogs. */
+  private readonly catalogActions = new Map<string, readonly MacroAction[]>();
 
   private readonly budget: Pick<SessionService, 'stateOf'>;
 
@@ -727,7 +753,17 @@ export class MissionService {
       risks: this.risksOf(connection.provider),
       authority: authority.riskIds,
       presets: this.deps.registry.presetsOf(connection.provider),
+      macro_actions: this.macroActionsOf(connection.provider),
     };
+  }
+
+  private macroActionsOf(provider: string): readonly MacroAction[] {
+    const cached = this.catalogActions.get(provider);
+    if (cached) return cached;
+    const registered = this.deps.registry.get(provider);
+    const actions = registered ? macroActionsOf(registered.plugin.catalog) : [];
+    this.catalogActions.set(provider, actions);
+    return actions;
   }
 
   private risksOf(provider: string): readonly CatalogRisk[] {
@@ -837,6 +873,7 @@ export class MissionService {
         policy: mission.policy
           .map(policyEntryOf)
           .filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
+        ...(c.crans ? { crans: c.crans } : {}),
       });
     }
     return {
@@ -1400,6 +1437,7 @@ export class MissionService {
         resource_scope: c.resourceScope,
         resource_ids: [...c.resourceIds],
         policy: policy.filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
+        ...(c.crans ? { crans: c.crans } : {}),
       });
     }
     return {
@@ -1459,6 +1497,7 @@ export class MissionService {
       mission,
       snapshot,
       judgement,
+      crans: cransOfDraft(connections, body.draft),
       asked: body.revision,
       revision: revisionOfRecord(mission),
     };
@@ -1502,7 +1541,7 @@ export class MissionService {
   async edit(user: AuthoritySubject, missionId: string, raw: unknown): Promise<EditResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
-    const { mission, snapshot, judgement, revision } = judged;
+    const { mission, snapshot, judgement, revision, crans } = judged;
     if (judged.asked !== revision) return { ok: false, reason: 'conflict' };
     if (!judgement.ok) {
       return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
@@ -1515,11 +1554,15 @@ export class MissionService {
       unchanged: (current) => revisionOfRecord(current) === revision,
       name: after.name,
       expiresAt: after.expires_at,
-      connections: after.connections.map((c) => ({
-        connectionId: c.connection_id,
-        resourceScope: c.resource_scope,
-        resourceIds: c.resource_scope === 'connection' ? [] : [...c.resource_ids],
-      })),
+      connections: after.connections.map((c) => {
+        const recorded = crans.get(c.connection_id);
+        return {
+          connectionId: c.connection_id,
+          resourceScope: c.resource_scope,
+          resourceIds: c.resource_scope === 'connection' ? [] : [...c.resource_ids],
+          ...(recorded && Object.keys(recorded).length > 0 ? { crans: recorded } : {}),
+        };
+      }),
       policy: after.connections.flatMap((c) => c.policy.map(policyEntryRecordOf)),
       summary: (closed) => ({
         kind: 'mission-changed',

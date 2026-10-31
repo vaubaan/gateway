@@ -28,6 +28,7 @@ import { GATES } from '@vaubaan/shared/domain';
 import { uncoveredRisks } from '../authority/catalog-authority';
 import { isResolvable } from './catalog-view';
 import { EVERYTHING_I_HOLD, expansionDigest, findPreset, presetIdsOf } from './everything-i-hold';
+import { knownCrans } from './macro-actions';
 import type {
   CatalogRisk,
   ConnectionPreview,
@@ -660,6 +661,7 @@ export function previewConnection(
       unresolvable: buckets.unresolvable,
       missing_budget: buckets.missingBudget,
       skipped_from_preset: buckets.skipped,
+      crans: knownCrans(connection, draft.crans),
     },
     issues,
     notices: [
@@ -825,6 +827,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
       : { scope: 'selected', resource_ids: p.resources.map((r) => r.id) },
     preset: p.preset?.id ?? null,
     policy: p.passes,
+    crans: p.crans,
   }));
 
   return {
