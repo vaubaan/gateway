@@ -42,9 +42,9 @@ import {
 import {
   expandMacroAction,
   macroActionsOf,
-  palierOf,
+  tierOf,
   TRUST_TRUST_LEVELS,
-  type Palier,
+  type Tier,
   type TrustLevel,
 } from '../missions/macro-actions';
 import { RISK_KINDS, type CatalogRisk, type RiskKind } from '../missions/model';
@@ -318,7 +318,7 @@ export interface MacroActionTag {
 /** What one variant of a risk gets at one trust level: its line, or `null` when the trust level leaves it out. */
 export interface TrustLevelCell {
   readonly risk: CatalogRisk;
-  readonly palier: Palier;
+  readonly tier: Tier;
   readonly line: {
     readonly quota: number;
     readonly rate_limit: RateLimit;
@@ -372,7 +372,7 @@ function riskReferenceOf(
         trustLevel,
         family.variants.map((risk) => ({
           risk,
-          palier: palierOf(risk.vector),
+          tier: tierOf(risk.vector),
           line: context.cells.get(risk.risk_id)?.[trustLevel] ?? null,
         })),
       ]),
@@ -529,7 +529,7 @@ export const TOOL_RISKS_NOTE =
 
 /** What the mark "hands a token to the agent" means (spec §2.4). */
 export const TOKEN_HANDOUT_NOTE =
-  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. At every trust level, a token that can write is handed only after the creator approves the call; a read-only token follows its palier. The long-lived credential never leaves the gateway.';
+  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. At every trust level, a token that can write is handed only after the creator approves the call; a read-only token follows its tier. The long-lived credential never leaves the gateway.';
 
 /** What a handed token can do at the provider. */
 export type TokenAccess = 'read-only' | 'write';

@@ -30,7 +30,7 @@ import {
   explainOrphan,
   isResolvable,
   macroActionOfRisk,
-  palierOf,
+  tierOf,
   TRUST_TRUST_LEVELS,
   type DraftPeriod,
   type IssuanceConnection,
@@ -38,7 +38,7 @@ import {
   type MissionIssuer,
   type MissionOverview,
   type MissionPreview,
-  type Palier,
+  type Tier,
   reachesLaterResources,
   type TrustLevel,
 } from '../missions';
@@ -84,7 +84,7 @@ export interface TrustLevelYieldView {
   readonly auto: number;
   /** Lines that ask the creator first. */
   readonly approval: number;
-  /** Risks the trust level does not accept (palier 4 at Prudent). */
+  /** Risks the trust level does not accept (tier 4 at Prudent). */
   readonly left_out: number;
 }
 
@@ -227,7 +227,7 @@ export interface CatalogRiskView {
   readonly reason: string;
   readonly level: string;
   /** 1 mild to 4 irreversible, read from the vector: what a trust level maps to a gate. */
-  readonly palier: Palier;
+  readonly tier: Tier;
   /** The macro-action the risk belongs to; `anything-else` for the fallback, `null` when deprecated. */
   readonly macro_action: string | null;
   /** The catalog's catch-all for writes it does not name; only in "Anything else". */
@@ -248,7 +248,7 @@ export interface CatalogView {
   readonly risks: readonly CatalogRiskView[];
   /** The macro-actions, each risk with its base budget (unqualified ids: one line per environment reached). */
   readonly macro_actions: readonly CatalogMacroActionView[];
-  /** Per trust level: the gate of each palier (`null`: not accepted) and the factor on the base budget. */
+  /** Per trust level: the gate of each tier (`null`: not accepted) and the factor on the base budget. */
   readonly trust_levels: Readonly<Record<TrustLevel, TrustLevelRuleView>>;
   /** With a connection: the built-in `everything-i-hold` written out for it, entry by entry. */
   readonly everything_i_hold?: {
@@ -266,7 +266,7 @@ export interface CatalogMacroActionView {
 }
 
 export interface TrustLevelRuleView {
-  readonly gates: Readonly<Record<`${Palier}`, Gate | null>>;
+  readonly gates: Readonly<Record<`${Tier}`, Gate | null>>;
   readonly budget_factor: number;
 }
 
@@ -301,7 +301,7 @@ export function catalogView(
       label: risk.label,
       reason: risk.reason,
       level: risk.level,
-      palier: palierOf(risk.vector),
+      tier: tierOf(risk.vector),
       macro_action: macroActionOfRisk(catalog, risk)?.id ?? null,
       fallback: risk.fallback,
       deprecated: risk.deprecated,

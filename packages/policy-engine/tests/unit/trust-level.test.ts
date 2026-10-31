@@ -1,5 +1,5 @@
 /**
- * Paliers, trust levels and the expansion of a macro-action
+ * Tiers, trust levels and the expansion of a macro-action
  * (ADR macro-actions-and-trust-levels-prefill-the-policy).
  */
 import { describe, expect, test } from 'vitest';
@@ -10,7 +10,7 @@ import {
   budgetAtTrustLevel,
   TRUST_LEVEL_GATES,
   expandAtTrustLevel,
-  palierOf,
+  tierOf,
   TRUST_TRUST_LEVELS,
   type TrustLevelCandidate,
 } from '../../src/trust-level.ts';
@@ -24,38 +24,36 @@ const mild: RiskVector = {
   persistence: 'stateless',
 };
 
-describe('palierOf — consequence and sensitivity', () => {
+describe('tierOf — consequence and sensitivity', () => {
   test('reversibility first', () => {
-    expect(palierOf({ ...mild, reversibility: 'irreversible' })).toBe(4);
-    expect(palierOf({ ...mild, reversibility: 'costly', data: 'pii' })).toBe(3);
+    expect(tierOf({ ...mild, reversibility: 'irreversible' })).toBe(4);
+    expect(tierOf({ ...mild, reversibility: 'costly', data: 'pii' })).toBe(3);
   });
 
-  test('reversible but sensitive, wide or unbounded is palier 2', () => {
-    expect(palierOf({ ...mild, data: 'pii' })).toBe(2);
-    expect(palierOf({ ...mild, data: 'secret' })).toBe(2);
-    expect(palierOf({ ...mild, blast: 'bulk' })).toBe(2);
-    expect(palierOf({ ...mild, blast: 'account' })).toBe(2);
-    expect(palierOf({ ...mild, cost: 'unbounded' })).toBe(2);
+  test('reversible but sensitive, wide or unbounded is tier 2', () => {
+    expect(tierOf({ ...mild, data: 'pii' })).toBe(2);
+    expect(tierOf({ ...mild, data: 'secret' })).toBe(2);
+    expect(tierOf({ ...mild, blast: 'bulk' })).toBe(2);
+    expect(tierOf({ ...mild, blast: 'account' })).toBe(2);
+    expect(tierOf({ ...mild, cost: 'unbounded' })).toBe(2);
   });
 
-  test('the rest is palier 1, visibility and persistence aside', () => {
-    expect(palierOf(mild)).toBe(1);
-    expect(palierOf({ ...mild, blast: 'env', visibility: 'public', persistence: 'posture' })).toBe(
-      1,
-    );
+  test('the rest is tier 1, visibility and persistence aside', () => {
+    expect(tierOf(mild)).toBe(1);
+    expect(tierOf({ ...mild, blast: 'env', visibility: 'public', persistence: 'posture' })).toBe(1);
   });
 });
 
 describe('the trust levels', () => {
   test('a higher trust level never asks more nor accepts less', () => {
     const rank = (g: string | null) => (g === null ? 0 : g === 'approval' ? 1 : 2);
-    for (const palier of [1, 2, 3, 4] as const) {
-      const ranks = TRUST_TRUST_LEVELS.map((c) => rank(TRUST_LEVEL_GATES[c][palier]));
+    for (const tier of [1, 2, 3, 4] as const) {
+      const ranks = TRUST_TRUST_LEVELS.map((c) => rank(TRUST_LEVEL_GATES[c][tier]));
       expect([...ranks].sort()).toEqual(ranks);
     }
   });
 
-  test('palier 1 always runs freely ; palier 4 never does', () => {
+  test('tier 1 always runs freely ; tier 4 never does', () => {
     for (const trustLevel of TRUST_TRUST_LEVELS) {
       expect(TRUST_LEVEL_GATES[trustLevel][1]).toBe('auto');
       expect(TRUST_LEVEL_GATES[trustLevel][4]).not.toBe('auto');
@@ -105,14 +103,14 @@ describe('expandAtTrustLevel', () => {
     candidate('acme.destroy', { ...mild, reversibility: 'irreversible' }),
   ];
 
-  test('Prudent leaves the irreversible out and asks for the rest but palier 1', () => {
+  test('Prudent leaves the irreversible out and asks for the rest but tier 1', () => {
     const { lines, left_out } = expandAtTrustLevel(candidates, 'prudent');
-    expect(lines.map((l) => [l.risk_id, l.gate, l.palier])).toEqual([
+    expect(lines.map((l) => [l.risk_id, l.gate, l.tier])).toEqual([
       ['acme.read', 'auto', 1],
       ['acme.export', 'approval', 2],
       ['acme.rewrite', 'approval', 3],
     ]);
-    expect(left_out).toEqual([{ risk_id: 'acme.destroy', palier: 4 }]);
+    expect(left_out).toEqual([{ risk_id: 'acme.destroy', tier: 4 }]);
   });
 
   test('Autonome accepts everything, asking only before the irreversible', () => {
@@ -124,7 +122,7 @@ describe('expandAtTrustLevel', () => {
 
   test('a risk handing the agent a token that can write asks first at every trust level', () => {
     const minted = { ...candidate('acme.mint-token', mild), hands_write_token: true };
-    expect(expandAtTrustLevel([minted], 'autonome').lines.map((l) => [l.gate, l.palier])).toEqual([
+    expect(expandAtTrustLevel([minted], 'autonome').lines.map((l) => [l.gate, l.tier])).toEqual([
       ['approval', 1],
     ]);
   });

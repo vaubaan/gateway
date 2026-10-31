@@ -134,7 +134,7 @@ test('an agent with a mission key and nothing else clones, pushes, is refused, a
     '[remote rejected] main -> main (permission github.merge-protected is not in this mission)',
   );
 
-  // A rewrite of the feature branch: Propose at Confiant asks first (force-push, palier 3).
+  // A rewrite of the feature branch: Propose at Confiant asks first (force-push, tier 3).
   await git(repo, ['switch', 'feature/hello']);
   await git(repo, ['commit', '--amend', '-m', 'Say hello, better']);
   const rewritten = (await git(repo, ['rev-parse', 'HEAD'])).out.trim();

@@ -9,7 +9,7 @@
 # 7 named risks + 1 fallback (`uncategorized-write`) : `exec-read`,
 # `exec-read-secret-files`, `exec-write`, and one risk per command class that
 # hurts (`exec-destructive`, `exec-package-install`, `exec-service-control`,
-# `exec-sudo`) so their palier can gate them with `approval`.
+# `exec-sudo`) so their tier can gate them with `approval`.
 #
 # How a command reaches a risk (see `src/shell-lex.ts`, `src/policy.ts`,
 # `src/command/`) :

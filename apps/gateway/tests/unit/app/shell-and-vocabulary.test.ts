@@ -26,7 +26,7 @@ import {
   giveAccessLabel,
   holderWords,
   ownedBy,
-  palierWord,
+  tierWord,
   REFUSAL_WORDS,
   shortDate,
   stepsDone,
@@ -351,8 +351,8 @@ describe('the words of the accounts, reference, activity and settings pages', ()
     expect(shortDate('2025-09-02T08:00:00Z', now)).toBe('2 Sep 2025');
   });
 
-  it('names a palier, the retention of the record and the setup count', () => {
-    expect(palierWord(3)).toBe('Palier 3');
+  it('names a tier, the retention of the record and the setup count', () => {
+    expect(tierWord(3)).toBe('Tier 3');
     expect(activityLede(90)).toBe(
       'Every call an agent made and every change a person made, kept 90 days. This is the audit record.',
     );

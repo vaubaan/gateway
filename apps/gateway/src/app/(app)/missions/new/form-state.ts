@@ -25,12 +25,12 @@ import {
   DEFAULT_TRUST_LEVEL,
   defaultLineOf,
   expandMacroAction,
-  highestPalier,
+  highestTier,
   knownTrustLevels,
   linesOfTrustLevels,
   rowsOf,
   type MacroActionTrustLevels,
-  type Palier,
+  type Tier,
   type TrustLevel,
 } from '@/server/missions/macro-actions';
 import { defaultResources, previewConnection } from '@/server/missions/preview';
@@ -310,7 +310,7 @@ export interface MacroActionRow {
   readonly total: number;
   readonly free: number;
   readonly asks: number;
-  /** Left out by the trust level (palier 4 at Prudent). */
+  /** Left out by the trust level (tier 4 at Prudent). */
   readonly leftOut: number;
   /** Outside what the reader may allow, or no selected resource carries the environment. */
   readonly unavailable: number;
@@ -348,12 +348,9 @@ export function macroActionRows(
   });
 }
 
-/** The highest palier among the chosen lines, or `null` when nothing is chosen. */
-export function chosenPalier(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): Palier | null {
-  return highestPalier(connection.risks.filter((risk) => state.entries[risk.risk_id]));
+/** The highest tier among the chosen lines, or `null` when nothing is chosen. */
+export function chosenTier(connection: IssuanceConnection, state: ConnectionState): Tier | null {
+  return highestTier(connection.risks.filter((risk) => state.entries[risk.risk_id]));
 }
 
 /** One risk "Everything I hold" yields on this connection, with the values the mission would get. */

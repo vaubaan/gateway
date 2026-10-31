@@ -136,7 +136,7 @@ callback registered at a provider).
   "Change", "Administer"): a group of `RiskId`s of one catalog, each with a base budget
   ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every connection also offers "Anything else"
   (the fallback). A creator ticks macro-actions and sets each to a **trust level** (Prudent, Confiant,
-  Autonome), which pre-fills the gate and budget of each of its risks from the risk's palier. It
+  Autonome), which pre-fills the gate and budget of each of its risks from the risk's tier. It
   grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
   the token. Every connection also offers the built-in expansion **"Everything I hold on this
   account"** (`everything-i-hold`, §3.2).
@@ -287,7 +287,7 @@ permissions and executes nothing.
 - **One deliberate exception:** a tool whose purpose is to hand the agent a short-lived, narrowly
   scoped provider token. It is its own catalog risk, never accepted by default, counted and audited;
   the long-lived credential never leaves. A trust level never runs a token-handing risk that grants
-  write freely: its pre-filled gate is `approval` at every trust level; a read-only one follows its palier.
+  write freely: its pre-filled gate is `approval` at every trust level; a read-only one follows its tier.
   An undeclared one is write.
 - An exfiltrated mission token grants the mission's rights within its budget until revoked; the
   audit names its holder, and revoking it leaves other holders working.
@@ -360,7 +360,7 @@ a mission whose accepted risk has no resolved budget.
   creator's authority, then adjusted risk by risk. The persisted policy never references a
   macro-action or a trust level, so a changed catalog alters no mission; the trust levels are recorded with the
   mission only to redraw the form. The interface shows what each macro-action yields at its trust level
-  (how many run freely, ask first, are left out) and the account's highest palier.
+  (how many run freely, ask first, are left out) and the account's highest tier.
 - **`everything-i-hold`**
   ([preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md)).
   At preview and issuance it expands to one line per non-deprecated `RiskId` the creator's authority
@@ -500,7 +500,7 @@ providers to identify the user at consent
 ([management-door-authorization-server](../decisions/management-door-authorization-server.md)).
 
 - **Read**: my connections and those shared with me, with the exact restriction; each provider's
-  catalog with its macro-actions, each risk's palier and the trust level table; my missions, policy,
+  catalog with its macro-actions, each risk's tier and the trust level table; my missions, policy,
   session and remaining budget.
 - **Preview** a draft `RiskId → (budget, gate)` on some connections: what passes, what exceeds the
   authority, what the mission could call; issues nothing. A draft connection may give trust levels per
@@ -606,7 +606,7 @@ stands in without one.
   all", each with severity and reason; it lists the orphaned missions the access would bring back.
   Ownerless accounts are the last region for an administrator, who names a new owner there.
 - **Reference** — generated for every registered plugin, read-only, for any signed-in user:
-  **Permissions** (permissions by macro-action, each with its palier, base budget and its gate at each
+  **Permissions** (permissions by macro-action, each with its tier, base budget and its gate at each
   trust level; a permission
   unfolds its reason, the six dimensions behind its severity and its tools), **Tools** ("depends on
   the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
@@ -781,7 +781,7 @@ values.
   the bucket is touched.
 - **No credential to the executor.** §2.4. No read returns a secret value under a non-secret risk:
   an answer that may carry secrets passes an allow-list of non-secret fields (others become
-  `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk, palier 2 at least, so
+  `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk, tier 2 at least, so
   Prudent asks before it.
 - **Transport.** Plain HTTP on the local network, behind a TLS termination held by the company.
 - **Human authentication.** Each sign-in attempt carries its own `state`, nonce and PKCE verifier
