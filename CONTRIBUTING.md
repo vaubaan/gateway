@@ -18,6 +18,36 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 Security problems are **not** reported in public issues: see
 [Security issues](#security-issues).
 
+## Your first contribution
+
+Issues labelled
+[`good first issue`](https://github.com/vaubaan/gateway/labels/good%20first%20issue) are small,
+self-contained and come with a pointer to the files involved; `help wanted` marks larger ones the
+maintainers would welcome help on. Leave a comment on the issue before you start so that two people
+do not do the same work.
+
+The usual first contribution is a plugin or a catalog correction: the
+[plugin kit](plugins/README.md) is a step-by-step guide that assumes you have never seen the
+project, and [`plugins/_template`](plugins/_template/README.md) is a complete plugin for an
+imaginary provider to copy. A correction to a risk catalog needs no knowledge of the rest of the
+code base.
+
+The labels in use:
+
+| Label              | Meaning                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| `good first issue` | Small and self-contained, with the files to read named.             |
+| `help wanted`      | The maintainers would welcome a contribution.                       |
+| `bug`              | Set by the bug report form.                                         |
+| `enhancement`      | Set by the feature request form.                                    |
+| `plugin`           | Set by the plugin request form.                                     |
+| `catalog`          | Set by the catalog correction form.                                 |
+| `e2e`              | On a pull request: run the browser tests in CI (billed, on demand). |
+| `dependencies`     | Set by Dependabot on its pull requests.                             |
+
+Who maintains the project and how decisions are taken: [MAINTAINERS.md](MAINTAINERS.md). What is
+planned: [ROADMAP.md](ROADMAP.md).
+
 ## Prerequisites
 
 - **Node.js 26 or later and npm 11 or later** (CI and the image run Node 26).
@@ -31,7 +61,7 @@ Security problems are **not** reported in public issues: see
 
 ```bash
 git clone https://github.com/vaubaan/gateway.git
-cd vaubaan-gateway
+cd gateway
 npm ci            # installs every workspace
 npm run ci        # the gate: type-check, lint, format check, build, tests
 ```
@@ -154,8 +184,9 @@ Three rules about these documents:
 ## English only
 
 Code, comments, commit messages, documentation, issues and pull requests are
-written in English. A few v4 decisions still in force are in French; they
-are not a model to follow.
+written in English. A few words of the interface and the catalogs (the names of
+the trust levels) are still provisional and will be renamed in English
+([ROADMAP.md](ROADMAP.md)); they are not a model to follow.
 
 ## Rules the code follows
 
