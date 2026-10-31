@@ -31,6 +31,10 @@ const ALLOWED: Record<string, string> = {
     'released entries are history, and the upgrade note names the field agents used to send',
   'apps/gateway/migrations/0025_mission_connection_crans.sql':
     'an applied migration is checksummed: its text never changes',
+  'apps/gateway/migrations/0026_mission_connection_trust_levels.sql':
+    'rewrites the values stored under their old names',
+  'apps/gateway/tests/unit/server/store/migrate.test.ts':
+    'proves that migration 0026 rewrites those stored values',
 };
 
 const TEXT = /\.(ts|tsx|js|mjs|cjs|json|md|mdx|ya?ml|sql|css|html|sh|txt|toml)$/;
