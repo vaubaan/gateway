@@ -41,7 +41,7 @@
 import type { MissionTokenKind, SessionEventDetails } from '@vaubaan/shared';
 
 import { findActiveUserByEmail } from '../authority/principals';
-import type { AuthoritySubject } from '../authority';
+import type { Subject } from '../authority';
 import type { MissionState } from '../budget';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -196,7 +196,7 @@ export class MissionTeamService {
   // ───────────────────────────────────────────────────────────────────────────
 
   /** The members and tokens of a mission, for its creator or one of its members. */
-  async team(user: AuthoritySubject, missionId: string): Promise<MissionTeam | null> {
+  async team(user: Subject, missionId: string): Promise<MissionTeam | null> {
     const access = await this.deps.missions.access(user, missionId);
     if (!access) return null;
     const { mission, role } = access;
@@ -263,7 +263,7 @@ export class MissionTeamService {
    * creator's (spec §11.2). They get no token here: they generate their own.
    */
   async addMember(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     target: { readonly email: string },
   ): Promise<AddMemberResult> {
@@ -317,7 +317,7 @@ export class MissionTeamService {
    * working token (and the door checks membership on every call besides).
    */
   async removeMember(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     memberUserId: string,
   ): Promise<RemoveMemberResult> {
@@ -354,7 +354,7 @@ export class MissionTeamService {
    * token, if any, stops working at once; nobody else's token is touched. The
    * secret is in this result only, handed to the holder themselves.
    */
-  async generateToken(user: AuthoritySubject, missionId: string): Promise<IssuedTokenResult> {
+  async generateToken(user: Subject, missionId: string): Promise<IssuedTokenResult> {
     const access = await this.deps.missions.access(user, missionId);
     if (!access) return { ok: false, reason: 'not-found' };
     const { mission } = access;
@@ -392,7 +392,7 @@ export class MissionTeamService {
    * `replaceNamedToken`.
    */
   async createNamedToken(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     rawName: unknown,
   ): Promise<NamedTokenResult> {
@@ -451,7 +451,7 @@ export class MissionTeamService {
    * new one after) and one `rotation` event. Creator only.
    */
   async replaceNamedToken(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     tokenId: string,
   ): Promise<ReplaceNamedTokenResult> {
@@ -517,7 +517,7 @@ export class MissionTeamService {
    * entry (`mission-member-left`) and, when they held a key, a `revocation` event.
    * The creator cannot leave: they stop the mission instead.
    */
-  async leave(user: AuthoritySubject, missionId: string): Promise<LeaveResult> {
+  async leave(user: Subject, missionId: string): Promise<LeaveResult> {
     const access = await this.deps.missions.access(user, missionId);
     if (!access) return { ok: false, reason: 'not-found' };
     if (access.role === 'creator') return { ok: false, reason: 'creator-cannot-leave' };
@@ -548,11 +548,7 @@ export class MissionTeamService {
    * budget are untouched (spec §7.9 bis). A member revokes their own token;
    * the creator revokes any. Idempotent: a token already retired is `already`.
    */
-  async revokeToken(
-    user: AuthoritySubject,
-    missionId: string,
-    tokenId: string,
-  ): Promise<RevokeTokenResult> {
+  async revokeToken(user: Subject, missionId: string, tokenId: string): Promise<RevokeTokenResult> {
     const access = await this.deps.missions.access(user, missionId);
     if (!access) return { ok: false, reason: 'not-found' };
     const { mission, role } = access;
@@ -620,7 +616,7 @@ export class MissionTeamService {
 
   /** The mission when `user` created it; `null` for anyone else, a member included. */
   private async creatorMission(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
   ): Promise<MissionAccess['mission'] | null> {
     const access = await this.deps.missions.access(user, missionId);

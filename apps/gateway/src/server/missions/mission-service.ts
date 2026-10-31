@@ -38,7 +38,7 @@ import {
 
 import type {
   AuthorityService,
-  AuthoritySubject,
+  Subject,
   InspectedMission,
   LostPart,
   MissionGrounds,
@@ -616,9 +616,6 @@ export interface MissionDetail extends MissionOverview {
   readonly kit: BootstrapKit | null;
 }
 
-/** A user who may read the mission: `id`, and nothing else is trusted from the caller. */
-type Reader = AuthoritySubject;
-
 /** The reached resources the mission created itself, as `created_resource_ids` (or nothing). */
 function createdIdsOf(
   selection: MissionConnectionRecord,
@@ -742,7 +739,7 @@ export class MissionService {
    * connection on which they hold a non-empty authority, with its resources,
    * its catalog as explicit ids and its macro-actions.
    */
-  async issuanceContext(user: AuthoritySubject): Promise<IssuanceConnection[]> {
+  async issuanceContext(user: Subject): Promise<IssuanceConnection[]> {
     const candidates = await this.deps.authority.connectionsOf(user);
     const context: IssuanceConnection[] = [];
     for (const connection of candidates) {
@@ -754,7 +751,7 @@ export class MissionService {
   }
 
   private async issuanceConnection(
-    user: AuthoritySubject,
+    user: Subject,
     connection: ConnectionRecord,
   ): Promise<IssuanceConnection | null> {
     const registered = this.deps.registry.get(connection.provider);
@@ -802,7 +799,7 @@ export class MissionService {
    * importer) — so that the preview and the later issuance agree.
    */
   async preview(
-    user: AuthoritySubject,
+    user: Subject,
     draft: MissionDraft,
     options: PreviewOptions = {},
   ): Promise<MissionPreview> {
@@ -815,7 +812,7 @@ export class MissionService {
   // ───────────────────────────────────────────────────────────────────────────
 
   async issue(
-    user: AuthoritySubject,
+    user: Subject,
     draft: MissionDraft,
     options: IssueOptions = {},
   ): Promise<IssueResult> {
@@ -877,7 +874,7 @@ export class MissionService {
    * itself keeps reaching none. A whole-connection source is drafted
    * `{ scope: 'connection' }`: the copy is as wide as its source, no wider.
    */
-  async draftFrom(user: AuthoritySubject, missionId: string): Promise<MissionDraft | null> {
+  async draftFrom(user: Subject, missionId: string): Promise<MissionDraft | null> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
     const connections: DraftConnection[] = [];
@@ -941,7 +938,7 @@ export class MissionService {
    * returns a new mission with its own token and its own budget.
    */
   async duplicate(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     overrides: Partial<Pick<MissionDraft, 'name' | 'period' | 'expires_at'>> = {},
     options: IssueOptions = {},
@@ -984,7 +981,7 @@ export class MissionService {
    * human rotates any of their missions in the interface.
    */
   async rotate(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: IssueOptions = {},
   ): Promise<RotateResult> {
@@ -1032,7 +1029,7 @@ export class MissionService {
    * it"). Anyone else reads none. Derived at this instant, like every reading of
    * `orphaned`.
    */
-  async orphanedOn(user: AuthoritySubject, connectionId: string): Promise<OrphanedOnConnection[]> {
+  async orphanedOn(user: Subject, connectionId: string): Promise<OrphanedOnConnection[]> {
     const connection = await this.deps.store.connections.getById(connectionId);
     if (!connection || !(await this.owns(user, connection))) return [];
     const orphaned: OrphanedOnConnection[] = [];
@@ -1056,7 +1053,7 @@ export class MissionService {
    * the connection lists them, so that its owner knows what removing an access or
    * disconnecting would stop.
    */
-  async onConnection(user: AuthoritySubject, connectionId: string): Promise<MissionOnConnection[]> {
+  async onConnection(user: Subject, connectionId: string): Promise<MissionOnConnection[]> {
     const connection = await this.deps.store.connections.getById(connectionId);
     if (!connection || !(await this.owns(user, connection))) return [];
     const listed: MissionOnConnection[] = [];
@@ -1103,7 +1100,7 @@ export class MissionService {
    * for the creator only.
    */
   async revoke(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: IssueOptions = {},
   ): Promise<RevokeResult> {
@@ -1149,7 +1146,7 @@ export class MissionService {
    * the missions of their connection that serve.
    */
   private async closableBy(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: IssueOptions,
   ): Promise<{ mission: MissionRecord; closer: Closer } | null> {
@@ -1171,7 +1168,7 @@ export class MissionService {
   }
 
   /** The one definition of "owns the connection now": the authority's (`basis: 'owner'`). */
-  private async owns(user: AuthoritySubject, connection: ConnectionRecord): Promise<boolean> {
+  private async owns(user: Subject, connection: ConnectionRecord): Promise<boolean> {
     return (await this.deps.authority.authorityOf(user, connection)).basis === 'owner';
   }
 
@@ -1184,7 +1181,7 @@ export class MissionService {
    * risk, and leaves the open requests where they are.
    */
   async setGate(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     riskId: RiskId,
     gate: string,
@@ -1266,7 +1263,7 @@ export class MissionService {
    * revocation would.
    */
   async setLimits(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     edits: readonly LimitEdit[],
   ): Promise<SetLimitsResult> {
@@ -1349,7 +1346,7 @@ export class MissionService {
     return { ok: true, mission: written.mission, changed };
   }
 
-  async permissionOptions(user: AuthoritySubject, missionId: string) {
+  async permissionOptions(user: Subject, missionId: string) {
     const mission = await this.ownMission(user, missionId);
     if (!mission || gateEditBlockedBy(mission)) return null;
     const reached = await this.detailConnections(mission);
@@ -1396,7 +1393,7 @@ export class MissionService {
   }
 
   /** Shared by a direct edit and the creator's answer to a permission request. */
-  async changePermissions(user: AuthoritySubject, missionId: string, raw: unknown) {
+  async changePermissions(user: Subject, missionId: string, raw: unknown) {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false as const, reason: 'not-found' };
     const parsed = permissionEditSchema.safeParse(raw);
@@ -1486,7 +1483,7 @@ export class MissionService {
    * draft, its revision, what was used this period and the open requests. `null`
    * ("not found") for anyone but the creator.
    */
-  async editView(user: AuthoritySubject, missionId: string): Promise<MissionEditView | null> {
+  async editView(user: Subject, missionId: string): Promise<MissionEditView | null> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
     const snapshot = await this.snapshotOf(mission);
@@ -1513,7 +1510,7 @@ export class MissionService {
   }
 
   /** The judgement of an edit against the mission as it stands. */
-  private async judged(user: AuthoritySubject, missionId: string, raw: unknown) {
+  private async judged(user: Subject, missionId: string, raw: unknown) {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false as const, reason: 'not-found' as const };
     const blocked = gateEditBlockedBy(mission);
@@ -1537,11 +1534,7 @@ export class MissionService {
   }
 
   /** What an edit would change, or why it would be refused. Writes nothing. */
-  async previewEdit(
-    user: AuthoritySubject,
-    missionId: string,
-    raw: unknown,
-  ): Promise<EditPreviewResult> {
+  async previewEdit(user: Subject, missionId: string, raw: unknown): Promise<EditPreviewResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
     const { judgement } = judged;
@@ -1571,7 +1564,7 @@ export class MissionService {
    * mission then reads `orphaned` and serves nothing, as an issuance racing the same
    * revocation would.
    */
-  async edit(user: AuthoritySubject, missionId: string, raw: unknown): Promise<EditResult> {
+  async edit(user: Subject, missionId: string, raw: unknown): Promise<EditResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
     const { mission, snapshot, judgement, revision, trustLevels } = judged;
@@ -1638,7 +1631,7 @@ export class MissionService {
    * resources the mission reaches there. Empty when every line passes.
    */
   private async limitIssues(
-    user: AuthoritySubject,
+    user: Subject,
     mission: MissionRecord,
     lines: readonly MissionPolicyEntry[],
   ): Promise<PreviewIssue[]> {
@@ -1815,7 +1808,7 @@ export class MissionService {
    * (`role: 'creator'`) and the ones shared with them as a member
    * (`role: 'member'`, spec §4.2 "Missions").
    */
-  async list(user: Reader): Promise<MissionOverview[]> {
+  async list(user: Subject): Promise<MissionOverview[]> {
     const created = await this.deps.store.missions.listForCreator(user.id);
     const shared = (await this.isActiveUser(user.id))
       ? await this.deps.store.missions.listForMember(user.id)
@@ -1857,7 +1850,7 @@ export class MissionService {
    * (`gates_editable: false`, and every mutation of this service answers
    * `not-found` to anyone but the creator).
    */
-  async get(user: Reader, missionId: string): Promise<MissionDetail | null> {
+  async get(user: Subject, missionId: string): Promise<MissionDetail | null> {
     const inspected = await this.access(user, missionId);
     if (!inspected) return null;
     const { mission } = inspected;
@@ -1930,7 +1923,7 @@ export class MissionService {
 
   private async overviewOf(
     { mission, orphan, lost, role }: MissionAccess,
-    reader: Reader,
+    reader: Subject,
     issuedVia: MissionIssuer | null,
   ): Promise<MissionOverview> {
     const token = await this.ownToken(mission.id, reader.id);
@@ -2011,7 +2004,7 @@ export class MissionService {
    * and "no longer shared with you". Every mutation of the mission itself goes
    * through `ownMission` instead, which knows the creator only.
    */
-  async access(user: Reader, missionId: string): Promise<MissionAccess | null> {
+  async access(user: Subject, missionId: string): Promise<MissionAccess | null> {
     const mission = await this.deps.store.missions.getById(missionId);
     if (!mission) return null;
     const membership = await this.membershipOf(mission, user.id);
@@ -2039,17 +2032,11 @@ export class MissionService {
    * One answer for "does not exist" and "not yours". The mission is returned as
    * it stands now: `orphaned` when the creator's authority is missing.
    */
-  private async ownMission(
-    user: AuthoritySubject,
-    missionId: string,
-  ): Promise<MissionRecord | null> {
+  private async ownMission(user: Subject, missionId: string): Promise<MissionRecord | null> {
     return (await this.ownInspected(user, missionId))?.mission ?? null;
   }
 
-  private async ownInspected(
-    user: AuthoritySubject,
-    missionId: string,
-  ): Promise<InspectedMission | null> {
+  private async ownInspected(user: Subject, missionId: string): Promise<InspectedMission | null> {
     const mission = await this.deps.store.missions.getById(missionId);
     if (!mission || mission.creatorUserId !== user.id) return null;
     return this.deps.grounds.inspect(mission);

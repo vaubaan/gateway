@@ -49,7 +49,7 @@ import {
   type MissionState,
   type SessionService,
 } from '../budget';
-import type { MissionGrounds } from '../authority';
+import type { MissionGrounds, Subject } from '../authority';
 import { revivesEndedMission, type CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
@@ -93,10 +93,6 @@ import { requestUrl } from './url';
 export const SESSION_EVENTS_SHOWN = 20;
 
 /** The user behind a request page or a decision: the session's user. */
-export interface RequestActor {
-  readonly id: string;
-}
-
 const MS_PER_SECOND = 1000;
 
 export interface RequestServiceDeps {
@@ -387,7 +383,7 @@ export class RequestService {
   // ───────────────────────────────────────────────────────────────────────────
 
   /** Open requests awaiting this user as creator, oldest first (spec §4.2). */
-  async inbox(user: RequestActor): Promise<RequestSummary[]> {
+  async inbox(user: Subject): Promise<RequestSummary[]> {
     const now = this.deps.clock.now();
     const open = await this.deps.store.requests.listOpenForCreator(user.id);
     const names = new Map<string, string>();
@@ -412,7 +408,7 @@ export class RequestService {
   }
 
   /** The badge of the "Requests" entry of the application bar. */
-  async openCount(user: RequestActor): Promise<number> {
+  async openCount(user: Subject): Promise<number> {
     const now = this.deps.clock.now();
     const open = await this.deps.store.requests.listOpenForCreator(user.id);
     return open.filter((request) => effectiveState(request, now) === 'open').length;
@@ -423,7 +419,7 @@ export class RequestService {
    * the permissions it is about (spec §4.2). Oldest first, like `inbox`. Read-only:
    * the same access rule — the creator's open requests and nothing else.
    */
-  async waiting(user: RequestActor): Promise<WaitingItem[]> {
+  async waiting(user: Subject): Promise<WaitingItem[]> {
     const now = this.deps.clock.now();
     const open = await this.deps.store.requests.listOpenForCreator(user.id);
     const missions = new Map<string, MissionRecord | null>();
@@ -457,7 +453,7 @@ export class RequestService {
    * answered — or expired — at or after `since`, most recent first. What "Answered
    * today" counts.
    */
-  async answered(user: RequestActor, since: Date): Promise<RequestSummary[]> {
+  async answered(user: Subject, since: Date): Promise<RequestSummary[]> {
     const now = this.deps.clock.now();
     const from = since.getTime();
     const summaries: RequestSummary[] = [];
@@ -472,7 +468,7 @@ export class RequestService {
   }
 
   /** The creator's view of one request. */
-  async view(user: RequestActor, requestId: string): Promise<ViewResult> {
+  async view(user: Subject, requestId: string): Promise<ViewResult> {
     const owned = await this.own(user, requestId);
     if (!owned) return { outcome: 'forbidden' };
     const { request, mission } = owned;
@@ -546,7 +542,7 @@ export class RequestService {
    * Decides a request from an untrusted body (JSON or form fields),
    * dispatching on the request's kind.
    */
-  async decide(user: RequestActor, requestId: string, raw: unknown): Promise<DecideResult> {
+  async decide(user: Subject, requestId: string, raw: unknown): Promise<DecideResult> {
     const owned = await this.own(user, requestId);
     if (!owned) return { ok: false, reason: 'forbidden' };
     switch (owned.request.kind) {
@@ -621,7 +617,7 @@ export class RequestService {
    * replays its call; the budget decides it again, quota and rate included.
    */
   async decideApproval(
-    user: RequestActor,
+    user: Subject,
     requestId: string,
     decision: ApprovalDecision,
   ): Promise<DecideResult> {
@@ -705,7 +701,7 @@ export class RequestService {
    * the store; the token does not change and the executor replays its call.
    */
   async decideClaim(
-    user: RequestActor,
+    user: Subject,
     requestId: string,
     decision: ClaimDecision,
   ): Promise<DecideResult> {
@@ -963,7 +959,7 @@ export class RequestService {
   }
 
   /** The request and its mission when `user` is the mission's creator; otherwise `null`. */
-  private async own(user: RequestActor, requestId: string): Promise<OwnedRequest | null> {
+  private async own(user: Subject, requestId: string): Promise<OwnedRequest | null> {
     const request = await this.deps.store.requests.getById(requestId);
     if (!request) return null;
     const stored = await this.deps.store.missions.getById(request.missionId);
@@ -1130,7 +1126,7 @@ function approvalSituationOf(
 
 interface ApplyApprovalInput {
   readonly decision: ApprovalDecision;
-  readonly user: RequestActor;
+  readonly user: Subject;
   readonly period: CurrentPeriod;
   /** When the approval of a grant stops being usable. */
   readonly expiresAt: Iso8601;
@@ -1224,7 +1220,7 @@ function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput):
 
 interface ApplyInput {
   readonly decision: ClaimDecision;
-  readonly user: RequestActor;
+  readonly user: Subject;
   readonly period: CurrentPeriod;
   readonly situation: ClaimSituation;
 }

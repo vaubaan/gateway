@@ -59,7 +59,7 @@ import {
   type SessionEventDetails,
 } from '@vaubaan/shared';
 
-import type { AuthoritySubject } from '../authority';
+import type { Subject } from '../authority';
 import type { MissionState } from '../budget';
 import type { MissionDetail, MissionRole, MissionService, SeverityLevel } from '../missions';
 import { missionChangeClauses } from '../missions/change-words';
@@ -302,7 +302,7 @@ export class MissionSessionService {
   constructor(private readonly deps: MissionSessionDeps) {}
 
   async get(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: {
       readonly eventsBefore?: AuditCursor | null;
