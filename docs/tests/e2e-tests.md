@@ -18,7 +18,7 @@ last_reviewed: 2026-10-27
 
 ## Scope
 
-- The acceptance criterion is manual: the instance owner, on their own instance behind TLS with their own IdP, providers and Claude Code, connects every service, issues one mission per code project and works a day with **no unexpected refusal** (spec [§10](../spec/vaubaan-gateway.md#10-tests) "End to end"; checklist in handbook [cutover-from-v4](../handbook/cutover-from-v4.md)). Everything automated exists to make that run boring.
+- The acceptance criterion is manual: the instance owner, on their own instance behind TLS with their own IdP, providers and Claude Code, connects every service, issues one mission per code project and works a day with **no unexpected refusal** (spec [§10](../spec/vaubaan-gateway.md#10-tests) "End to end"; checklist in handbook [first-install](../handbook/first-install.md)). Everything automated exists to make that run boring.
 - Automated, and never touching a real IdP, provider or coding agent: the browser specs (`npm run test:e2e:v5`), among them `cutover-smoke.spec.ts` walking the acceptance path in-process; and the container smoke (`deploy/docker/smoke.sh <image>`, `npm run docker:smoke`), which proves the image boots from configuration, runs as non-root and ships no test file.
 - Nothing automated runs the application path inside the image: the browser suite runs the shipped standalone `server.js`, the container smoke stops at boot, configuration and operator commands.
 - Cross-module behaviour without a browser is in [integration-tests.md](./integration-tests.md).

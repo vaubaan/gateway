@@ -2,7 +2,7 @@
 title: Handbook — index
 tracks:
   - docs/handbook/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Handbook — index
@@ -11,6 +11,8 @@ How the code works today, where the code does not say it: entry points,
 cross-file invariants, traps, what lives outside the repo, procedures. The
 what and why are in [`docs/spec/`](../spec/), the choices in
 [`docs/decisions/`](../decisions/). Deploying: [`deploy/README.md`](../../deploy/README.md).
+New to the code: read [architecture](../architecture.md) first, the path of a request in ten
+minutes.
 
 ## Running an instance
 
@@ -18,7 +20,7 @@ what and why are in [`docs/spec/`](../spec/), the choices in
 - [store](store.md) — the embedded SQLite store, migrations, backups.
 - [oauth-broker-contract](oauth-broker-contract.md) — the calls between an instance and an OAuth broker.
 - [oauth-broker](oauth-broker.md) — the OAuth broker of `apps/oauth-broker`: running it in Confidential Space, releasing and verifying its image.
-- [cutover-from-v4](cutover-from-v4.md) — the acceptance run of a first installation, and reading a refusal.
+- [first-install](first-install.md) — the acceptance run of a first installation, and reading a refusal.
 - [import-from-v4](import-from-v4.md) — the one-shot import of a v4 organization.
 - [demo-mode](demo-mode.md) — `npm run demo`: the real app with a simulated IdP and services.
 - [threat-model](threat-model.md) — what the gateway defends, against whom, with which control and proof.

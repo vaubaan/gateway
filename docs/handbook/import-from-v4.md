@@ -14,7 +14,7 @@ last_reviewed: 2026-10-27
 Carries one organization of the v4 SaaS into a v5 instance: pasted keys, the
 resources of its projects with their labels, one mission per working v4
 token. A temporary tool: delete it once the last v4 organization has moved.
-The rest of the cut-over: [cutover-from-v4](cutover-from-v4.md).
+The rest of the cut-over: [first-install](first-install.md).
 
 ## Start here
 
