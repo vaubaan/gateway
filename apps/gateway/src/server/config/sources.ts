@@ -343,6 +343,15 @@ const KEY_TABLE = [
     default: 600,
     min: 1,
   },
+  // The deadline of one plugin call on the execution door (`execution/upstream-stage.ts`):
+  // a provider that never answers releases the request, the credential and the slot.
+  {
+    path: 'execution.call_timeout_seconds',
+    env: 'VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS',
+    kind: 'int',
+    default: 120,
+    min: 1,
+  },
   {
     path: 'git.max_pack_mb',
     env: 'VAUBAAN_GIT_MAX_PACK_MB',

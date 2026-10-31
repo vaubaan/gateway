@@ -51,7 +51,8 @@ export async function executeContextFor(
   deps: UpstreamDeps,
   ctx: MissionContext,
   target: GitTarget,
-  signal?: AbortSignal,
+  /** The git request's: aborted at `git.request_timeout` or when git hangs up. */
+  signal: AbortSignal,
 ): Promise<ExecuteContext> {
   const resolved = await deps.credentials.resolve(target.connection.id);
   return {

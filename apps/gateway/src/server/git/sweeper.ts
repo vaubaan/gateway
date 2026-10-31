@@ -25,6 +25,7 @@ import type { ConnectionCredentialCache } from '../execution';
 import { errorFields, type Logger } from '../logging';
 import type { PendingRefRecord, PendingRefsRepo } from '../store';
 import type { Clock } from '../store/clock';
+import { CLEANUP_TIMEOUT_MS } from './constants';
 import { deleteTemporaryRefs, errorName } from './temporary-refs';
 
 export const PENDING_REF_SWEEP_INTERVAL_MS = 5 * 60_000;
@@ -68,7 +69,7 @@ export function startPendingRefSweeper(deps: PendingRefSweeperDeps): PendingRefS
       const remote = resolved.plugin.gitRemote;
       if (!remote) return new Set(rows.map((r) => r.ref));
       const ctx = {
-        ...deps.credentials.contextOf(resolved),
+        ...deps.credentials.contextOf(resolved, AbortSignal.timeout(CLEANUP_TIMEOUT_MS)),
         resources: [],
         credentialCache: deps.credentialCache.scopeFor(resolved.connection),
       };

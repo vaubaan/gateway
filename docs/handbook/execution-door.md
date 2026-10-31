@@ -52,7 +52,8 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 - **The after-call hook is awaited** before an `allowed` answer leaves (record created resources, schedule discovery); it never throws and never changes the answer.
 - **The stored rejection reason is not always what the agent read**: argument values of 3+ characters found verbatim in a plugin's sentence become `[argument]`; short or transformed values are not caught.
 - **Buffering.** `compress: false` in `next.config.ts`; `flush_interval -1` in the Caddyfile is kept as an explicit guarantee; another proxy must not buffer (`X-Accel-Buffering: no` covers nginx). The full result is still held in memory; a process dying mid-stream leaves a counted action with no entry (`countersAgreeWithAudit` reports it).
-- **Caller gone mid-stream** is checked between parts only (an in-flight provider call is not interrupted); it writes `stream stopped … the caller was gone` and no telemetry report.
+- **A deadline on every plugin call.** `contextOf` takes a signal, never optional: a tool call's is the caller's joined with `execution.call_timeout_seconds` (default 120 s); discovery, refresh, revocation and the git sweeper carry their own bounds. The stage stops waiting at the deadline even when the plugin ignores `ctx.signal`, never retries past it, audits `upstream_error` ending in `(timeout)` (counted, telemetry reported) and answers the agent `Upstream error: timeout: …`.
+- **Caller gone** aborts the plugin's signal too (its in-flight fetch stops); it writes `… the caller was gone` and no telemetry report.
 
 ## Procedures
 

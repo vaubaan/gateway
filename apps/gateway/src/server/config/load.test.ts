@@ -46,6 +46,7 @@ describe('loadInstanceConfig — required keys', () => {
     expect(config.retentionDays).toBe(90);
     expect(config.requests.expirySeconds).toBe(24 * 3600);
     expect(config.approvals.expirySeconds).toBe(600);
+    expect(config.execution.callTimeoutSeconds).toBe(120);
     expect(config.log.level).toBe('info');
     expect(config.trustedProxies).toEqual([]);
     expect(config.retiredKeys).toEqual([]);
@@ -128,11 +129,13 @@ describe('loadInstanceConfig — required keys', () => {
         VAUBAAN_TELEMETRY_ENABLED: 'maybe',
         VAUBAAN_LOG_LEVEL: 'loud',
         VAUBAAN_MASTER_KEY_VERSION: 'two',
+        VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS: '0',
       }),
     );
     expect(paths(err).sort()).toEqual(
       [
         'encryption.key_version',
+        'execution.call_timeout_seconds',
         'log.level',
         'requests.expiry',
         'retention_days',
@@ -147,8 +150,10 @@ describe('loadInstanceConfig — required keys', () => {
         VAUBAAN_TELEMETRY_ENABLED: 'true',
         VAUBAAN_TELEMETRY_COLLECTOR_URL: 'https://collector.example.net/ingest',
         VAUBAAN_LOG_LEVEL: 'debug',
+        VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS: '30',
       }),
     });
+    expect(ok.config.execution.callTimeoutSeconds).toBe(30);
     expect(ok.config.requests.expirySeconds).toBe(172_800);
     expect(ok.config.approvals.expirySeconds).toBe(90);
     expect(ok.config.retentionDays).toBe(30);

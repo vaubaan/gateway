@@ -353,6 +353,11 @@ export interface InstanceConfig {
   /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
   readonly mcp: { readonly rateLimitPerMinute: number };
   /**
+   * The execution door's plugin calls: how long one call may wait for its provider, in
+   * seconds, before it is stopped and answered as a timeout.
+   */
+  readonly execution: { readonly callTimeoutSeconds: number };
+  /**
    * The git remote (spec §4.1 ter): the largest push accepted, in bytes, and
    * how long one git request may last, in seconds. Both fail closed.
    */

@@ -61,6 +61,7 @@ import {
   OAuth2TokenError,
   refreshGrant,
   REVOCATION_REQUEST_TIMEOUT_MS,
+  TOKEN_REQUEST_TIMEOUT_MS,
   revokeGrant,
   type OAuth2Client,
   type RevocationAttempt,
@@ -323,12 +324,16 @@ export class CredentialBroker {
     }
   }
 
-  /** The `ConnectionContext` a plugin receives for a connection-level call (discovery). */
-  contextOf(resolved: ResolvedCredential, signal?: AbortSignal): ConnectionContext {
+  /**
+   * The `ConnectionContext` a plugin receives. The signal is required: every plugin
+   * call runs under a deadline (a tool call: `execution.call_timeout_seconds`, joined
+   * with its caller's signal; discovery, refresh, revocation: their own bounds).
+   */
+  contextOf(resolved: ResolvedCredential, signal: AbortSignal): ConnectionContext {
     return {
       credential: resolved.credential,
       fetch: this.deps.fetch,
-      ...(signal ? { signal } : {}),
+      signal,
       logger: pluginLogger(this.deps.logger, resolved.plugin.id),
     };
   }
@@ -439,7 +444,9 @@ export class CredentialBroker {
   private async obtain(current: ResolvedCredential): Promise<CredentialSecret> {
     const { plugin, credential } = current;
     if (plugin.refresh && ownRefreshApplies(plugin, credential)) {
-      const refreshed = await plugin.refresh(this.contextOf(current));
+      const refreshed = await plugin.refresh(
+        this.contextOf(current, AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS)),
+      );
       if (refreshed.kind !== credential.kind) {
         throw new Error(`plugin '${plugin.id}' refreshed into a '${refreshed.kind}' credential`);
       }
