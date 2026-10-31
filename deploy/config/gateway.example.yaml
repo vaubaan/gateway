@@ -37,11 +37,21 @@
 
 # Reverse proxies whose X-Forwarded-For header is trusted for client IPs
 # (surface rate limits, audit). IP addresses or CIDR blocks. Default: none.
-# 172.16.0.0/12 is Docker's default address pool (the Caddy container of
-# compose.yaml); narrow it to your proxy's address when you can.
+# compose.yaml trusts Caddy's fixed address, 172.30.253.2. Name your proxy's
+# address, never a whole Docker pool such as 172.16.0.0/12: every container on
+# it could then pick the address it is limited and audited under.
+# In production (the image) the gateway refuses to start without this or
+# client_ip_header, unless accept_shared_address_windows is set.
 # env: VAUBAAN_TRUSTED_PROXIES (comma-separated)
 # trusted_proxies:
-#   - 172.16.0.0/12
+#   - 172.30.253.2
+
+# With neither trusted_proxies nor client_ip_header, every address-keyed limit
+# (sign-in, the bootstrap token, the request page, the authorization server)
+# is one window shared by all callers, and the audit records no address.
+# Production refuses that unless it is accepted here.
+# env: VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS
+# accept_shared_address_windows: false
 
 # Provider resources that host or run this instance: never reachable by a
 # mission (not offered at issuance, refused at execution). Each entry is

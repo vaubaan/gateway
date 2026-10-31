@@ -235,7 +235,9 @@ docker run -d --name vaubaan -p 127.0.0.1:3000:3000 \
   -v vaubaan-data:/data \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
-  -e VAUBAAN_MASTER_KEY_FILE=/data/master.key -e VAUBAAN_MASTER_KEY_GENERATE=1 \
+  -v vaubaan-key:/keys \
+  -e VAUBAAN_MASTER_KEY_FILE=/keys/master.key -e VAUBAAN_MASTER_KEY_GENERATE=1 \
+  -e VAUBAAN_TRUSTED_PROXIES=<address of your reverse proxy> \
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
   -e VAUBAAN_BOOTSTRAP_TOKEN="$(openssl rand -hex 24)" \
   vaubaan-gateway:local
@@ -340,13 +342,21 @@ apps/gateway/restore.mjs …`.
   The version and the commit are compared with the body of one more
   `/healthz` answer, which the script keeps and prints when a stamp is not
   the expected one.
-- **Declare your reverse proxy** (`trusted_proxies`). Without it the instance
-  believes no client address: the per-address limits (the request page, the
-  token verification of the execution door, client registration and token
+- **Declare your reverse proxy** (`trusted_proxies`, or `client_ip_header`
+  behind an edge that overwrites it). The image runs with
+  `NODE_ENV=production`, where the gateway **refuses to start** without one of
+  the two, unless `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1` says you accept
+  what follows: no client address is believed, the per-address limits (sign-in,
+  the bootstrap token, the request page, client registration and token
   requests of the authorization server) become one window shared by all
-  callers, and the audit records no address. It says so in one warning
-  at boot. `deploy/config/.env.example` sets it to Docker's address pool (the
-  Caddy container of the reference Compose file); narrow it to your proxy.
+  callers, and the audit records no address (one warning at boot). The
+  reference Compose file puts Caddy at a fixed address of its own network
+  (`172.30.253.2` on `172.30.253.0/29`) and trusts that address alone; change
+  both lines of `compose.yaml` together if that subnet is taken on your host,
+  and never trust a whole Docker pool (every container on it could then pick
+  the address it is limited and audited under). The request page keys its
+  window on the signed-in user when there is one, so an anonymous flood never
+  holds a creator out of an approval link.
 - **Git remote**: `https://<public_url>/git/<owner>/<repo>.git` is the agents'
   git remote (handbook [git-remote](../docs/handbook/git-remote.md)). A push
   body is the pack itself, streamed and never stored: the reverse proxy must

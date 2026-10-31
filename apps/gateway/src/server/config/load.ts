@@ -441,6 +441,7 @@ function validate(
     r.issues.add('self_resources', message, envNamesFor('self_resources')),
   );
   const clientIpHeader = readClientIpHeader(r, trustedProxies);
+  requireAddressSource(r, env, trustedProxies, clientIpHeader);
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const restore = readRestore(r);
   const encryption = readEncryption(r, masterKey, restore.from !== null);
@@ -589,6 +590,35 @@ function readClientIpHeader(r: Reader, trustedProxies: readonly string[]): Clien
     return null;
   }
   return header;
+}
+
+/**
+ * In production (`NODE_ENV=production`: the image, never the demo nor a test), a
+ * source of client addresses is required: without `trusted_proxies` or
+ * `client_ip_header` every address-keyed window is one shared by all callers, so
+ * one client can hold everybody's sign-in and approval links at 429 (threat model
+ * A2). `accept_shared_address_windows` states that choice instead.
+ */
+function requireAddressSource(
+  r: Reader,
+  env: EnvSource,
+  trustedProxies: readonly string[],
+  clientIpHeader: ClientIpHeader | null,
+): void {
+  const accepted = r.bool(keySpec('accept_shared_address_windows'));
+  if (env.NODE_ENV !== 'production' || accepted) return;
+  if (trustedProxies.length > 0 || clientIpHeader !== null) return;
+  // A client_ip_header that was refused is already an issue of its own.
+  if (r.string('client_ip_header') !== undefined) return;
+  r.issues.add(
+    'trusted_proxies',
+    'a source of client addresses is required in production: set trusted_proxies to the address of the reverse proxy in front of the instance, or client_ip_header behind an edge that overwrites it; or set accept_shared_address_windows to share every address-keyed limit among all callers (deploy/README.md)',
+    [
+      ...envNamesFor('trusted_proxies'),
+      ...envNamesFor('client_ip_header'),
+      ...envNamesFor('accept_shared_address_windows'),
+    ],
+  );
 }
 
 /**
