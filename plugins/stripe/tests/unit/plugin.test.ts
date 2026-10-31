@@ -444,9 +444,9 @@ describe('discoverStripeResources with mockFetch', () => {
     const fetch = mockFetch([]);
     await expect(
       stripePlugin.discoverResources(ctx(fetch, { test_key: 'sk_live_xyz' })),
-    ).rejects.toThrow(/test_key must be a test-mode key/);
+    ).rejects.toThrow(/the test-mode key must start with sk_test_/);
     await expect(stripePlugin.discoverResources(ctx(fetch, {}))).rejects.toThrow(
-      /neither a test key nor a live key/,
+      /paste a test-mode key, a live-mode key, or both/,
     );
     expect(fetch.calls).toHaveLength(0);
   });
@@ -511,11 +511,11 @@ describe('credential spec', () => {
       expect(field.required).toBe(false);
     }
     const [testField, liveField] = spec.fields;
-    expect(new RegExp(testField!.pattern).test('sk_test_abc')).toBe(true);
-    expect(new RegExp(testField!.pattern).test('rk_test_abc')).toBe(true);
-    expect(new RegExp(testField!.pattern).test('sk_live_abc')).toBe(false);
-    expect(new RegExp(liveField!.pattern).test('sk_live_abc')).toBe(true);
-    expect(new RegExp(liveField!.pattern).test('sk_test_abc')).toBe(false);
+    expect(new RegExp(testField!.pattern!).test('sk_test_abc')).toBe(true);
+    expect(new RegExp(testField!.pattern!).test('rk_test_abc')).toBe(true);
+    expect(new RegExp(testField!.pattern!).test('sk_live_abc')).toBe(false);
+    expect(new RegExp(liveField!.pattern!).test('sk_live_abc')).toBe(true);
+    expect(new RegExp(liveField!.pattern!).test('sk_test_abc')).toBe(false);
   });
 
   test('macro-actions : the live money-out and irreversible entries never run freely', () => {

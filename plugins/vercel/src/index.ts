@@ -20,8 +20,10 @@ import {
   type VercelEnv,
 } from './classify.ts';
 import {
+  VERCEL_API_BASE,
   vercelAuth,
   vercelCredential,
+  verifyVercelToken,
   VERCEL_TEAM_ID_PATTERN,
   VERCEL_TOKENS_URL,
 } from './credential.ts';
@@ -31,7 +33,6 @@ import {
   DISCOVERY_PAGE_SIZE,
   discoverVercelResources,
   executeVercel,
-  VERCEL_API_BASE,
   VERCEL_MCP_URL,
 } from './execute.ts';
 import { VERCEL_ICON, VERCEL_ICON_COLOR } from './icon.ts';
@@ -49,7 +50,7 @@ export const vercelPlugin = definePlugin({
   displayName: 'Vercel',
   icon: VERCEL_ICON,
   iconColor: VERCEL_ICON_COLOR,
-  version: '3.0.4',
+  version: '3.0.5',
   description:
     'Runtime hosting plane — projects, deployments, logs, env vars, custom domains, firewall, preview comments.',
   summary:
@@ -78,6 +79,7 @@ export {
   toVercelEnv,
   vercelAuth,
   vercelCredential,
+  verifyVercelToken,
   vercelDataModel,
   vercelEnvOf,
   vercelTools,

@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-cloudflare-dns",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for Cloudflare DNS — zones and records, one resource per zone",

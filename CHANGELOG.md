@@ -88,6 +88,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Railway and Gmail guides move to the new shape (`@vaubaan/plugin-github`
   4.0.5, `-supabase` 5.0.5, `-notion` 0.1.5, `-caldav` 0.1.3, `-fly` 0.3.4,
   `-context7` 0.1.5, `-railway` 5.1.4, `-gmail` 1.1.1).
+- **Cloudflare DNS, Stripe, Vercel, Upstash Redis and Resend guide the
+  connection and check the token at paste** (`@vaubaan/plugin-cloudflare-dns`
+  3.0.5, `-stripe` 0.4.5, `-vercel` 3.0.5, `-upstash-redis` 3.2.4, `-resend`
+  0.5.4). Each connect page now has the exact token page, numbered steps,
+  how wide to grant and why, the permissions mapped to the tools they unlock
+  (Cloudflare's four permission rows, Upstash Read/Write, Resend Full access)
+  and the expiry; "Check and connect" asks the service first: Cloudflare
+  reads the token's status and expiry and names the accounts of its zones,
+  Stripe names the account each secret key opens, Vercel checks the token
+  opens the team and reads its expiry, Upstash checks the key, Resend names
+  the account by its domains. A Cloudflare token without zones, a Stripe
+  restricted key that cannot read its account, a Vercel token that cannot
+  open the team and a Resend Sending access key are refused with what to
+  change. Stripe asks for the secret key instead of a restricted one.
 - **Every risk catalog groups its risks into macro-actions** (ADR
   macro-actions-and-trust-crans-prefill-the-policy), 3 to 5 per connector in
   its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,

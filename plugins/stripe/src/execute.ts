@@ -23,6 +23,7 @@
  */
 
 import {
+  CredentialRefusal,
   ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
@@ -51,6 +52,8 @@ import { declaredArgsOf } from './tools.ts';
 
 /** Public API of the provider — a fact about Stripe, not instance configuration. */
 export const STRIPE_API_BASE = 'https://api.stripe.com/v1';
+
+const HTTP_FORBIDDEN = 403;
 
 type HttpMethod = 'GET' | 'POST' | 'DELETE';
 type Args = Readonly<Record<string, unknown>>;
@@ -182,42 +185,81 @@ interface AccountDto {
   readonly settings?: { readonly dashboard?: { readonly display_name?: string | null } } | null;
 }
 
+/** The Stripe account one key of the connection opens. */
+export interface StripeAccount {
+  readonly mode: StripeMode;
+  readonly id: string;
+  /** The Dashboard display name, else the business name, else the account id. */
+  readonly label: string;
+}
+
 /**
- * One resource per mode the credential carries a key for : `GET /v1/account`
- * with each key, `ref` = `<account id>/<mode>`, `env` = the mode. A key whose
- * prefix contradicts its field (`sk_live_…` pasted as the test key) is
- * refused before any call.
+ * The account behind each key the credential carries : `GET /v1/account`
+ * with each key. A key whose prefix contradicts its field (`sk_live_…` pasted
+ * as the test key) is refused before any call ; a key Stripe will not let
+ * describe its account (a restricted key) is refused with the fix.
  */
-export async function discoverStripeResources(
-  ctx: ConnectionContext,
-): Promise<readonly Resource[]> {
+export async function stripeAccounts(ctx: ConnectionContext): Promise<readonly StripeAccount[]> {
   const secret = expectCredentialKind(STRIPE_PROVIDER, ctx.credential, 'api-key');
-  const resources: Resource[] = [];
+  const accounts: StripeAccount[] = [];
   for (const mode of STRIPE_MODES) {
     const field = KEY_FIELD_BY_MODE[mode];
     const key = secret.fields[field];
     if (!key) continue;
     if (!keyMatchesMode(key, mode)) {
-      throw new Error(`stripe: ${field} must be a ${mode}-mode key (sk_${mode}_… or rk_${mode}_…)`);
+      throw new CredentialRefusal(
+        `stripe: the ${mode}-mode key must start with sk_${mode}_ (or rk_${mode}_).`,
+      );
     }
-    const account = await callStripeApi(ctx.fetch, key, 'GET', '/account', {}, ctx.signal);
-    if (!isAccountDto(account)) {
-      throw new Error(`stripe: GET /account with the ${mode}-mode key returned no account id`);
-    }
+    const account = await readAccount(ctx, key, mode);
     const label =
       account.settings?.dashboard?.display_name ?? account.business_profile?.name ?? account.id;
-    resources.push({
-      provider: STRIPE_PROVIDER,
-      ref: stripeResourceRef(account.id, mode),
-      env: mode,
-      displayName: `${label} (${mode})`,
-      metadata: { account_id: account.id, mode },
-    });
+    accounts.push({ mode, id: account.id, label });
   }
-  if (resources.length === 0) {
-    throw new Error('stripe: the credential carries neither a test key nor a live key');
+  if (accounts.length === 0) {
+    throw new CredentialRefusal('stripe: paste a test-mode key, a live-mode key, or both.');
   }
-  return resources;
+  return accounts;
+}
+
+async function readAccount(
+  ctx: ConnectionContext,
+  key: string,
+  mode: StripeMode,
+): Promise<AccountDto> {
+  let account: unknown;
+  try {
+    account = await callStripeApi(ctx.fetch, key, 'GET', '/account', {}, ctx.signal);
+  } catch (err) {
+    // 403 : the key is valid but lacks a permission — a restricted key.
+    if (err instanceof UpstreamAuthError && err.upstreamStatus === HTTP_FORBIDDEN) {
+      throw new CredentialRefusal(
+        `stripe: the ${mode}-mode key may not read its own account: paste the secret key (sk_${mode}_…) instead of a restricted key.`,
+        HTTP_FORBIDDEN,
+      );
+    }
+    throw err;
+  }
+  if (!isAccountDto(account)) {
+    throw new Error(`stripe: GET /account with the ${mode}-mode key returned no account id`);
+  }
+  return account;
+}
+
+/**
+ * One resource per mode the credential carries a key for (`stripeAccounts`) :
+ * `ref` = `<account id>/<mode>`, `env` = the mode.
+ */
+export async function discoverStripeResources(
+  ctx: ConnectionContext,
+): Promise<readonly Resource[]> {
+  return (await stripeAccounts(ctx)).map(({ mode, id, label }) => ({
+    provider: STRIPE_PROVIDER,
+    ref: stripeResourceRef(id, mode),
+    env: mode,
+    displayName: `${label} (${mode})`,
+    metadata: { account_id: id, mode },
+  }));
 }
 
 function isAccountDto(value: unknown): value is AccountDto {

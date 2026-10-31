@@ -258,7 +258,8 @@ function zoneResource(zone: ZoneDto): Resource {
   };
 }
 
-function tokenOf(ctx: ConnectionContext): string {
+/** The pasted API token of a connection. */
+export function tokenOf(ctx: ConnectionContext): string {
   const secret = expectCredentialKind(CLOUDFLARE_DNS_PROVIDER, ctx.credential, 'api-key');
   const token = secret.fields[API_TOKEN_FIELD];
   if (!token) throw new Error(`cloudflare-dns: the credential has no '${API_TOKEN_FIELD}' field`);

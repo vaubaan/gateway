@@ -87,10 +87,10 @@ test('a form that refuses a key keeps what was typed, marks the field and says i
   await page.goto('/accounts/new/stripe');
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Connect a Stripe account');
   const name = page.getByLabel(/^Name/);
-  const testKey = page.getByLabel(/^Test-mode key/);
+  const testKey = page.getByLabel(/^Test-mode secret key/);
   await name.fill('Acme billing sandbox');
   await testKey.fill('not-a-stripe-key');
-  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await page.getByRole('button', { name: 'Check and connect' }).click();
 
   // Back on the same form, with why at the top…
   await expect(page).toHaveURL(/\/accounts\/new\/stripe\?notice=/);
@@ -101,7 +101,10 @@ test('a form that refuses a key keeps what was typed, marks the field and says i
   expect(await page.content()).not.toContain('not-a-stripe-key');
   // …the field in error marked, and the shape it expects said again under it.
   await expect(testKey).toHaveAttribute('aria-invalid', 'true');
-  await expect(page.getByLabel(/^Live-mode key/)).not.toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByLabel(/^Live-mode secret key/)).not.toHaveAttribute(
+    'aria-invalid',
+    'true',
+  );
   const why = page.getByRole('alert').filter({ hasText: 'expected shape' });
   await expect(why).toContainText('starts with sk_test_ or rk_test_');
   await expect(why).toContainText('A secret is never kept: type it again.');

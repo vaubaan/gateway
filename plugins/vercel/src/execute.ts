@@ -61,7 +61,7 @@ import {
   undeclaredArgument,
   VERCEL_ENVS,
 } from './classify.ts';
-import { vercelAuth } from './credential.ts';
+import { VERCEL_API_BASE, vercelAuth } from './credential.ts';
 import { PROJECT_TOOLS, redactProjectResult } from './project-redact.ts';
 import { redactEncryptedEnvListing } from './redact.ts';
 import {
@@ -83,8 +83,6 @@ import { isCustomTool, toUpstreamName, toolAcceptsArgument, vercelToolByName } f
 
 /** The official Vercel MCP server (rewrapped tools). A fact about the provider. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com/';
-/** The Vercel REST API (custom tools, discovery). */
-export const VERCEL_API_BASE = 'https://api.vercel.com';
 
 /** Projects per page and pages walked by `discoverResources` (1 000 projects). */
 export const DISCOVERY_PAGE_SIZE = 100;
