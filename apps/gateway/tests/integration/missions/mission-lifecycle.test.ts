@@ -7,7 +7,7 @@
  */
 import { checkMissionActive } from '@vaubaan/gateway-core';
 import { unqualifyRiskId } from '@vaubaan/policy-engine';
-import { digestApiKey, hashApiKeyArgon2id } from '@vaubaan/shared';
+import { digestApiKey } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { GatewayRoot } from '../../../src/server/compose/root';
@@ -403,96 +403,13 @@ describe('missions: issue, rotate, revoke', () => {
     expect(source.mission.connections[0]?.resourceIds).toHaveLength(3);
   });
 
-  describe('a token an earlier build stored as an argon2id hash', () => {
-    /** Rewrites the token row the way a build before the sha256 digest stored it. */
-    async function storedAsArgon2id(secret: string, prefix: string): Promise<string> {
-      const argon = await hashApiKeyArgon2id(secret);
+  describe('a token row of another algorithm', () => {
+    it('an argon2id row of an earlier build matches nothing (migration 0027 revoked them)', async () => {
+      const { token } = await issued();
       root.store.db
         .prepare("UPDATE mission_tokens SET hash = ?, hash_alg = 'argon2id' WHERE prefix = ?")
-        .run(argon, prefix);
-      return argon;
-    }
-    const rowOf = async (missionId: string) =>
-      (await root.store.missions.listTokens(missionId))[0]!;
-
-    it('still verifies, and the first match replaces the hash by the digest of the same secret', async () => {
-      const { mission, token } = await issued();
-      const before = await rowOf(mission.id);
-      const argon = await storedAsArgon2id(token.secret, token.prefix);
-
-      // A wrong secret is unknown and moves nothing.
-      const wrong = `${token.secret.slice(0, -1)}${token.secret.endsWith('a') ? 'b' : 'a'}`;
-      expect(await missions.verifyToken(wrong)).toEqual({ outcome: 'unknown' });
-      expect(await rowOf(mission.id)).toMatchObject({ hash: argon, hashAlg: 'argon2id' });
-
-      const verified = await missions.verifyToken(token.secret);
-      expect(verified).toMatchObject({ outcome: 'verified', mission: { id: mission.id } });
-      const after = await rowOf(mission.id);
-      expect(after).toMatchObject({ hash: digestApiKey(token.secret), hashAlg: 'sha256' });
-      // Nothing else of the row moved.
-      expect({ ...after, hash: '', hashAlg: '' }).toEqual({ ...before, hash: '', hashAlg: '' });
-      expect((await missions.verifyToken(token.secret)).outcome).toBe('verified');
-      expect(await missions.verifyToken(wrong)).toEqual({ outcome: 'unknown' });
-    });
-
-    it('asks the gate before the slow check, for a legacy row only, and computes nothing when it refuses', async () => {
-      const { mission, token } = await issued();
-      let asked = 0;
-      const open = async () => {
-        asked += 1;
-        return { allowed: true as const };
-      };
-      const closed = async () => {
-        asked += 1;
-        return { allowed: false as const, retryAfterMs: 1_500 };
-      };
-      // A row stored as a digest never meets the gate.
-      expect((await missions.verifyToken(token.secret, closed)).outcome).toBe('verified');
-      expect(asked).toBe(0);
-
-      const argon = await storedAsArgon2id(token.secret, token.prefix);
-      expect(await missions.verifyToken(token.secret, closed)).toEqual({
-        outcome: 'throttled',
-        retryAfterMs: 1_500,
-      });
-      expect(asked).toBe(1);
-      // Refused before the check: the right secret was not judged, the row not moved.
-      expect(await rowOf(mission.id)).toMatchObject({ hash: argon, hashAlg: 'argon2id' });
-
-      expect((await missions.verifyToken(token.secret, open)).outcome).toBe('verified');
-      expect(asked).toBe(2);
-      expect((await rowOf(mission.id)).hashAlg).toBe('sha256');
-      // Moved: the gate is out of the way for good.
-      expect((await missions.verifyToken(token.secret, closed)).outcome).toBe('verified');
-      expect(asked).toBe(2);
-    });
-
-    it('keeps authenticating when the move cannot be written, and tries again on the next call', async () => {
-      const { mission, token } = await issued();
-      await storedAsArgon2id(token.secret, token.prefix);
-      const rehash = root.store.missions.rehashToken.bind(root.store.missions);
-      let fail = true;
-      root.store.missions.rehashToken = async (id, change) => {
-        if (fail) throw new Error('disk full');
-        return rehash(id, change);
-      };
-      expect((await missions.verifyToken(token.secret)).outcome).toBe('verified');
-      expect((await rowOf(mission.id)).hashAlg).toBe('argon2id');
-      fail = false;
-      expect((await missions.verifyToken(token.secret)).outcome).toBe('verified');
-      expect((await rowOf(mission.id)).hashAlg).toBe('sha256');
-    });
-
-    it('a rotated legacy token is refused by its reason, and is not moved', async () => {
-      const { mission, token } = await issued();
-      await storedAsArgon2id(token.secret, token.prefix);
-      const rotated = await missions.rotate(seeded.ada, mission.id);
-      if (!rotated.ok) throw new Error('rotate refused');
-      expect(await missions.verifyToken(token.secret)).toMatchObject({
-        outcome: 'retired',
-        reason: 'rotated',
-      });
-      expect((await missions.verifyToken(rotated.token.secret)).outcome).toBe('verified');
+        .run('$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA', token.prefix);
+      expect(await missions.verifyToken(token.secret)).toEqual({ outcome: 'unknown' });
     });
 
     it('a row naming an algorithm nobody knows matches nothing', async () => {

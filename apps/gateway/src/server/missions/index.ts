@@ -3,7 +3,7 @@
  * selection, token mint / rotate / revoke, bootstrap kit; and the members and
  * per-holder tokens of a mission (`team`).
  *
- * Server-only barrel (`node:crypto` and argon2 through `token.ts`). Client components import
+ * Server-only barrel (`node:crypto` through `token.ts`). Client components import
  * the pure files directly — `model`, `catalog-view`, `preview`, `summary` —
  * never this index.
  * Handbook: docs/handbook/missions.md.
@@ -141,11 +141,9 @@ export {
   tokenHolderOf,
   type IssueOptions,
   type IssueResult,
-  type LegacyHashGate,
   type LimitReachedResult,
   type LimitChangeView,
   type LimitEdit,
-  type LegacyHashThrottled,
   type MissionAccess,
   type MissionDetail,
   type MissionDetailConnection,
@@ -196,7 +194,6 @@ export {
 export { explainOrphan, type OrphanExplanation } from './orphan-reason';
 export { summarize } from './summary';
 export {
-  LEGACY_TOKEN_HASH_ALG,
   maskedToken,
   mintMissionToken,
   MISSION_TOKEN_HASH_ALG,

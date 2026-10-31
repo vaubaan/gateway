@@ -5,7 +5,7 @@
  *        (refusal codes) ; docs/spec/gateway-risk-model.md (risk model).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  *
- * No IO, no framework import, except `api-key.ts` (argon2, node:crypto),
+ * No IO, no framework import, except `api-key.ts` (node:crypto),
  * which makes this barrel server-only. Browser code and the packages the
  * UI bundles (`@vaubaan/policy-engine`) import values from the subpaths
  * `@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` (closed sets and

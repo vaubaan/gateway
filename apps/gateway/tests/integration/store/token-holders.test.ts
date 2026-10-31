@@ -62,7 +62,12 @@ describe('token holders (migration 0010)', () => {
          VALUES ('a1', ?, 'call', 'm-ada', 'github__get_file', 'abc', 'allowed')`,
       ).run(AT);
 
-      runMigrations(db, shipped, t.clock);
+      // Up to 0026: 0027 revokes the argon2id rows this era stored (its own test).
+      runMigrations(
+        db,
+        shipped.filter((m) => m.version < 27),
+        t.clock,
+      );
 
       expect(
         db

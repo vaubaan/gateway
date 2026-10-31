@@ -65,7 +65,7 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
 - The YAML reaches `.next/standalone` only through the `plugins/*/src/**/*.yaml` glob of
   `outputFileTracingIncludes` in `apps/gateway/next.config.ts`: keep it under
   `plugins/<id>/src/` (`standalone-plugin-catalogs.test.ts` checks after a build).
-- `@vaubaan/shared`'s barrel is server-only (argon2, `node:crypto`); code the UI bundles takes
+- `@vaubaan/shared`'s barrel is server-only (`node:crypto`); code the UI bundles takes
   values from `@vaubaan/shared/risk-id`, `/domain`, `/api-key`.
 - A plugin matching a glob from its arguments uses `matchWildcard`, never a `RegExp`.
 - A destructive operation gets its own risk through a verb leaf (`widget[<id>].delete.W`); the

@@ -14,8 +14,5 @@
   },
   "scripts": {
     "type-check": "tsc -p tsconfig.json --noEmit"
-  },
-  "dependencies": {
-    "argon2": "^0.45.1"
   }
 }

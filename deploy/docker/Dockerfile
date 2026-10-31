@@ -5,7 +5,7 @@
 # Handbook: docs/handbook/configuration.md, deploy/README.md
 
 # ---------------------------------------------------------------------------
-# base: debian-slim so the prebuilt native addons (argon2, better-sqlite3,
+# base: debian-slim so the prebuilt native addons (better-sqlite3,
 # ssh2's optional cpu-features) load against glibc without a compiler.
 # Pinned by version and by digest (multi-architecture index); every other stage
 # starts from this one. Written on the FROM line itself, not through an ARG,

@@ -7,7 +7,7 @@
 #                                 client addresses among them (NODE_ENV=production)
 # 2. http public URL           -> same, naming public_url
 # 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged
-# 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
+# 4. native addons traced      -> better-sqlite3 (prebuilt .node) loads inside the image
 # 5. non-root                  -> the process runs as uid 10001
 # 6. no env file shipped       -> the standalone output carries no apps/gateway/.env*
 # 7. no test file shipped      -> no test, spec, fixture or demo tree of this repository in the image
@@ -148,9 +148,6 @@ pass "no secret in the container logs"
 # 4. Native addons are present in the traced output and load. The image has
 #    no node_modules besides the traced standalone tree, so a passing hash /
 #    query proves the prebuilt .node binaries were traced by the build.
-docker exec "$NAME" node -e "require('argon2').hash('smoke').then(h=>{if(!h.startsWith('\$argon2id'))process.exit(1)})" \
-  || fail "argon2 does not load inside the image (check outputFileTracingIncludes)"
-pass "argon2 loads inside the image (libsodium is bundled; the encryptor ran during boot)"
 docker exec "$NAME" node -e "const D=require('better-sqlite3');const r=new D(':memory:').prepare('select 1 as one').get();if(r.one!==1)process.exit(1)" \
   || fail "better-sqlite3 does not load inside the image (check outputFileTracingIncludes)"
 pass "better-sqlite3 loads inside the image (in-memory query ran)"

@@ -61,5 +61,3 @@ in the change that removes it.
 - **The demo is not a deployment**: `npm run demo` signs anybody in as anybody, answers providers from memory, binds loopback, refuses a production environment and is not in the image. → [demo-mode](demo-mode.md)
 
 ## Kept until the next major version
-
-- **The argon2id check of legacy tokens**: a token stored as argon2id by an earlier build is checked the slow way, behind its own throttle, until its first use moves it to its SHA-256 digest. → [ADR](../decisions/mission-token-sha256-digest.md)
