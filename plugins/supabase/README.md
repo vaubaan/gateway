@@ -133,7 +133,7 @@ surfaced.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, `catalog_version: 4`, 25 named risks — 24 live and
+`src/risk-catalog.yaml`, 25 named risks — 24 live and
 the deprecated `supabase.row-write-one` — + the fallback
 `supabase.uncategorized-write` (`supabase.**.W`). A risk is never renamed or
 deleted, only deprecated.

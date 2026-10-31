@@ -114,8 +114,7 @@ identifier, a mode the connection holds no key for, an unknown tool — is an
 `isError` result carrying the reason (`ExecutorRefusal` under the SDK's
 `declining`), returned before any request: nothing failed at Stripe and the
 audit records no upstream failure. What Stripe fails is thrown
-(`UpstreamAuthError` on 401/403, `UpstreamHttpError` otherwise). Plugin
-version 0.4.0.
+(`UpstreamAuthError` on 401/403, `UpstreamHttpError` otherwise).
 
 Reads whose answer carries customer fields — `list_invoices`,
 `list_charges`, `list_payment_intents`, and `list_events` unless `type`
@@ -125,7 +124,7 @@ need `read-customer-pii`.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 4: 16 named risks and the
+`src/risk-catalog.yaml`: 16 named risks and the
 `stripe.uncategorized-write` fallback. Every risk is env-scoped on the mode
 (`acceptable_in_envs: [test, live]`), so the runtime qualifies
 `stripe[live].refund-create` vs `stripe[test].refund-create` from the

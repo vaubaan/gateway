@@ -18,7 +18,7 @@ Contributor guide: [`plugins/README.md`](../README.md).
 | File                     | Role                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`           | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                                   |
-| `src/risk-catalog.yaml`  | 7 risks + fallback, three macro-actions, `catalog_version: 6`. Loaded at boot by the SDK; the only catalog artefact.                |
+| `src/risk-catalog.yaml`  | 7 risks + fallback, three macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                      |
 | `src/data-model.ts`      | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                         |
 | `src/tools.ts`           | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                         |
 | `src/shell-lex.ts`       | `lexCommandLine`: the line as a POSIX shell tokenises it (words, redirections, simple commands), and what it cannot model, by name. |

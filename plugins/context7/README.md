@@ -84,7 +84,7 @@ needed), write the array, re-read the classifier, bump the version.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 1: one named risk and the fallback.
+`src/risk-catalog.yaml`: one named risk and the fallback.
 
 | Risk                           | Action | Notes                                                                                                         |
 | ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |

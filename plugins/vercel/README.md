@@ -10,7 +10,6 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
   (data model, tool → slice mapping, catalog, edge cases).
 - Upstream: ADR [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md).
 - Arguments and refusals: ADR [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
-- Plugin version 3.0.0, catalog version 2.
 
 ## Layout
 

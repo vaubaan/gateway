@@ -11,7 +11,6 @@ approval.
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md);
 what the executor declines:
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
-Plugin version 0.3.0, catalog version 3.
 Modelling handbook: [`docs/handbook/providers/resend.md`](../../docs/handbook/providers/resend.md).
 Provider spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).
 Contributor guide: [`plugins/README.md`](../README.md).
@@ -137,7 +136,7 @@ the audit records no upstream failure for it. What Resend fails is thrown
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 3, 18 entries: 15 live named risks, the
+`src/risk-catalog.yaml`, 18 entries: 15 live named risks, the
 `resend.uncategorized-write` fallback, and two deprecated ids
 (`read-audiences` → `read-segments`, `audience-write` → `segment-write`)
 kept so they stay resolvable.

@@ -12,7 +12,6 @@ ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contrac
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
 [`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md),
 [`gateway-as-git-remote`](../../docs/decisions/gateway-as-git-remote.md).
-Plugin version 4.0.1, catalog version 9.
 
 ## Layout
 

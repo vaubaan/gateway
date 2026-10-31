@@ -855,7 +855,10 @@ Two documents, both in English, both in the same pull request as the code.
 
 **`plugins/<id>/README.md`** — for somebody who will use the plugin. Replace
 the template's README, keeping its sections: Data model, Credential and
-resources, Tools, Catalog (one line per risk), Macro-actions, Tests.
+resources, Tools, Catalog (one line per risk), Macro-actions, Tests. It
+states no version, neither the plugin's nor the catalog's: they are in
+`package.json` and `catalog_version`, and a third copy drifts
+(`plugin-versions.test.ts` refuses one).
 
 **`docs/handbook/providers/<id>.md`** — for the reviewer and the next
 maintainer: the model and the reasons behind it. Start it with this
@@ -943,7 +946,8 @@ the build and the tests. Fix it (`npm run format`) and run the gate again.
 
 **Plugin version** — `version` in `src/index.ts` and in the plugin's
 `package.json`, always equal (after changing it: `npm install`, which updates
-`package-lock.json`). A new plugin starts at `0.1.0`. It is what telemetry
+`package-lock.json`; `plugin-versions.test.ts` holds every shipped plugin to
+it). A new plugin starts at `0.1.0`. It is what telemetry
 reports, so one version never designates two different classifiers.
 
 | Change                                                                                                                   | From `1.0.0` | Before `1.0.0`        |

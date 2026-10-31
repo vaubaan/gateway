@@ -497,6 +497,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugin-version-two-places',
+    statement:
+      "A shipped plugin's version is written in definePlugin and in its package.json, equal; its README states neither the plugin's version nor its catalog's.",
+    source: 'plugins/README.md step 9 and step 11',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-versions.test.ts`,
+        tests: [
+          'has the version of its package.json',
+          'states no version in its README, of the plugin or of its catalog',
+        ],
+      },
+    ],
+  },
+  {
     id: 'deployed-commit-is-known',
     statement:
       'The commit /healthz reports is the one git archive stamped, else the checkout HEAD, else unknown: no build argument or environment variable feeds it.',

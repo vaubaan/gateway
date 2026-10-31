@@ -112,7 +112,7 @@ A `link_to_page` is exactly `{ type: "page_id", page_id }` or
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 1: 14 named risks and the fallback.
+`src/risk-catalog.yaml`: 14 named risks and the fallback.
 
 | Risk                         | Action | Notes                                                                |
 | ---------------------------- | ------ | -------------------------------------------------------------------- |

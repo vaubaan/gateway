@@ -4,7 +4,7 @@
  * version, the catalog path, the credential, the tool surface built from
  * the upstream list. No network.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -87,12 +87,8 @@ describe('miro plugin — structural kit', () => {
     expect(miroPlugin.resourceCreatingTools).toEqual([TOOL.boardCreate]);
   });
 
-  test('the plugin is the default export, and its version is the package version', () => {
+  test('the plugin is the default export', () => {
     expect(defaultExport).toBe(miroPlugin);
-    const manifest: unknown = JSON.parse(
-      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-    );
-    expect(manifest).toMatchObject({ name: '@vaubaan/plugin-miro', version: miroPlugin.version });
   });
 
   test('no environment anywhere : no envScopable entity, no env-scoped risk', () => {

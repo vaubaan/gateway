@@ -140,7 +140,7 @@ The transport is an interface (`GmailTransport`, `src/transport.ts`):
 ## Catalog and macro-actions
 
 `src/risk-catalog.yaml` — twenty risks plus the mandatory
-`gmail.uncategorized-write` fallback, `catalog_version: 8` (5 added
+`gmail.uncategorized-write` fallback (5 added
 `gmail.label-create`; 6 drops "Experimental" from a description; 7 adds the
 macro-actions; 8 the four `gmail.send-to-zone-*`, in the `send` macro-action
 "Send", and drops the presets). No risk is
@@ -152,8 +152,8 @@ SDK coverage kit showed the v4 catalog left two slices uncovered or on the
 fallback: `draft-write` is the one id v5 adds, for the containment slice of
 a draft (the zone risk carries the exfiltration axis), and `read-mailbox`,
 an existing id, also matches the thread containment slice of `get_thread`.
-Plugin version 1.0.0: the plugin is no longer experimental (see
-docs/handbook/plugin-sdk.md); 1.1.0 sends over SMTP.
+The plugin is no longer experimental (see docs/handbook/plugin-sdk.md),
+and sends over SMTP.
 
 | Macro-action | What it covers                                                       | Risks                                                                                  |
 | ------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |

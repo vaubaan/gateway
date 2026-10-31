@@ -2,7 +2,7 @@
  * Mandatory suite of the `fly` plugin : the SDK kit (definition, macro-actions,
  * coverage of every tool, the identifier proof), identity and version.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -171,11 +171,7 @@ describe('fly plugin — structural kit', () => {
     expect(flyPlugin.tools.map((t) => t.name)).toContain(TOOL.createApp);
   });
 
-  test('the plugin is the default export, and its version is the package version', () => {
+  test('the plugin is the default export', () => {
     expect(defaultExport).toBe(flyPlugin);
-    const manifest: unknown = JSON.parse(
-      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-    );
-    expect(manifest).toMatchObject({ version: flyPlugin.version });
   });
 });

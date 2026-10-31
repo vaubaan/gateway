@@ -73,7 +73,7 @@ redacted from every answer; `exec` capped at 60 s and 64 KiB of output.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 1: 24 named risks and the fallback.
+`src/risk-catalog.yaml`: 24 named risks and the fallback.
 
 | Risk                         | Env-scoped | Notes                                                                |
 | ---------------------------- | ---------- | -------------------------------------------------------------------- |

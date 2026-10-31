@@ -7,7 +7,6 @@ only.
 
 - Contract: ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
   handbook [`plugin-sdk`](../../docs/handbook/plugin-sdk.md).
-- Plugin version 3.0.0, catalog version 5.
 - Modelling: handbook [`providers/upstash-redis`](../../docs/handbook/providers/upstash-redis.md)
   (data model, tool → slice mapping, catalog, edge cases).
 
@@ -16,7 +15,7 @@ only.
 | File                    | Role                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                                               |
-| `src/risk-catalog.yaml` | 10 risks + fallback, four macro-actions, `catalog_version: 8`. Loaded at boot by the SDK; the only catalog artefact.                                       |
+| `src/risk-catalog.yaml` | 10 risks + fallback, four macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                             |
 | `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                                                       |
 | `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                                              |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`.                             |

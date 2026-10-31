@@ -79,7 +79,7 @@ character is refused before classification and before any call.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 3: three named risks and the fallback.
+`src/risk-catalog.yaml`: three named risks and the fallback.
 
 | Risk                           | Action | Notes                                                                                    |
 | ------------------------------ | ------ | ---------------------------------------------------------------------------------------- |
