@@ -1,7 +1,7 @@
 /**
  * Where the provider reference lives and how other pages point into it
  * (spec §4.2 "Providers"). Every risk id shown in the interface links to its
- * catalog entry, every preset to its expansion; the anchors are built here and
+ * catalog entry, every macro-action to its place; the anchors are built here and
  * nowhere else, so a link and its target cannot drift.
  *
  * Pure and browser-safe: values come from `@vaubaan/shared/risk-id`.
@@ -21,7 +21,7 @@ export const REFERENCE_SECTIONS = {
   legend: 'legend',
   dataModel: 'data-model',
   risks: 'risks',
-  presets: 'presets',
+  macroActions: 'macro-actions',
   tools: 'tools',
 } as const;
 
@@ -30,9 +30,9 @@ export function riskAnchor(baseId: RiskId): string {
   return `risk-${baseId}`;
 }
 
-/** Fragment id of a preset (`preset-developer`). */
-export function presetAnchor(presetId: string): string {
-  return `preset-${presetId}`;
+/** Fragment id of a macro-action (`macro-read`). */
+export function macroActionAnchor(actionId: string): string {
+  return `macro-${actionId}`;
 }
 
 /**
@@ -47,8 +47,8 @@ export function riskReferencePath(riskId: RiskId): string | null {
   return `${providerPath(parsed.provider)}#${riskAnchor(baseId)}`;
 }
 
-export function presetReferencePath(providerId: string, presetId: string): string {
-  return `${providerPath(providerId)}#${presetAnchor(presetId)}`;
+export function macroActionReferencePath(providerId: string, actionId: string): string {
+  return `${providerPath(providerId)}#${macroActionAnchor(actionId)}`;
 }
 
 export function sectionPath(

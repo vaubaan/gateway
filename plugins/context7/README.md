@@ -89,17 +89,19 @@ needed), write the array, re-read the classifier, bump the version.
 | Risk                           | Action | Notes                                                                                                         |
 | ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
 | `context7.query-docs`          | R      | Both tools. The agent's question leaves for Context7, which stores queries; each call spends the key's quota. |
-| `context7.uncategorized-write` | W      | Fallback (`fallback: true`); no tool of the plugin writes, in no preset.                                      |
+| `context7.uncategorized-write` | W      | Fallback (`fallback: true`); no tool of the plugin writes, in no macro-action.                                |
 
-## Presets
+## Macro-actions
 
-| Preset      | Scope                                                       |
-| ----------- | ----------------------------------------------------------- |
-| `read-only` | `context7.query-docs`: 300 per period, 20 a minute, `auto`. |
+| Macro-action | What it covers                            | Risks                                            |
+| ------------ | ----------------------------------------- | ------------------------------------------------ |
+| `ask`        | Ask Context7 about library documentation. | `query-docs` (base: 300 per period, 20 a minute) |
 
-With one risk, which is a read, `read-only` is also the preset for daily
-work. Presets are a shortcut of the New mission form: the mission that is
-saved holds the explicit list of risks.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The mission stores the explicit list. The question cannot be
+recalled once sent, so `query-docs` is irreversible: left out at Prudent, it
+asks first at Confiant and Autonome.
 
 ## Failures
 
@@ -121,8 +123,8 @@ call is rethrown as the abort.
 
 ## Tests
 
-`npx vitest run plugins/context7` — 58 tests: the SDK kit
-(`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
+`npx vitest run plugins/context7` — 59 tests: the SDK kit
+(`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage`, `assertIdentifiersRefused` with no identifier in a
 URL), the frozen upstream surface, the classifier branch by branch (every
 alias refused, malformed library ids, free-text bounds, the resource),

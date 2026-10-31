@@ -1,6 +1,6 @@
 /**
  * The macro-actions of a connection as the creation form ticks them (risk
- * model §4.7; ADR macro-actions-and-trust-crans-prefill-the-policy): the
+ * model §4.6; ADR macro-actions-and-trust-crans-prefill-the-policy): the
  * catalog's own, plus "Anything else" holding the fallback, each expanded at
  * a trust cran against the selected resources and the creator's authority.
  *
@@ -27,7 +27,7 @@ import {
 import type { Gate, MacroAction, RiskCatalog, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource } from './model';
+import type { CatalogRisk, IssuanceConnection, IssuanceResource, LeftOutEntry } from './model';
 
 /** The cran of each ticked macro-action of one connection, by macro-action id. */
 export type MacroActionCrans = Readonly<Record<string, TrustCran>>;
@@ -85,8 +85,23 @@ export function rowsOf(
   return connection.risks.filter((risk) => ids.has(risk.base_id) && !risk.deprecated);
 }
 
+/** A row as `expandAtCran` reads it, from its macro-action entry's base budget. */
+function candidateOf(
+  connection: Pick<IssuanceConnection, 'write_token_risks'>,
+  risk: Pick<CatalogRisk, 'base_id' | 'risk_id' | 'vector' | 'rate_ceiling_per_minute'>,
+  entry: MacroAction['entries'][number],
+): CranCandidate {
+  return {
+    risk_id: risk.risk_id,
+    vector: risk.vector,
+    base: { quota: entry.quota, rate_limit: entry.rate_limit },
+    rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
+    hands_write_token: connection.write_token_risks.includes(risk.base_id),
+  };
+}
+
 export function expandMacroAction(
-  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env'>,
+  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env' | 'write_token_risks'>,
   action: MacroAction,
   cran: TrustCran,
   resources: readonly Pick<IssuanceResource, 'env'>[],
@@ -102,34 +117,57 @@ export function expandMacroAction(
       unavailable.push(risk);
       continue;
     }
-    candidates.push({
-      risk_id: risk.risk_id,
-      vector: risk.vector,
-      base: { quota: entry.quota, rate_limit: entry.rate_limit },
-      rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
-    });
+    candidates.push(candidateOf(connection, risk, entry));
   }
   return { ...expandAtCran(candidates, cran), unavailable };
 }
 
-/** The explicit lines of every ticked macro-action, catalog order. */
-export function linesOfCrans(
-  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env' | 'macro_actions'>,
+type CransConnection = Pick<
+  IssuanceConnection,
+  'risks' | 'authority' | 'derives_env' | 'macro_actions' | 'write_token_risks'
+>;
+
+/**
+ * What the crans write on a connection: the lines of every ticked
+ * macro-action, catalog order, and what they leave out, with why.
+ */
+export function prefillOfCrans(
+  connection: CransConnection,
   crans: MacroActionCrans,
   resources: readonly Pick<IssuanceResource, 'env'>[],
-): CranLine[] {
+): { readonly lines: CranLine[]; readonly left_out: LeftOutEntry[] } {
   const byId = new Map<RiskId, CranLine>();
+  const leftOut = new Map<RiskId, LeftOutEntry>();
+  const held = new Set(connection.authority);
+  const envOf = new Map(connection.risks.map((risk) => [risk.risk_id, risk.env]));
   for (const action of connection.macro_actions) {
     const cran = crans[action.id];
     if (!cran) continue;
-    for (const line of expandMacroAction(connection, action, cran, resources).lines) {
-      byId.set(line.risk_id, line);
+    const expansion = expandMacroAction(connection, action, cran, resources);
+    for (const line of expansion.lines) byId.set(line.risk_id, line);
+    for (const { risk_id } of expansion.left_out) {
+      leftOut.set(risk_id, { risk_id, reason: 'cran', env: envOf.get(risk_id) ?? null });
+    }
+    for (const risk of expansion.unavailable) {
+      const reason = held.has(risk.risk_id) ? 'unresolvable-env' : 'outside-authority';
+      leftOut.set(risk.risk_id, { risk_id: risk.risk_id, reason, env: risk.env });
     }
   }
-  return connection.risks.flatMap((risk) => {
-    const line = byId.get(risk.risk_id);
-    return line ? [line] : [];
-  });
+  const inCatalogOrder = <T>(byRisk: ReadonlyMap<RiskId, T>): T[] =>
+    connection.risks.flatMap((risk) => {
+      const found = byRisk.get(risk.risk_id);
+      return found ? [found] : [];
+    });
+  return { lines: inCatalogOrder(byId), left_out: inCatalogOrder(leftOut) };
+}
+
+/** The explicit lines of every ticked macro-action, catalog order. */
+export function linesOfCrans(
+  connection: CransConnection,
+  crans: MacroActionCrans,
+  resources: readonly Pick<IssuanceResource, 'env'>[],
+): CranLine[] {
+  return prefillOfCrans(connection, crans, resources).lines;
 }
 
 /** The macro-action a catalog row belongs to, or `undefined` (a deprecated entry). */
@@ -149,7 +187,7 @@ export function macroActionOfRisk(
  * `null` for a risk in no macro-action.
  */
 export function defaultLineOf(
-  connection: Pick<IssuanceConnection, 'macro_actions'>,
+  connection: Pick<IssuanceConnection, 'macro_actions' | 'write_token_risks'>,
   crans: MacroActionCrans,
   risk: Pick<CatalogRisk, 'base_id' | 'risk_id' | 'vector' | 'rate_ceiling_per_minute'>,
 ): {
@@ -161,17 +199,7 @@ export function defaultLineOf(
   const entry = action?.entries.find((e) => e.risk_id === risk.base_id);
   if (!action || !entry) return null;
   const cran = crans[action.id] ?? DEFAULT_CRAN;
-  const [line] = expandAtCran(
-    [
-      {
-        risk_id: risk.risk_id,
-        vector: risk.vector,
-        base: { quota: entry.quota, rate_limit: entry.rate_limit },
-        rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
-      },
-    ],
-    cran,
-  ).lines;
+  const [line] = expandAtCran([candidateOf(connection, risk, entry)], cran).lines;
   if (line) return { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
   // Left out at this cran: ticked by hand, it asks first, at the base budget.
   return { quota: entry.quota, rate_limit: entry.rate_limit, gate: 'approval' };
@@ -179,7 +207,7 @@ export function defaultLineOf(
 
 /**
  * The crans of a draft that name a macro-action of this connection: anything
- * else is dropped (the crans redraw a form, they never decide).
+ * else is dropped (`unknownMacroActions` names it).
  */
 export function knownCrans(
   connection: Pick<IssuanceConnection, 'macro_actions'>,
@@ -187,6 +215,15 @@ export function knownCrans(
 ): MacroActionCrans {
   const ids = new Set(connection.macro_actions.map((action) => action.id));
   return Object.fromEntries(Object.entries(cransOf(raw)).filter(([id]) => ids.has(id)));
+}
+
+/** The ids a draft gives a cran that are not macro-actions of this connection. */
+export function unknownMacroActions(
+  connection: Pick<IssuanceConnection, 'macro_actions'>,
+  raw: Readonly<Record<string, unknown>> | undefined,
+): string[] {
+  const ids = new Set(connection.macro_actions.map((action) => action.id));
+  return Object.keys(raw ?? {}).filter((id) => !ids.has(id));
 }
 
 /** The entries of a stored or posted record that are crans, whatever their macro-action. */

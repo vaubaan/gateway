@@ -1,5 +1,5 @@
 /**
- * Mandatory suite of the `miro` plugin : the SDK kit (definition, presets,
+ * Mandatory suite of the `miro` plugin : the SDK kit (definition, macro-actions,
  * no wildcard, catalog coverage, identifier proof), the identity, the
  * version, the catalog path, the credential, the tool surface built from
  * the upstream list. No network.
@@ -15,7 +15,6 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -40,9 +39,8 @@ import {
 import { SAMPLES, context, mcpRoute, textResult, workshop } from './fixtures.ts';
 
 describe('miro plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(miroPlugin);
-    assertPresetsValid(miroPlugin);
     assertNoWildcard(miroPlugin);
   });
 

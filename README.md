@@ -34,7 +34,7 @@ doors; "Waiting for you", where a mission's creator answers what an agent
 asks; the activity record; a scheduled backup to S3-compatible storage,
 encrypted under the instance's own key and restored once before it is
 uploaded; a per-service reference of every permission and
-preset; a plugin per service (named in the diagram below); a Docker image
+macro-action; a plugin per service (named in the diagram below); a Docker image
 built from source and published by the release pipeline, and a demo that
 runs on a laptop.
 
@@ -148,7 +148,7 @@ cannot be opened without it —, and add your sign-in provider.
 │       ▼                                              ▼                   │
 │  PLUGINS (one per service)                  STORE (embedded database)    │
 │  data model · classifier · catalog of       accounts, credentials        │
-│  permissions with presets · executor        encrypted under your master  │
+│  permissions, macro-actions · executor      encrypted under your master  │
 │  one folder of plugins/ per service         key, accesses, missions,     │
 │  (GitHub, Stripe, Supabase…;                keys (as digests), counters, │
 │  the list: plugins/README.md)               requests, activity           │
@@ -182,8 +182,9 @@ plugin declares one today: git goes through the gateway's own remote.
 
 **Permissions, not scopes.** Each plugin ships a catalog of named permissions
 (`github.merge-protected`, `supabase[staging].migration-write`), each with
-the reason it exists and how severe it is, and presets that pre-fill a
-mission. A mission stores an explicit list; nothing is ever "all". Reference,
+the reason it exists and how severe it is, grouped into macro-actions that
+a mission's creator ticks at a trust level (Prudent, Confiant, Autonome) to
+pre-fill it. A mission stores an explicit list; nothing is ever "all". Reference,
 in the interface, shows every one of them, service by service.
 
 ### Words
@@ -192,22 +193,22 @@ The interface speaks to people; the protocol — MCP tool names, refusal codes,
 ids, the API, the database, the configuration, and the specification of the
 domain — keeps the names it had. The same things, under both:
 
-| In the interface                 | In the protocol, the code and the spec                |
-| -------------------------------- | ----------------------------------------------------- |
-| account                          | connection                                            |
-| access (Give access)             | share                                                 |
-| permission                       | risk, by its `RiskId` (`github.merge-protected`)      |
-| limits (per day, per minute)     | budget: quota and rate limit                          |
-| runs freely / ask me first       | gate: `auto` / `approval`                             |
-| key, machine key                 | mission token: member token, named token              |
-| Replace key                      | rotate                                                |
-| Waiting for you                  | request: a claim (limit reached), an approval request |
-| connected app                    | delegation, OAuth client                              |
-| Activity                         | audit, session                                        |
-| teammate, team                   | mission member, group                                 |
-| administrator                    | operator                                              |
-| service, OAuth client, Reference | provider, provider app, the provider pages            |
-| mission, preset                  | mission, preset                                       |
+| In the interface                   | In the protocol, the code and the spec                |
+| ---------------------------------- | ----------------------------------------------------- |
+| account                            | connection                                            |
+| access (Give access)               | share                                                 |
+| permission                         | risk, by its `RiskId` (`github.merge-protected`)      |
+| limits (per day, per minute)       | budget: quota and rate limit                          |
+| runs freely / ask me first         | gate: `auto` / `approval`                             |
+| key, machine key                   | mission token: member token, named token              |
+| Replace key                        | rotate                                                |
+| Waiting for you                    | request: a claim (limit reached), an approval request |
+| connected app                      | delegation, OAuth client                              |
+| Activity                           | audit, session                                        |
+| teammate, team                     | mission member, group                                 |
+| administrator                      | operator                                              |
+| service, OAuth client, Reference   | provider, provider app, the provider pages            |
+| mission, macro-action, trust level | mission, macro-action, trust cran                     |
 
 ## Documentation
 

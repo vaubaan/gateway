@@ -4,7 +4,7 @@
  * management door call the same functions.
  *
  * ADR  : docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md.
- * Spec : docs/spec/gateway-risk-model.md §4.7 (macro-actions), §9 (preview).
+ * Spec : docs/spec/gateway-risk-model.md §4.6 (macro-actions), §9 (preview).
  *
  * The vector pre-fills, it never decides : the lines this module writes are
  * shown, editable, and stored as the explicit list ; the runtime never reads
@@ -100,6 +100,11 @@ export interface CranCandidate {
   readonly vector: RiskVector;
   readonly base: Budget;
   readonly rate_ceiling_per_minute: number | null;
+  /**
+   * True for a risk whose tool hands the agent a provider token that can write
+   * (spec §2.4) : a cran never runs it freely, its line asks first.
+   */
+  readonly hands_write_token?: boolean;
 }
 
 /** A policy line a cran wrote, with the palier that chose its gate. */
@@ -128,7 +133,7 @@ export function expandAtCran(candidates: readonly CranCandidate[], cran: TrustCr
     }
     lines.push({
       risk_id: candidate.risk_id,
-      gate,
+      gate: candidate.hands_write_token === true ? 'approval' : gate,
       palier,
       ...budgetAtCran(candidate.base, cran, candidate.rate_ceiling_per_minute),
     });

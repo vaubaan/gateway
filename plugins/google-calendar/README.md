@@ -20,7 +20,7 @@ Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/
 | `src/identity.ts`          | ids, Google's tool and argument names, the MCP URL, the scopes            |
 | `src/identifiers.ts`       | calendar id ↔ ref (`@` ↔ `~`), event id, strict address parsing           |
 | `src/data-model.ts`        | the `calendar` plane                                                      |
-| `src/risk-catalog.yaml`    | 10 risks + fallback, presets `read-only` and `assistant`                  |
+| `src/risk-catalog.yaml`    | 10 risks + fallback, macro-actions `read`, `schedule`, `invite`           |
 | `src/credential.ts`        | the brokered `oauth2` spec                                                |
 | `src/tools.ts`             | the gateway's declarations, built from `upstream-tools.json`              |
 | `src/upstream-tools.json`  | Google's nine tools, modelled from the reference (source and date inside) |
@@ -43,13 +43,19 @@ resource per calendar of the account (ref `alice~acme.example`), with
 `update_event`, `delete_event`, `respond_to_event`. `calendarId` is a calendar
 of the mission (ref or id), the primary one when omitted.
 
-## Risks and presets
+## Risks and macro-actions
 
-Reads (`calendar-list`, `event-read`, `free-busy-read`), event writes
-(`event-create`, `event-change`, `event-delete`, `event-respond`), who is
-reached (`invite-internal`, `invite-external`, `notify-guests`). `read-only`
-reads; `assistant` runs the agenda, with deleting and inviting outside the
-company asking first.
+| Macro-action | What it covers                            | Risks                                                           |
+| ------------ | ----------------------------------------- | --------------------------------------------------------------- |
+| `read`       | Calendars, events and free/busy.          | `calendar-list`, `event-read`, `free-busy-read`                 |
+| `schedule`   | Create, change, delete and answer events. | `event-create`, `event-change`, `event-delete`, `event-respond` |
+| `invite`     | Invite people and let Google email them.  | `invite-internal`, `invite-external`, `notify-guests`           |
+
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The mission stores the explicit list. Deleting an event asks
+first below Autonome; inviting outside the company and notifying guests are
+irreversible and never run freely.
 
 ## Refreshing the tool list
 

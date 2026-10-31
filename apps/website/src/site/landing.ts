@@ -74,7 +74,7 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     },
     {
       question: 'Which services does it support?',
-      answer: `One plugin per service ships with the gateway: ${services}. Each plugin is a catalog of named permissions with presets; a plugin for another service can be written from the kit in the repository.`,
+      answer: `One plugin per service ships with the gateway: ${services}. Each plugin is a catalog of named permissions grouped into macro-actions; a plugin for another service can be written from the kit in the repository.`,
     },
     {
       question: 'Which agents and MCP clients work with it?',

@@ -29,7 +29,7 @@ discovery writes one resource per mode (`acct_…/test`, `acct_…/live`).
   qualifies from the label, so the classifier refuses a resource whose label is absent or differs,
   and a live call is never judged as `stripe[test].…`. Both layers are pinned in `policy.test.ts`;
   the host keeps the plugin-set label read-only.
-- The fallback is env-scoped too, so a test preset never accepts a live write.
+- The fallback is env-scoped too, so a mission on the test mode never accepts a live write.
 - **Only declared arguments**: the classifier refuses any key outside `declaredArgsOf(tool)`;
   declaring a property means deciding its cost in `classify.ts`.
 - **Customer PII overlay**: every read whose answer carries customer fields (invoices, charges,

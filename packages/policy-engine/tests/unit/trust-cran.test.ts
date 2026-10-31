@@ -118,4 +118,11 @@ describe('expandAtCran', () => {
     expect(lines.map((l) => l.gate)).toEqual(['auto', 'auto', 'auto', 'approval']);
     expect(lines[0]).toMatchObject({ quota: 100, rate_limit: { max: 50, window_seconds: 60 } });
   });
+
+  test('a risk handing the agent a token that can write asks first at every cran', () => {
+    const minted = { ...candidate('acme.mint-token', mild), hands_write_token: true };
+    expect(expandAtCran([minted], 'autonome').lines.map((l) => [l.gate, l.palier])).toEqual([
+      ['approval', 1],
+    ]);
+  });
 });

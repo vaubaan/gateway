@@ -8,16 +8,16 @@
  * Covers what the tool-by-tool suite cannot see : an argument that changes
  * the nature of a call must cost the stronger risk, customer PII must not be
  * reachable through `read-billing-history`, every risk is refused outside
- * the mode it was accepted for, and each shipped preset allows what it
- * describes on the mode it names and nothing on the other.
+ * the mode it was accepted for, and each mission composed from macro-actions
+ * (risk model §4.6) allows what it describes on its mode and nothing on the other.
  */
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice, type ProviderPlugin, type Resource, type RiskId } from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 import {
   envResolverFor,
   evaluateCall,
-  findRiskEntry,
   qualifyRiskId,
   resourceEnvResolver,
 } from '@vaubaan/policy-engine';
@@ -78,24 +78,40 @@ const missingOf = (verdict: Verdict): readonly RiskId[] => {
   return verdict.missing;
 };
 
+type Crans = Parameters<typeof policyFromMacroActions>[1];
+
 /**
- * The accepted set a preset yields on a selection of resources : an explicit
- * id stands for itself, the base id of an env-scoped risk becomes one line
- * per environment of the selection (what issuance persists).
+ * The missions of this suite, as a creator composes them : macro-actions at a
+ * trust cran, and the risks a creator unticks in the advanced view.
  */
-function acceptedFrom(presetId: string, selected: readonly Resource[]): RiskId[] {
-  const preset = stripeCatalog.catalog.presets.find((p) => p.id === presetId);
-  if (!preset) throw new Error(`no preset '${presetId}'`);
-  const ids = new Set<RiskId>();
-  for (const { risk_id } of preset.entries) {
-    const entry = findRiskEntry(stripeCatalog.indexed, risk_id);
-    if (!entry) {
-      ids.add(risk_id);
-      continue;
-    }
-    for (const resource of selected) ids.add(qualifyRiskId(risk_id, resource.env, entry));
-  }
-  return [...ids];
+const MISSIONS: Readonly<Record<string, { crans: Crans; untick?: readonly string[] }>> = {
+  // Books at Prudent, customer PII unticked.
+  'read-only': { crans: { books: 'prudent' }, untick: ['read-customer-pii'] },
+  'test-mode-developer': {
+    crans: {
+      books: 'autonome',
+      'set-up': 'autonome',
+      bill: 'autonome',
+      'money-out': 'autonome',
+      cancel: 'autonome',
+    },
+  },
+  'finance-operator': {
+    crans: { books: 'confiant', bill: 'confiant', 'money-out': 'confiant', cancel: 'confiant' },
+  },
+};
+
+/**
+ * The accepted set a mission yields on a selection of resources : one line per
+ * mode the selection carries (what issuance persists).
+ */
+function acceptedFrom(missionId: string, selected: readonly Resource[]): RiskId[] {
+  const mission = MISSIONS[missionId];
+  if (!mission) throw new Error(`no mission '${missionId}'`);
+  const envs = selected.flatMap((r) => (r.env ? [r.env] : []));
+  return policyFromMacroActions(stripePlugin, mission.crans, { envs })
+    .map((e) => e.risk_id)
+    .filter((id) => !(mission.untick ?? []).some((name) => id.endsWith(`].${name}`)));
 }
 
 /** One realistic call per tool ; `account` is added by the caller. */
@@ -305,7 +321,7 @@ describe('the mode of a call : resolved from the resource, refused when it canno
   });
 });
 
-describe('shipped presets : what they describe on their mode, nothing on the other', () => {
+describe('missions from macro-actions : what they describe on their mode, nothing on the other', () => {
   const READ_ONLY_ALLOWED = [
     'stripe__list_products',
     'stripe__list_prices',
@@ -332,7 +348,7 @@ describe('shipped presets : what they describe on their mode, nothing on the oth
   });
 
   test('test-mode-developer : every tool on test, none on live', () => {
-    const accepted = acceptedFrom('test-mode-developer', both);
+    const accepted = acceptedFrom('test-mode-developer', [testRes]);
     for (const tool of TOOLS) {
       expect(decide(tool, on(TEST, tool), accepted).kind, `${tool} on test`).toBe('allow');
       const live = decide(tool, on(LIVE, tool), accepted);
@@ -346,7 +362,7 @@ describe('shipped presets : what they describe on their mode, nothing on the oth
   });
 
   test('finance-operator : live billing operations, no catalog or webhook write, nothing on test', () => {
-    const accepted = acceptedFrom('finance-operator', both);
+    const accepted = acceptedFrom('finance-operator', [liveRes]);
     const refusedOnLive = [
       'stripe__create_product',
       'stripe__update_product',
@@ -363,9 +379,9 @@ describe('shipped presets : what they describe on their mode, nothing on the oth
     }
   });
 
-  test('no preset lets a call through on the fallback or on a risk it does not list', () => {
-    for (const preset of stripeCatalog.catalog.presets) {
-      const accepted = acceptedFrom(preset.id, both);
+  test('no mission lets a call through on the fallback or on a risk it does not list', () => {
+    for (const id of Object.keys(MISSIONS)) {
+      const accepted = acceptedFrom(id, both);
       for (const tool of TOOLS) {
         for (const ref of [TEST, LIVE]) {
           const verdict = decide(tool, on(ref, tool), accepted);

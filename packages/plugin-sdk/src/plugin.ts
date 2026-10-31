@@ -3,8 +3,8 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 ("Provider plugins — two
  *        responsibilities : classify and execute ; they also declare how to
- *        obtain and refresh a credential, how to discover resources, and
- *        ship at least one preset") ; docs/spec/gateway-risk-model.md §7.
+ *        obtain and refresh a credential, how to discover resources") ;
+ *        docs/spec/gateway-risk-model.md §4.6 (macro-actions), §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  *
  * The plugin knows neither the mission, nor the accepted risks, nor the
@@ -115,11 +115,10 @@ export interface TokenHandout {
   readonly riskIds: readonly string[];
   /**
    * The risks among `riskIds` whose token cannot write at the provider
-   * (`contents:read` for a clone). Spec §2.4 : in a preset, a token-handing
-   * risk that grants write is gated by approval ; a read-only one may be
-   * automatic. A risk that is not listed here is taken as write — absent,
-   * every handout risk of the tool is — and `definePlugin` refuses a preset
-   * that leaves it on `auto`.
+   * (`contents:read` for a clone). Spec §2.4 : a token-handing risk that
+   * grants write is asked first at every trust cran ; a read-only one follows
+   * its palier. A risk that is not listed here is taken as write — absent,
+   * every handout risk of the tool is (`writeHandoutRiskIds`).
    */
   readonly readOnlyRiskIds?: readonly string[];
 }
@@ -234,7 +233,7 @@ export interface ProviderPlugin {
   readonly tools: readonly McpToolDeclaration[];
   /** Declarative graph of the provider's entities (risk-model spec §2). */
   readonly dataModel: DataModel;
-  /** The risk catalog, loaded from `risk-catalog.yaml` at boot, presets included. */
+  /** The risk catalog, loaded from `risk-catalog.yaml` at boot, macro-actions included. */
   readonly catalog: RiskCatalog;
   /**
    * How a connection to this provider is obtained, stored and refreshed :

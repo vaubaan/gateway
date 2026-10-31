@@ -1,6 +1,6 @@
 /**
- * Mandatory suite of the `notion` plugin : the SDK kit (well-formed, presets,
- * no wildcard, catalog coverage, the identifier proof), the identity and the
+ * Mandatory suite of the `notion` plugin : the SDK kit (well-formed, no
+ * wildcard, macro-actions, catalog coverage, the identifier proof), the identity and the
  * version. No network : `execute` runs against `mockFetch`.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
+  policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { API_TOKEN_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
@@ -23,9 +23,8 @@ import { SAMPLES } from './samples.ts';
 import { DISCUSSION, TOKEN, echoWrites, pageRoot, world } from './fixtures.ts';
 
 describe('notion plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(notionPlugin);
-    assertPresetsValid(notionPlugin);
     assertNoWildcard(notionPlugin);
   });
 
@@ -99,27 +98,35 @@ describe('notion plugin — structural kit', () => {
     });
   });
 
-  test('presets : read-only, reviewer, editor ; explicit risks, the fallback and root-trash in none', () => {
-    const { risks, presets } = notionCatalog.catalog;
-    expect(presets?.map((p) => p.id)).toEqual(['read-only', 'reviewer', 'editor']);
+  test('macro-actions : read, comment, write, reorganize ; explicit risks, the fallback in none', () => {
+    const { risks, macro_actions: actions } = notionCatalog.catalog;
+    expect(actions.map((a) => a.id)).toEqual(['read', 'comment', 'write', 'reorganize']);
     const fallback = risks.find((r) => r.fallback)?.id;
-    for (const preset of presets ?? []) {
-      for (const entry of preset.entries) {
-        expect(entry.risk_id).not.toMatch(/[*?[\]]/);
-        expect(entry.risk_id).not.toBe(fallback);
-        expect(entry.risk_id).not.toBe('notion.root-trash');
-      }
+    for (const entry of actions.flatMap((a) => a.entries)) {
+      expect(entry.risk_id).not.toMatch(/[*?[\]]/);
+      expect(entry.risk_id).not.toBe(fallback);
     }
   });
 
-  test('the destructive operations ask first in editor ; everything else runs freely', () => {
-    const editor = notionCatalog.catalog.presets?.find((p) => p.id === 'editor');
-    const gated = editor?.entries.filter((e) => e.gate === 'approval').map((e) => e.risk_id);
-    expect(gated?.sort()).toEqual(['notion.block-delete', 'notion.page-trash']);
-    const writes = notionCatalog.catalog.presets
-      ?.filter((p) => p.id !== 'editor')
-      .flatMap((p) => p.entries.map((e) => e.risk_id));
-    expect(writes).not.toContain('notion.page-trash');
-    expect(writes).not.toContain('notion.block-delete');
+  test('at Confiant the destructive operations ask first ; everything else runs freely', () => {
+    const policy = policyFromMacroActions(notionPlugin, {
+      read: 'confiant',
+      comment: 'confiant',
+      write: 'confiant',
+      reorganize: 'confiant',
+    });
+    const gated = policy.filter((l) => l.gate === 'approval').map((l) => l.risk_id);
+    expect(gated.sort()).toEqual([
+      'notion.block-delete',
+      'notion.block-update',
+      'notion.page-trash',
+      'notion.root-trash',
+    ]);
+    // Deleting and trashing live in reorganize alone.
+    const others = notionCatalog.catalog.macro_actions
+      .filter((a) => a.id !== 'reorganize')
+      .flatMap((a) => a.entries.map((e) => e.risk_id));
+    expect(others).not.toContain('notion.page-trash');
+    expect(others).not.toContain('notion.block-delete');
   });
 });

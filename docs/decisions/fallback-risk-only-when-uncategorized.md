@@ -1,25 +1,25 @@
 ---
-title: A catalog's fallback risk is an explicit flag, touched only when no other entry matched, and never in a preset
+title: A catalog's fallback risk is an explicit flag, touched only when no other entry matched, and in no catalog macro-action
 status: accepted
 date: 2026-10-13
 ---
 
-# A catalog's fallback risk is an explicit flag, touched only when no other entry matched, and never in a preset
+# A catalog's fallback risk is an explicit flag, touched only when no other entry matched, and in no catalog macro-action
 
 ## Context
 
 Every catalog declares a fallback, `<provider>.uncategorized-write`, matching every write, so that
 its appearance signals a missing catalog entry. Evaluated like any entry, it was touched by every
 write in addition to its dedicated entry: a mission accepting `github.merge-protected` but not the
-fallback was refused, plugins put the fallback in every write preset, and accepting it came to mean
+fallback was refused, plugins put the fallback in every write bundle, and accepting it came to mean
 "any write at all".
 
 ## Decision
 
 A slice touches the fallback only when no other entry matched it; dedicated entries that overlap
 still co-fire. The fallback is the entry flagged `fallback: true`, exactly one per catalog, named
-`<provider>.uncategorized-*`, and a preset entry on it is a loader error; a creator may still accept
-it by hand.
+`<provider>.uncategorized-*`, and a catalog macro-action listing it is a loader error; a creator may
+still accept it by hand, or tick the gateway's own "Anything else".
 
 ## Consequences
 
@@ -31,7 +31,7 @@ it by hand.
 
 ## Rejected alternatives
 
-### Require every write preset to carry the fallback
+### Put the fallback in every write macro-action
 
 Turns the fallback into an "allow writes" switch and empties its audit signal.
 

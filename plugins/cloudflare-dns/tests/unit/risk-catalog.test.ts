@@ -2,7 +2,7 @@
  * Catalog invariants the SDK loader does not check for us : the risk count
  * and version, the irreversible set, the absence of env scoping / caps, the
  * layered record-write patterns, and the exact risks every tool touches.
- * Structure, patterns, presets and fallback are validated
+ * Structure, patterns, macro-actions and fallback are validated
  * by `loadCatalogFile` at import and by the kit in `plugin.test.ts`.
  *
  * Spec : docs/spec/gateway-risk-model.md §4.
@@ -10,11 +10,11 @@
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice, type Resource } from '@vaubaan/plugin-sdk';
-import { declaredOnly } from '@vaubaan/plugin-sdk/testing';
+import { declaredOnly, policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 import { prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
-import { cloudflareDnsCatalog, cloudflareDnsTools } from '../../src/index.ts';
+import { cloudflareDnsCatalog, cloudflareDnsPlugin, cloudflareDnsTools } from '../../src/index.ts';
 
 const { catalog, indexed: idx } = cloudflareDnsCatalog;
 
@@ -29,7 +29,7 @@ describe('cloudflare-dns risk-catalog — shape', () => {
   test('11 named risks + 1 fallback, version 3', () => {
     expect(catalog.provider).toBe('cloudflare-dns');
     expect(catalog.risks).toHaveLength(12);
-    expect(catalog.catalog_version).toBe(4);
+    expect(catalog.catalog_version).toBe(5);
     expect(catalog.risks.filter((r) => r.fallback === true).map((r) => r.id)).toEqual([
       'cloudflare-dns.uncategorized-write',
     ]);
@@ -50,12 +50,16 @@ describe('cloudflare-dns risk-catalog — shape', () => {
     }
   });
 
-  test('no preset lists the fallback or the zone deletion', () => {
-    for (const preset of catalog.presets) {
-      const risks = preset.entries.map((e) => e.risk_id);
-      expect(risks, preset.id).not.toContain('cloudflare-dns.uncategorized-write');
-      expect(risks, preset.id).not.toContain('cloudflare-dns.zone-delete');
-    }
+  test('no macro-action lists the fallback ; the zone deletion never runs freely', () => {
+    const listed = (catalog.macro_actions ?? []).flatMap((a) => a.entries.map((e) => e.risk_id));
+    expect(listed).not.toContain('cloudflare-dns.uncategorized-write');
+    const gateOf = (cran: 'prudent' | 'confiant' | 'autonome') =>
+      policyFromMacroActions(cloudflareDnsPlugin, { 'rule-zone': cran }).find(
+        (l) => l.risk_id === 'cloudflare-dns.zone-delete',
+      )?.gate;
+    expect(gateOf('prudent')).toBeUndefined();
+    expect(gateOf('confiant')).toBe('approval');
+    expect(gateOf('autonome')).toBe('approval');
   });
 });
 

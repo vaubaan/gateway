@@ -31,8 +31,10 @@ The rest of the cut-over: [cutover-from-v4](cutover-from-v4.md).
 - Imports go through the services (key verified, discovery, sealing, audit);
   every admin entry carries `marker: imported-from-v4`.
 - v4 risk ids are translated one by one: dropped, never widened; a v4 denial
-  trumps acceptance; a quota is never invented (`--carry-unbudgeted` keeps
-  them under `approval` only).
+  trumps acceptance. Each kept id is its macro-action's line at Confiant
+  (`IMPORT_CRAN`: base budget ×3, gate from its palier), the fallback in
+  "Anything else" included; a quota is never invented for an id in no
+  macro-action (`--carry-unbudgeted` keeps it under `approval` only).
 - Idempotent by provenance: `after.v4_source` on `mission-issued` is how a
   later run recognises a mission; `--reissue` issues a new one and never
   revokes the old.

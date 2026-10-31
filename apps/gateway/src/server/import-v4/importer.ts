@@ -116,7 +116,7 @@ export interface ImportOptions {
   readonly apply: boolean;
   /**
    * `--carry-unbudgeted <quota>`: keep, with this quota and the `approval`
-   * gate, a v4 risk no preset gives a budget instead of dropping it.
+   * gate, a v4 risk no macro-action gives a budget instead of dropping it.
    */
   readonly carryUnbudgeted?: number | null;
   /**
@@ -229,7 +229,7 @@ export interface MissionOutcome {
   /** Why the mission waits, or what blocked it (deferred, refused). */
   readonly reasons: readonly string[];
   readonly dropped: readonly (DroppedRisk & { readonly provider: string })[];
-  /** v4 risks no preset budgets, kept under approval (`--carry-unbudgeted`). */
+  /** v4 risks no macro-action budgets, kept under approval (`--carry-unbudgeted`). */
   readonly carried: readonly (CarriedRisk & { readonly provider: string })[];
   /**
    * `--reissue`: the mission an earlier import issued for the same v4 token,

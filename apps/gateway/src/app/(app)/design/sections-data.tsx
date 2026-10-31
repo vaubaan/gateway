@@ -493,7 +493,7 @@ export function PermissionSections() {
         >
           {(theme) => <EditorSpecimen theme={theme} />}
         </Specimen>
-        <Specimen name="Read" note="what a mission or a preset holds">
+        <Specimen name="Read" note="what a mission or a macro-action holds">
           {(theme) => (
             <PermissionTable variant="read" caption={`Permissions of the mission (${theme})`}>
               <PermissionGroup title="GitHub · acme" note="acme/app, acme/web">

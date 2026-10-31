@@ -82,7 +82,7 @@ Writes (17): `create_product`, `update_product`, `create_price`,
 `create_refund`, `create_payout`, `delete_customer`,
 `create_webhook_endpoint`.
 
-`create_payout` and `delete_customer` are both irreversible and gated `approval` on live in the shipped preset.
+`create_payout` and `delete_customer` are both irreversible: no trust cran runs them freely.
 
 The properties a tool declares are its whole argument surface: the
 classifier refuses a call carrying any other key (`expand`, an undeclared
@@ -126,47 +126,52 @@ need `read-customer-pii`.
 `stripe[live].refund-create` vs `stripe[test].refund-create` from the
 resource the call targets.
 
-| Risk                            | Action | Notes                                                                |
-| ------------------------------- | ------ | -------------------------------------------------------------------- |
-| `stripe.read-catalog`           | R      | Products, prices, coupons, promotion codes.                          |
-| `stripe.read-billing-history`   | R      | Customers (business payload), subscriptions, invoices, PI, charges.  |
-| `stripe.read-customer-pii`      | R      | Co-emitted with every read returning customer fields (see Tools).    |
-| `stripe.read-balance`           | R      | Balance, ledger, events.                                             |
-| `stripe.catalog-write`          | W      | Reversible.                                                          |
-| `stripe.subscription-create`    | W      | Co-emits `payment-intent.W` (immediate proration).                   |
-| `stripe.subscription-update`    | W      | Also `pause_subscription`.                                           |
-| `stripe.subscription-cancel`    | W      | Irreversible. Also `update_subscription` scheduling a cancellation.  |
-| `stripe.invoice-create-draft`   | W      | Reversible.                                                          |
-| `stripe.invoice-finalize`       | W      | Notifies, attempts collection. Also `create_invoice` + auto_advance. |
-| `stripe.invoice-void`           | W      | Irreversible.                                                        |
-| `stripe.refund-create`          | W      | Irreversible, `cost: unbounded`; rate ceiling 30/min.                |
-| `stripe.payout-create`          | W      | Irreversible, `cost: unbounded`; rate ceiling 30/min.                |
-| `stripe.customer-delete`        | W      | Irreversible, cancels subscriptions, erases PII.                     |
-| `stripe.webhook-endpoint-write` | W      | Posture shift.                                                       |
-| `stripe.mint-webhook-secret`    | W      | Co-emitted with `create_webhook_endpoint`.                           |
-| `stripe.uncategorized-write`    | W      | Fallback; counts only when no dedicated entry matched. In no preset. |
+| Risk                            | Action | Notes                                                                      |
+| ------------------------------- | ------ | -------------------------------------------------------------------------- |
+| `stripe.read-catalog`           | R      | Products, prices, coupons, promotion codes.                                |
+| `stripe.read-billing-history`   | R      | Customers (business payload), subscriptions, invoices, PI, charges.        |
+| `stripe.read-customer-pii`      | R      | Co-emitted with every read returning customer fields (see Tools).          |
+| `stripe.read-balance`           | R      | Balance, ledger, events.                                                   |
+| `stripe.catalog-write`          | W      | Reversible.                                                                |
+| `stripe.subscription-create`    | W      | Co-emits `payment-intent.W` (immediate proration).                         |
+| `stripe.subscription-update`    | W      | Also `pause_subscription`.                                                 |
+| `stripe.subscription-cancel`    | W      | Irreversible. Also `update_subscription` scheduling a cancellation.        |
+| `stripe.invoice-create-draft`   | W      | Reversible.                                                                |
+| `stripe.invoice-finalize`       | W      | Notifies, attempts collection. Also `create_invoice` + auto_advance.       |
+| `stripe.invoice-void`           | W      | Irreversible.                                                              |
+| `stripe.refund-create`          | W      | Irreversible, `cost: unbounded`; rate ceiling 30/min.                      |
+| `stripe.payout-create`          | W      | Irreversible, `cost: unbounded`; rate ceiling 30/min.                      |
+| `stripe.customer-delete`        | W      | Irreversible, cancels subscriptions, erases PII.                           |
+| `stripe.webhook-endpoint-write` | W      | Posture shift.                                                             |
+| `stripe.mint-webhook-secret`    | W      | Co-emitted with `create_webhook_endpoint`.                                 |
+| `stripe.uncategorized-write`    | W      | Fallback; counts only when no dedicated entry matched. In no macro-action. |
 
-## Presets
+## Macro-actions
 
-| Preset                | Scope                                                                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only`           | Catalog, subscriptions, balance and customer-free events of the selected mode. No PII (so no customer, invoice, charge or payment-intent read), no write. |
-| `test-mode-developer` | Every risk qualified `stripe[test].*`, generous quotas, all `auto`. Nothing on live.                                                                      |
-| `finance-operator`    | Live reads including PII, subscriptions and invoices `auto`; refund, payout, customer deletion, cancel, void `approval`.                                  |
+| Macro-action | What it covers                                         | Risks                                                                                    |
+| ------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `books`      | Catalog, billing history, balance and customers.       | `read-catalog`, `read-billing-history`, `read-balance`, `read-customer-pii`              |
+| `set-up`     | Catalog and webhooks.                                  | `catalog-write`, `webhook-endpoint-write`, `mint-webhook-secret`                         |
+| `bill`       | Subscriptions and invoices.                            | `subscription-create`, `subscription-update`, `invoice-create-draft`, `invoice-finalize` |
+| `money-out`  | Refunds and payouts.                                   | `refund-create`, `payout-create`                                                         |
+| `cancel`     | Cancel subscriptions, void invoices, delete customers. | `subscription-cancel`, `invoice-void`, `customer-delete`                                 |
 
-Presets are UI sugar: the persisted policy is the explicit enumeration.
-No preset carries the fallback: the engine counts it only when no dedicated
-entry matched a write.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran turns each risk's vector into a gate and scales its
+base budget. The persisted policy is the explicit list. Each line is qualified with the mode of the
+selected resource (`stripe[live].refund-create`). Money-out and cancel are
+left out at Prudent and ask first above. The fallback sits in "Anything
+else": the engine counts it only when no dedicated entry matched a write.
 
 ## Tests
 
 `npx vitest run plugins/stripe` — 220 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the classifier's tool-by-tool security suite
+macro-action missions through `policyFromMacroActions`), the classifier's tool-by-tool security suite
 (`classify.test.ts`), the decision path through the real catalog and the
 engine — stronger risk on `cancel_at*` / `auto_advance`, PII overlay, mode
-resolution, each preset on test and live (`policy.test.ts`), the request
+resolution, each mission on test and live (`policy.test.ts`), the request
 shapes sent to Stripe (`execute.test.ts`), `execute` and `discoverResources`
-against `mockFetch`, the credential spec and presets, catalog
+against `mockFetch`, the credential spec and macro-actions, catalog
 invariants, and hostile identifiers fed to `classify` and `execute`
 (`identifiers.test.ts`). No test ever calls Stripe.

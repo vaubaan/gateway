@@ -578,7 +578,7 @@ describe('audit search: visibility, filters, paging', () => {
       other = await issueMission(rig, rig.seeded.ada, {
         name: 'Rotate the keys',
         connections: [
-          { connection_id: rig.seeded.supabase.connection.id, preset: 'read-only-analyst' },
+          { connection_id: rig.seeded.supabase.connection.id, crans: { query: 'confiant' } },
         ],
         period: { kind: 'one-off' },
         expires_at: null,

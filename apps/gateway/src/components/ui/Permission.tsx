@@ -11,7 +11,7 @@
  * | variant  | columns                                                        | used for                         |
  * | -------- | -------------------------------------------------------------- | -------------------------------- |
  * | `editor` | tick · permission · risk · per day · per minute · ask me first | the granular editor of a mission |
- * | `read`   | permission · risk · per day · per minute · gate                | what a mission or a preset holds |
+ * | `read`   | permission · risk · per day · per minute · gate                | what a mission holds             |
  * | `usage`  | permission · used today · per minute · gate                    | a mission, today                 |
  * | `pick`   | tick · permission · risk                                       | the ceiling given with an access |
  *

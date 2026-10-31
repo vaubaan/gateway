@@ -316,7 +316,7 @@
 .accountBody {
   padding: 10px 0 0 27px;
 }
-.presetDescription {
+.everythingDescription {
   max-width: var(--measure);
   margin: 10px 0 0;
   color: var(--ink-2);

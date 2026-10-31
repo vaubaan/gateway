@@ -54,7 +54,7 @@ const DROP_WORDS: Record<DropReason, string> = {
   'no-exact-env-counterpart':
     'environment-qualified in v4 with no exact v5 counterpart (never widened)',
   'env-unresolvable': 'needs a resource labelled with one of its environments',
-  'no-preset-budget': 'no preset of the plugin gives it a budget: add it by hand',
+  'no-base-budget': 'in no macro-action of the plugin, so no budget to give it: add it by hand',
   'outside-authority': "outside the owner's authority on the account",
 };
 

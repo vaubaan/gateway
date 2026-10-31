@@ -2,16 +2,16 @@
 
 /**
  * The body of a service's reference: one section in view at a time, behind
- * tabs — the permissions compared across the presets (what a person reads
+ * tabs — the permissions compared across the trust crans (what a person reads
  * before giving any), the tools, then how the service is modelled. A text
  * filter narrows the list in view; a service whose model has several planes
  * gets a plane filter that slices every tab at once.
  *
  * The URL fragment drives it, and every other page links here with one:
- * `#permissions`, `#tools`, `#data-model` select a tab (`#presets` and
- * `#risks`, the sections of the earlier page, both lead to Permissions);
+ * `#permissions`, `#tools`, `#data-model` select a tab (`#macro-actions`,
+ * `#presets` and `#risks` all lead to Permissions);
  * `#risk-<id>` opens Permissions on a plane that shows the entry, unfolds it
- * and scrolls to it; `#preset-<id>` marks the column of the preset;
+ * and scrolls to it; `#macro-<id>` marks the macro-action;
  * `#legend` opens "How to read this page".
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -41,7 +41,9 @@ type TabId = (typeof TAB_IDS)[number];
 
 /** The sections of the earlier page: links written before still land on the right tab. */
 const TAB_ALIASES: Readonly<Record<string, TabId>> = {
-  [REFERENCE_SECTIONS.presets]: 'permissions',
+  [REFERENCE_SECTIONS.macroActions]: 'permissions',
+  // The presets of an earlier page, retired: their links still land on Permissions.
+  presets: 'permissions',
   [REFERENCE_SECTIONS.risks]: 'permissions',
 };
 
@@ -75,8 +77,8 @@ function destinationOf(reference: ProviderReference, fragment: string): Destinat
   if (entry) {
     return { tab: 'permissions', target: entry.anchor, risk: entry.base_id, planes: entry.planes };
   }
-  const preset = reference.presets.find((candidate) => candidate.anchor === fragment);
-  if (preset) return { tab: 'permissions', target: preset.anchor, risk: null, planes: [] };
+  const action = reference.macro_actions.find((candidate) => candidate.anchor === fragment);
+  if (action) return { tab: 'permissions', target: action.anchor, risk: null, planes: [] };
   return null;
 }
 
@@ -255,9 +257,13 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
           permission the mission does not hold is refused.
         </p>
         <p>
-          A <strong>preset</strong> is a starting list with limits, shipped with the service.
-          Choosing one never gives more than you hold on the account, and a preset that changes in a
-          later version does not change a mission that exists.
+          A <strong>macro-action</strong> groups the permissions of one thing an agent does on the
+          service, in its own words. A mission ticks macro-actions, each at a{' '}
+          <strong>trust cran</strong>: Prudent, Confiant or Autonome sets, from each permission’s
+          palier (1 mild to 4 irreversible), whether it runs freely, asks first or is left out, and
+          multiplies its limits ×1, ×3 or ×10. Ticking never gives more than you hold on the
+          account, and a catalog that changes in a later version does not change a mission that
+          exists.
         </p>
         <p>
           <strong>Risk</strong> is one word — low, medium, high, critical — read from six facts
@@ -282,7 +288,7 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
       {tab === 'permissions' && (
         <TabPanel base={TABS_BASE} id="permissions" className={styles.panel}>
           <PermissionComparison
-            presets={reference.presets}
+            macroActions={reference.macro_actions}
             groups={groups}
             expanded={expanded}
             onExpanded={setExpanded}

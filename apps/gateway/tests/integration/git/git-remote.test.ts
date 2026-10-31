@@ -16,6 +16,7 @@ import type { AuditCallRecord } from '../../../src/server/store';
 import { line, type IssuedMission } from '../../../src/server/execution/testing';
 import {
   CONNECTION_TOKEN,
+  DEVELOPER_CRANS,
   openGitRig,
   OTHER_REPOSITORY,
   REPOSITORY,
@@ -31,7 +32,7 @@ let developer: IssuedMission;
 
 beforeAll(async () => {
   rig = await openGitRig();
-  developer = await rig.mission({ preset: 'developer' });
+  developer = await rig.mission({ crans: DEVELOPER_CRANS });
 }, 60_000);
 
 afterAll(async () => {
@@ -244,10 +245,18 @@ describe('push', () => {
 
   it('tags and deletions need their own permissions', async () => {
     const repo = await clone(developer);
+    // Pushes on work branches, without the tag and branch-delete lines.
+    const pusher = await rig.mission({
+      policy: [
+        line('github.read-code'),
+        line('github.git-push'),
+        line('github.feature-branch-write'),
+      ],
+    });
     ok(await rig.git(repo, ['tag', 'v9.9.9'], null));
-    const tag = await rig.git(repo, ['push', 'origin', 'v9.9.9'], developer.token);
+    const tag = await rig.git(repo, ['push', 'origin', 'v9.9.9'], pusher.token);
     expect(tag.stderr).toContain('github.tag-write');
-    const del = await rig.git(repo, ['push', 'origin', ':feature/x'], developer.token);
+    const del = await rig.git(repo, ['push', 'origin', ':feature/x'], pusher.token);
     expect(del.stderr).toContain('github.branch-delete');
 
     const release = await rig.mission({
@@ -353,7 +362,7 @@ describe('keys', () => {
   });
 
   it('refuses a revoked mission with its reason', async () => {
-    const mission = await rig.mission({ preset: 'developer' });
+    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
     await rig.root.missions.service.revoke(rig.ada, mission.mission.id);
     const dir = rig.workdir();
     const result = await rig.git(dir, ['clone', '-q', rig.remote(), 'a'], mission.token);
@@ -367,7 +376,7 @@ describe('keys', () => {
     const issued = await rig.root.missions.service.issue(rig.ada, {
       name: 'Two accounts',
       connections: [
-        { connection_id: account.id, preset: 'developer' },
+        { connection_id: account.id, crans: DEVELOPER_CRANS },
         {
           connection_id: rig.connection.id,
           resources: { scope: 'all' },

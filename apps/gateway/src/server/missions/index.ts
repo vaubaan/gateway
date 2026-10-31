@@ -1,5 +1,5 @@
 /**
- * Missions: authority-bounded issuance, presets, resource
+ * Missions: authority-bounded issuance, macro-actions at a cran, resource
  * selection, token mint / rotate / revoke, bootstrap kit; and the members and
  * per-holder tokens of a mission (`team`).
  *
@@ -109,26 +109,28 @@ export {
   type BootstrapKit,
   type BootstrapKitInput,
 } from './bootstrap-kit';
-export {
-  describePresetWidth,
-  enumerateCatalog,
-  isResolvable,
-  presetWidth,
-  severityLevel,
-  severityOf,
-  type PresetWidth,
-} from './catalog-view';
+export { enumerateCatalog, isResolvable, severityLevel, severityOf } from './catalog-view';
 export {
   EVERYTHING_I_HOLD,
   EVERYTHING_I_HOLD_DESCRIPTION,
   EVERYTHING_I_HOLD_LABEL,
   everythingIHold,
   expansionDigest,
-  findPreset,
-  presetIdsOf,
+  type EverythingIHold,
   type ExpansionDigest,
 } from './everything-i-hold';
 export { missionDraftSchema, parseMissionDraft, type ParsedDraft } from './draft-schema';
+export {
+  CRAN_BUDGET_FACTOR,
+  CRAN_GATES,
+  expandMacroAction,
+  macroActionOfRisk,
+  macroActionsOf,
+  palierOf,
+  TRUST_CRANS,
+  type Palier,
+  type TrustCran,
+} from './macro-actions';
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
   MissionService,
@@ -182,7 +184,6 @@ export { reachedResources, reachesLaterResources } from '../store/mission-reach'
 export {
   budgetProblem,
   defaultResources,
-  expandPreset,
   previewConnection,
   previewDraft,
   uncoveredOf,

@@ -1,6 +1,6 @@
 # Risk catalog of the `ssh` provider (bash over SSH).
 #
-# Spec     : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/ssh.md.
 #
 # Loaded at boot by `@vaubaan/plugin-sdk` (`loadCatalogFile`) ; this file is
@@ -9,7 +9,7 @@
 # 7 named risks + 1 fallback (`uncategorized-write`) : `exec-read`,
 # `exec-read-secret-files`, `exec-write`, and one risk per command class that
 # hurts (`exec-destructive`, `exec-package-install`, `exec-service-control`,
-# `exec-sudo`) so a preset can gate them with `approval`.
+# `exec-sudo`) so their palier can gate them with `approval`.
 #
 # How a command reaches a risk (see `src/shell-lex.ts`, `src/policy.ts`,
 # `src/command-classes.ts`) :
@@ -36,13 +36,12 @@
 # or `prod` in the UI. Every write risk is env-scoped on those three labels ;
 # the default `resourceEnvResolver` reads the label from the `host[<ref>]`
 # segment, no plugin hook needed. An unlabelled host cannot be written to
-# through a preset (no env → no qualified risk) ; label it.
+# through a macro-action (no env → no qualified risk) ; label it.
 #
 # Rules the loader enforces : every id starts with `ssh.` ; every pattern
 # parses as a slice of this provider ; the `ssh.uncategorized-*` fallback
-# exists ; at least one preset ; every preset entry names an explicit risk of
-# THIS catalog with a numeric quota, a rate limit and a gate ; no preset
-# references the fallback.
+# exists ; every other live risk sits in exactly one macro-action with a
+# numeric base quota and rate limit ; no macro-action references the fallback.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
@@ -51,9 +50,11 @@
 # catalog_version 5 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 6 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: ssh
-catalog_version: 5
-catalog_date: 2026-10-30
+catalog_version: 6
+catalog_date: 2026-10-31
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -86,8 +87,7 @@ risks:
       raw devices), and paths it cannot see (an expansion, `..`, a recursive
       `grep`, `docker inspect`, a line it cannot classify), and emits an extra
       slice, so a mission must hold this permission on top of `exec-read` to read
-      them. Exfiltration of host credentials ; refused by every preset but
-      `operator`, where it asks first.
+      them. Exfiltration of host credentials.
     matches: 'ssh.host[**].command.secret-file.R'
     vector:
       reversibility: reversible
@@ -131,7 +131,7 @@ risks:
       `rm` with `-r` or `-f`, `mkfs`, `dd`, `shred`, `wipefs`, partitioning
       tools, `reboot` / `shutdown`, `userdel`, firewall flushes, Docker
       prunes. Irreversible at the host level ; emitted together with
-      `exec-write`. Presets make it ask first outside `dev`.
+      `exec-write`.
     matches: 'ssh.host[**].command.destructive.W'
     vector:
       reversibility: irreversible
@@ -170,8 +170,7 @@ risks:
       `systemctl` lifecycle verbs, `service <x> restart`, Docker and Compose
       lifecycle, `pm2`, `supervisorctl`, `nginx -s`, `kill` / `pkill`.
       Availability impact, reversible by starting again. Emitted together
-      with `exec-write`. A developer preset allows it on `dev` and asks first
-      on `staging`.
+      with `exec-write`.
     matches: 'ssh.host[**].command.service.W'
     vector:
       reversibility: reversible
@@ -210,8 +209,8 @@ risks:
     reason: >-
       Catch-all for writes without a dedicated entry. Every write of the
       single `ssh__exec` tool is covered by `exec-write` ; this entry exists
-      for tools added later (an `ssh__sftp_put`, say) and is never referenced
-      by a preset.
+      for tools added later (an `ssh__sftp_put`, say) and is in no
+      macro-action.
     matches: 'ssh.**.W'
     fallback: true
     vector:
@@ -260,111 +259,3 @@ macro_actions:
       - risk_id: ssh.exec-sudo
         quota: 20
         rate_limit: { max: 2, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Inspect a host — logs, processes, disk, services, files outside credential paths. No write.
-    entries:
-      - risk_id: ssh.exec-read
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-
-  - id: developer
-    label: Developer
-    description: One mission per code project — reads everywhere, file and process operations on dev and staging hosts, service restarts on dev; nothing destructive, no packages, no sudo, no prod.
-    entries:
-      - risk_id: ssh.exec-read
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[dev].exec-write
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-write
-        quota: 500
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[dev].exec-service-control
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-service-control
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-
-  - id: operator
-    label: Operator
-    description: Everything on every labelled host; credential-file reads, destructive commands, package changes, service control and sudo asking first outside dev; every prod write asking first.
-    entries:
-      - risk_id: ssh.exec-read
-        quota: 10000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh.exec-read-secret-files
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[dev].exec-write
-        quota: 2000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-write
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[prod].exec-write
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[dev].exec-destructive
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-destructive
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[prod].exec-destructive
-        quota: 10
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[dev].exec-package-install
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-package-install
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[prod].exec-package-install
-        quota: 10
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[dev].exec-service-control
-        quota: 500
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-service-control
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[prod].exec-service-control
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[dev].exec-sudo
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: ssh[staging].exec-sudo
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: ssh[prod].exec-sudo
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval

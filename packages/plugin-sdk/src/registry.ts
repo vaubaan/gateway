@@ -8,12 +8,7 @@
  */
 
 import { prepareCatalog, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
-import {
-  splitToolName,
-  toolPrefixFor,
-  type McpToolDeclaration,
-  type Preset,
-} from '@vaubaan/shared';
+import { splitToolName, toolPrefixFor, type McpToolDeclaration } from '@vaubaan/shared';
 
 import { isBrokeredSpec } from './credential.ts';
 import { pluginIssues } from './define-plugin.ts';
@@ -188,11 +183,6 @@ export class PluginRegistry {
   /** The indexed catalog of a provider. */
   catalogOf(id: string): IndexedRiskCatalog {
     return this.require(id).catalog;
-  }
-
-  /** The presets a provider ships. */
-  presetsOf(id: string): readonly Preset[] {
-    return this.require(id).plugin.catalog.presets ?? [];
   }
 
   /** Every tool of every plugin, in registration order. */

@@ -1,7 +1,7 @@
 /**
  * Mandatory structural suite of the github plugin (spec §10) : the SDK kit,
- * catalog coverage of every declared tool, the fallback lint, the presets
- * and the credential spec. The classifier branches are pinned in
+ * catalog coverage of every declared tool, the fallback lint, the
+ * macro-actions at their trust crans and the credential spec. The classifier branches are pinned in
  * `classify.test.ts`, the risks each tool touches in `risk-catalog.test.ts`,
  * upstream calls in `execute.test.ts`.
  */
@@ -13,7 +13,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
+  policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyGithub, githubCatalog, githubCredential, githubPlugin } from '../../src/index.ts';
@@ -135,9 +135,8 @@ function gitUpdate(
 const resources: readonly Resource[] = [appRepo];
 
 describe('github plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(githubPlugin);
-    assertPresetsValid(githubPlugin);
     assertNoWildcard(githubPlugin);
   });
 
@@ -228,69 +227,84 @@ describe('github plugin — structural kit', () => {
   });
 });
 
-describe('github catalog — presets', () => {
-  const presets = githubCatalog.catalog.presets;
-  const byId = Object.fromEntries(presets.map((p) => [p.id, p]));
-  const risksOf = (id: string) => byId[id]!.entries.map((e) => e.risk_id);
-  const entry = (preset: string, risk: string) =>
-    byId[preset]!.entries.find((e) => e.risk_id === risk);
+describe('github catalog — macro-actions at a trust cran', () => {
+  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(policyFromMacroActions(githubPlugin, crans).map((l) => [l.risk_id, l.gate]));
 
-  test('ships read-only, developer and release-manager', () => {
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'release-manager']);
-    expect(githubCatalog.catalog.catalog_version).toBe(10);
+  test('read, propose, ship, administer ; catalog version 11', () => {
+    expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
+      'read',
+      'propose',
+      'ship',
+      'administer',
+    ]);
+    expect(githubCatalog.catalog.catalog_version).toBe(11);
   });
 
-  test('read-only grants reads only, no search, gate auto', () => {
-    expect(risksOf('read-only')).toEqual(['github.read-code', 'github.read-meta']);
-    for (const e of byId['read-only']!.entries) expect(e.gate).toBe('auto');
+  test('read at Prudent : code and metadata run freely, the global search asks first', () => {
+    expect(gates({ read: 'prudent' })).toEqual({
+      'github.read-code': 'auto',
+      'github.read-meta': 'auto',
+      'github.search-global': 'approval',
+    });
   });
 
-  test('developer writes on feature branches and PRs, never on protected branches or admin surfaces', () => {
-    const dev = risksOf('developer');
+  test('propose at Prudent writes on feature branches and PRs, never on protected branches or admin surfaces', () => {
+    const propose = gates({ propose: 'prudent' });
     for (const id of [
-      'github.read-code',
-      'github.read-meta',
-      'github.search-global',
       'github.feature-branch-write',
+      'github.git-push',
       'github.bulk-file-write',
       'github.create-pr',
       'github.comment-write',
     ]) {
-      expect(dev).toContain(id);
+      expect(propose[id], id).toBe('auto');
     }
+    // A force-push or a branch deletion is costly : it asks first.
+    expect(propose['github.force-push']).toBe('approval');
+    expect(propose['github.branch-delete']).toBe('approval');
     for (const id of [
       'github.merge-protected',
       'github.branch-protection-write',
+      'github.workflow-write-via-file',
       'github.create-release',
       'github.delete-release',
+      'github.tag-write',
     ]) {
-      expect(dev).not.toContain(id);
-    }
-    expect(entry('developer', 'github.workflow-write-via-file')?.gate).toBe('approval');
-    // Catalog v6 : git goes through the gateway's remote ; a force-push asks first.
-    expect(entry('developer', 'github.git-push')?.gate).toBe('auto');
-    expect(entry('developer', 'github.force-push')?.gate).toBe('approval');
-    for (const id of ['github.branch-delete', 'github.tag-write']) {
-      expect(dev).not.toContain(id);
+      expect(Object.keys(propose)).not.toContain(id);
     }
   });
 
-  test('release-manager pushes tags with git, each asking first', () => {
-    expect(entry('release-manager', 'github.git-push')?.gate).toBe('auto');
-    expect(entry('release-manager', 'github.tag-write')?.gate).toBe('approval');
+  test('ship at Confiant : merges, tags and releases ask first ; deleting a release is left out at Prudent', () => {
+    expect(gates({ ship: 'confiant' })).toEqual({
+      'github.merge-protected': 'approval',
+      'github.tag-write': 'approval',
+      'github.create-release': 'approval',
+      'github.delete-release': 'approval',
+    });
+    expect(Object.keys(gates({ ship: 'prudent' }))).not.toContain('github.delete-release');
   });
 
-  test('release-manager gates merge-protected, create-release and delete-release on approval', () => {
-    expect(entry('release-manager', 'github.merge-protected')?.gate).toBe('approval');
-    expect(entry('release-manager', 'github.create-release')?.gate).toBe('approval');
-    expect(entry('release-manager', 'github.delete-release')?.gate).toBe('approval');
-    expect(risksOf('release-manager')).not.toContain('github.branch-protection-write');
-  });
-
-  test('no preset offers the fallback risk — the creator opts in explicitly', () => {
-    for (const preset of presets) {
-      expect(risksOf(preset.id)).not.toContain('github.uncategorized-write');
+  test('administer : branch protection and workflow files ask first below Autonome', () => {
+    for (const cran of ['prudent', 'confiant'] as const) {
+      expect(gates({ administer: cran })).toEqual({
+        'github.branch-protection-write': 'approval',
+        'github.workflow-write-via-file': 'approval',
+      });
     }
+  });
+
+  test('no macro-action of the catalog holds the fallback — the creator ticks "Anything else"', () => {
+    const all = gates({
+      read: 'autonome',
+      propose: 'autonome',
+      ship: 'autonome',
+      administer: 'autonome',
+    });
+    expect(Object.keys(all)).not.toContain('github.uncategorized-write');
+    expect(gates({ 'anything-else': 'prudent' })).toEqual({
+      'github.uncategorized-write': 'approval',
+    });
   });
 });
 

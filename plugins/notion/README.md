@@ -27,7 +27,7 @@ root[<root id>]                  the resource: a top-level page or database shar
 ```
 
 No entity is `envScopable`: Notion has no environments, and no risk is
-env-scoped. Destructive operations ask first in the presets instead.
+env-scoped. Destructive operations are gated by their palier instead.
 
 ## Credential and resources
 
@@ -114,37 +114,43 @@ A `link_to_page` is exactly `{ type: "page_id", page_id }` or
 
 `src/risk-catalog.yaml`, version 1: 14 named risks and the fallback.
 
-| Risk                         | Action | Notes                                                          |
-| ---------------------------- | ------ | -------------------------------------------------------------- |
-| `notion.read-content`        | R      | Pages, blocks, databases, data sources, search, the root list. |
-| `notion.query-databases`     | R      | Bulk entry queries (`blast: bulk`, `data: pii`).               |
-| `notion.read-comments`       | R      | Open discussions.                                              |
-| `notion.page-create`         | W      | A page under a page.                                           |
-| `notion.page-update`         | W      | Title, icon, cover.                                            |
-| `notion.content-append`      | W      | New blocks.                                                    |
-| `notion.block-update`        | W      | Rewrites one block (`costly`).                                 |
-| `notion.block-delete`        | W      | The `delete` leaf: one block to the trash.                     |
-| `notion.page-trash`          | W      | The `trash` leaf: a page and its subtree (`blast: bulk`).      |
-| `notion.page-restore`        | W      | The `restore` leaf: a page back from the trash.                |
-| `notion.root-trash`          | W      | The root page itself; in no preset.                            |
-| `notion.entry-create`        | W      | A database entry.                                              |
-| `notion.entry-update`        | W      | An entry's values.                                             |
-| `notion.comment-create`      | W      | A new discussion or a reply.                                   |
-| `notion.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool, in no preset. |
+| Risk                         | Action | Notes                                                                |
+| ---------------------------- | ------ | -------------------------------------------------------------------- |
+| `notion.read-content`        | R      | Pages, blocks, databases, data sources, search, the root list.       |
+| `notion.query-databases`     | R      | Bulk entry queries (`blast: bulk`, `data: pii`).                     |
+| `notion.read-comments`       | R      | Open discussions.                                                    |
+| `notion.page-create`         | W      | A page under a page.                                                 |
+| `notion.page-update`         | W      | Title, icon, cover.                                                  |
+| `notion.content-append`      | W      | New blocks.                                                          |
+| `notion.block-update`        | W      | Rewrites one block (`costly`).                                       |
+| `notion.block-delete`        | W      | The `delete` leaf: one block to the trash.                           |
+| `notion.page-trash`          | W      | The `trash` leaf: a page and its subtree (`blast: bulk`).            |
+| `notion.page-restore`        | W      | The `restore` leaf: a page back from the trash.                      |
+| `notion.root-trash`          | W      | The root page itself, beside `page-trash`.                           |
+| `notion.entry-create`        | W      | A database entry.                                                    |
+| `notion.entry-update`        | W      | An entry's values.                                                   |
+| `notion.comment-create`      | W      | A new discussion or a reply.                                         |
+| `notion.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool, in no macro-action. |
 
 Write patterns do not overlap: each write touches one risk, except trashing
 the root page, which also touches `root-trash`.
 
-## Presets
+## Macro-actions
 
-| Preset      | Scope                                                                                                  |
-| ----------- | ------------------------------------------------------------------------------------------------------ |
-| `read-only` | The three reads, `auto`.                                                                               |
-| `reviewer`  | Reads and `comment-create`, `auto`.                                                                    |
-| `editor`    | Reads, comments, every page, block and entry write `auto`; `page-trash` and `block-delete` `approval`. |
+A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
+Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The fallback sits apart, under "Anything else".
 
-`root-trash` is in no preset. Presets are a shortcut of the New mission
-form: the saved mission holds the explicit list of risks.
+| Macro-action | What it covers                                             | Its risks                                                                                      |
+| ------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `read`       | Pages, databases and comments.                             | `read-content`, `query-databases`, `read-comments`                                             |
+| `comment`    | Leave comments.                                            | `comment-create`                                                                               |
+| `write`      | Create and edit pages, their content and database entries. | `page-create`, `page-update`, `content-append`, `block-update`, `entry-create`, `entry-update` |
+| `reorganize` | Delete blocks, move to the trash and restore.              | `block-delete`, `page-trash`, `page-restore`, `root-trash`                                     |
+
+At Confiant, `block-update`, `block-delete`, `page-trash` and `root-trash`
+ask first; everything else runs freely. The saved mission holds the explicit
+list of risks.
 
 ## Ceilings
 
@@ -161,7 +167,7 @@ its `Retry-After`.
 ## Tests
 
 `npx vitest run plugins/notion` — 144 tests: the SDK kit
-(`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
+(`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage` with no fallback hit and no risk untouched,
 `assertIdentifiersRefused` on the same samples), the classifier branch by
 branch, the ancestry walk, the requests of `execute` (silent notifications

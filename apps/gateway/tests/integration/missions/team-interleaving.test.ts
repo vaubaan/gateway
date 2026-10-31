@@ -39,7 +39,12 @@ describe('missions: a token insert that lost the race is refused', () => {
     ({ ada, bob } = seeded);
     const draft: MissionDraft = {
       name: 'Ship the billing page',
-      connections: [{ connection_id: seeded.github.connection.id, preset: 'developer' }],
+      connections: [
+        {
+          connection_id: seeded.github.connection.id,
+          crans: { read: 'confiant', propose: 'confiant' },
+        },
+      ],
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
     };

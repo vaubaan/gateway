@@ -16,7 +16,7 @@ only.
 | File                    | Role                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                                               |
-| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 5`. Loaded at boot by the SDK; the only catalog artefact.                                            |
+| `src/risk-catalog.yaml` | 10 risks + fallback, four macro-actions, `catalog_version: 8`. Loaded at boot by the SDK; the only catalog artefact.                                       |
 | `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                                                       |
 | `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                                              |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`.                             |
@@ -105,7 +105,7 @@ What `execute` declines itself (a database outside the mission, a malformed
 argument, a pipeline-shaped `command`) is an `isError` result; a provider
 failure is thrown.
 
-## Catalog and presets
+## Catalog and macro-actions
 
 Risks (ids are stable, never renamed): `read-database-metadata`,
 `read-data`, `read-stats`, `write-data`¹, `delete-data`¹, `flush-database`¹,
@@ -115,15 +115,19 @@ Risks (ids are stable, never renamed): `read-database-metadata`,
 as `upstash-redis[staging].write-data` etc. Reads and `create-database`
 (account-rooted) stay account-scoped.
 
-| Preset      | Intent                                                                                      | Approval-gated by default                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `read-only` | Inspect databases, stats and key-value data.                                                | —                                                                                                           |
-| `developer` | Key-level reads/writes with TTL and targeted deletions on `development` and `staging`.      | — (no FLUSH, no arbitrary command, no management write, nothing on `prod`)                                  |
-| `operator`  | Developer plus `prod` key writes, FLUSH, arbitrary commands, database create/delete/rename. | FLUSH and arbitrary commands on `staging` / `prod`, every database deletion, every rename, `prod` deletions |
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome),
+risk model §4.6; the cran writes the explicit lines, one per environment the
+mission's databases carry.
 
-Budgets are per period; see the YAML for the numbers. Presets are UI sugar;
-the persisted mission policy is always the explicit enumeration. No preset
-carries the fallback.
+| Macro-action | What it covers                                  | Its risks                                                                    |
+| ------------ | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| `peek`       | Metadata, stats and values.                     | `read-database-metadata`, `read-stats`, `read-data`                          |
+| `write`      | Set keys.                                       | `write-data`                                                                 |
+| `delete`     | Delete keys and flush the database.             | `delete-data`, `flush-database`                                              |
+| `manage`     | Create, rename, delete, and arbitrary commands. | `create-database`, `modify-database`, `delete-database`, `execute-arbitrary` |
+
+Base budgets are in the YAML. The fallback is in no macro-action: the gateway
+offers it under "Anything else".
 
 ## Resources
 
@@ -150,16 +154,16 @@ npx vitest run plugins/upstash-redis
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with
+`assertNoWildcard`, `assertCatalogCoverage` with
 samples for every tool), the classifier conventions, env resolution through
 the resource label, the credential spec, and `execute` / `discoverResources`
 against `mockFetch`. `classify.test.ts` pins the expected slice of every
 tool and the denials; `command-table.test.ts` is the adversarial table of
 the generic `execute` tool (one class per command, deletions in disguise,
 unreadable commands, pipelines); `policy.test.ts` runs the shipped catalog
-and presets through the engine (`evaluateCall` with the gateway's env
-resolver): refusal on an unlabelled database, what each preset allows and
-refuses. `risk-catalog.test.ts` lints the loaded catalog and its coverage of
+and missions written from its macro-actions through the engine
+(`evaluateCall` with the gateway's env resolver): refusal on an unlabelled
+database, what each mission allows and refuses. `risk-catalog.test.ts` lints the loaded catalog and its coverage of
 every tool, `execute.test.ts` pins the request shapes sent upstream and the
 pinned REST endpoint, and `identifiers.test.ts` feeds hostile database refs
 to `classify` and `execute`. 313 tests; none reaches the network.

@@ -29,7 +29,7 @@ import {
   type ManagementRateLimit,
   type ProviderCatalog,
 } from '../management';
-import { enumerateCatalog, type MissionService } from '../missions';
+import { enumerateCatalog, macroActionsOf, type MissionService } from '../missions';
 import {
   createManagementGate,
   type ManagementGate,
@@ -80,7 +80,7 @@ export function managementMissionsOf(service: MissionService): ManagementMission
   return Object.freeze(port);
 }
 
-/** The shipped catalogs as plain data: ids, labels, presets. No plugin behaviour is handed over. */
+/** The shipped catalogs as plain data: ids, labels, macro-actions. No plugin behaviour is handed over. */
 export function managementCatalogOf(registry: PluginRegistry): ManagementCatalog {
   const catalogs = new Map<string, ProviderCatalog>();
   for (const id of registry.ids) {
@@ -92,7 +92,7 @@ export function managementCatalogOf(registry: PluginRegistry): ManagementCatalog
         provider_label: plugin.displayName,
         derives_env: typeof plugin.envOf === 'function',
         risks: enumerateCatalog(plugin.catalog),
-        presets: registry.presetsOf(id),
+        macro_actions: macroActionsOf(plugin.catalog),
       }),
     );
   }

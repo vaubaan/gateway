@@ -3,8 +3,8 @@
 GitHub provider plugin for Vaubaan Gateway, written against
 [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One connection is one
 **fine-grained personal access token**; one resource is one repository the
-token reaches (`owner/repo`); a mission picks repositories, a preset and the
-risks it accepts.
+token reaches (`owner/repo`); a mission picks repositories and macro-actions at
+a trust cran, which write the risks it accepts.
 
 Handbook: [`docs/handbook/providers/github.md`](../../docs/handbook/providers/github.md).
 Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
@@ -19,7 +19,7 @@ Plugin version 4.0.1, catalog version 9.
 | File                      | Role                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                 |
-| `src/risk-catalog.yaml`   | The risks, the fallback and the presets. Loaded by the SDK at boot; the only catalog artefact.           |
+| `src/risk-catalog.yaml`   | The risks, the fallback and the macro-actions. Loaded by the SDK at boot; the only catalog artefact.     |
 | `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release, pull request, issue, workflow → run → job.    |
 | `src/tools.ts`            | 27 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                     |
 | `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.     |
@@ -43,7 +43,7 @@ environment label. Virtual leaves carry intentions that are not entities:
 `branch[X].merge-into`, `branch[X].propose-to[Y]`,
 `branch[X].workflow-via-file`, `branch[X].files-bulk`, `release[id].delete`.
 
-## Catalog and presets
+## Catalog and macro-actions
 
 The risks are in `src/risk-catalog.yaml`; the handbook argues the
 classification. What a reviewer must know:
@@ -51,7 +51,7 @@ classification. What a reviewer must know:
 - A write on `main, master, prod, production, release-*` touches
   `merge-protected`; on `feature/*, feat/*, fix/*, chore/*, bug/*, docs/*,
 refactor/*` it touches `feature-branch-write`; any other branch name falls
-  to the fallback `github.uncategorized-write`, which no preset offers.
+  to the fallback `github.uncategorized-write`, which no macro-action offers.
 - A file under `.github/workflows/` touches `workflow-write-via-file` (a
   privilege-escalation vector), through the API or through a push.
 - `search_code` / `search_issues` touch `search-global`: they are bounded by
@@ -61,13 +61,20 @@ refactor/*` it touches `feature-branch-write`; any other branch name falls
 - `mint-install-token-clone` / `-push` are deprecated (they belonged to the
   removed GitHub App); no call touches them.
 
-| Preset            | For                                                                                    | Approval gates                                                     |
-| ----------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `read-only`       | code and metadata reads                                                                | —                                                                  |
-| `developer`       | one mission per repository: feature branches, git push, PRs, comments, global search   | `workflow-write-via-file`, `force-push`                            |
-| `release-manager` | merge into protected branches, releases, tags; feature-branch writes, PRs and comments | `merge-protected`, `create-release`, `delete-release`, `tag-write` |
+A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
+Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The fallback sits apart, under "Anything else".
 
-No preset grants `branch-protection-write`: the creator adds it.
+| Macro-action | What it covers                                   | Its risks                                                                                                          |
+| ------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `read`       | Code, metadata and global search.                | `read-code`, `read-meta`, `search-global`                                                                          |
+| `propose`    | Work branches, push, pull requests and comments. | `feature-branch-write`, `git-push`, `bulk-file-write`, `create-pr`, `comment-write`, `branch-delete`, `force-push` |
+| `ship`       | Merge on protected branches, tags and releases.  | `merge-protected`, `tag-write`, `create-release`, `delete-release`                                                 |
+| `administer` | Branch protection and workflow files.            | `branch-protection-write`, `workflow-write-via-file`                                                               |
+
+`force-push`, `branch-delete`, protected merges, tags, releases and
+`administer` ask first below Autonome; `delete-release` is left out at
+Prudent and asks first above.
 
 ## Classification and execution
 
@@ -163,8 +170,8 @@ nothing at GitHub: delete the token on the fine-grained tokens page.
 npx vitest run plugins/github
 ```
 
-- `plugin.test.ts` — SDK kit (well-formed, presets valid, no wildcard,
-  catalog coverage with samples per tool, `fallbackHits` empty).
+- `plugin.test.ts` — SDK kit (well-formed, no wildcard, catalog coverage
+  with samples per tool, `fallbackHits` empty), the macro-actions at each cran.
 - `risk-catalog.test.ts` — the table `[tool, arguments, risks touched]`: add
   a row whenever a tool, a classifier branch or a catalog pattern changes.
 - `classify.test.ts` — the classifier's security suite: exact slices or

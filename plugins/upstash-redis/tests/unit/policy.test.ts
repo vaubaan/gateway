@@ -1,24 +1,25 @@
 /**
- * The shipped catalog and presets, through the real engine.
+ * The shipped catalog and missions written from its macro-actions, through the real engine.
  *
  * Each call goes the way the gateway takes it : the plugin classifies, then
  * `evaluateCall` intersects the slices with the loaded catalog, qualifies
  * the touched risks with the environment label of the database
  * (`envResolverFor(resources, plugin.envOf)`, the resolver the gateway
- * builds) and checks them against the accepted risks of a mission issued
- * from a preset.
+ * builds) and checks them against the accepted risks of a mission written
+ * from macro-actions at trust crans (`policyFromMacroActions`).
  *
  * Two rules are pinned here :
  *   - an env-scoped risk touched on a database with no label, or with a
  *     label outside `acceptable_in_envs`, refuses the call — every Upstash
  *     write risk is env-scoped, so no write passes on such a database ;
- *   - a preset allows and refuses what its description says, whichever tool
+ *   - a mission allows and refuses what its macro-actions say, whichever tool
  *     carries the command (`DEL` through the generic `execute` tool needs
  *     `delete-data`, like the dedicated `del` tool).
  */
 import { describe, expect, test } from 'vitest';
 
 import type { ProviderPlugin, Resource } from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 import { envResolverFor, evaluateCall, indexCatalog } from '@vaubaan/policy-engine';
 
 import { upstashRedisPlugin } from '../../src/index.ts';
@@ -39,11 +40,32 @@ function database(env?: string): Resource {
   };
 }
 
-/** The accepted risks a mission gets from a preset, exactly as the preset lists them. */
-function acceptedBy(presetId: string): ReadonlySet<string> {
-  const preset = upstashRedisPlugin.catalog.presets.find((p) => p.id === presetId);
-  if (!preset) throw new Error(`no preset '${presetId}'`);
-  return new Set(preset.entries.map((e) => e.risk_id));
+/** The missions below, written as the creation form writes them. */
+const MISSIONS = {
+  /** Inspect : `peek`, no environment needed. */
+  'read-only': policyFromMacroActions(upstashRedisPlugin, { peek: 'prudent' }),
+  /** Key writes and DEL off prod ; at Prudent the irreversible flush is left out. */
+  developer: policyFromMacroActions(
+    upstashRedisPlugin,
+    { peek: 'prudent', write: 'prudent', delete: 'prudent' },
+    { envs: ['development', 'staging'] },
+  ),
+  /** Everything, everywhere, at Confiant. */
+  operator: policyFromMacroActions(
+    upstashRedisPlugin,
+    { peek: 'confiant', write: 'confiant', delete: 'confiant', manage: 'confiant' },
+    { envs: ['development', 'staging', 'prod'] },
+  ),
+} as const;
+
+/** The accepted risks of a mission, exactly as its lines list them. */
+function acceptedBy(id: keyof typeof MISSIONS): ReadonlySet<string> {
+  return new Set(MISSIONS[id].map((e) => e.risk_id));
+}
+
+/** The gate a mission's line gives a risk. */
+function gateIn(id: keyof typeof MISSIONS, riskId: string): string | undefined {
+  return MISSIONS[id].find((e) => e.risk_id === riskId)?.gate;
 }
 
 /** Classify, then decide — the two steps of `evaluateCallForToken`. */
@@ -127,7 +149,7 @@ describe('a database with no environment label, or a label the catalog does not 
   });
 });
 
-describe('preset read-only — inspect, no write', () => {
+describe('peek — inspect, no write', () => {
   const accepted = acceptedBy('read-only');
 
   test('allows the reads, through the dedicated tools and through execute', () => {
@@ -185,7 +207,7 @@ describe('preset read-only — inspect, no write', () => {
   });
 });
 
-describe('preset developer — key-level writes and targeted DEL on development and staging', () => {
+describe('peek, write and delete at Prudent on development and staging — key-level writes and targeted DEL', () => {
   const accepted = acceptedBy('developer');
 
   for (const env of ['development', 'staging']) {
@@ -250,7 +272,7 @@ describe('preset developer — key-level writes and targeted DEL on development 
   });
 });
 
-describe('preset operator — everything, each command under the risk that names it', () => {
+describe('every macro-action at Confiant — everything, each command under the risk that names it', () => {
   const accepted = acceptedBy('operator');
 
   test('allows every class of command in every environment', () => {
@@ -284,10 +306,7 @@ describe('preset operator — everything, each command under the risk that names
   // approval. A DEL must touch the gated risk whichever tool carries it,
   // or the approval is skipped by choosing the other tool.
   test('a prod DEL touches the approval-gated delete-data, through del and through execute', () => {
-    const gateOf = (riskId: string) =>
-      upstashRedisPlugin.catalog.presets
-        .find((p) => p.id === 'operator')!
-        .entries.find((e) => e.risk_id === riskId)!.gate;
+    const gateOf = (riskId: string) => gateIn('operator', riskId);
     expect(gateOf('upstash-redis[prod].write-data')).toBe('auto');
     expect(gateOf('upstash-redis[prod].delete-data')).toBe('approval');
 
@@ -384,8 +403,7 @@ describe('preset operator — everything, each command under the risk that names
   });
 
   test('arbitrary execution outside development is behind approval, like the FLUSH a script can run', () => {
-    const operator = upstashRedisPlugin.catalog.presets.find((p) => p.id === 'operator')!;
-    const gateOf = (riskId: string) => operator.entries.find((e) => e.risk_id === riskId)!.gate;
+    const gateOf = (riskId: string) => gateIn('operator', riskId);
     for (const env of ['staging', 'prod']) {
       expect(gateOf(`upstash-redis[${env}].flush-database`)).toBe('approval');
       expect(gateOf(`upstash-redis[${env}].execute-arbitrary`)).toBe('approval');

@@ -16,8 +16,8 @@ knows where it runs; a plugin has no access to its environment. Handbook
 ## Decision
 
 `InstanceConfig.selfResources` always holds `railway:$RAILWAY_PROJECT_ID` and `fly:$FLY_APP_NAME`
-when the platform sets them, plus every entry of `self_resources`; no plugin, connection, preset
-or policy changes it. One predicate (`isSelfResource`) enforces it at issuance, at execution
+when the platform sets them, plus every entry of `self_resources`; no plugin, connection,
+macro-action or policy changes it. One predicate (`isSelfResource`) enforces it at issuance, at execution
 whatever the stored selection says, and in every listing of what a mission can select.
 
 ## Consequences

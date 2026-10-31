@@ -31,7 +31,7 @@ export const resendPlugin = definePlugin({
   displayName: 'Resend',
   icon: RESEND_ICON,
   iconColor: RESEND_ICON_COLOR,
-  version: '0.5.2',
+  version: '0.5.3',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',

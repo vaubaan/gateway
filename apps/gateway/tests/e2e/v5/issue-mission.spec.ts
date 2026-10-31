@@ -45,11 +45,11 @@ const COMPACT_SCREENS = ACCOUNTS_SHOWN + 1;
 
 /**
  * What the pages show of the GitHub plugin is read from the plugin itself, so a
- * permission, a preset or a tool added to it does not leave this file behind.
+ * permission, a macro-action or a tool added to it does not leave this file behind.
  */
 const GITHUB = {
   permissions: githubPlugin.catalog.risks.length,
-  presets: githubPlugin.catalog.presets?.length ?? 0,
+  macroActions: githubPlugin.catalog.macro_actions?.length ?? 0,
   tools: githubPlugin.tools.length,
 };
 
@@ -430,8 +430,19 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
       connections: [
         {
           provider: 'github',
-          preset: 'read-only',
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
+          policy: [
+            {
+              risk_id: 'github.read-code',
+              quota: 100,
+              rate_limit: { max: 10, window_seconds: 60 },
+            },
+            {
+              risk_id: 'github.read-meta',
+              quota: 100,
+              rate_limit: { max: 10, window_seconds: 60 },
+            },
+          ],
         },
         {
           provider: 'supabase',
@@ -492,7 +503,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   expect(await checkToken(request, second)).toMatchObject({ outcome: 'verified' });
 });
 
-test('the reference explains each service: permissions against presets, tools, model', async ({
+test('the reference explains each service: permissions against the trust crans, tools, model', async ({
   page,
 }) => {
   await signIn(page);
@@ -505,7 +516,9 @@ test('the reference explains each service: permissions against presets, tools, m
   await expect(page.getByTestId('provider-github')).toContainText(
     `${GITHUB.permissions} permissions`,
   );
-  await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.presets} presets`);
+  await expect(page.getByTestId('provider-github')).toContainText(
+    `${GITHUB.macroActions} macro-actions`,
+  );
   await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.tools} tools`);
   await expect(page.getByTestId('provider-gmail')).not.toContainText('experimental');
   // The services are a local navigation beside the content.
@@ -559,28 +572,37 @@ test('the reference explains each service: permissions against presets, tools, m
   await page.getByRole('button', { name: 'Hide how to read this page' }).click();
   await expect(help).toBeHidden();
 
-  // The permissions against the presets: one column each, a cell per limit.
-  const matrix = page.getByTestId('preset-matrix');
-  const preset = page.getByTestId('preset-staging-developer');
-  await expect(preset).toContainText('Staging developer');
-  await expect(preset).toContainText(/\d+ permissions|\d+ · \d+ ask/);
+  // The macro-actions first, then the permissions against the trust crans: a column per cran.
+  const actions = page.getByTestId('macro-action-list');
+  await expect(actions.locator('li')).toHaveCount(6);
+  await expect(page.getByTestId('macro-change-data')).toContainText('Change data');
+  await expect(page.getByTestId('macro-change-data')).toContainText(/\d+ permissions/);
+  await expect(page.getByTestId('macro-anything-else')).toContainText('Anything else');
+  const matrix = page.getByTestId('cran-matrix');
   await expect(matrix.getByRole('columnheader')).toHaveText([
     'Permission',
     'Risk',
-    /Read-only analyst/,
-    /Staging developer/,
-    /Migration operator/,
+    'Prudent',
+    'Confiant',
+    'Autonome',
   ]);
-  const bulkCell = page.getByTestId('cell-staging-developer-supabase.bulk-row-write');
-  await expect(bulkCell).toContainText('staging');
-  await expect(bulkCell).toContainText(/\d/);
-  await expect(page.getByTestId('cell-read-only-analyst-supabase.bulk-row-write')).toContainText(
-    'not included',
+  await expect(page.getByTestId('cran-prudent')).toHaveAttribute('title', /left out/);
+  // A costly write (palier 3): asks first until Autonome, its limit ×1, ×3, ×10.
+  const bulkCell = (cran: string) => page.getByTestId(`cell-${cran}-supabase.bulk-row-write`);
+  await expect(bulkCell('prudent')).toContainText('staging');
+  await expect(bulkCell('prudent')).toContainText('asks first');
+  await expect(bulkCell('prudent')).toContainText('50');
+  await expect(bulkCell('confiant')).toContainText('150');
+  await expect(bulkCell('autonome')).toContainText('500');
+  await expect(bulkCell('autonome')).not.toContainText('asks first');
+  // An irreversible one (palier 4): left out at Prudent, asks first above.
+  await expect(page.getByTestId('cell-prudent-supabase.storage.bulk-object-write')).toContainText(
+    'left out',
   );
-  await expect(page.getByTestId('cell-migration-operator-supabase.migration-write')).toContainText(
+  await expect(page.getByTestId('cell-confiant-supabase.storage.bulk-object-write')).toContainText(
     'asks first',
   );
-  await snap(page, 'provider-presets');
+  await snap(page, 'provider-macro-actions');
 
   // A text filter narrows the list in view.
   const rows = matrix.locator('tr[data-risk]');
@@ -648,12 +670,14 @@ test('the reference explains each service: permissions against presets, tools, m
   const unfolded = page.locator('[id="risk-supabase.bulk-row-write-detail"]');
   await expect(unfolded).toContainText('once per environment');
   await expect(unfolded).toContainText('supabase[staging].bulk-row-write');
-  // The six words behind the severity, what it covers, and its limits in each preset.
+  // The six words behind the severity, what it covers, and its line at each cran.
   await expect(unfolded.getByText('Blast radius').first()).toBeVisible();
   await expect(unfolded).toContainText('Write: project');
   await expect(unfolded).toContainText('supabase.project');
-  await expect(unfolded).toContainText('Staging developer');
-  await expect(unfolded).toContainText('Migration operator');
+  await expect(unfolded).toContainText('Change data');
+  await expect(unfolded).toContainText('Prudent');
+  await expect(unfolded).toContainText('Autonome');
+  await expect(unfolded).toContainText('Palier 3');
   await expect(unfolded).toContainText(/\d+\/min/);
   // The reader was on `auth`, which does not show this entry: its own part was opened.
   await expect(planes.getByRole('button', { name: 'db' })).toHaveAttribute('aria-pressed', 'true');
@@ -678,20 +702,37 @@ test('the reference explains each service: permissions against presets, tools, m
     'Counts only for a write no other entry of the catalog names',
   );
   await snap(page, 'provider-risks');
-  // The name of a preset is the link to its column.
-  await page.getByTestId('preset-migration-operator').getByRole('link').click();
-  await expect(page).toHaveURL(/#preset-migration-operator$/);
-  await expect(page.getByTestId('preset-migration-operator')).toBeInViewport();
+  // The macro-action of a permission is the link to it in the list.
+  await page
+    .getByTestId('risk-supabase.migration-write')
+    .getByRole('link', { name: 'Change the schema' })
+    .click();
+  await expect(page).toHaveURL(/#macro-change-schema$/);
+  await expect(page.getByTestId('macro-change-schema')).toBeInViewport();
 
-  // A preset anchor; a service with one part has no filter by part.
-  await page.goto('/reference/github#preset-developer');
-  await expect(page.getByTestId('preset-developer')).toBeInViewport();
+  // A macro-action anchor; a service with one part has no filter by part.
+  await page.goto('/reference/github#macro-administer');
+  await expect(page.getByTestId('macro-administer')).toBeInViewport();
   await expect(page.getByTestId('plane-control')).toHaveCount(0);
-  await expect(page.getByTestId('preset-matrix')).toContainText('Modify a GitHub Actions workflow');
-  await expect(page.getByTestId('cell-developer-github.workflow-write-via-file')).toContainText(
+  await expect(page.getByTestId('cran-matrix')).toContainText('Modify a GitHub Actions workflow');
+  await expect(page.getByTestId('cell-prudent-github.workflow-write-via-file')).toContainText(
     'asks first',
   );
-  // The earlier sections still lead somewhere: `#risks` and `#presets` open Permissions.
+  await expect(page.getByTestId('cell-autonome-github.workflow-write-via-file')).not.toContainText(
+    'asks first',
+  );
+  await expect(page.getByTestId('cell-prudent-github.delete-release')).toContainText('left out');
+  // The earlier sections still lead somewhere: `#presets`, `#macro-actions` and `#risks`
+  // open Permissions.
+  for (const section of ['presets', 'macro-actions']) {
+    await page.goto(`/reference/github#tools`);
+    await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
+    await page.goto(`/reference/github#${section}`);
+    await expect(page.getByRole('tab', { name: /Permissions/ }), section).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  }
   // Nineteen permissions today, folded, read in about two screens.
   await page.goto('/reference/github#risks');
   await expect(page.getByRole('tab', { name: /Permissions/ })).toHaveAttribute(

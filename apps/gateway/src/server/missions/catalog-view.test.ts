@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import { fullCatalogRiskIds } from '../authority';
 import {
-  describePresetWidth,
   enumerateCatalog,
   formatRate,
   groupByKind,
@@ -11,7 +10,6 @@ import {
   isResolvable,
   MAX_SEVERITY,
   patternsOf,
-  presetWidth,
   riskKindOf,
   SEVERITY_RANKS,
   severityLevel,
@@ -129,19 +127,6 @@ describe('isResolvable', () => {
   });
   it('resolves any env when the plugin derives it from the call', () => {
     expect(isResolvable({ env: 'prod' }, { derives_env: true }, [])).toBe(true);
-  });
-});
-
-describe('presetWidth', () => {
-  it('counts the risks, names the most severe one and the largest quota', () => {
-    const developer = ACME_CATALOG.presets?.find((p) => p.id === 'developer');
-    if (!developer) throw new Error('fixture preset missing');
-    const width = presetWidth(developer, enumerateCatalog(ACME_CATALOG));
-    expect(width).toMatchObject({ risks: 3, largest_quota: 1000, approvals: 1 });
-    expect(width.most_severe?.risk_id).toBe('acme[staging].bulk-delete');
-    expect(describePresetWidth(width)).toBe(
-      '3 risks · most severe: Delete things in bulk (high) · largest quota 1000 · 1 under approval',
-    );
   });
 });
 

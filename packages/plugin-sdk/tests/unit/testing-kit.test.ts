@@ -9,7 +9,6 @@ import {
   assertCatalogCoverage,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
 } from '../../src/testing/index.ts';
 import { ACME_API, acmePlugin } from '../fixtures/acme/acme-plugin.ts';
@@ -121,29 +120,7 @@ describe('assertCatalogCoverage', () => {
         ),
       },
     };
-    // The reader preset now references a missing risk ; replace it so only
-    // coverage fails (a preset on the fallback would be a definition error).
-    const plugin: ProviderPlugin = {
-      ...noReadRisk,
-      catalog: {
-        ...noReadRisk.catalog,
-        presets: [
-          {
-            id: 'w',
-            label: 'W',
-            description: 'w',
-            entries: [
-              {
-                risk_id: 'acme.thing-write',
-                quota: 1,
-                rate_limit: { max: 1, window_seconds: 1 },
-                gate: 'auto',
-              },
-            ],
-          },
-        ],
-      },
-    };
+    const plugin = noReadRisk;
     expect(() => assertCatalogCoverage(plugin, samples, { resources: [staging] })).toThrow(
       /'acme__list_things' sample #1 slice #1: no catalog risk matches it/,
     );
@@ -161,7 +138,7 @@ describe('assertCatalogCoverage', () => {
   });
 });
 
-describe('assertNoWildcard / assertPresetsValid / assertPluginWellFormed', () => {
+describe('assertNoWildcard / assertPluginWellFormed', () => {
   test('explicit lists pass, wildcards and sentinels fail', () => {
     expect(() => assertNoWildcard(['acme.read-things', 'acme[prod].thing-write'])).not.toThrow();
     expect(() => assertNoWildcard(['acme.read-things', 'acme.*'])).toThrow(
@@ -174,61 +151,26 @@ describe('assertNoWildcard / assertPresetsValid / assertPluginWellFormed', () =>
   test('catalog and plugin forms', () => {
     expect(() => assertNoWildcard(acmePlugin)).not.toThrow();
     expect(() => assertNoWildcard(acmePlugin.catalog)).not.toThrow();
-    const bad: ProviderPlugin = {
-      ...acmePlugin,
-      catalog: {
-        ...acmePlugin.catalog,
-        presets: [
-          {
-            id: 'p',
-            label: 'P',
-            description: 'p',
-            entries: [
-              {
-                risk_id: 'acme.thing-*',
-                quota: 1,
-                rate_limit: { max: 1, window_seconds: 1 },
-                gate: 'auto',
-              },
-            ],
-          },
-        ],
-      },
-    };
-    expect(() => assertNoWildcard(bad)).toThrow(
-      /presets\[0\]\.entries\[0\]\.risk_id 'acme.thing-\*'/,
-    );
-    expect(() => assertPresetsValid(bad)).toThrow(PluginAssertionError);
-    // The preset half of the wildcard rule, by function — not by the first
-    // word of a message : the finding is there, the risk-id half is not.
     const wildRisk: ProviderPlugin = {
       ...acmePlugin,
       catalog: {
-        ...bad.catalog,
+        ...acmePlugin.catalog,
         risks: [...acmePlugin.catalog.risks, { ...acmePlugin.catalog.risks[0]!, id: 'acme.x-*' }],
       },
     };
-    const findings = (() => {
-      try {
-        assertPresetsValid(wildRisk);
-      } catch (e) {
-        if (e instanceof PluginAssertionError) return e.findings;
-        throw e;
-      }
-      return [];
-    })();
-    expect(findings).toContain(
-      "presets[0].entries[0].risk_id 'acme.thing-*' is not an explicit RiskId (no wildcard, no sentinel)",
+    expect(() => assertNoWildcard(wildRisk)).toThrow(
+      /risks\[4\]\.id 'acme.x-\*' contains a wildcard/,
     );
-    expect(findings.filter((m) => m.includes('contains a wildcard'))).toEqual([]);
   });
 
-  test('presets and well-formedness on the fixture', () => {
-    expect(() => assertPresetsValid(acmePlugin)).not.toThrow();
+  test('well-formedness on the fixture', () => {
     expect(() => assertPluginWellFormed(acmePlugin)).not.toThrow();
-    expect(() => assertPresetsValid({ ...acmePlugin.catalog, presets: [] })).toThrow(
-      /at least one preset/,
-    );
+    expect(() =>
+      assertPluginWellFormed({
+        ...acmePlugin,
+        catalog: { ...acmePlugin.catalog, presets: [] },
+      } as ProviderPlugin),
+    ).toThrow(/presets were retired/);
     expect(() => assertPluginWellFormed({ ...acmePlugin, version: 'x' })).toThrow(
       /version: expected semver/,
     );

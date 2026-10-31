@@ -8,11 +8,11 @@ import { count, PAGES, REFERENCE_WORDS, ROUTES, TERMS } from '@/lib/vocabulary';
 import { providerPath } from '@/server/providers/links';
 import type { ProviderCard } from '@/server/providers/reference';
 
-/** "15 permissions · 3 presets · 26 tools" */
+/** "15 permissions · 4 macro-actions · 26 tools" */
 export function catalogSize(card: Pick<ProviderCard, 'counts'>): string {
   return [
     count(card.counts.risks, TERMS.risk),
-    count(card.counts.presets, TERMS.preset),
+    count(card.counts.macro_actions, TERMS.macroAction),
     `${card.counts.tools} ${card.counts.tools === 1 ? 'tool' : 'tools'}`,
   ].join(' · ');
 }

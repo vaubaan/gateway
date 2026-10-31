@@ -8,7 +8,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * the `AuthorityService` what the creator may accept, and leaves the decision
  * to the pure `previewDraft`. A mission is persisted as an explicit
  * enumeration: explicit resource ids (even for "all"), explicit policy
- * entries (never a preset reference), and the creator's own token, whose
+ * entries (never a macro-action or cran), and the creator's own token, whose
  * secret is returned once. Members and the other tokens of a mission are the
  * `MissionTeamService`'s (`team-service.ts`); this service says who may read a
  * mission (`access`) and what a presented token is worth (`verifyToken`).
@@ -23,7 +23,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * `connections/mapping.ts` only; no record is written into an audit payload.
  */
 import type { TokenHolder } from '@vaubaan/gateway-core';
-import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import { writeHandoutRiskIds, type PluginRegistry } from '@vaubaan/plugin-sdk';
 import {
   isGate,
   parseRiskId,
@@ -720,7 +720,7 @@ export class MissionService {
   /**
    * The connections the user may build a mission from: every non-revoked
    * connection on which they hold a non-empty authority, with its resources,
-   * its catalog as explicit ids and its plugin's presets.
+   * its catalog as explicit ids and its macro-actions.
    */
   async issuanceContext(user: AuthoritySubject): Promise<IssuanceConnection[]> {
     const candidates = await this.deps.authority.connectionsOf(user);
@@ -752,7 +752,7 @@ export class MissionService {
       resources: resources.map((r) => toIssuanceResource(r, this.isSelf(connection.provider, r))),
       risks: this.risksOf(connection.provider),
       authority: authority.riskIds,
-      presets: this.deps.registry.presetsOf(connection.provider),
+      write_token_risks: [...writeHandoutRiskIds(plugin)],
       macro_actions: this.macroActionsOf(connection.provider),
     };
   }

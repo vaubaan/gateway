@@ -12,8 +12,8 @@
  * the executor (the ancestry walk, `ancestry.ts`).
  *
  * No entity carries an environment (product owner, 2026-10-16) : a root is
- * written whatever its owner's label, and the destructive operations ask
- * first in the presets instead.
+ * written whatever its owner's label, and the destructive operations are
+ * gated by their palier instead.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';

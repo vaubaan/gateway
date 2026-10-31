@@ -20,9 +20,11 @@ function summaryOf(
 
 describe('summarize — the three lines of the creation screen', () => {
   it('says what the mission can do, per connection, with its most severe risk', () => {
-    const s = summaryOf([{ connection_id: 'conn-acme', preset: 'developer' }]);
+    const s = summaryOf([
+      { connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } },
+    ]);
     expect(s.can).toBe(
-      'Acme "Acme main": 3 risks on 3 of 3 resources, up to "Delete things in bulk" (high).',
+      'Acme "Acme main": 4 risks on 3 of 3 resources, up to "Delete things in bulk" (high).',
     );
   });
 
@@ -30,7 +32,7 @@ describe('summarize — the three lines of the creation screen', () => {
     const s = summaryOf([
       {
         connection_id: 'conn-acme',
-        preset: 'reader',
+        crans: { read: 'prudent' },
         resources: { scope: 'selected', resource_refs: ['app-prod'] },
       },
     ]);
@@ -41,17 +43,19 @@ describe('summarize — the three lines of the creation screen', () => {
 
   it('says in what quantities: widest quota, fastest rate, approvals, reload, expiry', () => {
     const s = summaryOf(
-      [{ connection_id: 'conn-acme', preset: 'developer' }],
+      [{ connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } }],
       { kind: 'recurring', length_seconds: 86_400 },
       '2026-11-01T00:00:00.000Z',
     );
     expect(s.quantities).toBe(
-      'At most 1000 actions per day on the widest risk ("Read things") · fastest 120 per 60s · 1 risk needs your approval for each action · quotas reload every day · expires 2026-11-01 00:00 UTC.',
+      'At most 300 actions per day on the widest risk ("Write a thing") · fastest 180 per 60s · 3 risks need your approval for each action · quotas reload every day · expires 2026-11-01 00:00 UTC.',
     );
   });
 
   it('speaks of a total for a one-off mission that never expires', () => {
-    const s = summaryOf([{ connection_id: 'conn-acme', preset: 'reader' }], { kind: 'one-off' });
+    const s = summaryOf([{ connection_id: 'conn-acme', crans: { read: 'prudent' } }], {
+      kind: 'one-off',
+    });
     expect(s.quantities).toContain('At most 100 actions in total');
     expect(s.quantities).toContain('no approval gate');
     expect(s.quantities).toContain('quotas never reload (one-off)');
@@ -60,7 +64,7 @@ describe('summarize — the three lines of the creation screen', () => {
 
   it('stays readable before anything is picked', () => {
     const s = summaryOf([]);
-    expect(s.can).toBe('Nothing yet — include a connection and pick a preset.');
+    expect(s.can).toBe('Nothing yet — include a connection and tick a macro-action.');
     expect(s.cannot).toBe('Everything: no connection is included.');
     expect(s.quantities).toBe('No budget yet.');
   });

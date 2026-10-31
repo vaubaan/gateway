@@ -8,7 +8,7 @@ tracks:
   - apps/gateway/src/app/oauth/
   - apps/gateway/src/app/.well-known/
   - apps/gateway/src/app/mcp/manage/route.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Management door — handbook
@@ -44,6 +44,10 @@ resource, `/mcp/manage`, whose tools prepare missions. Spec:
 - **The hard deny is the dependency list**: the door holds no `MissionService` (it has `setGate`),
   no request, budget, connection, share, group or execution service (`hard-deny.test.ts`). The
   mission service, not the door, checks the delegating user's current authority.
+- An agent composes a connection from `crans` (macro-action → cran) or `everything-i-hold`; the
+  views say what each cran yields with the mission module's own `expandMacroAction`
+  (`at_cran`), and `get_catalog` gives each risk's palier and the cran table, so the agent can
+  predict the preview. Catalogs ship no presets: any other `preset` is `unknown-preset`.
 - `rotate_mission_token` reaches only missions this delegation issued; `MissionService.rotate`
   checks it again (`not-issued-by-delegation`).
 

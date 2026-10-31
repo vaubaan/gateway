@@ -17,7 +17,7 @@
  *    the mission must accept ALL possible write risks the agent could touch.
  *  - Unknown tool → `denied`. Ambiguous target → `denied`.
  *
- * The decisions these slices lead to, preset by preset, are in
+ * The decisions these slices lead to, mission by mission, are in
  * `policy.test.ts`.
  */
 import { describe, expect, test } from 'vitest';

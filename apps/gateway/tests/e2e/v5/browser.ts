@@ -221,8 +221,8 @@ export async function issueSmallMission(
 
 /**
  * Issues a mission of the approver (`E2E_APPROVER_USER`) from the GitHub plugin's
- * `developer` preset as shipped, on a connection of their own, and hands back its
- * token. Some of the preset's risks are gated `approval`.
+ * macro-actions at the developer crans, on a connection of their own, and hands
+ * back its token. Some of its risks are gated `approval`.
  */
 export async function issueDeveloperMission(
   request: APIRequestContext,

@@ -1,14 +1,14 @@
 # Risk catalog of the `context7` provider.
 #
-# Spec     : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/context7.md.
 #
 # Rules the loader enforces at boot :
 #   - `provider` is the plugin id ; every risk id starts with it ;
 #   - every `matches` pattern parses as a slice of this provider ;
 #   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
-#   - at least one preset ; every preset entry names a risk of THIS catalog,
-#     with an explicit quota, rate limit and gate — never a wildcard.
+#   - every risk but the fallback in exactly one macro-action, with an
+#     explicit base budget (quota and rate limit) — never a wildcard, no gate.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
@@ -23,9 +23,11 @@
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: context7
-catalog_version: 2
-catalog_date: 2026-10-30
+catalog_version: 3
+catalog_date: 2026-10-31
 
 risks:
   - id: context7.query-docs
@@ -71,13 +73,3 @@ macro_actions:
       - risk_id: context7.query-docs
         quota: 300
         rate_limit: { max: 20, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Ask Context7 about library documentation. The questions the agent writes are sent to Context7.
-    entries:
-      - risk_id: context7.query-docs
-        quota: 300
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto

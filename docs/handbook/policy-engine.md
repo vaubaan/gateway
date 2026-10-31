@@ -29,8 +29,8 @@ last_reviewed: 2026-10-27
 
 - Values come only from the browser-safe subpaths `@vaubaan/shared/risk-id` and `/domain`: the
   issuance UI bundles this package and the barrel pulls in `node:crypto` and argon2.
-- One rule each, called by every consumer: `isAcceptableInEnv` (issuance, runtime, SDK preset
-  checks, the store's `RegistryCatalogIndex`), `budgetIssues` (SDK loader, `presetIssues`,
+- One rule each, called by every consumer: `isAcceptableInEnv` (issuance, runtime, SDK macro-action
+  checks, the store's `RegistryCatalogIndex`), `budgetIssues` (SDK loader, `macroActionIssues`,
   issuance preview). Never re-implement them.
 - The fallback is touched only when no other entry matched; empty means nothing covers the slice,
   and the call is refused.

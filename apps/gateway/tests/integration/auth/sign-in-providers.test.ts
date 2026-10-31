@@ -402,7 +402,9 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     });
     const issued = await root.missions.service.issue(ada, {
       name: 'ada-app',
-      connections: [{ connection_id: seeded.connection.id, preset: 'developer' }],
+      connections: [
+        { connection_id: seeded.connection.id, crans: { read: 'confiant', propose: 'confiant' } },
+      ],
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
     });

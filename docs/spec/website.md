@@ -58,7 +58,7 @@ upgrade, retention, telemetry), known limitations.
 
 ### 2.3 Plugins — `/plugins`, `/plugins/<id>`
 
-Each shipped plugin with description, version, tools, risks, presets, how to connect and its health,
+Each shipped plugin with description, version, tools, risks, macro-actions, how to connect and its health,
 generated from its folder; a plugin is listed because it exists in the repository.
 
 ### 2.4 Plugin health — `/plugins/health` and on each plugin page

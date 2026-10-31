@@ -13,7 +13,7 @@
  *   missions   seven methods of the mission service: read, preview, issue,
  *              rotate, revoke — not `setGate`, not `duplicate`, not
  *              `verifyToken`
- *   catalog    the shipped catalogs and presets, as plain data
+ *   catalog    the shipped catalogs and macro-actions, as plain data
  *   rateLimit  the surface rate limit, on keys of its own
  *
  * The composition root builds each port as an object of closures
@@ -26,7 +26,7 @@
  * families (`requests`, `budget`, `execution`, `connections`, `shares`,
  * `groups`, `authority`, `store`); the same test reads the imports.
  */
-import type { Preset } from '@vaubaan/shared';
+import type { MacroAction } from '@vaubaan/shared';
 
 import type { RateLimitDecision } from '../compose/ports';
 import type { BuildInfo } from '../config';
@@ -55,7 +55,7 @@ export const MANAGEMENT_MISSION_METHODS = [
   'get',
 ] as const satisfies readonly (keyof ManagementMissions)[];
 
-/** One provider's catalog as the door shows it: explicit ids and presets, no behaviour. */
+/** One provider's catalog as the door shows it: explicit ids and macro-actions, no behaviour. */
 export interface ProviderCatalog {
   readonly provider: string;
   readonly provider_label: string;
@@ -63,7 +63,8 @@ export interface ProviderCatalog {
   readonly derives_env: boolean;
   /** The whole catalog as explicit `RiskId`s, catalog order. */
   readonly risks: readonly CatalogRisk[];
-  readonly presets: readonly Preset[];
+  /** The catalog's macro-actions, then "Anything else" holding the fallback (`macroActionsOf`). */
+  readonly macro_actions: readonly MacroAction[];
 }
 
 /** The catalogs of the plugins the instance ships: static data, read from the registry. */

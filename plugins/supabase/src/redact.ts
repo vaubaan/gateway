@@ -9,7 +9,7 @@
  * `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_DB_URL` among them) and `GET
  * /projects/{ref}/config/auth` (OAuth client secrets, SMTP password, hook
  * secrets, SMS provider tokens…). Both are priced as `supabase.read-data`,
- * the risk every preset carries, so neither may return a secret value ; nor
+ * the risk most missions hold, so neither may return a secret value ; nor
  * may the answer of `PATCH /config/auth`, which is the whole config again.
  *
  * The rule is an **allow-list** : a field is returned as it is only when it

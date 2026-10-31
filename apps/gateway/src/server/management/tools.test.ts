@@ -15,7 +15,8 @@ import { describe, expect, it } from 'vitest';
 import { silentLogger } from '../logging';
 import type { MissionDetail, MissionDraft, MissionOverview, MissionPreview } from '../missions';
 import { explainOrphan } from '../missions/orphan-reason';
-import { expandPreset, previewDraft } from '../missions/preview';
+import { macroActionsOf } from '../missions/macro-actions';
+import { previewDraft } from '../missions/preview';
 import { ACME_CATALOG, acmeConnection } from '../missions/testing';
 import { enumerateCatalog } from '../missions/catalog-view';
 import { MANAGEMENT_INSTRUCTIONS, MANAGEMENT_TOOLS } from './definitions';
@@ -102,7 +103,7 @@ function rig(
             provider_label: 'Acme',
             derives_env: false,
             risks: enumerateCatalog(ACME_CATALOG),
-            presets: ACME_CATALOG.presets ?? [],
+            macro_actions: macroActionsOf(ACME_CATALOG),
           }
         : null,
   };
@@ -145,7 +146,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     const { tools, calls } = rig();
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', preset: 'reader' }],
+      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
     };
     await tools.issueMission(ACTOR, within);
     const issue = calls.find((call) => call.method === 'issue');
@@ -186,7 +187,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
 
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', preset: 'reader' }],
+      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
     };
     await tools.issueMission(ACTOR, within);
     const second = await tools.issueMission(ACTOR, within);
@@ -343,7 +344,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
   describe('the mission service decides last: its answer after the door’s own check stands', () => {
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', preset: 'reader' }],
+      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
     };
     /** A mission of the user that serves calls, as `get` returns it. */
     const active = {
@@ -470,46 +471,31 @@ describe('views', () => {
       usable_risk_ids: ['acme[staging].write', 'acme[prod].write', 'acme[staging].bulk-delete'],
       unusable_risk_ids: [],
     });
-    expect(owner.presets.every((preset) => preset.within_authority)).toBe(true);
+    expect(owner.macro_actions.every((action) => action.unavailable.length === 0)).toBe(true);
 
     const shared = connectionView(acmeConnection({ basis: 'share', authority: SHARED }));
     expect(shared.authority).toEqual({ basis: 'share', risk_ids: SHARED, whole_catalog: false });
-    const presets = Object.fromEntries(shared.presets.map((preset) => [preset.id, preset]));
-    expect(presets.reader?.within_authority).toBe(true);
-    expect(presets.developer?.outside_authority).toEqual(['acme[staging].bulk-delete']);
-    // `writer` names the base id `acme.write`: held in one environment, it is covered.
-    expect(presets.writer?.within_authority).toBe(true);
+    const actions = Object.fromEntries(shared.macro_actions.map((action) => [action.id, action]));
+    expect(actions.read?.unavailable).toEqual([]);
+    expect(actions.change?.unavailable).toEqual(['acme[prod].write', 'acme[staging].bulk-delete']);
+    expect(actions.administer?.unavailable).toEqual(['acme.admin']);
   });
 
-  it('a preset is judged with the mission module’s own expansion, on what the user holds', () => {
-    // Nothing of `acme.write` is held: the base id expands to nothing and is outside.
-    const readOnly = connectionView(acmeConnection({ basis: 'share', authority: ['acme.read'] }));
-    const presets = Object.fromEntries(readOnly.presets.map((preset) => [preset.id, preset]));
-    expect(presets.reader).toMatchObject({ within_authority: true, outside_authority: [] });
-    expect(presets.writer).toMatchObject({
-      within_authority: false,
-      outside_authority: ['acme.write'],
+  it('a macro-action says what each cran writes, with the mission module’s own expansion', () => {
+    const owner = connectionView(acmeConnection());
+    const change = owner.macro_actions.find((action) => action.id === 'change');
+    // Writes are costly (palier 3), bulk deletes irreversible (palier 4).
+    expect(change?.at_cran).toEqual({
+      prudent: { auto: 0, approval: 2, left_out: 1 },
+      confiant: { auto: 0, approval: 3, left_out: 0 },
+      autonome: { auto: 2, approval: 1, left_out: 0 },
     });
-    expect(presets.developer?.outside_authority).toEqual([
-      'acme[staging].write',
-      'acme[staging].bulk-delete',
+    expect(owner.macro_actions.map((action) => action.id)).toEqual([
+      'read',
+      'change',
+      'administer',
+      'anything-else',
     ]);
-
-    // The same answer as `expandPreset` over the held part of the catalog, for every preset.
-    for (const authority of [SHARED, ['acme.read'], ['acme[prod].write'], []] as RiskId[][]) {
-      const connection = acmeConnection({ basis: 'share', authority });
-      const held = new Set(authority);
-      for (const [index, preset] of connection.presets.entries()) {
-        const { lines } = expandPreset(
-          preset,
-          { risks: connection.risks.filter((r) => held.has(r.risk_id)), derives_env: true },
-          [],
-        );
-        expect(connectionView(connection).presets[index]?.outside_authority).toEqual(
-          lines.map((line) => line.risk_id).filter((id) => !held.has(id)),
-        );
-      }
-    }
   });
 
   it('env usability is `isResolvable` on the resources a mission can select: a stale label does not count', () => {
@@ -659,7 +645,7 @@ describe('views', () => {
       provider_label: 'Acme',
       derives_env: false,
       risks: enumerateCatalog(ACME_CATALOG),
-      presets: ACME_CATALOG.presets ?? [],
+      macro_actions: macroActionsOf(ACME_CATALOG),
     };
     const plain = catalogView(catalog, null);
     expect(plain.risks.map((risk) => risk.risk_id)).toContain('acme[prod].write');
@@ -668,38 +654,44 @@ describe('views', () => {
     expect(
       flagged.risks.filter((risk) => risk.in_my_authority).map((risk) => risk.risk_id),
     ).toEqual(SHARED);
+    // Each risk says its palier and macro-action; the crans say what a palier gets.
+    expect(plain.risks.find((risk) => risk.risk_id === 'acme[staging].bulk-delete')).toMatchObject({
+      palier: 4,
+      macro_action: 'change',
+    });
+    expect(plain.risks.find((risk) => risk.risk_id === 'acme.legacy-export')?.macro_action).toBe(
+      null,
+    );
+    expect(plain.macro_actions.map((action) => action.id)).toContain('anything-else');
+    expect(plain.crans.prudent).toEqual({
+      gates: { '1': 'auto', '2': 'approval', '3': 'approval', '4': null },
+      budget_factor: 1,
+    });
   });
 
   it('the built-in `everything-i-hold` is listed last, within the authority, counted on the resources known now', () => {
     const shared = acmeConnection({ basis: 'share', authority: SHARED });
-    const listed = connectionView(shared).presets.at(-1);
-    expect(listed).toMatchObject({
-      id: 'everything-i-hold',
+    expect(connectionView(shared).everything_i_hold).toMatchObject({
       label: 'Everything I hold on this account',
-      within_authority: true,
-      outside_authority: [],
-      built_in: true,
       risks: 2,
     });
-    expect(connectionView(shared).presets.filter((p) => p.built_in)).toHaveLength(1);
     // An owner holds the whole catalog: every non-deprecated id, the fallback included.
-    expect(connectionView(acmeConnection()).presets.at(-1)?.risks).toBe(6);
+    expect(connectionView(acmeConnection()).everything_i_hold.risks).toBe(6);
 
     const catalog = {
       provider: 'acme',
       provider_label: 'Acme',
       derives_env: false,
       risks: enumerateCatalog(ACME_CATALOG),
-      presets: ACME_CATALOG.presets ?? [],
+      macro_actions: macroActionsOf(ACME_CATALOG),
     };
     // Without a connection there is nothing to write out: it is not listed.
-    expect(catalogView(catalog, null).presets.map((p) => p.id)).not.toContain('everything-i-hold');
-    const written = catalogView(catalog, shared).presets.at(-1);
-    expect(written).toMatchObject({ id: 'everything-i-hold', built_in: true, risks: 2 });
+    expect(catalogView(catalog, null).everything_i_hold).toBeUndefined();
+    const written = catalogView(catalog, shared).everything_i_hold;
     expect(written?.entries.map((e) => e.risk_id)).toEqual(SHARED);
   });
 
-  it('preview and issue accept `everything-i-hold` as a preset id: the policy is the explicit list', () => {
+  it('preview and issue accept `everything-i-hold`: the policy is the explicit list', () => {
     const draft: MissionDraft = {
       ...DRAFT,
       connections: [{ connection_id: 'conn-acme', preset: 'everything-i-hold' }],
@@ -791,7 +783,7 @@ describe('tool definitions and results', () => {
     expect(text.list_my_connections).toContain('exact list of RiskIds');
     expect(text.list_my_connections).toContain('unlabelled resources refuse it');
     expect(text.get_catalog).toContain('explicit RiskIds');
-    expect(text.get_catalog).toContain('preset');
+    expect(text.get_catalog).toContain('macro_actions');
     expect(text.preview_policy).toContain('explicit RiskIds only');
     expect(text.preview_policy).toContain('one connection per provider');
     expect(text.preview_policy).toContain('a quota and a rate limit for every risk');

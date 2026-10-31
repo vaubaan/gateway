@@ -9,13 +9,14 @@
  *     labelled outside `acceptable_in_envs`, refuses the call whatever the
  *     mission accepted (listing users on an unlabelled project, bulk row
  *     writes of a migration on prod) ;
- *   - what each shipped preset allows and refuses, call by call, on a
- *     correctly labelled project — no preset needs the fallback to do what
- *     its description says.
+ *   - what a mission written from macro-actions at trust crans allows and
+ *     refuses, call by call, on a correctly labelled project — none needs the
+ *     fallback to do what its macro-actions say.
  */
 import { describe, expect, test } from 'vitest';
 
 import type { ProviderPlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 import { envResolverFor, evaluateCall } from '@vaubaan/policy-engine';
 
 import { supabaseCatalog, supabasePlugin } from '../../src/index.ts';
@@ -72,12 +73,45 @@ function decide(
   });
 }
 
-const presetOf = (id: string) => {
-  const preset = catalog.presets?.find((p) => p.id === id);
-  if (!preset) throw new Error(`preset ${id} missing`);
-  return preset;
-};
-const presetRisks = (id: string): readonly RiskId[] => presetOf(id).entries.map((e) => e.risk_id);
+/** The missions the decisions below are made for, written as the creation form writes them. */
+const MISSIONS = {
+  /** Reads, no environment : nothing env-scoped. */
+  'read-only-analyst': policyFromMacroActions(plugin, { query: 'prudent' }),
+  /** Everything but administration, on staging only. */
+  'staging-developer': policyFromMacroActions(
+    plugin,
+    {
+      query: 'autonome',
+      'change-data': 'autonome',
+      'change-schema': 'autonome',
+      'ship-functions': 'autonome',
+    },
+    { envs: ['staging'] },
+  ),
+  /**
+   * Schema changes on staging and prod, plus the backfills and grants a
+   * migration needs ticked by hand on staging alone. The engine refuses a bulk
+   * row write on prod whatever the mission holds (`acceptable_in_envs`).
+   */
+  'migration-operator': [
+    ...policyFromMacroActions(plugin, { query: 'prudent' }),
+    ...policyFromMacroActions(
+      plugin,
+      { 'change-schema': 'confiant' },
+      { envs: ['staging', 'prod'] },
+    ),
+    ...(['supabase[staging].bulk-row-write', 'supabase[staging].db-role-write'] as const).map(
+      (risk_id) => ({
+        risk_id,
+        quota: 50,
+        rate_limit: { max: 10, window_seconds: 60 },
+        gate: 'approval' as const,
+      }),
+    ),
+  ],
+} as const;
+type MissionName = keyof typeof MISSIONS;
+const missionRisks = (id: MissionName): readonly RiskId[] => MISSIONS[id].map((e) => e.risk_id);
 
 // ─── SQL samples ─────────────────────────────────────────────────────────────
 
@@ -245,7 +279,7 @@ describe('supabase — bulk row writes on a prod project', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Presets — what each one allows and refuses on labelled projects
+// Missions from macro-actions — what each allows and refuses on labelled projects
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Expected = 'allowed' | 'denied';
@@ -254,21 +288,21 @@ type Row = readonly [label: string, tool: string, args: Record<string, unknown>,
 const on = (ref: string, args: Record<string, unknown> = {}) => ({ project_ref: ref, ...args });
 const sql = (ref: string, query: string) => on(ref, { name: 'm', query });
 
-function expectRows(preset: string, rows: readonly Row[]): void {
-  const accepted = presetRisks(preset);
+function expectRows(name: MissionName, rows: readonly Row[]): void {
+  const accepted = missionRisks(name);
   for (const [label, tool, args, expected] of rows) {
     const decision = decide(tool, args, accepted);
-    expect(decision.outcome, `${preset} — ${label}`).toBe(expected);
+    expect(decision.outcome, `${name} — ${label}`).toBe(expected);
     if (decision.outcome === 'allowed') {
-      expect(decision.risks_touched, `${preset} — ${label}`).not.toContain(FALLBACK);
+      expect(decision.risks_touched, `${name} — ${label}`).not.toContain(FALLBACK);
     }
   }
 }
 
-describe('supabase presets — decisions on labelled projects', () => {
-  test('no preset carries the fallback or a risk outside its acceptable environments', () => {
-    for (const preset of catalog.presets ?? []) {
-      for (const entry of preset.entries) {
+describe('supabase missions from macro-actions — decisions on labelled projects', () => {
+  test('no mission carries the fallback or a risk outside its acceptable environments', () => {
+    for (const entries of Object.values(MISSIONS)) {
+      for (const entry of entries) {
         expect(entry.risk_id).not.toContain('uncategorized');
         const env = /\[([a-z-]+)\]/.exec(entry.risk_id)?.[1];
         const risk = catalog.risks.find((r) => qualify(r.id, env ?? '') === entry.risk_id);
@@ -289,17 +323,18 @@ describe('supabase presets — decisions on labelled projects', () => {
         ['list_objects', 'supabase__list_objects', on(ref, { bucket: 'b' }), 'allowed'],
         ['list_users', 'supabase__list_users', on(ref), 'denied'],
         ['get_user', 'supabase__get_user', on(ref, { user_id: 'u1' }), 'denied'],
+        // `query` holds signed URLs and function reads.
         [
           'signed url',
           'supabase__create_signed_url',
           on(ref, { bucket: 'b', path: 'p' }),
-          'denied',
+          'allowed',
         ],
         [
           'function body',
           'supabase__get_function_body',
           on(ref, { function_slug: 'fn' }),
-          'denied',
+          'allowed',
         ],
         ['migration', 'supabase__apply_migration', sql(ref, DDL), 'denied'],
         [
@@ -321,9 +356,7 @@ describe('supabase presets — decisions on labelled projects', () => {
       ['RLS migration', 'supabase__apply_migration', { name: 'm', query: RLS }],
       ['backfill migration', 'supabase__apply_migration', { name: 'm', query: BACKFILL }],
       ['drop table migration', 'supabase__apply_migration', { name: 'm', query: DROP_TABLE }],
-      ['grant migration', 'supabase__apply_migration', { name: 'm', query: GRANT }],
       ['extension migration', 'supabase__apply_migration', { name: 'm', query: EXTENSION }],
-      ['function migration', 'supabase__apply_migration', { name: 'm', query: FUNCTION }],
       ['create_bucket', 'supabase__create_bucket', { id: 'b', name: 'B' }],
       ['update_bucket', 'supabase__update_bucket', { id: 'b' }],
       ['delete_bucket', 'supabase__delete_bucket', { id: 'b' }],
@@ -372,7 +405,10 @@ describe('supabase presets — decisions on labelled projects', () => {
       ['get_user on staging', 'supabase__get_user', on(s, { user_id: 'u1' }), 'allowed'],
       ['list_users on prod', 'supabase__list_users', on(PROD), 'denied'],
       ['list_users unlabelled', 'supabase__list_users', on(UNLABELLED), 'denied'],
-      // Project-level configuration and exfiltration paths are not part of the preset.
+      // Database roles and project-level configuration are `administer`, not ticked.
+      ['grant migration on staging', 'supabase__apply_migration', sql(s, GRANT), 'denied'],
+      // A new function may carry grants : it needs db-role-write too.
+      ['function migration on staging', 'supabase__apply_migration', sql(s, FUNCTION), 'denied'],
       ['auth config on staging', 'supabase__update_auth_config', on(s, { config: {} }), 'denied'],
       [
         'storage config on staging',
@@ -387,17 +423,11 @@ describe('supabase presets — decisions on labelled projects', () => {
         on(s, { type: 'oidc' }),
         'denied',
       ],
-      [
-        'signed url on staging',
-        'supabase__create_signed_url',
-        on(s, { bucket: 'b', path: 'p' }),
-        'denied',
-      ],
     ];
     expectRows('staging-developer', rows);
   });
 
-  test('migration-operator : any migration on staging ; on prod, plain DDL and RLS only', () => {
+  test('migration-operator : any migration on staging ; on prod, plain DDL, RLS and extensions only', () => {
     const rows: Row[] = [
       ...[DDL, RLS, BACKFILL, DROP_TABLE, GRANT, EXTENSION, FUNCTION, DYNAMIC].map((query): Row => [
         `staging: ${query}`,
@@ -407,7 +437,8 @@ describe('supabase presets — decisions on labelled projects', () => {
       ]),
       ['prod: DDL', 'supabase__apply_migration', sql(PROD, DDL), 'allowed'],
       ['prod: RLS', 'supabase__apply_migration', sql(PROD, RLS), 'allowed'],
-      ...[BACKFILL, DROP_TABLE, GRANT, EXTENSION, FUNCTION, DYNAMIC].map((query): Row => [
+      ['prod: extension', 'supabase__apply_migration', sql(PROD, EXTENSION), 'allowed'],
+      ...[BACKFILL, DROP_TABLE, GRANT, FUNCTION, DYNAMIC].map((query): Row => [
         `prod: ${query}`,
         'supabase__apply_migration',
         sql(PROD, query),
@@ -442,14 +473,14 @@ describe('supabase presets — decisions on labelled projects', () => {
     expectRows('migration-operator', rows);
   });
 
-  test('migration-operator gates what it allows on prod behind an approval', () => {
-    const preset = presetOf('migration-operator');
+  test('change-schema at Confiant gates what it allows on prod behind an approval', () => {
+    const lines = MISSIONS['migration-operator'];
     for (const query of [DDL, RLS]) {
-      const decision = decide(...migration(PROD, query), presetRisks('migration-operator'));
+      const decision = decide(...migration(PROD, query), missionRisks('migration-operator'));
       expect(decision.outcome).toBe('allowed');
       if (decision.outcome !== 'allowed') continue;
       for (const id of decision.risks_touched) {
-        expect(preset.entries.find((e) => e.risk_id === id)?.gate, id).toBe('approval');
+        expect(lines.find((e) => e.risk_id === id)?.gate, id).toBe('approval');
       }
     }
   });
@@ -468,7 +499,7 @@ describe('supabase — SQL reads of the managed schemas', () => {
   const APPLICATION = 'select id, title from public.todo';
 
   test('the read-only analyst reads application tables, never auth, vault or an unread query', () => {
-    const analyst = presetRisks('read-only-analyst');
+    const analyst = missionRisks('read-only-analyst');
     for (const ref of [STAGING, PROD, PREVIEW, UNLABELLED]) {
       expect(decide(...sql(ref, APPLICATION), analyst).outcome, ref).toBe('allowed');
     }
@@ -506,21 +537,14 @@ describe('supabase — SQL reads of the managed schemas', () => {
     }
   });
 
-  test('no shipped preset reads them: the staging developer and the migration operator are refused', () => {
-    const developer = presetRisks('staging-developer');
-    for (const ref of [STAGING, PROD]) {
-      for (const query of [AUTH_USERS, UNKNOWN_FUNCTION]) {
-        const decision = decide(...sql(ref, query), developer);
-        expect(decision.outcome, `${ref} ${query}`).toBe('denied');
-      }
+  test('query reaches them only in the environments of the mission ; without one, nobody does', () => {
+    const developer = missionRisks('staging-developer');
+    for (const query of [AUTH_USERS, UNKNOWN_FUNCTION]) {
+      expect(decide(...sql(STAGING, query), developer).outcome, `staging ${query}`).toBe('allowed');
+      expect(decide(...sql(PROD, query), developer).outcome, `prod ${query}`).toBe('denied');
     }
-    expect(decide(...sql(STAGING, APPLICATION), developer).outcome).toBe('allowed');
-    // Ticked on purpose for staging, it passes there.
-    expect(
-      decide(...sql(STAGING, AUTH_USERS), [...developer, 'supabase[staging].read-managed-schemas'])
-        .outcome,
-    ).toBe('allowed');
-    const operator = presetRisks('migration-operator');
+    expect(decide(...sql(PROD, APPLICATION), developer).outcome).toBe('allowed');
+    const operator = missionRisks('migration-operator');
     expect(decide(...sql(STAGING, AUTH_USERS), operator).outcome).toBe('denied');
     expect(decide(...sql(PROD, AUTH_USERS), operator).outcome).toBe('denied');
     expect(decide(...sql(PROD, APPLICATION), operator).outcome).toBe('allowed');

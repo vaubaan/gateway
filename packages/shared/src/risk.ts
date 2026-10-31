@@ -20,7 +20,7 @@
  * `@vaubaan/policy-engine` ; catalog loading in `@vaubaan/plugin-sdk`.
  */
 
-import type { Budget, Gate } from './domain.ts';
+import type { Budget } from './domain.ts';
 import type { RefusalCode } from './refusal.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,30 +237,8 @@ export interface InfraLimits {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Presets — policy fragments shipped by the plugin (spec §0, §3.2)
+// Macro-actions — how a catalog groups its risks for the creator (spec risk model §4.6)
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** One line of a preset : a risk of the plugin's own catalog with default values. */
-export interface PresetEntry extends Budget {
-  /** Account-scoped or env-scoped id ; must resolve to an entry of the same catalog. */
-  readonly risk_id: RiskId;
-  readonly gate: Gate;
-}
-
-/**
- * A named policy fragment. UI sugar : it pre-fills the policy of a mission
- * for one connection, the creator adjusts, and the persisted policy is the
- * explicit enumeration. A preset never grants anything by itself and is
- * bounded by the creator's authority at issuance.
- */
-export interface Preset {
-  /** Slug, unique within the catalog (`reviewer`, `developer`, `release-manager`). */
-  readonly id: string;
-  readonly label: string;
-  /** One line shown next to the label. */
-  readonly description: string;
-  readonly entries: readonly PresetEntry[];
-}
 
 /** One entry of a macro-action : a catalog risk with its base budget, never a gate. */
 export interface MacroActionEntry extends Budget {
@@ -287,15 +265,10 @@ export interface MacroAction {
 // Catalog
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * A provider's full risk catalog. `presets` is optional on the type so the
- * not-yet-migrated v4 TS twins still compile ; the SDK loader and
- * `definePlugin` require at least one preset (spec §10).
- */
+/** A provider's full risk catalog. */
 export interface RiskCatalog {
   readonly provider: string;
   readonly risks: readonly RiskEntry[];
-  readonly presets?: readonly Preset[];
   /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-crans-prefill-the-policy). */
   readonly macro_actions?: readonly MacroAction[];
   /** Monotonic integer bumped on every reviewed change of the YAML. */

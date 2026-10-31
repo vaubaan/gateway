@@ -13,7 +13,6 @@ import type {
   Gate,
   MacroAction,
   MissionPolicyEntry,
-  Preset,
   RateLimit,
   RiskId,
   RiskVector,
@@ -25,7 +24,8 @@ import type {
 
 /**
  * One accepted risk of a draft. `quota`, `rate_limit` and `gate` may be
- * omitted: they then come from the connection's preset entry for that risk.
+ * omitted when the connection names `everything-i-hold`: they then come from
+ * its line for that risk.
  * A risk whose budget resolves from neither is refused (spec §3.2: "the
  * gateway refuses to issue a mission whose accepted risk has no resolved
  * budget"). The gate alone has a default, `auto`.
@@ -67,9 +67,12 @@ export type DraftResources =
  * The connection is named by id, or by `provider` when the creator holds
  * exactly one usable connection of that provider (an agent's proposal).
  *
- * `preset` + no `policy`  → the preset's entries, bounded by the authority.
- * `policy`                → exactly these risks; a missing budget falls back
- *                           to the preset's entry for the same risk.
+ * `crans` + no `policy`   → what the macro-actions write at their crans,
+ *                           bounded by the authority and the selection.
+ * `everything-i-hold`     → every risk held there that the selection reaches.
+ * `policy`                → exactly these risks, each with its budget (or
+ *                           `everything-i-hold`'s); crans beside it only
+ *                           redraw the form.
  */
 export interface DraftConnection {
   readonly connection_id?: string;
@@ -77,15 +80,15 @@ export interface DraftConnection {
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
   /**
-   * Preset id of the connection's plugin (`registry.presetsOf`), or the
-   * built-in `everything-i-hold`, expanded against the selection.
+   * Only the built-in `everything-i-hold`, expanded against the selection
+   * (ADR preset-everything-i-hold-expands-explicitly); catalogs ship no presets.
    */
   readonly preset?: string | null;
   readonly policy?: readonly DraftPolicyEntry[];
   /**
-   * The trust cran of each macro-action the form ticked (risk model §4.7): kept
-   * with the mission only to redraw the form, it never changes the policy.
-   * Ids that are not macro-actions of the connection are dropped.
+   * The trust cran of each ticked macro-action (risk model §4.6). Without
+   * `policy`, they write it; with one, they decide nothing. Either way they are
+   * kept with the mission only to redraw the form.
    */
   readonly crans?: Readonly<Record<string, string>>;
 }
@@ -131,7 +134,7 @@ export interface CatalogRisk {
   /** Ordering signal derived from the 6-D vector; never a gate (risk model §3). */
   readonly severity: number;
   readonly level: SeverityLevel;
-  /** The catalog's catch-all (`<provider>.uncategorized-write`); never in a preset. */
+  /** The catalog's catch-all (`<provider>.uncategorized-write`); only in "Anything else". */
   readonly fallback: boolean;
   readonly deprecated: boolean;
   /** Hard ceiling from the catalog's `infra_limits.calls_per_minute_max`, if any. */
@@ -187,7 +190,11 @@ export interface IssuanceConnection {
   readonly risks: readonly CatalogRisk[];
   /** The creator's authority on this connection: explicit ids, a subset of `risks`. */
   readonly authority: readonly RiskId[];
-  readonly presets: readonly Preset[];
+  /**
+   * Base ids whose tool hands the agent a provider token that can write (spec
+   * §2.4): a cran pre-fills them `approval`.
+   */
+  readonly write_token_risks: readonly RiskId[];
   /** The catalog's macro-actions, then "Anything else" holding the fallback (`macroActionsOf`). */
   readonly macro_actions: readonly MacroAction[];
 }
@@ -222,6 +229,7 @@ export const PREVIEW_ISSUE_CODES = [
   'resource-self',
   'no-resource-selected',
   'unknown-preset',
+  'unknown-macro-action',
   'unknown-risk',
   'duplicate-risk',
   'exceeds-authority',
@@ -270,7 +278,7 @@ export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
  * permissions on a later one only once it is labelled (`resource_refs` empty).
  *
  * `everything-i-hold-expanded` is of another kind: it says what the built-in
- * preset `everything-i-hold` wrote out on a connection — how many explicit
+ * expansion `everything-i-hold` wrote out on a connection — how many explicit
  * lines, the most severe, the critical ones running freely and the fallback,
  * whose ids are its `risk_ids` (ADR preset-everything-i-hold-expands-explicitly).
  */
@@ -295,9 +303,14 @@ export interface UnresolvableEntry {
   readonly env: string;
 }
 
-export interface SkippedPresetEntry {
+/**
+ * A risk the crans or `everything-i-hold` would have written that the policy
+ * leaves out: outside the creator's authority, no selected resource in its
+ * environment, or (`cran`) a palier the cran does not accept.
+ */
+export interface LeftOutEntry {
   readonly risk_id: RiskId;
-  readonly reason: 'outside-authority' | 'unresolvable-env';
+  readonly reason: 'outside-authority' | 'unresolvable-env' | 'cran';
   readonly env: string | null;
 }
 
@@ -326,10 +339,10 @@ export interface ConnectionPreview {
   readonly unresolvable: readonly UnresolvableEntry[];
   readonly missing_budget: readonly RiskId[];
   /**
-   * Preset entries left out when the preset is applied as is (no explicit
-   * policy): they inform, they do not block.
+   * What the crans or `everything-i-hold` left out when they write the policy
+   * (no explicit `policy`): they inform, they do not block.
    */
-  readonly skipped_from_preset: readonly SkippedPresetEntry[];
+  readonly left_out: readonly LeftOutEntry[];
   /** The draft's crans that name a macro-action of the connection (`knownCrans`). */
   readonly crans: Readonly<Record<string, TrustCran>>;
 }

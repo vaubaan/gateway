@@ -84,21 +84,6 @@ const FAKE_CATALOG: RiskCatalog = {
       ],
     },
   ],
-  presets: [
-    {
-      id: 'reader',
-      label: 'Reader',
-      description: 'Read-only access.',
-      entries: [
-        {
-          risk_id: 'acme.read-things',
-          quota: 100,
-          rate_limit: { max: 60, window_seconds: 60 },
-          gate: 'auto',
-        },
-      ],
-    },
-  ],
 };
 
 /** A valid plugin with provider id `acme`, one tool, one env-scoped risk. */

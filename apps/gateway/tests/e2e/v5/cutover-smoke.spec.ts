@@ -4,7 +4,7 @@
  * an ephemeral instance, with the simulated IdP and a mocked GitHub.
  *
  *   sign in through the IdP → connect GitHub through the company's App →
- *   issue a mission from the plugin's `developer` preset → an MCP client lists
+ *   issue a mission from the plugin's macro-actions at a cran → an MCP client lists
  *   the tools and calls one over HTTP on `/mcp` with the mission token → a
  *   quota runs out → the refusal's claim URL → the creator grants → the replay
  *   passes → the calls show on the Audit page and on the mission's session.
@@ -34,7 +34,7 @@ const QUOTA = 2;
 const [REPOSITORY, LEFT_OUT] = MOCK_GITHUB.repositories;
 const [OWNER, REPO] = REPOSITORY.split('/');
 const AGENT_LABEL = 'cutover-agent';
-/** A write on the default branch: a risk the `developer` preset does not accept. */
+/** A write on the default branch: a risk Read and Propose do not hold. */
 const PROTECTED_WRITE = 'github__create_or_update_file';
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */

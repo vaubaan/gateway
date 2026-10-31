@@ -1,6 +1,6 @@
 /**
  * A provider's catalog as issuance sees it: explicit ids, a severity for
- * ordering, the width of a preset, and whether an env-qualified id can ever
+ * ordering, and whether an env-qualified id can ever
  * be touched with a given resource selection.
  *
  * Pure and browser-safe (the creation form runs the same functions as the
@@ -8,7 +8,7 @@
  * `@vaubaan/shared/risk-id` and `@vaubaan/policy-engine`.
  */
 import { isEnvScopedEntry, isFallbackEntry, resolveVector } from '@vaubaan/policy-engine';
-import type { Preset, RiskCatalog, RiskEntry, RiskId, RiskVector } from '@vaubaan/shared';
+import type { RiskCatalog, RiskEntry, RiskId, RiskVector } from '@vaubaan/shared';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 // The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
@@ -44,7 +44,7 @@ export const MAX_SEVERITY = Object.values(SEVERITY_RANKS).reduce(
 
 /**
  * Sum of the axis ranks, 0 (harmless read) to `MAX_SEVERITY`. It orders
- * risks in the interface and names "the most severe one" of a preset; no
+ * risks in the interface and names "the most severe one" of a policy; no
  * decision is derived from it (risk model: "no gate is derived from the
  * vector").
  */
@@ -140,52 +140,6 @@ export function isResolvable(
   if (risk.env === null) return true;
   if (connection.derives_env) return true;
   return selected.some((r) => r.env === risk.env);
-}
-
-export interface PresetWidth {
-  readonly risks: number;
-  readonly most_severe: {
-    readonly risk_id: RiskId;
-    readonly label: string;
-    readonly level: SeverityLevel;
-  } | null;
-  readonly largest_quota: number;
-  readonly approvals: number;
-}
-
-/** The width of a preset (spec §3.2: "how many risks, the most severe one, the largest quota"). */
-export function presetWidth(preset: Preset, risks: readonly CatalogRisk[]): PresetWidth {
-  let mostSevere: CatalogRisk | null = null;
-  let largestQuota = 0;
-  let approvals = 0;
-  for (const entry of preset.entries) {
-    // An entry may name the base id of an env-scoped risk: every env row counts.
-    for (const risk of risks) {
-      if (risk.risk_id !== entry.risk_id && risk.base_id !== entry.risk_id) continue;
-      if (mostSevere === null || risk.severity > mostSevere.severity) mostSevere = risk;
-    }
-    if (entry.quota > largestQuota) largestQuota = entry.quota;
-    if (entry.gate === 'approval') approvals += 1;
-  }
-  return {
-    risks: preset.entries.length,
-    most_severe: mostSevere
-      ? { risk_id: mostSevere.risk_id, label: mostSevere.label, level: mostSevere.level }
-      : null,
-    largest_quota: largestQuota,
-    approvals,
-  };
-}
-
-/** One line for the preset picker. */
-export function describePresetWidth(width: PresetWidth): string {
-  const parts = [`${width.risks} ${width.risks === 1 ? 'risk' : 'risks'}`];
-  if (width.most_severe) {
-    parts.push(`most severe: ${width.most_severe.label} (${width.most_severe.level})`);
-  }
-  parts.push(`largest quota ${width.largest_quota}`);
-  if (width.approvals > 0) parts.push(`${width.approvals} under approval`);
-  return parts.join(' · ');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -326,9 +280,9 @@ export function groupByKind(risks: readonly CatalogRisk[]): RiskKindGroup[] {
 
 /** What the two catalog markers mean, wherever one is shown (risk model §4.3, §4.5). */
 export const FALLBACK_NOTE =
-  'Fallback: counts only for a write no other entry of the catalog names. Accepting it accepts writes nobody reviewed; no preset includes it.';
+  'Fallback: counts only for a write no other entry of the catalog names. Accepting it accepts writes nobody reviewed; only "Anything else" includes it.';
 export const DEPRECATED_NOTE =
-  'Deprecated: kept so that existing missions and shares keep working; "select all" and presets leave it out.';
+  'Deprecated: kept so that existing missions and shares keep working; "select all" and macro-actions leave it out.';
 
 /**
  * A note without its lead ("Fallback: counts only…" → "Counts only…"), for the

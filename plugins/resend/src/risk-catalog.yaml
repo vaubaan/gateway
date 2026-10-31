@@ -1,12 +1,12 @@
 # Risk catalog of the `resend` provider.
 #
 # Spec : docs/spec/resend.md §5 (modelling), docs/spec/gateway-risk-model.md §4
-#        + §4bis (scope caps), docs/spec/vaubaan-gateway.md §3.2 (presets).
+#        + §4bis (scope caps), §4.6 (macro-actions).
 # ADR  : docs/decisions/scope-caps-amplification-axis.md,
 #        docs/decisions/scope-caps-amplification-axis.md (only the rate ceiling
 #        `infra_limits.calls_per_minute_max` is declared : it is the one enforced),
 #        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
-#        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).
+#        docs/decisions/plugin-contract-and-credential-spec.md (loader).
 #
 # 18 entries : 15 live named risks, the fallback, and 2 deprecated ids.
 # Slices are rooted at the mission resources — `domain[<name>]` for everything
@@ -14,7 +14,7 @@
 # after Resend's retired "audiences" are deprecated and replaced :
 # `read-audiences` → `read-segments`, `audience-write` → `segment-write`.
 # Their patterns are kept verbatim so the ids stay resolvable ; no slice the
-# classifier emits matches them and no preset offers them.
+# classifier emits matches them and no macro-action offers them.
 #
 # Pattern discipline : `[**]` spans any number of segments, `[*]` exactly one
 # identifier. Write patterns use `[*]` and explicit leaves so that a contact
@@ -24,7 +24,7 @@
 # Only `send-email-external-unbounded` is env-scoped : the owner labels domain
 # resources with free-form environments, and a call touching that risk on a
 # domain labelled anything but `staging` / `dev`, or not labelled, is refused
-# whatever the mission accepted. The fallback is never offered in a preset :
+# whatever the mission accepted. The fallback is in no macro-action :
 # the engine counts it only when no specific risk matched, and no tool of
 # this plugin emits a slice that reaches it.
 #
@@ -35,9 +35,11 @@
 # catalog_version 5 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 6 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: resend
-catalog_version: 5
-catalog_date: 2026-10-30
+catalog_version: 6
+catalog_date: 2026-10-31
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -341,8 +343,8 @@ risks:
     reason: >-
       Catch-all for a write no named permission covers. If Resend adds a surface
       (webhooks, API keys, templates) and Vaubaan wraps it before the catalog
-      is updated, calls land here — fail-loud by design. Never offered in a
-      preset.
+      is updated, calls land here — fail-loud by design. In no
+      macro-action.
     matches: 'resend.[**].W'
     fallback: true
     vector:
@@ -352,12 +354,6 @@ risks:
       cost: moderate
       visibility: internal
       persistence: posture
-
-# ─── PRESETS (UI sugar ; the persisted policy is always the explicit list) ──
-#
-# Values are a starting point — ADR `mission-presets-default-values` is
-# deferred. `send-email-external-unbounded` is env-scoped and never offered :
-# a creator adds `resend[staging].send-email-external-unbounded` by hand.
 
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
@@ -425,116 +421,3 @@ macro_actions:
       - risk_id: resend.domain-write
         quota: 20
         rate_limit: { max: 5, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Email status, sending domains and campaign metadata of the selected resources. No PII, no write.
-    entries:
-      - risk_id: resend.read-email-status
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-domains
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-broadcasts
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-
-  - id: developer
-    label: Developer
-    description: One mission per code project — transactional sends to internal and allow-listed recipients, generous limits; no bulk, no PII, no domain change.
-    entries:
-      - risk_id: resend.read-email-status
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-domains
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-broadcasts
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.send-email-internal
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.send-email-allowlist
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-
-  - id: marketing-operator
-    label: Marketing operator
-    description: Contacts, segments and campaigns; broadcast sends, batch sends and segment deletion ask first. No domain change.
-    entries:
-      - risk_id: resend.read-email-status
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-domains
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-segments
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.read-broadcasts
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.send-email-internal
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.send-email-allowlist
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.send-batch
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: resend.contact-write
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.segment-write
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: resend.broadcast-draft
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.broadcast-send
-        quota: 10
-        rate_limit: { max: 1, window_seconds: 60 }
-        gate: approval
-      - risk_id: resend.broadcast-delete
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-
-  - id: domain-admin
-    label: Domain admin
-    description: Provision sending domains — read and verify freely, every domain mutation asks first. No send.
-    entries:
-      - risk_id: resend.read-domains
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.domain-verify
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: resend.domain-write
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval

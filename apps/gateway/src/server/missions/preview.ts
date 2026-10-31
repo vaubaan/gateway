@@ -10,25 +10,28 @@
  * server-side: the browser's copy decides nothing.
  *
  * Spec §3.1 (monotonicity, enumeration, partition per connection, resource
- * selection), §3.2 (mandatory budget, presets), §0 "Resource" (env-qualified
+ * selection), §3.2 (mandatory budget, macro-actions and crans), §0 "Resource" (env-qualified
  * ids resolve against the selected resources). Browser-safe: no IO.
  */
 import { budgetIssues, exceedsRateCeiling, type BudgetField } from '@vaubaan/policy-engine';
-import type {
-  Gate,
-  MissionPolicyEntry,
-  Preset,
-  PresetEntry,
-  RateLimit,
-  RiskId,
-} from '@vaubaan/shared';
+import type { Gate, MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 import { GATES } from '@vaubaan/shared/domain';
 
 // The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
 import { uncoveredRisks } from '../authority/catalog-authority';
 import { isResolvable } from './catalog-view';
-import { EVERYTHING_I_HOLD, expansionDigest, findPreset, presetIdsOf } from './everything-i-hold';
-import { knownCrans } from './macro-actions';
+import {
+  EVERYTHING_I_HOLD,
+  EVERYTHING_I_HOLD_LABEL,
+  everythingIHold,
+  expansionDigest,
+} from './everything-i-hold';
+import {
+  knownCrans,
+  prefillOfCrans,
+  unknownMacroActions,
+  type MacroActionCrans,
+} from './macro-actions';
 import type {
   CatalogRisk,
   ConnectionPreview,
@@ -37,12 +40,12 @@ import type {
   DraftPolicyEntry,
   IssuanceConnection,
   IssuanceResource,
+  LeftOutEntry,
   MissionDraft,
   MissionPreview,
   PreviewIssue,
   PreviewNotice,
   ResolvedDraftConnection,
-  SkippedPresetEntry,
   UnresolvableEntry,
 } from './model';
 import { summarize } from './summary';
@@ -73,7 +76,7 @@ const BUDGET_PROBLEMS: Readonly<Record<BudgetField, string>> = {
  * integer quota, a positive integer rate over a positive integer window, a
  * gate of the closed set (spec §3.2) — is `budgetIssues` of
  * `@vaubaan/policy-engine`, the same function the plugin SDK's catalog loader
- * applies to a preset. Issuance adds the catalog's rate ceiling.
+ * applies to a macro-action's base budget. Issuance adds the catalog's rate ceiling.
  */
 export function budgetProblem(
   entry: { quota: number; rate_limit: RateLimit; gate: Gate },
@@ -88,19 +91,22 @@ export function budgetProblem(
   return null;
 }
 
+/**
+ * What a draft line leaves out, filled in: the prefill's line for that id,
+ * else the risk's macro-action at its cran.
+ */
+type LineDefaults = Omit<MissionPolicyEntry, 'risk_id'> | null;
+
 /** The explicit entry a draft line resolves to, or `null` when its budget is missing. */
-function resolveEntry(
-  line: DraftPolicyEntry,
-  fromPreset: PresetEntry | undefined,
-): MissionPolicyEntry | null {
-  const quota = line.quota ?? fromPreset?.quota;
-  const rateLimit = line.rate_limit ?? fromPreset?.rate_limit;
+function resolveEntry(line: DraftPolicyEntry, defaults: LineDefaults): MissionPolicyEntry | null {
+  const quota = line.quota ?? defaults?.quota;
+  const rateLimit = line.rate_limit ?? defaults?.rate_limit;
   if (quota === undefined || rateLimit === undefined) return null;
   return {
     risk_id: line.risk_id,
     quota,
     rate_limit: { max: rateLimit.max, window_seconds: rateLimit.window_seconds },
-    gate: line.gate ?? fromPreset?.gate ?? 'auto',
+    gate: line.gate ?? defaults?.gate ?? 'auto',
   };
 }
 
@@ -205,40 +211,6 @@ function resolveResources(
   return { selected: connection.resources.filter((r) => selected.has(r.id)), issues };
 }
 
-/**
- * The lines a preset contributes on one connection. An entry naming an
- * explicit id stands for itself. An entry naming the *base* id of an
- * env-scoped risk (`stripe.read-catalog`: "of the selected mode") stands for
- * that risk in every environment the selection can resolve, and becomes one
- * explicit line per such environment — the persisted policy never holds a
- * base id the runtime could not match.
- */
-export function expandPreset(
-  preset: Pick<Preset, 'entries'>,
-  connection: Pick<IssuanceConnection, 'risks' | 'derives_env'>,
-  selected: readonly Pick<IssuanceResource, 'env'>[],
-): { readonly lines: PresetEntry[]; readonly unresolved: RiskId[] } {
-  const explicit = new Set(connection.risks.map((r) => r.risk_id));
-  const lines: PresetEntry[] = [];
-  const unresolved: RiskId[] = [];
-  for (const entry of preset.entries) {
-    if (explicit.has(entry.risk_id)) {
-      lines.push(entry);
-      continue;
-    }
-    const perEnv = connection.risks.filter((r) => r.base_id === entry.risk_id && r.env !== null);
-    const reachable = perEnv.filter((r) => isResolvable(r, connection, selected));
-    if (perEnv.length > 0 && reachable.length === 0) {
-      unresolved.push(entry.risk_id);
-      continue;
-    }
-    // Not a base id either: left as is, the caller reports it as unknown.
-    if (perEnv.length === 0) lines.push(entry);
-    for (const risk of reachable) lines.push({ ...entry, risk_id: risk.risk_id });
-  }
-  return { lines, unresolved };
-}
-
 interface ConnectionOutcome {
   readonly preview: ConnectionPreview;
   readonly issues: PreviewIssue[];
@@ -256,46 +228,64 @@ function list(ids: readonly string[]): string {
   return ids.join(', ');
 }
 
-interface PresetResolution {
-  readonly preset: Preset | undefined;
-  /** The preset's lines on this connection, base ids expanded per reachable environment. */
-  readonly lines: readonly PresetEntry[];
-  /** Base ids of env-scoped risks no selected resource can resolve. */
-  readonly unresolved: readonly RiskId[];
-  /**
-   * Budget defaults of an explicit line: the preset's entry for that id, else
-   * the preset's entry for its base id ("in whatever environment").
-   */
-  readonly defaults: ReadonlyMap<RiskId, PresetEntry>;
+/**
+ * What writes a connection's policy when the draft gives no explicit lines:
+ * `everything-i-hold`, or the crans of its macro-actions.
+ */
+interface Prefill {
+  /** Set when the draft names `everything-i-hold`. */
+  readonly everything: boolean;
+  /** The lines it writes on this connection, explicit ids only. */
+  readonly lines: readonly MissionPolicyEntry[];
+  /** What it left out, reported when it writes the policy. */
+  readonly left_out: readonly LeftOutEntry[];
+  /** The crans of the draft that name a macro-action here. */
+  readonly crans: MacroActionCrans;
   readonly issues: PreviewIssue[];
 }
 
-/** The preset a draft names on a connection, expanded against the selected resources. */
-function resolvePreset(
+/** The prefill a draft names on a connection, against the selected resources. */
+function resolvePrefill(
   connection: IssuanceConnection,
   draft: DraftConnection,
   selected: readonly IssuanceResource[],
   where: Where,
-): PresetResolution {
-  // The built-in `everything-i-hold` is computed here, against this selection (ADR
-  // preset-everything-i-hold-expands-explicitly); a plugin's preset is read as shipped.
-  const preset = draft.preset ? findPreset(connection, draft.preset, selected) : undefined;
+): Prefill {
+  const crans = knownCrans(connection, draft.crans);
   const issues: PreviewIssue[] = [];
-  if (draft.preset && !preset) {
+  if (draft.preset && draft.preset !== EVERYTHING_I_HOLD) {
     issues.push({
       code: 'unknown-preset',
-      message: `"${draft.preset}" is not a preset of ${connection.provider_label} (known: ${list(
-        presetIdsOf(connection),
+      message: `"${draft.preset}" is not a preset: catalogs ship none. Name "${EVERYTHING_I_HOLD}" for everything you hold on "${connection.display_name}", or give its macro-actions a cran (crans).`,
+      ...where,
+    });
+  }
+  // The built-in `everything-i-hold` is computed here, against this selection (ADR
+  // preset-everything-i-hold-expands-explicitly).
+  if (draft.preset === EVERYTHING_I_HOLD) {
+    const lines = everythingIHold(connection, selected).entries;
+    return { everything: true, lines, left_out: [], crans, issues };
+  }
+  // Crans naming nothing here: dropped beside explicit lines (they then only
+  // redraw the form), refused when they are what writes the policy.
+  const unknown = unknownMacroActions(connection, draft.crans);
+  if ((draft.policy ?? []).length === 0 && unknown.length > 0) {
+    issues.push({
+      code: 'unknown-macro-action',
+      message: `Not ${unknown.length === 1 ? 'a macro-action' : 'macro-actions'} of ${connection.provider_label}: ${list(unknown)} (known: ${list(
+        connection.macro_actions.map((action) => action.id),
       )}).`,
       ...where,
     });
   }
-  const expanded = preset
-    ? expandPreset(preset, connection, selected)
-    : { lines: [], unresolved: [] };
-  const defaults = new Map((preset?.entries ?? []).map((e) => [e.risk_id, e]));
-  for (const line of expanded.lines) defaults.set(line.risk_id, line);
-  return { preset, lines: expanded.lines, unresolved: expanded.unresolved, defaults, issues };
+  const written = prefillOfCrans(connection, crans, selected);
+  const lines = written.lines.map(({ risk_id, quota, rate_limit, gate }): MissionPolicyEntry => ({
+    risk_id,
+    quota,
+    rate_limit,
+    gate,
+  }));
+  return { everything: false, lines, left_out: written.left_out, crans, issues };
 }
 
 /** Where each line of a connection's policy ends up. */
@@ -307,17 +297,18 @@ interface LineBuckets {
   readonly unresolvable: UnresolvableEntry[];
   readonly missingBudget: RiskId[];
   readonly duplicates: RiskId[];
-  /** Preset entries left out when the preset is applied as is. */
-  readonly skipped: SkippedPresetEntry[];
+  /** What the prefill left out when it writes the policy. */
+  readonly leftOut: LeftOutEntry[];
   readonly invalid: { risk_id: RiskId; problem: string }[];
 }
 
 interface ClassifyInput {
   readonly connection: IssuanceConnection;
   readonly selected: readonly IssuanceResource[];
-  /** The preset applied as is: what the creator does not hold or cannot resolve is skipped. */
-  readonly presetOnly: boolean;
-  readonly preset: Pick<PresetResolution, 'defaults' | 'unresolved'>;
+  /** The prefill writes the policy: what the creator does not hold or cannot resolve is left out. */
+  readonly prefillOnly: boolean;
+  /** The budget and gate a line that gives none takes. */
+  readonly defaultsOf: (risk: CatalogRisk) => LineDefaults;
 }
 
 /**
@@ -326,7 +317,7 @@ interface ClassifyInput {
  * no budget, invalid budget — otherwise it passes.
  */
 function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput): LineBuckets {
-  const { connection, selected, presetOnly, preset } = input;
+  const { connection, selected, prefillOnly, defaultsOf } = input;
   const catalog = new Map(connection.risks.map((r) => [r.risk_id, r]));
   // Monotonicity (spec §3.1): the lines the creator's authority does not cover.
   const outside = new Set(
@@ -343,9 +334,7 @@ function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput)
     unresolvable: [],
     missingBudget: [],
     duplicates: [],
-    skipped: presetOnly
-      ? preset.unresolved.map((risk_id) => ({ risk_id, reason: 'unresolvable-env', env: null }))
-      : [],
+    leftOut: [],
     invalid: [],
   };
 
@@ -361,21 +350,18 @@ function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput)
       continue;
     }
     if (outside.has(line.risk_id)) {
-      if (presetOnly) {
-        buckets.skipped.push({ risk_id: line.risk_id, reason: 'outside-authority', env: risk.env });
+      if (prefillOnly) {
+        buckets.leftOut.push({ risk_id: line.risk_id, reason: 'outside-authority', env: risk.env });
       } else buckets.exceeds.push(line.risk_id);
       continue;
     }
     if (!isResolvable(risk, connection, selected)) {
-      if (presetOnly) {
-        buckets.skipped.push({ risk_id: line.risk_id, reason: 'unresolvable-env', env: risk.env });
+      if (prefillOnly) {
+        buckets.leftOut.push({ risk_id: line.risk_id, reason: 'unresolvable-env', env: risk.env });
       } else buckets.unresolvable.push({ risk_id: line.risk_id, env: risk.env ?? '' });
       continue;
     }
-    const entry = resolveEntry(
-      line,
-      preset.defaults.get(line.risk_id) ?? preset.defaults.get(risk.base_id),
-    );
+    const entry = resolveEntry(line, defaultsOf(risk));
     if (!entry) {
       buckets.missingBudget.push(line.risk_id);
       continue;
@@ -552,7 +538,7 @@ export function laterResourcesNotice(
  * that `budgetProblem` accepts. A change of a mission's limits after issuance
  * (`MissionService.setLimits`) is judged by this and nothing else, so that whatever
  * caps a creation caps the change. Each line names its quota, rate and gate: no
- * preset fills anything in.
+ * macro-action fills anything in.
  */
 export function checkPolicyLines(
   connection: IssuanceConnection,
@@ -564,14 +550,14 @@ export function checkPolicyLines(
   const buckets = classifyLines(lines, {
     connection,
     selected,
-    presetOnly: false,
-    preset: { defaults: new Map(), unresolved: [] },
+    prefillOnly: false,
+    defaultsOf: () => null,
   });
   return { passes: buckets.passes, issues: issuesOf(buckets, connection, where) };
 }
 
 /**
- * What the built-in preset `everything-i-hold` wrote out on this connection,
+ * What the built-in `everything-i-hold` wrote out on this connection,
  * said before anything is issued: how many lines, the most severe, the critical
  * ones that run freely, and the fallback by id (ADR
  * preset-everything-i-hold-expands-explicitly). `risk_ids`: the critical ids
@@ -601,9 +587,9 @@ export function everythingNotice(
       : '';
   return {
     code: 'everything-i-hold-expanded',
-    message: `Preset "${EVERYTHING_I_HOLD}" on "${name}" is written out as ${digest.count} explicit ${
+    message: `"${EVERYTHING_I_HOLD}" on "${name}" is written out as ${digest.count} explicit ${
       digest.count === 1 ? 'risk' : 'risks'
-    } (listed in passes): every non-deprecated risk your authority covers that the selected resources can reach, each at the catalog's rate ceiling where one exists, gate auto.${severe}${critical}${fallback} The mission stores this list, not the preset; adjust it like any policy.`,
+    } (listed in passes): every non-deprecated risk your authority covers that the selected resources can reach, each at the catalog's rate ceiling where one exists, gate auto.${severe}${critical}${fallback} The mission stores this list, not "${EVERYTHING_I_HOLD}"; adjust it like any policy.`,
     resource_refs: [],
     risk_ids: [
       ...digest.critical_auto.map((r) => r.risk_id),
@@ -622,26 +608,31 @@ export function previewConnection(
   const where: Where = { connection_index: index, connection_id: connection.id };
   const resources = resolveResources(connection, draft, index);
   const reachesLater = draft.resources?.scope === 'connection';
-  const preset = resolvePreset(connection, draft, resources.selected, where);
+  const prefill = resolvePrefill(connection, draft, resources.selected, where);
 
-  // A draft with explicit lines accepts exactly those; a draft with only a
-  // preset accepts the preset, bounded by what the creator holds and by what
-  // the selected resources can resolve.
+  // A draft with explicit lines accepts exactly those; a draft without writes
+  // its policy from `everything-i-hold` or its crans, bounded by what the
+  // creator holds and by what the selected resources can resolve.
   const explicit = draft.policy ?? [];
-  const presetOnly = explicit.length === 0 && preset.preset !== undefined;
-  const lines: readonly DraftPolicyEntry[] = presetOnly ? preset.lines : explicit;
+  const prefillOnly = explicit.length === 0 && (prefill.everything || prefill.lines.length > 0);
+  const lines: readonly DraftPolicyEntry[] = prefillOnly ? prefill.lines : explicit;
+  // Beside explicit lines, only `everything-i-hold` fills a budget a line omits;
+  // crans then only redraw the form, and a line without a budget is missing one.
+  const fills = new Map(
+    (prefillOnly || prefill.everything ? prefill.lines : []).map((line) => [line.risk_id, line]),
+  );
   const buckets = classifyLines(lines, {
     connection,
     selected: resources.selected,
-    presetOnly,
-    preset,
+    prefillOnly,
+    defaultsOf: (risk) => fills.get(risk.risk_id) ?? null,
   });
 
-  const issues = [...resources.issues, ...preset.issues, ...issuesOf(buckets, connection, where)];
-  if (lines.length === 0 || (presetOnly && buckets.passes.length === 0)) {
+  const issues = [...resources.issues, ...prefill.issues, ...issuesOf(buckets, connection, where)];
+  if (lines.length === 0 || (prefillOnly && buckets.passes.length === 0)) {
     issues.push({
       code: 'no-accepted-risk',
-      message: `Connection "${connection.display_name}" accepts no risk: pick a preset or accept at least one risk, or leave the connection out.`,
+      message: `Connection "${connection.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
       ...where,
     });
   }
@@ -654,20 +645,18 @@ export function previewConnection(
       resources: resources.selected,
       reaches_later: reachesLater,
       resources_total: resourcesTotal(connection, resources.selected),
-      preset: preset.preset ? { id: preset.preset.id, label: preset.preset.label } : null,
+      preset: prefill.everything ? { id: EVERYTHING_I_HOLD, label: EVERYTHING_I_HOLD_LABEL } : null,
       passes: buckets.passes,
       exceeds: buckets.exceeds,
       unknown: buckets.unknown,
       unresolvable: buckets.unresolvable,
       missing_budget: buckets.missingBudget,
-      skipped_from_preset: buckets.skipped,
-      crans: knownCrans(connection, draft.crans),
+      left_out: prefillOnly ? [...prefill.left_out, ...buckets.leftOut] : [],
+      crans: prefill.crans,
     },
     issues,
     notices: [
-      ...(preset.preset?.id === EVERYTHING_I_HOLD
-        ? [everythingNotice(connection, buckets.passes, where)]
-        : []),
+      ...(prefill.everything ? [everythingNotice(connection, buckets.passes, where)] : []),
       ...envNotices(connection, resources.selected, buckets.passes, where),
       ...(reachesLater ? laterResourcesNotice(connection, buckets.passes, where) : []),
     ],

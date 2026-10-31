@@ -140,24 +140,24 @@ the audit records no upstream failure for it. What Resend fails is thrown
 (`read-audiences` → `read-segments`, `audience-write` → `segment-write`)
 kept so they stay resolvable.
 
-| Risk                                   | Action | Notes                                                                        |
-| -------------------------------------- | ------ | ---------------------------------------------------------------------------- |
-| `resend.read-email-status`             | R      | `GET /emails/:id` metadata.                                                  |
-| `resend.read-domains`                  | R      | Domains, DNS records, `describe_zones`.                                      |
-| `resend.read-segments`                 | R      | Segments, contacts, members — **PII**.                                       |
-| `resend.read-broadcasts`               | R      | Campaign metadata.                                                           |
-| `resend.send-email-internal`           | W      | Every recipient in `internal_domains`.                                       |
-| `resend.send-email-allowlist`          | W      | Internal or allow-listed recipients.                                         |
-| `resend.send-email-external-unbounded` | W      | Irreversible, `data: secret`; **env-scoped `[staging, dev]`**.               |
-| `resend.send-batch`                    | W      | `POST /emails/batch`; at most 100 emails per call.                           |
-| `resend.segment-write`                 | W      | Create or delete a segment.                                                  |
-| `resend.contact-write`                 | W      | Contact CRUD and segment membership — PII.                                   |
-| `resend.broadcast-draft`               | W      | Create or update a draft.                                                    |
-| `resend.broadcast-send`                | W      | Irreversible, `cost: unbounded`; rate ceiling 10/min.                        |
-| `resend.broadcast-delete`              | W      | Cancels a scheduled broadcast.                                               |
-| `resend.domain-write`                  | W      | Add, update, remove a sending domain — posture shift.                        |
-| `resend.domain-verify`                 | W      | Trigger DNS verification.                                                    |
-| `resend.uncategorized-write`           | W      | Fallback; counts only when no named risk matched. Never offered in a preset. |
+| Risk                                   | Action | Notes                                                                 |
+| -------------------------------------- | ------ | --------------------------------------------------------------------- |
+| `resend.read-email-status`             | R      | `GET /emails/:id` metadata.                                           |
+| `resend.read-domains`                  | R      | Domains, DNS records, `describe_zones`.                               |
+| `resend.read-segments`                 | R      | Segments, contacts, members — **PII**.                                |
+| `resend.read-broadcasts`               | R      | Campaign metadata.                                                    |
+| `resend.send-email-internal`           | W      | Every recipient in `internal_domains`.                                |
+| `resend.send-email-allowlist`          | W      | Internal or allow-listed recipients.                                  |
+| `resend.send-email-external-unbounded` | W      | Irreversible, `data: secret`; **env-scoped `[staging, dev]`**.        |
+| `resend.send-batch`                    | W      | `POST /emails/batch`; at most 100 emails per call.                    |
+| `resend.segment-write`                 | W      | Create or delete a segment.                                           |
+| `resend.contact-write`                 | W      | Contact CRUD and segment membership — PII.                            |
+| `resend.broadcast-draft`               | W      | Create or update a draft.                                             |
+| `resend.broadcast-send`                | W      | Irreversible, `cost: unbounded`; rate ceiling 10/min.                 |
+| `resend.broadcast-delete`              | W      | Cancels a scheduled broadcast.                                        |
+| `resend.domain-write`                  | W      | Add, update, remove a sending domain — posture shift.                 |
+| `resend.domain-verify`                 | W      | Trigger DNS verification.                                             |
+| `resend.uncategorized-write`           | W      | Fallback; counts only when no named risk matched. In no macro-action. |
 
 Patterns use `[*]` (exactly one identifier) and explicit verb leaves, so a
 contact write never touches `segment-write` and a broadcast send never
@@ -170,33 +170,34 @@ From a domain labelled anything else, or not labelled, the engine refuses
 the call whatever the mission accepted — the classifier reports the slice,
 the catalog's `acceptable_in_envs` decides.
 
-## Presets
+## Macro-actions
 
-| Preset               | Scope                                                                                                                                                     |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only`          | Email status, domains, campaign metadata. No PII, no write.                                                                                               |
-| `developer`          | One mission per code project: reads plus transactional sends to internal and allow-listed recipients, generous limits. No bulk, no PII, no domain change. |
-| `marketing-operator` | Reads including PII, contacts and segments, drafts and single sends `auto`; `broadcast-send`, `send-batch` and `segment-write` need `approval`.           |
-| `domain-admin`       | Read and verify domains freely; `domain-write` needs `approval`. No send.                                                                                 |
+| Macro-action | What it covers                                    | Risks                                                                                        |
+| ------------ | ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `check`      | Email statuses, domains, broadcasts and segments. | `read-email-status`, `read-domains`, `read-broadcasts`, `read-segments`                      |
+| `send`       | Transactional emails, one by one or in batches.   | `send-email-internal`, `send-email-allowlist`, `send-email-external-unbounded`, `send-batch` |
+| `campaign`   | Contacts, segments and broadcasts.                | `contact-write`, `segment-write`, `broadcast-draft`, `broadcast-send`, `broadcast-delete`    |
+| `domains`    | Verify and change sending domains.                | `domain-verify`, `domain-write`                                                              |
 
-Presets are UI sugar: the persisted policy is the explicit enumeration.
-`send-email-external-unbounded` is env-scoped and never offered; a creator
-adds `resend[staging].send-email-external-unbounded` by hand, so no preset
-can send to a recipient outside the zone lists. Every preset does what its
-row says without the fallback (`tests/unit/mission-evaluation.test.ts`
-evaluates each one call by call). Values are a starting point — ADR
-`mission-presets-default-values` is deferred.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran turns each risk's vector into a gate and scales its
+base budget. The persisted policy is the explicit list.
+`send-email-external-unbounded` is env-scoped: it is only written qualified
+with `staging` or `dev` (`resend[staging].…`), from Confiant up, and always
+asks first. Bulk sends (`send-batch`, `broadcast-send`) never run freely at any
+cran. No mission needs the fallback to do its job
+(`tests/unit/mission-evaluation.test.ts` evaluates them call by call).
 
 ## Tests
 
 `npx vitest run plugins/resend` — 233 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage` with no fallback hit,
-`assertNoWildcard`, `assertPresetsValid`), the classifier (cross-cutting
+`assertNoWildcard`), the classifier (cross-cutting
 rules in `plugin.test.ts`, scenarios per tool in `classify.test.ts`),
 `execute` and `discoverResources` against `mockFetch`, the credential spec
-and presets, catalog invariants, the identifier grammars fed hostile values
+and macro-actions, catalog invariants, the identifier grammars fed hostile values
 on both sides (`identifiers.test.ts`), address parsing, the data model, and
 whole decisions through
 the real catalog and the engine (`mission-evaluation.test.ts`: external
-sends per domain label, each preset call by call). No test ever calls
+sends per domain label, each mission call by call). No test ever calls
 Resend.

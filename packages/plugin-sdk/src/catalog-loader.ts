@@ -2,18 +2,19 @@
  * Risk-catalog loader — YAML in, validated and indexed catalog out.
  *
  * Spec : docs/spec/gateway-risk-model.md §4 (schema, versioning, mandatory
- *        fallback) ; docs/spec/vaubaan-gateway.md §3.2 and §10 (presets :
- *        at least one per plugin, every entry a risk of the same catalog,
- *        never a wildcard).
+ *        fallback), §4.6 (macro-actions : every entry in exactly one, each
+ *        with a base budget).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md (YAML loaded
  *        at boot, TypeScript twins retired) ;
  *        docs/decisions/fallback-risk-only-when-uncategorized.md (one
- *        fallback per catalog, flagged `fallback: true`, never in a preset).
+ *        fallback per catalog, flagged `fallback: true`, in no macro-action) ;
+ *        docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md
+ *        (presets retired : a catalog with a `presets` key does not load).
  *
  * The loader is strict : any structural issue, unknown key, malformed id,
  * duplicate, missing fallback, fallback that is not the catch-all write,
- * foreign or wildcard preset entry, illegal budget, or a preset entry on
- * the fallback fails the boot with every issue listed, path-qualified
+ * a `presets` key, a foreign or fallback macro-action entry, an entry in no
+ * macro-action, or an illegal budget fails the boot with every issue listed, path-qualified
  * (`risks[3].vector.blast`). The semantic rules (`semanticIssues`) also run
  * on a catalog written in TypeScript, through `definePlugin`, the registry
  * and the test kit — the budget rule itself is `budgetIssues` of the policy
@@ -35,8 +36,6 @@ import {
   fallbackEntriesOf,
   fallbackRiskPrefix,
   hasCatchAllWritePattern,
-  isAcceptableInEnv,
-  isEnvScopedEntry,
   isValidBudget,
   prepareCatalog,
   type IndexedRiskCatalog,
@@ -45,15 +44,11 @@ import {
   ENV_LABEL_PATTERN,
   RISK_VECTOR_AXES,
   WILDCARD_CHARS,
-  baseRiskId,
-  isExplicitRiskId,
   isProviderId,
   isRiskId,
   parseRiskId,
   type MacroAction,
   type MacroActionEntry,
-  type Preset,
-  type PresetEntry,
   type RiskCatalog,
   type RiskEntry,
   type RiskId,
@@ -61,9 +56,8 @@ import {
   type ScopeCaps,
 } from '@vaubaan/shared';
 
-/** A catalog as the SDK requires it : presets and macro-actions present. */
+/** A catalog as the SDK requires it : macro-actions present. */
 export interface PluginCatalog extends RiskCatalog {
-  readonly presets: readonly Preset[];
   readonly macro_actions: readonly MacroAction[];
 }
 
@@ -78,8 +72,6 @@ export interface LoadCatalogOptions {
   readonly source?: string;
   /** Fail when no `<provider>.uncategorized-*` entry exists. Default true (risk-model spec §4.3). */
   readonly requireFallback?: boolean;
-  /** Fail when the catalog ships no preset. Default true (spec §10). */
-  readonly requirePresets?: boolean;
   /** Fail when the catalog declares no macro-action. Default true (ADR macro-actions-and-trust-crans-prefill-the-policy). */
   readonly requireMacroActions?: boolean;
   /** Receives non-fatal findings (`catalogWarnings` : a fallback without the flag). Defaults to `console.warn`. */
@@ -159,15 +151,15 @@ export function validateCatalog(doc: unknown, options: LoadCatalogOptions = {}):
 // Semantic checks (reused by the test kit and `definePlugin`)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Issues beyond structure : fallback, presets, macro-actions, wildcards. Empty array = valid. */
+/** Issues beyond structure : fallback, macro-actions, wildcards. Empty array = valid. */
 export function semanticIssues(catalog: RiskCatalog, options: LoadCatalogOptions = {}): string[] {
   const issues: string[] = [];
   const requireFallback = options.requireFallback ?? true;
-  const requirePresets = options.requirePresets ?? true;
   const requireMacroActions = options.requireMacroActions ?? true;
+  // A catalog built in code skips the parser : it must not carry presets either.
+  if (Object.hasOwn(catalog, 'presets')) issues.push(RETIRED_PRESETS_ISSUE);
   issues.push(...fallbackIssues(catalog, { requireFallback }));
   issues.push(...wildcardIssues(catalog));
-  issues.push(...presetIssues(catalog, { requirePresets }));
   issues.push(...macroActionIssues(catalog, { requireMacroActions }));
   return issues;
 }
@@ -306,16 +298,20 @@ export function fallbackFlagIssues(catalog: RiskCatalog): string[] {
 
 /**
  * Non-fatal findings the loader reports through `warn` : today only
- * `fallbackFlagIssues`. A preset that includes the fallback used to be a
- * warning ; it is an error since no plugin needs it (`presetIssues`).
+ * `fallbackFlagIssues`. A macro-action that includes the fallback is an
+ * error (`macroActionIssues`).
  */
 export function catalogWarnings(catalog: RiskCatalog): string[] {
   return fallbackFlagIssues(catalog);
 }
 
-/** Risk ids and preset entries that are patterns or sentinels instead of explicit ids. */
+/**
+ * Risk ids that are patterns or sentinels instead of explicit ids. A
+ * macro-action entry must name an unqualified risk of the catalog
+ * (`macroActionIssues`), so a wildcard there is reported as unknown.
+ */
 export function wildcardIssues(catalog: RiskCatalog): string[] {
-  return [...riskIdWildcardIssues(catalog), ...presetWildcardIssues(catalog)];
+  return riskIdWildcardIssues(catalog);
 }
 
 /** Catalog risk ids that contain a wildcard character. */
@@ -325,120 +321,6 @@ export function riskIdWildcardIssues(catalog: RiskCatalog): string[] {
     if (WILDCARD_CHARS.test(risk.id))
       issues.push(`risks[${i}].id '${risk.id}' contains a wildcard`);
   });
-  return issues;
-}
-
-/** Preset entries that are a pattern or a sentinel instead of an explicit id (spec §10). */
-export function presetWildcardIssues(catalog: RiskCatalog): string[] {
-  const issues: string[] = [];
-  (catalog.presets ?? []).forEach((preset, p) => {
-    preset.entries.forEach((entry, e) => {
-      if (!isExplicitRiskId(entry.risk_id)) {
-        issues.push(
-          `presets[${p}].entries[${e}].risk_id '${entry.risk_id}' is not an explicit RiskId (no wildcard, no sentinel)`,
-        );
-      }
-    });
-  });
-  return issues;
-}
-
-/**
- * Preset rules (spec §3.2, §10) : at least one preset ; ids unique ; every
- * entry carries a legal budget (`budgetIssues` : positive integer quota and
- * rate limit, gate from the closed set — never unbounded) and references a
- * risk of this catalog ; an env-qualified entry targets an env-scoped risk
- * and an allowed env ; no duplicate risk within a preset ; never the
- * fallback — it fires only on writes the catalog has not reviewed (ADR
- * fallback-risk-only-when-uncategorized D3, as tightened), so a
- * preset including it would pre-accept exactly those. A mission creator may
- * still accept it by hand at issuance.
- *
- * This is the path every catalog takes, whatever it was written in : the
- * YAML loader, `definePlugin`, the registry and the test kit.
- */
-export function presetIssues(
-  catalog: RiskCatalog,
-  options: { readonly requirePresets?: boolean } = {},
-): string[] {
-  const issues: string[] = [];
-  const presets = catalog.presets ?? [];
-  if ((options.requirePresets ?? true) && presets.length === 0) {
-    issues.push('presets: every plugin ships at least one preset (spec §3.2)');
-    return issues;
-  }
-  const lookup: PresetLookup = {
-    provider: catalog.provider,
-    byId: new Map<string, RiskEntry>(catalog.risks.map((r) => [r.id, r])),
-    fallbackIds: new Set(fallbackEntriesOf(catalog).map((r) => r.id)),
-  };
-  const presetIds = new Set<string>();
-  presets.forEach((preset, p) => {
-    const at = `presets[${p}]`;
-    if (presetIds.has(preset.id)) issues.push(`${at}.id '${preset.id}' is declared twice`);
-    presetIds.add(preset.id);
-    if (preset.entries.length === 0) issues.push(`${at}.entries is empty`);
-    const seen = new Set<string>();
-    preset.entries.forEach((entry, e) => {
-      const where = `${at}.entries[${e}]`;
-      if (seen.has(entry.risk_id))
-        issues.push(`${where}.risk_id '${entry.risk_id}' repeated in preset '${preset.id}'`);
-      seen.add(entry.risk_id);
-      issues.push(...presetEntryIssues(entry, where, preset.id, lookup));
-    });
-  });
-  return issues;
-}
-
-/** What a preset entry is checked against. */
-interface PresetLookup {
-  readonly provider: string;
-  readonly byId: ReadonlyMap<string, RiskEntry>;
-  readonly fallbackIds: ReadonlySet<string>;
-}
-
-/** The issues of one preset entry : its budget, then the risk it references. */
-function presetEntryIssues(
-  entry: PresetEntry,
-  where: string,
-  presetId: string,
-  lookup: PresetLookup,
-): string[] {
-  const issues = budgetIssues(entry).map((issue) => `${where}.${issue.field}: ${issue.message}`);
-  const parsed = parseRiskId(entry.risk_id);
-  if (!parsed) return issues; // reported by presetWildcardIssues / structure
-  if (parsed.provider !== lookup.provider) {
-    issues.push(
-      `${where}.risk_id '${entry.risk_id}' belongs to provider '${parsed.provider}', not '${lookup.provider}'`,
-    );
-    return issues;
-  }
-  const risk = lookup.byId.get(baseRiskId(entry.risk_id));
-  if (!risk) {
-    issues.push(
-      `${where}.risk_id '${entry.risk_id}' is not a risk of the '${lookup.provider}' catalog`,
-    );
-    return issues;
-  }
-  if (parsed.env !== null) {
-    if (!isEnvScopedEntry(risk)) {
-      issues.push(
-        `${where}.risk_id '${entry.risk_id}' qualifies an env on a risk that is not env-scoped`,
-      );
-    } else if (!isAcceptableInEnv(risk, parsed.env)) {
-      issues.push(
-        `${where}.risk_id '${entry.risk_id}' uses env '${parsed.env}' outside acceptable_in_envs [${(risk.acceptable_in_envs ?? []).join(', ')}]`,
-      );
-    }
-  }
-  if (risk.deprecated)
-    issues.push(
-      `${where}.risk_id '${entry.risk_id}' is deprecated and must not be offered in a preset`,
-    );
-  if (lookup.fallbackIds.has(risk.id))
-    issues.push(
-      `${where}.risk_id '${entry.risk_id}' is the fallback — a preset must not pre-accept uncategorized writes (preset '${presetId}')`,
-    );
   return issues;
 }
 
@@ -458,7 +340,7 @@ function isRecord(x: unknown): x is Rec {
  * pushing the reason at its path.
  */
 interface ParseContext {
-  /** Path of the node being read (`risks[3]`, `presets[0].entries[2]`) ; empty at the root. */
+  /** Path of the node being read (`risks[3]`, `macro_actions[0].entries[2]`) ; empty at the root. */
   readonly at: string;
   readonly issues: string[];
 }
@@ -508,14 +390,12 @@ const CATALOG_KEYS = new Set([
   'provider',
   'risks',
   'macro_actions',
-  'presets',
   'catalog_version',
   'catalog_date',
 ]);
+const CATALOG_KEYS_AND_RETIRED: ReadonlySet<string> = new Set([...CATALOG_KEYS, 'presets']);
 const MACRO_ACTION_KEYS = new Set(['id', 'label', 'description', 'entries']);
 const MACRO_ENTRY_KEYS = new Set(['risk_id', 'quota', 'rate_limit']);
-const PRESET_KEYS = new Set(['id', 'label', 'description', 'entries']);
-const ENTRY_KEYS = new Set(['risk_id', 'quota', 'rate_limit', 'gate']);
 const RATE_LIMIT_KEYS = new Set(['max', 'window_seconds']);
 /** The cap keys `caps` and `infra_limits` accept — every key of `ScopeCaps`, in declaration order. */
 const SCOPE_CAP_KEYS = [
@@ -526,7 +406,11 @@ const SCOPE_CAP_KEYS = [
   'calls_per_session_max',
 ] as const satisfies readonly (keyof ScopeCaps)[];
 const CAP_KEYS: ReadonlySet<string> = new Set(SCOPE_CAP_KEYS);
-const PRESET_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
+const MACRO_ACTION_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
+
+/** What a catalog that still carries `presets` reads (spec §15). */
+export const RETIRED_PRESETS_ISSUE =
+  'presets: presets were retired (ADR macro-actions-and-trust-crans-prefill-the-policy) ; group the risks in macro_actions and remove the presets key';
 
 type Axis = keyof RiskVector;
 /** The six axes, in declaration order. `Object.keys` widens to `string[]` ; the keys of a constant object are its keys. */
@@ -541,9 +425,13 @@ interface StructuralResult {
 export function structuralIssues(doc: unknown): StructuralResult {
   const issues: string[] = [];
   if (!isRecord(doc))
-    return { issues: ['document: expected a mapping with `provider`, `risks` and `presets`'] };
+    return {
+      issues: ['document: expected a mapping with `provider`, `risks` and `macro_actions`'],
+    };
   const root: ParseContext = { at: '', issues };
-  unknownKeys(doc, CATALOG_KEYS, root);
+  // A retired key reads as retired, not as unknown.
+  if ('presets' in doc) issues.push(RETIRED_PRESETS_ISSUE);
+  unknownKeys(doc, CATALOG_KEYS_AND_RETIRED, root);
 
   const provider = providerFrom(doc, root);
   const catalogVersion = catalogVersionFrom(doc, root);
@@ -552,14 +440,12 @@ export function structuralIssues(doc: unknown): StructuralResult {
   // names the catalog the risk ids are compared with.
   const declaredProvider = typeof doc.provider === 'string' ? doc.provider : null;
   const risks = risksFrom(doc.risks, child(root, 'risks'), declaredProvider);
-  const presets = presetsFrom(doc.presets, child(root, 'presets'));
   const macroActions = macroActionsFrom(doc.macro_actions, child(root, 'macro_actions'));
 
   if (issues.length > 0 || provider === undefined) return { issues };
   const catalog: PluginCatalog = {
     provider,
     risks,
-    presets,
     macro_actions: macroActions,
     ...(catalogVersion !== undefined ? { catalog_version: catalogVersion } : {}),
     ...(catalogDate !== undefined ? { catalog_date: catalogDate } : {}),
@@ -597,18 +483,6 @@ function risksFrom(raw: unknown, ctx: ParseContext, provider: string | null): Ri
   return raw.flatMap((item, i) => {
     const risk = riskFrom(item, { at: `${ctx.at}[${i}]`, issues: ctx.issues }, provider);
     return risk ? [risk] : [];
-  });
-}
-
-function presetsFrom(raw: unknown, ctx: ParseContext): Preset[] {
-  if (raw === undefined) return [];
-  if (!isUnknownList(raw)) {
-    ctx.issues.push(`${ctx.at}: expected a list`);
-    return [];
-  }
-  return raw.flatMap((item, i) => {
-    const preset = presetFrom(item, { at: `${ctx.at}[${i}]`, issues: ctx.issues });
-    return preset ? [preset] : [];
   });
 }
 
@@ -857,20 +731,20 @@ function riskFrom(raw: unknown, ctx: ParseContext, provider: string | null): Ris
   };
 }
 
-// ── One preset ───────────────────────────────────────────────────────────────
+// ── One macro-action ─────────────────────────────────────────────────────────
 
 /**
- * One preset entry. The shape is the loader's (known keys, `gate` defaults
- * to `auto`) ; whether the budget is acceptable is `budgetIssues`, the rule
- * `presetIssues` applies to every catalog.
+ * One macro-action entry : a risk and its base budget, never a gate. The
+ * shape is the loader's (known keys) ; whether the budget is acceptable is
+ * `budgetIssues`, the rule `macroActionIssues` applies to every catalog.
  */
-function presetEntryFrom(raw: unknown, ctx: ParseContext): PresetEntry | undefined {
+function macroEntryFrom(raw: unknown, ctx: ParseContext): MacroActionEntry | undefined {
   if (!isRecord(raw)) return notAMapping(ctx);
-  unknownKeys(raw, ENTRY_KEYS, ctx);
+  unknownKeys(raw, MACRO_ENTRY_KEYS, ctx);
   if (isRecord(raw.rate_limit))
     unknownKeys(raw.rate_limit, RATE_LIMIT_KEYS, child(ctx, 'rate_limit'));
   const riskId = requireString(raw, 'risk_id', ctx);
-  const budget = { quota: raw.quota, rate_limit: raw.rate_limit, gate: raw.gate ?? 'auto' };
+  const budget = { quota: raw.quota, rate_limit: raw.rate_limit, gate: 'auto' };
   for (const issue of budgetIssues(budget)) {
     ctx.issues.push(`${ctx.at}.${issue.field}: ${issue.message}`);
   }
@@ -882,17 +756,16 @@ function presetEntryFrom(raw: unknown, ctx: ParseContext): PresetEntry | undefin
       max: budget.rate_limit.max,
       window_seconds: budget.rate_limit.window_seconds,
     },
-    gate: budget.gate,
   };
 }
 
-function presetEntriesFrom(raw: unknown, ctx: ParseContext): PresetEntry[] {
+function macroEntriesFrom(raw: unknown, ctx: ParseContext): MacroActionEntry[] {
   if (!isUnknownList(raw) || raw.length === 0) {
     ctx.issues.push(`${ctx.at}: expected a non-empty list`);
     return [];
   }
   return raw.flatMap((item, j) => {
-    const entry = presetEntryFrom(item, { at: `${ctx.at}[${j}]`, issues: ctx.issues });
+    const entry = macroEntryFrom(item, { at: `${ctx.at}[${j}]`, issues: ctx.issues });
     return entry ? [entry] : [];
   });
 }
@@ -909,41 +782,17 @@ function macroActionsFrom(raw: unknown, ctx: ParseContext): MacroAction[] {
   });
 }
 
-/** One macro-action ; its entries are presets' entries without a gate. */
+/** One macro-action : a slug, a label and a description in the connector's words, its entries. */
 function macroActionFrom(raw: unknown, ctx: ParseContext): MacroAction | undefined {
   if (!isRecord(raw)) return notAMapping(ctx);
   const own = scoped(ctx);
   unknownKeys(raw, MACRO_ACTION_KEYS, own);
   const id = requireString(raw, 'id', own);
-  if (id !== undefined && !PRESET_ID_PATTERN.test(id))
+  if (id !== undefined && !MACRO_ACTION_ID_PATTERN.test(id))
     own.issues.push(`${own.at}.id '${id}' must be a lowercase slug`);
   const label = requireString(raw, 'label', own);
   const description = requireString(raw, 'description', own);
-  const entriesCtx = child(own, 'entries');
-  if (isUnknownList(raw.entries)) {
-    for (const [j, item] of raw.entries.entries()) {
-      if (isRecord(item))
-        unknownKeys(item, MACRO_ENTRY_KEYS, { at: `${entriesCtx.at}[${j}]`, issues: own.issues });
-    }
-  }
-  const entries: MacroActionEntry[] = presetEntriesFrom(raw.entries, entriesCtx).map(
-    ({ risk_id, quota, rate_limit }) => ({ risk_id, quota, rate_limit }),
-  );
-  if (!own.commit() || !id || !label || !description) return undefined;
-  return { id, label, description, entries };
-}
-
-/** Assemble one preset ; `undefined` when its header or any of its entries reported. */
-function presetFrom(raw: unknown, ctx: ParseContext): Preset | undefined {
-  if (!isRecord(raw)) return notAMapping(ctx);
-  const own = scoped(ctx);
-  unknownKeys(raw, PRESET_KEYS, own);
-  const id = requireString(raw, 'id', own);
-  if (id !== undefined && !PRESET_ID_PATTERN.test(id))
-    own.issues.push(`${own.at}.id '${id}' must be a lowercase slug`);
-  const label = requireString(raw, 'label', own);
-  const description = requireString(raw, 'description', own);
-  const entries = presetEntriesFrom(raw.entries, child(own, 'entries'));
+  const entries = macroEntriesFrom(raw.entries, child(own, 'entries'));
   if (!own.commit() || !id || !label || !description) return undefined;
   return { id, label, description, entries };
 }

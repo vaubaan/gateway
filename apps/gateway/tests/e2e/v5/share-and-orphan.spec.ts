@@ -134,18 +134,25 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(dialog.getByLabel('Give github.uncategorized-write')).not.toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).toBeChecked();
   await snap(ines, 'share-dialog-select-all');
-  // A preset is a starting point: it ticks its own explicit list. Read-only is two reads.
-  await dialog.getByRole('button', { name: 'Read-only', exact: true }).click();
-  await expect(dialog.getByLabel(`Give ${READ_CODE}`)).toBeChecked();
-  await expect(dialog.getByLabel(`Give ${READ_META}`)).toBeChecked();
-  await expect(dialog.getByLabel('Give github.merge-protected')).not.toBeChecked();
-  await expect(summary).toContainText('2 of 19 permissions');
-  await expect(submit).toHaveText('Give access · 2 permissions');
-  // "Clear", then the same two by hand: the list posted is the one ticked.
+  // A macro-action is a toggle over its own explicit list; "Select all" holds Read whole.
+  const readAction = dialog.getByRole('button', { name: 'Read', exact: true });
+  await expect(readAction).toHaveAttribute('aria-pressed', 'true');
+  // "Clear", then Read alone: its three reads, nothing else.
   await dialog.getByRole('button', { name: 'Clear' }).click();
   await expect(submit).toBeDisabled();
-  await dialog.getByLabel(`Give ${READ_CODE}`).check();
-  await dialog.getByLabel(`Give ${READ_META}`).check();
+  await expect(readAction).toHaveAttribute('aria-pressed', 'false');
+  await readAction.click();
+  await expect(readAction).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByLabel(`Give ${READ_CODE}`)).toBeChecked();
+  await expect(dialog.getByLabel(`Give ${READ_META}`)).toBeChecked();
+  await expect(dialog.getByLabel('Give github.search-global')).toBeChecked();
+  await expect(dialog.getByLabel('Give github.merge-protected')).not.toBeChecked();
+  await expect(summary).toContainText('3 of 19 permissions');
+  // One box unticked by hand: Read is no longer whole, and the list posted is the one ticked.
+  await dialog.getByLabel('Give github.search-global').uncheck();
+  await expect(readAction).toHaveAttribute('aria-pressed', 'false');
+  await expect(summary).toContainText('2 of 19 permissions');
+  await expect(submit).toHaveText('Give access · 2 permissions');
   await submit.click();
 
   await expect(ines).toHaveURL(new RegExp(`/accounts/${connectionId}\\?notice=`));

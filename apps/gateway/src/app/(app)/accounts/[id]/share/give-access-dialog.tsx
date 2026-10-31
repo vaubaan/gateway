@@ -6,8 +6,8 @@
  *
  * The checklist is the catalog as explicit ids, grouped the way the reference
  * groups them (reads, writes, irreversible writes), each line with its
- * severity and a "why?" one click away. "Select all" and the presets tick the
- * boxes one by one: the form posts one `risk` value per ticked permission, so
+ * severity and a "why?" one click away. "Select all" and the macro-actions
+ * tick the boxes one by one: the form posts one `risk` value per ticked permission, so
  * what is stored is the list resolved at the time of the click (spec §3.1
  * "Enumeration"), never "everything". A permission the catalog gains later is
  * not part of it.
@@ -57,10 +57,11 @@ export interface GiveAccessInitial {
   readonly holder: string | null;
 }
 
-/** A preset of the service as a starting point: the explicit ids it stands for. */
-export interface AccessPreset {
+/** A macro-action of the service: the explicit ids it stands for, ticked or unticked together. */
+export interface AccessMacroAction {
   readonly id: string;
   readonly label: string;
+  readonly description: string;
   readonly riskIds: readonly string[];
 }
 
@@ -83,8 +84,19 @@ export interface AccessFields {
   readonly restore: string;
 }
 
-function sameSet(a: ReadonlySet<string>, b: readonly string[]): boolean {
-  return a.size === b.length && b.every((id) => a.has(id));
+/** True when every id of the group is ticked. */
+function holdsAll(selected: ReadonlySet<string>, ids: readonly string[]): boolean {
+  return ids.length > 0 && ids.every((id) => selected.has(id));
+}
+
+/** The selection with every id of the group ticked (`on`) or unticked. */
+function toggled(selected: ReadonlySet<string>, ids: readonly string[], on: boolean): Set<string> {
+  const next = new Set(selected);
+  for (const id of ids) {
+    if (on) next.add(id);
+    else next.delete(id);
+  }
+  return next;
 }
 
 /** The tick of a whole group: all, some (drawn indeterminate), none. */
@@ -121,7 +133,7 @@ export function GiveAccessDialog({
   fields,
   risks,
   teams,
-  presets,
+  macroActions,
   labelling,
   initial,
   restore,
@@ -135,7 +147,7 @@ export function GiveAccessDialog({
   fields: AccessFields;
   risks: readonly CatalogRisk[];
   teams: readonly { readonly id: string; readonly name: string }[];
-  presets: readonly AccessPreset[];
+  macroActions: readonly AccessMacroAction[];
   labelling: EnvLabelling;
   initial: GiveAccessInitial;
   restore: AccessRestore | null;
@@ -324,20 +336,24 @@ export function GiveAccessDialog({
         )}
 
         <div className={styles.starts}>
-          {presets.length > 0 && <span>Start from</span>}
-          {presets.map((preset) => (
-            <Button
-              key={preset.id}
-              type="button"
-              size="sm"
-              aria-pressed={sameSet(selected, preset.riskIds)}
-              className={sameSet(selected, preset.riskIds) ? styles.presetOn : undefined}
-              disabled={preset.riskIds.length === 0}
-              onClick={() => setSelected(new Set(preset.riskIds))}
-            >
-              {preset.label}
-            </Button>
-          ))}
+          {macroActions.length > 0 && <span>Tick</span>}
+          {macroActions.map((action) => {
+            const on = holdsAll(selected, action.riskIds);
+            return (
+              <Button
+                key={action.id}
+                type="button"
+                size="sm"
+                title={action.description}
+                aria-pressed={on}
+                className={on ? styles.macroActionOn : undefined}
+                disabled={action.riskIds.length === 0}
+                onClick={() => setSelected(toggled(selected, action.riskIds, !on))}
+              >
+                {action.label}
+              </Button>
+            );
+          })}
           <span className={styles.startsEnd}>
             <button
               type="button"

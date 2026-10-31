@@ -2,7 +2,7 @@
  * Catalog invariants the SDK loader does not check for us : the cardinal
  * money-out entries keep their rate ceiling and declare no unenforced cap, the irreversible set is exact, every
  * named risk is env-scoped on the Stripe mode, and a handful of slices
- * resolve to the risk a reviewer expects. Structure, patterns, presets and
+ * resolve to the risk a reviewer expects. Structure, patterns, macro-actions and
  * fallback are validated by `loadCatalogFile` at import and by the kit in
  * `plugin.test.ts`.
  */
@@ -19,7 +19,7 @@ describe('stripe risk-catalog — shape', () => {
   test('16 named risks + 1 fallback, version 5', () => {
     expect(catalog.provider).toBe('stripe');
     expect(catalog.risks).toHaveLength(17);
-    expect(catalog.catalog_version).toBe(6);
+    expect(catalog.catalog_version).toBe(7);
     expect(catalog.risks.filter((r) => r.id.startsWith('stripe.uncategorized'))).toHaveLength(1);
   });
 
@@ -29,10 +29,10 @@ describe('stripe risk-catalog — shape', () => {
     }
   });
 
-  test('no preset carries the fallback (it counts only when no dedicated entry matched)', () => {
-    for (const preset of catalog.presets) {
-      const fallback = preset.entries.find((e) => e.risk_id.endsWith('.uncategorized-write'));
-      expect(fallback, preset.id).toBeUndefined();
+  test('no macro-action carries the fallback (it counts only when no dedicated entry matched)', () => {
+    for (const action of catalog.macro_actions ?? []) {
+      const fallback = action.entries.find((e) => e.risk_id.endsWith('.uncategorized-write'));
+      expect(fallback, action.id).toBeUndefined();
     }
   });
 

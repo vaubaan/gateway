@@ -11,8 +11,14 @@ import { describe, expect, test } from 'vitest';
 
 import { parseSlice, risksTouchedByAll, serializeSlice } from '@vaubaan/policy-engine';
 import type { Resource, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
-import { classifySupabase, SUPABASE_CLASSIFIED_TOOLS, supabaseCatalog } from '../../src/index.ts';
+import {
+  classifySupabase,
+  SUPABASE_CLASSIFIED_TOOLS,
+  supabaseCatalog,
+  supabasePlugin,
+} from '../../src/index.ts';
 
 const CATALOG = supabaseCatalog.catalog;
 const INDEXED = supabaseCatalog.indexed;
@@ -41,8 +47,8 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares provider `supabase`, a version and a date', () => {
     expect(CATALOG.provider).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(6);
-    expect(CATALOG.catalog_date).toBe('2026-10-30');
+    expect(CATALOG.catalog_version).toBe(7);
+    expect(CATALOG.catalog_date).toBe('2026-10-31');
   });
 
   test('exposes 25 named risks plus the fallback', () => {
@@ -359,19 +365,14 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
     expect(run('select * from vault.decrypted_secrets;')).not.toContain('supabase.auth.read-users');
   });
 
-  test('no shipped preset carries read-managed-schemas: a person ticks it on purpose', () => {
-    for (const preset of CATALOG.presets ?? []) {
-      const ids = preset.entries.map((e) => e.risk_id);
-      expect(
-        ids.filter((id) => id.endsWith('.read-managed-schemas')),
-        preset.id,
-      ).toEqual([]);
-    }
+  test('read-managed-schemas asks first at Prudent, and only in an environment the mission reaches', () => {
+    const lines = (envs: readonly string[]) =>
+      policyFromMacroActions(supabasePlugin, { query: 'prudent' }, { envs });
     expect(
-      (CATALOG.presets ?? [])
-        .find((p) => p.id === 'read-only-analyst')!
-        .entries.map((e) => e.risk_id),
-    ).toEqual(['supabase.read-data', 'supabase.storage.object-read']);
+      lines(['staging']).find((l) => l.risk_id === 'supabase[staging].read-managed-schemas')?.gate,
+    ).toBe('approval');
+    expect(lines([]).map((l) => l.risk_id)).not.toContain('supabase.read-managed-schemas');
+    expect(lines([]).map((l) => l.risk_id)).toContain('supabase.read-data');
   });
 
   test('delete_bucket fires bucket-write and the bulk object cascade', () => {

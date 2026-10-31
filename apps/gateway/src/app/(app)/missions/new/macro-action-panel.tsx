@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * What an agent may do on one account (risk model §4.7; ADR
+ * What an agent may do on one account (risk model §4.6; ADR
  * macro-actions-and-trust-crans-prefill-the-policy), in two views:
  *
  * - **Simple**: the service's macro-actions, each a row the creator ticks and
@@ -30,7 +30,7 @@ import styles from '../missions.module.css';
 import {
   chosenPalier,
   describeEverything,
-  explainPreset,
+  explainEverything,
   macroActionRows,
   policyCounts,
   type ConnectionState,
@@ -69,13 +69,10 @@ export function MacroActionPanel({
   const counts = policyCounts(connection, state);
   const total = counts.free + counts.asks;
   const palier = chosenPalier(connection, state);
-  const everything = state.presetId
-    ? (() => {
-        const explanation = explainPreset(connection, state, state.presetId);
-        return explanation ? describeEverything(connection, explanation) : null;
-      })()
+  const everything = state.everything
+    ? describeEverything(connection, explainEverything(connection, state))
     : null;
-  const adjusted = state.edited && !state.presetId && total > 0;
+  const adjusted = state.edited && !state.everything && total > 0;
 
   return (
     <div className={styles.accountBody} data-testid={`macro-actions-${connection.provider}`}>
@@ -91,7 +88,7 @@ export function MacroActionPanel({
           advanced
         ) : everything ? (
           <div
-            className={styles.presetDescription}
+            className={styles.everythingDescription}
             data-testid={`everything-${connection.provider}`}
           >
             {everything.map((sentence) => (
@@ -141,7 +138,7 @@ export function MacroActionPanel({
             highest palier P{palier}
           </span>
         )}
-        {state.presetId ? null : (
+        {state.everything ? null : (
           <button type="button" className={styles.countsLink} onClick={onEverything}>
             Everything I hold on this account
           </button>

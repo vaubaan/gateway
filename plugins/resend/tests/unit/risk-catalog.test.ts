@@ -1,15 +1,17 @@
 /**
  * Catalog invariants the SDK loader does not check for us : the bulk entries
  * declare only the rate ceiling the gateway enforces, the irreversible set is exact, only the exfiltration risk
- * is env-scoped, no preset offers the fallback, a deprecated id or an
- * env-scoped risk unqualified, and the patterns are disjoint : a slice touches
- * exactly one risk. Structure, patterns, presets and fallback are validated by
+ * is env-scoped, no macro-action offers the fallback or a deprecated id, the
+ * env-scoped risk is only ever offered qualified, and the patterns are disjoint :
+ * a slice touches exactly one risk. Structure, patterns, macro-actions and fallback are validated by
  * `loadCatalogFile` at import and by the kit in `plugin.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice } from '@vaubaan/plugin-sdk';
 import { isEnvScopedEntry, risksTouchedBy } from '@vaubaan/policy-engine';
+
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
 import { resendCatalog, resendPlugin } from '../../src/index.ts';
 
@@ -19,7 +21,7 @@ const touched = (raw: string) => risksTouchedBy(parseSlice(raw), indexed);
 describe('resend risk-catalog — shape', () => {
   test('18 entries : 15 live named risks + 1 fallback + 2 deprecated ids, version 4', () => {
     expect(catalog.provider).toBe('resend');
-    expect(catalog.catalog_version).toBe(5);
+    expect(catalog.catalog_version).toBe(6);
     expect(catalog.risks).toHaveLength(18);
     const fallback = catalog.risks.filter((r) => r.fallback);
     const deprecated = catalog.risks.filter((r) => r.deprecated);
@@ -66,15 +68,22 @@ describe('resend risk-catalog — shape', () => {
     ]);
   });
 
-  test('no preset offers the fallback, a deprecated id or an unqualified env-scoped risk', () => {
+  test('no macro-action offers the fallback, a deprecated id or an unqualified env-scoped risk', () => {
     const deprecated = new Set(catalog.risks.filter((r) => r.deprecated).map((r) => r.id));
-    for (const preset of catalog.presets) {
-      for (const entry of preset.entries) {
-        expect(entry.risk_id, preset.id).not.toMatch(/uncategorized/);
-        expect(deprecated.has(entry.risk_id), `${preset.id}: ${entry.risk_id}`).toBe(false);
-        expect(entry.risk_id, preset.id).not.toBe('resend.send-email-external-unbounded');
+    for (const action of catalog.macro_actions ?? []) {
+      for (const entry of action.entries) {
+        expect(entry.risk_id, action.id).not.toMatch(/uncategorized/);
+        expect(deprecated.has(entry.risk_id), `${action.id}: ${entry.risk_id}`).toBe(false);
       }
     }
+    const crans = Object.fromEntries(
+      (catalog.macro_actions ?? []).map((a) => [a.id, 'autonome' as const]),
+    );
+    const ids = policyFromMacroActions(resendPlugin, crans, {
+      envs: ['prod', 'staging', 'dev'],
+    }).map((e) => e.risk_id);
+    expect(ids).not.toContain('resend.send-email-external-unbounded');
+    expect(ids).not.toContain('resend[prod].send-email-external-unbounded');
   });
 
   test('the plugin serves the loaded catalog itself', () => {

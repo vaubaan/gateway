@@ -27,7 +27,8 @@ ones (spec [gateway-risk-model](../spec/gateway-risk-model.md)).
   any call no other risk matches.
 - A new catalog risk fails closed: a mission that did not accept it is refused on the first call
   touching it, and nothing is migrated automatically.
-- Presets are copied into the explicit list at issuance, never referenced.
+- What pre-fills a policy (macro-actions at a cran) is written into the explicit list at issuance,
+  never referenced.
 - A missing risk is answered by a person (the creator edits the mission), never by the agent.
 
 ## Rejected alternatives

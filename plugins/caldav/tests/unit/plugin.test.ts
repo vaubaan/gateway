@@ -1,8 +1,8 @@
 /**
- * Mandatory suite of the `caldav` plugin : the SDK kit (definition, presets,
- * catalog coverage), the credential (server URL, username, app password),
- * `verify` and `discoverResources` against the fake server in three server
- * shapes, and the presets. No network.
+ * Mandatory suite of the `caldav` plugin : the SDK kit (definition, catalog
+ * coverage), the credential (server URL, username, app password), `verify`
+ * and `discoverResources` against the fake server in three server shapes,
+ * and the macro-actions. No network.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -11,7 +11,7 @@ import {
   assertCatalogCoverage,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
+  policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { caldavPlugin, createCaldavPlugin, normalizeServerUrl } from '../../src/index.ts';
@@ -20,9 +20,8 @@ import { connCtx, work } from './fixtures.ts';
 import { SAMPLES } from './samples.ts';
 
 describe('SDK kit', () => {
-  test('well formed, presets valid, no wildcard', () => {
+  test('well formed, no wildcard', () => {
     assertPluginWellFormed(caldavPlugin);
-    assertPresetsValid(caldavPlugin);
     assertNoWildcard(caldavPlugin);
   });
 
@@ -35,7 +34,7 @@ describe('SDK kit', () => {
   test('identity : id, name, icon, version', () => {
     expect(caldavPlugin.id).toBe('caldav');
     expect(caldavPlugin.displayName).toBe('CalDAV Calendar');
-    expect(caldavPlugin.version).toBe('0.1.1');
+    expect(caldavPlugin.version).toBe('0.1.2');
     expect(caldavPlugin.icon).toMatch(/^M/);
     expect(Object.keys(caldavPlugin.toolTitles ?? {}).sort()).toEqual(
       caldavPlugin.tools.map((t) => t.name).sort(),
@@ -43,34 +42,42 @@ describe('SDK kit', () => {
   });
 });
 
-describe('presets', () => {
-  const entries = (id: string): Record<string, string> =>
-    Object.fromEntries(
-      caldavPlugin.catalog
-        .presets!.find((p) => p.id === id)!
-        .entries.map((e) => [e.risk_id, e.gate ?? 'auto']),
-    );
+describe('macro-actions', () => {
+  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]): Record<string, string> =>
+    Object.fromEntries(policyFromMacroActions(caldavPlugin, crans).map((l) => [l.risk_id, l.gate]));
 
-  test('read-only reads, and writes nothing', () => {
-    expect(entries('read-only')).toEqual({
+  test('reading at Prudent reads freely, writes nothing ; a wide range asks first', () => {
+    expect(gates({ read: 'prudent' })).toEqual({
       'caldav.read-calendars': 'auto',
       'caldav.read-events': 'auto',
+      'caldav.read-wide-range': 'approval',
     });
   });
 
-  test('own agenda writes events that notify nobody ; deleting asks first', () => {
-    const e = entries('own-agenda');
-    expect(Object.keys(e).some((id) => id.startsWith('caldav.attendees-'))).toBe(false);
-    expect(e['caldav.event-delete']).toBe('approval');
+  test('scheduling writes events that notify nobody ; deleting is left out at Prudent, asks first above', () => {
+    const prudent = gates({ schedule: 'prudent' });
+    expect(Object.keys(prudent).some((id) => id.startsWith('caldav.attendees-'))).toBe(false);
+    expect(prudent['caldav.event-create']).toBe('auto');
+    expect(prudent['caldav.event-delete']).toBeUndefined();
+    expect(gates({ schedule: 'confiant' })['caldav.event-delete']).toBe('approval');
+    expect(gates({ schedule: 'autonome' })['caldav.event-delete']).toBe('approval');
   });
 
-  test('the assistant invites colleagues and allowlisted contacts freely, anybody else after approval', () => {
-    const e = entries('assistant');
-    expect(e['caldav.attendees-internal']).toBe('auto');
-    expect(e['caldav.attendees-allowlisted']).toBe('auto');
-    expect(e['caldav.attendees-external']).toBe('approval');
-    expect(e['caldav.event-delete']).toBe('approval');
-    expect(e['caldav.uncategorized-write']).toBeUndefined();
+  test('inviting at Autonome invites colleagues freely, anybody else after approval', () => {
+    expect(gates({ invite: 'autonome' })).toEqual({
+      'caldav.attendees-internal': 'auto',
+      'caldav.attendees-allowlisted': 'approval',
+      'caldav.attendees-external': 'approval',
+    });
+    // At Prudent, colleagues ask first and outsiders are left out.
+    expect(gates({ invite: 'prudent' })).toEqual({ 'caldav.attendees-internal': 'approval' });
+  });
+
+  test('the fallback is in no macro-action', () => {
+    const listed = (caldavPlugin.catalog.macro_actions ?? []).flatMap((a) =>
+      a.entries.map((e) => e.risk_id),
+    );
+    expect(listed).not.toContain('caldav.uncategorized-write');
   });
 });
 

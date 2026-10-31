@@ -32,6 +32,16 @@ import { FakeGithubHost, isolatedGitEnv } from './fake-github-host';
 export const CONNECTION_TOKEN = 'github_pat_11AAAAAAA0GITRIG_0123456789abcdefghijklmnopqrstuv';
 export const REPOSITORY = 'acme/app';
 export const OTHER_REPOSITORY = 'acme/lib';
+/**
+ * What the former `developer` preset stood for: read and propose at Confiant
+ * (push and pull requests run freely, a force-push or a branch delete asks
+ * first), administer at Confiant (a workflow file write asks first).
+ */
+export const DEVELOPER_CRANS: Readonly<Record<string, string>> = {
+  read: 'confiant',
+  propose: 'confiant',
+  administer: 'confiant',
+};
 
 /** The inline credential helper of the setup kit: the key comes from the environment. */
 export const KIT_CREDENTIAL_HELPER =
@@ -50,9 +60,9 @@ export interface GitRig extends ExecutionInstance {
   readonly remoteBase: string;
   readonly logs: string[];
   remote(repository?: string): string;
-  /** A mission on the GitHub connection: a preset as shipped, or an explicit policy. */
+  /** A mission on the GitHub connection: macro-actions at their crans, or an explicit policy. */
   mission(input: {
-    readonly preset?: string;
+    readonly crans?: Readonly<Record<string, string>>;
     readonly policy?: readonly MissionPolicyEntry[];
     readonly repositories?: readonly string[];
   }): Promise<IssuedMission>;
@@ -61,10 +71,10 @@ export interface GitRig extends ExecutionInstance {
     token: string,
     permissions: Readonly<Record<string, string>>,
   ): Promise<ConnectionRecord>;
-  /** A mission on another connection, from a shipped preset or an explicit policy. */
+  /** A mission on another connection, from macro-actions at their crans or an explicit policy. */
   missionOn(
     connection: ConnectionRecord,
-    preset: string | readonly MissionPolicyEntry[],
+    composition: Readonly<Record<string, string>> | readonly MissionPolicyEntry[],
   ): Promise<IssuedMission>;
   /** The agent's git: `key` in `VAUBAAN_MISSION_TOKEN`, nothing else configured. */
   git(
@@ -147,10 +157,10 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
     remote: (repository = REPOSITORY) => `${remoteBase}${repository}.git`,
     async mission(input) {
       const repositories = input.repositories ?? [REPOSITORY];
-      const connection = input.preset
+      const connection = input.crans
         ? {
             connection_id: github.id,
-            preset: input.preset,
+            crans: input.crans,
             resources: { scope: 'selected' as const, resource_refs: [...repositories] },
           }
         : {
@@ -180,15 +190,14 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
       ]);
       return connection;
     },
-    async missionOn(connection, preset) {
-      const entry =
-        typeof preset === 'string'
-          ? { connection_id: connection.id, preset }
-          : {
-              connection_id: connection.id,
-              resources: { scope: 'selected' as const, resource_refs: [REPOSITORY] },
-              policy: [...preset],
-            };
+    async missionOn(connection, composition) {
+      const entry = isPolicy(composition)
+        ? {
+            connection_id: connection.id,
+            resources: { scope: 'selected' as const, resource_refs: [REPOSITORY] },
+            policy: [...composition],
+          }
+        : { connection_id: connection.id, crans: composition };
       const issued = await instance.root.missions.service.issue(instance.ada, {
         name: `On ${connection.displayName}`,
         connections: [entry],
@@ -325,4 +334,10 @@ async function serve(handle: (request: Request) => Promise<Response>): Promise<S
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   return server;
+}
+
+function isPolicy(
+  composition: Readonly<Record<string, string>> | readonly MissionPolicyEntry[],
+): composition is readonly MissionPolicyEntry[] {
+  return Array.isArray(composition);
 }

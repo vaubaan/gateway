@@ -39,19 +39,20 @@ export interface RiskInfo {
   readonly deprecated: boolean;
 }
 
-export interface PresetEntryInfo {
+/** One risk of a macro-action with its base budget: no gate, the trust level decides it. */
+export interface MacroActionEntryInfo {
   readonly riskId: string;
-  readonly gate: 'auto' | 'approval';
   readonly quota: number;
   readonly rateMax: number;
   readonly rateWindowSeconds: number;
 }
 
-export interface PresetInfo {
+/** A macro-action of the catalog (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+export interface MacroActionInfo {
   readonly id: string;
   readonly label: string;
   readonly description: string;
-  readonly entries: readonly PresetEntryInfo[];
+  readonly entries: readonly MacroActionEntryInfo[];
 }
 
 export interface CredentialFieldInfo {
@@ -90,7 +91,7 @@ export interface PluginInfo {
   readonly catalogDate: string | null;
   readonly tools: readonly ToolInfo[];
   readonly risks: readonly RiskInfo[];
-  readonly presets: readonly PresetInfo[];
+  readonly macroActions: readonly MacroActionInfo[];
   readonly credentials: readonly CredentialInfo[];
   /** Tools that hand the agent a short-lived provider token, each a permission of its own. */
   readonly tokenHandouts: readonly { readonly tool: string; readonly riskIds: readonly string[] }[];
@@ -221,13 +222,12 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
       description: tool.description,
     })),
     risks: catalog.risks.map(riskInfo),
-    presets: (catalog.presets ?? []).map((preset) => ({
-      id: preset.id,
-      label: preset.label,
-      description: preset.description,
-      entries: preset.entries.map((entry) => ({
+    macroActions: (catalog.macro_actions ?? []).map((action) => ({
+      id: action.id,
+      label: action.label,
+      description: action.description,
+      entries: action.entries.map((entry) => ({
         riskId: entry.risk_id,
-        gate: entry.gate,
         quota: entry.quota,
         rateMax: entry.rate_limit.max,
         rateWindowSeconds: entry.rate_limit.window_seconds,

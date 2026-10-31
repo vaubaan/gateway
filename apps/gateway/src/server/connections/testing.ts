@@ -212,21 +212,6 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
             ]
           : []),
       ],
-      presets: [
-        {
-          id: 'reader',
-          label: 'Reader',
-          description: 'Read-only access.',
-          entries: [
-            {
-              risk_id: `${id}.read-things`,
-              quota: 100,
-              rate_limit: { max: 60, window_seconds: 60 },
-              gate: 'auto',
-            },
-          ],
-        },
-      ],
     },
     credential: options.credential,
     ...(options.toolTitles ? { toolTitles: options.toolTitles } : {}),

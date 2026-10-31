@@ -131,12 +131,11 @@ and its body is base64: nothing the agent writes can add a header.
 The transport is an interface (`GmailTransport`, `src/transport.ts`):
 `createGmailPlugin({ transport })` runs the plugin over a fake one.
 
-## Catalog and presets
+## Catalog and macro-actions
 
 `src/risk-catalog.yaml` — sixteen risks plus the mandatory
 `gmail.uncategorized-write` fallback, `catalog_version: 6` (5 added
-`gmail.label-create`, in the `developer` preset; 6 drops "Experimental" from
-the `developer` preset's description). No risk is
+`gmail.label-create`; 6 drops "Experimental" from a description). No risk is
 env-scoped (Gmail has no environment). No entry declares `caps` or
 `infra_limits`: the door enforces no stateless cap (ADR
 `scope-caps-amplification-axis`), so `gmail.read-from-zone-unknown` and
@@ -148,16 +147,19 @@ an existing id, also matches the thread containment slice of `get_thread`.
 Plugin version 1.0.0: the plugin is no longer experimental (see
 docs/handbook/plugin-sdk.md).
 
-| Preset      | Grants                                                                                                                                                               |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only` | Labels, drafts, searches and reads from automated, internal, allowlisted and unknown senders (unknown capped at 20/min). No write, no bulk read, no sensitive label. |
-| `developer` | Read-only + `draft-write` with drafts to self / internal / allowlist, single-thread labels and new labels (`auto`); `bulk-read` under `approval`.                    |
+| Macro-action | What it covers                                                       | Risks                                                                                  |
+| ------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `search`     | Read the structure, the threads and the messages, whoever sent them. | `read-mailbox`, `read-from-zone-*`, `read-drafts`, `read-sensitive-label`, `bulk-read` |
+| `draft`      | Write and edit drafts. Nothing leaves.                               | `draft-write`, `draft-to-zone-self`, `-internal`, `-allowlist`                         |
+| `tidy`       | Apply, remove and create labels.                                     | `label-write`, `label-create`, `bulk-label-write`                                      |
 
-In no preset, on purpose: `gmail.read-sensitive-label` (PII, explicit
-acceptance), `gmail.draft-to-zone-external-unbounded` (the exfiltration
-vector — never acceptable: the classifier refuses the draft, and the entry
-is kept `deprecated` because ids are never deleted),
-`gmail.bulk-label-write` (no modelled tool can touch it) and the fallback.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The mission stores the explicit list. At Prudent the sensitive
+and bulk reads and bulk labels ask first. In no macro-action:
+`gmail.draft-to-zone-external-unbounded` (the exfiltration vector — never
+acceptable: the classifier refuses the draft, and the entry is kept
+`deprecated` because ids are never deleted) and the fallback.
 
 ## Credential — an app password
 

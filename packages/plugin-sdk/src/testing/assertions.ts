@@ -2,9 +2,9 @@
  * Structural assertions every plugin test suite runs.
  *
  * Spec : docs/spec/vaubaan-gateway.md §10 — each plugin's classifier is
- * unit-tested ("a classification error is a security hole") ; every plugin
- * ships at least one preset referencing only its own risks ; no wildcard
- * anywhere. Framework-agnostic : each assertion throws a plain
+ * unit-tested ("a classification error is a security hole") ; every risk
+ * but the fallback belongs to one macro-action of its own catalog ; no
+ * wildcard anywhere. Framework-agnostic : each assertion throws a plain
  * `PluginAssertionError` listing every finding, so it works under vitest,
  * node:test or a CI script.
  */
@@ -24,12 +24,7 @@ import {
   type Slice,
 } from '@vaubaan/shared';
 
-import {
-  fallbackFlagIssues,
-  presetIssues,
-  presetWildcardIssues,
-  wildcardIssues,
-} from '../catalog-loader.ts';
+import { fallbackFlagIssues, wildcardIssues } from '../catalog-loader.ts';
 import { declaredToolNames, pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
@@ -65,7 +60,7 @@ export function assertPluginWellFormed(plugin: ProviderPlugin): void {
 }
 
 /**
- * No risk id, preset entry, restriction or accepted-risk list may contain a
+ * No risk id, restriction or accepted-risk list may contain a
  * wildcard or a sentinel. Accepts a catalog, a plugin, or a plain list of
  * ids (a persisted restriction, a mission's `accepted_risks`).
  */
@@ -85,20 +80,6 @@ export function assertNoWildcard(input: RiskCatalog | ProviderPlugin | readonly 
 /** `Array.isArray` narrows a readonly array to `any[]` ; this guard keeps the element type. */
 function isIdList(x: RiskCatalog | ProviderPlugin | readonly RiskId[]): x is readonly RiskId[] {
   return Array.isArray(x);
-}
-
-/**
- * At least one preset ; every entry an explicit risk of the same catalog
- * (no wildcard, no sentinel) ; budgets explicit — a positive integer quota
- * and rate limit, a gate from the closed set (`presetIssues`, which applies
- * `budgetIssues` to every entry).
- */
-export function assertPresetsValid(input: RiskCatalog | ProviderPlugin): void {
-  const catalog = 'catalog' in input ? input.catalog : input;
-  fail(`presets of catalog '${catalog.provider}'`, [
-    ...presetIssues(catalog, { requirePresets: true }),
-    ...presetWildcardIssues(catalog),
-  ]);
 }
 
 /** One representative call of a tool. */

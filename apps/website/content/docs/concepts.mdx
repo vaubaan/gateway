@@ -1,6 +1,6 @@
 ---
 title: Concepts
-description: The words of Vaubaan Gateway — instance, account, resource, mission, key, permission, preset, limit, ask me first, activity — and the names the protocol keeps for them.
+description: The words of Vaubaan Gateway — instance, account, resource, mission, key, permission, macro-action, trust level, limit, ask me first, activity — and the names the protocol keeps for them.
 ---
 
 A mission is what a person allows an agent to do through Vaubaan Gateway: which accounts and resources it may touch, which permissions it holds, the limits of each, and which actions ask first. The other words of the interface follow from it.
@@ -29,9 +29,13 @@ The secret an agent presents to the gateway, one per mission and per holder. It 
 
 A named risk from a service's catalog, such as `github.merge-protected` or `supabase[prod].row-write`, with the reason it exists and one severity word (low, medium, high, critical) computed from six axes: undo, blast radius, data, cost, visible to, lasts. A mission stores an explicit list of permissions; nothing is ever "all". Every service's permissions are on its [plugin page](/plugins).
 
-## Preset
+## Macro-action
 
-A named set of permissions with limits that pre-fills a mission for one account — "Read-only", "Developer", "Release manager". The person creating the mission adjusts it; the mission stores the explicit list, never the preset. Every account also offers "Everything I hold on this account", the instance's own preset: every permission you may allow there, written out one by one when the mission is created.
+One thing to do with a service, in its own words — "Read", "Propose", "Ship" — grouping the permissions it needs, each with a base limit. Every permission belongs to one macro-action; "Anything else" holds the uncategorized writes. The person creating a mission ticks macro-actions per account; the mission stores the explicit list of permissions, never the macro-action. Every account also offers "Everything I hold on this account": every permission you may allow there, written out one by one when the mission is created.
+
+## Trust level
+
+What a ticked macro-action is set to: Prudent, Confiant or Autonome. From how hard each permission is to undo, the level decides whether it runs freely, asks first or is left out, and it raises the limits. It only pre-fills: every line stays editable before the mission is created.
 
 ## Limit
 

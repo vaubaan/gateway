@@ -13,7 +13,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
+  policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -54,9 +54,8 @@ const SAMPLES: ToolSamples = {
 };
 
 describe('context7 plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(context7Plugin);
-    assertPresetsValid(context7Plugin);
     assertNoWildcard(context7Plugin);
   });
 
@@ -122,20 +121,32 @@ describe('context7 plugin — structural kit', () => {
     }
   });
 
-  test('one preset, read-only, with the drafted budget, the fallback in none', () => {
-    const { presets } = context7Catalog.catalog;
-    expect(presets).toEqual([
+  test('one macro-action with the drafted base budget, the fallback in none', () => {
+    expect(context7Catalog.catalog.macro_actions).toEqual([
       expect.objectContaining({
-        id: 'read-only',
+        id: 'ask',
         entries: [
           {
             risk_id: `${PROVIDER_ID}.query-docs`,
             quota: 300,
             rate_limit: { max: 20, window_seconds: 60 },
-            gate: 'auto',
           },
         ],
       }),
+    ]);
+  });
+
+  // The question leaves for a third party and cannot be recalled : the
+  // vector is irreversible, so no cran runs a query freely.
+  test('a query is left out at Prudent and asks first at the other crans', () => {
+    expect(policyFromMacroActions(context7Plugin, { ask: 'prudent' })).toEqual([]);
+    expect(policyFromMacroActions(context7Plugin, { ask: 'confiant' })).toEqual([
+      {
+        risk_id: `${PROVIDER_ID}.query-docs`,
+        quota: 900,
+        rate_limit: { max: 60, window_seconds: 60 },
+        gate: 'approval',
+      },
     ]);
   });
 

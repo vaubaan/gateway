@@ -9,11 +9,8 @@ import {
 } from '../../src/credential.ts';
 import { DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled } from '../../src/flags.ts';
 import { PluginRegistry, PluginRegistryError } from '../../src/registry.ts';
-import {
-  PluginAssertionError,
-  assertPluginWellFormed,
-  assertPresetsValid,
-} from '../../src/testing/assertions.ts';
+import { RETIRED_PRESETS_ISSUE } from '../../src/catalog-loader.ts';
+import { PluginAssertionError, assertPluginWellFormed } from '../../src/testing/assertions.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 describe('definePlugin', () => {
@@ -313,9 +310,9 @@ describe('definePlugin', () => {
     ]);
   });
 
-  // Spec §2.4: in a preset, a token-handing risk that grants write is gated by
-  // approval; a read-only one may be automatic. Undeclared means write.
-  describe('a preset and the token-handing risks', () => {
+  // Spec §2.4: a token-handing risk that grants write is asked first at every
+  // trust cran (`policyFromMacroActions` tests it); undeclared means write.
+  describe('the token-handing risks', () => {
     const [tool] = acmePlugin.tools;
     const handing = (riskIds: string[], readOnlyRiskIds?: unknown): ProviderPlugin =>
       ({
@@ -323,24 +320,8 @@ describe('definePlugin', () => {
         tokenHandouts: [{ tool: tool!.name, riskIds, readOnlyRiskIds }],
       }) as ProviderPlugin;
 
-    test('a write token left on auto is refused, where it is left on auto', () => {
-      // `acme.thing-write` is on auto in staging and on approval in prod.
-      expect(pluginIssues(handing(['acme.thing-write']))).toEqual([
-        expect.stringMatching(
-          /^catalog: preset 'developer': 'acme\[staging\]\.thing-write' hands the agent a token that can write ; its gate must be 'approval'/,
-        ),
-      ]);
-    });
-
-    test('a risk that is not declared read-only is taken as write', () => {
-      const issues = pluginIssues(handing(['acme.read-things']));
-      expect(issues).toHaveLength(2);
-      expect(issues[0]).toContain("preset 'reader': 'acme.read-things'");
-      expect(issues[1]).toContain("preset 'developer': 'acme.read-things'");
-    });
-
-    test('a declared read-only token may stay on auto', () => {
-      expect(pluginIssues(handing(['acme.read-things'], ['acme.read-things']))).toEqual([]);
+    test('a write handout is well-formed: the cran, not the definition, gates it', () => {
+      expect(pluginIssues(handing(['acme.thing-write']))).toEqual([]);
     });
 
     test('read-only is declared among the risks of the handout, as a list', () => {
@@ -355,44 +336,41 @@ describe('definePlugin', () => {
     });
   });
 
-  test('catalog rules apply (presets, fallback) through the definition', () => {
-    const noPresets: ProviderPlugin = {
+  test('catalog rules apply (retired presets) through the definition', () => {
+    const withPresets = {
       ...acmePlugin,
       catalog: { ...acmePlugin.catalog, presets: [] },
-    };
-    expect(pluginIssues(noPresets)).toEqual([
-      expect.stringMatching(/^catalog: presets: every plugin ships at least one preset/),
-    ]);
+    } as ProviderPlugin;
+    expect(pluginIssues(withPresets)).toEqual([`catalog: ${RETIRED_PRESETS_ISSUE}`]);
   });
 
   // A catalog written in TypeScript never goes through the YAML loader: the
   // budget rule (spec §3.2, "always numbers, never unbounded") must hold on
   // this path too, for `definePlugin`, the registry and the test kit.
   describe('budget rules on a TypeScript catalog', () => {
+    const [first, ...others] = acmePlugin.catalog.macro_actions ?? [];
     const withEntry = (entry: Record<string, unknown>): ProviderPlugin =>
       ({
         ...acmePlugin,
         catalog: {
           ...acmePlugin.catalog,
-          presets: [
+          macro_actions: [
             {
-              id: 'ts-preset',
-              label: 'TS',
-              description: 'Declared in TypeScript.',
+              ...first,
               entries: [
                 {
                   risk_id: 'acme.read-things',
                   quota: 10,
                   rate_limit: { max: 1, window_seconds: 60 },
-                  gate: 'auto',
                   ...entry,
                 },
               ],
             },
+            ...others,
           ],
         },
       }) as unknown as ProviderPlugin;
-    const at = 'catalog: presets[0].entries[0]';
+    const at = 'catalog: macro_actions[0].entries[0]';
 
     test('a legal budget passes', () => {
       expect(pluginIssues(withEntry({}))).toEqual([]);
@@ -418,15 +396,12 @@ describe('definePlugin', () => {
         { rate_limit: undefined },
         `${at}.rate_limit: expected { max, window_seconds }`,
       ],
-      ['a bogus gate', { gate: 'whatever' }, `${at}.gate: expected one of auto | approval`],
-      ['a missing gate', { gate: undefined }, `${at}.gate: expected one of auto | approval`],
     ])('%s is refused', (_name, entry, expected) => {
       const issues = pluginIssues(withEntry(entry));
       expect(issues).toHaveLength(1);
       expect(issues[0]).toContain(expected);
       expect(() => definePlugin(withEntry(entry))).toThrow(PluginDefinitionError);
       expect(() => new PluginRegistry([withEntry(entry)])).toThrow(PluginRegistryError);
-      expect(() => assertPresetsValid(withEntry(entry))).toThrow(PluginAssertionError);
       expect(() => assertPluginWellFormed(withEntry(entry))).toThrow(PluginAssertionError);
     });
 
@@ -435,10 +410,9 @@ describe('definePlugin', () => {
         withEntry({
           quota: Infinity,
           rate_limit: { max: -1, window_seconds: 0 },
-          gate: 'whatever',
         }),
       );
-      expect(issues).toHaveLength(4);
+      expect(issues).toHaveLength(3);
     });
   });
 

@@ -1,12 +1,12 @@
 # Risk catalog of the `supabase` provider — four planes under one project.
 #
-# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/supabase.md.
 #
 # Loaded by the plugin SDK at boot (`loadCatalogFile`) ; the loader refuses
 # unknown keys, malformed ids, patterns of another provider, a missing
-# fallback, zero presets, a preset entry that is not an explicit risk of this
-# catalog, a deprecated risk in a preset, a non-numeric budget.
+# fallback, a `presets` key, a live risk in no macro-action, a macro-action
+# entry that is not a risk of this catalog, a non-numeric base budget.
 #
 # Cardinality convention (see classify.ts) :
 #   row[one]    bounded write on one identified row ;
@@ -34,8 +34,8 @@
 #     delete.
 #
 # The fallback `supabase.uncategorized-write` counts only when no specific
-# entry matched the write (policy-engine rule) ; presets never
-# carry it. Seen in production, it means a tool classifies to a slice no
+# entry matched the write (policy-engine rule) ; no macro-action
+# carries it. Seen in production, it means a tool classifies to a slice no
 # fine-grained entry covers : add the entry.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
@@ -47,9 +47,11 @@
 # catalog_version 6 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 7 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: supabase
-catalog_version: 6
-catalog_date: 2026-10-30
+catalog_version: 7
+catalog_date: 2026-10-31
 
 risks:
   # ───────────────────────────────────────────────────────────────────────
@@ -86,7 +88,7 @@ risks:
       the database role may read. Also touched by any query the classifier
       cannot read with confidence : a statement that is not a plain query,
       a function outside the list it knows to be inert, dollar quoting,
-      prefixed strings. No read-only preset carries it.
+      prefixed strings.
     matches: supabase.project[**].schema[managed].row[**].R
     vector:
       reversibility: reversible
@@ -486,12 +488,6 @@ risks:
       persistence: session
     acceptable_in_envs: [preview, staging, prod]
 
-# ─────────────────────────────────────────────────────────────────────────
-# Presets — UI sugar : pre-fill a mission policy, the creator adjusts, the
-# persisted policy is always the explicit enumeration (spec §3.2).
-# Quotas are actions per mission period ; rate limits per sliding window.
-# ─────────────────────────────────────────────────────────────────────────
-
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
@@ -589,131 +585,3 @@ macro_actions:
       - risk_id: supabase.auth-config-write
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
-
-presets:
-  - id: read-only-analyst
-    label: Read-only analyst
-    description: Query application data and schema, list buckets and objects, on every selected project. No write, no user listing, no SQL on the schemas Supabase manages (auth, vault, storage).
-    entries:
-      - risk_id: supabase.read-data
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase.storage.object-read
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-
-  - id: staging-developer
-    label: Staging developer
-    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
-    entries:
-      - risk_id: supabase.read-data
-        quota: 10000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase.storage.object-read
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase.functions.read
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].auth.read-users
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].bulk-row-write
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].migration-write
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].policy-write
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      # Needed with the three above by any migration the classifier cannot
-      # read (function body, trigger, dynamic SQL) : it touches every class.
-      - risk_id: supabase[staging].db-role-write
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].extension-write
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].bucket-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].storage.object-write-one
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].storage.bulk-object-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].auth.user-write-one
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].auth.generate-link
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].functions.body-write
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].functions.deploy
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].function-secret-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-
-  - id: migration-operator
-    label: Migration operator
-    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each asking first; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
-    entries:
-      - risk_id: supabase.read-data
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].migration-write
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].bulk-row-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].policy-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      # Needed with the three above by any migration the classifier cannot
-      # read (function body, trigger, dynamic SQL) : it touches every class.
-      - risk_id: supabase[staging].db-role-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[staging].extension-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: supabase[prod].migration-write
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: supabase[prod].policy-write
-        quota: 10
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval

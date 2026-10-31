@@ -186,7 +186,7 @@ const EMPTY: ConnectionState = {
   resourceScope: 'all',
   resourceIds: [],
   crans: {},
-  presetId: '',
+  everything: false,
   entries: {},
   edited: false,
 };
@@ -601,7 +601,7 @@ export function MissionForm({
                     value={proposalText}
                     onChange={(e) => setProposalText(e.target.value)}
                     aria-label="Agent proposal (JSON)"
-                    placeholder='{"connections":[{"provider":"github","preset":"developer","resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                    placeholder='{"connections":[{"provider":"github","crans":{"read":"prudent","propose":"confiant"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
                     spellCheck={false}
                   />
                 </Field>
@@ -651,7 +651,7 @@ export function MissionForm({
                 const whole = cs.resourceScope === 'connection';
                 const selected = connection.resources.filter((r) => cs.resourceIds.includes(r.id));
                 const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
-                // The expansion of "Everything I hold" is said by the preset panel, in its words.
+                // The expansion of "Everything I hold" is said by the macro-action panel, in its words.
                 const notices = preview.notices.filter(
                   (n) =>
                     n.connection_id === connection.id && n.code !== 'everything-i-hold-expanded',
@@ -818,7 +818,7 @@ export function MissionForm({
                             limitLabel={limitColumn(periodSeconds)}
                             onChange={(next) => patchConnection(connection.id, next)}
                             onReset={
-                              cs.edited && (cs.presetId || Object.keys(cs.crans).length > 0)
+                              cs.edited && (cs.everything || Object.keys(cs.crans).length > 0)
                                 ? () => setPending({ kind: 'reset', connectionId: connection.id })
                                 : null
                             }

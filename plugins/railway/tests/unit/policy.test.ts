@@ -1,15 +1,15 @@
 /**
  * Tests — Railway calls decided end to end : the real classifier, the real
  * catalog and the gateway decision core (`evaluateCallForToken`), with the
- * accepted risks of each shipped preset.
+ * accepted risks of the missions a creator composes from macro-actions.
  *
- * Spec     : docs/spec/gateway-risk-model.md §8 (strict-fail runtime) ;
- *            docs/spec/vaubaan-gateway.md §3.2 (presets), §10.
+ * Spec     : docs/spec/gateway-risk-model.md §4.6 (macro-actions), §8
+ *            (strict-fail runtime) ; docs/spec/vaubaan-gateway.md §10.
  * Handbook : docs/handbook/providers/railway.md.
  *
  * What the slice-shape tests (`classify.test.ts`) cannot show :
  *   - a single-variable write touches `upsert-variable` alone, so the
- *     `developer` preset can actually write variables ; only the "replace
+ *     developer mission can actually write variables ; only the "replace
  *     all variables" case touches `bulk-variables-replace` ;
  *   - an env-scoped risk touched on a project whose label is absent or
  *     outside `acceptable_in_envs` refuses the call — it is never dropped ;
@@ -19,6 +19,7 @@ import { describe, expect, test } from 'vitest';
 
 import { evaluateCallForToken, type CallVerdict } from '@vaubaan/gateway-core';
 import { PluginRegistry, type Resource } from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
 import { railwayPlugin } from '../../src/index.ts';
 
@@ -46,10 +47,36 @@ function project(env?: string): Resource {
 
 const catalog = new PluginRegistry([railwayPlugin]).catalogOf(railwayPlugin.id);
 
-function presetRisks(id: string): readonly string[] {
-  const preset = (railwayPlugin.catalog.presets ?? []).find((p) => p.id === id);
-  if (!preset) throw new Error(`no preset '${id}' in the railway catalog`);
-  return preset.entries.map((e) => e.risk_id);
+const ENVS = ['dev', 'preview', 'staging', 'prod'];
+
+/**
+ * The accepted risks of three missions a creator composes (risk model §4.6) :
+ * `read-only` ticks Watch ; `developer` ticks Watch, Deploy and Configure at
+ * Prudent and unticks the prod variable values in the advanced view ;
+ * `operator` ticks every macro-action at Confiant and unticks the Railway
+ * agent. Prudent leaves `bulk-variables-replace` out (irreversible).
+ */
+const MISSIONS: Readonly<Record<string, readonly string[]>> = {
+  'read-only': risksOf({ watch: 'prudent' }),
+  developer: risksOf({ watch: 'prudent', deploy: 'prudent', configure: 'prudent' }).filter(
+    (id) => id !== 'railway[prod].read-variables',
+  ),
+  operator: risksOf({
+    watch: 'confiant',
+    deploy: 'confiant',
+    configure: 'confiant',
+    create: 'confiant',
+  }).filter((id) => id !== 'railway.agent-action'),
+};
+
+function risksOf(crans: Parameters<typeof policyFromMacroActions>[1]): string[] {
+  return policyFromMacroActions(railwayPlugin, crans, { envs: ENVS }).map((e) => e.risk_id);
+}
+
+function missionRisks(id: string): readonly string[] {
+  const risks = MISSIONS[id];
+  if (!risks) throw new Error(`no mission '${id}'`);
+  return risks;
 }
 
 function decide(
@@ -162,11 +189,11 @@ describe('railway variable writes — risks touched', () => {
   });
 });
 
-// ─── Each shipped preset, call by call ───────────────────────────────────────
+// ─── Each mission, call by call ──────────────────────────────────────────────
 
-describe('railway presets — decision per call', () => {
+describe('railway missions — decision per call', () => {
   test('read-only : reads of account, runtime and logs ; nothing else', () => {
-    expect(runAll('staging', presetRisks('read-only'))).toEqual({
+    expect(runAll('staging', missionRisks('read-only'))).toEqual({
       whoami: 'allow',
       listServices: 'allow',
       getLogs: 'allow',
@@ -187,7 +214,7 @@ describe('railway presets — decision per call', () => {
   test.each(['dev', 'preview', 'staging'])(
     'developer on a %s project : deploys and single-variable writes, no destructive replace',
     (env) => {
-      expect(runAll(env, presetRisks('developer'))).toEqual({
+      expect(runAll(env, missionRisks('developer'))).toEqual({
         whoami: 'allow',
         listServices: 'allow',
         getLogs: 'allow',
@@ -206,7 +233,7 @@ describe('railway presets — decision per call', () => {
 
   test('developer on a prod project : no variable values ; writes pass the risk step', () => {
     // The `approval` gate of the prod entries is applied after this step, by the gateway.
-    expect(runAll('prod', presetRisks('developer'))).toEqual({
+    expect(runAll('prod', missionRisks('developer'))).toEqual({
       whoami: 'allow',
       listServices: 'allow',
       getLogs: 'allow',
@@ -225,7 +252,7 @@ describe('railway presets — decision per call', () => {
   test.each(['dev', 'preview', 'staging', 'prod'])(
     'operator on a %s project : everything but the agent meta-tool',
     (env) => {
-      expect(runAll(env, presetRisks('operator'))).toEqual({
+      expect(runAll(env, missionRisks('operator'))).toEqual({
         whoami: 'allow',
         listServices: 'allow',
         getLogs: 'allow',
@@ -243,19 +270,24 @@ describe('railway presets — decision per call', () => {
   );
 
   test('railway-agent needs agent-action on top of every write risk it could take', () => {
-    const accepted = [...presetRisks('operator'), 'railway.agent-action'];
+    const accepted = [...missionRisks('operator'), 'railway.agent-action'];
     expect(run('agent', 'staging', accepted)).toBe('allow');
-    expect(run('agent', 'staging', [...presetRisks('developer'), 'railway.agent-action'])).toBe(
+    expect(run('agent', 'staging', [...missionRisks('developer'), 'railway.agent-action'])).toBe(
       'deny: railway.bulk-variables-replace',
     );
   });
 
-  test('no preset grants the agent meta-tool or the fallback', () => {
-    for (const preset of railwayPlugin.catalog.presets ?? []) {
-      const ids = preset.entries.map((e) => e.risk_id);
-      expect(ids).not.toContain('railway.agent-action');
-      expect(ids).not.toContain('railway.uncategorized-write');
+  test('the agent meta-tool asks first below Autonome ; the fallback is in no macro-action', () => {
+    for (const cran of ['prudent', 'confiant'] as const) {
+      const line = policyFromMacroActions(railwayPlugin, { create: cran }).find(
+        (e) => e.risk_id === 'railway.agent-action',
+      );
+      expect(line?.gate, cran).toBe('approval');
     }
+    const listed = (railwayPlugin.catalog.macro_actions ?? []).flatMap((a) =>
+      a.entries.map((e) => e.risk_id),
+    );
+    expect(listed).not.toContain('railway.uncategorized-write');
   });
 });
 
@@ -263,15 +295,15 @@ describe('railway presets — decision per call', () => {
 
 describe('railway env-scoped risks — a label is required', () => {
   /** Every id a mission could hold : the catalog ids and their qualified forms. */
-  const everything = [...railwayPlugin.catalog.risks.map((r) => r.id), ...presetRisks('operator')];
+  const everything = [...railwayPlugin.catalog.risks.map((r) => r.id), ...missionRisks('operator')];
 
-  test('list-variables with the read-only preset is refused on a prod project', () => {
-    const verdict = decide(...CALLS.listVariables, [project('prod')], presetRisks('read-only'));
+  test('list-variables with the read-only mission is refused on a prod project', () => {
+    const verdict = decide(...CALLS.listVariables, [project('prod')], missionRisks('read-only'));
     expect(outcome(verdict)).toBe('deny: railway[prod].read-variables');
   });
 
-  test('list-variables with the read-only preset is refused on an unlabelled project', () => {
-    const verdict = decide(...CALLS.listVariables, [project()], presetRisks('read-only'));
+  test('list-variables with the read-only mission is refused on an unlabelled project', () => {
+    const verdict = decide(...CALLS.listVariables, [project()], missionRisks('read-only'));
     expect(outcome(verdict)).toBe('deny: railway.read-variables');
     if (verdict.kind !== 'deny') throw new Error('unreachable');
     expect(verdict.hint).toContain('no environment label');
@@ -279,11 +311,11 @@ describe('railway env-scoped risks — a label is required', () => {
     expect(verdict.risks_touched).toContain('railway.read-runtime');
   });
 
-  test('list-variables with the read-only preset is refused on a project labelled `production`', () => {
+  test('list-variables with the read-only mission is refused on a project labelled `production`', () => {
     const verdict = decide(
       ...CALLS.listVariables,
       [project('production')],
-      presetRisks('read-only'),
+      missionRisks('read-only'),
     );
     expect(outcome(verdict)).toBe('deny: railway[production].read-variables');
     if (verdict.kind !== 'deny') throw new Error('unreachable');
@@ -304,13 +336,13 @@ describe('railway env-scoped risks — a label is required', () => {
     expect(run('agent', undefined, everything)).toBe(
       'deny: railway.deploy, railway.upsert-variable',
     );
-    expect(run('agent', undefined, presetRisks('operator'))).toBe(
+    expect(run('agent', undefined, missionRisks('operator'))).toBe(
       'deny: railway.agent-action, railway.deploy, railway.upsert-variable',
     );
   });
 
   test('operations that touch no env-scoped risk still run on an unlabelled project', () => {
-    const accepted = presetRisks('read-only');
+    const accepted = missionRisks('read-only');
     expect(run('whoami', undefined, accepted)).toBe('allow');
     expect(run('listServices', undefined, accepted)).toBe('allow');
     expect(run('getLogs', undefined, accepted)).toBe('allow');
@@ -320,7 +352,7 @@ describe('railway env-scoped risks — a label is required', () => {
 // ─── `environmentId` is bound to the project the call is classified on ──────
 
 describe('railway environmentId — must belong to the resolved project', () => {
-  const accepted = [...presetRisks('operator'), 'railway.agent-action'];
+  const accepted = [...missionRisks('operator'), 'railway.agent-action'];
   const other: Resource = {
     provider: 'railway',
     ref: OTHER_PROJECT,

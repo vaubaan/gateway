@@ -49,17 +49,16 @@ describe('the plugin catalog of the site', () => {
       expect(plugin.version, plugin.id).toMatch(/^\d+\.\d+\.\d+/);
       expect(plugin.name, plugin.id).not.toBe('');
       expect(plugin.risks.length, plugin.id).toBeGreaterThan(0);
-      expect(plugin.presets.length, plugin.id).toBeGreaterThan(0);
+      expect(plugin.macroActions.length, plugin.id).toBeGreaterThan(0);
       expect(plugin.credentials.length, plugin.id).toBeGreaterThan(0);
       for (const risk of plugin.risks) {
         expect(risk.id.startsWith(plugin.id), risk.id).toBe(true);
         expect(['low', 'medium', 'high', 'critical']).toContain(risk.severity);
       }
-      const ids = new Set(plugin.risks.map((r) => r.id.replace(/\[[^\]]+\]/, '')));
-      for (const preset of plugin.presets) {
-        for (const entry of preset.entries) {
-          expect(ids.has(entry.riskId.replace(/\[[^\]]+\]/, '')), entry.riskId).toBe(true);
-        }
+      const ids = new Set(plugin.risks.map((r) => r.id));
+      for (const action of plugin.macroActions) {
+        expect(action.entries.length, action.id).toBeGreaterThan(0);
+        for (const entry of action.entries) expect(ids.has(entry.riskId), entry.riskId).toBe(true);
       }
     }
   });

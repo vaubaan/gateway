@@ -6,9 +6,9 @@
  * unit-tested without a browser. The decision itself is `previewDraft`,
  * shared with the server.
  */
-import type { Gate, Preset, PresetEntry, RateLimit, RiskId } from '@vaubaan/shared';
+import type { Gate, MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
-import { groupVariants, isResolvable, type RiskFamily } from '@/server/missions/catalog-view';
+import { isResolvable } from '@/server/missions/catalog-view';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -19,13 +19,8 @@ import type {
   MissionDraft,
   PreviewIssue,
   ResolvedDraftConnection,
-  SkippedPresetEntry,
 } from '@/server/missions/model';
-import {
-  EVERYTHING_I_HOLD,
-  expansionDigest,
-  findPreset,
-} from '@/server/missions/everything-i-hold';
+import { EVERYTHING_I_HOLD, expansionDigest } from '@/server/missions/everything-i-hold';
 import {
   DEFAULT_CRAN,
   defaultLineOf,
@@ -49,7 +44,7 @@ export interface EntryState {
 }
 
 /**
- * How the policy of one connection is shown (risk model §4.7): `simple` — the
+ * How the policy of one connection is shown (risk model §4.6): `simple` — the
  * macro-actions of the service, each ticked at a trust cran; `advanced` —
  * every permission with its own limit and gate. The persisted policy is the
  * explicit list either way: the view is a property of the screen, and the
@@ -108,8 +103,8 @@ export interface ConnectionState {
   readonly resourceIds: readonly string[];
   /** The ticked macro-actions, each with its cran. */
   readonly crans: MacroActionCrans;
-  /** `everything-i-hold` when the policy was filled from it; '' otherwise. */
-  readonly presetId: string;
+  /** True when the policy was filled from "Everything I hold on this account". */
+  readonly everything: boolean;
   /** Accepted risks, explicit ids. */
   readonly entries: Readonly<Record<RiskId, EntryState>>;
   /** True once the lines differ from what the crans (or "Everything I hold") wrote. */
@@ -159,7 +154,7 @@ export function initialConnectionState(connection: IssuanceConnection): Connecti
     resourceScope: 'all',
     resourceIds: defaultResources(connection).map((r) => r.id),
     crans: {},
-    presetId: '',
+    everything: false,
     entries: {},
     edited: false,
   };
@@ -175,7 +170,7 @@ export function initialFormState(context: readonly IssuanceConnection[]): FormSt
   };
 }
 
-function entryOf(entry: Pick<PresetEntry, 'quota' | 'rate_limit' | 'gate'>): EntryState {
+function entryOf(entry: Pick<MissionPolicyEntry, 'quota' | 'rate_limit' | 'gate'>): EntryState {
   return {
     quota: String(entry.quota),
     rateMax: String(entry.rate_limit.max),
@@ -207,39 +202,43 @@ export function draftResourcesOf(
     : { scope: 'selected', resource_ids: state.resourceIds };
 }
 
-/** The connection as a draft line that carries only the preset: what "apply the preset" means. */
-function presetDraft(connection: IssuanceConnection, state: ConnectionState): DraftConnection {
+/** The connection as a draft line that carries only "Everything I hold": what applying it means. */
+function everythingDraft(
+  connection: IssuanceConnection,
+  state: Pick<ConnectionState, 'resourceIds'> & Partial<Pick<ConnectionState, 'resourceScope'>>,
+): DraftConnection {
   return {
     connection_id: connection.id,
-    preset: state.presetId || null,
-    resources: draftResourcesOf(state),
+    preset: EVERYTHING_I_HOLD,
+    resources: draftResourcesOf({
+      resourceScope: state.resourceScope ?? 'selected',
+      resourceIds: state.resourceIds,
+    }),
   };
 }
 
 function entriesOf(
-  lines: readonly Pick<PresetEntry, 'risk_id' | 'quota' | 'rate_limit' | 'gate'>[],
+  lines: readonly Pick<MissionPolicyEntry, 'risk_id' | 'quota' | 'rate_limit' | 'gate'>[],
 ) {
   return Object.fromEntries(lines.map((line) => [line.risk_id, entryOf(line)]));
 }
 
-/** Fills the policy from a preset (today the built-in "Everything I hold"), bounded by the authority and the selection. */
-export function applyPreset(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-  presetId: string,
-): ConnectionState {
-  const next: ConnectionState = { ...state, presetId, edited: false, entries: {} };
-  if (!presetId) return next;
-  const { preview } = previewConnection(connection, presetDraft(connection, next));
-  return { ...next, entries: entriesOf(preview.passes) };
-}
-
-/** "Everything I hold on this account": its explicit lines, in place of the macro-actions. */
+/**
+ * "Everything I hold on this account": its explicit lines, in place of the
+ * macro-actions, bounded by the authority and the selection.
+ */
 export function applyEverything(
   connection: IssuanceConnection,
   state: ConnectionState,
 ): ConnectionState {
-  return applyPreset(connection, { ...state, crans: {} }, EVERYTHING_I_HOLD);
+  const { preview } = previewConnection(connection, everythingDraft(connection, state));
+  return {
+    ...state,
+    crans: {},
+    everything: true,
+    edited: false,
+    entries: entriesOf(preview.passes),
+  };
 }
 
 /** Fills the policy from the crans: the lines `linesOfCrans` writes, nothing else. */
@@ -248,7 +247,7 @@ export function applyCrans(
   state: ConnectionState,
 ): ConnectionState {
   const lines = linesOfCrans(connection, state.crans, selectedResources(connection, state));
-  return { ...state, presetId: '', edited: false, entries: entriesOf(lines) };
+  return { ...state, everything: false, edited: false, entries: entriesOf(lines) };
 }
 
 /**
@@ -273,9 +272,7 @@ export function resetEdits(
   connection: IssuanceConnection,
   state: ConnectionState,
 ): ConnectionState {
-  return state.presetId
-    ? applyPreset(connection, state, state.presetId)
-    : applyCrans(connection, state);
+  return state.everything ? applyEverything(connection, state) : applyCrans(connection, state);
 }
 
 /**
@@ -353,7 +350,7 @@ export function chosenPalier(
   return highestPalier(connection.risks.filter((risk) => state.entries[risk.risk_id]));
 }
 
-/** One risk a preset yields on this connection, with the values the mission would get. */
+/** One risk "Everything I hold" yields on this connection, with the values the mission would get. */
 export interface ExplainedLine {
   readonly risk: CatalogRisk;
   readonly quota: number;
@@ -361,60 +358,30 @@ export interface ExplainedLine {
   readonly gate: Gate;
 }
 
-/** A catalog entry the preset names and this mission cannot get, with why. */
-export interface SkippedFamily extends RiskFamily {
-  readonly why: string;
-}
-
 /**
- * What picking a preset means on this connection, with this selection and
+ * What "Everything I hold" means on this connection, with this selection and
  * this authority — the content of the card the creator reads before issuing.
  */
-export interface PresetExplanation {
-  readonly preset: Preset;
+export interface EverythingExplanation {
   /** Passes without asking. */
   readonly auto: readonly ExplainedLine[];
   /** Each action waits for the creator's approval. */
   readonly approval: readonly ExplainedLine[];
-  /** Risks the creator could accept here and the preset does not include. */
-  readonly leftOut: readonly RiskFamily[];
-  /** Entries of the preset that cannot apply: outside the authority, or no resource carries the environment. */
-  readonly skipped: readonly SkippedFamily[];
 }
 
 /** Why a permission the catalog lists cannot be given here: the reader's own ceiling on the account. */
 export const OUTSIDE_AUTHORITY = 'outside what you may allow';
 
-function skippedWhy(skipped: SkippedPresetEntry, envs: readonly string[]): string {
-  if (skipped.reason === 'outside-authority') return OUTSIDE_AUTHORITY;
-  const named = skipped.env ? [skipped.env] : envs;
-  return named.length > 0
-    ? `needs a selected resource labelled ${named.map((env) => `"${env}"`).join(' or ')}`
-    : 'needs a selected resource with an environment label';
-}
-
 /**
- * Expands a preset of the connection's plugin against the selected resources
- * and the creator's authority — the same computation as `applyPreset`, read
- * instead of applied, so the card and the policy cannot disagree. `null` for
- * an id that is not a preset of this plugin.
+ * Expands "Everything I hold" against the selected resources and the
+ * creator's authority — the same computation as `applyEverything`, read
+ * instead of applied, so the card and the policy cannot disagree.
  */
-export function explainPreset(
+export function explainEverything(
   connection: IssuanceConnection,
   state: Pick<ConnectionState, 'resourceIds'> & Partial<Pick<ConnectionState, 'resourceScope'>>,
-  presetId: string,
-): PresetExplanation | null {
-  // The built-in "Everything I hold" is written out for this very selection.
-  const preset = findPreset(connection, presetId, selectedResources(connection, state));
-  if (!preset) return null;
-  const { preview } = previewConnection(connection, {
-    connection_id: connection.id,
-    preset: presetId,
-    resources: draftResourcesOf({
-      resourceScope: state.resourceScope ?? 'selected',
-      resourceIds: state.resourceIds,
-    }),
-  });
+): EverythingExplanation {
+  const { preview } = previewConnection(connection, everythingDraft(connection, state));
   const byId = new Map(preview.passes.map((entry) => [entry.risk_id, entry]));
   const lines = connection.risks.flatMap((risk): ExplainedLine[] => {
     const entry = byId.get(risk.risk_id);
@@ -422,33 +389,9 @@ export function explainPreset(
       ? [{ risk, quota: entry.quota, rate_limit: entry.rate_limit, gate: entry.gate }]
       : [];
   });
-  const held = new Set(connection.authority);
-  const resources = selectedResources(connection, state);
-  const skippedIds = new Set(preview.skipped_from_preset.map((s) => s.risk_id));
-  const leftOut = connection.risks.filter(
-    (risk) =>
-      !byId.has(risk.risk_id) &&
-      !skippedIds.has(risk.risk_id) &&
-      !skippedIds.has(risk.base_id) &&
-      unavailableReason(connection, risk, resources, held) === null,
-  );
-  const skipped = preview.skipped_from_preset.flatMap((entry): SkippedFamily[] => {
-    // A skipped entry names an explicit id, or the base id of an env-scoped risk.
-    const variants = connection.risks.filter(
-      (risk) => risk.risk_id === entry.risk_id || risk.base_id === entry.risk_id,
-    );
-    const exact = variants.filter((risk) => risk.risk_id === entry.risk_id);
-    const [family] = groupVariants(exact.length > 0 ? exact : variants);
-    if (!family) return [];
-    const envs = family.variants.flatMap((risk) => (risk.env === null ? [] : [risk.env]));
-    return [{ ...family, why: skippedWhy(entry, envs) }];
-  });
   return {
-    preset,
     auto: lines.filter((line) => line.gate === 'auto'),
     approval: lines.filter((line) => line.gate === 'approval'),
-    leftOut: groupVariants(leftOut),
-    skipped,
   };
 }
 
@@ -456,13 +399,12 @@ export function explainPreset(
  * What "Everything I hold on this account" writes out here, in the interface's
  * words (ADR preset-everything-i-hold-expands-explicitly): how many permissions,
  * the most severe, the critical ones that run freely, and the uncategorized
- * writes by name. `null` for any other preset.
+ * writes by name.
  */
 export function describeEverything(
   connection: Pick<IssuanceConnection, 'risks'>,
-  explanation: PresetExplanation,
-): readonly string[] | null {
-  if (explanation.preset.id !== EVERYTHING_I_HOLD) return null;
+  explanation: EverythingExplanation,
+): readonly string[] {
   const lines = [...explanation.auto, ...explanation.approval].map((line) => ({
     risk_id: line.risk.risk_id,
     gate: line.gate,
@@ -583,8 +525,8 @@ export function setIncluded(state: ConnectionState, included: boolean): Connecti
 }
 
 /**
- * Changes the resource selection. While the policy is what the crans (or the
- * preset) wrote, it follows the selection (env-qualified entries come and go with the
+ * Changes the resource selection. While the policy is what the crans (or
+ * "Everything I hold") wrote, it follows the selection (env-qualified entries come and go with the
  * labelled resources); once edited, the creator's entries are kept and the
  * preview flags the ones that no longer resolve.
  */
@@ -732,10 +674,14 @@ function draftConnection(connection: IssuanceConnection, state: ConnectionState)
   return {
     connection_id: connection.id,
     resources: draftResourcesOf(state),
-    // The persisted policy is the explicit enumeration: the preset is not sent.
+    // The persisted policy is the explicit enumeration: "Everything I hold" is not sent.
     preset: null,
-    // Kept with the mission to redraw this form; they decide nothing.
-    ...(Object.keys(state.crans).length > 0 ? { crans: state.crans } : {}),
+    // Kept with the mission to redraw this form. Sent beside lines only: without
+    // any, the server would write the policy from them, and an emptied policy
+    // must stay empty.
+    ...(Object.keys(state.crans).length > 0 && Object.keys(state.entries).length > 0
+      ? { crans: state.crans }
+      : {}),
     policy: connection.risks
       .filter((risk) => state.entries[risk.risk_id] !== undefined)
       .map((risk) => {
@@ -801,7 +747,7 @@ export function draftOf(
 /** True when the form's entries are exactly these lines, value for value. */
 function sameLines(
   entries: Readonly<Record<RiskId, EntryState>>,
-  lines: readonly Pick<PresetEntry, 'risk_id' | 'quota' | 'rate_limit' | 'gate'>[],
+  lines: readonly Pick<MissionPolicyEntry, 'risk_id' | 'quota' | 'rate_limit' | 'gate'>[],
 ): boolean {
   if (Object.keys(entries).length !== lines.length) return false;
   return lines.every((line) => {
@@ -847,7 +793,7 @@ export function loadResolved(
       resourceScope: line.resources.scope === 'connection' ? 'connection' : 'selected',
       resourceIds,
       crans,
-      presetId: '',
+      everything: false,
       entries,
       edited: !matches,
     };

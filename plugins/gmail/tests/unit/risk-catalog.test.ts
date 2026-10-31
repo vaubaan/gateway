@@ -9,7 +9,7 @@
  *
  * The lint fails the build (CI gate) on :
  *   - a catalog the SDK loader refuses (malformed YAML, unknown keys, bad
- *     ids, patterns of another provider, missing fallback, invalid presets)
+ *     ids, patterns of another provider, missing fallback, invalid macro-actions)
  *   - a `matches` pattern that does not parse via `parseSlice`
  *   - any tool whose emitted slices are only covered by the fallback risk
  *     (signals a hole in the catalog).
@@ -22,7 +22,7 @@ import { classifyGmail } from '../../src/classify.ts';
 import { gmailCatalog } from '../../src/index.ts';
 
 // The catalog as the gateway loads it at boot : the loader already enforced
-// the structure, the slice grammar and the presets.
+// the structure, the slice grammar and the macro-actions.
 const parsedCatalog = gmailCatalog.catalog;
 
 const mailbox: Resource = {
@@ -101,7 +101,7 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
     expect(hasFallback, 'catalog must declare a gmail.uncategorized-* fallback').toBe(true);
   });
 
-  test('gmail.draft-to-zone-external-unbounded is never acceptable : kept, deprecated, in no preset, and refused by the classifier', () => {
+  test('gmail.draft-to-zone-external-unbounded is never acceptable : kept, deprecated, in no macro-action, and refused by the classifier', () => {
     // "Never acceptable" cannot be written in the catalog (the loader
     // refuses `acceptable_in_envs: []`), and a mission may enumerate every
     // risk id. The guarantee is therefore the classifier's : the draft is
@@ -111,8 +111,8 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
     );
     expect(entry).toBeDefined();
     expect(entry!.deprecated).toBe(true);
-    for (const preset of parsedCatalog.presets ?? []) {
-      expect(preset.entries.map((e) => e.risk_id)).not.toContain(entry!.id);
+    for (const action of parsedCatalog.macro_actions ?? []) {
+      expect(action.entries.map((e) => e.risk_id)).not.toContain(entry!.id);
     }
     for (const to of [['stranger@evil.ru'], ['colleague@myorg.com', 'stranger@evil.ru']]) {
       const outcome = classifyGmail('gmail__create_draft', { to, subject: 's', body: 'b' }, [
@@ -125,11 +125,10 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
     }
   });
 
-  test('gmail.bulk-label-write is kept but offered by no preset (no tool can touch it)', () => {
+  test('gmail.bulk-label-write is kept, in the tidy macro-action, though no tool can touch it', () => {
     expect(parsedCatalog.risks.some((r) => r.id === 'gmail.bulk-label-write')).toBe(true);
-    for (const preset of parsedCatalog.presets ?? []) {
-      expect(preset.entries.map((e) => e.risk_id)).not.toContain('gmail.bulk-label-write');
-    }
+    const tidy = parsedCatalog.macro_actions?.find((a) => a.id === 'tidy');
+    expect(tidy?.entries.map((e) => e.risk_id)).toContain('gmail.bulk-label-write');
   });
 
   test('no entry declares a cap the door does not enforce (ADR scope-caps-amplification-axis)', () => {

@@ -451,7 +451,9 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   const expiresAt = new Date(Date.now() + 2_000);
   await seeder.issue(alice.user, {
     name: 'Migration dry-run (finished)',
-    connections: [{ connection_id: github.id, resources: { scope: 'all' }, preset: 'read-only' }],
+    connections: [
+      { connection_id: github.id, resources: { scope: 'all' }, crans: { read: 'prudent' } },
+    ],
     period: { kind: 'one-off' },
     expires_at: expiresAt.toISOString(),
   });
@@ -503,7 +505,8 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
       {
         connection_id: github.id,
         resources: onRepos([product.repositories[0] ?? '']),
-        preset: 'release-manager',
+        // Ship at Confiant: merges, tags and releases ask first; reads run freely.
+        crans: { read: 'confiant', propose: 'prudent', ship: 'confiant' },
       },
     ],
     period: recurring,
@@ -513,7 +516,11 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
   const revoked = await seeder.issue(alice.user, {
     name: 'Spike: move the status page DNS',
     connections: [
-      { connection_id: cloudflare.id, resources: { scope: 'all' }, preset: 'dns-operator' },
+      {
+        connection_id: cloudflare.id,
+        resources: { scope: 'all' },
+        crans: { 'look-up': 'confiant', point: 'confiant' },
+      },
     ],
     period: { kind: 'one-off' },
     expires_at: null,

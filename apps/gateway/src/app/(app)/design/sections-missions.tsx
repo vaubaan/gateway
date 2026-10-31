@@ -2,7 +2,7 @@
 
 /**
  * Gallery, part four: the components added with the mission pages — the rest
- * behind "···", a choice among presets, a key shown once, a form with its
+ * behind "···", a choice among trust crans, a key shown once, a form with its
  * rail. Every value is invented.
  */
 import { useState } from 'react';
@@ -39,41 +39,33 @@ export const MISSION_SECTION_ITEMS = [
   { id: 'form-rail', label: 'Form with a rail' },
 ] as const;
 
-function Presets({ theme }: { theme: string }) {
-  const [value, setValue] = useState('developer');
+function Crans({ theme }: { theme: string }) {
+  const [value, setValue] = useState('confiant');
   return (
-    <ChoiceRow legend="Preset for GitHub · acme">
+    <ChoiceRow legend="Cran of Propose on GitHub acme">
       <ChoiceChip
-        name={`design-preset-${theme}`}
-        value="read-only"
-        checked={value === 'read-only'}
+        name={`design-cran-${theme}`}
+        value="prudent"
+        checked={value === 'prudent'}
         onChange={setValue}
-        label="Read-only"
-        hint="2"
+        label="Prudent"
+        title="Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out."
       />
       <ChoiceChip
-        name={`design-preset-${theme}`}
-        value="developer"
-        checked={value === 'developer'}
+        name={`design-cran-${theme}`}
+        value="confiant"
+        checked={value === 'confiant'}
         onChange={setValue}
-        label="Developer"
-        hint="10"
+        label="Confiant"
+        title="Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3."
       />
       <ChoiceChip
-        name={`design-preset-${theme}`}
-        value="operator"
-        checked={value === 'operator'}
+        name={`design-cran-${theme}`}
+        value="autonome"
+        checked={value === 'autonome'}
         onChange={setValue}
-        label="Migration operator"
-        unavailable="needs a selected resource labelled “prod”: none selected"
-      />
-      <ChoiceChip
-        name={`design-preset-${theme}`}
-        value="custom"
-        checked={value === 'custom'}
-        onChange={setValue}
-        label="Custom"
-        hint="start empty"
+        label="Autonome"
+        unavailable="none you may allow here"
       />
     </ChoiceRow>
   );
@@ -110,10 +102,10 @@ export function MissionSections() {
         rule="One choice among a few, each with a short fact beside it. A choice that would yield nothing is not hidden and not offered silently: it is dashed, cannot be picked, and says why."
       >
         <Specimen
-          name="Presets of an account"
+          name="Trust cran of a macro-action"
           note="chosen, available, unavailable with its reason"
         >
-          {(theme) => <Presets theme={theme} />}
+          {(theme) => <Crans theme={theme} />}
         </Specimen>
       </GallerySection>
 
