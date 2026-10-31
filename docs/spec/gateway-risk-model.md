@@ -160,7 +160,7 @@ pre-fills a gate in the creation form. No runtime decision is derived from it.
 ### 4.6 Macro-actions and trust crans
 
 What a creator ticks per connection, in the connector's words
-([ADR](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)):
+([ADR](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)):
 
 - A catalog declares **3 to 6 macro-actions** (`id`, `label`, `description`, `entries`); every entry
   that is neither the fallback nor deprecated belongs to **exactly one**, listed unqualified with its

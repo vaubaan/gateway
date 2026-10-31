@@ -2,7 +2,7 @@
 
 /**
  * What an agent may do on one account (risk model §4.6; ADR
- * macro-actions-and-trust-crans-prefill-the-policy), in two views:
+ * macro-actions-and-trust-levels-prefill-the-policy), in two views:
  *
  * - **Simple**: the service's macro-actions, each a row the creator ticks and
  *   sets to a trust cran (Prudent, Confiant, Autonome). Each row says what its

@@ -1,6 +1,6 @@
 /**
  * The macro-actions of a connection as the creation form ticks them (risk
- * model §4.6; ADR macro-actions-and-trust-crans-prefill-the-policy): the
+ * model §4.6; ADR macro-actions-and-trust-levels-prefill-the-policy): the
  * catalog's own, plus "Anything else" holding the fallback, each expanded at
  * a trust cran against the selected resources and the creator's authority.
  *

@@ -323,9 +323,9 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   the entry's vector (irreversible asks or stays out, costly asks, a
   sensitive read asks at the lowest cran), so the vector must be right. The
   gateway adds "Anything else" for the fallback
-  ([ADR](../docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
+  ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 - **No presets.** Presets were retired: a catalog with a `presets` key does
-  not load ([ADR](../docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
+  not load ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
   A risk whose tool hands the agent a token that can write
   (`tokenHandouts`) asks first at every cran.
 - **Limits.** The only limit the gateway enforces is

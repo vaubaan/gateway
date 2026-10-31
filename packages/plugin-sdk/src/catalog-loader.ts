@@ -8,7 +8,7 @@
  *        at boot, TypeScript twins retired) ;
  *        docs/decisions/fallback-risk-only-when-uncategorized.md (one
  *        fallback per catalog, flagged `fallback: true`, in no macro-action) ;
- *        docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md
+ *        docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md
  *        (presets retired : a catalog with a `presets` key does not load).
  *
  * The loader is strict : any structural issue, unknown key, malformed id,
@@ -72,7 +72,7 @@ export interface LoadCatalogOptions {
   readonly source?: string;
   /** Fail when no `<provider>.uncategorized-*` entry exists. Default true (risk-model spec §4.3). */
   readonly requireFallback?: boolean;
-  /** Fail when the catalog declares no macro-action. Default true (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+  /** Fail when the catalog declares no macro-action. Default true (ADR macro-actions-and-trust-levels-prefill-the-policy). */
   readonly requireMacroActions?: boolean;
   /** Receives non-fatal findings (`catalogWarnings` : a fallback without the flag). Defaults to `console.warn`. */
   readonly warn?: (message: string) => void;
@@ -167,7 +167,7 @@ export function semanticIssues(catalog: RiskCatalog, options: LoadCatalogOptions
 export { ANYTHING_ELSE_MACRO_ACTION };
 
 /**
- * Macro-action rules (ADR macro-actions-and-trust-crans-prefill-the-policy) :
+ * Macro-action rules (ADR macro-actions-and-trust-levels-prefill-the-policy) :
  * unique slugs, none named `anything-else` ; each non-empty ; each entry an
  * unqualified, non-fallback risk of this catalog with a valid base budget ;
  * every entry that is neither the fallback nor deprecated in exactly one
@@ -182,7 +182,7 @@ export function macroActionIssues(
   if (actions.length === 0) {
     if (options.requireMacroActions ?? true) {
       issues.push(
-        'macro_actions: every catalog groups its risks into macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy)',
+        'macro_actions: every catalog groups its risks into macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy)',
       );
     }
     return issues;
@@ -410,7 +410,7 @@ const MACRO_ACTION_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 /** What a catalog that still carries `presets` reads (spec §15). */
 export const RETIRED_PRESETS_ISSUE =
-  'presets: presets were retired (ADR macro-actions-and-trust-crans-prefill-the-policy) ; group the risks in macro_actions and remove the presets key';
+  'presets: presets were retired (ADR macro-actions-and-trust-levels-prefill-the-policy) ; group the risks in macro_actions and remove the presets key';
 
 type Axis = keyof RiskVector;
 /** The six axes, in declaration order. `Object.keys` widens to `string[]` ; the keys of a constant object are its keys. */

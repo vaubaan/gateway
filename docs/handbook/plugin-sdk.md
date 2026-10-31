@@ -18,7 +18,7 @@ Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §5,
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
 [plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
 [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
-[macro-actions-and-trust-crans-prefill-the-policy](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md).
+[macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md).
 Contributor guide: [`plugins/README.md`](../../plugins/README.md).
 
 ## Start here
