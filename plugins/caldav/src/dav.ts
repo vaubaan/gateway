@@ -6,12 +6,17 @@
  * Handbook : docs/handbook/providers/caldav.md.
  *
  *   - **Where** : the server URL the person typed is the anchor. A request
- *     goes to the same scheme, port and host, or to a sibling host of the
- *     same parent domain (iCloud answers `caldav.icloud.com` with a calendar
- *     home on `p43-caldav.icloud.com`). `https` only, `http` for a loopback
- *     host alone. Anything else is refused before a request is built, so the
- *     `Authorization` header never leaves for a host the person did not
- *     name — whatever a server's answer says.
+ *     goes to the same scheme, port and host, or to the one host of the
+ *     calendar home, pinned (security audit 2026-10-31, L3). The home's host
+ *     is accepted once, when the principal announces it at discovery, and
+ *     only as a sibling of the server under the same parent domain (iCloud
+ *     answers `caldav.icloud.com` with a calendar home on
+ *     `p43-caldav.icloud.com`); the calendars stored at discovery carry it,
+ *     and a call goes to its calendar's host and the server's, nowhere else.
+ *     `https` only, `http` for a loopback host alone. Anything else is
+ *     refused before a request is built, so the `Authorization` header never
+ *     leaves for a host the person did not name — whatever a server's answer
+ *     says.
  *   - **What** : the XML bodies are fixed texts ; the one value inserted, the
  *     `time-range` of a `REPORT`, is formatted by the plugin from a parsed
  *     instant. Answers are read with `@xmldom/xmldom`, bounded in size, a
@@ -34,6 +39,17 @@ export interface DavAccount {
   readonly server: URL;
   readonly username: string;
   readonly password: string;
+  /**
+   * The calendar home (or the calendar) the requests of this discovery or call are
+   * pinned to, when it is not on the server's host: the one other host the password
+   * may go to. Absent: the server's host only.
+   */
+  readonly home?: URL;
+}
+
+/** The account pinned to the host of `home` (`DavAccount.home`). */
+export function pinnedTo(account: DavAccount, home: URL): DavAccount {
+  return { ...account, home };
 }
 
 // ─── Where the credential may go ───────────────────────────────────────────
@@ -48,16 +64,26 @@ export function isLoopbackHost(host: string): boolean {
 const isIpLiteral = (host: string): boolean =>
   host.startsWith('[') || host.split('.').every((part) => /^\d{1,3}$/.test(part));
 
+/** Same scheme and port as the server URL, no user name or password in it. */
+function isOnServerScheme(target: URL, server: URL): boolean {
+  return (
+    target.protocol === server.protocol &&
+    target.port === server.port &&
+    target.username === '' &&
+    target.password === ''
+  );
+}
+
 /**
- * `target` is a place the account's password may be sent : same scheme and
- * port as the server URL, and the same host or a sibling of it under the
- * same parent domain (`p43-caldav.icloud.com` for `caldav.icloud.com`). A
- * parent of two labels or fewer (`example.com` for `example.com`), an IP
- * literal or a loopback host admits the host itself only.
+ * `target` may hold a calendar home of the server : the same host, or a sibling
+ * of it under the same parent domain (`p43-caldav.icloud.com` for
+ * `caldav.icloud.com`). A parent of two labels or fewer (`example.com` for
+ * `example.com`), an IP literal or a loopback host admits the host itself only.
+ * Asked once per discovery, of the home the principal announces, and of a
+ * stored calendar at a call ; the requests then stay on that host.
  */
-export function isAllowedTarget(target: URL, server: URL): boolean {
-  if (target.protocol !== server.protocol || target.port !== server.port) return false;
-  if (target.username !== '' || target.password !== '') return false;
+export function isHomeHost(target: URL, server: URL): boolean {
+  if (!isOnServerScheme(target, server)) return false;
   const host = target.hostname.toLowerCase();
   const anchor = server.hostname.toLowerCase();
   if (host === anchor) return true;
@@ -68,8 +94,24 @@ export function isAllowedTarget(target: URL, server: URL): boolean {
   return host.endsWith(`.${parent}`);
 }
 
-/** `href` (absolute or relative to `base`) as a URL the account may reach, or `null`. */
-export function resolveHref(href: string, base: URL, server: URL): URL | null {
+/**
+ * `target` is a place the account's password may be sent : same scheme and port
+ * as the server URL, and the server's host or the pinned home's (`DavAccount.home`).
+ */
+export function isAllowedTarget(
+  target: URL,
+  account: Pick<DavAccount, 'server' | 'home'>,
+): boolean {
+  if (!isOnServerScheme(target, account.server)) return false;
+  const host = target.hostname.toLowerCase();
+  return (
+    host === account.server.hostname.toLowerCase() ||
+    (account.home !== undefined && host === account.home.hostname.toLowerCase())
+  );
+}
+
+/** `href` (absolute or relative to `base`) as a URL, when `allowed`; `null` otherwise. */
+function resolveIf(href: string, base: URL, allowed: (url: URL) => boolean): URL | null {
   let url: URL;
   try {
     url = new URL(href.trim(), base);
@@ -77,7 +119,21 @@ export function resolveHref(href: string, base: URL, server: URL): URL | null {
     return null;
   }
   url.hash = '';
-  return isAllowedTarget(url, server) && url.search === '' ? url : null;
+  return allowed(url) && url.search === '' ? url : null;
+}
+
+/** `href` (absolute or relative to `base`) as a URL the account may reach, or `null`. */
+export function resolveHref(
+  href: string,
+  base: URL,
+  account: Pick<DavAccount, 'server' | 'home'>,
+): URL | null {
+  return resolveIf(href, base, (url) => isAllowedTarget(url, account));
+}
+
+/** `href` as a calendar home of the server (`isHomeHost`), or `null`. */
+export function resolveHomeHref(href: string, base: URL, server: URL): URL | null {
+  return resolveIf(href, base, (url) => isHomeHost(url, server));
 }
 
 // ─── Requests ──────────────────────────────────────────────────────────────
@@ -127,7 +183,7 @@ export async function davSend(
   account: DavAccount,
   request: DavRequest,
 ): Promise<DavResponse> {
-  if (!isAllowedTarget(request.url, account.server)) {
+  if (!isAllowedTarget(request.url, account)) {
     throw new Error(`caldav: refusing to send the credential to ${request.url.host}.`);
   }
   const headers: Record<string, string> = {

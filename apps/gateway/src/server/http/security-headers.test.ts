@@ -104,4 +104,15 @@ describe('structural: one source for the security headers', () => {
       expect(caddyfile, name).not.toContain(name);
     }
   });
+
+  it('the reference proxy compresses the static assets only, never a page (BREACH)', () => {
+    const directives = readFileSync(resolve(REPO, 'deploy/caddy/Caddyfile'), 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('#'));
+    expect(directives.filter((line) => line.startsWith('encode'))).toEqual([
+      'encode @static zstd gzip',
+    ]);
+    expect(directives).toContain('@static path /_next/static/*');
+  });
 });

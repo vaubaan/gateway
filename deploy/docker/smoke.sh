@@ -5,15 +5,18 @@
 #
 # 1. incomplete configuration  -> the container exits 78 (EX_CONFIG) and names the key
 # 2. http public URL           -> same, naming public_url
-# 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged
+# 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged,
+#                                 run hardened as deploy/compose.yaml runs it: read-only root,
+#                                 no capability, no new privilege, /tmp a tmpfs, /data a volume
 # 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
-# 5. non-root                  -> the process runs as uid 10001
+# 5. non-root                  -> the process runs as uid 10001, with no capability, on a
+#                                 root filesystem it cannot write
 # 6. no env file shipped       -> the standalone output carries no apps/gateway/.env*
 # 7. no test file shipped      -> no test, spec, fixture or demo tree of this repository in the image
 # 8. security headers          -> every page answers with the headers the application owns
 # 9. started as root           -> on a root-owned volume, the entrypoint gives /data to uid 10001
-#                                 and the server runs as 10001 with no capability (Railway's
-#                                 RAILWAY_RUN_UID=0)
+#                                 without following a link planted there, and the server runs as
+#                                 10001 with no capability (Railway's RAILWAY_RUN_UID=0)
 # 10. v4 importer shipped       -> apps/gateway/import-v4.mjs loads in the image, refuses root,
 #                                 runs as 10001 through the entrypoint, and opens the instance
 #                                 (a configured dry run refuses an unknown owner) (handbook import-from-v4)
@@ -47,6 +50,7 @@ FAIL_FAST_TIMEOUT_SECONDS=60
 IMAGE="${1:?usage: smoke.sh <image>}"
 PORT="${SMOKE_PORT:-3999}"
 NAME="vaubaan-smoke-$$"
+DATA_VOLUME="vaubaan-smoke-hardened-$$"
 ROOT_NAME="vaubaan-smoke-root-$$"
 VOLUME="vaubaan-smoke-data-$$"
 RESTORE_NAME="vaubaan-smoke-restore-$$"
@@ -56,7 +60,7 @@ BOOTSTRAP="smoke-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
 cleanup() {
   docker rm -f "$NAME" "$ROOT_NAME" "$RESTORE_NAME" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" >/dev/null 2>&1 || true
+  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" "$DATA_VOLUME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -90,8 +94,12 @@ set -e
 echo "$out" | grep -q 'public_url: must use https' || fail "exit message does not refuse http:\n$out"
 pass "http public URL refused"
 
-# 3. Complete configuration serves /healthz.
+# 3. Complete configuration serves /healthz, hardened as deploy/compose.yaml runs it
+#    (the four keys of its `gateway` service, the data on a volume).
+docker volume create "$DATA_VOLUME" >/dev/null
 docker run -d --name "$NAME" -p "127.0.0.1:${PORT}:3000" \
+  --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp \
+  -v "$DATA_VOLUME:/data" \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \
@@ -144,9 +152,14 @@ docker exec "$NAME" node -e "const D=require('better-sqlite3');const r=new D(':m
   || fail "better-sqlite3 does not load inside the image (check outputFileTracingIncludes)"
 pass "better-sqlite3 loads inside the image (in-memory query ran)"
 
-# 5. Non-root.
+# 5. Non-root, no capability, a root filesystem it cannot write.
 [ "$(docker exec "$NAME" id -u)" = "10001" ] || fail "process is not running as uid 10001"
-pass "process runs as non-root"
+caps="$(docker exec "$NAME" awk '/^CapEff:/{print $2}' /proc/1/status)"
+[ "$caps" = "0000000000000000" ] || fail "the hardened server keeps capabilities $caps"
+if docker exec "$NAME" sh -c 'touch /app/smoke-write' 2>/dev/null; then
+  fail "the root filesystem is writable under read_only"
+fi
+pass "process runs as non-root, with no capability, on a read-only root filesystem"
 
 # 5b. No package manager: the runner stage removes npm, npx, corepack and yarn,
 #     which the gateway never runs and whose dependencies the image scan flags.
@@ -191,12 +204,18 @@ for expected in \
   grep -qiF -- "$expected" <<<"$headers" || fail "/login is missing the header part: $expected\n$headers"
 done
 pass "/login carries the security headers (CSP with a nonce, framing, nosniff, referrer, permissions, HSTS)"
+# Pages served, the store opened: nothing tried to write outside /data and /tmp.
+logs="$(docker logs "$NAME" 2>&1)" || fail "cannot read the container logs"
+if grep -qE 'EROFS|read-only file system' <<<"$logs"; then
+  fail "the server tried to write outside /data and /tmp:\n$logs"
+fi
+pass "the read-only server wrote nowhere but /data and /tmp"
 
 # 9. Started as root on a root-owned volume (RAILWAY_RUN_UID=0): the entrypoint
 #    gives /data to vaubaan and the server runs as 10001 without capabilities.
 docker volume create "$VOLUME" >/dev/null
 docker run --rm --user 0 --entrypoint sh -v "$VOLUME:/data" "$IMAGE" \
-  -c 'chown -R 0:0 /data && touch /data/left-by-root' >/dev/null
+  -c 'chown -R 0:0 /data && touch /data/left-by-root && ln -s /usr/local/bin/vaubaan-entrypoint /data/planted-link' >/dev/null
 docker run -d --name "$ROOT_NAME" --user 0 -v "$VOLUME:/data" \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
@@ -220,7 +239,10 @@ caps="$(docker exec "$ROOT_NAME" awk '/^CapEff:/{print $2}' /proc/1/status)"
 [ "$caps" = "0000000000000000" ] || fail "started as root, the server keeps capabilities $caps"
 owner="$(docker exec "$ROOT_NAME" stat -c %u /data /data/left-by-root /data/gateway.db | sort -u)"
 [ "$owner" = "10001" ] || fail "started as root, /data is not owned by 10001: $owner"
-pass "started as root on a root-owned volume: /data given to 10001, server runs as 10001 with no capability"
+# A symbolic link planted on the volume is given away itself, never followed.
+followed="$(docker exec "$ROOT_NAME" stat -c %u /usr/local/bin/vaubaan-entrypoint)"
+[ "$followed" = "0" ] || fail "the entrypoint followed a link on /data: its target is owned by $followed"
+pass "started as root on a root-owned volume: /data given to 10001 (links not followed), server runs as 10001 with no capability"
 
 # 10. The v4 importer ships beside the server, refuses root, and runs through the
 #     entrypoint as 10001 (the `railway ssh` form of docs/handbook/import-from-v4.md).

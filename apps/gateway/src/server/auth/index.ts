@@ -263,6 +263,7 @@ export {
   type RecoveryOutcome,
 } from './recovery-handlers';
 export {
+  SECOND_FACTOR_LOCKOUT,
   SecondFactorService,
   waiverApplies,
   type SecondFactorCheck,

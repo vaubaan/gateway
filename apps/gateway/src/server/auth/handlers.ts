@@ -12,8 +12,9 @@
  *   POST /api/admin/identity-provider    save a sign-in provider (operator, origin-checked)
  *   POST /api/admin/sign-in-providers    the same, under the name of the page
  *   POST /api/admin/sign-in-providers/<id>/remove   remove one (operator, origin-checked)
- *   GET  /auth/test/<id>                 test a provider beside the session (operator): the
- *                                        callback signs nobody in (ADR administrators-live-in-the-instance)
+ *   POST /auth/test/<id>                 test a provider beside the session (operator,
+ *                                        origin-checked): the callback signs nobody in (ADR
+ *                                        administrators-live-in-the-instance)
  *   POST /api/admin/sign-in-providers/<id>/enable    switch on, after a passed test (operator)
  *   POST /api/admin/sign-in-providers/<id>/disable   switch off (operator; never the last way in)
  *   POST /api/admin/sign-in-providers/<id>/test/administrator   make the tested identity an administrator
@@ -99,9 +100,15 @@ export const AUTH_LIMITS = {
   callbackPerAddress: { limit: 30, windowMs: MINUTE_MS },
   callbackPerInstance: { limit: 2000, windowMs: MINUTE_MS },
   bootstrapPerInstance: { limit: 10, windowMs: 10 * MINUTE_MS },
-  /** The password form of the local accounts, and the forms that take a link. */
+  /**
+   * The password form of the local accounts, the forms that take a link, and the codes of
+   * the second factor. Each password post costs an argon2id hash (64 MiB, on libuv's
+   * thread pool, four threads by default, shared with file and DNS work): 60 a minute
+   * for the whole instance keeps anonymous posts to a small share of the pool (security
+   * audit 2026-10-31, M2) and still lets thirty people a minute sign in with their code.
+   */
   passwordPerAddress: { limit: 10, windowMs: MINUTE_MS },
-  passwordPerInstance: { limit: 300, windowMs: MINUTE_MS },
+  passwordPerInstance: { limit: 60, windowMs: MINUTE_MS },
   /** "Forgot your password": each answer may send a mail. */
   forgotPerAddress: { limit: 3, windowMs: 10 * MINUTE_MS },
   forgotPerInstance: { limit: 30, windowMs: 10 * MINUTE_MS },
@@ -146,7 +153,7 @@ export interface AuthHandlers {
   /** Saves a sign-in provider from the Settings form (the single-provider form included). */
   saveIdpSettings(request: Request): Promise<Response>;
   removeSignInProvider(request: Request, providerId: string): Promise<Response>;
-  /** `GET /auth/test/<id>`: a test of the provider, in another window, beside the session. */
+  /** `POST /auth/test/<id>`: a test of the provider, in another window, beside the session. */
   testStart(request: Request, providerId: string): Promise<Response>;
   enableSignInProvider(request: Request, providerId: string): Promise<Response>;
   disableSignInProvider(request: Request, providerId: string): Promise<Response>;
@@ -438,13 +445,10 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
     },
 
     async testStart(request, providerId) {
-      const principal = await deps.authenticator.authenticate(request.headers);
-      const decision = await deps.authenticator.authorizeAdmin(principal);
-      if (!decision.ok) {
-        return decision.status === 401
-          ? redirect(`${LOGIN_PAGE}?${RETURN_TO_PARAM}=${encodeURIComponent(IDP_PAGE)}`)
-          : statusResponse(403, decision.reason);
-      }
+      // A form of Settings → Sign-in (security audit 2026-10-31, L7): a test writes a
+      // pending sign-in and its record, so a link from elsewhere must not start one.
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
       if (
         !(await admitted(
           request,
@@ -464,7 +468,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         );
       }
       const provider = effective.provider;
-      const tester = decision.principal;
+      const tester = guard.principal;
       if (provider.kind === 'oidc' && deps.checkIssuer) {
         // The check of the form (#81), before anything is started: a test that cannot
         // even find the provider says why, rather than "could not be reached".

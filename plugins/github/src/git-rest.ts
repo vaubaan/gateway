@@ -118,6 +118,7 @@ export class GithubRest {
   ): Promise<Response> {
     const token = githubTokenOf(this.ctx);
     const res = await this.ctx.fetch(`${GITHUB_API_BASE}${this.repoPath}${path}`, {
+      redirect: 'error',
       method,
       headers: {
         ...GITHUB_API_HEADERS,

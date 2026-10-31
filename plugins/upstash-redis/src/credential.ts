@@ -134,6 +134,7 @@ export async function verifyUpstashKey(ctx: ConnectionContext): Promise<Credenti
   const auth = upstashAuth(ctx.credential);
   const res = await ctx.fetch(`${UPSTASH_MANAGEMENT_API}/teams`, {
     method: 'GET',
+    redirect: 'error',
     headers: { Authorization: basicAuthHeader(auth), Accept: 'application/json' },
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });

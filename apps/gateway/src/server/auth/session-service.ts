@@ -86,8 +86,10 @@ export interface PendingLogin {
  * administrators-live-in-the-instance, §7): the person's second factor is asked, or
  * enrolled when they have none. Any provider: the password of a local account, the
  * callback of an OpenID Connect or GitHub provider. Bound to the browser by the same
- * cookie as a pending sign-in, for the same ten minutes. Settings → Security uses the
- * same record for an enrolment in progress.
+ * cookie as a pending sign-in, for the same ten minutes, counted from the step's
+ * creation: a step re-issued after a wrong code keeps its `createdAt` (security audit
+ * 2026-10-31, M1), so retries never extend it. Settings → Security uses the same
+ * record for an enrolment in progress.
  */
 export interface PendingLocalStep {
   readonly kind: 'local-step';
@@ -264,20 +266,44 @@ export class SessionService {
     };
   }
 
+  /**
+   * The same step under a new cookie, after a wrong code: its `createdAt` and so its
+   * end are kept. `null` when its ten minutes are over.
+   */
+  async reissueLocalStep(step: PendingLocalStep): Promise<IssuedCookie | null> {
+    const left = this.localStepTimeLeft(step);
+    if (left <= 0) return null;
+    const id = newSessionId();
+    await this.store.set(loginKey(id), step, left);
+    return {
+      id,
+      setCookie: serializeCookie(LOGIN_COOKIE, id, { maxAgeSeconds: Math.ceil(left / 1000) }),
+    };
+  }
+
   /** Reads the step without consuming it (the page that asks for the code). */
   async peekLocalStep(headers: Headers): Promise<PendingLocalStep | null> {
     const id = readCookie(headers, LOGIN_COOKIE);
     if (!id) return null;
-    return this.readGuarded(loginKey(id), isPendingLocalStep);
+    const step = await this.readGuarded(loginKey(id), isPendingLocalStep);
+    return step && this.localStepTimeLeft(step) > 0 ? step : null;
   }
 
-  /** Reads and consumes the step (the form that answers it). */
+  /** Reads and consumes the step (the form that answers it); an outlived one reads as none. */
   async takeLocalStep(headers: Headers): Promise<PendingLocalStep | null> {
     const id = readCookie(headers, LOGIN_COOKIE);
     if (!id) return null;
     const step = await this.readGuarded(loginKey(id), isPendingLocalStep);
-    if (step) await this.store.delete(loginKey(id));
-    return step;
+    if (!step) return null;
+    await this.store.delete(loginKey(id));
+    return this.localStepTimeLeft(step) > 0 ? step : null;
+  }
+
+  /** What is left of a step's ten minutes, whatever the store's own expiry says. */
+  private localStepTimeLeft(step: PendingLocalStep): number {
+    const created = Date.parse(step.createdAt);
+    if (!Number.isFinite(created)) return 0;
+    return created + LOGIN_TTL_MS - this.clock.now().getTime();
   }
 
   /** The value under `key` when it has the expected shape; otherwise the key is deleted. */

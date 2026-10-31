@@ -163,6 +163,7 @@ async function listZones(ctx: ConnectionContext): Promise<ZonesDto> {
 async function cloudflareGet(ctx: ConnectionContext, path: string): Promise<unknown> {
   const res = await ctx.fetch(`${CLOUDFLARE_API_BASE}${path}`, {
     method: 'GET',
+    redirect: 'error',
     headers: { Authorization: `Bearer ${tokenOf(ctx)}`, Accept: 'application/json' },
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });

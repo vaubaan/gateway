@@ -4,9 +4,10 @@ tracks:
   - apps/gateway/src/server/auth/
   - apps/gateway/src/server/users/
   - apps/gateway/src/server/config/sign-in.ts
+  - apps/gateway/src/server/crypto/password.ts
   - apps/gateway/src/server/backup/copy.ts
   - apps/gateway/src/app/admin/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Authentication — handbook
@@ -44,6 +45,21 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   sessions: ending them all is `users.sessions_ended_at`.
 - A stored client secret is never sent to another issuer: a blank secret on
   save keeps the stored one only for the same issuer.
+- Passwords: argon2id through the native `argon2` binding (`crypto/password.ts`),
+  computed on libuv's thread pool, never on the event loop; libsodium's limits
+  (64 MiB, 2 passes, 1 lane). New hashes are written with libsodium's parameter
+  order (`m,t,p`), so hashes from before and after verify on either image.
+  `checkPassword`: an unknown address and a wrong password cost one hash each; a
+  locked account is refused before any hash.
+- "Forgot password" answers after the address lookup alone: the reset link
+  and its mail are made on `setImmediate`, after the answer, for an existing
+  account only; a mail failure is logged, never shown.
+- The second factor's step (`PendingLocalStep`) lasts ten minutes from its
+  `createdAt`; a wrong code re-issues it with the same `createdAt`
+  (`reissueLocalStep`), and `takeLocalStep` refuses an outlived one whatever the
+  store's expiry. Wrong codes count per person in `user_second_factors`
+  (`SECOND_FACTOR_LOCKOUT`, 10 in 15 min, as `LOCAL_LOCKOUT` for passwords);
+  while locked, no code is checked.
 
 ## Traps
 
@@ -65,7 +81,8 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   `claims.email_verified` and `require_verified_email`.
 - A provider saved from Settings stays off until a test passes since its last
   save; the test runs the real flow and writes nothing (no user, session,
-  group sync).
+  group sync). It starts from a form (`POST /auth/test/<id>`, `guardMutation`,
+  in another window), never a link.
 - `backup` writes every file/env provider into the copy (never the live
   store), secrets sealed; on the restoring host its own configuration wins on
   an id collision (the copy stays hidden). `registered_for` flags a provider
@@ -91,5 +108,7 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
   instance window is full: it slides in ten minutes, or restart (in-memory).
 - **Boot exit 78 on `bootstrap_token`** → no administrator, no token, no admin
   rule: no way in.
+- **`second-factor-locked`** → ten wrong codes in fifteen minutes: wait
+  fifteen minutes, or an administrator resets the person's second factor.
 - **`groups-overage`** → limit the claim to groups assigned to the
   application, or map `claims.groups` to a complete claim.

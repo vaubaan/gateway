@@ -297,11 +297,13 @@ export class AttestedChannel implements BrokerChannel {
         );
         return;
       }
+      // The chain is verified by the pin instead, before anything is written: see
+      // `send`, held by the structural invariant broker-key-pinned-before-write.
+      // nosemgrep: vaubaan-tls-verification-off -- the presented key is compared with the attested pin before any write
       const socket = tlsConnect({
         host,
         port,
         ...(isIP(host) ? {} : { servername: host }),
-        // Verified by the pin instead, before anything is written: see `send`.
         rejectUnauthorized: false,
         ALPNProtocols: ['http/1.1'],
       });

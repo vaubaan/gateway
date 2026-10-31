@@ -158,3 +158,45 @@ rules:
           # token) that names a secret, unless it ends with a word that
           # names something about it rather than the value itself.
           regex: (?i)^(?![\w$]*(prefix|id|ids|kind|count|length|present|label|name|type|expires|expiry|expires_at|scope|scopes|hash|digest|fingerprint|status|url|error|reason|version|revoked|retired|rotated|refused|generated|issued)$)[a-z_$][\w$]*(token|secret|password|passwd|private_?key|privatekey|credential|authorization|cookie|master_?key|bearer|api_?key)[\w$]*$
+
+  - id: vaubaan-tls-verification-off
+    message: >-
+      TLS certificate verification is turned off. The one place allowed is the
+      attested OAuth broker channel, which compares the presented key with the
+      key its attestation pinned before it writes a byte (structural invariant
+      broker-key-pinned-before-write); it carries the suppression with that
+      reason. Anywhere else, verify the certificate.
+    severity: ERROR
+    languages: [typescript, javascript]
+    pattern-either:
+      - pattern: '{..., rejectUnauthorized: false, ...}'
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = $V
+
+  - id: vaubaan-plugin-fetch-without-redirect-policy
+    message: >-
+      A plugin's HTTP call states its redirect policy, inline: `redirect:
+      'error'` unless a provider is known to redirect on purpose (then
+      'manual' or 'follow', with the reason in a comment). Followed by
+      default, a redirect to another origin keeps the custom headers
+      (`apikey`, `x-api-key`, …) that undici does not strip like
+      `Authorization` (security audit 2026-10-31, L2). The options object is
+      written at the call, so the policy is seen where the request leaves.
+    severity: ERROR
+    languages: [typescript, javascript]
+    paths:
+      include:
+        - /plugins/
+      exclude:
+        - '*.test.ts'
+        - /plugins/*/tests/
+    patterns:
+      - pattern-either:
+          - pattern: $FETCH($URL)
+          - pattern: $FETCH($URL, $INIT)
+      - metavariable-regex:
+          metavariable: $FETCH
+          # The fetch functions a plugin is handed (ctx.fetch, io.fetch,
+          # call.fetch, a fetchImpl parameter) and the global one; not the
+          # IMAP session's or the Notion walker's own `fetch` methods.
+          regex: ^(fetch|fetchImpl|globalThis\.fetch|(ctx|io|call|input|this\.ctx)\.fetch|call\.fetchImpl)$
+      - pattern-not: '$FETCH($URL, {..., redirect: $POLICY, ...})'

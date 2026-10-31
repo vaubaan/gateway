@@ -137,6 +137,7 @@ export async function callUpstream(
 ): Promise<unknown> {
   const id = options.id ?? Math.floor(Math.random() * 1_000_000_000);
   const res = await fetchImpl(RAILWAY_MCP_URL, {
+    redirect: 'error',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -194,6 +195,7 @@ export async function callGraphql<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const res = await fetchImpl(RAILWAY_GRAPHQL_URL, {
+    redirect: 'error',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

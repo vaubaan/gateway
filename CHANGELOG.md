@@ -150,6 +150,48 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Every plugin gains a patch version and a `catalog_version`; Gmail's comes
   with its 1.1.0.
 
+### Security
+
+Fixes from the pre-publication security audit of 2026-10-31.
+
+- **The second factor is locked after ten wrong codes**, for fifteen
+  minutes, counted per person in the store (migration 0026); a sign-in then
+  answers `second-factor-locked`. The step that asks for the code lasts ten
+  minutes from the password, wrong codes included: retrying no longer
+  extends it.
+- **Password hashing no longer blocks the gateway.** Local-account
+  passwords are hashed by the native `argon2` binding on the thread pool
+  instead of libsodium's synchronous build, with the same limits and format:
+  stored passwords verify unchanged, and an earlier image still verifies a
+  password set by this one. The instance-wide window of the password forms
+  goes from 300 to 60 posts a minute, and a locked account is refused
+  before any hash.
+- **"Forgot password" answers before the reset link is made and mailed**,
+  so its time no longer tells whether an address has an account.
+- **Testing a sign-in provider is a form**, origin-checked like every
+  mutation (`POST /auth/test/<id>`); a link can no longer start a test.
+- **Provider plugins refuse redirects** (`redirect: 'error'` on every call),
+  so a custom credential header (Supabase's `apikey`) cannot follow one to
+  another origin; a Semgrep rule holds it for new plugins. Patch releases:
+  `@vaubaan/plugin-cloudflare-dns` 3.0.5, `-context7` 0.1.5, `-fly` 0.3.4,
+  `-github` 4.0.5, `-notion` 0.1.5, `-railway` 5.1.4, `-resend` 0.5.4,
+  `-stripe` 0.4.5, `-supabase` 5.0.5, `-upstash-redis` 3.2.4, `-vercel`
+  3.0.5.
+- **CalDAV sends the app password to the typed server and to the calendar
+  home's host announced at discovery only** (`@vaubaan/plugin-caldav`
+  0.2.0), not to any sibling host a later
+  answer names.
+- **The reference deployment is hardened**: the Compose gateway runs on a
+  read-only root filesystem with no capability and no new privilege (`/tmp`
+  a tmpfs), Caddy compresses static assets only (no compression oracle on
+  pages that show a token), the image installs and builds as an
+  unprivileged user, and the entrypoint never follows a link on `/data`.
+- **A release is never published un-audited**: the dependency audit fails a
+  release run when the registry cannot answer (a merge still only warns).
+- Mission-token symbols are drawn without modulo bias; the attested OAuth
+  broker's key pinning is held by a structural test and a Semgrep rule;
+  every CI checkout keeps no token.
+
 ## [2.0.0-alpha.11] - 2026-10-29
 
 ### Added

@@ -186,6 +186,7 @@ export function supabaseBearerOf(pluginId: string, credential: CredentialSecret)
  */
 export async function verifySupabaseToken(ctx: ConnectionContext): Promise<CredentialCheck> {
   const res = await ctx.fetch(`${SUPABASE_API}/organizations`, {
+    redirect: 'error',
     method: 'GET',
     headers: {
       Authorization: `Bearer ${supabaseBearerOf('supabase', ctx.credential)}`,

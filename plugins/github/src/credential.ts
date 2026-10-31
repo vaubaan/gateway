@@ -107,6 +107,7 @@ export function githubTokenOf(ctx: ConnectionContext): string {
  */
 export async function verifyGithubToken(ctx: ConnectionContext): Promise<CredentialCheck> {
   const res = await ctx.fetch(`${GITHUB_API_BASE}/user`, {
+    redirect: 'error',
     method: 'GET',
     headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${githubTokenOf(ctx)}` },
     ...(ctx.signal ? { signal: ctx.signal } : {}),

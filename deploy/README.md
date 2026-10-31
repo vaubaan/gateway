@@ -395,6 +395,11 @@ root — a platform whose volume is root-owned, such as Railway with
 `RAILWAY_RUN_UID=0` — it first gives `/data` to uid 10001 when anything there
 belongs to someone else, then drops to that user with `setpriv` (no
 capability, no new privilege). The smoke test runs both.
+`compose.yaml` adds what the platform can enforce: a read-only root
+filesystem, every capability dropped, `no-new-privileges`, and `/tmp` as a
+tmpfs; the server writes nothing but `/data` and `/tmp`. Give the same four
+settings on another platform when it offers them; the smoke test runs the
+server with them.
 Native addons (`argon2`, `better-sqlite3`) are prebuilt for glibc, which is
 why the base is Debian slim rather than Alpine; `next.config.ts` traces
 their binaries and runtime files explicitly (`outputFileTracingIncludes`)

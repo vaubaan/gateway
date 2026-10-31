@@ -122,6 +122,7 @@ async function callTool(
 ): Promise<UpstreamToolResult> {
   const id = Math.floor(Math.random() * 1_000_000_000);
   const res = await ctx.fetch(CONTEXT7_MCP_URL, {
+    redirect: 'error',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,

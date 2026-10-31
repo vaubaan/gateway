@@ -17,7 +17,8 @@ instance reaches every connection's credentials.
 
 A sign-in provider of kind `local` (at most one) keeps accounts in the store: issuer
 `urn:vaubaan:local:<id>`, subject the account id, created only for an invited or designated address
-through a single-use 15-minute link. Passwords are argon2id (libsodium), every sign-in requires a
+through a single-use 15-minute link. Passwords are argon2id (64 MiB, 2 passes, hashed by the native
+`argon2` binding on the thread pool, never on the event loop), every sign-in requires a
 TOTP code or a recovery code, and invitation and reset links are sent through the instance's own
 `mail.*` settings, never a provider plugin. Hashes, TOTP secrets and recovery codes are sealed blobs
 like every stored secret.
@@ -49,3 +50,9 @@ A password alone is below the bar for a session that reaches every connection's 
 ### Sending mail through a provider plugin
 
 The gateway's own mail must not depend on a connection somebody may revoke.
+
+## History
+
+- 2026-10-31: passwords are hashed by the native `argon2` binding instead of libsodium's
+  synchronous WebAssembly build, which held the event loop for every anonymous password post
+  (security audit M2). Same limits and string format: the stored hashes verify unchanged.

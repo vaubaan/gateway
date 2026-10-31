@@ -15,7 +15,12 @@
  *   registry unreachable exit 0   with a warning: the audit endpoint did not
  *                                 answer after the retries. A registry outage
  *                                 is not a vulnerability and must not block a
- *                                 merge or a release; the next run audits.
+ *                                 merge; the next run audits.
+ *                        exit 1   on a run that publishes (a tag, or the
+ *                                 release workflow calling ci.yml): a release
+ *                                 never ships un-audited (security audit
+ *                                 2026-10-31, L11); it is re-run once the
+ *                                 registry answers.
  *
  * Anything else that goes wrong (unreadable allowlist, output that is neither a
  * report nor a registry error) is exit 2: a broken gate is fixed, not ignored.
@@ -38,6 +43,17 @@ export const GATED_SEVERITIES = ['moderate', 'high', 'critical'];
  */
 export const UNGATED_SEVERITIES = ['info', 'low'];
 export const ATTEMPTS = 4;
+/** The `name:` of .github/workflows/release.yml: what GITHUB_WORKFLOW reads in the ci.yml it calls. */
+export const RELEASE_WORKFLOW = 'release';
+
+/**
+ * Whether this run publishes, so that an audit the registry could not answer fails it:
+ * a tag, or the release workflow (its dry run of a branch included).
+ * @param {Readonly<Record<string, string | undefined>>} env
+ */
+export function publishes(env) {
+  return env.GITHUB_REF_TYPE === 'tag' || env.GITHUB_WORKFLOW === RELEASE_WORKFLOW;
+}
 export const RETRY_DELAYS_MS = [2_000, 8_000, 20_000];
 
 /** npm error codes and messages that mean "the registry did not answer", not "the tree is bad". */
@@ -325,6 +341,13 @@ async function main(argv) {
     }
   }
   if (outcome.kind === 'registry-error') {
+    if (publishes(process.env)) {
+      annotate(
+        'error',
+        `Dependency audit NOT performed on a release run: the npm registry did not answer after ${ATTEMPTS} attempts (${outcome.detail}). A release is not published un-audited; re-run once the registry answers.`,
+      );
+      return 1;
+    }
     annotate(
       'warning',
       `Dependency audit NOT performed: the npm registry did not answer after ${ATTEMPTS} attempts (${outcome.detail}). No advisory was checked by this run.`,

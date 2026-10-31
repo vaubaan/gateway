@@ -6,9 +6,15 @@
  * would copy them from People.
  */
 import { throughSecondFactor } from '../../../src/server/auth/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AUTH_LIMITS, LOCAL_LOCKOUT, LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
+import {
+  AUTH_LIMITS,
+  LOCAL_LOCKOUT,
+  LOGIN_COOKIE,
+  SECOND_FACTOR_LOCKOUT,
+  SESSION_COOKIE,
+} from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
@@ -471,6 +477,59 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       expect(stale.headers.get('location')).toBe('/login?error=login-expired');
     });
 
+    /** The code form of the second factor's step, answered with `code`. */
+    async function answerCode(res: Response, code: string): Promise<Response> {
+      return root.auth.handlers.secondFactorLogin(
+        formWith(cookieOf(res, LOGIN_COOKIE), { code }),
+        'local',
+      );
+    }
+
+    it('a wrong code keeps the step’s ten minutes: retrying never extends them', async () => {
+      const { secret } = await enrolledAdministrator();
+      const asked = await signIn(OPS, OPS_PASSWORD);
+      clock.advance(9 * 60_000);
+      const wrong = await answerCode(asked, '123456');
+      expect(wrong.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+      // Ten minutes after the password, the re-issued step is over like the first one.
+      clock.advance(60_000);
+      const late = await answerCode(wrong, codeNow(secret));
+      expect(late.headers.get('location')).toBe('/login?error=login-expired');
+      expect(sessionCookieOf(late)).toBeNull();
+    });
+
+    it('ten wrong codes lock the second factor for fifteen minutes, the right code included', async () => {
+      const { secret } = await enrolledAdministrator();
+      let res = await signIn(OPS, OPS_PASSWORD);
+      for (let miss = 1; miss < SECOND_FACTOR_LOCKOUT.maxAttempts; miss += 1) {
+        res = await answerCode(res, '123456');
+        expect(res.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+      }
+      const locked = await answerCode(res, '123456');
+      expect(locked.headers.get('location')).toBe('/login?error=second-factor-locked');
+      expect(cookieOf(locked, LOGIN_COOKIE)).toBe(`${LOGIN_COOKIE}=`);
+      // The password still opens the step, but no code is checked until the lock passes.
+      clock.advance(60_000);
+      const refused = await answerCode(await signIn(OPS, OPS_PASSWORD), codeNow(secret));
+      expect(refused.headers.get('location')).toBe('/login?error=second-factor-locked');
+      clock.advance(SECOND_FACTOR_LOCKOUT.lockMs);
+      const open = await answerCode(await signIn(OPS, OPS_PASSWORD), codeNow(secret));
+      expect(open.headers.get('location')).toBe('/');
+      expect(sessionCookieOf(open)).not.toBeNull();
+    });
+
+    it('a right code clears the count of wrong ones', async () => {
+      const { secret } = await enrolledAdministrator();
+      let res = await signIn(OPS, OPS_PASSWORD);
+      for (let miss = 1; miss < SECOND_FACTOR_LOCKOUT.maxAttempts; miss += 1) {
+        res = await answerCode(res, '123456');
+      }
+      clock.advance(60_000);
+      expect((await answerCode(res, codeNow(secret))).headers.get('location')).toBe('/');
+      const again = await answerCode(await signIn(OPS, OPS_PASSWORD), '123456');
+      expect(again.headers.get('location')).toBe('/login/code?error=second-factor-refused');
+    });
+
     it('an administrator resets a person’s second factor: their next sign-in enrols again', async () => {
       await enrolledAdministrator();
       const [user] = await root.store.users.list();
@@ -648,8 +707,58 @@ describe('local accounts: invitation link, password sign-in, lockout, reset', ()
       expect(created.headers.get('location')).toBe('/login/second-factor');
       await root.auth.handlers.forgotPassword(form({ email: ADA }));
       await root.auth.handlers.forgotPassword(form({ email: 'nobody@example.com' }));
-      expect(sent.map((m) => m.kind)).toEqual(['invite', 'reset']);
+      await vi.waitFor(() => expect(sent.map((m) => m.kind)).toEqual(['invite', 'reset']));
       expect(sent[1]?.url.pathname).toBe('/account/reset');
+    });
+
+    it('"forgot" answers before the link is made and mailed, for a known address as for an unknown one', async () => {
+      let release: () => void = () => undefined;
+      const mailing = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const sent: string[] = [];
+      await root.close();
+      root = await buildRoot({
+        loadConfig: () =>
+          loadInstanceConfig({
+            env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_EMAILS: OPS }),
+          }),
+        logWrite: () => undefined,
+        clock,
+        openStore: async ({ encryptor, catalog }) => openMemoryStore({ encryptor, catalog, clock }),
+        mailer: {
+          async sendLink(input) {
+            await mailing;
+            sent.push(input.to);
+          },
+        },
+      });
+      await root.auth.providers.save(
+        {
+          id: 'local',
+          kind: 'local',
+          name: '',
+          issuer: '',
+          clientId: '',
+          clientSecret: null,
+          allowedEmailDomains: [],
+          invitationOnly: true,
+        },
+        'create',
+      );
+      await root.auth.accounts.createAccount({
+        providerId: 'local',
+        email: ADA,
+        password: PASSWORD,
+        actor: 'bootstrap',
+      });
+      const known = await root.auth.handlers.forgotPassword(form({ email: ADA }));
+      const unknown = await root.auth.handlers.forgotPassword(form({ email: 'x@example.com' }));
+      expect(known.headers.get('location')).toBe(unknown.headers.get('location'));
+      // Both answered while the mail of the known address was still being sent.
+      expect(sent).toEqual([]);
+      release();
+      await vi.waitFor(() => expect(sent).toEqual([ADA]));
     });
   });
 });

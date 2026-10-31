@@ -604,6 +604,7 @@ async function fetchJson(
   missing: readonly number[] = [],
 ): Promise<unknown> {
   const res = await ctx.fetch(url, {
+    redirect: 'error',
     method,
     headers: {
       authorization: authorizationOf(ctx.credential),

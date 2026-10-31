@@ -154,9 +154,9 @@ export default async function SignInTestPage({ params, searchParams }: Props) {
         )}
         <div className={styles.formActions}>
           {provider.kind !== 'local' && (
-            <ButtonLink href={signInTestPath(provider.id)} external target="_blank" rel="opener">
-              Test again
-            </ButtonLink>
+            <form method="post" action={signInTestPath(provider.id)} target="_blank">
+              <Button type="submit">Test again</Button>
+            </form>
           )}
           {provider.source === 'store' && !provider.enabled && testPassedSinceSaved(state) && (
             <form

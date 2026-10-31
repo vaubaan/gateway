@@ -1,13 +1,15 @@
 /**
  * The second factor of every person (migration 0021; ADR
  * administrators-live-in-the-instance §7): the confirmed TOTP and its recovery codes,
- * sealed. Who decides is the auth module's `SecondFactorService`; this is the table.
+ * sealed, and the count of wrong codes that locks it (migration 0026). Who decides is
+ * the auth module's `SecondFactorService`; this is the table.
  */
 
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText } from '../encryptor.ts';
 import type { Iso } from '../types.ts';
 import { nowIso, type RepoContext } from './context.ts';
+import { nextLockout, type LockoutRule } from './local-accounts.ts';
 
 export const SECOND_FACTOR_SECRET_KINDS = ['totp', 'recovery'] as const;
 export type SecondFactorSecretKind = (typeof SECOND_FACTOR_SECRET_KINDS)[number];
@@ -17,12 +19,20 @@ export interface SecondFactorRecord {
   readonly confirmedAt: Iso;
   /** The last time step a code was accepted for; `null` before the first. */
   readonly lastStep: number | null;
+  /** Wrong codes since `firstFailureAt`. */
+  readonly failedAttempts: number;
+  readonly firstFailureAt: Iso | null;
+  /** No code is checked before this instant. */
+  readonly lockedUntil: Iso | null;
   readonly updatedAt: Iso;
 }
 
 export interface SecondFactorsRepo {
   get(userId: string): Promise<SecondFactorRecord | null>;
-  /** Writes the seed and the recovery codes and marks the factor confirmed, in one transaction. */
+  /**
+   * Writes the seed and the recovery codes and marks the factor confirmed, in one
+   * transaction. A new factor starts with no wrong code counted.
+   */
   set(input: {
     userId: string;
     totp: string;
@@ -36,12 +46,23 @@ export interface SecondFactorsRepo {
   writeSecret(userId: string, kind: SecondFactorSecretKind, plain: string): Promise<void>;
   /** Accepts the step only when it is later than the last one accepted: `false` for a replay. */
   advanceStep(userId: string, step: number): Promise<boolean>;
+  /**
+   * One more wrong code: the counter restarts when the window has passed, and the
+   * factor is locked for `lockMs` at `maxAttempts`. Returns the factor after; `null`
+   * when the person has none.
+   */
+  recordFailure(userId: string, rule: LockoutRule): Promise<SecondFactorRecord | null>;
+  /** A code accepted: the counters are cleared. */
+  clearFailures(userId: string): Promise<void>;
 }
 
 interface FactorRow {
   user_id: string;
   confirmed_at: string;
   last_step: number | null;
+  failed_attempts: number;
+  first_failure_at: string | null;
+  locked_until: string | null;
   updated_at: string;
 }
 
@@ -63,7 +84,9 @@ function secretId(userId: string, kind: SecondFactorSecretKind): string {
 export function createSecondFactorsRepo(ctx: RepoContext): SecondFactorsRepo {
   const { db, encryptor } = ctx;
   const byUser = db.prepare<[string], FactorRow>(
-    'SELECT user_id, confirmed_at, last_step, updated_at FROM user_second_factors WHERE user_id = ?',
+    `SELECT user_id, confirmed_at, last_step, failed_attempts, first_failure_at, locked_until,
+            updated_at
+     FROM user_second_factors WHERE user_id = ?`,
   );
   const upsertFactor = db.prepare<[string, string, number | null, string]>(
     `INSERT INTO user_second_factors (user_id, confirmed_at, last_step, updated_at)
@@ -71,6 +94,9 @@ export function createSecondFactorsRepo(ctx: RepoContext): SecondFactorsRepo {
      ON CONFLICT (user_id) DO UPDATE SET
        confirmed_at = excluded.confirmed_at,
        last_step = excluded.last_step,
+       failed_attempts = 0,
+       first_failure_at = NULL,
+       locked_until = NULL,
        updated_at = excluded.updated_at`,
   );
   const deleteFactor = db.prepare<[string]>('DELETE FROM user_second_factors WHERE user_id = ?');
@@ -92,11 +118,24 @@ export function createSecondFactorsRepo(ctx: RepoContext): SecondFactorsRepo {
     `UPDATE user_second_factors SET last_step = ?, updated_at = ?
      WHERE user_id = ? AND (last_step IS NULL OR last_step < ?)`,
   );
+  const updateFailure = db.prepare<[number, string | null, string | null, string, string]>(
+    `UPDATE user_second_factors
+     SET failed_attempts = ?, first_failure_at = ?, locked_until = ?, updated_at = ?
+     WHERE user_id = ?`,
+  );
+  const clearFailure = db.prepare<[string, string]>(
+    `UPDATE user_second_factors
+     SET failed_attempts = 0, first_failure_at = NULL, locked_until = NULL, updated_at = ?
+     WHERE user_id = ?`,
+  );
 
   const toRecord = (row: FactorRow): SecondFactorRecord => ({
     userId: row.user_id,
     confirmedAt: row.confirmed_at,
     lastStep: row.last_step,
+    failedAttempts: row.failed_attempts,
+    firstFailureAt: row.first_failure_at,
+    lockedUntil: row.locked_until,
     updatedAt: row.updated_at,
   });
 
@@ -143,6 +182,25 @@ export function createSecondFactorsRepo(ctx: RepoContext): SecondFactorsRepo {
     },
     async advanceStep(userId, step) {
       return advance.run(step, nowIso(ctx), userId, step).changes > 0;
+    },
+    async recordFailure(userId, rule) {
+      return withImmediateTransaction(db, () => {
+        const row = byUser.get(userId);
+        if (!row) return null;
+        const next = nextLockout(toRecord(row), rule, ctx.clock.now());
+        updateFailure.run(
+          next.failedAttempts,
+          next.firstFailureAt,
+          next.lockedUntil,
+          nowIso(ctx),
+          userId,
+        );
+        const after = byUser.get(userId);
+        return after ? toRecord(after) : null;
+      });
+    },
+    async clearFailures(userId) {
+      clearFailure.run(nowIso(ctx), userId);
     },
   };
 }

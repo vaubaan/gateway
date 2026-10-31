@@ -78,6 +78,13 @@ export const ENROL_PARAM = 'enrol';
 /** A second factor is removed only within this long after signing in. */
 export const FRESH_SIGN_IN_FOR_FACTOR_MS = 10 * 60_000;
 
+/** Settings → Security: the enrolment's step is gone, or its ten minutes are over. */
+const ENROLMENT_EXPIRED: Notice = {
+  tone: 'danger',
+  title: 'Enrolment expired',
+  lines: ['Start again: the secret shown is no longer the one to confirm.'],
+};
+
 /** What sends the mail of a link; absent when the instance sends no mail. */
 export interface LinkMailer {
   sendLink(input: {
@@ -321,6 +328,47 @@ export function createLocalAuthHandlers(
     return step;
   }
 
+  /**
+   * The step again after a wrong code, on its page, within its first ten minutes (the
+   * step keeps its `createdAt`); once they are over, the sign-in starts again.
+   */
+  async function retryStep(step: PendingLocalStep, page: string): Promise<Response> {
+    const again = await deps.sessions.reissueLocalStep(step);
+    if (!again) {
+      return loginError('login-expired', { 'Set-Cookie': deps.sessions.clearPendingCookie() });
+    }
+    return redirect(`${page}?error=second-factor-refused`, { 'Set-Cookie': again.setCookie });
+  }
+
+  /** A reset link for the account, mailed; a failure is logged, nobody waits for it. */
+  async function sendResetLink(
+    mailer: LinkMailer,
+    providerId: string,
+    email: string,
+  ): Promise<void> {
+    const issued = await deps.accounts.createLink({
+      kind: 'reset',
+      providerId,
+      email,
+      createdBy: 'self',
+    });
+    await mailer.sendLink({
+      kind: 'reset',
+      to: email,
+      url: issued.url,
+      expiresAt: issued.link.expiresAt,
+    });
+  }
+
+  /** `task` once the current answer is on its way: its time is not the answer's. */
+  function afterAnswer(task: () => Promise<void>): void {
+    setImmediate(() => {
+      task().catch((err: unknown) => {
+        logger.error('password reset mail failed', { err });
+      });
+    });
+  }
+
   /** The recovery codes, shown once on Settings → Security, as a notice read once. */
   async function codesNotice(
     sessionId: string,
@@ -400,13 +448,15 @@ export function createLocalAuthHandlers(
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const check = await deps.secondFactors.check(step.userId, stringField(form, 'code'));
-      if (!check.ok) {
-        // The step is kept: the person may try again, within the same ten minutes.
-        const again = await deps.sessions.createLocalStep(step);
-        logger.warn('sign-in failed', { code: 'second-factor-refused' });
-        return redirect(`${SECOND_FACTOR_PAGE}?error=second-factor-refused`, {
-          'Set-Cookie': again.setCookie,
+      if (!check.ok && check.cause === 'locked') {
+        logger.warn('sign-in failed', { code: 'second-factor-locked' });
+        return loginError('second-factor-locked', {
+          'Set-Cookie': deps.sessions.clearPendingCookie(),
         });
+      }
+      if (!check.ok) {
+        logger.warn('sign-in failed', { code: 'second-factor-refused', cause: check.cause });
+        return retryStep(step, SECOND_FACTOR_PAGE);
       }
       if (!(await stillActive(step))) return loginError('account-deactivated');
       if (check.by === 'recovery-code') {
@@ -439,11 +489,8 @@ export function createLocalAuthHandlers(
         step.userId,
       );
       if (!confirmed) {
-        const again = await deps.sessions.createLocalStep(step);
         logger.warn('sign-in failed', { code: 'second-factor-refused', at: 'enrolment' });
-        return redirect(`${ENROL_PAGE}?error=second-factor-refused`, {
-          'Set-Cookie': again.setCookie,
-        });
+        return retryStep(step, ENROL_PAGE);
       }
       const session = await openSession(request, step);
       const noticeId = await codesNotice(
@@ -521,27 +568,13 @@ export function createLocalAuthHandlers(
       const provider = await localProvider();
       // One answer whatever the address, whether the instance sends mail or not: the
       // page said beforehand what to expect. A link is made only for an existing account
-      // and only when a mail can carry it; nothing is ever shown here.
-      if (provider && deps.mailer) {
+      // and only when a mail can carry it; nothing is ever shown here. The answer waits
+      // for the same work either way, the lookup of the address: the link and its mail
+      // are made after it (security audit 2026-10-31, L6), so their time tells nothing.
+      const mailer = deps.mailer;
+      if (provider && mailer) {
         const account = await deps.accounts.accountOf(provider.id, email);
-        if (account) {
-          try {
-            const issued = await deps.accounts.createLink({
-              kind: 'reset',
-              providerId: provider.id,
-              email: account.email,
-              createdBy: 'self',
-            });
-            await deps.mailer.sendLink({
-              kind: 'reset',
-              to: account.email,
-              url: issued.url,
-              expiresAt: issued.link.expiresAt,
-            });
-          } catch (err) {
-            logger.error('password reset mail failed', { err });
-          }
-        }
+        if (account) afterAnswer(() => sendResetLink(mailer, provider.id, account.email));
       }
       return redirect(`${FORGOT_PASSWORD_PAGE}?${FORGOT_SENT_PARAM}=1`);
     },
@@ -569,11 +602,7 @@ export function createLocalAuthHandlers(
       const step = await deps.sessions.takeLocalStep(request.headers);
       const clear = deps.sessions.clearPendingCookie();
       if (step?.step !== 'enrol' || step.userId !== who.user.id || !step.totpSecret) {
-        return redirectWithNotice(who.sessionId, SECURITY_PAGE, {
-          tone: 'danger',
-          title: 'Enrolment expired',
-          lines: ['Start again: the secret shown is no longer the one to confirm.'],
-        });
+        return redirectWithNotice(who.sessionId, SECURITY_PAGE, ENROLMENT_EXPIRED);
       }
       const form = await readForm(request);
       if (!form) return notAFormResponse();
@@ -584,7 +613,10 @@ export function createLocalAuthHandlers(
         who.user.id,
       );
       if (!confirmed) {
-        const again = await deps.sessions.createLocalStep(step);
+        const again = await deps.sessions.reissueLocalStep(step);
+        if (!again) {
+          return redirectWithNotice(who.sessionId, SECURITY_PAGE, ENROLMENT_EXPIRED);
+        }
         const notice: Notice = {
           tone: 'danger',
           title: 'Code not accepted',

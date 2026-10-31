@@ -106,17 +106,27 @@ and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow
   revoked at its issuer; the history is not rewritten.
 - **Code**: static analysis (Semgrep, community security rules at a pinned
   commit plus rules of this codebase) on every pull request and weekly on
-  the default branch; property-based tests on the parsers that
+  the default branch. The codebase's rules include: every HTTP call of a
+  plugin states its redirect policy (`redirect: 'error'` unless a provider
+  redirects on purpose), so a credential header never follows a redirect to
+  another origin; TLS certificate verification is off in one reviewed place
+  only (the attested OAuth broker channel, which compares the key with its
+  attestation before it writes). Property-based tests cover the parsers that
   read what an agent or a client sends (SQL, shell, headers, the git wire,
   the configuration).
 - **Dependencies**: `npm audit` against a reviewed allowlist, registry
   signatures and provenance (`npm audit signatures`), a lockfile that only
   downloads from the npm registry with an integrity hash, and weekly
   updates that wait a cooldown of several days before a new version is
-  adopted.
+  adopted. A registry outage lets a merge through with a warning, never a
+  release: a release run fails until the audit has answered.
 - **Image**: scanned with Trivy on every release, weekly on the default
   branch and on demand (a known vulnerability with a fix fails it), no
-  package manager shipped, base image pinned by digest.
+  package manager shipped, base image pinned by digest. Dependencies are
+  installed and the application built as an unprivileged user, never as
+  root; the server runs as uid 10001, and the reference Compose file adds a
+  read-only root filesystem, no capability and no new privilege (the smoke
+  test runs the image so).
 - **Release**: the image carries an SBOM and a signed build-provenance
   attestation that the release pipeline verifies before it publishes;
   verify it yourself before you run it:

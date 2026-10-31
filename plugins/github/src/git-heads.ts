@@ -25,6 +25,7 @@ export async function branchHeads(
 ): Promise<ReadonlySet<string>> {
   const remote = await upstream(ctx, repository, 'read');
   const res = await ctx.fetch(`${remote.url}/info/refs?service=${UPLOAD_PACK_SERVICE}`, {
+    redirect: 'error',
     method: 'GET',
     headers: { Authorization: remote.authorization },
     ...(ctx.signal ? { signal: ctx.signal } : {}),

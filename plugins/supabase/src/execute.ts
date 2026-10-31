@@ -193,6 +193,7 @@ async function mgmtFetch(
   signal?: AbortSignal,
 ): Promise<unknown> {
   const res = await fetchImpl(SUPABASE_API_BASE + path, {
+    redirect: 'error',
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -455,7 +456,10 @@ async function dataApiFetch(
     body: init.body ?? undefined,
     ...(signal ? { signal } : {}),
   } as Parameters<FetchImpl>[1];
-  const res = await fetchImpl(`${projectUrl(projectRef)}${path}`, requestInit);
+  const res = await fetchImpl(`${projectUrl(projectRef)}${path}`, {
+    ...requestInit,
+    redirect: 'error',
+  });
   if (!res.ok) {
     const body = await res.text();
     const msg = `Supabase data-plane ${path} → ${res.status}: ${body.slice(0, 300)}`;

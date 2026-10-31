@@ -135,6 +135,7 @@ export async function askRailwayGraphql<T>(
   signal?: AbortSignal,
 ): Promise<GraphqlAnswer<T>> {
   const res = await fetchImpl(RAILWAY_GRAPHQL, {
+    redirect: 'error',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

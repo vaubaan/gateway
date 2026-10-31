@@ -9,9 +9,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_ALLOWLIST,
   GATED_SEVERITIES,
+  RELEASE_WORKFLOW,
   decide,
   parseAllowlist,
   parseAuditOutput,
+  publishes,
 } from './audit-gate.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,6 +51,20 @@ const entry = (id, pkg, overrides = {}) => ({
   reviewed: '2026-10-13',
   review_by: '2027-01-13',
   ...overrides,
+});
+
+describe('publishes', () => {
+  it('fails a registry outage closed on a tag and on the release workflow, open elsewhere', () => {
+    expect(publishes({ GITHUB_REF_TYPE: 'tag', GITHUB_WORKFLOW: 'ci' })).toBe(true);
+    expect(publishes({ GITHUB_REF_TYPE: 'branch', GITHUB_WORKFLOW: RELEASE_WORKFLOW })).toBe(true);
+    expect(publishes({ GITHUB_REF_TYPE: 'branch', GITHUB_WORKFLOW: 'ci' })).toBe(false);
+    expect(publishes({})).toBe(false);
+  });
+
+  it('knows the release workflow by the name release.yml gives itself', () => {
+    const release = readFileSync(join(ROOT, '.github/workflows/release.yml'), 'utf8');
+    expect(release).toMatch(new RegExp(`^name: ${RELEASE_WORKFLOW}$`, 'm'));
+  });
 });
 
 describe('parseAuditOutput', () => {

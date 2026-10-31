@@ -56,6 +56,7 @@ export async function send(
   const query =
     options.query && [...options.query].length > 0 ? `?${options.query.toString()}` : '';
   const res = await ctx.fetch(`${NOTION_API_BASE}${path}${query}`, {
+    redirect: 'error',
     method,
     headers: {
       authorization: `Bearer ${tokenOf(ctx)}`,

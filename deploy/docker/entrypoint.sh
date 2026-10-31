@@ -23,7 +23,9 @@ DATA_DIR="${VAUBAAN_DATA_DIR:-/data}"
 if [ "$(id -u)" = "0" ]; then
   if [ -d "$DATA_DIR" ] && [ -n "$(find "$DATA_DIR" ! -user "$APP_USER" -print -quit)" ]; then
     echo "entrypoint: giving $DATA_DIR to $APP_USER (it was not owned by $APP_USER)" >&2
-    chown -R "$APP_USER:$APP_USER" "$DATA_DIR"
+    # -h and -P: a symbolic link planted on the volume is given away itself, never
+    # followed to what it points at (security audit 2026-10-31, L12).
+    chown -R -h -P "$APP_USER:$APP_USER" "$DATA_DIR"
   fi
   exec setpriv --reuid="$APP_USER" --regid="$APP_USER" --init-groups \
     --inh-caps=-all --bounding-set=-all --no-new-privs -- "$@"

@@ -54,6 +54,7 @@ export function context7KeyOf(credential: CredentialSecret): string {
 /** One `GET /v2/usage` with the key : the response, whatever its status. */
 export async function requestUsage(ctx: ConnectionContext, key: string): Promise<Response> {
   return ctx.fetch(CONTEXT7_USAGE_URL, {
+    redirect: 'error',
     method: 'GET',
     headers: {
       Authorization: `Bearer ${key}`,
