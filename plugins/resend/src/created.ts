@@ -14,10 +14,8 @@
 
 import { jsonObjectsOf, type McpToolResult, type Resource } from '@vaubaan/plugin-sdk';
 
-import { RESEND_PROVIDER, domainName, pathIdent } from './resources.ts';
-
-const CREATE_DOMAIN = 'resend__create_domain';
-const CREATE_SEGMENT = 'resend__create_segment';
+import { PROVIDER_ID, TOOL } from './identity.ts';
+import { domainName, pathIdent } from './resources.ts';
 
 /** `ProviderPlugin.createdResources` : the domain or segment the call made, or `[]`. */
 export function createdResendResources(
@@ -29,7 +27,7 @@ export function createdResendResources(
   if (!answer) return [];
   const id = pathIdent(answer.id);
   if (id === null) return [];
-  if (tool === CREATE_DOMAIN) {
+  if (tool === TOOL.createDomain) {
     const name = typeof answer.name === 'string' ? answer.name : null;
     const ref = domainName(name);
     if (ref === null || name === null) return [];
@@ -37,7 +35,7 @@ export function createdResendResources(
     const region = typeof answer.region === 'string' && answer.region ? answer.region : null;
     return [
       {
-        provider: RESEND_PROVIDER,
+        provider: PROVIDER_ID,
         ref,
         displayName: status === 'verified' || status === null ? name : `${name} (${status})`,
         metadata: {
@@ -52,11 +50,11 @@ export function createdResendResources(
       },
     ];
   }
-  if (tool === CREATE_SEGMENT) {
+  if (tool === TOOL.createSegment) {
     const name = typeof answer.name === 'string' && answer.name.trim() ? answer.name : id;
     return [
       {
-        provider: RESEND_PROVIDER,
+        provider: PROVIDER_ID,
         ref: id,
         displayName: name,
         metadata: { kind: 'segment', segment_id: id },

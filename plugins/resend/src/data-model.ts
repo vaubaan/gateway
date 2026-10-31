@@ -24,10 +24,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
-import { RESEND_PROVIDER } from './resources.ts';
+import { PROVIDER_ID } from './identity.ts';
 
 export const resendDataModel: DataModel = {
-  provider: RESEND_PROVIDER,
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'email',

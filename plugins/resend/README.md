@@ -132,7 +132,8 @@ What `execute` declines itself — whatever the classifier denies, a malformed
 id, a broadcast of another segment — is an `isError` result carrying the
 reason (`ExecutorRefusal` under the SDK's `declining`), not a thrown error:
 the audit records no upstream failure for it. What Resend fails is thrown
-(`UpstreamAuthError`, `UpstreamHttpError`).
+(`UpstreamAuthError`, `UpstreamHttpError`, and `UpstreamProtocolError` for an
+answer that is not JSON or not the shape the plugin reads).
 
 ## Catalog
 

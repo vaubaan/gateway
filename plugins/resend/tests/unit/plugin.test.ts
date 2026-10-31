@@ -8,8 +8,12 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  UpstreamHttpError,
+  UpstreamProtocolError,
+  catalogPathIssues,
   parseSlice,
   serializeSlice,
+  slicePathIssue,
   type ConnectionContext,
   type ExecuteContext,
   type Resource,
@@ -187,6 +191,39 @@ describe('resend plugin — structural kit', () => {
     expect(report.fallbackHits).toEqual([]);
     // Only the two retired catalog ids (account-rooted patterns) are never touched.
     expect(report.risksUntouched).toEqual(['resend.read-audiences', 'resend.audience-write']);
+  });
+
+  // `catalogPathIssues` skips deprecated entries, and so does the check of the
+  // live ones below. A deprecated entry's patterns are kept for the id missions
+  // store ; the classifier emits nothing they match (`risksUntouched` above
+  // pins that), so they are not maintained against the data model. This test
+  // says so, and pins what they are today : rooted at an `account` the model
+  // does not have.
+  test('the patterns of the live entries walk the data model ; the deprecated ones are pinned as they are', () => {
+    expect(catalogPathIssues(resendPlugin)).toEqual([]);
+    const deprecated = Object.fromEntries(
+      resendPlugin.catalog.risks
+        .filter((risk) => risk.deprecated === true)
+        .map((risk) => [
+          risk.id,
+          Object.fromEntries(
+            [risk.matches]
+              .flat()
+              .map((pattern) => [
+                pattern,
+                slicePathIssue(resendPlugin.dataModel, parseSlice(pattern), 'pattern'),
+              ]),
+          ),
+        ]),
+    );
+    const noAccount = "'account' is not an entity of the data model";
+    expect(deprecated).toEqual({
+      'resend.read-audiences': {
+        'resend.account[**].audience[**].R': noAccount,
+        'resend.account[**].audience[**].contact[**].R': noAccount,
+      },
+      'resend.audience-write': { 'resend.account[**].audience[**].W': noAccount },
+    });
   });
 
   // What is executed is what was classified (SDK kit) : every string argument of
@@ -675,12 +712,15 @@ describe('executeResend with mockFetch', () => {
     const fetch = mockFetch([
       { method: 'POST', url: `${RESEND_API_BASE}/contacts`, body: { object: 'contact' } },
     ]);
-    await expect(
-      resendPlugin.execute(ctxOf(fetch), 'resend__create_contact', {
-        email: 'new@example.com',
-        segment_id: 'seg_news',
-      }),
-    ).rejects.toThrow(/Resend returned no id — it was not added to segment 'seg_news'/);
+    const created = resendPlugin.execute(ctxOf(fetch), 'resend__create_contact', {
+      email: 'new@example.com',
+      segment_id: 'seg_news',
+    });
+    // Resend's failure to say what its API promises, not the plugin's.
+    await expect(created).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(created).rejects.toThrow(
+      /Resend returned no id — it was not added to segment 'seg_news'/,
+    );
     expect(fetch.calls).toHaveLength(1);
   });
 
@@ -795,6 +835,29 @@ describe('executeResend with mockFetch', () => {
         { id: 'brd_2', audience_id: 'seg_test' },
       ],
     });
+  });
+
+  test('an answer that is not JSON, or not the shape the executor reads, is an UpstreamProtocolError', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: `${RESEND_API_BASE}/emails/em_1`, body: '<html>maintenance</html>' },
+      { method: 'GET', url: `${RESEND_API_BASE}/domains?limit=100`, body: { data: 'none' } },
+      { method: 'GET', url: `${RESEND_API_BASE}/broadcasts/brd_1`, body: { segment_id: 7 } },
+      { method: 'DELETE', url: `${RESEND_API_BASE}/contacts/ct_1`, status: 204 },
+    ]);
+    const ctx = ctxOf(fetch);
+    await expect(
+      resendPlugin.execute(ctx, 'resend__get_email', { id: 'em_1' }),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(resendPlugin.execute(ctx, 'resend__list_domains', {})).rejects.toThrow(
+      /GET \/domains: a page of .* unexpected answer/,
+    );
+    await expect(
+      resendPlugin.execute(ctx, 'resend__get_broadcast', { id: 'brd_1', segment_id: 'seg_news' }),
+    ).rejects.toThrow(/GET \/broadcasts\/brd_1: a broadcast: unexpected answer/);
+    // An answer without content is still a confirmation.
+    expect(
+      jsonOf(await resendPlugin.execute(ctx, 'resend__delete_contact', { id: 'ct_1' })),
+    ).toEqual({});
   });
 
   test('send_broadcast re-reads the broadcast and refuses one of another segment', async () => {
@@ -950,6 +1013,7 @@ describe('executeResend with mockFetch', () => {
       subject: 's',
     });
     await expect(validation).rejects.toThrow(/403/);
+    await expect(validation).rejects.toBeInstanceOf(UpstreamHttpError);
     await expect(validation).rejects.not.toMatchObject({ name: 'UpstreamAuthError' });
     await expect(resendPlugin.execute(ctx, 'resend__get_email', { id: 'em_429' })).rejects.toThrow(
       /429/,
