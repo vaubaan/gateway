@@ -87,7 +87,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `careful|trusting|autonomous` (were `prudent|confiant|autonome`);
   `list_my_connections` says `at_trust_level` (was `at_cran`), `get_catalog`
   gives each risk's `tier` (was `palier`) and the `trust_levels` table, and a
-  line a trust level leaves out has `reason: 'trust-level'`. Migration 0026
+  line a trust level leaves out has `reason: 'trust-level'`; a draft asks
+  for everything the user holds with `everything_i_hold: true` (was
+  `preset: 'everything-i-hold'`, and `unknown-preset` is gone). The
+  decision core's entry point is `evaluateCallForMission` (was
+  `evaluateCallForToken`), without the v4 explicit deny. Migration 0026
   renames `mission_connections.crans_json` to `trust_levels_json` and
   rewrites the stored values to the new names, so a running instance keeps
   every mission's recorded levels on upgrade; agents holding a draft with
@@ -125,8 +129,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **Catalog presets.** No plugin ships `presets`, a catalog with the key no
   longer loads, and the plugin SDK loses `presetsOf`, `assertPresetsValid`
   and the `Preset` types (`policyFromMacroActions` in `@vaubaan/plugin-sdk/testing`
-  writes a test policy from macro-actions instead). A draft's `preset` takes
-  only `everything-i-hold`; any other id is `unknown-preset`. The management
+  writes a test policy from macro-actions instead). A draft names no preset:
+  `everything_i_hold: true` asks for the built-in expansion, and the preview
+  says `everything_i_hold` per connection (both were `preset`). The management
   door's `presets` fields are replaced by `macro_actions`, `trust_levels` and
   `everything_i_hold`, and the preview's `skipped_from_preset` by `left_out`.
   Every plugin gains a patch version and a `catalog_version`; Gmail's comes

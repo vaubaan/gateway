@@ -1099,7 +1099,7 @@ describe('missions: issuance context', () => {
       });
       const draft = {
         name: `${provider} wide`,
-        connections: [{ connection_id: connection.id, preset: 'everything-i-hold' }],
+        connections: [{ connection_id: connection.id, everything_i_hold: true }],
         period: DAILY,
         expires_at: null,
       };

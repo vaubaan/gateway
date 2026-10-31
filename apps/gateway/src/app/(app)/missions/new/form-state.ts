@@ -20,7 +20,7 @@ import type {
   PreviewIssue,
   ResolvedDraftConnection,
 } from '@/server/missions/model';
-import { EVERYTHING_I_HOLD, expansionDigest } from '@/server/missions/everything-i-hold';
+import { expansionDigest } from '@/server/missions/everything-i-hold';
 import {
   DEFAULT_TRUST_LEVEL,
   defaultLineOf,
@@ -209,7 +209,7 @@ function everythingDraft(
 ): DraftConnection {
   return {
     connection_id: connection.id,
-    preset: EVERYTHING_I_HOLD,
+    everything_i_hold: true,
     resources: draftResourcesOf({
       resourceScope: state.resourceScope ?? 'selected',
       resourceIds: state.resourceIds,
@@ -678,7 +678,7 @@ function draftConnection(connection: IssuanceConnection, state: ConnectionState)
     connection_id: connection.id,
     resources: draftResourcesOf(state),
     // The persisted policy is the explicit enumeration: "Everything I hold" is not sent.
-    preset: null,
+    everything_i_hold: false,
     // Kept with the mission to redraw this form. Sent beside lines only: without
     // any, the server would write the policy from them, and an emptied policy
     // must stay empty.

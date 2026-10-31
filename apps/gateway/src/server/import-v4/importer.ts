@@ -891,7 +891,7 @@ export class Importer {
       draftConnections.push({
         connection_id: h.issuance.id,
         resources: { scope: 'selected', resource_ids: selected.map((r) => r.id) },
-        preset: null,
+        everything_i_hold: false,
         policy: translation.entries.map((e) => ({
           risk_id: e.risk_id,
           quota: e.quota,

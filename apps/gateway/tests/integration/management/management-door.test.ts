@@ -426,7 +426,7 @@ describe('management door — tools of a delegated agent', () => {
 
       const draft = {
         name: 'My own agents',
-        connections: [{ connection_id: github, preset: 'everything-i-hold' }],
+        connections: [{ connection_id: github, everything_i_hold: true }],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       };

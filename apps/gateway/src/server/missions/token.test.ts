@@ -113,9 +113,9 @@ describe('parseMissionDraft', () => {
   it('accepts the built-in everything-i-hold in place of trust levels', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      connections: [{ provider: 'github', preset: 'everything-i-hold' }],
+      connections: [{ provider: 'github', everything_i_hold: true }],
     });
-    expect(parsed.ok && parsed.draft.connections[0]?.preset).toBe('everything-i-hold');
+    expect(parsed.ok && parsed.draft.connections[0]?.everything_i_hold).toBe(true);
   });
 
   it('refuses a trust level that is not one of the three', () => {

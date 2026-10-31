@@ -143,7 +143,7 @@ export function draftConnectionOf(c: MissionSnapshotConnection): DraftConnection
       c.resource_scope === 'connection'
         ? { scope: 'connection' }
         : { scope: 'selected', resource_ids: [...c.resource_ids] },
-    preset: null,
+    everything_i_hold: false,
     policy: c.policy.map((p) => ({
       risk_id: p.risk_id,
       quota: p.quota,

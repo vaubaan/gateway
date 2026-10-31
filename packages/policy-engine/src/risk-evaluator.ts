@@ -25,8 +25,8 @@
  *    touches that entry alone ; a write covered by none touches the
  *    fallback ; a slice covered by nothing at all yields an empty result,
  *    which the runtime refuses. This keeps the "no silent passthrough"
- *    guarantee while letting a preset omit the fallback : accepting it
- *    means accepting *uncategorized* writes, not every write.
+ *    guarantee while letting a mission leave the fallback out : accepting
+ *    it means accepting *uncategorized* writes, not every write.
  */
 
 import type { RiskCatalog, RiskEntry, RiskId, Slice } from '@vaubaan/shared';

@@ -18,7 +18,7 @@ import { isResolvable } from './catalog-view';
 import { macroActionOfRisk } from './macro-actions';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource, SeverityLevel } from './model';
 
-/** The id a draft names it by in `preset`. No catalog may declare a macro-action of that id. */
+/** Its id where the gateway names it (a notice, the reference). No catalog may declare a macro-action of that id. */
 export const EVERYTHING_I_HOLD = 'everything-i-hold';
 export const EVERYTHING_I_HOLD_LABEL = 'Everything I hold on this account';
 export const EVERYTHING_I_HOLD_DESCRIPTION =

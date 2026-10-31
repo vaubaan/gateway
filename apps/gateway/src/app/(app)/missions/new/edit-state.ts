@@ -51,7 +51,7 @@ export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConn
       c.resource_scope === 'connection'
         ? { scope: 'connection' }
         : { scope: 'selected', resource_ids: [...c.resource_ids] },
-    preset: null,
+    everything_i_hold: false,
     policy: c.policy,
     trust_levels: trustLevelsOf(c.trust_levels),
   }));

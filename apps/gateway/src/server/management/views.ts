@@ -601,7 +601,8 @@ export interface PreviewView {
     /** `connection`: resources discovered later are reached too; `resources` are the ones known now. */
     readonly resource_scope: 'selected' | 'connection';
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
-    readonly preset: { readonly id: string; readonly label: string } | null;
+    /** The built-in everything-i-hold wrote this connection's lines. */
+    readonly everything_i_hold: boolean;
     readonly passes: MissionPreview['policy'];
     readonly exceeds: readonly RiskId[];
     readonly unknown: readonly RiskId[];
@@ -631,7 +632,7 @@ export function previewView(preview: MissionPreview): PreviewView {
       display_name: c.display_name,
       resource_scope: c.reaches_later ? 'connection' : 'selected',
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
-      preset: c.preset,
+      everything_i_hold: c.everything_i_hold,
       passes: c.passes,
       exceeds: c.exceeds,
       unknown: c.unknown,

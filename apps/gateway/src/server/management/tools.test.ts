@@ -720,7 +720,7 @@ describe('views', () => {
   it('preview and issue accept `everything-i-hold`: the policy is the explicit list', () => {
     const draft: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', preset: 'everything-i-hold' }],
+      connections: [{ connection_id: 'conn-acme', everything_i_hold: true }],
     };
     const preview = previewDraft(
       { connections: [acmeConnection({ basis: 'share', authority: SHARED })], now: NOW },
@@ -729,10 +729,7 @@ describe('views', () => {
     const view = previewView(preview);
     expect(view.ok).toBe(true);
     expect(view.policy.map((line) => line.risk_id)).toEqual(SHARED);
-    expect(view.connections[0]?.preset).toEqual({
-      id: 'everything-i-hold',
-      label: 'Everything I hold on this account',
-    });
+    expect(view.connections[0]?.everything_i_hold).toBe(true);
     expect(view.notices.map((n) => n.code)).toContain('everything-i-hold-expanded');
   });
 

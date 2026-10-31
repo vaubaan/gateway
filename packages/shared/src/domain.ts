@@ -177,7 +177,7 @@ export interface MissionPolicyEntry extends Budget {
  * The mission policy : an explicit enumeration of entries, one per accepted
  * risk, `risk_id` unique within the list (the store enforces it at write
  * time). The accepted risks are its `risk_id`s — see `acceptedRisksOf`. No
- * wildcard, no sentinel, no preset reference is ever an entry.
+ * wildcard, no sentinel, no reference to a macro-action is ever an entry.
  */
 export type MissionPolicy = readonly MissionPolicyEntry[];
 
@@ -207,7 +207,7 @@ export interface Mission {
   readonly creator_id: string;
   readonly status: MissionStatus;
   readonly resources: readonly MissionResourceSelection[];
-  /** Explicit enumeration ; never a preset reference. */
+  /** Explicit enumeration ; never a reference to a macro-action. */
   readonly policy: MissionPolicy;
   readonly period: Period;
   readonly expires_at: Iso8601 | null;

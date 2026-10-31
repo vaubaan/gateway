@@ -72,8 +72,8 @@ const idx = indexCatalog(catalog);
 
 describe('evaluateCall — allow path', () => {
   test('feature branch write allowed with feature-branch-write alone (fallback not co-touched)', () => {
-    // Inverted on purpose (ADR fallback-risk-only-when-uncategorized) : a mission built from a
-    // preset without the fallback can still write on feature branches.
+    // Inverted on purpose (ADR fallback-risk-only-when-uncategorized) : a mission
+    // without the fallback can still write on feature branches.
     const d = evaluateCall({
       executed_slices: [parseSlice('github.repo[foo].branch[feature/x].file[a.ts].W')],
       accepted_risks: new Set(['github.feature-branch-write']),

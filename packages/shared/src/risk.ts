@@ -2,7 +2,7 @@
  * Risk-based authorization types.
  *
  * Spec : docs/spec/gateway-risk-model.md (slices, catalogs, 6-D vector,
- *        scope caps) ; docs/spec/vaubaan-gateway.md §3.2 (presets).
+ *        scope caps, §4.6 macro-actions) ; docs/spec/vaubaan-gateway.md §3.2 (budgets).
  * ADR  : docs/decisions/unified-gates-drop-confirm.md,
  *        docs/decisions/plugin-contract-and-credential-spec.md.
  *
