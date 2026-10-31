@@ -213,7 +213,7 @@ export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
 export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit'] as const;
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
 
-export interface MissionConnection {
+export interface MissionConnectionRecord {
   readonly connectionId: string;
   readonly resourceScope: ResourceScope;
   /** Selected resource ids; empty when `resourceScope` is `all` or `connection`. */
@@ -244,7 +244,7 @@ export interface MissionRecord {
   readonly createdAt: Iso;
   readonly updatedAt: Iso;
   readonly closedAt: Iso | null;
-  readonly connections: readonly MissionConnection[];
+  readonly connections: readonly MissionConnectionRecord[];
   readonly policy: readonly MissionPolicyEntry[];
 }
 

@@ -54,7 +54,7 @@ function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
     {
       id: 'mission',
       header: 'Mission',
-      cell: ({ mission, issuedVia, creator }) => (
+      cell: ({ mission, issued_via: issuedVia, creator }) => (
         <>
           <Link href={`${ROUTES.missions}/${mission.id}`} className={styles.name}>
             {mission.name}

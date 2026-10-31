@@ -487,13 +487,13 @@ describe('management door — tools of a delegated agent', () => {
         status: 'active',
       });
       const [overview] = await rig.root.missions.service.list(rig.seeded.bob);
-      expect(overview?.issuedVia).toEqual({
+      expect(overview?.issued_via).toEqual({
         delegation_id: agent.delegated.delegationId,
         client_id: clientId,
         client_name: 'Scripted MCP client',
       });
       const detail = await rig.root.missions.service.get(rig.seeded.bob, issued.mission.mission_id);
-      expect(detail?.issuedVia?.client_id).toBe(clientId);
+      expect(detail?.issued_via?.client_id).toBe(clientId);
       // Ada, who owns the connection, did not issue it.
       expect(await rig.root.missions.service.list(rig.seeded.ada)).toEqual([]);
 

@@ -72,7 +72,7 @@ import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
-  MissionConnection as MissionConnectionRecord,
+  MissionConnectionRecord,
   MissionRecord,
   MissionTokenRecord,
   ResourceScope,
@@ -551,9 +551,9 @@ export interface MissionOverview {
    * The public part of the reader's own active token of this mission; `null`
    * when they have none (a member who has not generated theirs, a revoked token).
    */
-  readonly token: { readonly prefix: string; readonly createdAt: string } | null;
+  readonly token: { readonly prefix: string; readonly created_at: string } | null;
   /** The client that issued it by delegation; `null` for a mission issued in the interface. */
-  readonly issuedVia: MissionIssuer | null;
+  readonly issued_via: MissionIssuer | null;
 }
 
 export interface MissionDetailConnection {
@@ -1943,8 +1943,8 @@ export class MissionService {
         cause: part.cause,
         final: isFinalLoss(part.cause),
       })),
-      token: token ? { prefix: token.prefix, createdAt: token.createdAt } : null,
-      issuedVia,
+      token: token ? { prefix: token.prefix, created_at: token.createdAt } : null,
+      issued_via: issuedVia,
     };
   }
 

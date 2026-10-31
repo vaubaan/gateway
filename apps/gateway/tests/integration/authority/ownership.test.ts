@@ -187,7 +187,7 @@ describe('ownership: transfer, unowned, operator reassignment', () => {
 
     // The operator sees it and names a new owner.
     const ownerless = await rig.root.connections.service.listOwnerless();
-    expect(ownerless.map((v) => [v.connection.id, v.ownerLabel])).toEqual([
+    expect(ownerless.map((v) => [v.connection.id, v.owner_label])).toEqual([
       [unowned.id, 'group depot-admins'],
     ]);
     const reassigned = await rig.root.connections.service.reassign(rig.operator.id, unowned.id, {

@@ -238,7 +238,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
         orphan: null,
         lost: [],
         token: null,
-        issuedVia:
+        issued_via:
           delegationId === null
             ? null
             : { delegation_id: delegationId, client_id: clientId, client_name: 'Agent' },
@@ -361,7 +361,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
       creator: { id: 'user-ada', email: 'ada@example.com' },
       orphan: null,
       token: null,
-      issuedVia: {
+      issued_via: {
         delegation_id: ACTOR.delegationId,
         client_id: ACTOR.clientId,
         client_name: 'Agent',
@@ -571,7 +571,7 @@ describe('views', () => {
         orphan: { cause, connection_id: 'conn-acme', uncovered: ['acme.read'] },
         lost: [],
         token: null,
-        issuedVia: null,
+        issued_via: null,
       }) as unknown as MissionOverview;
     const causes = [
       'creator-removed',
@@ -771,8 +771,8 @@ describe('views', () => {
       state: { kind: 'orphaned' },
       orphan: { cause: 'connection-revoked', connection_id: 'conn-acme', uncovered: [] },
       lost: [{ connection_id: 'conn-acme', cause: 'connection-revoked', final: true }],
-      token: { prefix: 'AbCd1234', createdAt: NOW.toISOString() },
-      issuedVia: { delegation_id: 'delegation-2', client_id: 'other', client_name: 'Other agent' },
+      token: { prefix: 'AbCd1234', created_at: NOW.toISOString() },
+      issued_via: { delegation_id: 'delegation-2', client_id: 'other', client_name: 'Other agent' },
     } as MissionOverview;
     const view = missionView(overview, ACTOR, (prefix) => `masked:${prefix}`);
     expect(view).toMatchObject({

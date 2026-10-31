@@ -507,9 +507,9 @@ export function AccountView({
   // account is listed. The note of the act itself says it once; it is not said twice.
   const grant = revoked
     ? providerGrantReport(
-        detail.providerLabel,
+        detail.provider_label,
         connection.providerGrant,
-        detail.providerGrant.byHand,
+        detail.provider_grant.byHand,
       )
     : null;
   const grantSaid =
@@ -682,7 +682,7 @@ export function AccountView({
   const moreResources = resources.slice(shown);
 
   const lede = [
-    detail.providerLabel,
+    detail.provider_label,
     ownedBy({
       team: holders.owner.kind === 'group',
       name: holders.owner.name,
@@ -692,15 +692,15 @@ export function AccountView({
     `connected ${shortDate(connection.createdAt, now)}`,
     !revoked && detail.discovery ? `checked ${agoWords(detail.discovery.at, now)}` : null,
     // A pasted token's expiry is said ahead of it, on the first line of the page.
-    !revoked && detail.tokenExpiresAt ? expiresOn(detail.tokenExpiresAt, now) : null,
+    !revoked && detail.token_expires_at ? expiresOn(detail.token_expires_at, now) : null,
   ]
     .filter(Boolean)
     .join(' · ');
   const tokenExpiresSoon =
     !revoked &&
     connection.status !== 'expired' &&
-    detail.tokenExpiresAt !== null &&
-    Date.parse(detail.tokenExpiresAt) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * DAY_MS;
+    detail.token_expires_at !== null &&
+    Date.parse(detail.token_expires_at) - now.getTime() <= TOKEN_EXPIRY_NOTICE_DAYS * DAY_MS;
 
   const details = <DetailToggle key="details" />;
   const reconnect = (
@@ -718,7 +718,7 @@ export function AccountView({
           { label: PAGES.accounts.title, href: ROUTES.accounts },
           { label: connection.displayName },
         ]}
-        mark={<ServiceMark name={detail.providerLabel} icon={detail.providerIcon} size="lg" />}
+        mark={<ServiceMark name={detail.provider_label} icon={detail.provider_icon} size="lg" />}
         title={connection.displayName}
         status={
           ACCOUNT_STATES[connection.status].tone !== null || revoked ? (
@@ -745,10 +745,10 @@ export function AccountView({
         (detail.discovery && !detail.discovery.ok && !revoked)) && (
         <div className={styles.notes}>
           {note}
-          {tokenExpiresSoon && detail.tokenExpiresAt && (
+          {tokenExpiresSoon && detail.token_expires_at && (
             <Callout
               tone="warn"
-              title={TOKEN_CONNECT.expiresSoonTitle(shortDate(detail.tokenExpiresAt, now))}
+              title={TOKEN_CONNECT.expiresSoonTitle(shortDate(detail.token_expires_at, now))}
               testId="token-expires-soon"
             >
               {TOKEN_CONNECT.expiresSoonBody}
@@ -756,18 +756,18 @@ export function AccountView({
           )}
           {connection.status === 'expired' && (
             <Callout tone="bad" title="This account needs reconnecting" testId="account-expired">
-              {detail.providerLabel} rejected the stored credential and it could not be renewed.
+              {detail.provider_label} rejected the stored credential and it could not be renewed.
               Every call of the missions that use this account is refused until an owner reconnects
               it.
             </Callout>
           )}
-          {detail.wayRetired && !revoked && (
+          {detail.way_retired && !revoked && (
             <Callout
               tone="bad"
               title="This account needs reconnecting"
               testId="account-way-retired"
             >
-              It was connected a way {detail.providerLabel} no longer offers on this gateway. Every
+              It was connected a way {detail.provider_label} no longer offers on this gateway. Every
               call of the missions that use it is refused until an owner reconnects it; reconnecting
               keeps the account, its resources and who has access.
             </Callout>
@@ -805,7 +805,7 @@ export function AccountView({
           )}
           {detail.discovery && !detail.discovery.ok && !revoked && (
             <Callout tone="warn" title="The last check failed" testId="check-failed">
-              {detail.discovery.error ?? `${detail.providerLabel} gave no reason.`} What was found
+              {detail.discovery.error ?? `${detail.provider_label} gave no reason.`} What was found
               before is kept.
             </Callout>
           )}
@@ -820,7 +820,7 @@ export function AccountView({
                 term: capitalize(TERMS.provider.one),
                 value: (
                   <>
-                    {detail.providerLabel} ·{' '}
+                    {detail.provider_label} ·{' '}
                     <Link href={providerPath(connection.provider)} className={shared.reveal}>
                       what an agent can do on it
                     </Link>{' '}
@@ -830,17 +830,17 @@ export function AccountView({
               },
               {
                 term: 'Credential',
-                value: `${credentialKindLabel(detail.credentialKind, detail.wayRetired)} · encrypted at rest, never shown`,
+                value: `${credentialKindLabel(detail.credential_kind, detail.way_retired)} · encrypted at rest, never shown`,
               },
-              ...(detail.credentialKind === 'api-key' &&
-              (detail.tokenAccount || detail.tokenExpiresAt)
+              ...(detail.credential_kind === 'api-key' &&
+              (detail.token_account || detail.token_expires_at)
                 ? [
                     {
                       term: TOKEN_CONNECT.tokenFacts,
                       value: [
-                        detail.tokenAccount ? TOKEN_CONNECT.actsAs(detail.tokenAccount) : null,
-                        detail.tokenExpiresAt
-                          ? expiresOn(detail.tokenExpiresAt, now)
+                        detail.token_account ? TOKEN_CONNECT.actsAs(detail.token_account) : null,
+                        detail.token_expires_at
+                          ? expiresOn(detail.token_expires_at, now)
                           : TOKEN_CONNECT.tokenNoExpiry,
                       ]
                         .filter(Boolean)
@@ -848,11 +848,11 @@ export function AccountView({
                     },
                   ]
                 : []),
-              ...(detail.oauthBroker
+              ...(detail.oauth_broker
                 ? [
                     {
                       term: 'OAuth broker',
-                      value: oauthBrokerFact(detail.oauthBroker),
+                      value: oauthBrokerFact(detail.oauth_broker),
                     },
                   ]
                 : []),
@@ -879,11 +879,11 @@ export function AccountView({
         </div>
       </DetailOnly>
 
-      {detail.publicKey && !revoked && (
+      {detail.public_key && !revoked && (
         <Section title="Public key to install" first>
           <div className={styles.key}>
             <CodeBlock label="Public key" wrap>
-              {detail.publicKey}
+              {detail.public_key}
             </CodeBlock>
           </div>
           <Hint>
@@ -899,7 +899,7 @@ export function AccountView({
         count={accessRows.length}
         note={`${ACCOUNT_PAGES.whoHasAccess} Owners hold all ${count(total, TERMS.risk)} and can give access.`}
         id={ACCESS_ANCHOR}
-        first={!(detail.publicKey && !revoked)}
+        first={!(detail.public_key && !revoked)}
         testId="who-has-access"
       >
         <DataTable
@@ -988,18 +988,18 @@ export function AccountView({
         }
         testId="account-resources"
       >
-        {!revoked && detail.defaultEnvChoices.length > 0 && (
+        {!revoked && detail.default_env_choices.length > 0 && (
           <DefaultEnvForm
             action={`${base}/default-env`}
             current={connection.defaultEnv}
-            choices={detail.defaultEnvChoices}
+            choices={detail.default_env_choices}
           />
         )}
         {resources.length === 0 ? (
           <Hint>
             Nothing found yet.
             {!revoked &&
-              ` Use “${ACCOUNT_ACTIONS.refresh}” once ${detail.providerLabel} is reachable.`}
+              ` Use “${ACCOUNT_ACTIONS.refresh}” once ${detail.provider_label} is reachable.`}
           </Hint>
         ) : (
           <>
@@ -1076,7 +1076,7 @@ export function AccountView({
             action={`${base}/revoke`}
             name={connection.displayName}
             running={running.length}
-            atProvider={providerGrantForecast(detail.providerLabel, detail.providerGrant)}
+            atProvider={providerGrantForecast(detail.provider_label, detail.provider_grant)}
           />
         </div>
       )}
@@ -1092,7 +1092,7 @@ function agoWords(iso: string, now: Date): string {
 }
 
 /** Which broker a brokered account renews through, and whether the gateway checks the code it runs. */
-function oauthBrokerFact(broker: NonNullable<ConnectionDetail['oauthBroker']>): string {
+function oauthBrokerFact(broker: NonNullable<ConnectionDetail['oauth_broker']>): string {
   if (broker.attested === null) return `${broker.name} · no longer configured`;
   return broker.attested
     ? `${broker.name} · attested: the gateway checks the code it runs before each use`

@@ -12,10 +12,10 @@
  * the staleness of a resource (`isStale`). A connection's own shapes are translated by
  * `connections/mapping.ts`.
  *
- * Naming: the store calls its camelCase policy entry `MissionPolicyEntry` and its
- * selection `MissionConnection`, exactly like the shared and gateway-core domain types.
- * The store's names are a contract of the store module, so they are aliased here
- * (`…Record`) rather than renamed.
+ * Naming: the store calls its camelCase policy entry `MissionPolicyEntry`, exactly
+ * like the shared domain type; it is aliased here (`…Record`) rather than renamed.
+ * Its selection is `MissionConnectionRecord`, apart from gateway-core's
+ * `MissionConnection`.
  */
 
 import type {

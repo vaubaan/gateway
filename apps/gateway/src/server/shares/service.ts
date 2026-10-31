@@ -232,7 +232,7 @@ export class ShareService {
     );
     return {
       connection,
-      providerLabel: detail.providerLabel,
+      providerLabel: detail.provider_label,
       risks: registered ? enumerateCatalog(registered.plugin.catalog) : [],
       groups: await this.deps.store.groups.list(),
       labelling: labellingOf(detail.resources, typeof registered?.plugin.envOf === 'function'),

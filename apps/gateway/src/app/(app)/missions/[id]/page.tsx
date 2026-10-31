@@ -127,7 +127,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
   const { root, user } = session;
   const detail = await root.missions.service.get(user, id);
   if (!detail) notFound();
-  const { mission, state, orphan, issuedVia } = detail;
+  const { mission, state, orphan, issued_via: issuedVia } = detail;
   const isCreator = detail.role === 'creator';
   const query = await searchParams;
   const editingLimits = isCreator && detail.limits_editable && query.edit === EDIT_LIMITS;
