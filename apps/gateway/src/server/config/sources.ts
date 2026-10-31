@@ -176,6 +176,14 @@ const KEY_TABLE = [
     format: 'enum',
     oneOf: CLIENT_IP_HEADERS,
   },
+  // In production a source of client addresses is required (one of the two keys above);
+  // this says the operator accepts address windows shared by every caller instead.
+  {
+    path: 'accept_shared_address_windows',
+    env: 'VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS',
+    kind: 'bool',
+    default: false,
+  },
   { path: 'store.path', env: 'VAUBAAN_STORE_PATH', kind: 'string', required: 'always' },
   // A presigned URL is a credential: `restore.from` is a secret (see
   // docs/handbook/store.md).

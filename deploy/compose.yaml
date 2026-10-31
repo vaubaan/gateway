@@ -44,6 +44,13 @@ services:
       # 2026-10-31). Back the two volumes up separately; keep the key's copy
       # off the host too (the setup hands it to you).
       VAUBAAN_MASTER_KEY_FILE: /keys/master.key
+      # The one proxy whose X-Forwarded-For is believed: Caddy, at its fixed
+      # address below. Never a whole Docker pool: every container on it could
+      # then pick the address it is limited and audited under. A value in
+      # deploy/config/.env wins (another proxy in front of Caddy, say).
+      VAUBAAN_TRUSTED_PROXIES: ${VAUBAAN_TRUSTED_PROXIES:-172.30.253.2}
+    networks:
+      - edge
     volumes:
       - gateway-data:/data
       - gateway-key:/keys
@@ -67,6 +74,10 @@ services:
     # Caddy obtains and renews the certificate for it (ports 80/443 reachable).
     environment:
       GATEWAY_DOMAIN: ${GATEWAY_DOMAIN:?set GATEWAY_DOMAIN in deploy/config/.env and pass --env-file deploy/config/.env}
+    networks:
+      edge:
+        # Fixed, so the gateway can trust this address alone (VAUBAAN_TRUSTED_PROXIES).
+        ipv4_address: 172.30.253.2
     ports:
       - '80:80'
       - '443:443'
@@ -74,6 +85,14 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+
+networks:
+  # The proxy and the gateway, nothing else. If the subnet is taken on the
+  # host, change it here and the two addresses above together.
+  edge:
+    ipam:
+      config:
+        - subnet: 172.30.253.0/29
 
 volumes:
   gateway-data:

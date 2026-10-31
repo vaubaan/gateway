@@ -59,7 +59,13 @@ describe.skipIf(!hasBundle)('the importer runs from the standalone output', () =
   function run(args: string[], input: string) {
     return spawnSync(process.execPath, [bundlePath, ...args], {
       cwd: standaloneApp,
-      env: { PATH: process.env.PATH ?? '', NODE_ENV: 'production', ...env },
+      // The image's environment: production, where a source of client addresses is required.
+      env: {
+        PATH: process.env.PATH ?? '',
+        NODE_ENV: 'production',
+        VAUBAAN_TRUSTED_PROXIES: '127.0.0.1',
+        ...env,
+      },
       input,
       encoding: 'utf8',
       timeout: 60_000,

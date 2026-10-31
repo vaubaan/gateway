@@ -26,6 +26,38 @@ function paths(err: ConfigError): string[] {
   return err.issues.map((i) => i.path);
 }
 
+describe('loadInstanceConfig — a source of client addresses in production', () => {
+  const production = (overrides: Record<string, string> = {}) =>
+    validEnv({ NODE_ENV: 'production', ...overrides });
+
+  it('refuses to start in production with neither trusted_proxies nor client_ip_header', () => {
+    const err = failure(production());
+    expect(paths(err)).toEqual(['trusted_proxies']);
+    const [issue] = err.issues;
+    expect(issue?.env).toEqual([
+      'VAUBAAN_TRUSTED_PROXIES',
+      'VAUBAAN_CLIENT_IP_HEADER',
+      'VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS',
+    ]);
+  });
+
+  it('starts with either source, or with the shared windows accepted', () => {
+    const sources: Record<string, string>[] = [
+      { VAUBAAN_TRUSTED_PROXIES: '172.30.253.2' },
+      { VAUBAAN_CLIENT_IP_HEADER: 'x-real-ip' },
+      { VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS: '1' },
+    ];
+    for (const env of sources) {
+      expect(() => loadInstanceConfig({ env: production(env) })).not.toThrow();
+    }
+  });
+
+  it('asks nothing outside production (the demo, the tests, a developer)', () => {
+    expect(() => loadInstanceConfig({ env: validEnv() })).not.toThrow();
+    expect(() => loadInstanceConfig({ env: validEnv({ NODE_ENV: 'development' }) })).not.toThrow();
+  });
+});
+
 describe('loadInstanceConfig — required keys', () => {
   it('loads the minimal environment-only configuration with defaults', () => {
     const { config, configFile } = loadInstanceConfig({ env: validEnv() });

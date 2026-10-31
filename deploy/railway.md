@@ -54,10 +54,14 @@ providers from the interface.
 address only from `X-Forwarded-For` written by a declared proxy. Railway
 documents `X-Real-IP` instead and publishes no address range for its edge, so
 there is nothing safe to declare: confidence that Railway's edge can be
-declared is low until a deployment shows what reaches the process. Unset, the
-per-address limits are one window shared by everybody and the audit records
-no client address; the gateway says so in one warning at boot (accepted risk
-A2 of the [threat model](../docs/handbook/threat-model.md)). Never set
+declared is low until a deployment shows what reaches the process. The image
+runs with `NODE_ENV=production`, where the gateway refuses to start without a
+source of client addresses: set `VAUBAAN_CLIENT_IP_HEADER=x-real-ip` once
+verified (below), and until then `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1`.
+With the latter the per-address limits are one window shared by everybody and
+the audit records no client address; the gateway says so in one warning at
+boot (accepted risk A2 of the
+[threat model](../docs/handbook/threat-model.md)). Never set
 `0.0.0.0/0`: any client could then choose the address it is limited and
 audited under.
 

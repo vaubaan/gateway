@@ -3,7 +3,8 @@
 #
 #   deploy/docker/smoke.sh <image>
 #
-# 1. incomplete configuration  -> the container exits 78 (EX_CONFIG) and names the key
+# 1. incomplete configuration  -> the container exits 78 (EX_CONFIG) and names the key, a source of
+#                                 client addresses among them (NODE_ENV=production)
 # 2. http public URL           -> same, naming public_url
 # 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged,
 #                                 run hardened as deploy/compose.yaml runs it: read-only root,
@@ -83,6 +84,8 @@ set -e
 echo "$out" | grep -q 'encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)' \
   || fail "exit message does not name VAUBAAN_MASTER_KEY:\n$out"
 echo "$out" | grep -q 'store.path: missing required key' || fail "exit message does not name store.path"
+echo "$out" | grep -q 'trusted_proxies: a source of client addresses is required in production' \
+  || fail "exit message does not ask for a source of client addresses:\n$out"
 echo "$out" | grep -q 'bootstrap_token: missing required key' || fail "exit message does not name bootstrap_token"
 pass "incomplete configuration exits $code naming the missing keys"
 
@@ -108,6 +111,7 @@ docker run -d --name "$NAME" -p "127.0.0.1:${PORT}:3000" \
   --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp \
   -v "$DATA_VOLUME:/data" \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+  -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1 \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
@@ -225,6 +229,7 @@ docker run --rm --user 0 --entrypoint sh -v "$VOLUME:/data" "$IMAGE" \
   -c 'chown -R 0:0 /data && touch /data/left-by-root && ln -s /usr/local/bin/vaubaan-entrypoint /data/planted-link' >/dev/null
 docker run -d --name "$ROOT_NAME" --user 0 -v "$VOLUME:/data" \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+  -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1 \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
@@ -338,6 +343,7 @@ pass "restore ships, refuses root, checks a copy as 10001, never replaces a live
 docker volume create "$RESTORE_VOLUME" >/dev/null
 restore_env=(
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com
+  -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1
   -e VAUBAAN_STORE_PATH=/data/gateway.db
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY"
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com
