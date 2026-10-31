@@ -39,11 +39,10 @@ export type KeyKind = 'string' | 'secret' | 'list' | 'int' | 'bool' | 'secret-ma
 export type KeyFormat = 'url' | 'duration' | 'enum';
 
 /**
- * When a key must be set: always, once the `idp` block exists (`with-idp`), or as
- * long as the configuration sets no sign-in provider at all — neither `idp.*` nor
- * any `sign_in.<id>.*` (`without-idp`).
+ * When a key must be set: always, or as long as the configuration sets no sign-in
+ * provider (`sign_in.<id>.*`) at all (`without-sign-in`).
  */
-export type KeyRequirement = 'always' | 'with-idp' | 'without-idp';
+export type KeyRequirement = 'always' | 'without-sign-in';
 
 export interface KeySpec {
   readonly path: string;
@@ -227,38 +226,13 @@ const KEY_TABLE = [
     kind: 'bool',
     default: false,
   },
-  {
-    path: 'idp.issuer',
-    env: 'VAUBAAN_IDP_ISSUER',
-    kind: 'string',
-    format: 'url',
-    required: 'with-idp',
-    https: true,
-  },
-  { path: 'idp.client_id', env: 'VAUBAAN_IDP_CLIENT_ID', kind: 'string', required: 'with-idp' },
-  {
-    path: 'idp.client_secret',
-    env: 'VAUBAAN_IDP_CLIENT_SECRET',
-    kind: 'secret',
-    required: 'with-idp',
-  },
-  { path: 'idp.claims.sub', env: 'VAUBAAN_IDP_CLAIM_SUB', kind: 'string', default: 'sub' },
-  { path: 'idp.claims.email', env: 'VAUBAAN_IDP_CLAIM_EMAIL', kind: 'string', default: 'email' },
-  { path: 'idp.claims.groups', env: 'VAUBAAN_IDP_CLAIM_GROUPS', kind: 'string', default: 'groups' },
-  { path: 'idp.allowed_email_domains', env: 'VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS', kind: 'list' },
-  {
-    path: 'idp.invitation_only',
-    env: 'VAUBAAN_IDP_INVITATION_ONLY',
-    kind: 'bool',
-    default: false,
-  },
   { path: 'admin.group', env: 'VAUBAAN_ADMIN_GROUP', kind: 'string' },
   { path: 'admin.emails', env: 'VAUBAAN_ADMIN_EMAILS', kind: 'list' },
   {
     path: 'bootstrap_token',
     env: 'VAUBAAN_BOOTSTRAP_TOKEN',
     kind: 'secret',
-    required: 'without-idp',
+    required: 'without-sign-in',
     minLength: 32,
   },
   // Mail delivery (ADR local-accounts-sign-in-provider, D6): the relay through which the
@@ -469,17 +443,15 @@ export function keySpec<P extends KeyPath>(path: P): Extract<KeyEntry, { readonl
 }
 
 /**
- * Whether a key must be set. `idpConfigured` says whether the `idp` block
- * exists; it only matters to the keys whose requirement depends on it.
+ * Whether a key must be set. `signInConfigured` says whether the configuration sets
+ * a sign-in provider; it only matters to the keys whose requirement depends on it.
  */
-export function isKeyRequired(spec: KeySpec, idpConfigured?: boolean): boolean {
+export function isKeyRequired(spec: KeySpec, signInConfigured?: boolean): boolean {
   switch (spec.required) {
     case 'always':
       return true;
-    case 'with-idp':
-      return idpConfigured === true;
-    case 'without-idp':
-      return idpConfigured === false;
+    case 'without-sign-in':
+      return signInConfigured === false;
     case undefined:
       return false;
   }
@@ -563,6 +535,14 @@ function namedFieldOf(
 export function namedBlockEnvName(block: NamedBlock, name: string, suffix: string): string {
   return `${block.prefix}${name.toUpperCase().replace(/-/g, '_')}_${suffix}`;
 }
+
+/**
+ * The single-provider keys of earlier builds (`idp.*`, `VAUBAAN_IDP_*`): retired, and
+ * refused rather than ignored — ignoring them would leave the instance without the
+ * provider people sign in with. They are written as `sign_in.idp.*` now.
+ */
+export const RETIRED_IDP_KEY = 'idp';
+export const RETIRED_IDP_ENV_PREFIX = 'VAUBAAN_IDP_';
 
 /** The top-level key of the retired per-provider OAuth clients (`providers.<id>.<field>`). */
 export const RETIRED_PROVIDERS_KEY = 'providers';

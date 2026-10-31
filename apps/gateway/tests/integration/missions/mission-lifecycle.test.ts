@@ -496,7 +496,7 @@ describe('missions: issue, rotate, revoke', () => {
   });
 
   it('lets a member of the owner group issue, and stops when they leave it', async () => {
-    const group = await root.store.groups.getOrCreate('github-admins', 'local');
+    const group = await root.store.groups.getOrCreate('github-admins', 'local', null);
     await root.store.groups.addMember(group.id, seeded.bob.id);
     await root.store.connections.transferOwner(seeded.github.connection.id, {
       kind: 'group',

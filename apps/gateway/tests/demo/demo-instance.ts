@@ -130,14 +130,19 @@ function demoConfig(origin: string, storePath: string, idp: DemoIdp) {
       config: {
         ...loaded.config,
         publicUrl: new URL(origin),
-        idp: {
-          issuer: idp.publicIssuer,
-          clientId: idp.clientId,
-          clientSecret: idp.clientSecret,
-          claims: { sub: 'sub', email: 'email', groups: 'groups' },
-          allowedEmailDomains: [],
-          invitationOnly: false,
-        },
+        signIn: [
+          {
+            kind: 'oidc',
+            id: 'idp',
+            name: idp.publicIssuer.hostname,
+            issuer: idp.publicIssuer,
+            clientId: idp.clientId,
+            clientSecret: idp.clientSecret,
+            claims: { sub: 'sub', email: 'email', groups: 'groups' },
+            allowedEmailDomains: [],
+            invitationOnly: false,
+          },
+        ],
       },
     };
   };

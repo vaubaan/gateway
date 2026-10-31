@@ -55,7 +55,6 @@ export {
   type EncryptionConfig,
   type EncryptionKeys,
   type IdpClaimMapping,
-  type IdpConfig,
   type InstanceConfig,
   type LimitsConfig,
   type LogLevel,

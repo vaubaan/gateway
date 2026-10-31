@@ -177,7 +177,7 @@ describe('requests: exhaust and claim over HTTP', () => {
 
   it('a co-owner of the connection is not the creator', async () => {
     const claim = await exhaust();
-    const group = await root.store.groups.getOrCreate('platform', 'idp');
+    const group = await root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await root.store.groups.addMember(group.id, seeded.ada.id);
     await root.store.groups.addMember(group.id, seeded.bob.id);
     await root.store.connections.transferOwner(seeded.github.connection.id, {

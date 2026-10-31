@@ -120,33 +120,9 @@
 #   previous_keys:
 #     1: ${file:/run/secrets/vaubaan_master_key_v1}
 
-# OpenID Connect provider (spec D2). Optional at first boot: until it is set,
-# the operator signs in with bootstrap_token. Once present, issuer (https),
-# client_id and client_secret are required and bootstrap_token becomes
-# optional; claims and allowed_email_domains keep their defaults.
-# idp:
-#   # env: VAUBAAN_IDP_ISSUER
-#   issuer: https://login.example.com/realms/acme
-#   # env: VAUBAAN_IDP_CLIENT_ID
-#   client_id: vaubaan-gateway
-#   # env: VAUBAAN_IDP_CLIENT_SECRET or VAUBAAN_IDP_CLIENT_SECRET_FILE
-#   client_secret: ${VAUBAAN_IDP_CLIENT_SECRET}
-#   # Claim names in the ID token / userinfo. Defaults shown.
-#   # env: VAUBAAN_IDP_CLAIM_SUB, VAUBAAN_IDP_CLAIM_EMAIL, VAUBAAN_IDP_CLAIM_GROUPS
-#   claims:
-#     sub: sub
-#     email: email
-#     groups: groups
-#   # Only users whose email domain is listed (or who are invited) may sign
-#   # in. Default: everyone the directory signs in — refused for an issuer
-#   # where anyone can open an account (personal Google or Microsoft).
-#   # env: VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS (comma-separated)
-#   allowed_email_domains:
-#     - example.com
-#   # Admit invited addresses (Settings → People) and the admin emails only,
-#   # instead of domains. Default false.
-#   # env: VAUBAAN_IDP_INVITATION_ONLY
-#   invitation_only: false
+# The single-provider block `idp:` of earlier builds is refused: write that
+# provider as `sign_in.idp` (kind oidc) under `sign_in:` below, and register its
+# callback <public_url>/auth/callback/idp at the identity provider.
 
 # OAuth brokers this instance is enrolled with, keyed by a name of your choice.
 # A broker owns an OAuth client at a provider that offers no key a person can

@@ -18,6 +18,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { createAuditModule, type AuditModule } from '../audit';
 import { createBackupModule, type BackupService, type BackupTimers } from '../backup';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
+import { upgradeSingleProviderSettings } from '../auth/single-provider-upgrade';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
@@ -278,7 +279,6 @@ function logConfigurationSummary(
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
     instance_name: config.instanceName ?? 'not set (Administration decides; the host by default)',
-    idp: config.idp ? config.idp.issuer.origin : 'not configured',
     sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
     admin_rule:
       config.admin.group === null && config.admin.emails.length === 0
@@ -441,6 +441,14 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
           instanceLabel: config.instanceName ?? config.publicUrl.host,
         })
       : undefined);
+  // Before anything reads the sign-in providers: the `idp.*` settings of earlier builds
+  // become the saved provider `idp` (a no-op once done).
+  await upgradeSingleProviderSettings({
+    store,
+    configured: config.signIn,
+    logger,
+    now: () => (deps.clock ?? { now: () => new Date() }).now(),
+  });
   const auth = createAuthModule({
     clock: deps.clock,
     mailer,

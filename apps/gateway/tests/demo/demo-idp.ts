@@ -10,7 +10,7 @@
  *   GET  /__demo/idp/userinfo
  *
  * The gateway's relying party discovers it and exchanges codes with it over
- * HTTP like any other IdP, so `/login`, the redirect and `/auth/callback` run
+ * HTTP like any other IdP, so `/login`, the redirect and `/auth/callback/idp` run
  * exactly as they do against Okta or Keycloak. The only thing that is not an
  * IdP's is the authorize page: no password, three accounts to pick from.
  *

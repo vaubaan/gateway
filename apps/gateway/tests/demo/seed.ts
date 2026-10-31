@@ -148,7 +148,7 @@ class Seeder {
     this.origin = ctx.root.config.publicUrl.href.replace(/\/$/, '');
   }
 
-  /** The real sign-in: `/auth/login`, the IdP's consent for `person`, `/auth/callback`. */
+  /** The real sign-in: `/auth/login`, the IdP's consent for `person`, `/auth/callback/idp`. */
   async signIn(person: DemoPerson): Promise<SignedIn> {
     const { handlers, authenticator } = this.ctx.root.auth;
     const started = await handlers.loginStart(
@@ -160,6 +160,7 @@ class Seeder {
     const callback = this.ctx.idp.consent(new URL(authorization), person);
     let finished = await handlers.loginCallback(
       new Request(callback, { headers: { cookie: pending } }),
+      'idp',
     );
     if (isSecondFactorStep(finished)) {
       // An administrator gives the gateway's own second factor, as their app would.

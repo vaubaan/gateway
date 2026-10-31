@@ -103,17 +103,15 @@ describe('administrators', () => {
     expect(resolveGroupDesignation(groupRow('acme/admins', 'github'), ['company'])).toBeNull();
   });
 
-  it('keeps a legacy group name with a colon for the single provider idp', () => {
-    expect(resolveGroupDesignation(groupRow('eng:admins'), ['idp'])).toEqual({
+  it('reads a group name with a colon only when written with its provider', () => {
+    expect(resolveGroupDesignation(groupRow('eng:admins'), ['idp'])).toBeNull();
+    expect(resolveGroupDesignation(groupRow('idp:eng:admins'), ['idp'])).toEqual({
       provider: 'idp',
       name: 'eng:admins',
     });
   });
 
-  it('with no provider configured, reads a bare group for the provider idp', () => {
-    expect(resolveGroupDesignation(groupRow('gateway-admins'), [])).toEqual({
-      provider: 'idp',
-      name: 'gateway-admins',
-    });
+  it('with no provider configured, a bare group names nobody', () => {
+    expect(resolveGroupDesignation(groupRow('gateway-admins'), [])).toBeNull();
   });
 });

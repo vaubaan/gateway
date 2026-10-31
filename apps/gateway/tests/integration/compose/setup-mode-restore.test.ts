@@ -63,7 +63,7 @@ describe('setup mode: the setup receives the key for a restore', () => {
         .config.encryption,
     );
     const old = openStore({ path: source, encryptor, catalog: new SetCatalogIndex([]) });
-    await old.config.setSecret('idp.client_secret', SECRET);
+    await old.config.setSecret('sign_in.company.client_secret', SECRET);
     await old.close();
     backup = join(dir, 'old', 'backup.sqlite');
     const db = openReadonlyDb(source);
@@ -252,7 +252,9 @@ describe('setup mode: the setup receives the key for a restore', () => {
 
     const root = await getRoot();
     expect(root.store.kind).toBe('sqlite');
-    await expect(root.store.config.getSecret('idp.client_secret')).resolves.toBe(SECRET);
+    await expect(root.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
+      SECRET,
+    );
     expect((await root.masterKey.service.state()).generatedAt).toBeNull();
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store restored"');

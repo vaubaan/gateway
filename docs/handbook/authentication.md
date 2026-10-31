@@ -94,8 +94,11 @@ navigate`, a page left open past its session): 303 to `/login?return_to=<the ref
 
 ## Outside the repo
 
-- Each provider's callback, `<public_url>/auth/callback/<id>` (`idp`:
-  `/auth/callback`), is registered at the IdP, per public URL.
+- Each provider's callback, `<public_url>/auth/callback/<id>`, is registered at
+  the IdP, per public URL. The provider `idp` of earlier builds (`idp.*`, then
+  `/auth/callback`) is an ordinary provider since 2026-10-31: its stored settings
+  are moved at boot (`auth/single-provider-upgrade.ts`), its callback is
+  `/auth/callback/idp`.
 
 ## Procedures
 

@@ -26,6 +26,7 @@ import {
 import { pkcePair, type PkcePair } from '../../../src/server/oauth-as/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
+import { saveTestOidcProvider } from '../../../src/server/auth/testing';
 
 export const PUBLIC_URL = 'https://gateway.example.com';
 export const MANAGEMENT_URL = `${PUBLIC_URL}/mcp/manage`;
@@ -43,7 +44,7 @@ export const OPS = { sub: 'idp|ops', email: OPERATOR_EMAIL, name: 'Ops' } as con
 type Handler = (root: GatewayRoot, request: Request, id: string) => Promise<Response>;
 
 export interface Route {
-  /** The path, `:id` standing for one dynamic segment. */
+  /** The path, `:<name>` standing for one dynamic segment. */
   readonly path: string;
   /** The route file under `src/app`. */
   readonly file: string;
@@ -120,10 +121,10 @@ export const ROUTES: readonly Route[] = [
     handle: (root, request) => root.auth.handlers.loginStart(request),
   },
   {
-    path: '/auth/callback',
-    file: 'auth/callback/route.ts',
+    path: '/auth/callback/:provider',
+    file: 'auth/callback/[provider]/route.ts',
     delegatesTo: 'auth.handlers.loginCallback',
-    handle: (root, request) => root.auth.handlers.loginCallback(request),
+    handle: (root, request, id) => root.auth.handlers.loginCallback(request, id),
   },
   {
     path: '/settings/connected-apps/:id/revoke',
@@ -145,7 +146,7 @@ function match(route: Route, pathname: string): string | null {
   if (pattern.length !== actual.length) return null;
   let id = '';
   for (let i = 0; i < pattern.length; i += 1) {
-    if (pattern[i] === ':id') id = decodeURIComponent(actual[i] ?? '');
+    if (pattern[i]?.startsWith(':')) id = decodeURIComponent(actual[i] ?? '');
     else if (pattern[i] !== actual[i]) return null;
   }
   return id;
@@ -190,7 +191,7 @@ export async function openInstance(options: InstanceOptions = {}): Promise<Insta
     ...options.deps,
   });
   if (!options.withoutIdp) {
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: IDP_CLIENT.clientId,
       clientSecret: IDP_CLIENT.clientSecret,

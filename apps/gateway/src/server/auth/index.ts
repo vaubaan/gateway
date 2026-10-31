@@ -20,7 +20,6 @@ import { BootstrapService } from './bootstrap';
 import { createAuthHandlers, type AuthHandlers } from './handlers';
 import { LocalAccountsService } from './local-accounts';
 import { createLocalAuthHandlers, type LinkMailer, type LocalAuthHandlers } from './local-handlers';
-import { IdpSettingsService } from './idp-settings';
 import { createSignInFlows, type SignInFlows } from './sign-in-flows';
 import { SignInProvidersService } from './sign-in-providers';
 import type { LoginDeps } from './login';
@@ -61,8 +60,6 @@ export interface AuthModuleDeps {
 
 export interface AuthModule {
   readonly sessions: SessionService;
-  /** The single-provider settings saved from the interface (the provider `idp`). */
-  readonly idp: IdpSettingsService;
   /** Every sign-in provider: the configuration's and the ones saved in Settings → Sign-in. */
   readonly providers: SignInProvidersService;
   /** Who administers the instance: the designations of the store (ADR administrators-live-in-the-instance). */
@@ -87,9 +84,6 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'auth' });
   const sessions = new SessionService(deps.sessions, clock);
-  const idp = new IdpSettingsService(deps.config.idp, deps.store.config, {
-    allowInsecureIssuer: deps.oidc?.allowInsecureIssuer,
-  });
   const bootstrap = new BootstrapService(deps.config.bootstrapToken, deps.store.config, clock);
   const relyingParties = createRelyingPartyFactory({
     publicUrl: deps.config.publicUrl,
@@ -102,7 +96,6 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
       (await deps.store.administrators.list()).flatMap((d) =>
         d.kind === 'group' && d.provider === null ? [d.groupName] : [],
       ),
-    idp,
     deps.store.config,
     clock,
     {
@@ -218,7 +211,6 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
   return {
     sessions,
     recovery,
-    idp,
     providers,
     administrators,
     secondFactors,
@@ -354,15 +346,8 @@ export {
   statusResponse,
   type AuthHandlers,
 } from './handlers';
-export {
-  DEFAULT_CLAIM_MAPPING,
-  IDP_CONFIG_KEYS,
-  IdpSettingsService,
-  splitList,
-  type EffectiveIdp,
-  type IdpSettingsInput,
-  type IdpSource,
-} from './idp-settings';
+export { DEFAULT_CLAIM_MAPPING } from '../config/sign-in';
+export { splitList } from '../http/form';
 export {
   completeLogin,
   currentAuthority,

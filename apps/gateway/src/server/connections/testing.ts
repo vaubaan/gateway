@@ -354,7 +354,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
       });
       const groups: GroupRecord[] = [];
       for (const name of groupNames) {
-        const group = await test.store.groups.getOrCreate(name, 'idp');
+        const group = await test.store.groups.getOrCreate(name, 'idp', 'idp');
         await test.store.groups.addMember(group.id, user.id);
         groups.push(group);
       }

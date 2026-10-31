@@ -129,7 +129,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
 
     it('authority-lost: the creator dropped from the owner group that grounded the mission', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       const connection = await connect({ kind: 'group', id: group.id });
       const m = await mission(bob, [connection], [READ]);
@@ -156,7 +156,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
 
     it('stays grounded on an expired or an unowned connection: neither removes an authority', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       await store.groups.addMember(group.id, ada.id);
       const connection = await connect({ kind: 'group', id: group.id });
       await share(connection, user(bob), [READ]);
@@ -555,7 +555,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
 
     it('watchCreator follows the missions of that user only, in both directions', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       await store.groups.addMember(group.id, ada.id);
       const connection = await connect({ kind: 'group', id: group.id });
@@ -603,7 +603,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
 
     it('two watches taken before two acts record one mission-restored', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       const connection = await connect({ kind: 'group', id: group.id });
       await store.groups.addMember(group.id, ada.id);
       const m = await mission(bob, [connection], [READ]);
@@ -668,7 +668,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
 
   describe('MembershipSettler.watch', () => {
     it('marks the connections whose owner group emptied unowned and reports what the member lost', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       const owned = await connect({ kind: 'group', id: group.id });
       const adas = await connect(user(ada));
@@ -686,7 +686,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
 
     it('reports the missions a regained membership grounds again', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       await store.groups.addMember(group.id, ada.id);
       const owned = await connect({ kind: 'group', id: group.id });
@@ -703,7 +703,7 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
 
     it('changes nothing while the group keeps another member', async () => {
-      const group = await store.groups.getOrCreate('admins', 'local');
+      const group = await store.groups.getOrCreate('admins', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       await store.groups.addMember(group.id, ada.id);
       const owned = await connect({ kind: 'group', id: group.id });

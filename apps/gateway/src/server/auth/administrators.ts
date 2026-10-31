@@ -20,12 +20,7 @@ import {
   type AuditWriter,
 } from '@vaubaan/gateway-core';
 
-import {
-  issuerKey,
-  LEGACY_PROVIDER_ID,
-  resolveAdminGroup,
-  type AdminGroup,
-} from '../config/sign-in';
+import { issuerKey, resolveAdminGroup, type AdminGroup } from '../config/sign-in';
 import type { AdminRule } from '../config/types';
 import { parseRestoredAdminRule, RESTORED_ADMIN_RULE_KEY } from './restored-admin-rule';
 import type { Logger } from '../logging';
@@ -75,10 +70,7 @@ export function resolveGroupDesignation(
   if (designation.provider === null) {
     // A bare `admin.group` carried over from the configuration: resolved as it always
     // was (the one provider; `<provider>:<group>` for a configured provider).
-    return resolveAdminGroup(
-      designation.groupName,
-      providerIds.length > 0 ? providerIds : [LEGACY_PROVIDER_ID],
-    );
+    return resolveAdminGroup(designation.groupName, providerIds);
   }
   return providerIds.includes(designation.provider)
     ? { provider: designation.provider, name: designation.groupName }

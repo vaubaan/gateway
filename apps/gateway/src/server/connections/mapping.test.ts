@@ -56,7 +56,7 @@ describe('connection mapping', () => {
       subject: 'a',
       email: 'alice@example.com',
     });
-    const group = await t.store.groups.getOrCreate('platform', 'idp');
+    const group = await t.store.groups.getOrCreate('platform', 'idp', 'idp');
 
     expect(await connectionOwnerOf(t.store, { owner: { kind: 'user', id: user.id } })).toEqual({
       kind: 'user',

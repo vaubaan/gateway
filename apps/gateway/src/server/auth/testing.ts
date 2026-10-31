@@ -6,6 +6,7 @@ import type { Store } from '../store';
 import type { ConfigRepo } from '../store/repositories/config';
 import { ENROL_PAGE, SECOND_FACTOR_PAGE } from './local-handlers';
 import type { SessionService } from './session-service';
+import { storedProviderWrites } from './sign-in-providers';
 
 /**
  * Switches a provider saved in Settings on without a test beside the session: the
@@ -22,6 +23,48 @@ export async function switchOnForTests(
     `sign_in_state.${id}`,
     JSON.stringify({ ...current, enabled: true, changed_at: null }),
   );
+}
+
+/** What a test gives of the OpenID Connect provider it signs people in through. */
+export interface TestOidcProvider {
+  readonly issuer: string;
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly claims?: { readonly sub: string; readonly email: string; readonly groups: string };
+  readonly allowedEmailDomains?: readonly string[];
+  readonly invitationOnly?: boolean;
+  /** Default `idp`: its callback is `<public_url>/auth/callback/idp`. */
+  readonly id?: string;
+}
+
+/**
+ * Stores an OpenID Connect provider as Settings would and switches it on — without
+ * the form's checks, so a test needs no reachable issuer; returns its id.
+ */
+export async function saveTestOidcProvider(
+  config: Pick<ConfigRepo, 'apply' | 'set' | 'get'>,
+  provider: TestOidcProvider,
+): Promise<string> {
+  const id = provider.id ?? 'idp';
+  const issuer = new URL(provider.issuer);
+  await config.apply(
+    storedProviderWrites(
+      {
+        kind: 'oidc',
+        id,
+        name: issuer.hostname,
+        issuer,
+        clientId: provider.clientId,
+        clientSecret: provider.clientSecret,
+        claims: provider.claims ?? { sub: 'sub', email: 'email', groups: 'groups' },
+        allowedEmailDomains: provider.allowedEmailDomains ?? [],
+        invitationOnly: provider.invitationOnly ?? false,
+      },
+      new Date().toISOString(),
+    ),
+  );
+  await switchOnForTests(config, id);
+  return id;
 }
 
 /** What `passSecondFactor` drives: the root's step store, factors and handlers. */

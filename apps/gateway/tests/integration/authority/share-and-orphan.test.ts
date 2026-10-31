@@ -184,7 +184,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   });
 
   it('is seen by the door itself when nobody watched: authority is never snapshotted in a mission', async () => {
-    const team = await rig.root.store.groups.getOrCreate('depot-team', 'local');
+    const team = await rig.root.store.groups.getOrCreate('depot-team', 'local', null);
     await rig.root.store.groups.addMember(team.id, rig.bob.id);
     await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
       target: { kind: 'group', groupId: team.id },
@@ -313,7 +313,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     });
 
     it('is detected by the door in both directions without any administrative entry', async () => {
-      const team = await rig.root.store.groups.getOrCreate('depot-team', 'local');
+      const team = await rig.root.store.groups.getOrCreate('depot-team', 'local', null);
       await rig.root.store.groups.addMember(team.id, rig.bob.id);
       await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
         target: { kind: 'group', groupId: team.id },

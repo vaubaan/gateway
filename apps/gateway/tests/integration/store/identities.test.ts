@@ -109,8 +109,8 @@ describe('groups repository', () => {
   afterEach(() => store.close());
 
   it('getOrCreate is idempotent on the name', async () => {
-    const g1 = await store.groups.getOrCreate('github-admins', 'idp');
-    const g2 = await store.groups.getOrCreate('github-admins', 'local');
+    const g1 = await store.groups.getOrCreate('github-admins', 'idp', 'idp');
+    const g2 = await store.groups.getOrCreate('github-admins', 'local', null);
     expect(g2).toEqual(g1);
     expect(g1.source).toBe('idp');
     expect(await store.groups.getByName('github-admins')).toEqual(g1);
@@ -118,7 +118,7 @@ describe('groups repository', () => {
   });
 
   it('replaces membership atomically and reports groups of a user', async () => {
-    const g = await store.groups.getOrCreate('ops', 'idp');
+    const g = await store.groups.getOrCreate('ops', 'idp', 'idp');
     await store.groups.setMembers(g.id, [alice, bob]);
     expect((await store.groups.listMembers(g.id)).map((u) => u.id)).toEqual([alice, bob]);
     await store.groups.setMembers(g.id, [bob]);
@@ -130,10 +130,10 @@ describe('groups repository', () => {
   });
 
   it('removes a user from every group at once, local and IdP-sourced, and says which', async () => {
-    const local = await store.groups.getOrCreate('reviewers', 'local');
+    const local = await store.groups.getOrCreate('reviewers', 'local', null);
     await store.groups.addMember(local.id, alice);
     await store.groups.addMember(local.id, bob);
-    await store.groups.syncIdpMemberships(alice, ['dev']);
+    await store.groups.syncIdpMemberships(alice, ['dev'], 'idp');
     const left = await store.groups.removeAllMemberships(alice);
     expect(left.map((g) => [g.name, g.source])).toEqual([
       ['dev', 'idp'],
@@ -145,7 +145,7 @@ describe('groups repository', () => {
   });
 
   it('adds and removes single members', async () => {
-    const g = await store.groups.getOrCreate('ops', 'local');
+    const g = await store.groups.getOrCreate('ops', 'local', null);
     await store.groups.addMember(g.id, alice);
     await store.groups.addMember(g.id, alice); // idempotent
     expect(await store.groups.memberCount(g.id)).toBe(1);
@@ -155,36 +155,38 @@ describe('groups repository', () => {
   });
 
   it('syncIdpMemberships replaces the IdP memberships of a user and leaves local groups alone', async () => {
-    const local = await store.groups.getOrCreate('reviewers', 'local');
+    const local = await store.groups.getOrCreate('reviewers', 'local', null);
     await store.groups.addMember(local.id, alice);
-    expect(await store.groups.syncIdpMemberships(alice, ['dev', 'ops'])).toEqual({ skipped: [] });
+    expect(await store.groups.syncIdpMemberships(alice, ['dev', 'ops'], 'idp')).toEqual({
+      skipped: [],
+    });
     expect((await store.groups.groupsOf(alice)).map((g) => [g.name, g.source])).toEqual([
       ['dev', 'idp'],
       ['ops', 'idp'],
       ['reviewers', 'local'],
     ]);
-    await store.groups.syncIdpMemberships(alice, ['ops']);
+    await store.groups.syncIdpMemberships(alice, ['ops'], 'idp');
     expect((await store.groups.groupsOf(alice)).map((g) => g.name)).toEqual(['ops', 'reviewers']);
-    await store.groups.syncIdpMemberships(alice, []);
+    await store.groups.syncIdpMemberships(alice, [], 'idp');
     expect((await store.groups.groupsOf(alice)).map((g) => g.name)).toEqual(['reviewers']);
   });
 
   it('syncIdpMemberships skips a name held by a local group and reports it', async () => {
-    await store.groups.getOrCreate('finance', 'local');
-    expect(await store.groups.syncIdpMemberships(bob, ['finance', 'dev'])).toEqual({
+    await store.groups.getOrCreate('finance', 'local', null);
+    expect(await store.groups.syncIdpMemberships(bob, ['finance', 'dev'], 'idp')).toEqual({
       skipped: ['finance'],
     });
     expect((await store.groups.groupsOf(bob)).map((g) => g.name)).toEqual(['dev']);
   });
 
   it('syncIdpMemberships is one transaction: a failure keeps the previous memberships and creates no group', async () => {
-    await store.groups.syncIdpMemberships(alice, ['dev']);
+    await store.groups.syncIdpMemberships(alice, ['dev'], 'idp');
     store.db.exec(
       `CREATE TRIGGER refuse_marked_group BEFORE INSERT ON group_members
        WHEN NEW.group_id IN (SELECT id FROM groups WHERE name = 'refused')
        BEGIN SELECT RAISE(ABORT, 'refused group'); END`,
     );
-    await expect(store.groups.syncIdpMemberships(alice, ['ops', 'refused'])).rejects.toThrow(
+    await expect(store.groups.syncIdpMemberships(alice, ['ops', 'refused'], 'idp')).rejects.toThrow(
       /refused group/,
     );
     expect((await store.groups.groupsOf(alice)).map((g) => g.name)).toEqual(['dev']);
@@ -192,7 +194,7 @@ describe('groups repository', () => {
   });
 
   it('refuses a member that is not a user (foreign key)', async () => {
-    const g = await store.groups.getOrCreate('ops', 'local');
+    const g = await store.groups.getOrCreate('ops', 'local', null);
     await expect(store.groups.addMember(g.id, 'ghost')).rejects.toThrow(/FOREIGN KEY/);
   });
 });

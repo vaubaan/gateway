@@ -43,6 +43,7 @@ import type { LocalAccountRecord } from '../../../src/server/store';
 import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
 import { pkcePair } from '../../../src/server/oauth-as/testing';
+import { saveTestOidcProvider } from '../../../src/server/auth/testing';
 import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
   ConnectionRecord,
@@ -294,7 +295,7 @@ async function openRig(): Promise<Rig> {
       const mission = await rig.issue();
       const [carried] = mission.connections;
       if (!carried) throw new Error('expected a connection');
-      const group = await root.store.groups.getOrCreate('mission-owners', 'local');
+      const group = await root.store.groups.getOrCreate('mission-owners', 'local', null);
       await root.store.groups.addMember(group.id, aliceUser.id);
       await root.store.connections.transferOwner(carried.connectionId, {
         kind: 'group',
@@ -304,7 +305,7 @@ async function openRig(): Promise<Rig> {
     },
     async ownerless() {
       const connection = await rig.connectByKey();
-      const group = await root.store.groups.getOrCreate('key-admins', 'local');
+      const group = await root.store.groups.getOrCreate('key-admins', 'local', null);
       await root.store.groups.addMember(group.id, aliceUser.id);
       await root.store.connections.transferOwner(connection.id, { kind: 'group', id: group.id });
       await root.store.groups.removeMember(group.id, aliceUser.id);
@@ -578,7 +579,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     target: connections,
     prepare: async (rig) => {
       const connection = await rig.connectByKey();
-      const group = await rig.root.store.groups.getOrCreate('key-admins', 'local');
+      const group = await rig.root.store.groups.getOrCreate('key-admins', 'local', null);
       await rig.root.store.groups.addMember(group.id, rig.alice.user.id);
       return { connection, group };
     },
@@ -1044,30 +1045,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   ),
 
   // ── auth ──────────────────────────────────────────────────────────────────
-  'IdpSettingsService.current': READ,
-  'IdpSettingsService.stored': READ,
-  'IdpSettingsService.save': {
-    kind: 'mutation',
-    target: (root) => root.auth.idp,
-    drive: async (rig) =>
-      rig.root.auth.handlers.saveIdpSettings(
-        await rig.operatorPost('/api/admin/identity-provider', {
-          issuer: 'https://idp.example.com',
-          client_id: 'gateway',
-          client_secret: 'idp-client-secret',
-          claim_sub: 'sub',
-          claim_email: 'email',
-          claim_groups: 'groups',
-          allowed_email_domains: 'example.com',
-        }),
-      ),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'idp',
-      actor: 'operator',
-    },
-  },
   'SignInProvidersService.views': READ,
   'SignInProvidersService.view': READ,
   'SignInProvidersService.resolve': READ,
@@ -1078,12 +1055,10 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: (root) => root.auth.providers,
     prepare: (rig) =>
-      rig.root.auth.idp.save({
+      saveTestOidcProvider(rig.root.store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
-        claims: { sub: 'sub', email: 'email', groups: 'groups' },
-        allowedEmailDomains: [],
       }),
     drive: async (rig) =>
       rig.root.auth.handlers.setSecondFactorWaiver(
@@ -1093,7 +1068,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: {
       act: 'second-factor-waiver-changed',
       object: 'instance-config',
-      objectId: 'idp',
+      objectId: 'sign-in:idp',
       actor: 'operator',
     },
   },
@@ -1320,12 +1295,10 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: (root) => root.auth.administrators,
     prepare: (rig) =>
-      rig.root.auth.idp.save({
+      saveTestOidcProvider(rig.root.store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
-        claims: { sub: 'sub', email: 'email', groups: 'groups' },
-        allowedEmailDomains: [],
       }),
     drive: async (rig) =>
       rig.root.users.handlers.addAdministratorGroup(
@@ -1804,7 +1777,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'administrator-granted',
       'administrator-revoked',
       'approval-granted',
-      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

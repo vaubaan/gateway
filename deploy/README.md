@@ -109,9 +109,9 @@ and paste the bootstrap token; on **Settings → Administration → Sign-in**
 add a sign-in provider — your company's OpenID Connect directory (redirect URI
 `https://<your domain>/auth/callback/<id>`), or GitHub — then "Test". The
 first sign-in of a user matching the admin rule revokes the bootstrap token.
-You may instead put the providers in the configuration (`idp.*` for one
-OpenID Connect provider, whose callback stays `https://<your domain>/auth/callback`,
-and `sign_in.<id>.*` for any number); they are then read-only on that page and
+You may instead put the providers in the configuration (`sign_in.<id>.*`, any
+number; the single-provider `idp.*` keys of earlier builds are refused and are
+written `sign_in.idp.*`); they are then read-only on that page and
 no bootstrap token is needed. Several providers may be offered at once; a
 provider where anyone can open an account (GitHub, personal Google or
 Microsoft) needs allowed email domains or "invitation only", and invitations
@@ -327,8 +327,8 @@ apps/gateway/restore.mjs …`.
   so another identity provider means new accounts for everybody; the earlier
   ones keep their connections and missions and are reached by nobody. When
   you upgrade an instance that already has users, let somebody sign in once
-  **before** you change `idp.*`: the existing accounts are bound to the
-  issuer of the first sign-in after the upgrade (handbook
+  **before** you change its issuer: the existing accounts are bound to the
+  issuer of the provider `idp` at the first start after the upgrade (handbook
   [configuration](../docs/handbook/configuration.md)).
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
