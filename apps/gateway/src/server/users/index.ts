@@ -15,6 +15,7 @@ import type { SignInProvidersService } from '../auth/sign-in-providers';
 import type { MembershipSettler } from '../authority';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { MissionTeamService } from '../missions';
 import type { DelegationService } from '../oauth-as';
@@ -49,6 +50,8 @@ export interface UsersModuleDeps {
   readonly mailer?: LinkMailer;
   readonly logger: Logger;
   readonly clock?: Clock;
+  /** The `limits.users` ceiling (`root.limits`); absent, none. */
+  readonly ceilings?: CeilingCheck;
 }
 
 export interface UsersModule {
@@ -68,12 +71,14 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,
     logger,
+    ceilings: deps.ceilings,
   });
   const invitations = new InvitationService({
     store: deps.store,
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,
     logger,
+    ceilings: deps.ceilings,
   });
   const handlers = createUserAdminHandlers({
     publicUrl: deps.config.publicUrl,
@@ -100,6 +105,7 @@ export {
   USER_ADMIN_ERROR_CODES,
   USER_ADMIN_ERROR_MESSAGES,
   UserAdminError,
+  userLimitError,
   type UserAdminErrorCode,
 } from './errors';
 export {

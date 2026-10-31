@@ -58,3 +58,4 @@ last_reviewed: 2026-10-27
 - ⚠️ **The door's authority re-check cost** (spec [§4.1](../spec/vaubaan-gateway.md#41-execution-surface)) — measured by `door-latency.bench.test.ts`, not asserted.
 - ⚠️ **The OAuth broker in a real enclave** ([oauth-broker](../spec/oauth-broker.md) §4) — the Confidential Space adapters (broker and gateway) run against fakes and self-signed tokens; no real attestation token or Secret Manager unseal has been run.
 - ⚠️ **`ssh__exec` against a real host** (spec [§5](../spec/vaubaan-gateway.md#5-composition)) — by design: a fake transport and the loopback server only.
+- ⚠️ **Two additions racing for the last place under a ceiling** (spec [§4.3 bis](../spec/vaubaan-gateway.md#43-bis-ceilings-and-counters)) — the check reads the count before the write; the race is accepted (handbook [limits-and-counters](../handbook/limits-and-counters.md)) and not tested.

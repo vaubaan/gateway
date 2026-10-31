@@ -359,6 +359,18 @@ const KEY_TABLE = [
     default: '10m',
     maxSeconds: 3_600,
   },
+  // Ceilings (spec §4.3 bis): absent is unlimited, the default. Enforced where an
+  // item would be added, never by cutting (`server/limits`).
+  { path: 'limits.users', env: 'VAUBAAN_LIMITS_USERS', kind: 'int', min: 1 },
+  { path: 'limits.connections', env: 'VAUBAAN_LIMITS_CONNECTIONS', kind: 'int', min: 1 },
+  {
+    path: 'limits.active_missions',
+    env: 'VAUBAAN_LIMITS_ACTIVE_MISSIONS',
+    kind: 'int',
+    min: 1,
+  },
+  // The bearer of `GET /ops/stats` (spec §4.3 bis): absent, the endpoint does not exist.
+  { path: 'ops.token', env: 'VAUBAAN_OPS_TOKEN', kind: 'secret', minLength: 32 },
   {
     path: 'oauth.access_token_ttl',
     env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL',

@@ -74,6 +74,7 @@ import {
   type IdpConfig,
   type InstanceConfig,
   LOG_LEVELS,
+  type LimitsConfig,
   type LogLevel,
   type OAuthBrokerConfig,
   type OAuthConfig,
@@ -101,11 +102,16 @@ const BYTES_PER_MEGABYTE = 1024 * 1024;
 export const MASTER_KEY_BYTES = KEY_BYTES;
 // Defaults and bounds are those of the key table (`KEYS` in `sources.ts`).
 const MIN_BOOTSTRAP_TOKEN_LENGTH = keySpec('bootstrap_token').minLength;
+const MIN_OPS_TOKEN_LENGTH = keySpec('ops.token').minLength;
 const DEFAULT_LOG_LEVEL: LogLevel = keySpec('log.level').default;
 
 interface IntKey {
   readonly path: string;
   readonly default: number;
+  readonly min: number;
+}
+interface OptionalIntKey {
+  readonly path: string;
   readonly min: number;
 }
 interface BoolKey {
@@ -338,6 +344,18 @@ class Reader {
     return value;
   }
 
+  /** An integer key without a default: `null` when absent (a ceiling: unlimited). */
+  optionalInt(key: OptionalIntKey): number | null {
+    const { path, min } = key;
+    const value = getPath(this.raw, path);
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min) {
+      this.issues.add(path, `expected an integer >= ${min}, got ${show(value)}`, envNamesFor(path));
+      return null;
+    }
+    return value;
+  }
+
   bool(key: BoolKey): boolean {
     const { path, default: fallback } = key;
     const value = getPath(this.raw, path);
@@ -431,6 +449,8 @@ function validate(
   const signInProviders = checkSignInProviders(r, idp, signIn);
   const admin = readAdmin(r, signInProviders);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
+  const limits = readLimits(r);
+  const opsToken = readOpsToken(r);
 
   const mail = readMail(r);
   const backup = readBackup(r);
@@ -489,6 +509,8 @@ function validate(
       maxPackBytes: gitMaxPackMb * BYTES_PER_MEGABYTE,
       requestTimeoutSeconds: gitRequestTimeout,
     },
+    limits,
+    ops: { token: opsToken },
     oauth,
     oauthBrokers,
     log: { level },
@@ -621,6 +643,33 @@ function readBootstrapToken(r: Reader, hasSignInProvider: boolean): string | nul
     );
   }
   return bootstrapToken;
+}
+
+/**
+ * `limits.*` (spec §4.3 bis): each a positive whole number, absent unlimited. A
+ * ceiling under the current count is accepted: nothing is cut, additions are refused.
+ */
+function readLimits(r: Reader): LimitsConfig {
+  return {
+    users: r.optionalInt(keySpec('limits.users')),
+    connections: r.optionalInt(keySpec('limits.connections')),
+    activeMissions: r.optionalInt(keySpec('limits.active_missions')),
+  };
+}
+
+/** `ops.token`: optional; when set, long enough to resist guessing. */
+function readOpsToken(r: Reader): string | null {
+  const path = 'ops.token';
+  const token = r.string(path) ?? null;
+  if (token !== null && token.length < MIN_OPS_TOKEN_LENGTH) {
+    r.issues.add(
+      path,
+      `must be at least ${MIN_OPS_TOKEN_LENGTH} characters long`,
+      envNamesFor(path),
+    );
+    return null;
+  }
+  return token;
 }
 
 /** A delegated token is short-lived (spec §6): the access token never outlives this. */

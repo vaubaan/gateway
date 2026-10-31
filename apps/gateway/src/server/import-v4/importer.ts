@@ -925,7 +925,11 @@ export class Importer {
       return done('refused', {
         reasons: [
           ...base.reasons,
-          ...(issued.reason === 'refused' ? issueLines(issued.preview.issues) : ['not found']),
+          ...(issued.reason === 'refused'
+            ? issueLines(issued.preview.issues)
+            : issued.reason === 'limit-reached'
+              ? [issued.message]
+              : ['not found']),
         ],
       });
     }

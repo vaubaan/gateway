@@ -63,7 +63,7 @@ export function clearSetup(): void {
 /** The paths the proxy lets through in setup mode; everything else goes to the setup page. */
 export const SETUP_PAGE = '/admin/bootstrap';
 export const SETUP_KEY_ACTION = '/api/setup/master-key';
-const SETUP_PATHS = /^\/(?:admin\/bootstrap$|api\/setup\/|healthz$|_next\/|favicon)/;
+const SETUP_PATHS = /^\/(?:admin\/bootstrap$|api\/setup\/|healthz$|ops\/stats$|_next\/|favicon)/;
 
 export function servedInSetupMode(pathname: string): boolean {
   return SETUP_PATHS.test(pathname);

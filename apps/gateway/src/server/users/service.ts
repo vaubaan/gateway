@@ -45,13 +45,14 @@
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import type { MembershipSettlement, MembershipSettler } from '../authority';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { MissionTeamService } from '../missions';
 import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
-import { UserAdminError } from './errors';
+import { UserAdminError, userLimitError } from './errors';
 
 /** Who acts: the audit actor, and their own user id (`null` for the bootstrap operator). */
 export interface UserAdminActor {
@@ -95,6 +96,11 @@ export interface UserAdminServiceDeps {
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
+  /**
+   * The `limits.users` ceiling (spec §4.3 bis): a reactivation and an administrator
+   * created at the setup add a person. Absent: no ceiling.
+   */
+  readonly ceilings?: CeilingCheck;
 }
 
 export class UserAdminService {
@@ -115,6 +121,17 @@ export class UserAdminService {
     readonly email: string;
   }): Promise<UserRecord> {
     return this.deps.store.users.ensureIdentity(input);
+  }
+
+  /** Throws the `limit-reached` refusal when one more person does not fit (spec §4.3 bis). */
+  async refuseNewUser(): Promise<void> {
+    const reached = await this.deps.ceilings?.refusal('users');
+    if (!reached) return;
+    this.deps.logger.warn('person refused at the ceiling of users', {
+      count: reached.count,
+      ceiling: reached.limit,
+    });
+    throw userLimitError(reached);
   }
 
   /** Every user the instance knows, in sign-up order, with their current groups. */
@@ -236,6 +253,8 @@ export class UserAdminService {
     const user = await store.users.getById(userId);
     if (!user) throw new UserAdminError('not-found');
     if (user.status === 'active') throw new UserAdminError('not-deactivated');
+    // A removed person counts again once reactivated.
+    await this.refuseNewUser();
 
     // A deactivation whose closing steps half-failed left things open that only the
     // user's status keeps dead (a delegation not revoked, a member token, a membership).

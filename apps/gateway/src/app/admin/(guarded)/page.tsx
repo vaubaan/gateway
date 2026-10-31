@@ -43,6 +43,7 @@ import { requireOperator } from '@/lib/auth/session';
 import { takeNotice } from '@/lib/connections/session';
 import {
   CONFIG_WORDS,
+  CEILING_WORDS,
   count,
   formatNumber,
   SECTIONS,
@@ -174,18 +175,29 @@ export default async function SetupPage({ searchParams }: Props) {
   const notice = await takeNotice(root, principal.sessionId, params);
   const nameProblem = isNameProblem(params[NAME_PROBLEM_PARAM]) ? params[NAME_PROBLEM_PARAM] : null;
   const keyProblem = isKeyProblem(params[KEY_PROBLEM_PARAM]) ? params[KEY_PROBLEM_PARAM] : null;
-  const [providers, rule, bootstrap, ownerless, clients, telemetry, users, identity, key] =
-    await Promise.all([
-      root.auth.providers.views(),
-      root.auth.administrators.current(),
-      root.auth.bootstrap.state(),
-      root.connections.service.listOwnerless(),
-      root.oauth.clients.list(),
-      root.telemetry.overview(),
-      root.users.service.list(),
-      root.instance.name.identity(),
-      root.masterKey.service.state(),
-    ]);
+  const [
+    providers,
+    rule,
+    bootstrap,
+    ownerless,
+    clients,
+    telemetry,
+    users,
+    identity,
+    key,
+    ceilings,
+  ] = await Promise.all([
+    root.auth.providers.views(),
+    root.auth.administrators.current(),
+    root.auth.bootstrap.state(),
+    root.connections.service.listOwnerless(),
+    root.oauth.clients.list(),
+    root.telemetry.overview(),
+    root.users.service.list(),
+    root.instance.name.identity(),
+    root.masterKey.service.state(),
+    root.limits.usage(),
+  ]);
   // The handover step (below) is the one thing to do while it is pending: every other
   // action of the checklist waits for it (ADR master-key-generated-and-handed-over-by-the-instance).
   const handover = key.handoverPending;
@@ -580,6 +592,10 @@ export default async function SetupPage({ searchParams }: Props) {
         <KeyValue
           items={[
             { term: 'Public address', value: <Mono>{root.config.publicUrl.href}</Mono> },
+            ...ceilings.map((usage) => ({
+              term: CEILING_WORDS.labels[usage.ceiling],
+              value: CEILING_WORDS.usage(usage.count, usage.limit),
+            })),
             {
               term: 'Activity kept',
               value: `${count(root.config.retentionDays, { one: 'day', many: 'days' })}, then deleted`,

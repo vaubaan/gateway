@@ -11,7 +11,14 @@
 import { SqliteAuditWriter, type AuditWriter } from './audit-writer.ts';
 import { SetCatalogIndex, type CatalogIndex } from './catalog-index.ts';
 import { systemClock, type Clock } from './clock.ts';
-import { backupTo, MEMORY_PATH, openCopyForWriting, openDb, type StoreDb } from './db.ts';
+import {
+  backupTo,
+  MEMORY_PATH,
+  openCopyForWriting,
+  openDb,
+  sizeOnDisk,
+  type StoreDb,
+} from './db.ts';
 import type { Encryptor } from './encryptor.ts';
 import { newId, type IdGenerator } from './ids.ts';
 import { DEFAULT_MIGRATIONS_DIR, loadMigrations, runMigrations } from './migrate.ts';
@@ -89,6 +96,8 @@ export interface Store {
   ping(): Promise<void>;
   /** Consistent single-file copy (`VACUUM INTO`), safe while the gateway runs. */
   backupTo(destinationPath: string): void;
+  /** Bytes on disk: the pages, plus the write-ahead log when there is one (spec §4.3 bis). */
+  sizeOnDisk(): number;
   close(): Promise<void>;
 }
 
@@ -142,6 +151,7 @@ export function openStore(options: StoreOptions): Store {
       ping.get();
     },
     backupTo: (destinationPath) => backupTo(db, destinationPath),
+    sizeOnDisk: () => sizeOnDisk(db, options.path),
     async close() {
       db.close();
     },
@@ -317,6 +327,7 @@ export type {
   AuditRiskRow,
   AuditScope,
   AuditSearch,
+  CallDecisionCounts,
   CallLookup,
   TokenHolderActivity,
 } from './repositories/audit.ts';

@@ -35,7 +35,7 @@ import {
 import { notAFormResponse, readForm } from '../auth/handlers';
 import { createNoticeRedirect, type Notice, type NoticeStore } from '../connections';
 import type { Logger } from '../logging';
-import { USER_ADMIN_ERROR_MESSAGES, UserAdminError } from './errors';
+import { UserAdminError } from './errors';
 import type { LocalAccountsService } from '../auth/local-accounts';
 import type { LinkMailer } from '../auth/local-handlers';
 import type { SignInProvidersService } from '../auth/sign-in-providers';
@@ -166,7 +166,7 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
 
   function failure(err: unknown, title: string): Notice {
     if (err instanceof UserAdminError) {
-      return { tone: 'danger', title, lines: [USER_ADMIN_ERROR_MESSAGES[err.code]] };
+      return { tone: 'danger', title, lines: [err.sentence] };
     }
     if (err instanceof LocalAccountError) {
       return { tone: 'danger', title, lines: [err.sentence] };
@@ -279,6 +279,8 @@ export function createUserAdminHandlers(deps: UserAdminHandlerDeps): UserAdminHa
           );
         }
         const actor = auditActorId(principal);
+        // A new person: refused at the ceiling before the account exists (spec §4.3 bis).
+        await deps.users.refuseNewUser();
         const account = await deps.accounts.createAccount({
           providerId: local.id,
           email,

@@ -124,10 +124,23 @@ describe('setup mode: the setup receives the key for a restore', () => {
     const health = setupResponse({ build: setup.build, startedAt: setup.startedAt });
     expect(health.status).toBe(200);
     expect(await health.json()).toMatchObject({ status: 'setup' });
-    for (const path of ['/admin/bootstrap', '/api/setup/master-key', '/healthz', '/_next/x']) {
+    for (const path of [
+      '/admin/bootstrap',
+      '/api/setup/master-key',
+      '/healthz',
+      '/ops/stats',
+      '/_next/x',
+    ]) {
       expect(servedInSetupMode(path), path).toBe(true);
     }
-    for (const path of ['/', '/login', '/admin', '/mcp', '/api/admin/master-key/download']) {
+    for (const path of [
+      '/',
+      '/login',
+      '/admin',
+      '/mcp',
+      '/api/admin/master-key/download',
+      '/ops/stats/x',
+    ]) {
       expect(servedInSetupMode(path), path).toBe(false);
     }
     const log = lines.join('\n');

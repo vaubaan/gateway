@@ -15,11 +15,12 @@
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import type { Iso } from '../store/types';
-import { UserAdminError } from './errors';
+import { UserAdminError, userLimitError } from './errors';
 
 /** The object id of an invitation entry in the administrative audit. */
 export const INVITATIONS_OBJECT_ID = 'invitations';
@@ -43,6 +44,11 @@ export interface InvitationServiceDeps {
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
+  /**
+   * The `limits.users` ceiling (spec §4.3 bis): inviting an address no active person
+   * holds invites a new person. Absent: no ceiling.
+   */
+  readonly ceilings?: CeilingCheck;
 }
 
 /** The address as stored: trimmed, lower-cased; `null` when it is not an address. */
@@ -87,11 +93,25 @@ export class InvitationService {
   async invite(actorId: string, rawEmail: string): Promise<string> {
     const email = normalizeInvitedEmail(rawEmail);
     if (!email) throw new UserAdminError('invitation-email-invalid');
+    await this.refuseNewPerson(email);
     const added = await this.deps.store.invitations.add(email, actorId);
     if (!added) throw new UserAdminError('invitation-exists');
     await this.audit(actorId, 'invitation-added', null, { email });
     this.deps.logger.info('address invited', { actor: actorId });
     return email;
+  }
+
+  /** An address already held by an active person adds nobody; any other is refused at the ceiling. */
+  private async refuseNewPerson(email: string): Promise<void> {
+    const reached = await this.deps.ceilings?.refusal('users');
+    if (!reached) return;
+    const holders = await this.deps.store.users.findByEmail(email);
+    if (holders.some((user) => user.status === 'active')) return;
+    this.deps.logger.warn('invitation refused at the ceiling of users', {
+      count: reached.count,
+      ceiling: reached.limit,
+    });
+    throw userLimitError(reached);
   }
 
   async remove(actorId: string, rawEmail: string): Promise<string> {

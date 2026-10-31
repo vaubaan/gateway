@@ -279,6 +279,22 @@
 # env: VAUBAAN_RETENTION_DAYS
 # retention_days: 90
 
+# Ceilings (spec §4.3 bis): how many people, connected accounts and active missions
+# the instance holds at most, each a whole number >= 1; absent is unlimited. At the
+# ceiling nothing is cut: only the next addition is refused, with the count.
+# env: VAUBAAN_LIMITS_USERS, VAUBAAN_LIMITS_CONNECTIONS, VAUBAAN_LIMITS_ACTIVE_MISSIONS
+# limits:
+#   users: 50
+#   connections: 200
+#   active_missions: 100
+
+# The bearer token of GET /ops/stats, the counters for your monitoring (counts only,
+# never a name or an identifier); at least 32 characters. Absent, the endpoint
+# answers 404. A secret: prefer ${file:/run/secrets/ops_token}.
+# env: VAUBAAN_OPS_TOKEN (or VAUBAAN_OPS_TOKEN_FILE)
+# ops:
+#   token: ${file:/run/secrets/ops_token}
+
 # How long a request to the creator stays answerable, a claim (spec §3.4) and
 # an approval request (spec §3.5) alike. A duration is a whole number > 0 and
 # one unit: 30s, 10m, 24h, 7d.

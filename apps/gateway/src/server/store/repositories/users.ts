@@ -37,6 +37,11 @@ export interface UsersRepo {
   findByEmail(email: string): Promise<UserRecord[]>;
   list(): Promise<UserRecord[]>;
   /**
+   * How many people are not removed (`status = 'active'`), whether or not they have
+   * signed in yet: the count of the `limits.users` ceiling (spec §4.3 bis).
+   */
+  countActive(): Promise<number>;
+  /**
    * Binds every account created before migration 0011 (no issuer recorded) to
    * `issuer`, and returns how many were bound. Called with the issuer of a sign-in
    * that was just validated, before the account is looked up: the first sign-in after
@@ -152,6 +157,9 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
     `SELECT ${COLUMNS} FROM users WHERE email = ? ORDER BY created_at`,
   );
   const all = db.prepare<[], UserRow>(`SELECT ${COLUMNS} FROM users ORDER BY created_at`);
+  const activeCount = db.prepare<[], { readonly n: number }>(
+    "SELECT COUNT(*) AS n FROM users WHERE status = 'active'",
+  );
   // An account that would collide with one already bound to this issuer is left unbound
   // (and therefore unreachable) rather than failing the sign-in that triggered the bind.
   const bindUnbound = db.prepare<[string, string, string]>(
@@ -233,6 +241,9 @@ export function createUsersRepo(ctx: RepoContext): UsersRepo {
     },
     async list() {
       return all.all().map(toRecord);
+    },
+    async countActive() {
+      return activeCount.get()?.n ?? 0;
     },
     async bindUnboundTo(issuer) {
       // Validates the issuer the same way a key is built.

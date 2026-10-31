@@ -195,6 +195,9 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
       const result = await deps.service.issue(principal.user, draft);
       if (!result.ok) {
         if (result.reason === 'not-found') return json(404, NOT_FOUND);
+        if (result.reason === 'limit-reached') {
+          return json(409, { error: 'limit-reached', message: result.message });
+        }
         return json(422, { error: 'refused', preview: result.preview });
       }
       return json(201, {
@@ -326,6 +329,8 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           });
         case 'conflict':
           return json(409, CONFLICT);
+        case 'limit-reached':
+          return json(409, { error: 'limit-reached', message: result.message });
         case 'refused':
           return json(422, {
             error: 'refused',

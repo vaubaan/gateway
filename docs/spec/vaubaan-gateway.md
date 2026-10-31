@@ -674,11 +674,52 @@ committed:
 - the **telemetry level** (§9) and the collector URL;
 - optionally, the instance's **name**: 1 to 64 characters, no control characters, a label never
   markup.
+- optionally, **ceilings** on users, connected accounts and active missions, and the **counters
+  token** that opens the counters (§4.3 bis).
 
 Optional keys have defaults, among them the delegation's absolute lifetime and the audit retention
 (ninety days each), the request expiry (twenty-four hours) and the approval validity (ten minutes),
 and the git remote's largest push and longest request. Anything missing makes startup fail with a
 message naming it.
+
+### 4.3 bis Ceilings and counters
+
+An operator may cap how much an instance holds: `limits.users`, `limits.connections` and
+`limits.active_missions`, each a positive whole number. A ceiling that is absent is unlimited, and
+that is the default. The same counts serve the ceilings, the administrator's view and the counters
+endpoint, so the three never disagree:
+
+| Count           | What it counts                                                                                                          |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| users           | people not removed, whether or not they have signed in yet; never an agent, a mission token or a management-door client |
+| connections     | connected accounts not revoked, every owner together; an expired or ownerless one still counts until revoked            |
+| active missions | missions neither revoked nor past their end, orphaned ones included                                                     |
+
+- **Enforced where an item would be added, never by cutting.**
+  - A person is refused when they would become a new user: a first sign-in of any kind, an
+    invitation sent or accepted, an administrator named who is not yet a user, a removed user
+    reactivated.
+  - A connection is refused when a new one would be created: by any connect flow, before the
+    provider is reached where the flow allows it, and again when the account is stored. Reconnecting
+    an existing account is never refused.
+  - A mission is refused when issuing it would add an active one: from the form, a duplicate, the
+    management door or the v4 import. Giving an expired mission a new end (an edit or a granted
+    extension) counts as adding one.
+- **At or above a ceiling**, the instance keeps working: nothing existing is removed, disabled or
+  stopped, and only the additions of that count are refused, until enough items are removed or
+  revoked by the people of the instance. A ceiling lowered under the current count is accepted at
+  startup.
+- **The refusal names the ceiling** and the count ("This gateway holds 3 active missions, its
+  ceiling is 3"); for an agent on the management door it is a refusal code of its own. The
+  administrator sees each count against its ceiling in the settings.
+
+**Counters.** `GET /ops/stats` answers counts only, for the operator's monitoring: users, connections
+(total and by provider), active missions, calls of the current day (UTC) allowed and refused, the
+store's size on disk, the current key version and how many sealed values each key version still
+holds, and the configured ceilings. Never a name, an e-mail, an identifier of an item, a resource or a
+configuration value. It is opened by `ops.token`, a secret of at least 32 characters sent as a bearer
+token; without that key the endpoint does not exist (404), a wrong or missing token is refused (401)
+without saying more, and while the instance is in setup it answers that it is not ready (503).
 
 ### 4.4 Bootstrap kit after issuance
 

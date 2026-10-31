@@ -246,10 +246,21 @@ export interface AuditRepo {
    * structural check "session counters agree with the audit" (spec §10).
    */
   countAllowedTouches(missionId: string, riskId: RiskId, since: Iso, until: Iso): Promise<number>;
+  /**
+   * Call entries at or after `since`, counted by decision (the `audit_ts` index): the
+   * calls of the day of the counters (spec §4.3 bis).
+   */
+  countCallsSince(since: Iso): Promise<CallDecisionCounts>;
   /** Retention purge: deletes entries strictly older than `cutoff`. The only delete path. */
   purgeOlderThan(cutoff: Iso): Promise<number>;
   /** `purgeOlderThan(now - retentionDays)`; default 90 days (spec §8). */
   purgeByRetention(retentionDays?: number): Promise<number>;
+}
+
+/** How many call entries were allowed and refused. */
+export interface CallDecisionCounts {
+  readonly allowed: number;
+  readonly refused: number;
 }
 
 interface AuditRow {
@@ -648,6 +659,10 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
      WHERE a.kind = 'call' AND a.decision = 'allowed' AND a.mission_id = ?
        AND r.risk_id = ? AND r.touched = 1 AND a.ts >= ? AND a.ts < ?`,
   );
+  const callsSince = db.prepare<[string], { readonly decision: string; readonly n: number }>(
+    `SELECT decision, COUNT(*) AS n FROM audit
+     WHERE ts >= ? AND kind = 'call' GROUP BY decision`,
+  );
   const openWindow = db.prepare<[string]>(
     'INSERT INTO audit_purge_guard (id, cutoff) VALUES (1, ?)',
   );
@@ -987,6 +1002,15 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     },
     async countAllowedTouches(missionId, riskId, since, until) {
       return countTouches.get(missionId, riskId, since, until)?.n ?? 0;
+    },
+    async countCallsSince(since) {
+      let allowed = 0;
+      let refused = 0;
+      for (const row of callsSince.all(since)) {
+        if (row.decision === 'allowed') allowed = row.n;
+        else if (row.decision === 'refused') refused = row.n;
+      }
+      return { allowed, refused };
     },
     purgeOlderThan,
     async purgeByRetention(retentionDays = DEFAULT_AUDIT_RETENTION_DAYS) {
