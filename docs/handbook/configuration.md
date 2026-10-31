@@ -3,6 +3,7 @@ title: Instance configuration, crypto and composition root
 tracks:
   - apps/gateway/src/server/config/
   - apps/gateway/src/server/compose/
+  - apps/gateway/src/server/setup/
   - apps/gateway/src/server/crypto/
   - apps/gateway/src/server/reseal/
   - apps/gateway/src/server/http/
@@ -82,6 +83,8 @@ How the process starts from configuration alone and wires its modules. Spec:
 
 - New host without a shell: `restore.from` + `restore.sha256`, empty volume,
   no key file; upload token and key file at `/admin/bootstrap`.
+- Wrong tokens are counted in `<key directory>/setup-misses` (`setup/misses.ts`),
+  across restarts; at 50 the page refuses until that file is deleted.
 
 ### Rotating the master key
 
