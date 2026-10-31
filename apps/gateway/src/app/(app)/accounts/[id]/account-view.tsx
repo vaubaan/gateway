@@ -132,6 +132,16 @@ export interface AccountData {
    * when it reaches none (SEC 2026-10-15 re-check M-1).
    */
   readonly unboundTools: readonly string[];
+  /**
+   * The permissions of the service's guide the pasted token does not hold, as the
+   * service said at connect time, with the titles of the tools that need each; empty
+   * when it holds them all or the service could not say (`ConnectionView.token_lacks`).
+   */
+  readonly tokenLacks: readonly {
+    readonly name: string;
+    readonly write: boolean;
+    readonly tools: readonly string[];
+  }[];
 }
 
 /** Everything the page shows. Throws the services' "not found" for anyone but an owner. */
@@ -165,6 +175,11 @@ export async function loadAccount(
           (tool) => toolTitleOf(root.registry, tool) ?? tool,
         )
       : [],
+    tokenLacks: (detail.token_lacks ?? []).map((permission) => ({
+      name: permission.name,
+      write: permission.access === 'read-write',
+      tools: permission.tools.map((tool) => toolTitleOf(root.registry, tool) ?? tool),
+    })),
   };
 }
 
@@ -741,6 +756,7 @@ export function AccountView({
         connection.status === 'unowned' ||
         revoked ||
         tokenExpiresSoon ||
+        (data.tokenLacks.length > 0 && !revoked) ||
         (detail.discovery && !detail.discovery.ok && !revoked)) && (
         <div className={styles.notes}>
           {note}
@@ -751,6 +767,24 @@ export function AccountView({
               testId="token-expires-soon"
             >
               {TOKEN_CONNECT.expiresSoonBody}
+            </Callout>
+          )}
+          {data.tokenLacks.length > 0 && !revoked && (
+            <Callout
+              tone="warn"
+              title={TOKEN_CONNECT.lacksTitle(data.tokenLacks.length)}
+              testId="token-lacks"
+            >
+              <p>{TOKEN_CONNECT.lacksBody(detail.provider_label)}</p>
+              <ul>
+                {data.tokenLacks.map((permission) => (
+                  <li key={permission.name}>
+                    <strong>{permission.name}</strong> (
+                    {permission.write ? TOKEN_CONNECT.writeAccess : TOKEN_CONNECT.readAccess}){' '}
+                    {TOKEN_CONNECT.usedBy(permission.tools.join(', '))}
+                  </li>
+                ))}
+              </ul>
             </Callout>
           )}
           {connection.status === 'expired' && (

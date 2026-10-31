@@ -60,3 +60,44 @@ describe('providerFailureReason: a refusal the plugin wrote itself is kept', () 
     expect(refusal.upstreamStatus).toBe(401);
   });
 });
+
+describe('providerFailureReason: at connect time, the sentence of a rejection is kept, masked', () => {
+  const credential = {
+    kind: 'api-key' as const,
+    fields: { user: 'bot@example.com', token: ECHOED },
+    metadata: {},
+  };
+
+  it('keeps the plugin sentence, masks every value of the credential, adds the status', () => {
+    const reason = providerFailureReason(
+      new UpstreamAuthError(
+        `refused ${ECHOED} for bot@example.com (${encodeURIComponent(ECHOED)})`,
+        401,
+      ),
+      credential,
+    );
+    expect(reason).toBe('refused [credential] for [credential] ([credential]) (HTTP 401)');
+    expect(reason).not.toContain(ECHOED);
+  });
+
+  it('says the status once when the sentence already does, on one bounded line', () => {
+    expect(
+      providerFailureReason(
+        new UpstreamAuthError('Fly refused the token (HTTP 401)', 401),
+        credential,
+      ),
+    ).toBe('Fly refused the token (HTTP 401)');
+    const long = providerFailureReason(
+      new UpstreamAuthError(`a\n${'b'.repeat(900)}`, 403),
+      credential,
+    );
+    expect(long.length).toBeLessThanOrEqual(320);
+    expect(long).not.toContain('\n');
+  });
+
+  it('keeps the status alone without the credential being connected (refresh, logs)', () => {
+    expect(providerFailureReason(new UpstreamAuthError('Bad credentials', 401))).toBe(
+      'the provider rejected the credential (HTTP 401)',
+    );
+  });
+});

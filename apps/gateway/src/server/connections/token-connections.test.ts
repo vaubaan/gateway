@@ -108,7 +108,8 @@ describe('a service connected with a pasted token', () => {
       rejected.service.start(alice, 'dual', { fields: { token: TOKEN } }),
       'credential-rejected',
     );
-    expect(err.detail).toBe('Dual: the provider rejected the credential (HTTP 401)');
+    // The plugin's sentence names the fix: kept at connect time, with its status.
+    expect(err.detail).toBe('Dual: Bad credentials (HTTP 401)');
     expect(await rejected.store.connections.list()).toHaveLength(0);
 
     const expired = dualHarness(async () => ({ account: 'x', expiresAt: '2020-01-01T00:00:00Z' }));
@@ -121,7 +122,7 @@ describe('a service connected with a pasted token', () => {
     expect(await expired.store.connections.list()).toHaveLength(0);
   });
 
-  it("a refusal the plugin wrote reaches the page in the plugin's words; the provider's never does", async () => {
+  it("a refusal the plugin wrote reaches the page in the plugin's words, with the credential masked", async () => {
     const sentence = 'the token lacks the scope Things: write; create it again with that scope';
     const refused = dualHarness(async () => {
       throw new CredentialRefusal(sentence, 403);
@@ -141,7 +142,57 @@ describe('a service connected with a pasted token', () => {
       quoted.service.start(bob, 'dual', { fields: { token: TOKEN } }),
       'credential-rejected',
     );
-    expect(hidden.detail).toBe('Dual: the provider rejected the credential (HTTP 403)');
+    // A rejection keeps its sentence at connect time, every value of the pasted token masked.
+    expect(hidden.detail).toBe('Dual: 403: {"scopes":[],"token":"[credential]"} (HTTP 403)');
+    expect(hidden.detail).not.toContain(TOKEN);
+
+    const named = dualHarness(async () => {
+      throw new UpstreamAuthError(
+        'Dual refused the sign-in of bot: the app password is wrong or was revoked',
+        401,
+      );
+    });
+    const carol = await named.actor('carol@example.com');
+    const said = await expectConnectError(
+      named.service.start(carol, 'dual', { fields: { token: TOKEN } }),
+      'credential-rejected',
+    );
+    expect(said.detail).toBe(
+      'Dual: Dual refused the sign-in of bot: the app password is wrong or was revoked (HTTP 401)',
+    );
+  });
+
+  it('a token the service lists the permissions of: the account names the ones it lacks', async () => {
+    const h = dualHarness(async () => ({
+      account: 'bot-account',
+      expiresAt: IN_A_YEAR,
+      granted: ['Other', '  Other  ', 42 as unknown as string],
+    }));
+    const alice = await h.actor('alice@example.com');
+    const done = await h.service.start(alice, 'dual', { fields: { token: TOKEN } });
+    if (done.kind !== 'connected') throw new Error('expected a connection');
+    expect(done.connection.metadata).toMatchObject({ granted: ['Other'] });
+    const view = await h.service.get(alice, done.connection.id);
+    expect(view.token_lacks).toEqual([
+      { name: 'Things', access: 'read', tools: ['dual__list_things'] },
+    ]);
+
+    const holds = dualHarness(async () => ({
+      account: null,
+      expiresAt: null,
+      granted: ['things'],
+    }));
+    const bob = await holds.actor('bob@example.com');
+    const all = await holds.service.start(bob, 'dual', { fields: { token: TOKEN } });
+    if (all.kind !== 'connected') throw new Error('expected a connection');
+    expect((await holds.service.get(bob, all.connection.id)).token_lacks).toEqual([]);
+
+    // A service that cannot say leaves it unknown: nothing is guessed.
+    const silent = dualHarness(async () => ({ account: null, expiresAt: null }));
+    const carol = await silent.actor('carol@example.com');
+    const unknown = await silent.service.start(carol, 'dual', { fields: { token: TOKEN } });
+    if (unknown.kind !== 'connected') throw new Error('expected a connection');
+    expect((await silent.service.get(carol, unknown.connection.id)).token_lacks).toBeNull();
   });
 
   it('an account made a way the plugin no longer offers is reconnected with a token, same id', async () => {

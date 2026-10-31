@@ -66,6 +66,7 @@ import type { CredentialBroker, ResolvedCredential } from './credentials';
 import { canWithdraw } from './credentials';
 import { ConnectError } from './errors';
 import { providerFailureReason } from './failure-reason';
+import { grantedNames, tokenLacks } from './token-permissions';
 import {
   cleanName,
   usableResourcesOf,
@@ -265,6 +266,12 @@ export interface ConnectionView {
   readonly oauth_broker: { readonly name: string; readonly attested: boolean | null } | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
   readonly token_expires_at: string | null;
+  /**
+   * The permissions of the plugin's guide the pasted token does not hold, as the
+   * service confirmed at connect time (`CredentialCheck.granted`): empty when it holds
+   * them all, `null` when the service could not say.
+   */
+  readonly token_lacks: readonly TokenPermission[] | null;
   readonly owner_label: string;
   /** `ssh-key`: the line to append to `authorized_keys`. */
   readonly public_key: string | null;
@@ -657,6 +664,8 @@ export class ConnectionService {
         ...extra,
         fields: read.visible,
         ...(check ? { account: check.account, expires_at: check.expiresAt } : {}),
+        // What the service confirmed the token holds; the account page names what it lacks.
+        ...(check?.granted ? { granted: check.granted } : {}),
       },
       expiresAt: check?.expiresAt ?? null,
     });
@@ -758,7 +767,7 @@ export class ConnectionService {
       const rejected = err instanceof UpstreamAuthError || !isTransportFailure(err);
       throw new ConnectError(
         rejected ? 'credential-rejected' : 'provider-unreachable',
-        `${plugin.displayName}: ${providerFailureReason(err)}`,
+        `${plugin.displayName}: ${providerFailureReason(err, secret)}`,
       );
     }
     const expiresAt = check.expiresAt === null ? null : Date.parse(check.expiresAt);
@@ -777,6 +786,7 @@ export class ConnectionService {
     return {
       account: cleanName(check.account),
       expiresAt: expiresAt === null ? null : new Date(expiresAt).toISOString(),
+      ...(check.granted === undefined ? {} : { granted: grantedNames(check.granted) }),
     };
   }
 
@@ -1004,9 +1014,10 @@ export class ConnectionService {
       if (policy === 'required') {
         throw new ConnectError(
           rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
-          `${plugin.displayName}: ${providerFailureReason(err)}`,
+          `${plugin.displayName}: ${providerFailureReason(err, secret)}`,
         );
       }
+      // Recorded on the account, which other owners read: the status only.
       return { resources: null, error: providerFailureReason(err) };
     }
   }
@@ -1685,6 +1696,8 @@ export class ConnectionService {
       token_account: accountSaid && typeof metadata.account === 'string' ? metadata.account : null,
       oauth_broker: this.oauthBrokerOf(metadata),
       token_expires_at: pasted ? connection.credentialExpiresAt : null,
+      token_lacks:
+        pasted && registered ? tokenLacks(registered.plugin.credential, metadata.granted) : null,
       owner_label: await this.ownerLabel(connection),
       public_key: typeof metadata.public_key === 'string' ? metadata.public_key : null,
       fields: connectionPublicFields(connection),

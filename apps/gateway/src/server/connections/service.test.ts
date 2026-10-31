@@ -397,9 +397,12 @@ describe('api-key — form checked by a first discovery', () => {
       h.service.start(alice, 'keyco', { fields: { token: 'tok-secret-123', team_id: 'team_a' } }),
       'credential-rejected',
     );
-    // The provider's own text is not shown: it can echo the key (ADR
-    // provider-error-text-stays-with-the-agent).
-    expect(rejected.detail).toBe('Key Co: the provider rejected the credential (HTTP 401)');
+    // At connect time the plugin's sentence is kept, every value of the pasted
+    // credential masked (ADR provider-error-text-stays-with-the-agent, 2026-10-31).
+    expect(rejected.detail).toBe(
+      'Key Co: GET /domains answered 401: This API key is restricted to only send emails (HTTP 401)',
+    );
+    expect(rejected.detail).not.toContain('tok-secret-123');
     expect(rejected.detail).not.toContain('tok-secret-123');
     expect(await h.store.connections.list()).toEqual([]);
     expect(h.audit.admin).toEqual([]);
