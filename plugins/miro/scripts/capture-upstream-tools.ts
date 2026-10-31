@@ -34,6 +34,7 @@ function say(line: string): void {
 
 async function postJson(url: string, body: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
+    redirect: 'error',
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
@@ -47,6 +48,7 @@ async function postForm(
   form: Record<string, string>,
 ): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
+    redirect: 'error',
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
     body: new URLSearchParams(form).toString(),

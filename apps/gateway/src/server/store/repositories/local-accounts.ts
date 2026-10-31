@@ -54,11 +54,40 @@ export interface LocalLinkRecord {
   readonly usedAt: Iso | null;
 }
 
-/** How wrong passwords are counted and when they lock the account. */
+/** How wrong secrets (a password, a code) are counted and when they lock. */
 export interface LockoutRule {
   readonly maxAttempts: number;
   readonly windowMs: number;
   readonly lockMs: number;
+}
+
+/** The lockout counters of a row, as stored. */
+export interface LockoutCounters {
+  readonly failedAttempts: number;
+  readonly firstFailureAt: Iso | null;
+  readonly lockedUntil: Iso | null;
+}
+
+/**
+ * The counters after one more failure at `now`: the count restarts when the window
+ * of the first failure has passed, and the lock is set at `maxAttempts`.
+ */
+export function nextLockout(
+  before: LockoutCounters,
+  rule: LockoutRule,
+  now: Date,
+): LockoutCounters {
+  const firstAt = before.firstFailureAt ? Date.parse(before.firstFailureAt) : NaN;
+  const inWindow = Number.isFinite(firstAt) && now.getTime() - firstAt < rule.windowMs;
+  const failedAttempts = inWindow ? before.failedAttempts + 1 : 1;
+  return {
+    failedAttempts,
+    firstFailureAt: inWindow ? before.firstFailureAt : now.toISOString(),
+    lockedUntil:
+      failedAttempts >= rule.maxAttempts
+        ? new Date(now.getTime() + rule.lockMs).toISOString()
+        : before.lockedUntil,
+  };
 }
 
 export interface LocalAccountsRepo {
@@ -280,17 +309,22 @@ export function createLocalAccountsRepo(ctx: RepoContext): LocalAccountsRepo {
       return withImmediateTransaction(db, () => {
         const row = accountById.get(id);
         if (!row) return null;
-        const now = ctx.clock.now();
-        const nowIsoText = nowIso(ctx);
-        const firstAt = row.first_failure_at ? Date.parse(row.first_failure_at) : NaN;
-        const inWindow = Number.isFinite(firstAt) && now.getTime() - firstAt < rule.windowMs;
-        const attempts = inWindow ? row.failed_attempts + 1 : 1;
-        const firstFailureAt = inWindow ? row.first_failure_at : nowIsoText;
-        const lockedUntil =
-          attempts >= rule.maxAttempts
-            ? new Date(now.getTime() + rule.lockMs).toISOString()
-            : row.locked_until;
-        updateFailure.run(attempts, firstFailureAt, lockedUntil, nowIsoText, id);
+        const next = nextLockout(
+          {
+            failedAttempts: row.failed_attempts,
+            firstFailureAt: row.first_failure_at,
+            lockedUntil: row.locked_until,
+          },
+          rule,
+          ctx.clock.now(),
+        );
+        updateFailure.run(
+          next.failedAttempts,
+          next.firstFailureAt,
+          next.lockedUntil,
+          nowIso(ctx),
+          id,
+        );
         const after = accountById.get(id);
         return after ? toAccount(after) : null;
       });

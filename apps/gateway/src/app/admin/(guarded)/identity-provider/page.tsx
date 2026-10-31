@@ -270,18 +270,18 @@ export default async function SignInSettingsPage({ searchParams }: Props) {
             actions={({ provider, people, state }) => (
               <span className={styles.inline}>
                 {provider.kind !== 'local' && (
-                  <ButtonLink
-                    href={signInTestPath(provider.id)}
-                    size="sm"
-                    aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
-                    // A plain link, in another window: the test runs beside this session.
-                    external
-                    target="_blank"
-                    rel="opener"
-                    data-testid={`test-provider-${provider.id}`}
-                  >
-                    Test
-                  </ButtonLink>
+                  // A form, in another window: the test runs beside this session, and a
+                  // link from elsewhere cannot start one (it writes a pending sign-in).
+                  <form method="post" action={signInTestPath(provider.id)} target="_blank">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      aria-label={`${SETTINGS_ACTIONS.testSignIn} through ${provider.name}`}
+                      data-testid={`test-provider-${provider.id}`}
+                    >
+                      Test
+                    </Button>
+                  </form>
                 )}
                 {state.test && (
                   <ButtonLink href={signInTestPage(provider.id)} size="sm" variant="ghost">

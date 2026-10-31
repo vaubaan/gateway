@@ -2,7 +2,12 @@
 # GATEWAY_DOMAIN is the only variable this container receives: compose.yaml
 # interpolates it from deploy/config/.env (`docker compose --env-file`).
 {$GATEWAY_DOMAIN} {
-	encode zstd gzip
+	# Compression for the static assets only (security audit 2026-10-31, L10): a
+	# page that shows a secret once (a mission token) beside text an attacker
+	# influences must not be compressed, or its size could reveal the secret
+	# (BREACH). The static assets hold no secret.
+	@static path /_next/static/*
+	encode @static zstd gzip
 
 	# No security header here: the gateway sets them itself on every response
 	# (HSTS, the Content-Security-Policy with its per-request nonce, framing,

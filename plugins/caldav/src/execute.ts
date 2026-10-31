@@ -7,7 +7,8 @@
  * Handbook : docs/handbook/providers/caldav.md.
  *
  * Everything goes through `ctx.fetch` (`dav.ts`), signed with the account's
- * app password, to the server the person typed or a sibling host of it.
+ * app password, to the server the person typed or the calendar home's host
+ * pinned at discovery (`pinnedTo`).
  *
  *   - **Discovery** (RFC 6764, RFC 5397, RFC 4791 §6.2) : `PROPFIND` of
  *     `current-user-principal` — at `/.well-known/caldav` first when the URL
@@ -72,7 +73,9 @@ import {
   expectStatus,
   hrefsIn,
   parseMultistatus,
+  pinnedTo,
   propOf,
+  resolveHomeHref,
   resolveHref,
   textOf,
   type DavAccount,
@@ -143,13 +146,15 @@ function asCollection(url: URL): URL {
 }
 
 /**
- * The address of a mission calendar : the resource's `href`, a URL the
- * account may reach, whose ref is the resource's. Anything else is declined :
- * the resource was not discovered by this plugin, or not for this account.
+ * The address of a mission calendar : the resource's `href`, on the server's
+ * host or a home host of it (`isHomeHost`), whose ref is the resource's. Anything
+ * else is declined : the resource was not discovered by this plugin, or not for
+ * this account.
  */
 function calendarUrl(resource: Resource, account: DavAccount): URL {
   const href = resource.metadata?.href;
-  const url = typeof href === 'string' ? resolveHref(href, account.server, account.server) : null;
+  const url =
+    typeof href === 'string' ? resolveHomeHref(href, account.server, account.server) : null;
   if (url === null || !refsOf(url).includes(resource.ref)) {
     return refuse(
       `calendar '${resource.ref}' has no address on ${account.server.host}: refresh the resources of the connection.`,
@@ -169,7 +174,7 @@ function eventUrl(calendar: URL, id: string): URL {
 
 /** The event id of a multistatus href : a direct child of the calendar, in the id grammar ; `null` otherwise. */
 function eventIdOfHref(href: string, calendar: URL, account: DavAccount): string | null {
-  const url = resolveHref(href, calendar, account.server);
+  const url = resolveHref(href, calendar, account);
   if (url === null || url.pathname.endsWith('/')) return null;
   const parent = url.pathname.slice(0, url.pathname.lastIndexOf('/') + 1);
   if (parent !== calendar.pathname) return null;
@@ -228,7 +233,7 @@ async function principalFrom(ctx: Ctx, account: DavAccount, start: URL): Promise
     if (REDIRECTS.has(response.status)) {
       const location = response.headers.get('location');
       if (location === null) return null;
-      const next = resolveHref(location, url, account.server);
+      const next = resolveHref(location, url, account);
       if (next === null) throw outside(account);
       url = next;
       continue;
@@ -244,7 +249,7 @@ async function principalFrom(ctx: Ctx, account: DavAccount, start: URL): Promise
       .map((e) => hrefsIn(propOf(e, DAV_NS, 'current-user-principal'))[0])
       .find((h) => h !== undefined && h.length > 0);
     if (href === undefined) return null;
-    const principal = resolveHref(href, url, account.server);
+    const principal = resolveHref(href, url, account);
     if (principal === null) throw outside(account);
     return principal;
   }
@@ -292,7 +297,7 @@ async function principalInfo(ctx: Ctx, account: DavAccount, principal: URL): Pro
       `${account.server.host} announces no calendar home for this account: it may offer no calendar over CalDAV.`,
     );
   }
-  const home = resolveHref(homeHref, principal, account.server);
+  const home = resolveHomeHref(homeHref, principal, account.server);
   if (home === null) throw outside(account);
   const addresses = new Set<string>();
   for (const e of entries) {
@@ -325,7 +330,8 @@ async function discoverCalendars(
   account: DavAccount,
   info: AccountInfo,
 ): Promise<Resource[]> {
-  const response = await davSend(ctx, account, {
+  const atHome = pinnedTo(account, info.home);
+  const response = await davSend(ctx, atHome, {
     method: 'PROPFIND',
     url: info.home,
     depth: '1',
@@ -336,7 +342,7 @@ async function discoverCalendars(
   const found: { url: URL; name: string; description: string }[] = [];
   for (const entry of parseMultistatus(response.text)) {
     if (!isEventCalendar(entry)) continue;
-    const url = resolveHref(entry.href, info.home, account.server);
+    const url = resolveHref(entry.href, info.home, atHome);
     if (url === null) continue;
     const collection = asCollection(url);
     if (collection.pathname === info.home.pathname) continue;
@@ -392,7 +398,7 @@ async function listCalendars(ctx: ExecuteContext, account: DavAccount): Promise<
   const calendars: Record<string, unknown>[] = [];
   for (const resource of ownCalendars(ctx.resources).slice(0, MAX_CALENDARS)) {
     const url = calendarUrl(resource, account);
-    const response = await davSend(ctx, account, {
+    const response = await davSend(ctx, pinnedTo(account, url), {
       method: 'PROPFIND',
       url,
       depth: '0',
@@ -706,17 +712,19 @@ export function createCaldavRuntime(options: CaldavRuntimeOptions = {}): CaldavR
         if (tool === TOOL.listCalendars) return listCalendars(ctx, account);
         const resource = resolveCalendar(args, ctx.resources);
         if ('denied' in resource) return refuse(resource.denied);
+        // The call's requests stay on the server's host and its calendar's.
+        const atCalendar = pinnedTo(account, calendarUrl(resource, account));
         switch (tool) {
           case TOOL.listEvents:
-            return listEvents(ctx, account, resource, args);
+            return listEvents(ctx, atCalendar, resource, args);
           case TOOL.getEvent:
-            return getEvent(ctx, account, resource, args);
+            return getEvent(ctx, atCalendar, resource, args);
           case TOOL.createEvent:
-            return createEvent(ctx, account, resource, args, deps);
+            return createEvent(ctx, atCalendar, resource, args, deps);
           case TOOL.updateEvent:
-            return updateEvent(ctx, account, resource, args, deps);
+            return updateEvent(ctx, atCalendar, resource, args, deps);
           default:
-            return deleteEvent(ctx, account, resource, args);
+            return deleteEvent(ctx, atCalendar, resource, args);
         }
       });
     },

@@ -19,6 +19,17 @@ services:
     image: vaubaan-gateway:local
     restart: unless-stopped
     init: true
+    # Hardening (security audit 2026-10-31, L9): the image's own root filesystem
+    # is read-only, no Linux capability is kept and no process gains a privilege.
+    # The server writes to /data (the volume) and to /tmp, nothing else; it runs
+    # as the image's user 10001, so the entrypoint's root branch (chown, setpriv)
+    # is not taken here.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     env_file:
       - ./config/.env
     environment:

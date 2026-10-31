@@ -432,7 +432,7 @@ async function request(
     init.body = JSON.stringify(body);
   }
 
-  const res = await ctx.fetch(url, init);
+  const res = await ctx.fetch(url, { ...init, redirect: 'error' });
   const raw = await res.text();
   if (!res.ok) {
     const message = `Resend API ${method} ${path} ${res.status}: ${raw.slice(0, 500)}`;

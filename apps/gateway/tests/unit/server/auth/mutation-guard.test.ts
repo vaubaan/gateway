@@ -387,6 +387,10 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'none',
     ),
   ),
+  // A test writes a pending sign-in and its record: a form of Settings → Sign-in.
+  'auth.handlers.testStart': form('operator', 303, (rig, headers) =>
+    rig.root.auth.handlers.testStart(post('/auth/test/none', headers, {}), 'none'),
+  ),
   'auth.handlers.enableSignInProvider': form('operator', 303, (rig, headers) =>
     rig.root.auth.handlers.enableSignInProvider(
       post('/api/admin/sign-in-providers/none/enable', headers, {}),
@@ -561,8 +565,6 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
 const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginStart': 'GET; starts a sign-in, the pending login is bound to a cookie',
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
-  'auth.handlers.testStart':
-    'GET; starts a test of a provider for an administrator (authorizeAdmin), bound to their session; its callback signs nobody in',
   'connections.handlers.callback':
     'GET from the provider; protected by the single-use state bound to the user (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',

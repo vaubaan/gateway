@@ -388,7 +388,7 @@ async function callCloudflareApi(
       break;
   }
 
-  const res = await fetchImpl(url, init);
+  const res = await fetchImpl(url, { ...init, redirect: 'error' });
   const text = await res.text();
   if (!res.ok) {
     const message = `Cloudflare API ${route.method} ${path} ${res.status}: ${text.slice(0, 500)}`;

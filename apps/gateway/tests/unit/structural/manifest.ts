@@ -821,4 +821,26 @@ export const INVARIANTS: readonly Invariant[] = [
       },
     ],
   },
+  {
+    id: 'broker-key-pinned-before-write',
+    statement:
+      'The attested OAuth broker channel, the one place certificate verification is off, compares the key a socket presents with the pinned attested key before the broker key is written; nothing else writes to the socket.',
+    source:
+      'ADR google-calendar-through-an-oauth-broker; security audit 2026-10-31 (H2); .semgrep/vaubaan.yml vaubaan-tls-verification-off',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/broker-key-pinned-before-write.test.ts`,
+        tests: [
+          'turns certificate verification off in one place of the server',
+          'writes the key from exchange only when asked, and only send asks',
+          'compares every socket send opens with the pin, right after it opens',
+          'writes to no socket but through exchange',
+        ],
+      },
+      {
+        file: `${SERVER}/connections/oauth-broker.test.ts`,
+        tests: ['a key the broker presents and no attestation carries gets nothing'],
+      },
+    ],
+  },
 ];

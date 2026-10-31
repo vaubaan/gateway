@@ -565,6 +565,11 @@ It runs only after the gateway allowed the call and counted it.
 
 - Use **`ctx.fetch`**, never the global `fetch`: tests inject a mock, the
   gateway its own.
+- Write **`redirect: 'error'`** in the options of every call, at the call:
+  a redirect to another origin would carry the plugin's custom headers
+  (`apikey`, `x-api-key`) with it. A provider known to redirect on purpose
+  gets `'manual'` or `'follow'` with the reason beside it. Semgrep refuses a
+  call without a policy (`vaubaan-plugin-fetch-without-redirect-policy`).
 - Take the secret with `expectCredentialKind(PROVIDER_ID, ctx.credential, '<kind>')`.
   Never log it, never put it in a result or an error message.
 - Resolve the target with the **classifier's functions** (step 4).
@@ -616,7 +621,7 @@ once.
 ```ts
 import { streamToolResult, textParts } from '@vaubaan/plugin-sdk';
 
-const response = await ctx.fetch(url, { headers }); // open the response first
+const response = await ctx.fetch(url, { headers, redirect: 'error' }); // open the response first
 if (response.status === 401) throw new UpstreamAuthError('…', 401);
 if (!response.ok || !response.body) throw new UpstreamHttpError('…', response.status);
 return streamToolResult(ctx, textParts(response.body));

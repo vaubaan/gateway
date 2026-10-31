@@ -122,6 +122,7 @@ export async function request(
   const apiKey = secret.fields[API_KEY_FIELD];
   if (!apiKey) throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
   const res = await ctx.fetch(`${TEMPLATE_API_BASE}${path}`, {
+    redirect: 'error',
     method,
     headers: {
       authorization: `Bearer ${apiKey}`,

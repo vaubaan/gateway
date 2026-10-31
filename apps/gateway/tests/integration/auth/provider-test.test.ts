@@ -107,14 +107,17 @@ describe('a provider is tested beside the session, then switched on', () => {
     return new Map([[SESSION_COOKIE, session.id]]);
   }
 
+  /** The Test button of Settings → Sign-in, posted from the tester's browser. */
+  function testForm(b: Browser, providerId: string): Request {
+    return new Request(`${PUBLIC_URL}/auth/test/${providerId}`, {
+      method: 'POST',
+      headers: { cookie: cookieHeader(b), origin: PUBLIC_URL },
+    });
+  }
+
   /** Test → the provider's consent → the callback, in the tester's browser. */
   async function test(b: Browser, providerId: 'company' | 'github'): Promise<Response> {
-    const start = await root.auth.handlers.testStart(
-      new Request(`${PUBLIC_URL}/auth/test/${providerId}`, {
-        headers: { cookie: cookieHeader(b) },
-      }),
-      providerId,
-    );
+    const start = await root.auth.handlers.testStart(testForm(b, providerId), providerId);
     expect(start.status).toBe(303);
     absorb(b, start);
     const location = new URL(start.headers.get('location') ?? '', PUBLIC_URL);
@@ -266,10 +269,7 @@ describe('a provider is tested beside the session, then switched on', () => {
 
   it('a callback carrying another session than the tester’s is refused', async () => {
     const b = await bootstrapBrowser();
-    const start = await root.auth.handlers.testStart(
-      new Request(`${PUBLIC_URL}/auth/test/company`, { headers: { cookie: cookieHeader(b) } }),
-      'company',
-    );
+    const start = await root.auth.handlers.testStart(testForm(b, 'company'), 'company');
     absorb(b, start);
     idp.nextClaims = { sub: 'emp-2', email: 'dan@example.com', groups: [] };
     const callback = idp.authorize(new URL(start.headers.get('location') ?? ''));

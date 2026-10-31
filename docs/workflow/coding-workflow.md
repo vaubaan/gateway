@@ -38,7 +38,8 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 - `scripts/audit-gate.mjs` gates `npm audit --omit=dev` against
   [the allowlist](../../.github/audit-allowlist.json): one GHSA id per package, a checkable reason,
   `review_by` at most a quarter after `reviewed`; a lapsed entry covers nothing. A registry outage
-  is a warning.
+  is a warning on a merge, and fails a release run (a tag, or the `release` workflow): re-run it
+  once the registry answers.
 - When it fails: upgrade; without a fix, check reachability (`npm ls --all --omit=dev <package>`)
   and add an entry. Never raise the gated severities or drop the job.
 

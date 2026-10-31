@@ -155,6 +155,7 @@ const HTTP_NOT_FOUND = 404;
 async function vercelGet(ctx: ConnectionContext, auth: VercelAuth, path: string): Promise<unknown> {
   const res = await ctx.fetch(`${VERCEL_API_BASE}${path}`, {
     method: 'GET',
+    redirect: 'error',
     headers: { Authorization: `Bearer ${auth.token}`, Accept: 'application/json' },
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });

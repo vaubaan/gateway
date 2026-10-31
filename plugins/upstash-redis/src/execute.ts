@@ -205,7 +205,7 @@ async function callManagementApi(
     init.body = JSON.stringify(body);
   }
   if (call.signal) init.signal = call.signal;
-  const res = await call.fetch(`${UPSTASH_MANAGEMENT_API}${path}`, init);
+  const res = await call.fetch(`${UPSTASH_MANAGEMENT_API}${path}`, { ...init, redirect: 'error' });
   const text = await res.text();
   if (!res.ok) {
     const msg = `Upstash Management API ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;
@@ -379,7 +379,7 @@ async function executeDataTool(
     body: JSON.stringify(command),
   };
   if (call.signal) init.signal = call.signal;
-  const res = await call.fetch(endpoint, init);
+  const res = await call.fetch(endpoint, { ...init, redirect: 'error' });
   const text = await res.text();
   if (!res.ok) {
     const msg = `Upstash Data API ${res.status}: ${text.slice(0, 300)}`;

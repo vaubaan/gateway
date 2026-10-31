@@ -11,8 +11,10 @@
  *
  * Lockout: `LOCAL_LOCKOUT` wrong passwords within its window lock the account
  * for `lockMs`, counted in the store (a restart resets nothing). An unknown
- * address, a wrong password and a locked account are one answer, and cost the
- * same time (`decoyHash`).
+ * address, a wrong password and a locked account are one answer. An unknown
+ * address and a wrong password cost the same time (`decoyHash`); a locked account
+ * answers before any hash (security audit 2026-10-31, M2), so that a locked
+ * account is no free hash for anonymous posts (threat model A44).
  *
  * Audited (`AdminAuditEntry`, object `instance-config` /
  * `local-account:<provider>`): `local-link-created`, `local-account-created`,
@@ -22,7 +24,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
-import { decoyHash, hashPassword, passwordProblem, verifyPassword } from '../crypto/password';
+import { argon2Passwords, passwordProblem, type PasswordHasher } from '../crypto/password';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
@@ -76,6 +78,8 @@ export interface LocalAccountsDeps {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly publicUrl: URL;
+  /** The password hashing; the native argon2id binding unless a test hands another. */
+  readonly passwords?: PasswordHasher;
 }
 
 /** What an enrolment shows: the secret for the QR code and for typing by hand. */
@@ -89,7 +93,11 @@ export function localAccountsObjectId(providerId: string): string {
 }
 
 export class LocalAccountsService {
-  constructor(private readonly deps: LocalAccountsDeps) {}
+  private readonly passwords: PasswordHasher;
+
+  constructor(private readonly deps: LocalAccountsDeps) {
+    this.passwords = deps.passwords ?? argon2Passwords;
+  }
 
   /** The address a link points at: the create-account page or the reset page, with the token. */
   linkUrl(kind: LocalLinkKind, token: string): URL {
@@ -205,9 +213,10 @@ export class LocalAccountsService {
   }
 
   /**
-   * Whether `password` is the account's. One answer and one cost for an unknown
-   * address, a wrong password and a locked account; a wrong password counts
-   * towards the lockout, a right one clears the count.
+   * Whether `password` is the account's. One answer for an unknown address, a wrong
+   * password and a locked account, one cost for the first two; a locked account is
+   * refused before any hash. A wrong password counts towards the lockout, a right one
+   * clears the count.
    */
   async checkPassword(providerId: string, email: string, password: string): Promise<PasswordCheck> {
     const normalized = normalizeLocalEmail(email);
@@ -215,19 +224,18 @@ export class LocalAccountsService {
       ? await this.deps.store.localAccounts.getByEmail(providerId, normalized)
       : null;
     if (!account) {
-      await verifyPassword(await decoyHash(), password);
+      await this.passwords.verifyDecoy(password);
       return { ok: false, cause: 'unknown' };
     }
     const now = this.deps.clock.now().getTime();
     if (account.lockedUntil !== null && Date.parse(account.lockedUntil) > now) {
-      await verifyPassword(await decoyHash(), password);
       this.deps.logger.warn('local sign-in refused: account locked', { provider: providerId });
       return { ok: false, cause: 'locked' };
     }
     const hash = await this.deps.store.localAccounts.readSecret(account.id, 'password');
-    const right = hash !== null && (await verifyPassword(hash, password));
+    const right = hash !== null && (await this.passwords.verify(hash, password));
     if (!right) {
-      if (hash === null) await verifyPassword(await decoyHash(), password);
+      if (hash === null) await this.passwords.verifyDecoy(password);
       const after = await this.deps.store.localAccounts.recordFailure(account.id, LOCAL_LOCKOUT);
       if (after?.lockedUntil && Date.parse(after.lockedUntil) > now) {
         this.deps.logger.warn('local account locked after too many wrong passwords', {
@@ -283,7 +291,7 @@ export class LocalAccountsService {
     password: string,
     actor: string,
   ): Promise<LocalAccountRecord> {
-    const hash = await hashPassword(password);
+    const hash = await this.passwords.hash(password);
     const account = await this.deps.store.localAccounts.create({ provider: providerId, email });
     if (!account) throw new LocalAccountError('account-exists');
     await this.deps.store.localAccounts.writeSecret(account.id, 'password', hash);
@@ -298,7 +306,7 @@ export class LocalAccountsService {
     password: string,
     actor: string,
   ): Promise<void> {
-    const hash = await hashPassword(password);
+    const hash = await this.passwords.hash(password);
     await this.deps.store.localAccounts.writeSecret(account.id, 'password', hash);
     await this.deps.store.localAccounts.markPasswordChanged(account.id);
     await this.deps.store.localAccounts.clearFailures(account.id);

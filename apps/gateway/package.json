@@ -32,6 +32,7 @@
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
+    "argon2": "^0.45.1",
     "better-sqlite3": "13.0.3",
     "geist": "^1.8.1",
     "jose": "6.2.12",

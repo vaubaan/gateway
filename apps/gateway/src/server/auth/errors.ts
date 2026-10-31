@@ -24,6 +24,7 @@ export const LOGIN_ERROR_CODES = [
   'too-many-attempts',
   'password-refused',
   'second-factor-refused',
+  'second-factor-locked',
   'second-factor-required',
 ] as const;
 export type LoginErrorCode = (typeof LOGIN_ERROR_CODES)[number];
@@ -65,6 +66,8 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
     'The email address or the password is not right, or the account is locked for a few minutes after too many attempts.',
   'second-factor-refused':
     'The code was not accepted. Enter the current code of your authenticator app, or a recovery code.',
+  'second-factor-locked':
+    'Too many wrong codes were entered for this account. Wait fifteen minutes, then sign in again.',
   'second-factor-required':
     'This account administers the gateway and needs a second factor: the sign-in continues with its enrolment.',
 };

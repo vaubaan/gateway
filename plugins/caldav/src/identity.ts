@@ -16,7 +16,7 @@ import { toolPrefixFor } from '@vaubaan/plugin-sdk';
 export const CALDAV_PLUGIN_ID = 'caldav';
 
 /** The version, equal to `package.json` (telemetry reports it). */
-export const CALDAV_PLUGIN_VERSION = '0.1.3';
+export const CALDAV_PLUGIN_VERSION = '0.2.0';
 
 export const CALDAV_TOOL_PREFIX = toolPrefixFor(CALDAV_PLUGIN_ID);
 

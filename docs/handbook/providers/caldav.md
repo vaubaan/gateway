@@ -3,7 +3,7 @@ title: CalDAV Calendar provider plugin
 tracks:
   - plugins/caldav/src/
   - plugins/caldav/package.json
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # CalDAV Calendar provider plugin — handbook
@@ -18,17 +18,23 @@ before anything is sent (that is `google-calendar`). Rules common to every plugi
 - [`src/classify.ts`](../../../plugins/caldav/src/classify.ts) — grammars, attendee zoning, shared
   with execute.
 - [`src/dav.ts`](../../../plugins/caldav/src/dav.ts) — every request over `ctx.fetch`, the host
-  check (`isAllowedTarget`), multistatus.
+  check (`isAllowedTarget`, `isHomeHost`, `pinnedTo`), multistatus.
 - [`src/event.ts`](../../../plugins/caldav/src/event.ts) — event views and writes, the checks
   before a write.
 - [`src/ical.ts`](../../../plugins/caldav/src/ical.ts) — the iCalendar codec, syntax only.
 
 ## Invariants
 
-- **The credential goes only to the host the person typed**, or a sibling under the same parent
-  domain (iCloud homes live on `p<nn>-caldav.icloud.com`); a parent of two labels or fewer, an IP
-  literal or a loopback admits the host alone. Checked before every request, redirects included
-  (manual, at most five), in discovery and execution; `https` → `http` is refused.
+- **The credential goes only to the host the person typed, and to one pinned home host.** The
+  principal and its redirects stay on the typed host; the calendar home the principal announces may
+  be a sibling under the same parent domain (`isHomeHost`; iCloud homes live on
+  `p<nn>-caldav.icloud.com`), and from then on the discovery is pinned to that host
+  (`pinnedTo`): a calendar listed on any other host is skipped. A call is pinned to the host of its
+  stored calendar, checked by the same rule. A parent of two labels or fewer, an IP literal or a
+  loopback admits the host alone. Checked before every request, redirects included (manual, at
+  most five); `https` → `http` is refused. The residue: on a multi-tenant suffix
+  (`*.duckdns.org`), the typed server's own principal can still name a stranger's host as its home,
+  once, at discovery.
 - **Who a write notifies is what is priced**: a server with scheduling mails the attendees. Zones as
   Gmail's (account `none`, `internal`, `allowlist`, anybody else or a non-`mailto:` address
   `external`); the call's zone is the worst of its people. Zone lists are discovered empty: until

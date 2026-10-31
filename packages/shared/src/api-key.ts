@@ -49,12 +49,24 @@ const ARGON2_OPTS = {
   parallelism: 1,
 } as const;
 
-function randomBase62(len: number): string {
-  const buf = randomBytes(len);
+/**
+ * Bytes at or above the largest multiple of 62 a byte holds (4 × 62 = 248) are drawn
+ * again: every symbol then has exactly four bytes behind it, so each is equally likely
+ * (no modulo bias, security audit 2026-10-31, H1).
+ */
+const BASE62_BYTE_LIMIT = 248;
+
+/** `len` symbols of the token alphabet, uniformly drawn from `random` (a CSPRNG in production). */
+export function randomBase62(
+  len: number,
+  random: (size: number) => Uint8Array = randomBytes,
+): string {
   let out = '';
-  for (let i = 0; i < len; i++) {
-    const byte = buf[i] ?? 0;
-    out += BASE62[byte % 62] ?? '0';
+  while (out.length < len) {
+    for (const byte of random(len - out.length)) {
+      if (byte >= BASE62_BYTE_LIMIT) continue;
+      out += BASE62.charAt(byte % BASE62.length);
+    }
   }
   return out;
 }

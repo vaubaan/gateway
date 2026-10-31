@@ -46,3 +46,10 @@ export function logging(logger: Logger, token: IssuedToken, accessToken: string)
   // ok: vaubaan-secret-bearing-value-logged
   logger.warn('user deactivated', { member_tokens_revoked: 3, token_kind: 'member' });
 }
+
+export function tls(host: string): void {
+  // ruleid: vaubaan-tls-verification-off
+  tlsConnect({ host, rejectUnauthorized: false });
+  // ok: vaubaan-tls-verification-off
+  tlsConnect({ host, rejectUnauthorized: true });
+}

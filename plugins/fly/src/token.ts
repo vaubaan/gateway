@@ -158,6 +158,7 @@ export async function verifyFlyToken(ctx: ConnectionContext): Promise<Credential
     );
   }
   const res = await ctx.fetch(`${FLY_API_BASE}/tokens/current`, {
+    redirect: 'error',
     method: 'GET',
     headers: { authorization: authorizationOf(ctx.credential), accept: 'application/json' },
     ...(ctx.signal ? { signal: ctx.signal } : {}),

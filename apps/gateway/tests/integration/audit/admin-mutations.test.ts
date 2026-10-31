@@ -1544,6 +1544,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     },
   },
   'SessionService.createLocalStep': exempt(SESSION_STATE),
+  'SessionService.reissueLocalStep': exempt(SESSION_STATE),
   'SessionService.peekLocalStep': exempt(SESSION_STATE),
   'SessionService.takeLocalStep': exempt(SESSION_STATE),
   'SessionService.create': exempt(SESSION_STATE),

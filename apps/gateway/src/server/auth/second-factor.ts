@@ -5,6 +5,11 @@
  * the person has none — unless an administrator waived it for the provider, and never
  * waived for an administrator.
  *
+ * Lockout: `SECOND_FACTOR_LOCKOUT` wrong codes within its window lock the person's
+ * factor for `lockMs`, counted in the store as `LOCAL_LOCKOUT` counts wrong passwords
+ * (security audit 2026-10-31, M1): whoever holds the password cannot try codes without
+ * end. A locked factor checks no code, not even the right one.
+ *
  * The local accounts kept their factor per account (migration 0019); the boot moves it
  * to the account's user once (`adoptLocalFactors`).
  */
@@ -20,7 +25,7 @@ import {
 } from '../crypto/totp';
 import { localIssuer } from '../config/sign-in';
 import type { Logger } from '../logging';
-import type { Store } from '../store';
+import type { LockoutRule, Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import type { UserRecord } from '../store/types';
 
@@ -31,7 +36,16 @@ export interface TotpEnrolment {
 
 export type SecondFactorCheck =
   | { readonly ok: true; readonly by: 'totp' | 'recovery-code'; readonly recoveryCodesLeft: number }
-  | { readonly ok: false };
+  | { readonly ok: false; readonly cause: 'none' | 'wrong' | 'locked' };
+
+const MINUTE_MS = 60_000;
+
+/** Ten wrong codes in fifteen minutes lock the factor for fifteen minutes, as `LOCAL_LOCKOUT`. */
+export const SECOND_FACTOR_LOCKOUT: LockoutRule = {
+  maxAttempts: 10,
+  windowMs: 15 * MINUTE_MS,
+  lockMs: 15 * MINUTE_MS,
+};
 
 /** How a provider's waiver reads (`ProviderState.waiver`). */
 export type SecondFactorWaiver = 'always' | 'amr';
@@ -96,28 +110,61 @@ export class SecondFactorService {
     return { recoveryCodes };
   }
 
-  /** A code of the app (never twice: the step must be later than the last one), or a recovery code. */
+  /**
+   * A code of the app (never twice: the step must be later than the last one), or a
+   * recovery code. A wrong one counts towards the lockout, a right one clears the
+   * count; while the factor is locked no code is checked.
+   */
   async check(userId: string, code: string): Promise<SecondFactorCheck> {
-    if (!(await this.has(userId))) return { ok: false };
-    const typed = code.trim();
+    const factor = await this.deps.store.secondFactors.get(userId);
+    if (!factor) return { ok: false, cause: 'none' };
+    if (this.isLocked(factor.lockedUntil)) {
+      this.deps.logger.warn('second factor refused: locked');
+      return { ok: false, cause: 'locked' };
+    }
+    const accepted = await this.accept(userId, code.trim());
+    if (!accepted) return this.recordWrongCode(userId);
+    if (factor.failedAttempts > 0) await this.deps.store.secondFactors.clearFailures(userId);
+    return accepted;
+  }
+
+  /** The code when it is one of the person's: an unused step of the app, or an unused recovery code. */
+  private async accept(
+    userId: string,
+    typed: string,
+  ): Promise<Extract<SecondFactorCheck, { ok: true }> | null> {
     const factors = this.deps.store.secondFactors;
     if (/^[\d\s]{6,8}$/.test(typed)) {
       const secret = await factors.readSecret(userId, 'totp');
       const bytes = secret ? base32Decode(secret) : null;
       const step = bytes ? verifyTotp(bytes, typed, this.deps.clock.now().getTime()) : null;
-      if (step !== null && (await factors.advanceStep(userId, step))) {
-        return { ok: true, by: 'totp', recoveryCodesLeft: await this.recoveryCodesLeft(userId) };
-      }
-      return { ok: false };
+      if (step === null || !(await factors.advanceStep(userId, step))) return null;
+      return { ok: true, by: 'totp', recoveryCodesLeft: await this.recoveryCodesLeft(userId) };
     }
     const raw = await factors.readSecret(userId, 'recovery');
     const digests = raw ? (JSON.parse(raw) as string[]) : [];
     const digest = recoveryCodeDigest(typed);
-    if (!digests.includes(digest)) return { ok: false };
+    if (!digests.includes(digest)) return null;
     const left = digests.filter((d) => d !== digest);
     await factors.writeSecret(userId, 'recovery', JSON.stringify(left));
     this.deps.logger.info('recovery code used', { left: left.length });
     return { ok: true, by: 'recovery-code', recoveryCodesLeft: left.length };
+  }
+
+  /** One more wrong code; `locked` when it was the one too many. */
+  private async recordWrongCode(userId: string): Promise<SecondFactorCheck> {
+    const after = await this.deps.store.secondFactors.recordFailure(userId, SECOND_FACTOR_LOCKOUT);
+    if (after && this.isLocked(after.lockedUntil)) {
+      this.deps.logger.warn('second factor locked after too many wrong codes', {
+        attempts: after.failedAttempts,
+      });
+      return { ok: false, cause: 'locked' };
+    }
+    return { ok: false, cause: 'wrong' };
+  }
+
+  private isLocked(lockedUntil: string | null): boolean {
+    return lockedUntil !== null && Date.parse(lockedUntil) > this.deps.clock.now().getTime();
   }
 
   async recoveryCodesLeft(userId: string): Promise<number> {

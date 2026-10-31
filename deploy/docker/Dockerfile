@@ -32,26 +32,33 @@ RUN mkdir -p /manifests \
 # ---------------------------------------------------------------------------
 # deps: full install (dev dependencies are needed to build).
 # Build tools are present only as a fallback when a prebuilt addon is missing.
+# The install, and the lifecycle scripts of every package it runs, run as the
+# base image's unprivileged `node` user, never as root (security audit
+# 2026-10-31, L12); so does the build below.
 # ---------------------------------------------------------------------------
 FROM base AS deps
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
- && rm -rf /var/lib/apt/lists/*
-COPY --from=manifests /manifests ./
+ && rm -rf /var/lib/apt/lists/* \
+ && chown node:node /app
+USER node
+COPY --from=manifests --chown=node:node /manifests ./
 RUN npm ci --no-audit --no-fund
 
 # ---------------------------------------------------------------------------
 # build: next build with output: 'standalone' (apps/gateway/next.config.ts).
 # ---------------------------------------------------------------------------
 FROM base AS build
+RUN chown node:node /app
+USER node
 # No commit argument: the commit /healthz reports is read from
 # apps/gateway/build-commit.txt, which `git archive` stamps (export-subst);
 # a context that is not an archive builds `unknown`. A build argument could be
 # fed by a stale platform variable (docs/workflow/coding-workflow.md).
 # The whole dependency tree: the hoisted node_modules and the ones npm nests
 # under a workspace when two majors of a package coexist (apps/gateway/node_modules).
-COPY --from=deps /app ./
-COPY . .
+COPY --from=deps --chown=node:node /app ./
+COPY --chown=node:node . .
 RUN npm run build --workspace @vaubaan/gateway-app
 
 # ---------------------------------------------------------------------------

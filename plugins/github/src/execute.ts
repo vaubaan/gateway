@@ -134,6 +134,7 @@ export async function discoverGithubResources(
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
     const url = `${GITHUB_API_BASE}${path}?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
     const res = await ctx.fetch(url, {
+      redirect: 'error',
       method: 'GET',
       headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${token}` },
       ...(ctx.signal ? { signal: ctx.signal } : {}),

@@ -354,7 +354,7 @@ async function callStripeApi(
     if (body) init.body = body;
   }
 
-  const res = await fetchImpl(url, init);
+  const res = await fetchImpl(url, { ...init, redirect: 'error' });
   const text = await res.text();
   if (!res.ok) {
     const message = `Stripe API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`;

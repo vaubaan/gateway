@@ -483,6 +483,7 @@ async function callUpstreamMcp(
   id = Math.floor(Math.random() * 1_000_000_000),
 ): Promise<unknown> {
   const res = await call.fetch(VERCEL_MCP_URL, {
+    redirect: 'error',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${call.token}`,
@@ -528,7 +529,7 @@ async function callRest(
     init.body = JSON.stringify(body);
   }
   if (call.signal) init.signal = call.signal;
-  const res = await call.fetch(url, init);
+  const res = await call.fetch(url, { ...init, redirect: 'error' });
   const text = await res.text();
   if (!res.ok) {
     const msg = `Vercel REST ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;

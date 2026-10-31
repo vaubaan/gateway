@@ -85,6 +85,7 @@ export async function verifyResendKey(ctx: ConnectionContext): Promise<Credentia
   if (!key) throw new Error('resend: the credential carries no api_key');
   const res = await ctx.fetch(`${RESEND_API_BASE}/domains`, {
     method: 'GET',
+    redirect: 'error',
     headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   });
