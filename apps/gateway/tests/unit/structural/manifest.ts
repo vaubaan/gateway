@@ -196,14 +196,15 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'plugins-read-through-the-transport',
     statement:
-      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own; the plugins written before the transport are listed and the list only shrinks.",
+      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own, and never casts an answer to a DTO type.",
     source: 'ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-transport.test.ts`,
         tests: [
+          'the checks read a body read and a DTO cast, and nothing else',
           'reads no response body itself',
-          'is listed as not yet migrated only while it still reads a body itself',
+          "casts no provider's answer to a DTO",
         ],
       },
       {
