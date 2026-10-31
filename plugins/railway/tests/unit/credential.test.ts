@@ -142,7 +142,7 @@ describe('railway token — the declaration', () => {
   });
 
   test('the guide offers the account token second and says why not a project token', () => {
-    const steps = guideText(railwayCredential.guide!);
+    const steps = guideText(railwayCredential.guide);
     expect(steps.indexOf('workspace token')).toBeGreaterThan(-1);
     expect(steps.indexOf('workspace token')).toBeLessThan(steps.indexOf('account token'));
     expect(steps).toMatch(/project token is not accepted: it reaches one environment/);

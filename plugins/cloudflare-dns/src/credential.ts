@@ -94,7 +94,7 @@ export const cloudflareDnsCredential: ApiKeyCredentialSpec = {
       {
         do: 'Add one permission row per line below, at the level shown (Edit for read and write, Purge for Cache Purge).',
       },
-      { do: 'Under Zone Resources, choose Include, All zones.' },
+      { do: 'Choose Include, All zones under Zone Resources.' },
       {
         do: 'Leave the TTL empty or set an end date, choose Continue to summary, then Create Token.',
       },

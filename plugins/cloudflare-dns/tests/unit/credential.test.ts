@@ -43,14 +43,14 @@ describe('cloudflare-dns token — the guide', () => {
     expect(cloudflareDnsCredential.createUrl).toBe(
       'https://dash.cloudflare.com/profile/api-tokens',
     );
-    const text = guideText(cloudflareDnsCredential.guide!);
+    const text = guideText(cloudflareDnsCredential.guide);
     expect(text).toMatch(/Create Custom Token/);
     expect(text).toMatch(/Include, All zones/);
-    expect(cloudflareDnsCredential.guide!.expiry).toEqual({ kind: 'provider-reports' });
+    expect(cloudflareDnsCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
   });
 
   test('the permission rows are the token builder’s, every tool served by one', () => {
-    const names = new Set(cloudflareDnsCredential.guide!.permissions.map((p) => p.name));
+    const names = new Set(cloudflareDnsCredential.guide.permissions.map((p) => p.name));
     expect([...names]).toEqual([
       'Zone · Zone',
       'Zone · DNS',

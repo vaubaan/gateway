@@ -93,8 +93,8 @@ describe('credential', () => {
       ['app_password', true],
     ]);
     expect(spec.guide?.permissions).toEqual([]);
-    expect(guideText(spec.guide!)).toMatch(/caldav\.icloud\.com/);
-    expect(guideText(spec.guide!)).toMatch(/Google refuses app passwords/);
+    expect(guideText(spec.guide)).toMatch(/caldav\.icloud\.com/);
+    expect(guideText(spec.guide)).toMatch(/Google refuses app passwords/);
     expect(typeof spec.verify).toBe('function');
   });
 
@@ -124,8 +124,7 @@ describe('verify and discovery', () => {
   test('a plain server : the principal at /.well-known/caldav, the account its address', async () => {
     const server = plainServer();
     await expect(
-      caldavPlugin.credential.kind === 'api-key' &&
-        caldavPlugin.credential.verify!(connCtx(server)),
+      caldavPlugin.credential.kind === 'api-key' && caldavPlugin.credential.verify(connCtx(server)),
     ).resolves.toEqual({
       account: USER,
       expiresAt: null,

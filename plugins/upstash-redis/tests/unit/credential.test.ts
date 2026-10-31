@@ -29,15 +29,15 @@ const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
 describe('upstash-redis key — the guide', () => {
   test('the Developer API page, Read/Write for every tool, an expiry the person types', () => {
     expect(upstashRedisCredential.createUrl).toBe(UPSTASH_API_KEYS_URL);
-    expect(guideText(upstashRedisCredential.guide!)).toMatch(/native Upstash account/);
-    expect(upstashRedisCredential.guide!.permissions).toEqual([
+    expect(guideText(upstashRedisCredential.guide)).toMatch(/native Upstash account/);
+    expect(upstashRedisCredential.guide.permissions).toEqual([
       {
         name: 'Read/Write',
         access: 'read-write',
         tools: upstashRedisTools.map((tool) => tool.name),
       },
     ]);
-    expect(upstashRedisCredential.guide!.expiry).toEqual({
+    expect(upstashRedisCredential.guide.expiry).toEqual({
       kind: 'person-types',
       recommendedDays: 90,
     });

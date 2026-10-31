@@ -80,9 +80,10 @@ export const railwayCredential: ApiKeyCredentialSpec = {
       },
       {
         do: 'Open Account settings, Tokens, and create a token with the workspace selected: a workspace token reaches that workspace only.',
+        url: RAILWAY_TOKENS_PAGE,
       },
       {
-        do: 'An account token, created with No workspace selected, works too but reaches every workspace of the account. A project token is not accepted: it reaches one environment of one project.',
+        do: 'Choose No workspace instead only for an account token over every workspace of the account; a project token is not accepted: it reaches one environment of one project.',
       },
       { do: 'Copy the token and paste it here. Railway shows it once.' },
     ],

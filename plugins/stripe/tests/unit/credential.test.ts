@@ -38,10 +38,10 @@ describe('stripe keys — the guide', () => {
   test('asks for the secret key on the API keys page, and says why not a restricted one', () => {
     expect(stripePlugin.credential).toBe(stripeCredential);
     expect(stripeCredential.createUrl).toBe(STRIPE_KEYS_PAGE);
-    const text = guideText(stripeCredential.guide!);
+    const text = guideText(stripeCredential.guide);
     expect(text).toMatch(/Reveal live key/);
     expect(text).toMatch(/not a restricted key/);
-    expect(stripeCredential.guide!.expiry.kind).toBe('none');
+    expect(stripeCredential.guide.expiry.kind).toBe('none');
   });
 });
 

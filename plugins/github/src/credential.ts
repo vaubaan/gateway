@@ -67,6 +67,7 @@ export const githubCredential: ApiKeyCredentialSpec = {
       { do: 'Sign in to GitHub as the account the agents will act as.' },
       {
         do: 'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
+        url: GITHUB_TOKENS_PAGE,
       },
       {
         do: 'Choose the organization as Resource owner, then All repositories.',

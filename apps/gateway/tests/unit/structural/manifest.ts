@@ -763,6 +763,24 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'shipped-token-guides',
+    statement:
+      'Every plugin the image ships with a token way links the token page, lists steps to act on ending at the paste, says how wide to grant and that the mission narrows it, says who knows the expiry, points to the service documentation, and checks the token at paste: no token plugin ships with a bare form.',
+    source: 'ADR one-place-to-authorize-services-token-first (amended 2026-10-31)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/token-guides.test.ts`,
+        tests: [
+          'links the token page and names what the person creates',
+          'lists steps to act on, the last one at the paste',
+          'says how wide to grant and that the mission narrows it',
+          'says who knows the expiry',
+          'checks the token at paste and never shows it back',
+        ],
+      },
+    ],
+  },
+  {
     id: 'shipped-plugin-icons',
     statement:
       'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid) and the brand colour it is drawn in: no service of the repository falls back to two letters or to the plain ink, and the interface keeps no provider → icon or colour list of its own.',

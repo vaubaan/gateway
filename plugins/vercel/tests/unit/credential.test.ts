@@ -35,10 +35,10 @@ const current = (token: Record<string, unknown>): MockRoute => ({
 describe('vercel token — the guide', () => {
   test('the token page, the team with All Projects, the Team ID read first', () => {
     expect(vercelCredential.createUrl).toBe(VERCEL_TOKENS_URL);
-    const text = guideText(vercelCredential.guide!);
+    const text = guideText(vercelCredential.guide);
     expect(text.indexOf('Team ID')).toBeLessThan(text.indexOf('Account Settings, Tokens'));
-    expect(vercelCredential.guide!.reach.grant).toBe('The team, All Projects');
-    expect(vercelCredential.guide!.expiry).toEqual({ kind: 'provider-reports' });
+    expect(vercelCredential.guide.reach.grant).toBe('The team, All Projects');
+    expect(vercelCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
   });
 });
 

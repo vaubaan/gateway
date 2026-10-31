@@ -77,7 +77,10 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
   guide: {
     steps: [
       { do: 'Sign in to Supabase as the account the agents will act as.' },
-      { do: 'Open Account preferences, Access tokens, then generate a new token.' },
+      {
+        do: 'Open Account preferences, Access tokens, then generate a new token.',
+        url: SUPABASE_TOKENS_PAGE,
+      },
       {
         do: 'Choose the organization itself as the resource, not single projects.',
       },

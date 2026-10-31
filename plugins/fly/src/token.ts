@@ -4,10 +4,11 @@
  * Handbook : docs/handbook/providers/fly.md.
  *
  * Fly offers OAuth to extension partners only, with a `read` scope : a
- * token is the only way to create and deploy. The recommended token is
- * `fly tokens create org`, attenuated with the `NoAdminFeatures` caveat
- * (`fly tokens attenuate`) so that it cannot touch billing, membership or the
- * organization itself. Tokens made by `fly tokens create` are macaroons sent
+ * token is the only way to create and deploy. The guide asks for an
+ * organization token from the dashboard's Tokens page (or `fly tokens create
+ * org`, read through Context7 on 2026-10-31) : the whole organization, the
+ * missions narrowing it ; no caveat to write, one visit. Tokens made by
+ * `fly tokens create` and the Tokens page are macaroons sent
  * as `Authorization: FlyV1 <token>` (Fly's metrics documentation ; the
  * Machines API pages show `Bearer` for the older `fly auth token`).
  *
@@ -44,8 +45,8 @@ export const FLY_LOGS_BASE = 'https://api.fly.io/api/v1';
 /** The scheme `fly tokens create` tokens are sent with. */
 const FLYV1 = 'FlyV1 ';
 
-/** Where a person creates and revokes organization tokens. */
-export const FLY_TOKENS_PAGE = 'https://fly.io/dashboard';
+/** The dashboard's Tokens page, where a person creates and revokes organization tokens. */
+export const FLY_TOKENS_PAGE = 'https://fly.io/tokens';
 
 export const flyCredential: ApiKeyCredentialSpec = {
   kind: 'api-key',
@@ -60,7 +61,7 @@ export const flyCredential: ApiKeyCredentialSpec = {
       placeholder: 'FlyV1 fm2_…',
       // What `fly tokens create` prints : one or more `fm1_` / `fm2_` macaroons, comma-separated.
       pattern: '^(FlyV1 )?fm[12]_[A-Za-z0-9+/=_-]{16,}(,fm[12]_[A-Za-z0-9+/=_-]{16,})*$',
-      help: 'From `fly tokens create org`, attenuated with NoAdminFeatures. Never `fly auth token`.',
+      help: 'An organization token (Tokens page, or fly tokens create org), never fly auth token.',
     },
     {
       name: ORG_SLUG_FIELD,
@@ -86,15 +87,17 @@ export const flyCredential: ApiKeyCredentialSpec = {
   ],
   guide: {
     steps: [
-      { do: 'Install flyctl and sign in as a member of the organization the agents will work in.' },
+      { do: 'Sign in to Fly.io as a member of the organization the agents will work in.' },
       {
-        do: 'Create an organization token: fly tokens create org --org <slug> --name vaubaan-gateway --expiry 2160h.',
+        do: 'Open Tokens, choose the organization, name the token vaubaan-gateway, set an expiry, and choose Create Organization token.',
+        url: FLY_TOKENS_PAGE,
       },
       {
-        do: 'Attenuate it so it cannot touch billing, membership or the organization itself: write [{"type":"NoAdminFeatures","body":{}}] to caveats.json, then run fly tokens attenuate -f caveats.json -t "<token>".',
+        do: 'Run this instead with flyctl if you prefer the command line; it prints the same organization token.',
+        code: 'fly tokens create org --org <slug> --name vaubaan-gateway --expiry 2160h',
       },
       {
-        do: 'Paste the attenuated token here, with the organization slug. Keep the organization that hosts this gateway separate: never connect it here.',
+        do: 'Copy the token and paste it here with the organization slug; never connect the organization that hosts this gateway.',
       },
     ],
     permissions: [],

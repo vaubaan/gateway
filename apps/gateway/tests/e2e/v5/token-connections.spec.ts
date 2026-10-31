@@ -140,7 +140,7 @@ test('Railway: a workspace token, checked, named by its workspace', async ({ pag
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a Railway account$/);
   const guide = page.getByTestId('token-guide');
   await expect(guide).toContainText('a workspace token reaches that workspace only');
-  await expect(guide).toContainText('An account token, created with No workspace selected');
+  await expect(guide).toContainText('Choose No workspace instead only for an account token');
   await expect(guide).toContainText('A project token is not accepted');
   await captureAll(page, 'connect-railway-token');
 

@@ -47,13 +47,14 @@ export const gmailGuide: TokenGuide = {
       do: 'Sign in to the Google Account of the mailbox and turn on 2-Step Verification under Security, if it is not on yet: Google offers app passwords only then.',
     },
     {
-      do: `Open ${GMAIL_APP_PASSWORDS_URL}, create an app password named "Vaubaan Gateway" and copy the 16 letters Google shows.`,
+      do: 'Open the App passwords page, create an app password named "Vaubaan Gateway" and copy the 16 letters Google shows; if Google says app passwords are not available, the Google Workspace administrator of the account has turned them off.',
+      url: GMAIL_APP_PASSWORDS_URL,
     },
     {
-      do: 'Paste the address of the mailbox and the app password below; the spaces between the groups of letters do not matter.',
+      do: 'Check that IMAP is on in Gmail, under Settings, Forwarding and POP/IMAP.',
     },
     {
-      do: 'If Google says app passwords are not available, the Google Workspace administrator of the account has turned them off; if the connection is refused, check that IMAP is on in Gmail, under Settings, Forwarding and POP/IMAP.',
+      do: 'Paste the address of the mailbox and the app password here; the spaces between the groups of letters do not matter.',
     },
   ],
   permissions: [],

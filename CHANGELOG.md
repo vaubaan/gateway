@@ -92,6 +92,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Railway and Gmail guides move to the new shape (`@vaubaan/plugin-github`
   4.0.5, `-supabase` 5.0.5, `-notion` 0.1.5, `-caldav` 0.1.3, `-fly` 0.3.4,
   `-context7` 0.1.5, `-railway` 5.1.4, `-gmail` 1.1.1).
+- **The guided services ask for fewer visits.** Notion asks to share the
+  pages before the paste, so the first discovery finds them; CalDAV has one
+  step per server (iCloud, Fastmail, Nextcloud) with its page and the server
+  URL to copy; Fly links its dashboard's Tokens page and offers the
+  `fly tokens create org` command to copy, with no caveat file to write;
+  Gmail checks IMAP before the paste; every step is an action, the notes
+  moved into how wide to grant. Supabase and Fly say the expiry is chosen
+  at the service and not read back. A structural test holds every shipped
+  token way to the complete guide.
 - **Cloudflare DNS, Stripe, Vercel, Upstash Redis and Resend guide the
   connection and check the token at paste** (`@vaubaan/plugin-cloudflare-dns`
   3.0.5, `-stripe` 0.4.5, `-vercel` 3.0.5, `-upstash-redis` 3.2.4, `-resend`

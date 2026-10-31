@@ -35,8 +35,8 @@ describe('resend key — the guide', () => {
   test('the API keys page, Full access for every tool, and why not Sending access', () => {
     expect(resendPlugin.credential).toBe(resendCredential);
     expect(resendCredential.createUrl).toBe(RESEND_API_KEYS_PAGE);
-    expect(resendCredential.guide!.permissions.map((p) => p.name)).toEqual(['Full access']);
-    expect(guideText(resendCredential.guide!)).toMatch(/Sending access key cannot list/);
+    expect(resendCredential.guide.permissions.map((p) => p.name)).toEqual(['Full access']);
+    expect(guideText(resendCredential.guide)).toMatch(/Sending access key cannot list/);
   });
 });
 
