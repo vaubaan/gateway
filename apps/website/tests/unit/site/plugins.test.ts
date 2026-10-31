@@ -8,6 +8,7 @@ import { join } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { connectPageMarkdown } from '../../../src/content/plugin-pages';
 import { discoverPluginDirs, loadPlugins, type PluginInfo } from '../../../src/content/plugins';
 import { REPO_ROOT } from '../../../src/content/repo';
 
@@ -65,5 +66,17 @@ describe('the plugin catalog of the site', () => {
 
   it('carries no experimental state (docs/handbook/plugin-sdk.md)', () => {
     for (const plugin of plugins) expect(plugin, plugin.id).not.toHaveProperty('experimental');
+  });
+
+  it('the connect page of a token way says how wide to grant, the steps and the expiry', () => {
+    const tokenWays = plugins.filter((p) => p.credentials.some((c) => c.kind === 'api-key'));
+    expect(tokenWays.length).toBeGreaterThan(0);
+    for (const plugin of tokenWays) {
+      const page = connectPageMarkdown(plugin, '');
+      expect(page, plugin.id).toMatch(/^How wide to grant — .+: .+\. .*mission/m);
+      expect(page, plugin.id).toMatch(/^1\. /m);
+      expect(page, plugin.id).toMatch(/^Expiry: /m);
+      expect(page, plugin.id).not.toMatch(/and no more/);
+    }
   });
 });

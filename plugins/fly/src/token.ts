@@ -104,7 +104,7 @@ export const flyCredential: ApiKeyCredentialSpec = {
     reach: {
       what: 'Organization',
       grant: 'One organization token for the organization the agents work in',
-      why: 'Fly tokens carry no permission choice beyond their caveats: this gateway gives an agent only the apps and permissions its mission names.',
+      why: 'Fly tokens carry no permission choice: this gateway gives an agent only the apps and permissions its mission names.',
     },
     // Fly's token description read at paste carries no expiry: the person chose it.
     expiry: { kind: 'person-types', recommendedDays: 90 },

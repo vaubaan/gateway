@@ -183,7 +183,10 @@ function expiryWords(expiry: TokenExpiry): string {
 function credentialMarkdown(c: CredentialInfo): string[] {
   const lines: string[] = [`### The way: ${credentialKindWords(c)}`, ''];
   if (c.reach) {
-    lines.push(`Grant: ${text(c.reach.what)}, ${text(c.reach.grant)}. ${text(c.reach.why)}`, '');
+    lines.push(
+      `How wide to grant — ${text(c.reach.what)}: ${text(c.reach.grant)}. ${text(c.reach.why)}`,
+      '',
+    );
   }
   if (c.steps.length > 0) {
     lines.push(...c.steps.map((step, i) => stepMarkdown(step, i + 1)), '');
