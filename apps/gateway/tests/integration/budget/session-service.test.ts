@@ -14,7 +14,11 @@ import {
   type RecordCallRefused,
   type RecordCallResult,
 } from '../../../src/server/budget/index.ts';
-import { grantApprovalRequest, refuseRequest } from '../../../src/server/store/testing.ts';
+import {
+  grantApprovalRequest,
+  heldArguments,
+  refuseRequest,
+} from '../../../src/server/store/testing.ts';
 import {
   ANCHOR,
   APPROVAL_VALIDITY_SECONDS,
@@ -245,7 +249,7 @@ describe('SessionService.recordCall', () => {
         fingerprint: fingerprintArguments(args),
         hasArguments: true,
       });
-      expect(await f.store.requests.getArguments(request?.id as string)).toEqual(args);
+      expect(await heldArguments(f.store, request?.id as string)).toEqual(args);
       if (result.refusal.code !== 'approval-required') throw new Error('unreachable');
       expect(result.refusal.expires_at).toBe(request?.expiresAt);
       expect(await countersOf(result.session_id)).toEqual({});

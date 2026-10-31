@@ -726,7 +726,11 @@ describe('management door — tools of a delegated agent', () => {
       const issued = await issue(agent, draftOn(github, ['github.read-code']));
       const missionId = issued.mission.mission_id;
 
-      await rig.root.shares.service.revoke(await rig.actor(rig.seeded.ada), created.id);
+      await rig.root.shares.service.revoke(
+        await rig.actor(rig.seeded.ada),
+        created.id,
+        created.connectionId,
+      );
       const orphaned = await agent.call<MissionsAnswer>('list_my_missions', {
         mission_id: missionId,
       });
@@ -757,7 +761,11 @@ describe('management door — tools of a delegated agent', () => {
         [{ kind: 'user', id: rig.seeded.bob.id }],
         github,
       );
-      await rig.root.shares.service.revoke(await rig.actor(rig.seeded.ada), share!.id);
+      await rig.root.shares.service.revoke(
+        await rig.actor(rig.seeded.ada),
+        share!.id,
+        share!.connectionId,
+      );
       const revoked = await agent.call<RevokedMissionAnswer>('revoke_mission', {
         mission_id: missionId,
       });

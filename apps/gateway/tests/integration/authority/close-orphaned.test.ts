@@ -38,7 +38,7 @@ describe('closing an orphaned mission', () => {
   async function orphaned() {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ], 'Bob reads');
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
     expect(await rig.statusOf(mission)).toBe('orphaned');
     return mission;
   }
@@ -179,7 +179,11 @@ describe('closing an orphaned mission', () => {
       expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.connection.id)).toEqual([]);
 
       const [share] = await rig.root.store.shares.listForConnection(rig.connection.id);
-      await rig.root.shares.service.revoke(await rig.actor(rig.ada), share?.id ?? '');
+      await rig.root.shares.service.revoke(
+        await rig.actor(rig.ada),
+        share?.id ?? '',
+        share?.connectionId ?? '',
+      );
       expect(await rig.root.missions.service.orphanedOn(rig.ada, rig.connection.id)).toEqual([
         {
           id: serving.mission.id,

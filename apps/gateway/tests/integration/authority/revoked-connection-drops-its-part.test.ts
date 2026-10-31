@@ -232,7 +232,11 @@ describe('a revoked connection removes only its part of a mission', () => {
     }
     const mission = await issueBoth(bob);
     const [depotShare] = await instance.root.store.shares.listForConnection(instance.connection.id);
-    const withdrawn = await instance.root.shares.service.revoke(owner, depotShare!.id);
+    const withdrawn = await instance.root.shares.service.revoke(
+      owner,
+      depotShare!.id,
+      depotShare!.connectionId,
+    );
     expect(withdrawn).toMatchObject({ orphaned: 0, partsLost: 1 });
 
     const refused = await instance.call(mission, 'depot__read_item', { space: 'scratch' });

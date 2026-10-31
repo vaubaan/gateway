@@ -466,7 +466,8 @@ describe('audit search: visibility, filters, paging', () => {
         act,
         object: { type, id },
         before: null,
-        after: null,
+        // A share entry names its connection, as the share service writes it.
+        after: type === 'share' ? { connection_id: connection.id } : null,
         delegated_client_id: null,
       });
     }

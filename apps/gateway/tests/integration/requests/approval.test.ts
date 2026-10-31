@@ -36,6 +36,7 @@ import {
   WRITE,
   type BudgetFixture,
 } from '../budget/fixture.ts';
+import { heldArguments } from '../../../src/server/store/testing.ts';
 
 const PUBLIC_URL = new URL('https://gateway.example.com');
 const DAY1 = '2026-10-14T00:00:00.000Z';
@@ -749,7 +750,7 @@ describe('approval gate: refusal, decision, replay', () => {
         // The decision that is kept names no argument.
         expect(row.decision_json).not.toContain(SECRET_TITLE);
 
-        expect(await f.store.requests.getArguments(first.request_id)).toBeNull();
+        expect(await heldArguments(f.store, first.request_id)).toBeNull();
         const record = await f.store.requests.getById(first.request_id);
         expect(record).toMatchObject({ hasArguments: false, fingerprint: first.fingerprint });
         const view = await approvalView(first.request_id);
@@ -769,7 +770,7 @@ describe('approval gate: refusal, decision, replay', () => {
       // Overdue, not swept yet: the blob is still in the row, and nobody reads it.
       expect(stored(first.request_id)).toMatchObject({ state: 'open' });
       expect(stored(first.request_id).args_blob).not.toBeNull();
-      expect(await f.store.requests.getArguments(first.request_id)).toBeNull();
+      expect(await heldArguments(f.store, first.request_id)).toBeNull();
       const overdue = await approvalView(first.request_id);
       expect(overdue.request.state).toBe('expired');
       expect(overdue.call).toMatchObject({ arguments: null, arguments_erased: true });

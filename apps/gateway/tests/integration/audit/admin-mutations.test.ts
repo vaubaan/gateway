@@ -969,9 +969,10 @@ const RULES: Readonly<Record<string, Rule>> = {
         target: { kind: 'user', email: 'bob@example.com' },
         riskIds: ['keyco.read-things'],
       });
-      return share.id;
+      return { shareId: share.id, connectionId: connection.id };
     },
-    drive: (rig, shareId: string) => rig.root.shares.service.revoke(rig.alice, shareId),
+    drive: (rig, { shareId, connectionId }: { shareId: string; connectionId: string }) =>
+      rig.root.shares.service.revoke(rig.alice, shareId, connectionId),
     writes: { act: 'share-revoked', object: 'share', actor: 'alice' },
   },
 

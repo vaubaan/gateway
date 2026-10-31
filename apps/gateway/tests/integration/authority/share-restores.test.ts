@@ -48,7 +48,7 @@ describe('a share that would bring orphaned missions back', () => {
     const { share: first } = await share(toBob([READ, WRITE_STAGING]));
     const reader = await rig.issueFor(rig.bob, [READ]);
     const writer = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-    await rig.root.shares.service.revoke(await ada(), first.id);
+    await rig.root.shares.service.revoke(await ada(), first.id, first.connectionId);
     expect(await rig.statusOf(reader)).toBe('orphaned');
     expect(await rig.statusOf(writer)).toBe('orphaned');
     return { reader, writer };
@@ -99,7 +99,7 @@ describe('a share that would bring orphaned missions back', () => {
       await share({ target: { kind: 'group', groupId: team.id }, riskIds: [READ] });
       const { share: direct } = await share(toBob([WRITE_STAGING]));
       const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-      await rig.root.shares.service.revoke(await ada(), direct.id);
+      await rig.root.shares.service.revoke(await ada(), direct.id, direct.connectionId);
       expect(await rig.statusOf(mission)).toBe('orphaned');
 
       // The group share still gives the read half: the missing half alone restores it.
@@ -116,7 +116,7 @@ describe('a share that would bring orphaned missions back', () => {
         return share({ target: { kind: 'group', groupId: team.id }, riskIds: [WRITE_STAGING] });
       })();
       const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-      await rig.root.shares.service.revoke(await ada(), toTeam.id);
+      await rig.root.shares.service.revoke(await ada(), toTeam.id, toTeam.connectionId);
       expect(await rig.statusOf(mission)).toBe('orphaned');
 
       // Replacing Bob's share by the write half alone drops the read half he holds.

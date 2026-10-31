@@ -79,7 +79,11 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     expect(beyond.preview.connections[0]?.exceeds).toEqual([PURGE, WRITE_PROD]);
 
     // The owner revokes the share: the mission is orphaned at once…
-    const revoked = await rig.root.shares.service.revoke(await rig.actor(rig.ada), shared.share.id);
+    const revoked = await rig.root.shares.service.revoke(
+      await rig.actor(rig.ada),
+      shared.share.id,
+      shared.share.connectionId,
+    );
     expect(revoked).toMatchObject({ share: { status: 'revoked' }, orphaned: 1 });
     expect(await rig.statusOf(mission)).toBe('orphaned');
     // …as a derived state: the store still holds `active`.
@@ -227,6 +231,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       const revoked = await rig.root.shares.service.revoke(
         await rig.actor(rig.ada),
         first.share.id,
+        first.share.connectionId,
       );
       expect(revoked.orphaned).toBe(1);
       expect(await rig.statusOf(mission)).toBe('orphaned');
@@ -286,7 +291,11 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     it('is restored only when the new share covers every accepted risk of the mission', async () => {
       const first = await shareToBob([READ, WRITE_STAGING]);
       const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
-      await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+      await rig.root.shares.service.revoke(
+        await rig.actor(rig.ada),
+        first.share.id,
+        first.share.connectionId,
+      );
 
       // Narrower than what the mission accepted: still orphaned, and it says why.
       expect(await shareToBob([READ])).toMatchObject({ restored: 0 });
@@ -384,7 +393,11 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       await rig.root.missions.service.revoke(rig.bob, revokedMission.mission.id);
       await rig.root.store.missions.setStatus(expiredMission.mission.id, 'expired');
 
-      await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+      await rig.root.shares.service.revoke(
+        await rig.actor(rig.ada),
+        first.share.id,
+        first.share.connectionId,
+      );
       expect(await rig.statusOf(revokedMission)).toBe('revoked');
       expect(await rig.statusOf(expiredMission)).toBe('expired');
       expect(inactive(await rig.read(expiredMission)).status).toBe('expired');
@@ -408,7 +421,11 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       const [claim] = await rig.root.requests.service.inbox(rig.bob);
       if (!claim) throw new Error('expected an open claim');
 
-      await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+      await rig.root.shares.service.revoke(
+        await rig.actor(rig.ada),
+        first.share.id,
+        first.share.connectionId,
+      );
       const { service } = rig.root.missions;
       expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toEqual({
         ok: false,
@@ -450,7 +467,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   it('lets the creator close an orphaned mission for good: no gate edit, the creator revokes', async () => {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ]);
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
 
     const { service } = rig.root.missions;
     expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toEqual({
@@ -496,7 +513,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
   it('shows each side its own half in the Audit: share acts to the owner, the orphaning to the creator', async () => {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ]);
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
 
     const actsSeenBy = async (user: typeof rig.ada, isOperator = false) => {
       const { entries } = await rig.root.audit.query.search(
@@ -529,8 +546,13 @@ describe('share → issue within the restriction → exceed → revoke → orpha
         }),
       ).rejects.toMatchObject({ code: 'not-found' });
       await expect(asBob.contextFor(bob, rig.connection.id)).rejects.toBeInstanceOf(ShareError);
-      await expect(asBob.revoke(bob, share.id)).rejects.toMatchObject({ code: 'not-found' });
-      expect((await rig.root.store.shares.getById(share.id))?.status).toBe('active');
+      await expect(asBob.revoke(bob, share.id, share.connectionId)).rejects.toMatchObject({
+        code: 'not-found',
+      });
+      expect(
+        (await rig.root.store.shares.get({ connectionId: share.connectionId, shareId: share.id }))
+          ?.status,
+      ).toBe('active');
       expect(await rig.adminEntries('share-revoked')).toEqual([]);
     });
 
@@ -595,7 +617,11 @@ describe('a request on an orphaned mission still expires on the normal delay', (
     const [claim] = await rig.root.requests.service.inbox(rig.bob);
     if (!claim) throw new Error('expected an open claim');
 
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+    await rig.root.shares.service.revoke(
+      await rig.actor(rig.ada),
+      first.share.id,
+      first.share.connectionId,
+    );
     // The page states the limit: the request can be granted until it expires.
     const viewed = await rig.root.requests.service.view(rig.bob, claim.id);
     if (viewed.outcome !== 'ok' || viewed.view.kind !== 'claim') throw new Error('claim view');
@@ -655,7 +681,11 @@ describe('a request on an orphaned mission still expires on the normal delay', (
     if (!request) throw new Error('expected an open approval request');
     expect(blobOf(request.id)).toBeInstanceOf(Buffer);
 
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+    await rig.root.shares.service.revoke(
+      await rig.actor(rig.ada),
+      first.share.id,
+      first.share.connectionId,
+    );
     expect((await purge()).error?.data).toMatchObject({
       code: 'mission-inactive',
       status: 'orphaned',

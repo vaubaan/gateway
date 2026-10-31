@@ -856,7 +856,9 @@ export class RequestService {
 
     // An overdue request reads `expired` before the sweeper erases its blob:
     // nothing is opened for it either.
-    const openArguments = open ? await store.requests.getArguments(request.id) : null;
+    const openArguments = open
+      ? await store.requests.getArguments({ missionId: mission.id, requestId: request.id })
+      : null;
     return {
       kind: 'approval',
       request: summary,

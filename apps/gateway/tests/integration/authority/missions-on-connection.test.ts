@@ -76,7 +76,7 @@ describe('what an owner reads about a connection', () => {
     it('says a mission stopped for want of an owner, and why; a closed one reads stopped', async () => {
       const { share } = await shareToBob([READ]);
       const mission = await rig.issueFor(rig.bob, [READ], 'Bob reads');
-      await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+      await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
 
       expect(await onConnection(rig.ada)).toMatchObject([
         { id: mission.mission.id, state: 'orphaned', orphan_cause: 'authority-lost' },
@@ -174,7 +174,7 @@ describe('what an owner reads about a connection', () => {
         rig.connection.id,
         team.id,
       );
-      await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+      await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id, share.connectionId);
 
       const view = await holders(rig.ada);
       expect(view.owner).toMatchObject({ kind: 'group', name: 'depot-owners', you: true });

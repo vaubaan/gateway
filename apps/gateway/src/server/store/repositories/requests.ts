@@ -141,6 +141,15 @@ export interface ApprovalDecisionContext {
   recordEvent(event: NewEvent): EventRecord | null;
 }
 
+/**
+ * A request's held arguments are read with its mission: never by the request id alone
+ * (security audit 2026-10-31, L8). A request of another mission reads as missing.
+ */
+export interface RequestKey {
+  readonly missionId: string;
+  readonly requestId: string;
+}
+
 export interface RequestsRepo extends PermissionRequestsRepo {
   create(input: CreateRequestInput): Promise<RequestRecord>;
   /** Seals arguments for a request that a decision transaction will drop. */
@@ -154,7 +163,7 @@ export interface RequestsRepo extends PermissionRequestsRepo {
    * a request that is no longer open — decided, or past its expiry even when the
    * sweeper has not erased the blob yet.
    */
-  getArguments(id: string): Promise<unknown>;
+  getArguments(key: RequestKey): Promise<unknown>;
   /**
    * Decides an open claim and applies the creator's resolution in one `BEGIN IMMEDIATE`
    * transaction: the state change, the counter / expiry effects done through the
@@ -371,9 +380,11 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     `SELECT ${COLUMNS} FROM requests r WHERE r.mission_id = ? ORDER BY r.created_at`,
   );
   const blobOf = db.prepare<
-    [string],
+    [string, string],
     { args_blob: Buffer | null; key_version: number | null; state: string; expires_at: string }
-  >('SELECT args_blob, key_version, state, expires_at FROM requests WHERE id = ?');
+  >(
+    'SELECT args_blob, key_version, state, expires_at FROM requests WHERE mission_id = ? AND id = ?',
+  );
   const decideOpen = db.prepare<[string, string, string, string | null, string]>(
     `UPDATE requests SET state = ?, decided_at = ?, decided_by_user_id = ?, decision_json = ?,
        args_blob = NULL, key_version = NULL
@@ -552,8 +563,8 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     async listForMission(missionId) {
       return forMission.all(missionId).map(toRecord);
     },
-    async getArguments(id) {
-      const row = requireRow(blobOf.get(id), 'request', id);
+    async getArguments({ missionId, requestId: id }) {
+      const row = requireRow(blobOf.get(missionId, id), 'request', id);
       // Held for the lifetime of the request (spec §3.5): an overdue request the
       // sweeper has not reached yet is not opened either.
       if (row.state !== 'open' || row.expires_at <= nowIso(ctx)) return null;
