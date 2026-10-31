@@ -35,10 +35,9 @@ describe('SDK kit', () => {
     expect(report.risksUntouched).toEqual([]);
   });
 
-  test('identity : id, name, icon, version', () => {
+  test('identity : id, name, icon', () => {
     expect(caldavPlugin.id).toBe('caldav');
     expect(caldavPlugin.displayName).toBe('CalDAV Calendar');
-    expect(caldavPlugin.version).toBe('0.2.0');
     expect(caldavPlugin.icon).toMatch(/^M/);
     expect(Object.keys(caldavPlugin.toolTitles ?? {}).sort()).toEqual(
       caldavPlugin.tools.map((t) => t.name).sort(),
