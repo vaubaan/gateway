@@ -36,19 +36,33 @@ export const QUOTED_LENGTH = 300;
 /** The most read of a failed answer : the excerpt needs no more (4 bytes per character at most). */
 const FAILURE_READ_BYTES = QUOTED_LENGTH * 4;
 
-export interface HttpJsonRequest {
+interface HttpJsonRequestBase {
   readonly url: string | URL;
   /** Defaults to `GET`. */
   readonly method?: string;
   /** The credential goes here (`authorization`) ; `accept: application/json` is added. */
   readonly headers?: Readonly<Record<string, string>>;
-  /** Sent as JSON, with `content-type: application/json`. Absent : no body. */
-  readonly body?: unknown;
   /** The bound of the answer ; `DEFAULT_MAX_ANSWER_BYTES` when absent. */
   readonly maxBytes?: number;
   /** How messages name the request ; `<METHOD> <origin><path>` when absent. */
   readonly what?: string;
 }
+
+/** A body sent as it is : a form, a file. */
+export type RawRequestBody = string | Uint8Array<ArrayBuffer> | URLSearchParams | FormData | Blob;
+
+/**
+ * One request to a provider that answers JSON. Its body is either `body`,
+ * sent as JSON with `content-type: application/json`, or `rawBody`, sent as
+ * it is — never both : a form (`URLSearchParams`, `FormData`, whose
+ * `content-type` `fetch` writes) or bytes and text whose `content-type` the
+ * plugin puts in `headers`. Neither : no body.
+ */
+export type HttpJsonRequest = HttpJsonRequestBase &
+  (
+    | { readonly body?: unknown; readonly rawBody?: never }
+    | { readonly rawBody: RawRequestBody; readonly body?: never }
+  );
 
 /**
  * Send `request` and return its JSON answer as a `T`, or throw the typed
@@ -62,16 +76,17 @@ export async function httpJson<T>(
 ): Promise<T> {
   const method = (request.method ?? 'GET').toUpperCase();
   const what = request.what ?? `${method} ${describeUrl(request.url)}`;
-  const hasBody = request.body !== undefined;
+  const json = request.body !== undefined;
+  const body = request.rawBody ?? (json ? JSON.stringify(request.body) : undefined);
   const res = await io.fetch(request.url, {
     method,
     redirect: 'error',
     headers: {
       accept: 'application/json',
-      ...(hasBody ? { 'content-type': 'application/json' } : {}),
+      ...(json ? { 'content-type': 'application/json' } : {}),
       ...request.headers,
     },
-    ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
+    ...(body !== undefined ? { body } : {}),
     ...(io.signal ? { signal: io.signal } : {}),
   });
   if (!res.ok) throw await upstreamFailure(res, what);
