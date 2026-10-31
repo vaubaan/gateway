@@ -19,7 +19,7 @@ import {
   type ProviderPlugin,
 } from '@vaubaan/plugin-sdk';
 
-import { classifySsh, PROVIDER, resolveExecArgs } from './classify.ts';
+import { classifySsh, resolveExecArgs } from './classify.ts';
 import {
   SSH_DEFAULT_PORT,
   SSH_FINGERPRINT_PATTERN,
@@ -37,8 +37,9 @@ import {
 import { sshDataModel } from './data-model.ts';
 import { createSshRuntime, DISCOVERY_PROBE, hostResource } from './execute.ts';
 import { SSH_ICON, SSH_ICON_COLOR } from './icon.ts';
+import { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 import { sshToolTitles } from './tool-titles.ts';
-import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S, SSH_EXEC, sshTools } from './tools.ts';
+import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S, sshTools } from './tools.ts';
 import {
   MAX_READY_TIMEOUT_MS,
   MAX_STDERR_BYTES,
@@ -59,11 +60,11 @@ export const sshCatalog = loadCatalogFile(SSH_CATALOG_PATH);
 export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin {
   const runtime = createSshRuntime(options);
   return definePlugin({
-    id: PROVIDER,
+    id: PROVIDER_ID,
     displayName: 'SSH (bash)',
     icon: SSH_ICON,
     iconColor: SSH_ICON_COLOR,
-    version: '2.0.4',
+    version: '2.0.5',
     description:
       'Shell commands on a host over SSH — inspection on a read allow-list, writes priced by class (destructive, package, service, sudo), lines that cannot be classified priced as all of them.',
     summary:
@@ -108,30 +109,24 @@ export {
   MAX_STDERR_BYTES,
   MAX_STDOUT_BYTES,
   MAX_TIMEOUT_S,
+  PROVIDER_ID,
   SSH_DEFAULT_PORT,
-  SSH_EXEC,
   SSH_FINGERPRINT_PATTERN,
   SSH_HOST_MAX_LENGTH,
   SSH_HOST_PATTERN,
   SSH_PORT_PATTERN,
   SSH_USER_PATTERN,
+  TOOL,
+  TOOL_PREFIX,
 };
 export type { ExecArgs } from './classify.ts';
 export type { SshTarget } from './credential.ts';
 export type { SshRuntime, SshRuntimeOptions } from './execute.ts';
 export type { ExecResult, SshExecOptions, SshTransport } from './transport.ts';
-export {
-  isDestructive,
-  isPackageInstall,
-  isServiceControl,
-  looksLikeSecretFileRead,
-  profileCommandLine,
-  splitCommandLine,
-  stripPrivilegePrefix,
-  MAX_CMD_LENGTH,
-  type CommandProfile,
-  type SplitLine,
-} from './command-classes.ts';
+export { isDestructive, isPackageInstall, isServiceControl } from './command/classes.ts';
+export { profileCommandLine, MAX_CMD_LENGTH, type CommandProfile } from './command/profile.ts';
+export { looksLikeSecretFileRead } from './command/secret-paths.ts';
+export { stripPrivilegePrefix } from './command/wrappers.ts';
 export {
   isReadAllowed,
   matchRead,
@@ -145,8 +140,10 @@ export {
   hasGlob,
   isDynamic,
   lexCommandLine,
+  splitCommandLine,
   type LexedLine,
   type Redirect,
   type SimpleCommand,
+  type SplitLine,
   type Word,
 } from './shell-lex.ts';

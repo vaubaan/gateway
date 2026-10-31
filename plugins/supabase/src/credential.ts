@@ -23,14 +23,18 @@
  */
 
 import {
-  UpstreamAuthError,
-  UpstreamHttpError,
   expectCredentialKind,
+  httpJson,
+  isList,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
+
+import { PROVIDER_ID, SUPABASE_API_BASE, TOOL } from './identity.ts';
+import { SUPABASE_DATA_PLANE_TOOLS } from './tools.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
 export const SUPABASE_TOKEN_FIELD = 'access_token';
@@ -38,27 +42,8 @@ export const SUPABASE_TOKEN_FIELD = 'access_token';
 /** Where a person creates and deletes their access tokens. */
 export const SUPABASE_TOKENS_PAGE = 'https://supabase.com/dashboard/account/tokens';
 
-const SUPABASE_API = 'https://api.supabase.com/v1';
-
 /** At most this many organisation names are kept as the token's account. */
 const ACCOUNT_NAMES_SHOWN = 3;
-
-/** Tools that reach the data plane with the project's service_role key, read through the Management API. */
-const DATA_PLANE_TOOLS = [
-  'supabase__list_users',
-  'supabase__get_user',
-  'supabase__create_user',
-  'supabase__update_user',
-  'supabase__delete_user',
-  'supabase__generate_link',
-  'supabase__create_bucket',
-  'supabase__update_bucket',
-  'supabase__delete_bucket',
-  'supabase__list_objects',
-  'supabase__upload_object',
-  'supabase__delete_object',
-  'supabase__create_signed_url',
-] as const;
 
 export const supabaseCredential: ApiKeyCredentialSpec = {
   kind: 'api-key',
@@ -90,73 +75,64 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
       { do: 'Copy the token and paste it here. Supabase shows it once.' },
     ],
     permissions: [
-      { name: 'Project Settings', access: 'read', tools: ['supabase__get_project'] },
+      { name: 'Project Settings', access: 'read', tools: [TOOL.getProject] },
       {
         name: 'API Keys',
         access: 'read',
-        tools: ['supabase__get_anon_key', ...DATA_PLANE_TOOLS],
+        tools: [TOOL.getAnonKey, ...SUPABASE_DATA_PLANE_TOOLS],
       },
-      { name: 'API Key Secrets', access: 'read', tools: [...DATA_PLANE_TOOLS] },
+      { name: 'API Key Secrets', access: 'read', tools: [...SUPABASE_DATA_PLANE_TOOLS] },
       {
         name: 'Database',
         access: 'read',
-        tools: ['supabase__list_tables', 'supabase__list_migrations', 'supabase__execute_sql'],
+        tools: [TOOL.listTables, TOOL.listMigrations, TOOL.executeSql],
       },
-      { name: 'Migrations', access: 'read-write', tools: ['supabase__apply_migration'] },
-      { name: 'Advisors', access: 'read', tools: ['supabase__get_advisors'] },
+      { name: 'Migrations', access: 'read-write', tools: [TOOL.applyMigration] },
+      { name: 'Advisors', access: 'read', tools: [TOOL.getAdvisors] },
       {
         name: 'Storage Config',
         access: 'read',
-        tools: ['supabase__list_buckets', 'supabase__get_storage_config'],
+        tools: [TOOL.listBuckets, TOOL.getStorageConfig],
       },
-      { name: 'Storage Config', access: 'read-write', tools: ['supabase__update_storage_config'] },
+      { name: 'Storage Config', access: 'read-write', tools: [TOOL.updateStorageConfig] },
       {
         name: 'Auth Config',
         access: 'read',
         tools: [
-          'supabase__get_auth_config',
-          'supabase__list_sso_providers',
-          'supabase__get_sso_provider',
-          'supabase__list_third_party_auth',
-          'supabase__get_third_party_auth',
+          TOOL.getAuthConfig,
+          TOOL.listSsoProviders,
+          TOOL.getSsoProvider,
+          TOOL.listThirdPartyAuth,
+          TOOL.getThirdPartyAuth,
         ],
       },
       {
         name: 'Auth Config',
         access: 'read-write',
         tools: [
-          'supabase__update_auth_config',
-          'supabase__create_sso_provider',
-          'supabase__update_sso_provider',
-          'supabase__delete_sso_provider',
-          'supabase__create_third_party_auth',
-          'supabase__delete_third_party_auth',
+          TOOL.updateAuthConfig,
+          TOOL.createSsoProvider,
+          TOOL.updateSsoProvider,
+          TOOL.deleteSsoProvider,
+          TOOL.createThirdPartyAuth,
+          TOOL.deleteThirdPartyAuth,
         ],
       },
       {
         name: 'Edge Functions',
         access: 'read',
-        tools: [
-          'supabase__list_functions',
-          'supabase__get_function',
-          'supabase__get_function_body',
-        ],
+        tools: [TOOL.listFunctions, TOOL.getFunction, TOOL.getFunctionBody],
       },
       {
         name: 'Edge Functions',
         access: 'read-write',
-        tools: [
-          'supabase__create_function',
-          'supabase__update_function',
-          'supabase__delete_function',
-          'supabase__deploy_function',
-        ],
+        tools: [TOOL.createFunction, TOOL.updateFunction, TOOL.deleteFunction, TOOL.deployFunction],
       },
-      { name: 'Secrets', access: 'read', tools: ['supabase__list_function_secrets'] },
+      { name: 'Secrets', access: 'read', tools: [TOOL.listFunctionSecrets] },
       {
         name: 'Secrets',
         access: 'read-write',
-        tools: ['supabase__create_function_secrets', 'supabase__delete_function_secrets'],
+        tools: [TOOL.createFunctionSecrets, TOOL.deleteFunctionSecrets],
       },
     ],
     reach: {
@@ -175,44 +151,29 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
 export function supabaseBearerOf(pluginId: string, credential: CredentialSecret): string {
   const token = expectCredentialKind(pluginId, credential, 'api-key').fields[SUPABASE_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
-    throw new Error(`supabase: the stored token has no '${SUPABASE_TOKEN_FIELD}' field`);
+    throw new Error(`${PROVIDER_ID}: the stored token has no '${SUPABASE_TOKEN_FIELD}' field`);
   }
   return token;
 }
 
 /**
  * The organisations the token reaches, as its account. A 401 or 403 is a
- * rejected token ; any other failure is Supabase's.
+ * rejected token (`UpstreamAuthError`) ; any other failure is Supabase's,
+ * typed by `httpJson`, and so is an answer that is not a list.
  */
 export async function verifySupabaseToken(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const res = await ctx.fetch(`${SUPABASE_API}/organizations`, {
-    redirect: 'error',
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${supabaseBearerOf('supabase', ctx.credential)}`,
-      Accept: 'application/json',
+  const organizations = await httpJson(
+    ctx,
+    {
+      url: `${SUPABASE_API_BASE}/organizations`,
+      headers: { authorization: `Bearer ${supabaseBearerOf(PROVIDER_ID, ctx.credential)}` },
     },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new UpstreamAuthError(`supabase rejected the token (HTTP ${res.status})`, res.status);
-  }
-  if (!res.ok) {
-    throw new UpstreamHttpError(
-      `supabase GET /organizations failed with HTTP ${res.status}`,
-      res.status,
-    );
-  }
-  const body: unknown = await res.json();
-  const names = (Array.isArray(body) ? body : [])
-    .map((org: unknown) =>
-      typeof org === 'object' &&
-      org !== null &&
-      typeof (org as { name?: unknown }).name === 'string'
-        ? (org as { name: string }).name
-        : null,
-    )
-    .filter((name): name is string => name !== null);
+    isList,
+  );
+  // An organisation without a name names nothing : it is left out of the account.
+  const names = organizations.flatMap((org) =>
+    isRecord(org) && typeof org.name === 'string' ? [org.name] : [],
+  );
   const shown = names.slice(0, ACCOUNT_NAMES_SHOWN).join(', ');
   const more =
     names.length > ACCOUNT_NAMES_SHOWN ? ` and ${names.length - ACCOUNT_NAMES_SHOWN} more` : '';

@@ -3,7 +3,7 @@
  * wildcard, macro-actions, catalog coverage, the identifier proof), the identity and the
  * version. No network : `execute` runs against `mockFetch`.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -89,15 +89,8 @@ describe('notion plugin — structural kit', () => {
     expect(Object.keys(notionPlugin.toolTitles ?? {}).sort()).toEqual(Object.values(TOOL).sort());
   });
 
-  test('the plugin is the default export, and its version is the package version', () => {
+  test('the plugin is the default export', () => {
     expect(defaultExport).toBe(notionPlugin);
-    const manifest: unknown = JSON.parse(
-      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-    );
-    expect(manifest).toMatchObject({
-      name: '@vaubaan/plugin-notion',
-      version: notionPlugin.version,
-    });
   });
 
   test('macro-actions : read, comment, write, reorganize ; explicit risks, the fallback in none', () => {

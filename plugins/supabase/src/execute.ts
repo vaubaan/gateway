@@ -7,11 +7,18 @@
  * Handbook : docs/handbook/providers/supabase.md.
  *
  * Rules :
- *   - `fetch` comes from the context, never from the global ;
- *   - 401 / 403 from Supabase → `UpstreamAuthError`, so the host tries
- *     `refresh` and otherwise marks the connection `expired` ;
+ *   - every request goes through the SDK's transport, with `fetch` and the
+ *     caller's `signal` from the context : `httpJson` for an API that answers
+ *     JSON, `upstreamFailure` + `readBoundedText` for a data-plane answer that
+ *     may be text. A failure is thrown typed — 401 / 403 `UpstreamAuthError`
+ *     (the host tries `refresh`, otherwise marks the connection `expired`),
+ *     another failed status `UpstreamHttpError`, an answer that is not what
+ *     the plugin reads `UpstreamProtocolError` ;
+ *   - what this executor declines itself (an unknown tool, a call the
+ *     classifier denies) is an `isError` result (`refusalResult`,
+ *     `ExecutorRefusal` under `declining`) : nothing failed at the provider ;
  *   - the Management API base URL is a fact about the provider, hence a
- *     constant of the plugin, not configuration of the instance ;
+ *     constant of the plugin (`identity.ts`), not configuration of the instance ;
  *   - `execute_sql`, `list_tables` and `list_migrations` go through the
  *     **read-only** query endpoint : Postgres refuses any mutation there,
  *     which is what lets the classifier emit a read slice for opaque SQL ;
@@ -22,15 +29,15 @@
  *   - every other identifier that lands in a path, a query string, a header
  *     or the SQL text of `list_tables` comes from the classifier's own
  *     `readIdentifiers(tool, args)` / `tableSchemas(args)`, never from
- *     `args` : each is within the grammar of its kind (no dot-only segment,
- *     no separator, no escape), so the request names the function, user,
- *     bucket or object the slices named. A call the classifier denies is
- *     refused before any request, the `service_role` key lookup included.
+ *     `args` : each is within the grammar of its kind (`identifiers.ts`), so
+ *     the request names the function, user, bucket or object the slices
+ *     named. A call the classifier denies is refused before any request, the
+ *     `service_role` key lookup included.
  *
  * Data plane (GoTrue admin, Storage) : the Management API token cannot call
  * `{ref}.supabase.co/auth/v1/admin` or `/storage/v1`. The plugin fetches the
  * project's `service_role` key through the Management API for the duration of
- * the call and never surfaces it (`get_anon_key` strips it from its answer).
+ * the call and never surfaces it (`get_anon_key` returns the anon key only).
  *
  * Project secrets : the edge-function secrets listing and the auth config
  * answer with secret values ; `redact.ts` replaces each by a fixed marker
@@ -38,33 +45,47 @@
  */
 
 import {
-  UpstreamAuthError,
-  UpstreamHttpError,
+  DEFAULT_MAX_ANSWER_BYTES,
+  ExecutorRefusal,
+  UpstreamProtocolError,
+  anyJson,
+  declining,
+  describeUrl,
+  httpJson,
+  isList,
+  isRecord,
+  jsonResult,
+  readBoundedText,
+  readShape,
+  refusalResult,
+  upstreamFailure,
   type ConnectionContext,
   type ExecuteContext,
+  type Guard,
   type McpToolResult,
   type Resource,
+  type UpstreamIo,
 } from '@vaubaan/plugin-sdk';
 
 import {
   classifySupabase,
-  projectRefIdent,
   readIdentifiers,
   resolveProjectRef,
-  tableSchemas,
   type ToolIdentifiers,
 } from './classify.ts';
-import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
 import { supabaseBearerOf } from './credential.ts';
-import { SUPABASE_TOOL_NAMES } from './tools.ts';
-
-/** Public Management API of Supabase. */
-export const SUPABASE_API_BASE = 'https://api.supabase.com/v1';
+import { PROVIDER_ID, SUPABASE_API_BASE, TOOL, projectUrl } from './identity.ts';
+import { projectRefIdent, tableSchemas } from './identifiers.ts';
+import { redactAuthConfig, redactFunctionSecrets } from './redact.ts';
+import { SUPABASE_DATA_PLANE_TOOLS, SUPABASE_TOOL_NAMES } from './tools.ts';
 
 /** Upper bound on the projects one connection may expose ; the owner labels them one by one. */
 export const MAX_DISCOVERED_PROJECTS = 200;
 
-type FetchImpl = typeof fetch;
+/** What a call without an answer body returns to the agent (a `204`, a `DELETE`). */
+const NO_CONTENT_PAYLOAD = { ok: true };
+
+const DATA_PLANE_TOOLS: ReadonlySet<string> = new Set(SUPABASE_DATA_PLANE_TOOLS);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProviderPlugin entry points
@@ -75,48 +96,37 @@ export async function executeSupabase(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  if (!SUPABASE_TOOL_NAMES.has(tool)) return errorResult(`unknown tool '${tool}'`);
+  if (!SUPABASE_TOOL_NAMES.has(tool)) return refusalResult(`unknown tool '${tool}'`);
   // What the classifier denies is refused here for the same reason, before
   // any request : a missing SQL text, an identifier outside its grammar, a
   // project outside the mission.
   const classified = classifySupabase(tool, args, ctx.resources);
-  if ('denied' in classified) return errorResult(classified.denied);
+  if ('denied' in classified) return refusalResult(classified.denied);
   // Same functions, same inputs as the classifier : the project and the
   // identifiers the slices named are the ones the request carries.
   const target = resolveProjectRef(args, ctx.resources);
-  if ('denied' in target) return errorResult(target.denied);
+  if ('denied' in target) return refusalResult(target.denied);
   const read = readIdentifiers(tool, args);
-  if ('denied' in read) return errorResult(read.denied);
-  const token = supabaseBearerOf('supabase', ctx.credential);
-  const call: SupabaseCall = { fetchImpl: ctx.fetch, token, projectRef: target.ref, id: read.id };
-  const payload = await callSupabase(call, tool, args, ctx.signal);
-  return text(payload);
+  if ('denied' in read) return refusalResult(read.denied);
+  const token = supabaseBearerOf(PROVIDER_ID, ctx.credential);
+  const call: SupabaseCall = { io: ctx, token, projectRef: target.ref, id: read.id };
+  return declining(async () => {
+    const payload = DATA_PLANE_TOOLS.has(tool)
+      ? await callDataPlane(call, tool, args)
+      : await callManagement(call, tool, args);
+    return jsonResult(payload ?? NO_CONTENT_PAYLOAD);
+  });
 }
 
 /** One call, resolved : where it goes and the identifiers it carries. */
 interface SupabaseCall {
-  readonly fetchImpl: FetchImpl;
+  readonly io: UpstreamIo;
+  /** The connection's personal access token : the Management API's bearer. */
   readonly token: string;
   /** The project `resolveProjectRef` answered. */
   readonly projectRef: string;
   /** The identifiers `readIdentifiers` answered, each within the grammar of its kind. */
   readonly id: ToolIdentifiers;
-}
-
-interface OrganizationDto {
-  readonly id?: string;
-  readonly slug?: string;
-  readonly name?: string;
-}
-
-interface ProjectDto {
-  readonly id?: string;
-  readonly ref?: string;
-  readonly name?: string;
-  readonly organization_id?: string;
-  readonly organization_slug?: string;
-  readonly region?: string;
-  readonly status?: string;
 }
 
 /**
@@ -129,157 +139,150 @@ interface ProjectDto {
 export async function discoverSupabaseResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const token = supabaseBearerOf('supabase', ctx.credential);
+  const token = supabaseBearerOf(PROVIDER_ID, ctx.credential);
   const [organizations, projects] = await Promise.all([
-    mgmtFetch(ctx.fetch, token, '/organizations', undefined, ctx.signal) as Promise<
-      readonly OrganizationDto[] | null
-    >,
-    mgmtFetch(ctx.fetch, token, '/projects', undefined, ctx.signal) as Promise<
-      readonly ProjectDto[] | null
-    >,
+    managementJson(ctx, token, '/organizations', isRecordList),
+    managementJson(ctx, token, '/projects', isRecordList),
   ]);
   const orgNames = new Map<string, string>();
-  for (const org of organizations ?? []) {
-    if (!org.name) continue;
-    if (org.id) orgNames.set(org.id, org.name);
-    if (org.slug) orgNames.set(org.slug, org.name);
+  for (const org of organizations) {
+    const name = stringField(org, 'name');
+    if (!name) continue;
+    for (const key of [stringField(org, 'id'), stringField(org, 'slug')]) {
+      if (key) orgNames.set(key, name);
+    }
   }
-  const all = (projects ?? []).filter((p): p is ProjectDto & { ref: string } => {
-    const ref = p.ref ?? p.id;
-    return typeof ref === 'string' && ref.length > 0;
+  // A project without a ref names nothing a mission could reach : left out.
+  const all = projects.flatMap((project) => {
+    const ref = refOf(project);
+    return ref === null ? [] : [{ ref, project }];
   });
   // A ref the classifier would refuse is of no use to a mission : say so at
   // connection time instead of listing a resource no call can name.
-  const unusable = all.find((p) => projectRefIdent(p.ref ?? p.id) === null);
+  const unusable = all.find(({ ref }) => projectRefIdent(ref) === null);
   if (unusable) {
-    throw new Error(
-      `supabase: project ref ${JSON.stringify(unusable.ref ?? unusable.id)} is not a project ref (a host label)`,
+    throw new UpstreamProtocolError(
+      `${PROVIDER_ID}: project ref ${JSON.stringify(unusable.ref)} is not a project ref (a host label)`,
     );
   }
   if (all.length > MAX_DISCOVERED_PROJECTS) {
-    ctx.logger?.warn('supabase: more projects than the discovery cap, list truncated', {
+    ctx.logger?.warn(`${PROVIDER_ID}: more projects than the discovery cap, list truncated`, {
       total: all.length,
       cap: MAX_DISCOVERED_PROJECTS,
     });
   }
-  return all.slice(0, MAX_DISCOVERED_PROJECTS).map((p) => {
-    const ref = p.ref ?? p.id!;
-    const orgKey = p.organization_slug ?? p.organization_id ?? null;
+  return all.slice(0, MAX_DISCOVERED_PROJECTS).map(({ ref, project }) => {
+    const orgKey =
+      stringField(project, 'organization_slug') ?? stringField(project, 'organization_id') ?? null;
     const orgName = orgKey ? (orgNames.get(orgKey) ?? orgKey) : null;
-    const name = p.name ?? ref;
+    const name = stringField(project, 'name') ?? ref;
+    const region = stringField(project, 'region');
+    const status = stringField(project, 'status');
     return {
-      provider: 'supabase',
+      provider: PROVIDER_ID,
       ref,
       displayName: orgName ? `${orgName} / ${name}` : name,
       metadata: {
         ...(orgKey ? { organization: orgKey } : {}),
         ...(orgName ? { organization_name: orgName } : {}),
-        ...(p.region ? { region: p.region } : {}),
-        ...(p.status ? { status: p.status } : {}),
+        ...(region ? { region } : {}),
+        ...(status ? { status } : {}),
       },
     };
   });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Reading Supabase's answers : guards, never casts
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A list of objects : the Management API's organizations, projects and API keys. */
+function isRecordList(value: unknown): value is readonly Readonly<Record<string, unknown>>[] {
+  return isList(value) && value.every(isRecord);
+}
+
+/** The field `key` of an answer's object when it is a string. */
+function stringField(record: Readonly<Record<string, unknown>>, key: string): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** The ref of a listed project : `ref`, else `id` (older answers), when it is a non-empty string. */
+function refOf(project: Readonly<Record<string, unknown>>): string | null {
+  const ref = project.ref ?? project.id;
+  return typeof ref === 'string' && ref.length > 0 ? ref : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Management API
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function mgmtFetch(
-  fetchImpl: FetchImpl,
+/** One Management API call with the personal access token, its JSON answer read through `guard`. */
+function managementJson<T>(
+  io: UpstreamIo,
   token: string,
   path: string,
-  init?: RequestInit,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  const res = await fetchImpl(SUPABASE_API_BASE + path, {
-    redirect: 'error',
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...((init?.headers ?? {}) as Record<string, string>),
+  guard: Guard<T>,
+  method = 'GET',
+  body?: unknown,
+): Promise<T> {
+  return httpJson(
+    io,
+    {
+      url: `${SUPABASE_API_BASE}${path}`,
+      method,
+      headers: { authorization: `Bearer ${token}` },
+      body,
     },
-    ...(signal ? { signal } : {}),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    const msg = `Supabase ${path} → ${res.status}: ${body.slice(0, 300)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  if (res.status === 204) return null;
-  return res.json();
+    guard,
+  );
 }
 
-interface ApiKeyDto {
-  readonly name: string;
-  readonly api_key: string;
+/** The Supabase names of the two project keys the plugin reads (`GET /projects/{ref}/api-keys`). */
+type ProjectKeyName = 'anon' | 'service_role';
+
+/**
+ * One key of the project, read through the Management API. `service_role`
+ * serves the data-plane calls and is never returned to the caller.
+ */
+async function projectKey(call: SupabaseCall, name: ProjectKeyName): Promise<string> {
+  const path = `/projects/${call.projectRef}/api-keys`;
+  const keys = await managementJson(call.io, call.token, path, isRecordList);
+  const key = keys.find((entry) => entry.name === name)?.api_key;
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new UpstreamProtocolError(`${PROVIDER_ID} ${path} returned no '${name}' entry`);
+  }
+  return key;
 }
 
 /**
- * The project's `service_role` JWT, read through the Management API. Used
- * internally for data-plane calls and never returned to the caller.
+ * Dispatch one resolved Management API call. The project ref and every
+ * `id(…)` went through the classifier's grammars : an opaque id or a slug is
+ * one path segment and is interpolated as it is. Nothing that reaches a
+ * path, a query string or a header is read from `args`.
  */
-async function fetchServiceRoleKey(
-  fetchImpl: FetchImpl,
-  token: string,
-  projectRef: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const keys = (await mgmtFetch(
-    fetchImpl,
-    token,
-    `/projects/${encodeURIComponent(projectRef)}/api-keys`,
-    undefined,
-    signal,
-  )) as readonly ApiKeyDto[] | null;
-  const sr = keys?.find((k) => k.name === 'service_role')?.api_key;
-  if (!sr) {
-    throw new Error(`Supabase /projects/${projectRef}/api-keys returned no 'service_role' entry.`);
-  }
-  return sr;
-}
-
-/**
- * Dispatch one resolved call. The project ref and every `id(…)` went through
- * the classifier's grammars : an opaque id or a slug is one path segment and
- * is interpolated as it is ; a bucket id and the segments of an object path
- * may hold dots (never dots alone) and are percent-encoded. Nothing that
- * reaches a path, a query string or a header is read from `args`.
- * Throws on unknown tool.
- */
-async function callSupabase(
+async function callManagement(
   call: SupabaseCall,
   tool: string,
   args: Readonly<Record<string, unknown>>,
-  signal?: AbortSignal,
 ): Promise<unknown> {
-  const { fetchImpl, token, projectRef, id } = call;
-  const ref = projectRef;
-  const mgmt = (path: string, init?: RequestInit) =>
-    mgmtFetch(fetchImpl, token, path, init, signal);
-  const readOnlyQuery = (query: string) =>
-    mgmt(`/projects/${ref}/database/query/read-only`, {
-      method: 'POST',
-      body: JSON.stringify({ query }),
-    });
+  const { projectRef: ref, id } = call;
+  const mgmt = (path: string, method?: string, body?: unknown): Promise<unknown> =>
+    managementJson(call.io, call.token, path, anyJson, method, body);
+  const readOnlyQuery = (query: string): Promise<unknown> =>
+    mgmt(`/projects/${ref}/database/query/read-only`, 'POST', { query });
 
   switch (tool) {
     // ─── db ─────────────────────────────────────────────────────────────────
-    case 'supabase__get_project':
+    case TOOL.getProject:
       return mgmt(`/projects/${ref}`);
-    case 'supabase__get_anon_key': {
-      const keys = (await mgmt(`/projects/${ref}/api-keys`)) as readonly ApiKeyDto[] | null;
-      const anon = keys?.find((k) => k.name === 'anon')?.api_key;
-      if (!anon) throw new Error(`Supabase /projects/${ref}/api-keys returned no 'anon' entry`);
-      return { url: projectUrl(projectRef), anon_key: anon };
-    }
-    case 'supabase__list_tables': {
+    case TOOL.getAnonKey:
+      return { url: projectUrl(ref), anon_key: await projectKey(call, 'anon') };
+    case TOOL.listTables: {
       // Schema identifiers only (`tableSchemas`) : no quote, no backslash, so
       // each one is written between quotes as it is.
       const schemas = tableSchemas(args);
-      if (schemas === null) throw new Error('supabase list_tables: schemas were not validated');
+      if (schemas === null) throw new ExecutorRefusal('schemas: missing or malformed.');
       const listLiteral = schemas.map((s) => `'${s}'`).join(',');
       return readOnlyQuery(
         `select table_schema, table_name, table_type
@@ -288,135 +291,92 @@ async function callSupabase(
         order by table_schema, table_name;`,
       );
     }
-    case 'supabase__list_migrations':
+    case TOOL.listMigrations:
       return readOnlyQuery(
         'select version, name from supabase_migrations.schema_migrations order by version;',
       );
-    case 'supabase__execute_sql':
+    case TOOL.executeSql:
       return readOnlyQuery(String(args.query));
-    case 'supabase__get_advisors':
+    case TOOL.getAdvisors:
       return mgmt(`/projects/${ref}/advisors/${id('type')}`);
-    case 'supabase__apply_migration':
-      return mgmt(`/projects/${ref}/database/migrations`, {
-        method: 'POST',
-        body: JSON.stringify({ name: args.name, query: args.query }),
+    case TOOL.applyMigration:
+      return mgmt(`/projects/${ref}/database/migrations`, 'POST', {
+        name: args.name,
+        query: args.query,
       });
 
     // ─── storage (Management API side) ──────────────────────────────────────
-    case 'supabase__list_buckets':
+    case TOOL.listBuckets:
       return mgmt(`/projects/${ref}/storage/buckets`);
-    case 'supabase__get_storage_config':
+    case TOOL.getStorageConfig:
       return mgmt(`/projects/${ref}/config/storage`);
-    case 'supabase__update_storage_config':
-      return mgmt(`/projects/${ref}/config/storage`, {
-        method: 'PATCH',
-        body: JSON.stringify(args.config ?? {}),
-      });
+    case TOOL.updateStorageConfig:
+      return mgmt(`/projects/${ref}/config/storage`, 'PATCH', args.config ?? {});
 
     // ─── auth (Management API side) ─────────────────────────────────────────
     // The auth config carries the project's OAuth client secrets, SMTP
     // password, hook secrets… : `redactAuthConfig` keeps the settings only.
-    case 'supabase__get_auth_config':
+    case TOOL.getAuthConfig:
       return redactAuthConfig(await mgmt(`/projects/${ref}/config/auth`));
-    case 'supabase__update_auth_config':
+    case TOOL.updateAuthConfig:
       return redactAuthConfig(
-        await mgmt(`/projects/${ref}/config/auth`, {
-          method: 'PATCH',
-          body: JSON.stringify(args.config ?? {}),
-        }),
+        await mgmt(`/projects/${ref}/config/auth`, 'PATCH', args.config ?? {}),
       );
-    case 'supabase__list_sso_providers':
+    case TOOL.listSsoProviders:
       return mgmt(`/projects/${ref}/config/auth/sso/providers`);
-    case 'supabase__get_sso_provider':
+    case TOOL.getSsoProvider:
       return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`);
-    case 'supabase__create_sso_provider':
-      return mgmt(`/projects/${ref}/config/auth/sso/providers`, {
-        method: 'POST',
-        body: JSON.stringify(bodyOf(args)),
-      });
-    case 'supabase__update_sso_provider':
-      return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`, {
-        method: 'PUT',
-        body: JSON.stringify(bodyOf(args, ['provider_id'])),
-      });
-    case 'supabase__delete_sso_provider':
-      return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`, {
-        method: 'DELETE',
-      });
-    case 'supabase__list_third_party_auth':
+    case TOOL.createSsoProvider:
+      return mgmt(`/projects/${ref}/config/auth/sso/providers`, 'POST', bodyOf(args));
+    case TOOL.updateSsoProvider:
+      return mgmt(
+        `/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`,
+        'PUT',
+        bodyOf(args, ['provider_id']),
+      );
+    case TOOL.deleteSsoProvider:
+      return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`, 'DELETE');
+    case TOOL.listThirdPartyAuth:
       return mgmt(`/projects/${ref}/config/auth/third-party-auth`);
-    case 'supabase__get_third_party_auth':
+    case TOOL.getThirdPartyAuth:
       return mgmt(`/projects/${ref}/config/auth/third-party-auth/${id('tpa_id')}`);
-    case 'supabase__create_third_party_auth':
-      return mgmt(`/projects/${ref}/config/auth/third-party-auth`, {
-        method: 'POST',
-        body: JSON.stringify(bodyOf(args)),
-      });
-    case 'supabase__delete_third_party_auth':
-      return mgmt(`/projects/${ref}/config/auth/third-party-auth/${id('tpa_id')}`, {
-        method: 'DELETE',
-      });
+    case TOOL.createThirdPartyAuth:
+      return mgmt(`/projects/${ref}/config/auth/third-party-auth`, 'POST', bodyOf(args));
+    case TOOL.deleteThirdPartyAuth:
+      return mgmt(`/projects/${ref}/config/auth/third-party-auth/${id('tpa_id')}`, 'DELETE');
 
     // ─── functions ──────────────────────────────────────────────────────────
-    case 'supabase__list_functions':
+    case TOOL.listFunctions:
       return mgmt(`/projects/${ref}/functions`);
-    case 'supabase__get_function':
+    case TOOL.getFunction:
       return mgmt(`/projects/${ref}/functions/${id('function_slug')}`);
-    case 'supabase__get_function_body':
+    case TOOL.getFunctionBody:
       return mgmt(`/projects/${ref}/functions/${id('function_slug')}/body`);
-    case 'supabase__create_function':
-      return mgmt(`/projects/${ref}/functions`, {
-        method: 'POST',
-        body: JSON.stringify(bodyOf(args)),
-      });
-    case 'supabase__update_function':
-      return mgmt(`/projects/${ref}/functions/${id('function_slug')}`, {
-        method: 'PATCH',
-        body: JSON.stringify(bodyOf(args, ['function_slug'])),
-      });
-    case 'supabase__delete_function':
-      return mgmt(`/projects/${ref}/functions/${id('function_slug')}`, { method: 'DELETE' });
-    case 'supabase__deploy_function':
-      // The slug travels as a query parameter ; the body describes the bundle.
+    case TOOL.createFunction:
+      return mgmt(`/projects/${ref}/functions`, 'POST', bodyOf(args));
+    case TOOL.updateFunction:
       return mgmt(
-        `/projects/${ref}/functions/deploy?${new URLSearchParams({ slug: id('slug') }).toString()}`,
-        {
-          method: 'POST',
-          body: JSON.stringify(bodyOf(args, ['slug'])),
-        },
+        `/projects/${ref}/functions/${id('function_slug')}`,
+        'PATCH',
+        bodyOf(args, ['function_slug']),
       );
-    case 'supabase__list_function_secrets':
+    case TOOL.deleteFunction:
+      return mgmt(`/projects/${ref}/functions/${id('function_slug')}`, 'DELETE');
+    case TOOL.deployFunction: {
+      // The slug travels as a query parameter ; the body describes the bundle.
+      const query = new URLSearchParams({ slug: id('slug') }).toString();
+      return mgmt(`/projects/${ref}/functions/deploy?${query}`, 'POST', bodyOf(args, ['slug']));
+    }
+    case TOOL.listFunctionSecrets:
       // Supabase answers `{ name, value, updated_at }` : names and dates only.
       return redactFunctionSecrets(await mgmt(`/projects/${ref}/secrets`));
-    case 'supabase__create_function_secrets':
-      return mgmt(`/projects/${ref}/secrets`, {
-        method: 'POST',
-        body: JSON.stringify(args.secrets ?? []),
-      });
-    case 'supabase__delete_function_secrets':
-      return mgmt(`/projects/${ref}/secrets`, {
-        method: 'DELETE',
-        body: JSON.stringify(args.names ?? []),
-      });
-
-    // ─── data plane (GoTrue admin, Storage) ─────────────────────────────────
-    case 'supabase__list_users':
-    case 'supabase__get_user':
-    case 'supabase__create_user':
-    case 'supabase__update_user':
-    case 'supabase__delete_user':
-    case 'supabase__generate_link':
-    case 'supabase__create_bucket':
-    case 'supabase__update_bucket':
-    case 'supabase__delete_bucket':
-    case 'supabase__list_objects':
-    case 'supabase__upload_object':
-    case 'supabase__delete_object':
-    case 'supabase__create_signed_url':
-      return executeDataPlane(call, tool, args, signal);
+    case TOOL.createFunctionSecrets:
+      return mgmt(`/projects/${ref}/secrets`, 'POST', args.secrets ?? []);
+    case TOOL.deleteFunctionSecrets:
+      return mgmt(`/projects/${ref}/secrets`, 'DELETE', args.names ?? []);
 
     default:
-      throw new Error(`Unknown Supabase MCP tool: ${tool}`);
+      throw new ExecutorRefusal(`unknown tool '${tool}'`);
   }
 }
 
@@ -424,128 +384,127 @@ async function callSupabase(
 // Data plane — `{ref}.supabase.co` with the service_role key
 // ─────────────────────────────────────────────────────────────────────────────
 
-type DataApiBody = string | Buffer | Uint8Array;
+const NO_CONTENT = 204;
 
-interface DataApiInit {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  body?: DataApiBody | null;
-  headers?: Record<string, string>;
-}
-
-async function dataApiFetch(
-  fetchImpl: FetchImpl,
+/**
+ * One data-plane call with a JSON body (or none). GoTrue and Storage answer
+ * JSON, but the plugin has always passed a text answer through as text :
+ * the `content-type` decides, and only a JSON answer is parsed.
+ */
+async function dataPlane(
+  call: SupabaseCall,
   serviceRole: string,
-  projectRef: string,
   path: string,
-  init: DataApiInit = {},
-  signal?: AbortSignal,
+  method = 'GET',
+  body?: unknown,
 ): Promise<unknown> {
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${serviceRole}`,
-    apikey: serviceRole,
-    ...(init.headers ?? {}),
-  };
-  if (init.body !== undefined && init.body !== null && !('Content-Type' in headers)) {
-    headers['Content-Type'] = 'application/json';
-  }
-  // Buffer is a Uint8Array at runtime ; the lib.dom BodyInit overload does not
-  // list it and this package does not pull lib.dom, hence the cast.
-  const requestInit = {
-    method: init.method ?? 'GET',
-    headers,
-    body: init.body ?? undefined,
-    ...(signal ? { signal } : {}),
-  } as Parameters<FetchImpl>[1];
-  const res = await fetchImpl(`${projectUrl(projectRef)}${path}`, {
-    ...requestInit,
-    redirect: 'error',
+  const url = `${projectUrl(call.projectRef)}${path}`;
+  const what = `${method} ${describeUrl(url)}`;
+  const res = await call.io.fetch(url, {
+    method,
+    headers: {
+      accept: 'application/json',
+      ...serviceRoleHeaders(serviceRole),
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(call.io.signal ? { signal: call.io.signal } : {}),
   });
-  if (!res.ok) {
-    const body = await res.text();
-    const msg = `Supabase data-plane ${path} → ${res.status}: ${body.slice(0, 300)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  if (res.status === 204) return null;
+  if (!res.ok) throw await upstreamFailure(res, what);
+  const text = await readBoundedText(res, DEFAULT_MAX_ANSWER_BYTES, what);
+  if (res.status === NO_CONTENT) return null;
   const contentType = res.headers.get('content-type') ?? '';
-  if (contentType.startsWith('application/json')) return res.json();
-  return res.text();
+  if (!contentType.startsWith('application/json')) return text;
+  return readShape(parsedJson(text, what), anyJson, what);
 }
 
-async function executeDataPlane(
+/** The data plane takes the `service_role` key twice : as the bearer and as the `apikey`. */
+function serviceRoleHeaders(serviceRole: string): Record<string, string> {
+  return { authorization: `Bearer ${serviceRole}`, apikey: serviceRole };
+}
+
+/** A JSON answer's value ; an empty body is `null`, a body that is not JSON a protocol failure. */
+function parsedJson(text: string, what: string): unknown {
+  if (text.trim() === '') return null;
+  try {
+    const value: unknown = JSON.parse(text);
+    return value;
+  } catch {
+    throw new UpstreamProtocolError(`${what}: the answer is not JSON`);
+  }
+}
+
+/**
+ * Dispatch one resolved data-plane call. A bucket id and the segments of an
+ * object path may hold dots (never dots alone, per their grammar) and are
+ * percent-encoded ; the other identifiers are one path segment each.
+ */
+async function callDataPlane(
   call: SupabaseCall,
   tool: string,
   args: Readonly<Record<string, unknown>>,
-  signal?: AbortSignal,
 ): Promise<unknown> {
-  const { fetchImpl, token, projectRef, id } = call;
-  const serviceRole = await fetchServiceRoleKey(fetchImpl, token, projectRef, signal);
-  const data = (path: string, init?: DataApiInit) =>
-    dataApiFetch(fetchImpl, serviceRole, projectRef, path, init, signal);
+  const { id } = call;
+  const serviceRole = await projectKey(call, 'service_role');
+  const data = (path: string, method?: string, body?: unknown): Promise<unknown> =>
+    dataPlane(call, serviceRole, path, method, body);
 
   switch (tool) {
     // ─── auth / users ───────────────────────────────────────────────────────
-    case 'supabase__list_users': {
+    case TOOL.listUsers: {
       const query = new URLSearchParams({ page: id('page'), per_page: id('per_page') });
       return data(`/auth/v1/admin/users?${query.toString()}`);
     }
-    case 'supabase__get_user':
+    case TOOL.getUser:
       return data(`/auth/v1/admin/users/${id('user_id')}`);
-    case 'supabase__create_user':
-      return data('/auth/v1/admin/users', { method: 'POST', body: JSON.stringify(bodyOf(args)) });
-    case 'supabase__update_user':
-      return data(`/auth/v1/admin/users/${id('user_id')}`, {
-        method: 'PUT',
-        body: JSON.stringify(bodyOf(args, ['user_id'])),
-      });
-    case 'supabase__delete_user':
-      return data(`/auth/v1/admin/users/${id('user_id')}`, { method: 'DELETE' });
-    case 'supabase__generate_link':
-      return data('/auth/v1/admin/generate_link', {
-        method: 'POST',
-        body: JSON.stringify(bodyOf(args)),
-      });
+    case TOOL.createUser:
+      return data('/auth/v1/admin/users', 'POST', bodyOf(args));
+    case TOOL.updateUser:
+      return data(`/auth/v1/admin/users/${id('user_id')}`, 'PUT', bodyOf(args, ['user_id']));
+    case TOOL.deleteUser:
+      return data(`/auth/v1/admin/users/${id('user_id')}`, 'DELETE');
+    case TOOL.generateLink:
+      return data('/auth/v1/admin/generate_link', 'POST', bodyOf(args));
 
     // ─── storage / buckets ──────────────────────────────────────────────────
-    case 'supabase__create_bucket':
-      return data('/storage/v1/bucket', { method: 'POST', body: JSON.stringify(bodyOf(args)) });
-    case 'supabase__update_bucket':
-      return data(`/storage/v1/bucket/${enc(id('id'))}`, {
-        method: 'PUT',
-        body: JSON.stringify(bodyOf(args, ['id'])),
-      });
-    case 'supabase__delete_bucket':
-      return data(`/storage/v1/bucket/${enc(id('id'))}`, { method: 'DELETE' });
+    case TOOL.createBucket:
+      return data('/storage/v1/bucket', 'POST', bodyOf(args));
+    case TOOL.updateBucket:
+      return data(`/storage/v1/bucket/${enc(id('id'))}`, 'PUT', bodyOf(args, ['id']));
+    case TOOL.deleteBucket:
+      return data(`/storage/v1/bucket/${enc(id('id'))}`, 'DELETE');
 
     // ─── storage / objects ──────────────────────────────────────────────────
-    case 'supabase__list_objects':
-      return data(`/storage/v1/object/list/${enc(id('bucket'))}`, {
-        method: 'POST',
-        body: JSON.stringify(bodyOf(args, ['bucket'])),
-      });
-    case 'supabase__upload_object': {
-      return data(`/storage/v1/object/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
-        method: 'POST',
-        body: Buffer.from(id('content_base64'), 'base64'),
-        headers: {
-          'Content-Type': id('content_type'),
-          'x-upsert': args.upsert === true ? 'true' : 'false',
+    case TOOL.listObjects:
+      return data(`/storage/v1/object/list/${enc(id('bucket'))}`, 'POST', bodyOf(args, ['bucket']));
+    case TOOL.uploadObject:
+      // The bytes, not JSON : sent as they are, under the media type the agent named.
+      return httpJson(
+        call.io,
+        {
+          url: `${projectUrl(call.projectRef)}${objectPathOf(id)}`,
+          method: 'POST',
+          headers: {
+            ...serviceRoleHeaders(serviceRole),
+            'content-type': id('content_type'),
+            'x-upsert': args.upsert === true ? 'true' : 'false',
+          },
+          rawBody: new Uint8Array(Buffer.from(id('content_base64'), 'base64')),
         },
-      });
-    }
-    case 'supabase__delete_object':
-      return data(`/storage/v1/object/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
-        method: 'DELETE',
-      });
-    case 'supabase__create_signed_url': {
+        anyJson,
+      );
+    case TOOL.deleteObject:
+      return data(objectPathOf(id), 'DELETE');
+    case TOOL.createSignedUrl: {
       const expiresIn = typeof args.expires_in === 'number' ? args.expires_in : 3600;
-      return data(`/storage/v1/object/sign/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
-        method: 'POST',
-        body: JSON.stringify({ expiresIn }),
-      });
+      return data(
+        `/storage/v1/object/sign/${enc(id('bucket'))}/${encodePath(id('path'))}`,
+        'POST',
+        { expiresIn },
+      );
     }
     default:
-      throw new Error(`Unknown Supabase data-plane tool: ${tool}`);
+      throw new ExecutorRefusal(`unknown tool '${tool}'`);
   }
 }
 
@@ -553,9 +512,9 @@ async function executeDataPlane(
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Canonical API URL of a project. */
-export function projectUrl(projectRef: string): string {
-  return `https://${projectRef}.supabase.co`;
+/** The Storage path of the call's object : `/storage/v1/object/{bucket}/{path}`. */
+function objectPathOf(id: ToolIdentifiers): string {
+  return `/storage/v1/object/${enc(id('bucket'))}/${encodePath(id('path'))}`;
 }
 
 /** Percent-encode one dotted path segment the classifier's grammar accepted (never dot-only). */
@@ -579,12 +538,4 @@ function bodyOf(
     if (!drop.has(k) && v !== undefined) out[k] = v;
   }
   return out;
-}
-
-function errorResult(message: string): McpToolResult {
-  return { content: [{ type: 'text', text: message }], isError: true };
-}
-
-function text(payload: unknown): McpToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(payload ?? { ok: true }, null, 2) }] };
 }

@@ -4,7 +4,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError, UpstreamHttpError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import {
+  UpstreamAuthError,
+  UpstreamHttpError,
+  UpstreamProtocolError,
+  type ConnectionContext,
+} from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -18,7 +23,6 @@ import {
   classifyContext7,
   context7Plugin,
   executeContext7,
-  firstJsonRpcFrame,
   verifyContext7Key,
 } from '../../src/index.ts';
 import {
@@ -100,6 +104,13 @@ describe('executeContext7 — the forwarded call', () => {
     expect(
       await executeContext7(ctx(fetch), TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }),
     ).toEqual({ content: DOCS_RESULT.content });
+  });
+  test('a block that is not text is read the way the SDK reads every rewrapped server', async () => {
+    const image = { type: 'image', data: 'x', mimeType: 'image/png' };
+    const fetch = mockFetch([mcpAnswers({ content: [image] })]);
+    expect(
+      await executeContext7(ctx(fetch), TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }),
+    ).toEqual({ content: [image] });
   });
 });
 
@@ -202,7 +213,7 @@ describe('executeContext7 — provider failures are thrown', () => {
     ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 503 });
   });
 
-  test('a JSON-RPC error frame, or an answer that is not a tool result, is a plain Error', async () => {
+  test('a JSON-RPC error frame, an answer that is not a tool result, or no frame → UpstreamProtocolError', async () => {
     const errorFrame = mockFetch([
       {
         url: CONTEXT7_MCP_URL,
@@ -214,25 +225,36 @@ describe('executeContext7 — provider failures are thrown', () => {
           }),
       },
     ]);
-    const err = await executeContext7(ctx(errorFrame), TOOL.resolveLibraryId, {
+    const framed = executeContext7(ctx(errorFrame), TOOL.resolveLibraryId, {
       libraryName: 'x',
       query: QUERY,
-    }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(Error);
-    expect(err).not.toBeInstanceOf(UpstreamHttpError);
-    expect((err as Error).message).toMatch(/-32602: bad params/);
+    });
+    await expect(framed).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(framed).rejects.toThrow(/-32602: bad params/);
 
-    const odd = mockFetch([
-      mcpAnswers({ content: [{ type: 'image', data: 'x', mimeType: 'image/png' }] }),
-    ]);
-    await expect(
-      executeContext7(ctx(odd), TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }),
-    ).rejects.toThrow(/not a tool result/);
+    const odd = mockFetch([mcpAnswers({ content: 'not a list of blocks' })]);
+    const notAResult = executeContext7(ctx(odd), TOOL.resolveLibraryId, {
+      libraryName: 'x',
+      query: QUERY,
+    });
+    await expect(notAResult).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(notAResult).rejects.toThrow(/not a tool result/);
 
     const empty = mockFetch([{ url: CONTEXT7_MCP_URL, body: '' }]);
+    const noFrame = executeContext7(ctx(empty), TOOL.resolveLibraryId, {
+      libraryName: 'x',
+      query: QUERY,
+    });
+    await expect(noFrame).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(noFrame).rejects.toThrow(/no JSON-RPC frame/);
+  });
+
+  test('the server is stateless : a 400 is thrown as it is, no session is opened', async () => {
+    const fetch = mockFetch([{ url: CONTEXT7_MCP_URL, status: 400, body: 'bad request' }]);
     await expect(
-      executeContext7(ctx(empty), TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }),
-    ).rejects.toThrow(/no JSON-RPC frame/);
+      executeContext7(ctx(fetch), TOOL.resolveLibraryId, { libraryName: 'x', query: QUERY }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 400 });
+    expect(fetch.calls).toHaveLength(1);
   });
 
   test('an isError result with a key the usage endpoint refuses (live : 401) → UpstreamAuthError', async () => {
@@ -424,27 +446,6 @@ describe('executeContext7 — provider failures are thrown', () => {
   });
 });
 
-describe('firstJsonRpcFrame', () => {
-  test('skips frames of another id and lines that are not JSON', () => {
-    const body = `event: message\ndata: not json\n\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: 9, result: 1 })}\n\ndata: ${JSON.stringify({ jsonrpc: '2.0', id: 7, result: 2 })}\n`;
-    expect(firstJsonRpcFrame(body, 7)).toEqual({ result: 2 });
-    expect(() => firstJsonRpcFrame(body, 8)).toThrow(/no JSON-RPC frame answered id 8/);
-  });
-
-  test('a null id is accepted for an error frame only', () => {
-    const error = JSON.stringify({
-      jsonrpc: '2.0',
-      id: null,
-      error: { code: -32700, message: 'parse error' },
-    });
-    expect(firstJsonRpcFrame(`data: ${error}\n`, 7)).toEqual({
-      error: { code: -32700, message: 'parse error' },
-    });
-    const result = JSON.stringify({ jsonrpc: '2.0', id: null, result: { content: [] } });
-    expect(() => firstJsonRpcFrame(`data: ${result}\n`, 7)).toThrow(/no JSON-RPC frame/);
-  });
-});
-
 describe('discoverResources and verify — GET /v2/usage', () => {
   const connection = (fetch: ReturnType<typeof mockFetch>): ConnectionContext => {
     const { resources: _resources, ...rest } = ctx(fetch);
@@ -491,11 +492,13 @@ describe('discoverResources and verify — GET /v2/usage', () => {
     }
   });
 
-  test('an answer that is not the documented one fails', async () => {
-    for (const body of [{ plan: 'gold' }, { member: {} }, ['free'], 'free']) {
-      await expect(
-        context7Plugin.discoverResources(connection(mockFetch([usageAnswers(200, body)]))),
-      ).rejects.toThrow(/unexpected usage answer/);
+  test('an answer that is not the documented one → UpstreamProtocolError', async () => {
+    for (const body of [{ plan: 'gold' }, { member: {} }, ['free'], 'free', 'not json']) {
+      const discovery = context7Plugin.discoverResources(
+        connection(mockFetch([usageAnswers(200, body)])),
+      );
+      await expect(discovery).rejects.toBeInstanceOf(UpstreamProtocolError);
+      await expect(discovery).rejects.toThrow('Context7 GET /v2/usage: ');
     }
   });
 });

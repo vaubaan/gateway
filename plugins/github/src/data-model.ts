@@ -4,18 +4,29 @@
  * Spec : docs/spec/gateway-risk-model.md §2.
  * Handbook : docs/handbook/providers/github.md.
  *
- * Single plane `repo`. The data model declares every entity a slice path
- * can name (leaves and intermediate containment nodes), with cardinalities
- * and containment parent. One `Resource` of a connection is one repository
- * (`owner/name`) ; its `ref` is the first bracketed segment of every slice.
+ * One plane, `repo`, with two roots. `repo` : one `Resource` of a
+ * connection is one repository (`owner/name`) ; its `ref` is the first
+ * bracketed segment of every slice under it. `search` : GitHub's global
+ * search, which reaches every repository the token reaches, beyond those of
+ * a mission — not a resource, never selected, decided by its own risk
+ * (`github.search-global`). Kept in the one plane: a plane is what the
+ * interface filters risks by, and the search is no area of its own.
  *
- * Virtual leaves derived from containment — they appear in slices and
- * catalog patterns but are NOT entities :
+ * Every entity a slice path names is declared here, with its cardinalities
+ * (how a slice names it : `[x]` or nothing `one`, `[a,b]` `bounded`, `[*]`
+ * `unbounded`) and its containment parent. A slice walks the containment :
+ * a job is named through its run and the run's workflow
+ * (`workflow[*].workflow-run[<run>].job`), "any" where the arguments do not
+ * name the parent.
+ *
+ * Virtual leaves — acts rather than entities, last in a slice, never
+ * declared :
  *   - `branch[X].merge-into`        : emitted by `merge_pull_request`
  *   - `branch[X].propose-to[Y]`     : emitted by `create_pull_request`
  *   - `branch[X].workflow-via-file` : emitted when a `file[]` write targets
  *     a path under `.github/workflows/*.yml`
  *   - `branch[X].files-bulk`        : emitted by `push_files` with 2+ files
+ *   - `<ref>.push`, `<ref>.force`, `<ref>.delete` : emitted by the git remote
  *
  * Account-plane entities (`org`, organization-level collaborators…) are
  * intentionally absent : the current tool set does not touch them. A future
@@ -24,8 +35,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const githubDataModel: DataModel = {
-  provider: 'github',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'repo',
@@ -120,7 +133,8 @@ export const githubDataModel: DataModel = {
         {
           name: 'workflow',
           parent: 'repo',
-          cardinalities: ['one', 'bounded'],
+          // `[*]` : the workflow of a run or a job, which their tools do not name.
+          cardinalities: ['one', 'bounded', 'unbounded'],
           description:
             'A workflow definition (`.github/workflows/*.yml`). Read-only via ' +
             'tools — mutations only happen via `file[]` writes on the YAML ' +
@@ -141,14 +155,15 @@ export const githubDataModel: DataModel = {
           cardinalities: ['one', 'unbounded'],
           description:
             'A job of a workflow run, with its steps and their conclusions. Read-only ' +
-            'via tools (`list_workflow_jobs`, slice `workflow-run[<run>].job.R`).',
+            'via tools (`list_workflow_jobs`, slice `workflow[*].workflow-run[<run>].job.R`).',
         },
         {
           name: 'log',
           parent: 'job',
           cardinalities: ['one'],
           description:
-            'The log of a job (`get_job_logs`, slice `job[<id>].log.R`). Read-only ; ' +
+            'The log of a job (`get_job_logs`, slice ' +
+            '`workflow[*].workflow-run[*].job[<id>].log.R`). Read-only ; ' +
             'what a step printed, secrets masked by GitHub.',
         },
         {
@@ -183,6 +198,29 @@ export const githubDataModel: DataModel = {
           description:
             'The singleton repo configuration (visibility, default branch, ' +
             'archive flag, etc.). Reserved — no current tool surface.',
+        },
+        {
+          name: 'search',
+          parent: null,
+          cardinalities: ['one'],
+          description:
+            "GitHub's global search (`search_code`, `search_issues`) : every repository the " +
+            'token reaches, beyond the repositories of a mission. A second root of the plane, ' +
+            'not a resource : nothing is selected, the search is decided by its own risk.',
+        },
+        {
+          name: 'code',
+          parent: 'search',
+          cardinalities: ['one'],
+          description: 'Code search (`search_code`, slice `search.code.R`).',
+        },
+        {
+          name: 'issues',
+          parent: 'search',
+          cardinalities: ['one'],
+          description:
+            'Issue and pull-request search (`search_issues`, slice `search.issues.R`). ' +
+            'The search, not an `issue` of a repository.',
         },
       ],
     },

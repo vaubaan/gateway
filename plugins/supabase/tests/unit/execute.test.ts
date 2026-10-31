@@ -13,6 +13,7 @@ import type { CredentialSecret, ExecuteContext, Resource } from '@vaubaan/plugin
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import { SUPABASE_API_BASE, supabasePlugin } from '../../src/index.ts';
+import { resultJson, resultText, sentQuery } from './support.ts';
 
 const REF = 'tlqgxnezmthbpzhdwxgi';
 const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
@@ -36,9 +37,6 @@ const execCtx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
   fetch,
   resources: [project],
 });
-
-const textOf = (result: { content: readonly unknown[] }) =>
-  JSON.parse((result.content[0] as { text: string }).text) as unknown;
 
 /** Run one tool against a single-route Management API mock ; returns the recorded call and the result. */
 async function runMgmt(route: MockRoute, tool: string, args: Record<string, unknown>) {
@@ -80,7 +78,7 @@ describe('executeSupabase — Management API reads', () => {
       {},
     );
     expect(call.method).toBe('GET');
-    expect(textOf(result)).toEqual([{ id: 'avatars' }]);
+    expect(resultJson(result)).toEqual([{ id: 'avatars' }]);
   });
 
   test('get_function GETs /projects/:ref/functions/:slug ; a slug that is not one path segment is refused, not encoded', async () => {
@@ -162,7 +160,7 @@ describe('executeSupabase — Management API writes', () => {
       { provider_id: 'uuid-1' },
     );
     expect(call.body).toBeNull();
-    expect(textOf(result)).toEqual({ ok: true });
+    expect(resultJson(result)).toEqual({ ok: true });
   });
 
   test('create_function POSTs /functions with the body, project_ref stripped', async () => {
@@ -240,7 +238,7 @@ describe('executeSupabase — data plane through service_role', () => {
     expect(call.url).toBe(`${DATA}/auth/v1/admin/users?page=1&per_page=25`);
     expect(call.headers.authorization).toBe('Bearer eyJ.service_role.x');
     expect(call.headers.apikey).toBe('eyJ.service_role.x');
-    expect(textOf(result)).toEqual({ users: [{ id: 'u1' }] });
+    expect(resultJson(result)).toEqual({ users: [{ id: 'u1' }] });
   });
 
   test('create_user POSTs /auth/v1/admin/users with project_ref stripped', async () => {
@@ -268,7 +266,7 @@ describe('executeSupabase — data plane through service_role', () => {
       { user_id: 'u1' },
     );
     expect(call.method).toBe('DELETE');
-    expect(textOf(result)).toEqual({ ok: true });
+    expect(resultJson(result)).toEqual({ ok: true });
   });
 
   test('generate_link POSTs /auth/v1/admin/generate_link', async () => {
@@ -343,14 +341,11 @@ describe('executeSupabase — the target project is resolved like the classifier
   const OTHER_REF = 'victimprojectrefxxxx';
   const other: Resource = { ...project, ref: OTHER_REF, displayName: 'Acme / other' };
 
-  const errorText = (result: { content: readonly unknown[] }) =>
-    (result.content[0] as { text: string }).text;
-
   test('without project_ref, the single project of the mission is called (Management API)', async () => {
     const fetch = mockFetch([{ method: 'GET', url: MGMT, body: { name: 'app' }, times: 1 }]);
     const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_project', {});
     expect(fetch.calls.map((c) => c.url)).toEqual([`${SUPABASE_API_BASE}/projects/${REF}`]);
-    expect(textOf(result)).toEqual({ name: 'app' });
+    expect(resultJson(result)).toEqual({ name: 'app' });
   });
 
   test('without project_ref, the single project of the mission is called (data plane)', async () => {
@@ -393,7 +388,7 @@ describe('executeSupabase — the target project is resolved like the classifier
     const ctx: ExecuteContext = { ...execCtx(fetch), resources: [project, other] };
     const result = await supabasePlugin.execute(ctx, 'supabase__get_project', {});
     expect(result.isError).toBe(true);
-    expect(errorText(result)).toBe('ambiguous supabase target: specify project_ref.');
+    expect(resultText(result)).toBe('ambiguous supabase target: specify project_ref.');
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -411,7 +406,7 @@ describe('executeSupabase — the target project is resolved like the classifier
     const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_project', {
       project_ref: OTHER_REF,
     });
-    expect(errorText(result)).toBe(
+    expect(resultText(result)).toBe(
       `supabase project '${OTHER_REF}' is not a resource of this mission.`,
     );
   });
@@ -436,7 +431,7 @@ describe('executeSupabase — the target project is resolved like the classifier
       schemas: ['app', 7, null, { a: 1 }],
     });
     expect(result.isError).toBe(true);
-    expect(errorText(result)).toBe('schemas: missing or malformed.');
+    expect(resultText(result)).toBe('schemas: missing or malformed.');
     expect(fetch.calls).toHaveLength(0);
 
     const { call } = await runMgmt(
@@ -444,7 +439,7 @@ describe('executeSupabase — the target project is resolved like the classifier
       'supabase__list_tables',
       { schemas: ['app'] },
     );
-    expect((call.json as { query: string }).query).toContain("in ('app')");
+    expect(sentQuery(call)).toContain("in ('app')");
   });
 });
 
@@ -474,7 +469,7 @@ describe('executeSupabase — the body is built from declared arguments only', (
       ...args,
     });
     expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toContain(refusal(tool, name));
+    expect(resultText(result)).toContain(refusal(tool, name));
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -497,9 +492,7 @@ describe('executeSupabase — the body is built from declared arguments only', (
         content_base64,
       });
       expect(result.isError, String(content_base64)).toBe(true);
-      expect((result.content[0] as { text: string }).text).toContain(
-        'content_base64: missing or malformed.',
-      );
+      expect(resultText(result)).toContain('content_base64: missing or malformed.');
       expect(fetch.calls).toHaveLength(0);
     }
   });

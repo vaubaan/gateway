@@ -18,9 +18,8 @@
  * Without it a slice naming an undeclared entity is accepted and falls to the
  * fallback, and a catalog pattern with a typo matches nothing, silently. The
  * test kit runs it on every sample slice (`'slice'`,
- * `assertSlicesOnDataModel`) ; `catalogPathIssues` on every catalog pattern
- * (`'pattern'`), held for the shipped plugins by
- * `plugin-data-model-paths.test.ts` until it can join `definePlugin`.
+ * `assertSlicesOnDataModel`) ; `definePlugin` runs `catalogPathIssues` on
+ * every catalog pattern (`'pattern'`).
  */
 
 import { parseSlice } from '@vaubaan/policy-engine';

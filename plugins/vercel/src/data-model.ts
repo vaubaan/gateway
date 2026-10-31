@@ -14,7 +14,12 @@
  * everything else is bounded by quota or by containment.
  *
  * Every slice the classifier emits walks this graph ; every `matches` pattern
- * of the catalog names entities declared here.
+ * of the catalog names entities declared here (`assertSlicesOnDataModel` and
+ * `catalogPathIssues` in `tests/unit/plugin.test.ts`). A deployment or an env
+ * var is reached through its environment : a call that does not name one is
+ * classified under `env[*]`. The cardinalities are documentary (how many
+ * instances exist), not how a slice names them : `project` and `team` are
+ * `bounded` though a slice names one.
  *
  * Side-effect note : `bypass-token` is created by an HTTP GET on the upstream
  * API (`get_access_to_vercel_url`) — the classifier emits a `W` because the
@@ -23,8 +28,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const vercelDataModel: DataModel = {
-  provider: 'vercel',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'runtime',

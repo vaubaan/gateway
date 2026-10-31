@@ -23,6 +23,8 @@ import {
   ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
+  isRecord,
+  readBoundedText,
   type ExecuteContext,
   type McpToolResult,
 } from '@vaubaan/plugin-sdk';
@@ -148,7 +150,7 @@ class RefMover {
     path: string,
     body: unknown,
   ): Promise<MoveOutcome> {
-    const res = await this.rest.request(method, path, body);
+    const res = await this.rest.write(method, path, body);
     const message = res.ok ? '' : await messageOf(res);
     if (isMissingPermissionRefusal(res.status, message)) return this.refusedForPermission(message);
     if (res.ok) {
@@ -202,11 +204,15 @@ class RefMover {
   }
 }
 
-/** GitHub's `message` of a failed answer, or `''`. */
+/** Most of a refused write's answer read for GitHub's `message` : an error document is small. */
+const MESSAGE_READ_BYTES = 64 * 1024;
+
+/** GitHub's `message` of a refused write, or `''` when its answer is not JSON or holds none. */
 async function messageOf(res: Response): Promise<string> {
   try {
-    const parsed = (await res.json()) as { message?: unknown };
-    return typeof parsed.message === 'string' ? parsed.message : '';
+    const text = await readBoundedText(res, MESSAGE_READ_BYTES, 'github ref write');
+    const answer: unknown = JSON.parse(text);
+    return isRecord(answer) && typeof answer.message === 'string' ? answer.message : '';
   } catch {
     return '';
   }

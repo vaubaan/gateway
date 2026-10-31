@@ -15,6 +15,8 @@
 
 import { isIP } from 'node:net';
 
+import { isRecord } from '@vaubaan/plugin-sdk';
+
 import { DEFAULT_IMAGE_PREFIXES } from './identity.ts';
 
 /** A Fly app name : lower-case letters, digits and inner hyphens, at most 63 characters. */
@@ -164,8 +166,4 @@ export function configImageRefusal(config: unknown, prefixes: readonly string[])
     if (refusal) return refusal;
   }
   return null;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

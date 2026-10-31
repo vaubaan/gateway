@@ -34,41 +34,30 @@
  *     the probe itself fails. The agent reads the text ; the audit keeps the
  *     class. An aborted call is rethrown as the abort.
  *
- * The JSON-RPC client is a copy of Railway's, stricter (a type guard on the
- * result, a null id accepted for an error frame only) ; extracting one
- * `callRemoteMcpTool` into the SDK is a follow-up.
+ * The call itself goes through the SDK's MCP client (`callUpstreamTool`) :
+ * a failed status is `UpstreamAuthError` (401 / 403) or `UpstreamHttpError`,
+ * a JSON-RPC error frame, an answer with no frame for the request or one
+ * that is not a tool result `UpstreamProtocolError`.
  */
 
 import {
+  QUOTED_LENGTH,
   UpstreamAuthError,
   UpstreamHttpError,
+  anyJson,
+  callUpstreamTool,
   refusalResult,
   type ConnectionContext,
   type ExecuteContext,
-  type McpToolContent,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { readCall, resolveIndex, type Context7Call } from './classify.ts';
-import { INDEX_REF, PROVIDER_ID } from './identity.ts';
-import {
-  CONTEXT7_USER_AGENT,
-  context7KeyOf,
-  isKeyRefusal,
-  isQuotaSpent,
-  parsedJson,
-  readPlan,
-  requestUsage,
-} from './usage.ts';
-
-export const CONTEXT7_MCP_URL = 'https://mcp.context7.com/mcp';
-/** The protocol revision sent, as Railway's rewrap sends it. */
-export const MCP_PROTOCOL_VERSION = '2025-06-18';
+import { readCall, resolveIndex } from './classify.ts';
+import { CONTEXT7_MCP_SERVER, INDEX_REF, PROVIDER_ID } from './identity.ts';
+import { context7KeyOf, isQuotaSpent, readPlan, requestUsage } from './usage.ts';
 
 const HTTP_TOO_MANY_REQUESTS = 429;
-/** Longest excerpt of an upstream body or tool text quoted in an error. */
-const QUOTED_LENGTH = 300;
 
 /** Display name of the one resource of a connection. */
 export const INDEX_DISPLAY_NAME = 'Context7 library index';
@@ -87,7 +76,13 @@ export async function executeContext7(
   if ('denied' in index) return refusalResult(index.denied);
 
   const key = context7KeyOf(ctx.credential);
-  const result = await callTool(ctx, key, call);
+  const result = await callUpstreamTool(
+    ctx,
+    CONTEXT7_MCP_SERVER,
+    key,
+    call.upstream,
+    call.arguments,
+  );
   if (result.isError === true) throw await explainToolError(ctx, key, result);
   return { content: result.content };
 }
@@ -107,148 +102,39 @@ export async function discoverContext7Resources(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JSON-RPC over Streamable HTTP
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface UpstreamToolResult {
-  readonly content: readonly McpToolContent[];
-  readonly isError?: boolean;
-}
-
-async function callTool(
-  ctx: ExecuteContext,
-  key: string,
-  call: Context7Call,
-): Promise<UpstreamToolResult> {
-  const id = Math.floor(Math.random() * 1_000_000_000);
-  const res = await ctx.fetch(CONTEXT7_MCP_URL, {
-    redirect: 'error',
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
-      'User-Agent': CONTEXT7_USER_AGENT,
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      method: 'tools/call',
-      params: { name: call.upstream, arguments: call.arguments },
-    }),
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (!res.ok) {
-    const msg = `Context7 MCP upstream ${res.status}: ${(await res.text()).slice(0, QUOTED_LENGTH)}`;
-    if (isKeyRefusal(res.status)) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  const frame = firstJsonRpcFrame(await res.text(), id);
-  if ('error' in frame) {
-    throw new Error(`Context7 MCP upstream error ${frame.error.code}: ${frame.error.message}`);
-  }
-  if (!isToolResult(frame.result)) {
-    throw new Error(`${PROVIDER_ID}: the MCP server answered something that is not a tool result`);
-  }
-  return frame.result;
-}
-
-type JsonRpcFrame =
-  | { readonly result: unknown }
-  | { readonly error: { readonly code: number; readonly message: string } };
-
-/**
- * The first JSON-RPC frame answering `id` (or `null`) in a Streamable HTTP
- * body : SSE `data:` lines, or a bare JSON document.
- */
-export function firstJsonRpcFrame(body: string, id: number): JsonRpcFrame {
-  const candidates: string[] = [];
-  const trimmed = body.trim();
-  if (trimmed.startsWith('{')) candidates.push(trimmed);
-  for (const line of body.split('\n')) {
-    if (line.startsWith('data:')) candidates.push(line.slice('data:'.length).trim());
-  }
-  for (const payload of candidates) {
-    const frame = asFrame(payload, id);
-    if (frame) return frame;
-  }
-  throw new Error(`${PROVIDER_ID}: no JSON-RPC frame answered id ${id} in the MCP response`);
-}
-
-function asFrame(payload: string, id: number): JsonRpcFrame | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== 'object' || parsed === null) return null;
-  const frame = parsed as Record<string, unknown>;
-  if (frame.jsonrpc !== '2.0') return null;
-  const error = frame.error as Record<string, unknown> | null | undefined;
-  // A null id is what a server answers when it could not read the request's
-  // id : acceptable for an error frame, never for a result.
-  if (frame.id !== id && !(frame.id === null && typeof error === 'object' && error !== null)) {
-    return null;
-  }
-  if (typeof error === 'object' && error !== null) {
-    return {
-      error: {
-        code: typeof error.code === 'number' ? error.code : 0,
-        message: typeof error.message === 'string' ? error.message : 'no message',
-      },
-    };
-  }
-  return 'result' in frame ? { result: frame.result } : null;
-}
-
-/** An MCP tool result made of text blocks, which is all Context7's tools answer. */
-function isToolResult(x: unknown): x is UpstreamToolResult {
-  if (typeof x !== 'object' || x === null) return false;
-  const r = x as Record<string, unknown>;
-  return (
-    Array.isArray(r.content) &&
-    r.content.every(
-      (block: unknown) =>
-        typeof block === 'object' &&
-        block !== null &&
-        (block as Record<string, unknown>).type === 'text' &&
-        typeof (block as Record<string, unknown>).text === 'string',
-    ) &&
-    (r.isError === undefined || typeof r.isError === 'boolean')
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // A tool error, explained by the usage endpoint
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** What to throw for an upstream `isError` result, decided by what `GET /v2/usage` says of the key. */
+/**
+ * What to throw for an upstream `isError` result, decided by what
+ * `GET /v2/usage` says of the key. The probe is best-effort by design : a
+ * probe that fails without saying anything of the key (another status, an
+ * answer that is not JSON, the network) leaves Context7's text as the
+ * failure, never the probe's own.
+ */
 async function explainToolError(
   ctx: ExecuteContext,
   key: string,
-  result: UpstreamToolResult,
+  result: McpToolResult,
 ): Promise<Error> {
   const said = `Context7: ${toolText(result)}`;
-  let res: Response;
-  let body: unknown;
+  let usage: unknown;
   try {
-    res = await requestUsage(ctx, key);
-    body = res.ok ? parsedJson(await res.text()) : undefined;
+    usage = await requestUsage(ctx, key, anyJson);
   } catch (err) {
     // An aborted call is the caller's, not a fact about the key.
     if (ctx.signal?.aborted) throw err;
-    // The probe failed : nothing is known of the key, the tool's text is what there is.
+    if (err instanceof UpstreamAuthError) return new UpstreamAuthError(said, err.upstreamStatus);
+    if (err instanceof UpstreamHttpError && err.status === HTTP_TOO_MANY_REQUESTS) {
+      return new UpstreamHttpError(said, HTTP_TOO_MANY_REQUESTS);
+    }
     return new Error(said);
   }
-  if (isKeyRefusal(res.status)) return new UpstreamAuthError(said, res.status);
-  if (res.status === HTTP_TOO_MANY_REQUESTS) return new UpstreamHttpError(said, res.status);
-  if (res.ok && isQuotaSpent(body)) return new UpstreamHttpError(said, HTTP_TOO_MANY_REQUESTS);
+  if (isQuotaSpent(usage)) return new UpstreamHttpError(said, HTTP_TOO_MANY_REQUESTS);
   return new Error(said);
 }
 
-function toolText(result: UpstreamToolResult): string {
+function toolText(result: McpToolResult): string {
   const text = result.content
     .map((block) => (block.type === 'text' ? block.text : ''))
     .join(' ')

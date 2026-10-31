@@ -17,6 +17,7 @@ import {
   credentialSpecIssues,
   isSentence,
 } from './credential-issues.ts';
+import { catalogPathIssues } from './data-model-paths.ts';
 import { isList, isRecord } from './guards.ts';
 import type { ProviderPlugin } from './plugin.ts';
 
@@ -372,7 +373,10 @@ function dataModelIssues(plugin: ProviderPlugin): string[] {
  * The catalog rules of `semanticIssues` — fallback, wildcards, macro-actions
  * and their base budgets. This is the only validation a catalog written in
  * TypeScript goes through, so everything that must hold for every catalog
- * lives there, not in the YAML parser.
+ * lives there, not in the YAML parser. Then every live pattern walked on the
+ * plugin's data model (`catalogPathIssues`) : a pattern off the model
+ * matches nothing, silently. Walked only on a model that is itself sound,
+ * whose own issues `dataModelIssues` reports.
  */
 function catalogIssues(plugin: ProviderPlugin): string[] {
   if (!plugin.catalog || typeof plugin.catalog !== 'object') {
@@ -383,6 +387,9 @@ function catalogIssues(plugin: ProviderPlugin): string[] {
     issues.push(`catalog.provider '${plugin.catalog.provider}' must equal the plugin id`);
   }
   issues.push(...semanticIssues(plugin.catalog).map((m) => `catalog: ${m}`));
+  if (isList(plugin.catalog.risks) && dataModelIssues(plugin).length === 0) {
+    issues.push(...catalogPathIssues(plugin).map((m) => `catalog: ${m}`));
+  }
   return issues;
 }
 

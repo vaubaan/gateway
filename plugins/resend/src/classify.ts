@@ -55,8 +55,8 @@
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import {
-  RESEND_PROVIDER,
   contactSelector,
   pathIdent,
   resolveDomain,
@@ -73,7 +73,7 @@ export const BATCH_MAX_EMAILS = 100;
 type Args = Readonly<Record<string, unknown>>;
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: RESEND_PROVIDER, path: segments, action };
+  return { provider: PROVIDER_ID, path: segments, action };
 }
 function name(value: string): SliceSegment {
   return { kind: 'name', value };
@@ -193,7 +193,7 @@ function checkBroadcastFrom(args: Args, resources: readonly Resource[]): Denied 
 /** A broadcast create or update must stay a draft : no `send` (whatever its value), no schedule. */
 function refuseBroadcastDispatch(args: Args): Denied | null {
   if (args.send !== undefined) {
-    return { denied: 'send: a broadcast is sent with resend__send_broadcast, not at creation' };
+    return { denied: `send: a broadcast is sent with ${TOOL.sendBroadcast}, not at creation` };
   }
   if (args.scheduled_at !== undefined) {
     return { denied: 'scheduled_at: scheduling is not supported in v1' };
@@ -208,17 +208,17 @@ export function classifyResend(
 ): ClassifyOutcome {
   switch (tool) {
     // ─── Reads — sent emails ──────────────────────────────────────────────
-    case 'resend__get_email': {
+    case TOOL.getEmail: {
       const id = requireIdent(args);
       if ('denied' in id) return id;
       return { slices: [slice('R', [name('email'), ident(id.ident)])] };
     }
 
     // ─── Reads — domains ──────────────────────────────────────────────────
-    case 'resend__list_domains':
-    case 'resend__describe_zones':
+    case TOOL.listDomains:
+    case TOOL.describeZones:
       return { slices: [slice('R', [name('domain'), ANY])] };
-    case 'resend__get_domain': {
+    case TOOL.getDomain: {
       const target = resolveDomainArg(args.domain, resources);
       if ('denied' in target) return target;
       const root = [name('domain'), ident(target.resource.ref)];
@@ -228,14 +228,14 @@ export function classifyResend(
     }
 
     // ─── Reads — segments, contacts, broadcasts ───────────────────────────
-    case 'resend__list_segments':
+    case TOOL.listSegments:
       return { slices: [slice('R', [name('segment'), ANY])] };
-    case 'resend__get_segment': {
+    case TOOL.getSegment: {
       const seg = resolveSegmentArg(args.segment_id, resources);
       if ('denied' in seg) return seg;
       return { slices: [slice('R', [name('segment'), ident(seg.resource.ref)])] };
     }
-    case 'resend__list_contacts': {
+    case TOOL.listContacts: {
       if (args.segment_id === undefined) return { slices: [slice('R', [name('contact'), ANY])] };
       const seg = resolveSegmentArg(args.segment_id, resources);
       if ('denied' in seg) return seg;
@@ -243,18 +243,18 @@ export function classifyResend(
         slices: [slice('R', [name('segment'), ident(seg.resource.ref), name('member'), ANY])],
       };
     }
-    case 'resend__get_contact': {
+    case TOOL.getContact: {
       const contact = contactIdent(args);
       if ('denied' in contact) return contact;
       return { slices: [slice('R', [name('contact'), ident(contact.ident)])] };
     }
-    case 'resend__list_broadcasts':
+    case TOOL.listBroadcasts:
       return { slices: [slice('R', [name('segment'), ANY, name('broadcast'), ANY])] };
-    case 'resend__get_broadcast':
+    case TOOL.getBroadcast:
       return broadcastSlice('R', args, resources);
 
     // ─── Writes — transactional sends ─────────────────────────────────────
-    case 'resend__send_email': {
+    case TOOL.sendEmail: {
       const send = resolveSend(args, resources);
       if ('denied' in send) return send;
       const zone = worstZone(send.recipients, zoneConfigOf(send.resource));
@@ -266,22 +266,22 @@ export function classifyResend(
         ],
       };
     }
-    case 'resend__send_batch_emails':
+    case TOOL.sendBatchEmails:
       return classifyBatch(args, resources);
 
     // ─── Writes — domains ─────────────────────────────────────────────────
-    case 'resend__create_domain':
+    case TOOL.createDomain:
       if (typeof args.name !== 'string' || args.name.length === 0) {
         return { denied: 'name: missing domain name' };
       }
       return { slices: [slice('W', [name('domain')])] };
-    case 'resend__update_domain':
-    case 'resend__delete_domain': {
+    case TOOL.updateDomain:
+    case TOOL.deleteDomain: {
       const target = resolveDomainArg(args.domain, resources);
       if ('denied' in target) return target;
       return { slices: [slice('W', [name('domain'), ident(target.resource.ref)])] };
     }
-    case 'resend__verify_domain': {
+    case TOOL.verifyDomain: {
       const target = resolveDomainArg(args.domain, resources);
       if ('denied' in target) return target;
       return {
@@ -290,17 +290,17 @@ export function classifyResend(
     }
 
     // ─── Writes — segments and members ────────────────────────────────────
-    case 'resend__create_segment':
+    case TOOL.createSegment:
       if (typeof args.name !== 'string' || args.name.length === 0) {
         return { denied: 'name: missing segment name' };
       }
       return { slices: [slice('W', [name('segment')])] };
-    case 'resend__delete_segment': {
+    case TOOL.deleteSegment: {
       const seg = resolveSegmentArg(args.segment_id, resources);
       if ('denied' in seg) return seg;
       return { slices: [slice('W', [name('segment'), ident(seg.resource.ref)])] };
     }
-    case 'resend__create_contact': {
+    case TOOL.createContact: {
       if (!parseAddress(args.email)) return { denied: 'email: missing or malformed address' };
       const slices = [slice('W', [name('contact')])];
       if (args.segment_id !== undefined) {
@@ -310,14 +310,14 @@ export function classifyResend(
       }
       return { slices };
     }
-    case 'resend__update_contact':
-    case 'resend__delete_contact': {
+    case TOOL.updateContact:
+    case TOOL.deleteContact: {
       const contact = contactIdent(args);
       if ('denied' in contact) return contact;
       return { slices: [slice('W', [name('contact'), ident(contact.ident)])] };
     }
-    case 'resend__add_contact_to_segment':
-    case 'resend__remove_contact_from_segment': {
+    case TOOL.addContactToSegment:
+    case TOOL.removeContactFromSegment: {
       const seg = resolveSegmentArg(args.segment_id, resources);
       if ('denied' in seg) return seg;
       const contact = contactIdent(args);
@@ -335,7 +335,7 @@ export function classifyResend(
     }
 
     // ─── Writes — broadcasts ──────────────────────────────────────────────
-    case 'resend__create_broadcast': {
+    case TOOL.createBroadcast: {
       const seg = resolveSegmentArg(args.segment_id, resources);
       if ('denied' in seg) return seg;
       const dispatch = refuseBroadcastDispatch(args);
@@ -347,20 +347,20 @@ export function classifyResend(
         slices: [slice('W', [name('segment'), ident(seg.resource.ref), name('broadcast')])],
       };
     }
-    case 'resend__update_broadcast': {
+    case TOOL.updateBroadcast: {
       const dispatch = refuseBroadcastDispatch(args);
       if (dispatch) return dispatch;
       const from = checkBroadcastFrom(args, resources);
       if (from) return from;
       return broadcastSlice('W', args, resources);
     }
-    case 'resend__send_broadcast': {
+    case TOOL.sendBroadcast: {
       if (args.scheduled_at !== undefined) {
         return { denied: 'scheduled_at: scheduling is not supported in v1' };
       }
       return broadcastSlice('W', args, resources, 'send');
     }
-    case 'resend__delete_broadcast':
+    case TOOL.deleteBroadcast:
       return broadcastSlice('W', args, resources, 'delete');
 
     default:

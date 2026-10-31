@@ -8,7 +8,10 @@
  *   - `fetch` comes from the context, never from the global ;
  *   - the key is chosen by the **mode of the resource the call targets**
  *     (`test_key` / `live_key`), never by an argument ;
- *   - 401 / 403 from Stripe → `UpstreamAuthError` ;
+ *   - every request goes through the SDK's `httpJson` : 401 / 403 from
+ *     Stripe → `UpstreamAuthError`, another failed status →
+ *     `UpstreamHttpError`, an answer that is not JSON (Stripe always
+ *     answers JSON) → `UpstreamProtocolError` ;
  *   - Stripe takes `application/x-www-form-urlencoded` bodies with bracket
  *     notation for nested keys (`items[0][price]=…`), and query parameters on
  *     GET ; the `account` argument is consumed here and never forwarded ;
@@ -16,30 +19,37 @@
  *     and every identifier argument is read by its `readIdArgs` / `stripeId` :
  *     the id in the path and the ids in the query or the body are the ones
  *     the slices named, or the call is not made ;
- *   - only the arguments the tool's schema declares are forwarded
- *     (`declaredArgsOf`) : the classifier judged those and no other, so a
- *     Stripe parameter nobody classified (`expand`, `collection_method`…)
- *     never reaches the API, even if a caller skipped the classifier.
+ *   - a call carrying an argument the tool's schema does not declare is
+ *     declined with the classifier's own sentence (`undeclaredStripeArgument`) :
+ *     the classifier judged the declared ones and no other, so a Stripe
+ *     parameter nobody classified (`expand`, `collection_method`…) never
+ *     reaches the API, even if a caller skipped the classifier.
  */
 
 import {
   CredentialRefusal,
   ExecutorRefusal,
   UpstreamAuthError,
-  UpstreamHttpError,
+  anyJson,
   declining,
   expectCredentialKind,
+  httpJson,
+  isRecord,
+  jsonResult,
   refusalResult,
   type ConnectionContext,
   type ExecuteContext,
+  type Guard,
   type McpToolResult,
   type Resource,
+  type UpstreamIo,
 } from '@vaubaan/plugin-sdk';
 
+import { DECLARED_ARGUMENTS, undeclaredStripeArgument } from './classify.ts';
+import { PROVIDER_ID, STRIPE_API_BASE, TOOL } from './identity.ts';
 import {
   KEY_FIELD_BY_MODE,
   STRIPE_MODES,
-  STRIPE_PROVIDER,
   keyMatchesMode,
   modeOf,
   readIdArgs,
@@ -48,10 +58,6 @@ import {
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';
-import { declaredArgsOf } from './tools.ts';
-
-/** Public API of the provider — a fact about Stripe, not instance configuration. */
-export const STRIPE_API_BASE = 'https://api.stripe.com/v1';
 
 const HTTP_FORBIDDEN = 403;
 
@@ -89,51 +95,52 @@ const byId = (prefix: string, suffix = '') => ({
 /** Tool → Stripe endpoint. Every declared tool has a row ; the classifier enforces the inverse. */
 const ROUTES: Readonly<Record<string, Route>> = {
   // reads
-  stripe__list_products: { method: 'GET', path: () => '/products' },
-  stripe__list_prices: { method: 'GET', path: () => '/prices' },
-  stripe__list_customers: { method: 'GET', path: () => '/customers' },
-  stripe__retrieve_customer: { method: 'GET', ...byId('customers') },
-  stripe__list_subscriptions: { method: 'GET', path: () => '/subscriptions' },
-  stripe__list_invoices: { method: 'GET', path: () => '/invoices' },
-  stripe__list_charges: { method: 'GET', path: () => '/charges' },
-  stripe__list_payment_intents: { method: 'GET', path: () => '/payment_intents' },
-  stripe__get_balance: { method: 'GET', path: () => '/balance', forward: false },
-  stripe__list_events: { method: 'GET', path: () => '/events' },
+  [TOOL.listProducts]: { method: 'GET', path: () => '/products' },
+  [TOOL.listPrices]: { method: 'GET', path: () => '/prices' },
+  [TOOL.listCustomers]: { method: 'GET', path: () => '/customers' },
+  [TOOL.retrieveCustomer]: { method: 'GET', ...byId('customers') },
+  [TOOL.listSubscriptions]: { method: 'GET', path: () => '/subscriptions' },
+  [TOOL.listInvoices]: { method: 'GET', path: () => '/invoices' },
+  [TOOL.listCharges]: { method: 'GET', path: () => '/charges' },
+  [TOOL.listPaymentIntents]: { method: 'GET', path: () => '/payment_intents' },
+  [TOOL.getBalance]: { method: 'GET', path: () => '/balance', forward: false },
+  [TOOL.listEvents]: { method: 'GET', path: () => '/events' },
   // writes — catalog
-  stripe__create_product: { method: 'POST', path: () => '/products' },
-  stripe__update_product: { method: 'POST', ...byId('products') },
-  stripe__create_price: { method: 'POST', path: () => '/prices' },
-  stripe__update_price: { method: 'POST', ...byId('prices') },
-  stripe__create_coupon: { method: 'POST', path: () => '/coupons' },
-  stripe__create_promotion_code: { method: 'POST', path: () => '/promotion_codes' },
+  [TOOL.createProduct]: { method: 'POST', path: () => '/products' },
+  [TOOL.updateProduct]: { method: 'POST', ...byId('products') },
+  [TOOL.createPrice]: { method: 'POST', path: () => '/prices' },
+  [TOOL.updatePrice]: { method: 'POST', ...byId('prices') },
+  [TOOL.createCoupon]: { method: 'POST', path: () => '/coupons' },
+  [TOOL.createPromotionCode]: { method: 'POST', path: () => '/promotion_codes' },
   // writes — subscriptions
-  stripe__create_subscription: { method: 'POST', path: () => '/subscriptions' },
-  stripe__update_subscription: { method: 'POST', ...byId('subscriptions') },
-  stripe__cancel_subscription: { method: 'DELETE', ...byId('subscriptions') },
-  stripe__pause_subscription: { method: 'POST', ...byId('subscriptions') },
+  [TOOL.createSubscription]: { method: 'POST', path: () => '/subscriptions' },
+  [TOOL.updateSubscription]: { method: 'POST', ...byId('subscriptions') },
+  [TOOL.cancelSubscription]: { method: 'DELETE', ...byId('subscriptions') },
+  [TOOL.pauseSubscription]: { method: 'POST', ...byId('subscriptions') },
   // writes — invoices
   // A draft is a draft whatever the account's API version defaults to.
-  stripe__create_invoice: {
+  [TOOL.createInvoice]: {
     method: 'POST',
     path: () => '/invoices',
     defaults: { auto_advance: false },
   },
-  stripe__finalize_invoice: { method: 'POST', ...byId('invoices', '/finalize') },
-  stripe__void_invoice: { method: 'POST', ...byId('invoices', '/void'), forward: false },
+  [TOOL.finalizeInvoice]: { method: 'POST', ...byId('invoices', '/finalize') },
+  [TOOL.voidInvoice]: { method: 'POST', ...byId('invoices', '/void'), forward: false },
   // writes — money out
-  stripe__create_refund: { method: 'POST', path: () => '/refunds' },
-  stripe__create_payout: { method: 'POST', path: () => '/payouts' },
+  [TOOL.createRefund]: { method: 'POST', path: () => '/refunds' },
+  [TOOL.createPayout]: { method: 'POST', path: () => '/payouts' },
   // writes — customers
-  stripe__delete_customer: { method: 'DELETE', ...byId('customers'), forward: false },
+  [TOOL.deleteCustomer]: { method: 'DELETE', ...byId('customers'), forward: false },
   // writes — webhooks
-  stripe__create_webhook_endpoint: { method: 'POST', path: () => '/webhook_endpoints' },
+  [TOOL.createWebhookEndpoint]: { method: 'POST', path: () => '/webhook_endpoints' },
 };
 
 // ─── Entry points ─────────────────────────────────────────────────────────────
 
 /**
- * What this executor declines itself — an account outside the mission, a malformed
- * identifier, a mode the connection holds no key for — is an `ExecutorRefusal`,
+ * What this executor declines itself — an undeclared argument, an account outside
+ * the mission, a malformed identifier, a mode the connection holds no key for —
+ * is an `ExecutorRefusal`,
  * returned as an `isError` result : no request left, nothing failed at Stripe.
  */
 export function executeStripe(
@@ -151,6 +158,8 @@ async function executeDeclared(
 ): Promise<McpToolResult> {
   const route = Object.hasOwn(ROUTES, tool) ? ROUTES[tool] : undefined;
   if (!route) return refusalResult(`unknown tool '${tool}'`);
+  const undeclared = undeclaredStripeArgument(tool, args);
+  if (undeclared !== null) throw new ExecutorRefusal(undeclared);
 
   const target = resolveStripeResource(args, ctx.resources);
   if ('denied' in target) throw new ExecutorRefusal(`stripe: ${target.denied}`);
@@ -169,14 +178,15 @@ async function executeDeclared(
   if ('denied' in ids) throw new ExecutorRefusal(`stripe: ${ids.denied}`);
 
   const payload = await callStripeApi(
-    ctx.fetch,
+    ctx,
     key,
     route.method,
     path,
     forwardedArgs(tool, route, args),
-    ctx.signal,
+    anyJson,
   );
-  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+  // An empty answer (Stripe sends none in practice) reads as `{}`, as it always has.
+  return jsonResult(payload ?? {});
 }
 
 interface AccountDto {
@@ -200,7 +210,7 @@ export interface StripeAccount {
  * describe its account (a restricted key) is refused with the fix.
  */
 export async function stripeAccounts(ctx: ConnectionContext): Promise<readonly StripeAccount[]> {
-  const secret = expectCredentialKind(STRIPE_PROVIDER, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const accounts: StripeAccount[] = [];
   for (const mode of STRIPE_MODES) {
     const field = KEY_FIELD_BY_MODE[mode];
@@ -227,9 +237,10 @@ async function readAccount(
   key: string,
   mode: StripeMode,
 ): Promise<AccountDto> {
-  let account: unknown;
   try {
-    account = await callStripeApi(ctx.fetch, key, 'GET', '/account', {}, ctx.signal);
+    return await callStripeApi(ctx, key, 'GET', '/account', {}, isAccountDto, {
+      what: `${PROVIDER_ID}: GET /account with the ${mode}-mode key`,
+    });
   } catch (err) {
     // 403 : the key is valid but lacks a permission — a restricted key.
     if (err instanceof UpstreamAuthError && err.upstreamStatus === HTTP_FORBIDDEN) {
@@ -240,10 +251,6 @@ async function readAccount(
     }
     throw err;
   }
-  if (!isAccountDto(account)) {
-    throw new Error(`stripe: GET /account with the ${mode}-mode key returned no account id`);
-  }
-  return account;
 }
 
 /**
@@ -254,7 +261,7 @@ export async function discoverStripeResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
   return (await stripeAccounts(ctx)).map(({ mode, id, label }) => ({
-    provider: STRIPE_PROVIDER,
+    provider: PROVIDER_ID,
     ref: stripeResourceRef(id, mode),
     env: mode,
     displayName: `${label} (${mode})`,
@@ -262,18 +269,16 @@ export async function discoverStripeResources(
   }));
 }
 
+/**
+ * An account with an id : the one field read unconditionally. The names under
+ * it are read with optional chaining, each falling back to the next.
+ */
 function isAccountDto(value: unknown): value is AccountDto {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof value.id === 'string' &&
-    value.id !== ''
-  );
+  return isRecord(value) && typeof value.id === 'string' && value.id !== '';
 }
 
 function keyFor(ctx: ConnectionContext, mode: StripeMode): string {
-  const secret = expectCredentialKind(STRIPE_PROVIDER, ctx.credential, 'api-key');
+  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const key = secret.fields[KEY_FIELD_BY_MODE[mode]];
   if (!key) throw new ExecutorRefusal(`stripe: this connection has no ${mode}-mode key`);
   return key;
@@ -291,7 +296,7 @@ function forwardedArgs(tool: string, route: Route, args: Args): Args {
   if (route.forward === false) return {};
   const consumed = new Set(route.consumes ?? []);
   const forwarded: Record<string, unknown> = { ...route.defaults };
-  for (const key of declaredArgsOf(tool) ?? []) {
+  for (const key of DECLARED_ARGUMENTS.get(tool) ?? []) {
     if (NEVER_FORWARDED.has(key) || consumed.has(key)) continue;
     const value = args[key];
     if (value !== undefined && value !== null) forwarded[key] = value;
@@ -311,8 +316,8 @@ function toFormBody(obj: Args): string {
     if (value === null || value === undefined) return;
     if (Array.isArray(value)) {
       value.forEach((v, i) => encode(`${prefix}[${i}]`, v));
-    } else if (typeof value === 'object') {
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    } else if (isRecord(value)) {
+      for (const [k, v] of Object.entries(value)) {
         encode(`${prefix}[${k}]`, v);
       }
     } else {
@@ -332,39 +337,42 @@ function toQueryString(args: Args): string {
   return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
 
-async function callStripeApi(
-  fetchImpl: typeof fetch,
+/**
+ * One call to the Stripe API with `key`. A GET carries its arguments in the
+ * query string ; any other method carries them as a form body in Stripe's
+ * bracket notation, and says it is a form even when the form is empty.
+ */
+function callStripeApi<T>(
+  io: UpstreamIo,
   key: string,
   method: HttpMethod,
   path: string,
   args: Args,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  let url = `${STRIPE_API_BASE}${path}`;
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${key}`,
-    Accept: 'application/json',
-  };
-  const init: RequestInit = { method, headers, ...(signal ? { signal } : {}) };
+  guard: Guard<T>,
+  options: { readonly what?: string } = {},
+): Promise<T> {
+  const authorization = `Bearer ${key}`;
   if (method === 'GET') {
-    url += toQueryString(args);
-  } else {
-    headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    const body = toFormBody(args);
-    if (body) init.body = body;
+    return httpJson(
+      io,
+      {
+        url: `${STRIPE_API_BASE}${path}${toQueryString(args)}`,
+        headers: { authorization },
+        ...options,
+      },
+      guard,
+    );
   }
-
-  const res = await fetchImpl(url, { ...init, redirect: 'error' });
-  const text = await res.text();
-  if (!res.ok) {
-    const message = `Stripe API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(message, res.status);
-    throw new UpstreamHttpError(message, res.status);
-  }
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+  const form = toFormBody(args);
+  return httpJson(
+    io,
+    {
+      url: `${STRIPE_API_BASE}${path}`,
+      method,
+      headers: { authorization, 'content-type': 'application/x-www-form-urlencoded' },
+      ...(form ? { rawBody: form } : {}),
+      ...options,
+    },
+    guard,
+  );
 }

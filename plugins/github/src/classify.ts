@@ -34,25 +34,26 @@
  *   - `branch[X].files-bulk.W`        — secondary slice of `push_files`,
  *     distinguishing a multi-file commit from a single-file write
  *
- * Concrete slices never contain wildcards : "list all <entity>" reads emit
- * the entity name without a leaf (`repo[X].branch.R`) and the catalog's
- * terminal `[**]` absorbs the missing segment. A branch or a revision cannot
- * hold a `*` (its grammar refuses it) ; in a file path, where `*` is an
- * ordinary character, it is replaced like any character outside the ident
- * class (`asIdent`).
+ * "List all <entity>" reads emit the entity name without an identifier
+ * (`repo[X].branch.R`) and the catalog's terminal `[**]` absorbs the missing
+ * segment. An identifier the slice grammar cannot carry — a branch
+ * `feature/ü`, a file `my notes.md` or `a*.ts`, a fork head `owner:branch` —
+ * is written as "any" (`[*]`, `identOrAny`), never repaired into another
+ * name ; so is a parent the arguments do not name (the workflow of a run,
+ * the run of a job).
  */
 
-import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
-
 import {
-  PROVIDER,
-  githubRepoRefs,
-  isWorkflowPath,
-  readGithubCall,
-  type GithubCall,
-} from './call.ts';
+  isSliceIdent,
+  parseSlice,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+} from '@vaubaan/plugin-sdk';
 
+import { githubRepoRefs, isWorkflowPath, readGithubCall, type GithubCall } from './call.ts';
 import { isGitTool, readGitCall, type GitCall, type GitTargetUpdate } from './git-call.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 
 export { isWorkflowPath } from './call.ts';
 
@@ -93,8 +94,8 @@ export function classifyGithub(
  * as a second reading, from the files themselves.
  */
 export function gitSlicesOf(call: GitCall): Slice[] {
-  const repo = `${PROVIDER}.repo[${call.target.ref}]`;
-  if (call.tool === 'github__git_fetch') {
+  const repo = `${PROVIDER_ID}.repo[${call.target.ref}]`;
+  if (call.tool === TOOL.gitFetch) {
     return [build(`${repo}.branch.R`), build(`${repo}.tag.R`)];
   }
   return dedup(call.updates.flatMap((u) => gitUpdateSlices(repo, u)));
@@ -102,7 +103,7 @@ export function gitSlicesOf(call: GitCall): Slice[] {
 
 function gitUpdateSlices(repo: string, target: GitTargetUpdate): Slice[] {
   const { update } = target;
-  const ref = `${repo}.${target.refKind}[${asIdent(target.name)}]`;
+  const ref = `${repo}.${target.refKind}[${identOrAny(target.name)}]`;
   const out = [build(`${ref}.push.W`)];
   if (update.kind === 'delete') {
     if (target.refKind === 'branch') out.push(build(`${ref}.W`));
@@ -120,11 +121,11 @@ function gitUpdateSlices(repo: string, target: GitTargetUpdate): Slice[] {
 /** The slices of a call whose identifiers `readGithubCall` has checked. */
 export function slicesOf(call: GithubCall): Slice[] {
   switch (call.tool) {
-    // ── Global searches — not repo-scoped ──────────────────────────────────
-    case 'github__search_code':
-      return [build(`${PROVIDER}.search.code.R`)];
-    case 'github__search_issues':
-      return [build(`${PROVIDER}.search.issues.R`)];
+    // ── The search plane : GitHub's global search, beyond the repositories ──
+    case TOOL.searchCode:
+      return [build(`${PROVIDER_ID}.search.code.R`)];
+    case TOOL.searchIssues:
+      return [build(`${PROVIDER_ID}.search.issues.R`)];
 
     default:
       return repoSlices(call);
@@ -132,98 +133,99 @@ export function slicesOf(call: GithubCall): Slice[] {
 }
 
 function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
-  const repo = `${PROVIDER}.repo[${call.target.ref}]`;
+  const repo = `${PROVIDER_ID}.repo[${call.target.ref}]`;
   switch (call.tool) {
     // ── Reads — code / branch / commit / file / tag ────────────────────────
-    case 'github__list_branches':
+    case TOOL.listBranches:
       return [build(`${repo}.branch.R`)];
-    case 'github__list_commits':
+    case TOOL.listCommits:
       return [
         build(
           call.sha !== undefined
-            ? `${repo}.branch[${asIdent(call.sha)}].commit.R`
+            ? `${repo}.branch[${identOrAny(call.sha)}].commit.R`
             : `${repo}.commit.R`,
         ),
       ];
-    case 'github__get_file_contents': {
-      const branchSeg = call.ref !== undefined ? `branch[${asIdent(call.ref)}].` : 'branch.';
-      return [build(`${repo}.${branchSeg}file[${asIdent(call.path)}].R`)];
+    case TOOL.getFileContents: {
+      const branchSeg = call.ref !== undefined ? `branch[${identOrAny(call.ref)}].` : 'branch.';
+      return [build(`${repo}.${branchSeg}file[${identOrAny(call.path)}].R`)];
     }
-    case 'github__get_commit':
-      return [build(`${repo}.commit[${asIdent(call.sha)}].R`)];
-    case 'github__list_tags':
+    case TOOL.getCommit:
+      return [build(`${repo}.commit[${identOrAny(call.sha)}].R`)];
+    case TOOL.listTags:
       return [build(`${repo}.tag.R`)];
 
     // ── Reads — meta (PRs, issues, comments, releases, workflows, rules) ───
-    case 'github__list_pull_requests':
+    case TOOL.listPullRequests:
       return [build(`${repo}.pull_request.R`)];
-    case 'github__get_pull_request':
+    case TOOL.getPullRequest:
       return [build(`${repo}.pull_request[${call.pullNumber}].R`)];
-    case 'github__list_issues':
+    case TOOL.listIssues:
       return [build(`${repo}.issue.R`)];
-    case 'github__get_issue':
+    case TOOL.getIssue:
       return [build(`${repo}.issue[${call.issueNumber}].R`)];
-    case 'github__list_releases':
+    case TOOL.listReleases:
       return [build(`${repo}.release.R`)];
-    case 'github__list_workflows':
+    case TOOL.listWorkflows:
       return [build(`${repo}.workflow.R`)];
-    case 'github__list_workflow_runs': {
+    case TOOL.listWorkflowRuns: {
       const tail =
         call.workflowId !== undefined
-          ? `workflow[${asIdent(String(call.workflowId))}].workflow-run.R`
+          ? `workflow[${identOrAny(String(call.workflowId))}].workflow-run.R`
           : 'workflow-run.R';
       return [build(`${repo}.${tail}`)];
     }
-    case 'github__list_workflow_jobs':
-      return [build(`${repo}.workflow-run[${call.runId}].job.R`)];
-    case 'github__get_job_logs':
-      return [build(`${repo}.job[${call.jobId}].log.R`)];
-    case 'github__get_branch_protection':
-      return [build(`${repo}.branch-protection[${asIdent(call.branch)}].R`)];
+    // A run is named by its id alone : its workflow is "any". A job likewise : its run too.
+    case TOOL.listWorkflowJobs:
+      return [build(`${repo}.workflow[${ANY}].workflow-run[${call.runId}].job.R`)];
+    case TOOL.getJobLogs:
+      return [build(`${repo}.workflow[${ANY}].workflow-run[${ANY}].job[${call.jobId}].log.R`)];
+    case TOOL.getBranchProtection:
+      return [build(`${repo}.branch-protection[${identOrAny(call.branch)}].R`)];
 
     // ── Writes — branches / files / commits ────────────────────────────────
-    case 'github__create_branch':
-      return [build(`${repo}.branch[${asIdent(call.branch)}].W`)];
-    case 'github__create_or_update_file':
-    case 'github__delete_file':
+    case TOOL.createBranch:
+      return [build(`${repo}.branch[${identOrAny(call.branch)}].W`)];
+    case TOOL.createOrUpdateFile:
+    case TOOL.deleteFile:
       return fileWriteSlices(repo, call.branch, [call.path]);
-    case 'github__push_files': {
+    case TOOL.pushFiles: {
       const out = fileWriteSlices(
         repo,
         call.branch,
         call.files.map((f) => f.path),
       );
       if (call.files.length > 1) {
-        out.push(build(`${repo}.branch[${asIdent(call.branch)}].files-bulk.W`));
+        out.push(build(`${repo}.branch[${identOrAny(call.branch)}].files-bulk.W`));
       }
       return dedup(out);
     }
 
     // ── Writes — PRs / comments ────────────────────────────────────────────
-    case 'github__create_pull_request':
+    case TOOL.createPullRequest:
       return [
         build(`${repo}.pull_request.W`),
-        build(`${repo}.branch[${asIdent(call.head)}].propose-to[${asIdent(call.base)}].W`),
+        build(`${repo}.branch[${identOrAny(call.head)}].propose-to[${identOrAny(call.base)}].W`),
       ];
-    case 'github__merge_pull_request':
+    case TOOL.mergePullRequest:
       return [
         build(`${repo}.pull_request[${call.pullNumber}].W`),
-        build(`${repo}.branch[${asIdent(call.base)}].merge-into.W`),
+        build(`${repo}.branch[${identOrAny(call.base)}].merge-into.W`),
       ];
-    case 'github__add_issue_comment':
+    case TOOL.addIssueComment:
       // Trailing `comment` name — no leaf id (unknown before posting).
       return [build(`${repo}.issue[${call.issueNumber}].comment.W`)];
 
     // ── Writes — releases ──────────────────────────────────────────────────
-    case 'github__create_release':
-      return [build(`${repo}.release.W`), build(`${repo}.tag[${asIdent(call.tagName)}].W`)];
-    case 'github__delete_release':
+    case TOOL.createRelease:
+      return [build(`${repo}.release.W`), build(`${repo}.tag[${identOrAny(call.tagName)}].W`)];
+    case TOOL.deleteRelease:
       // Its own verb leaf : deleting is not the risk of publishing.
       return [build(`${repo}.release[${call.releaseId}].delete.W`)];
 
     // ── Writes — rules ─────────────────────────────────────────────────────
-    case 'github__update_branch_protection':
-      return [build(`${repo}.branch-protection[${asIdent(call.branch)}].W`)];
+    case TOOL.updateBranchProtection:
+      return [build(`${repo}.branch-protection[${identOrAny(call.branch)}].W`)];
   }
 }
 
@@ -235,24 +237,29 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
 function fileWriteSlices(repo: string, branch: string, paths: readonly string[]): Slice[] {
   const out: Slice[] = [];
   for (const path of paths) {
-    out.push(build(`${repo}.branch[${asIdent(branch)}].file[${asIdent(path)}].W`));
+    out.push(build(`${repo}.branch[${identOrAny(branch)}].file[${identOrAny(path)}].W`));
     if (isWorkflowPath(path)) {
-      out.push(build(`${repo}.branch[${asIdent(branch)}].workflow-via-file.W`));
+      out.push(build(`${repo}.branch[${identOrAny(branch)}].workflow-via-file.W`));
     }
   }
   return out;
 }
 
+/** "Any identifier" in a slice string : `[*]`. */
+const ANY = '*';
+
 /**
- * Render a checked identifier as a slice bracket-ident : characters outside
- * `[a-zA-Z0-9_./~-]` — the wildcard `*` included — are replaced by `-`, so
- * the slice parses and stays concrete. This only shapes the slice : the
- * request carries the identifier itself, and a string whose rendering is a
- * protected name (`main`) is that name, character for character.
+ * A checked identifier as a slice names it : itself when the slice grammar
+ * can carry it, "any" otherwise. Never repaired : `feature/ü` written
+ * `feature/-` names a branch that does not exist — in the audit, in the
+ * refusal the agent reads — and the catalog would decide on that other name.
+ * Written as "any", it touches every risk some identifier at that place
+ * could : a write to such a branch takes both the working-branch and the
+ * protected-branch risk, whatever its prefix. The request carries the
+ * identifier itself.
  */
-function asIdent(raw: string): string {
-  const cleaned = raw.replace(/[^a-zA-Z0-9_./~-]/g, '-');
-  return cleaned.length > 0 ? cleaned : '_';
+function identOrAny(value: string): string {
+  return isSliceIdent(value) ? value : ANY;
 }
 
 /** Parse at build time so a typo in a slice template fails close to the call site. */

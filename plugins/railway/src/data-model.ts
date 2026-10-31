@@ -41,9 +41,10 @@
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
 import { REPLACE_ALL_VARIABLES_ENTITY } from './classify.ts';
+import { PROVIDER_ID } from './identity.ts';
 
 export const railwayDataModel: DataModel = {
-  provider: 'railway',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'runtime',

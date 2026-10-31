@@ -9,74 +9,61 @@
 
 import type { TokenPermission } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
+
 export const GITHUB_TOKEN_PERMISSIONS: readonly TokenPermission[] = [
   // GitHub grants Metadata (read) to every fine-grained token by itself.
-  { name: 'Metadata', access: 'read', tools: ['github__list_tags'] },
+  { name: 'Metadata', access: 'read', tools: [TOOL.listTags] },
   {
     name: 'Contents',
     access: 'read-write',
     tools: [
-      'github__list_branches',
-      'github__list_commits',
-      'github__get_file_contents',
-      'github__get_commit',
-      'github__search_code',
-      'github__list_releases',
-      'github__git_fetch',
-      'github__create_branch',
-      'github__create_or_update_file',
-      'github__push_files',
-      'github__delete_file',
-      'github__merge_pull_request',
-      'github__create_release',
-      'github__delete_release',
-      'github__git_push',
+      TOOL.listBranches,
+      TOOL.listCommits,
+      TOOL.getFileContents,
+      TOOL.getCommit,
+      TOOL.searchCode,
+      TOOL.listReleases,
+      TOOL.gitFetch,
+      TOOL.createBranch,
+      TOOL.createOrUpdateFile,
+      TOOL.pushFiles,
+      TOOL.deleteFile,
+      TOOL.mergePullRequest,
+      TOOL.createRelease,
+      TOOL.deleteRelease,
+      TOOL.gitPush,
     ],
   },
   {
     name: 'Pull requests',
     access: 'read-write',
     tools: [
-      'github__list_pull_requests',
-      'github__get_pull_request',
-      'github__create_pull_request',
-      'github__merge_pull_request',
+      TOOL.listPullRequests,
+      TOOL.getPullRequest,
+      TOOL.createPullRequest,
+      TOOL.mergePullRequest,
     ],
   },
   {
     name: 'Issues',
     access: 'read-write',
-    tools: [
-      'github__list_issues',
-      'github__get_issue',
-      'github__search_issues',
-      'github__add_issue_comment',
-    ],
+    tools: [TOOL.listIssues, TOOL.getIssue, TOOL.searchIssues, TOOL.addIssueComment],
   },
   {
     name: 'Actions',
     access: 'read',
-    tools: [
-      'github__list_workflows',
-      'github__list_workflow_runs',
-      'github__list_workflow_jobs',
-      'github__get_job_logs',
-    ],
+    tools: [TOOL.listWorkflows, TOOL.listWorkflowRuns, TOOL.listWorkflowJobs, TOOL.getJobLogs],
   },
   {
     name: 'Administration',
     access: 'read-write',
-    tools: ['github__get_branch_protection', 'github__update_branch_protection'],
+    tools: [TOOL.getBranchProtection, TOOL.updateBranchProtection],
   },
   // A write under .github/workflows/ — by a file tool or a git push — needs it.
   {
     name: 'Workflows',
     access: 'read-write',
-    tools: [
-      'github__create_or_update_file',
-      'github__push_files',
-      'github__delete_file',
-      'github__git_push',
-    ],
+    tools: [TOOL.createOrUpdateFile, TOOL.pushFiles, TOOL.deleteFile, TOOL.gitPush],
   },
 ];

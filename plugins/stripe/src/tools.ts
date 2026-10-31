@@ -2,7 +2,7 @@
  * Stripe MCP tools — thin wrappers over the Stripe REST API v1.
  *
  * 27 tools : 10 reads (GET) and 17 writes (POST / DELETE). Names follow the
- * `<provider>__<verb>_<noun>` convention of the SDK (prefix `stripe__`).
+ * `<provider>__<verb>_<noun>` convention of the SDK (`TOOL` in `identity.ts`).
  *
  * Every tool accepts an optional `account` argument : the ref of the Stripe
  * resource the call targets (`acct_123/test` or `acct_123/live`, as listed in
@@ -10,15 +10,17 @@
  * resource ; the classifier refuses the call otherwise. The argument is
  * consumed by the gateway and never forwarded to Stripe.
  *
- * The declared properties are the whole argument surface : the classifier
- * refuses a call carrying any other key and `execute` forwards the declared
- * ones only (`declaredArgsOf`). Declaring a new property therefore means
- * deciding, in `classify.ts`, what it costs.
+ * The declared properties are the whole argument surface : a call carrying
+ * any other key is refused by the classifier and declined by `execute`, with
+ * one sentence (`undeclaredStripeArgument` in `classify.ts`). Declaring a new
+ * property therefore means deciding, in `classify.ts`, what it costs.
  *
  * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §5.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
+
+import { TOOL } from './identity.ts';
 
 /** Argument shared by every tool ; added by `withAccountArg` below. */
 const ACCOUNT_ARG = {
@@ -44,7 +46,7 @@ function withAccountArg(tool: McpToolDeclaration): McpToolDeclaration {
 
 const READ_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'stripe__list_products',
+    name: TOOL.listProducts,
     description: 'List all products. Backed by GET /v1/products.',
     inputSchema: {
       type: 'object',
@@ -65,7 +67,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_prices',
+    name: TOOL.listPrices,
     description: 'List all prices, optionally filtered by product. Backed by GET /v1/prices.',
     inputSchema: {
       type: 'object',
@@ -94,7 +96,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_customers',
+    name: TOOL.listCustomers,
     description:
       'List all customers. Returns PII fields (email, name, address, phone). Backed by GET /v1/customers.',
     inputSchema: {
@@ -116,7 +118,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__retrieve_customer',
+    name: TOOL.retrieveCustomer,
     description:
       'Retrieve a single customer by id. Returns PII fields (email, name, address, phone, shipping). Backed by GET /v1/customers/:id.',
     inputSchema: {
@@ -131,7 +133,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_subscriptions',
+    name: TOOL.listSubscriptions,
     description:
       'List subscriptions, optionally filtered by customer or status. Backed by GET /v1/subscriptions.',
     inputSchema: {
@@ -163,7 +165,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_invoices',
+    name: TOOL.listInvoices,
     description:
       'List invoices, optionally filtered by customer or status. Backed by GET /v1/invoices.',
     inputSchema: {
@@ -193,7 +195,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_charges',
+    name: TOOL.listCharges,
     description: 'List charges, optionally filtered by customer. Backed by GET /v1/charges.',
     inputSchema: {
       type: 'object',
@@ -218,7 +220,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_payment_intents',
+    name: TOOL.listPaymentIntents,
     description:
       'List payment intents, optionally filtered by customer. Backed by GET /v1/payment_intents.',
     inputSchema: {
@@ -241,7 +243,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__get_balance',
+    name: TOOL.getBalance,
     description:
       'Retrieve the current account balance (available, pending, connect_reserved). Backed by GET /v1/balance.',
     inputSchema: {
@@ -250,7 +252,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__list_events',
+    name: TOOL.listEvents,
     description: 'List events (webhook delivery log / audit feed). Backed by GET /v1/events.',
     inputSchema: {
       type: 'object',
@@ -277,7 +279,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
 
 const WRITE_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'stripe__create_product',
+    name: TOOL.createProduct,
     description: 'Create a new product. Backed by POST /v1/products.',
     inputSchema: {
       type: 'object',
@@ -303,7 +305,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__update_product',
+    name: TOOL.updateProduct,
     description: 'Update an existing product. Backed by POST /v1/products/:id.',
     inputSchema: {
       type: 'object',
@@ -333,7 +335,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_price',
+    name: TOOL.createPrice,
     description: 'Create a new price for a product. Backed by POST /v1/prices.',
     inputSchema: {
       type: 'object',
@@ -378,7 +380,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__update_price',
+    name: TOOL.updatePrice,
     description: 'Update an existing price. Backed by POST /v1/prices/:id.',
     inputSchema: {
       type: 'object',
@@ -404,7 +406,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_coupon',
+    name: TOOL.createCoupon,
     description: 'Create a new coupon (amount-off or percent-off). Backed by POST /v1/coupons.',
     inputSchema: {
       type: 'object',
@@ -443,7 +445,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_promotion_code',
+    name: TOOL.createPromotionCode,
     description:
       'Create a customer-facing promotion code for an existing coupon. Backed by POST /v1/promotion_codes.',
     inputSchema: {
@@ -475,7 +477,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_subscription',
+    name: TOOL.createSubscription,
     description:
       'Create a new subscription for a customer. May trigger an immediate charge if proration applies. Backed by POST /v1/subscriptions.',
     inputSchema: {
@@ -524,7 +526,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__update_subscription',
+    name: TOOL.updateSubscription,
     description:
       'Update an existing subscription (change plan, quantity, payment method, metadata). Backed by POST /v1/subscriptions/:id.',
     inputSchema: {
@@ -582,7 +584,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__cancel_subscription',
+    name: TOOL.cancelSubscription,
     description:
       'Cancel a subscription. Irreversible — stops future billing. Backed by DELETE /v1/subscriptions/:id.',
     inputSchema: {
@@ -606,7 +608,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__pause_subscription',
+    name: TOOL.pauseSubscription,
     description:
       'Pause a subscription by setting pause_collection. Technically an update with pause_collection field. Backed by POST /v1/subscriptions/:id.',
     inputSchema: {
@@ -637,7 +639,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_invoice',
+    name: TOOL.createInvoice,
     description:
       'Create a draft invoice for a customer. No notification is sent until finalized. Backed by POST /v1/invoices.',
     inputSchema: {
@@ -665,7 +667,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__finalize_invoice',
+    name: TOOL.finalizeInvoice,
     description:
       'Finalize a draft invoice — locks it, notifies the customer (email by default), and triggers automatic collection if auto_advance is true. Backed by POST /v1/invoices/:id/finalize.',
     inputSchema: {
@@ -684,7 +686,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__void_invoice',
+    name: TOOL.voidInvoice,
     description:
       'Void a finalized invoice. Irreversible — the invoice becomes permanently inert. Backed by POST /v1/invoices/:id/void.',
     inputSchema: {
@@ -699,7 +701,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_refund',
+    name: TOOL.createRefund,
     description:
       'Create a refund on a charge or payment intent. Real money leaves the merchant account. Irreversible. Backed by POST /v1/refunds.',
     inputSchema: {
@@ -730,7 +732,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_webhook_endpoint',
+    name: TOOL.createWebhookEndpoint,
     description:
       'Create a webhook endpoint. Returns a signing secret (whsec_*) that is only available at creation time. Backed by POST /v1/webhook_endpoints.',
     inputSchema: {
@@ -759,7 +761,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__create_payout',
+    name: TOOL.createPayout,
     description:
       'Send funds from the Stripe balance to the bank account or debit card on file (real money ' +
       'out in live mode). Backed by POST /v1/payouts.',
@@ -800,7 +802,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'stripe__delete_customer',
+    name: TOOL.deleteCustomer,
     description:
       'Permanently delete a customer. Cannot be undone ; immediately cancels every active ' +
       'subscription of the customer. Backed by DELETE /v1/customers/:id.',
@@ -821,17 +823,3 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
 export const stripeTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS].map(
   withAccountArg,
 );
-
-const DECLARED_ARGS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
-  stripeTools.map((tool) => [tool.name, new Set(Object.keys(tool.inputSchema.properties ?? {}))]),
-);
-
-/**
- * The argument names a tool declares (`account` included), or `undefined` for
- * a tool the plugin does not ship. The single source for "what may a call
- * carry" : the classifier refuses anything else, `execute` forwards nothing
- * else.
- */
-export function declaredArgsOf(tool: string): ReadonlySet<string> | undefined {
-  return DECLARED_ARGS.get(tool);
-}

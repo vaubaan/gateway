@@ -10,7 +10,7 @@ import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 import { JOB_LOG_DEFAULT_BYTES, JOB_LOG_MAX_BYTES } from '../../src/call.ts';
 import { classifyGithub } from '../../src/classify.ts';
 import { githubPlugin } from '../../src/index.ts';
-import { readBounded } from '../../src/job-logs.ts';
+import { readLogWindow } from '../../src/job-logs.ts';
 import { PAT, appRepo, executeCtx } from './fixtures.ts';
 
 const repo = { owner: 'acme', repo: 'app' };
@@ -39,16 +39,18 @@ function logRoutes(log: string) {
 }
 
 describe('classify — jobs and logs are read-meta reads', () => {
-  test('list_workflow_jobs → workflow-run[run].job.R', () => {
+  // Through the declared parents : the run's workflow, and the job's run, are not
+  // in the arguments, so they are "any".
+  test('list_workflow_jobs → workflow[*].workflow-run[run].job.R', () => {
     expect(slicesOf('github__list_workflow_jobs', { ...repo, run_id: 7 })).toEqual([
-      'github.repo[acme/app].workflow-run[7].job.R',
+      'github.repo[acme/app].workflow[*].workflow-run[7].job.R',
     ]);
   });
 
-  test('get_job_logs → job[id].log.R, whatever the bounds', () => {
+  test('get_job_logs → workflow[*].workflow-run[*].job[id].log.R, whatever the bounds', () => {
     expect(
       slicesOf('github__get_job_logs', { ...repo, job_id: 9, max_bytes: 10, tail: true }),
-    ).toEqual(['github.repo[acme/app].job[9].log.R']);
+    ).toEqual(['github.repo[acme/app].workflow[*].workflow-run[*].job[9].log.R']);
   });
 
   test.each([
@@ -184,7 +186,7 @@ describe('execute — get_job_logs', () => {
       .execute(executeCtx(gone), 'github__get_job_logs', { ...repo, job_id: 9 })
       .catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(Error);
-    expect(String((failure as Error).message)).not.toContain('sig=secret');
+    expect(String(failure)).not.toContain('sig=secret');
   });
 
   test('a redirect to anything but an https URL is not followed', async () => {
@@ -213,7 +215,7 @@ describe('execute — get_job_logs', () => {
   });
 });
 
-describe('readBounded — at most max bytes kept', () => {
+describe('readLogWindow — at most max bytes kept', () => {
   const stream = (...chunks: string[]) =>
     new ReadableStream<Uint8Array>({
       start(controller) {
@@ -224,7 +226,7 @@ describe('readBounded — at most max bytes kept', () => {
   const decoded = (b: Uint8Array) => new TextDecoder().decode(b);
 
   test('a log within the bound is whole', async () => {
-    const log = await readBounded(stream('ab', 'cd'), 4, false);
+    const log = await readLogWindow(stream('ab', 'cd'), 4, false);
     expect({ text: decoded(log.bytes), read: log.read, truncated: log.truncated }).toEqual({
       text: 'abcd',
       read: 4,
@@ -241,14 +243,14 @@ describe('readBounded — at most max bytes kept', () => {
         if (pulled > 100) controller.close();
       },
     });
-    const log = await readBounded(body, 15, false);
+    const log = await readLogWindow(body, 15, false);
     expect(decoded(log.bytes)).toBe('012345678901234');
     expect(log.truncated).toBe(true);
     expect(pulled).toBeLessThan(5);
   });
 
   test('tail: the last bytes across chunks, the whole log counted', async () => {
-    const log = await readBounded(stream('aaaa', 'bbbb', 'cccc', 'dd'), 5, true);
+    const log = await readLogWindow(stream('aaaa', 'bbbb', 'cccc', 'dd'), 5, true);
     expect(decoded(log.bytes)).toBe('cccdd');
     expect(log.read).toBe(14);
     expect(log.truncated).toBe(true);

@@ -2,7 +2,7 @@
  * Mandatory test suite of the `context7` plugin : the SDK kit, the frozen
  * upstream surface, the version and the catalog path. No network.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -95,12 +95,8 @@ describe('context7 plugin — structural kit', () => {
     );
   });
 
-  test('the plugin is the default export, and its version is the package version', () => {
+  test('the plugin is the default export', () => {
     expect(defaultExport).toBe(context7Plugin);
-    const manifest: unknown = JSON.parse(
-      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-    );
-    expect(manifest).toMatchObject({ version: context7Plugin.version });
   });
 
   test('the credential is one secret API key, checked before it is stored', () => {

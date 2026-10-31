@@ -5,6 +5,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText, type RecordedCall } from '@vaubaan/plugin-sdk/testing';
 
 import { NOTION_API_BASE, NOTION_VERSION } from '../../src/api.ts';
@@ -292,6 +293,39 @@ describe('declined by the executor : nothing is sent', () => {
       ),
     ).rejects.toThrow(/'api_token'/);
     expect(fetch.calls).toEqual([]);
+  });
+});
+
+describe('Notion’s answers are read through a shape : anything else is its failure', () => {
+  test('an answer that is not JSON is a protocol failure, no longer passed through as text', async () => {
+    const fetch = worldFetch({
+      method: 'PATCH',
+      url: `${NOTION_API_BASE}/pages/${CHILD}`,
+      body: '<html>Service busy</html>',
+    });
+    const failure = execute(ctx(fetch), TOOL.trashPage, { page_id: CHILD });
+    await expect(failure).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(failure).rejects.toThrow(/not JSON/);
+  });
+
+  test('a block list without results is a protocol failure, not a decline', async () => {
+    const fetch = worldFetch({ method: 'GET', url: /\/children\?/, body: { data: [] } });
+    const failure = execute(ctx(fetch), TOOL.listBlockChildren, { block_id: PAGE });
+    await expect(failure).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(failure).rejects.toThrow(/children: unexpected answer/);
+  });
+
+  test('a write answered 429 is thrown with its Retry-After', async () => {
+    const fetch = worldFetch({
+      method: 'PATCH',
+      url: `${NOTION_API_BASE}/pages/${CHILD}`,
+      status: 429,
+      headers: { 'retry-after': '7' },
+      body: { object: 'error', status: 429, code: 'rate_limited' },
+    });
+    const failure = execute(ctx(fetch), TOOL.trashPage, { page_id: CHILD });
+    await expect(failure).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 429 });
+    await expect(failure).rejects.toThrow(/rate_limited.*\(retry after 7 s\)/);
   });
 });
 

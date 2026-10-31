@@ -16,15 +16,16 @@
 import {
   CredentialRefusal,
   UpstreamAuthError,
-  UpstreamHttpError,
-  expectCredentialKind,
+  anyJson,
+  httpJson,
+  isList,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
-import { RESEND_API_BASE } from './execute.ts';
-import { RESEND_PROVIDER } from './resources.ts';
+import { RESEND_API_BASE, authorizationOf, resendErrorName } from './execute.ts';
 import { resendTools } from './tools.ts';
 
 /** Where a person creates and deletes API keys. */
@@ -81,38 +82,32 @@ export const resendCredential: ApiKeyCredentialSpec = {
  * 403 is a rejected key.
  */
 export async function verifyResendKey(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const key = expectCredentialKind(RESEND_PROVIDER, ctx.credential, 'api-key').fields.api_key;
-  if (!key) throw new Error('resend: the credential carries no api_key');
-  const res = await ctx.fetch(`${RESEND_API_BASE}/domains`, {
-    method: 'GET',
-    redirect: 'error',
-    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  const body: unknown = await res.json().catch(() => null);
-  if (res.status === 401 || res.status === 403) {
-    if (fieldOf(body, 'name') === RESTRICTED_KEY) {
+  let body: unknown;
+  try {
+    body = await httpJson(
+      ctx,
+      {
+        url: `${RESEND_API_BASE}/domains`,
+        headers: authorizationOf(ctx),
+        what: 'Resend GET /domains',
+      },
+      // Read leniently : the domains only name the account.
+      anyJson,
+    );
+  } catch (error) {
+    if (error instanceof UpstreamAuthError && resendErrorName(error) === RESTRICTED_KEY) {
       throw new CredentialRefusal(
         'Resend: this is a Sending access key. Create a key with Full access: the domains and segments cannot be listed without it.',
-        res.status,
+        error.upstreamStatus,
       );
     }
-    throw new UpstreamAuthError(`Resend rejected the key (HTTP ${res.status})`, res.status);
+    throw error;
   }
-  if (!res.ok) {
-    throw new UpstreamHttpError(`Resend GET /domains failed with HTTP ${res.status}`, res.status);
-  }
-  const data = fieldOf(body, 'data');
-  const names = (Array.isArray(data) ? data : [])
-    .map((domain: unknown) => fieldOf(domain, 'name'))
+  const data = isRecord(body) && isList(body.data) ? body.data : [];
+  const names = data
+    .map((domain) => (isRecord(domain) ? domain.name : undefined))
     .filter((name): name is string => typeof name === 'string' && name !== '');
   return { account: namesShown(names), expiresAt: null };
-}
-
-function fieldOf(value: unknown, key: string): unknown {
-  return typeof value === 'object' && value !== null
-    ? (value as Record<string, unknown>)[key]
-    : undefined;
 }
 
 function namesShown(names: readonly string[]): string | null {

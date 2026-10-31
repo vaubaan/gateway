@@ -54,27 +54,43 @@ describe('classifyVercel — reads', () => {
     ]);
   });
 
-  test('list_deployments → project[prj_abc].deployment[*].R', () => {
+  test('list_deployments → project[prj_abc].env[*].deployment[*].R', () => {
     expect(classify('vercel__list_deployments', { projectId: 'prj_abc' })).toEqual([
-      'vercel.project[prj_abc].deployment[*].R',
+      'vercel.project[prj_abc].env[*].deployment[*].R',
     ]);
   });
 
-  test('get_deployment with idOrUrl → project[prj_abc].deployment[dep_xyz].R', () => {
+  test('get_deployment with idOrUrl → project[prj_abc].env[*].deployment[dep_xyz].R', () => {
     expect(
       classify('vercel__get_deployment', { idOrUrl: 'dep_xyz', projectId: 'prj_abc' }),
-    ).toEqual(['vercel.project[prj_abc].deployment[dep_xyz].R']);
+    ).toEqual(['vercel.project[prj_abc].env[*].deployment[dep_xyz].R']);
   });
 
-  test('get_runtime_logs → project[prj_abc].deployment[dep_xyz].runtime-log.R', () => {
+  test('get_runtime_logs → project[prj_abc].env[*].deployment[dep_xyz].runtime-log.R', () => {
     expect(
       classify('vercel__get_runtime_logs', { projectId: 'prj_abc', deploymentId: 'dep_xyz' }),
-    ).toEqual(['vercel.project[prj_abc].deployment[dep_xyz].runtime-log.R']);
+    ).toEqual(['vercel.project[prj_abc].env[*].deployment[dep_xyz].runtime-log.R']);
+  });
+
+  test('get_runtime_logs names the environment its `environment` filter names, any otherwise', () => {
+    const p = { projectId: 'prj_abc', deploymentId: 'dep_xyz' };
+    expect(classify('vercel__get_runtime_logs', { ...p, environment: 'production' })).toEqual([
+      'vercel.project[prj_abc].env[prod].deployment[dep_xyz].runtime-log.R',
+    ]);
+    expect(classify('vercel__get_runtime_logs', { ...p, environment: 'preview' })).toEqual([
+      'vercel.project[prj_abc].env[preview].deployment[dep_xyz].runtime-log.R',
+    ]);
+    // A value the upstream schema refuses is forwarded as given : "any" here, not a denial.
+    for (const environment of ['development', 'prod', 42]) {
+      expect(classify('vercel__get_runtime_logs', { ...p, environment })).toEqual([
+        'vercel.project[prj_abc].env[*].deployment[dep_xyz].runtime-log.R',
+      ]);
+    }
   });
 
   test('list_env_vars (decrypt=false) → single env-var read slice', () => {
     expect(classify('vercel__list_env_vars', { projectId: 'prj_abc' })).toEqual([
-      'vercel.project[prj_abc].env-var[*].R',
+      'vercel.project[prj_abc].env[*].env-var[*].R',
     ]);
   });
 });
@@ -82,8 +98,8 @@ describe('classifyVercel — reads', () => {
 describe('classifyVercel — bug-fix #4 : decrypt=true emits plaintext slice', () => {
   test('list_env_vars decrypt=true → both env-var.R AND env-var.plaintext.R', () => {
     const slices = classify('vercel__list_env_vars', { projectId: 'prj_abc', decrypt: true });
-    expect(slices).toContain('vercel.project[prj_abc].env-var[*].R');
-    expect(slices).toContain('vercel.project[prj_abc].env-var[*].plaintext.R');
+    expect(slices).toContain('vercel.project[prj_abc].env[*].env-var[*].R');
+    expect(slices).toContain('vercel.project[prj_abc].env[*].env-var[*].plaintext.R');
     expect(slices).toHaveLength(2);
   });
 });
@@ -119,7 +135,7 @@ describe('classifyVercel — bug-fix #3 : get_access_to_vercel_url is a credenti
       projectId: 'prj_abc',
       url: 'https://dep-foo.vercel.app/admin',
     });
-    expect(slices).toEqual(['vercel.project[prj_abc].deployment[*].bypass-token.W']);
+    expect(slices).toEqual(['vercel.project[prj_abc].env[*].deployment[*].bypass-token.W']);
   });
 
   test('a `url` that is not an http(s) URL is denied, as `execute` refuses it', () => {
@@ -135,7 +151,7 @@ describe('classifyVercel — bug-fix #3 : get_access_to_vercel_url is a credenti
       projectId: 'prj_abc',
       url: 'https://dep-foo.vercel.app/',
     });
-    expect(slices).toEqual(['vercel.project[prj_abc].deployment[*].bypass-token.W']);
+    expect(slices).toEqual(['vercel.project[prj_abc].env[*].deployment[*].bypass-token.W']);
   });
 });
 
@@ -269,7 +285,7 @@ describe('classifyVercel — custom REST tools (project settings, domains, prote
 describe('classifyVercel — toolbar surface', () => {
   test('list_toolbar_threads → toolbar-thread[*].R under the mission project', () => {
     expect(classify('vercel__list_toolbar_threads', { projectId: 'prj_abc' })).toEqual([
-      'vercel.project[prj_abc].deployment[*].toolbar-thread[*].R',
+      'vercel.project[prj_abc].env[*].deployment[*].toolbar-thread[*].R',
     ]);
   });
 

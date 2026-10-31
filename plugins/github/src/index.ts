@@ -17,6 +17,7 @@ import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubGitRemoteOf } from './git-remote.ts';
+import { PROVIDER_ID } from './identity.ts';
 import { GITHUB_ICON, GITHUB_ICON_COLOR } from './icon.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
@@ -31,11 +32,11 @@ export const githubCatalog = loadCatalogFile(GITHUB_CATALOG_PATH);
 export const githubGitRemote = githubGitRemoteOf(githubCatalog.catalog);
 
 export const githubPlugin = definePlugin({
-  id: 'github',
+  id: PROVIDER_ID,
   displayName: 'GitHub',
   icon: GITHUB_ICON,
   iconColor: GITHUB_ICON_COLOR,
-  version: '4.0.6',
+  version: '5.0.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows a fine-grained token reaches.',
   summary:
@@ -61,6 +62,7 @@ export default githubPlugin;
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
 export { expiryOf, GITHUB_TOKEN_FIELD, verifyGithubToken } from './credential.ts';
 export { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
+export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { discoverGithubResources, executeGithub } from './execute.ts';
 export { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall } from './git-call.ts';
 export { COMPARE_MAX_COMMITS, COMPARE_MAX_FILES, workingBranchesOf } from './git-remote.ts';

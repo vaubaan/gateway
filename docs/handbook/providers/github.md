@@ -3,7 +3,7 @@ title: GitHub provider plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # GitHub provider plugin — handbook
@@ -40,6 +40,13 @@ env-scoped. Rules common to every plugin: [providers README](README.md).
   `feature-branch-write`, `main`, `master`, `prod`, `production`, `release-*` for
   `merge-protected`; any other branch lands on the fallback. The working globs are read from the
   catalog by the git remote (`workingBranchesOf`): the YAML is the one list.
+- **Slices walk the data model** (`data-model.ts`, held by `catalogPathIssues` and
+  `assertSlicesOnDataModel`): a job through its run and workflow,
+  `workflow[*].workflow-run[<run>].job.R` and `workflow[*].workflow-run[*].job[<job>].log.R`
+  (`[*]`: not in the arguments); the global search under its own root entity `search`
+  (`search.code.R`, `search.issues.R`), which is not a resource. An identifier outside the slice
+  grammar (`feature/ü`) is `[*]`, never repaired: a branch so written touches both
+  `feature-branch-write` and `merge-protected`.
 - `workflow-write-via-file` has no `acceptable_in_envs`: always touched, accepted explicitly.
   `create-release` and `delete-release` never match each other's tool; a pushed tag deliberately
   also matches `create-release`.

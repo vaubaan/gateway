@@ -176,7 +176,7 @@ describe('an argument that changes the nature of the call costs the stronger ris
     expect(decide('stripe__pause_subscription', args, update)).toEqual({
       kind: 'classify-denied',
       reason:
-        "cancel_at_period_end: not an argument of 'stripe__pause_subscription' — nothing classifies it",
+        "cancel_at_period_end: not an argument of 'stripe__pause_subscription' — nothing classifies it, so it is not sent.",
     });
   });
 
@@ -233,12 +233,17 @@ describe('customer PII is not reachable with read-billing-history alone (M4)', (
 
   const everythingLive = stripeCatalog.catalog.risks.map((r) => qualifyRiskId(r.id, 'live', r));
 
-  test.each(['expand', 'expand[]', 'expand[0]'])('%s is refused on every tool', (key) => {
+  // A key that is not name-shaped (`expand[]`) is described, never quoted, by the SDK's denial.
+  test.each([
+    ['expand', 'expand'],
+    ['expand[]', 'an argument with a malformed name'],
+    ['expand[0]', 'an argument with a malformed name'],
+  ])('%s is refused on every tool', (key, label) => {
     for (const tool of TOOLS) {
       const args = { ...on(LIVE, tool), [key]: ['data.customer'] };
       expect(decide(tool, args, everythingLive), tool).toEqual({
         kind: 'classify-denied',
-        reason: `${key}: not an argument of '${tool}' — nothing classifies it`,
+        reason: `${label}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`,
       });
     }
   });

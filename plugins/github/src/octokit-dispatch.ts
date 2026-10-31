@@ -18,9 +18,10 @@
  */
 
 import type { Octokit as OctokitType } from '@octokit/rest';
-import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
+import { ExecutorRefusal, UpstreamProtocolError, isList, isRecord } from '@vaubaan/plugin-sdk';
 
 import { branchName, type GithubCall, type RepoCall } from './call.ts';
+import { TOOL } from './identity.ts';
 
 export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
 
@@ -28,7 +29,7 @@ export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
  * Every call but the job log, which `execute.ts` answers itself (the log is a redirect to a download, read bounded :
  * `job-logs.ts`).
  */
-export type DispatchedCall = Exclude<GithubCall, { tool: 'github__get_job_logs' }>;
+export type DispatchedCall = Exclude<GithubCall, { tool: typeof TOOL.getJobLogs }>;
 
 type Args = Readonly<Record<string, unknown>>;
 
@@ -44,18 +45,18 @@ export async function dispatchGithubTool(
   if (!('target' in call)) {
     const q = args.q as string;
     const { data } =
-      call.tool === 'github__search_code'
+      call.tool === TOOL.searchCode
         ? await octokit.rest.search.code({ q })
         : await octokit.rest.search.issuesAndPullRequests({ q });
     return data;
   }
   const repo = { owner: call.target.owner, repo: call.target.repo } as const;
   switch (call.tool) {
-    case 'github__list_branches': {
+    case TOOL.listBranches: {
       const { data } = await octokit.rest.repos.listBranches({ ...repo });
       return data;
     }
-    case 'github__list_commits': {
+    case TOOL.listCommits: {
       const { data } = await octokit.rest.repos.listCommits({
         ...repo,
         sha: call.sha,
@@ -63,21 +64,21 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__list_pull_requests': {
+    case TOOL.listPullRequests: {
       const { data } = await octokit.rest.pulls.list({
         ...repo,
         state: (args.state as 'open' | 'closed' | 'all') ?? 'open',
       });
       return data;
     }
-    case 'github__list_issues': {
+    case TOOL.listIssues: {
       const { data } = await octokit.rest.issues.listForRepo({
         ...repo,
         state: (args.state as 'open' | 'closed' | 'all') ?? 'open',
       });
       return data;
     }
-    case 'github__get_file_contents': {
+    case TOOL.getFileContents: {
       const { data } = await octokit.rest.repos.getContent({
         ...repo,
         path: call.path,
@@ -85,19 +86,19 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__get_pull_request': {
+    case TOOL.getPullRequest: {
       const { data } = await octokit.rest.pulls.get({ ...repo, pull_number: call.pullNumber });
       return data;
     }
-    case 'github__get_issue': {
+    case TOOL.getIssue: {
       const { data } = await octokit.rest.issues.get({ ...repo, issue_number: call.issueNumber });
       return data;
     }
-    case 'github__get_commit': {
+    case TOOL.getCommit: {
       const { data } = await octokit.rest.repos.getCommit({ ...repo, ref: call.sha });
       return data;
     }
-    case 'github__create_branch': {
+    case TOOL.createBranch: {
       // No one-shot create_branch : resolve the base ref SHA, then create a new ref.
       const baseBranch = call.fromBranch ?? (await defaultBranchOf(octokit, call));
       const baseRef = await octokit.rest.git.getRef({ ...repo, ref: `heads/${baseBranch}` });
@@ -108,7 +109,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__create_or_update_file': {
+    case TOOL.createOrUpdateFile: {
       const { data } = await octokit.rest.repos.createOrUpdateFileContents({
         ...repo,
         path: call.path,
@@ -119,7 +120,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__push_files': {
+    case TOOL.pushFiles: {
       const { branch, files } = call;
       const message = args.message as string;
       const ref = await octokit.rest.git.getRef({ ...repo, ref: `heads/${branch}` });
@@ -157,7 +158,7 @@ export async function dispatchGithubTool(
       });
       return { commit_sha: commit.data.sha, branch };
     }
-    case 'github__create_pull_request': {
+    case TOOL.createPullRequest: {
       const { data } = await octokit.rest.pulls.create({
         ...repo,
         title: args.title as string,
@@ -168,7 +169,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__add_issue_comment': {
+    case TOOL.addIssueComment: {
       const { data } = await octokit.rest.issues.createComment({
         ...repo,
         issue_number: call.issueNumber,
@@ -176,7 +177,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__merge_pull_request': {
+    case TOOL.mergePullRequest: {
       await assertPullRequestTargetsDeclaredBase(octokit, call);
       const { data } = await octokit.rest.pulls.merge({
         ...repo,
@@ -185,7 +186,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__delete_file': {
+    case TOOL.deleteFile: {
       const { data } = await octokit.rest.repos.deleteFile({
         ...repo,
         path: call.path,
@@ -195,11 +196,11 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__list_workflows': {
+    case TOOL.listWorkflows: {
       const { data } = await octokit.rest.actions.listRepoWorkflows({ ...repo });
       return data;
     }
-    case 'github__list_workflow_runs': {
+    case TOOL.listWorkflowRuns: {
       const { workflowId, branch } = call;
       if (workflowId !== undefined) {
         const { data } = await octokit.rest.actions.listWorkflowRuns({
@@ -217,7 +218,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__list_workflow_jobs': {
+    case TOOL.listWorkflowJobs: {
       const { data } = await octokit.rest.actions.listJobsForWorkflowRun({
         ...repo,
         run_id: call.runId,
@@ -226,14 +227,14 @@ export async function dispatchGithubTool(
       });
       return jobListing(data);
     }
-    case 'github__get_branch_protection': {
+    case TOOL.getBranchProtection: {
       const { data } = await octokit.rest.repos.getBranchProtection({
         ...repo,
         branch: call.branch,
       });
       return data;
     }
-    case 'github__update_branch_protection': {
+    case TOOL.updateBranchProtection: {
       const { data } = await octokit.rest.repos.updateBranchProtection({
         ...repo,
         branch: call.branch,
@@ -249,18 +250,18 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__list_releases': {
+    case TOOL.listReleases: {
       const { data } = await octokit.rest.repos.listReleases({
         ...repo,
         per_page: perPageOf(args),
       });
       return data;
     }
-    case 'github__list_tags': {
+    case TOOL.listTags: {
       const { data } = await octokit.rest.repos.listTags({ ...repo, per_page: perPageOf(args) });
       return data;
     }
-    case 'github__create_release': {
+    case TOOL.createRelease: {
       const { data } = await octokit.rest.repos.createRelease({
         ...repo,
         tag_name: call.tagName,
@@ -273,7 +274,7 @@ export async function dispatchGithubTool(
       });
       return data;
     }
-    case 'github__delete_release': {
+    case TOOL.deleteRelease: {
       await octokit.rest.repos.deleteRelease({ ...repo, release_id: call.releaseId });
       return { deleted: true, release_id: call.releaseId };
     }
@@ -292,7 +293,7 @@ async function defaultBranchOf(octokit: OctokitLike, call: RepoCall): Promise<st
   });
   const branch = branchName(data.default_branch);
   if (branch === null) {
-    throw new Error(
+    throw new UpstreamProtocolError(
       `${call.tool}: the default branch GitHub answered for ${call.target.ref} is not a branch name; nothing created. Name the base with 'from_branch'.`,
     );
   }
@@ -308,7 +309,7 @@ async function defaultBranchOf(octokit: OctokitLike, call: RepoCall): Promise<st
  */
 async function assertPullRequestTargetsDeclaredBase(
   octokit: OctokitLike,
-  call: Extract<RepoCall, { tool: 'github__merge_pull_request' }>,
+  call: Extract<RepoCall, { tool: typeof TOOL.mergePullRequest }>,
 ): Promise<void> {
   const { pullNumber, base: declared } = call;
   const pull = await octokit.rest.pulls.get({
@@ -318,46 +319,36 @@ async function assertPullRequestTargetsDeclaredBase(
   });
   const actual = baseRefOf(pull.data);
   if (actual === undefined) {
-    throw new Error(
-      `github__merge_pull_request: could not read the base branch of pull request #${pullNumber}; not merged.`,
+    throw new UpstreamProtocolError(
+      `${TOOL.mergePullRequest}: could not read the base branch of pull request #${pullNumber}; not merged.`,
     );
   }
   if (actual !== declared) {
     // Declined, not failed : the pull request is not the one the call was classified on.
     throw new ExecutorRefusal(
-      `github__merge_pull_request: pull request #${pullNumber} targets '${actual}', not the declared base '${declared}'. Call again with base '${actual}'.`,
+      `${TOOL.mergePullRequest}: pull request #${pullNumber} targets '${actual}', not the declared base '${declared}'. Call again with base '${actual}'.`,
     );
   }
 }
 
 /** `base.ref` of a pull-request payload, when it is there as a non-empty string. */
 function baseRefOf(pull: unknown): string | undefined {
-  if (pull === null || typeof pull !== 'object' || !('base' in pull)) return undefined;
-  const base: unknown = pull.base;
-  if (base === null || typeof base !== 'object' || !('ref' in base)) return undefined;
-  const ref: unknown = base.ref;
+  if (!isRecord(pull) || !isRecord(pull.base)) return undefined;
+  const { ref } = pull.base;
   return typeof ref === 'string' && ref.length > 0 ? ref : undefined;
-}
-
-/** A step of a job, as `list_workflow_jobs` answers it. */
-interface JobStepSummary {
-  readonly number: unknown;
-  readonly name: unknown;
-  readonly status: unknown;
-  readonly conclusion: unknown;
 }
 
 /**
  * GitHub's listing of the jobs of a run, cut down to what diagnoses a run :
  * the job, its outcome, its steps and their outcomes, its page. The rest
  * (runner labels, check-run URLs, node ids) only costs the agent's context.
+ * Read field by field : Octokit types the answer, it does not check it.
  */
 function jobListing(data: unknown): unknown {
-  const body = (data ?? {}) as { total_count?: unknown; jobs?: unknown };
-  const jobs = Array.isArray(body.jobs) ? (body.jobs as readonly Record<string, unknown>[]) : [];
+  const body = isRecord(data) ? data : {};
   return {
     total_count: body.total_count,
-    jobs: jobs.map((job) => ({
+    jobs: recordsOf(body.jobs).map((job) => ({
       id: job.id,
       name: job.name,
       status: job.status,
@@ -366,14 +357,17 @@ function jobListing(data: unknown): unknown {
       completed_at: job.completed_at,
       html_url: job.html_url,
       run_attempt: job.run_attempt,
-      steps: (Array.isArray(job.steps) ? (job.steps as readonly JobStepSummary[]) : []).map(
-        (step) => ({
-          number: step.number,
-          name: step.name,
-          status: step.status,
-          conclusion: step.conclusion,
-        }),
-      ),
+      steps: recordsOf(job.steps).map((step) => ({
+        number: step.number,
+        name: step.name,
+        status: step.status,
+        conclusion: step.conclusion,
+      })),
     })),
   };
+}
+
+/** The objects of a list, or none when `value` is not a list. */
+function recordsOf(value: unknown): readonly Record<string, unknown>[] {
+  return isList(value) ? value.filter(isRecord) : [];
 }

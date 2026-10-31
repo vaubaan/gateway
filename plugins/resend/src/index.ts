@@ -21,6 +21,7 @@ import { resendCredential } from './credential.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
 import { RESEND_ICON, RESEND_ICON_COLOR } from './icon.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { resendToolTitles } from './tool-titles.ts';
 import { resendTools } from './tools.ts';
 
@@ -29,11 +30,11 @@ import { resendTools } from './tools.ts';
 export const resendCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const resendPlugin = definePlugin({
-  id: 'resend',
+  id: PROVIDER_ID,
   displayName: 'Resend',
   icon: RESEND_ICON,
   iconColor: RESEND_ICON_COLOR,
-  version: '0.5.4',
+  version: '0.6.0',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',
@@ -45,7 +46,7 @@ export const resendPlugin = definePlugin({
   toolTitles: resendToolTitles,
   // Domains and segments are what a Resend connection lists : a created one is
   // discovered at once (ADR created-resources-join-the-mission).
-  resourceCreatingTools: ['resend__create_domain', 'resend__create_segment'],
+  resourceCreatingTools: [TOOL.createDomain, TOOL.createSegment],
   // Read from the call's answer: the mission that created it reaches it at once
   // (ADR created-resources-join-the-mission).
   createdResources: createdResendResources,
@@ -60,6 +61,7 @@ export const resendPlugin = definePlugin({
 export default resendPlugin;
 
 export { classifyResend, resendDataModel, resendTools };
+export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
 export { BATCH_MAX_EMAILS } from './classify.ts';
 export { RESEND_API_KEYS_PAGE, resendCredential, verifyResendKey } from './credential.ts';
 export {

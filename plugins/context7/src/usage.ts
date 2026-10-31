@@ -19,28 +19,26 @@
  */
 
 import {
-  UpstreamAuthError,
-  UpstreamHttpError,
   expectCredentialKind,
+  httpJson,
+  isRecord,
   type ConnectionContext,
   type CredentialSecret,
+  type Guard,
 } from '@vaubaan/plugin-sdk';
 
-import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
+import { API_KEY_FIELD, CONTEXT7_USER_AGENT, PROVIDER_ID } from './identity.ts';
 
 /** Base of Context7's public REST API : a fact about the provider. */
 export const CONTEXT7_API_BASE = 'https://context7.com/api';
 export const CONTEXT7_USAGE_URL = `${CONTEXT7_API_BASE}/v2/usage`;
 
-/** Sent on every request, to the MCP server and to the REST API alike. */
-export const CONTEXT7_USER_AGENT = 'vaubaan-gateway';
-
 /** The plans `GET /v2/usage` documents (`UsageResponse.plan`). */
 export const CONTEXT7_PLANS = ['free', 'pro', 'enterprise', 'payg'] as const;
 export type Context7Plan = (typeof CONTEXT7_PLANS)[number];
 
-const HTTP_UNAUTHORIZED = 401;
-const HTTP_FORBIDDEN = 403;
+/** How messages name the usage request. */
+const USAGE_REQUEST = 'Context7 GET /v2/usage';
 
 /** The key of a Context7 connection. Thrown when the stored credential has none. */
 export function context7KeyOf(credential: CredentialSecret): string {
@@ -51,43 +49,36 @@ export function context7KeyOf(credential: CredentialSecret): string {
   return key;
 }
 
-/** One `GET /v2/usage` with the key : the response, whatever its status. */
-export async function requestUsage(ctx: ConnectionContext, key: string): Promise<Response> {
-  return ctx.fetch(CONTEXT7_USAGE_URL, {
-    redirect: 'error',
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      Accept: 'application/json',
-      'User-Agent': CONTEXT7_USER_AGENT,
+/**
+ * One `GET /v2/usage` with the key, its answer read through `guard`. Fails
+ * the way `httpJson` fails : 401 / 403 `UpstreamAuthError`, another status
+ * `UpstreamHttpError`, a body that is not JSON or not what `guard` accepts
+ * `UpstreamProtocolError`.
+ */
+export async function requestUsage<T>(
+  ctx: ConnectionContext,
+  key: string,
+  guard: Guard<T>,
+): Promise<T> {
+  return httpJson(
+    ctx,
+    {
+      url: CONTEXT7_USAGE_URL,
+      headers: { authorization: `Bearer ${key}`, 'user-agent': CONTEXT7_USER_AGENT },
+      what: USAGE_REQUEST,
     },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
+    guard,
+  );
 }
 
 /**
  * The plan of the key's teamspace. A refused key throws `UpstreamAuthError`,
  * another failed status `UpstreamHttpError`, an answer that is not the
- * documented one a plain `Error`.
+ * documented one `UpstreamProtocolError`.
  */
 export async function readPlan(ctx: ConnectionContext): Promise<Context7Plan> {
-  const res = await requestUsage(ctx, context7KeyOf(ctx.credential));
-  if (isKeyRefusal(res.status)) {
-    throw new UpstreamAuthError(`Context7 rejected the API key (HTTP ${res.status})`, res.status);
-  }
-  if (!res.ok) {
-    throw new UpstreamHttpError(
-      `Context7 GET /v2/usage failed with HTTP ${res.status}`,
-      res.status,
-    );
-  }
-  const body = parsedJson(await res.text());
-  if (!isUsageAnswer(body)) {
-    throw new Error(
-      `${PROVIDER_ID}: unexpected usage answer (expected { plan: ${CONTEXT7_PLANS.join(' | ')} })`,
-    );
-  }
-  return body.plan;
+  const answer = await requestUsage(ctx, context7KeyOf(ctx.credential), isUsageAnswer);
+  return answer.plan;
 }
 
 /**
@@ -115,10 +106,6 @@ export function isQuotaSpent(answer: unknown): boolean {
   return freeSpent || limitReached;
 }
 
-function isRecord(x: unknown): x is Readonly<Record<string, unknown>> {
-  return typeof x === 'object' && x !== null && !Array.isArray(x);
-}
-
 function isCount(x: unknown): x is number {
   return typeof x === 'number' && Number.isInteger(x) && x >= 0;
 }
@@ -127,22 +114,9 @@ function isAmount(x: unknown): x is number {
   return typeof x === 'number' && Number.isFinite(x) && x >= 0;
 }
 
-/** The body as JSON, or `undefined` when it is not JSON (refused by the type guard). */
-export function parsedJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
+/** A documented usage answer : its `plan` is one of `CONTEXT7_PLANS`. */
 function isUsageAnswer(x: unknown): x is { readonly plan: Context7Plan } {
-  if (typeof x !== 'object' || x === null || !('plan' in x)) return false;
+  if (!isRecord(x)) return false;
   const plan = x.plan;
   return CONTEXT7_PLANS.some((known) => known === plan);
-}
-
-/** True for a status that says the key itself is refused. */
-export function isKeyRefusal(status: number): boolean {
-  return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN;
 }

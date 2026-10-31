@@ -406,7 +406,7 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
     case 'updateBlock': {
       const blockId = idArg(args, 'block_id');
       if (blockId === root.ref)
-        return deny('block_id: the shared root itself — change a page with notion__update_page');
+        return deny(`block_id: the shared root itself — change a page with ${TOOL.updatePage}`);
       const update = checkBlockUpdate(args.type, args.content);
       if ('refused' in update) return deny(update.refused);
       return { op, root, blockId, ...update.ok };
@@ -415,7 +415,7 @@ function readOrThrow(tool: string, args: Args, resources: readonly Resource[]): 
       const blockId = idArg(args, 'block_id');
       if (blockId === root.ref) {
         return deny(
-          'block_id: the shared root itself — a page goes to the trash with notion__trash_page',
+          `block_id: the shared root itself — a page goes to the trash with ${TOOL.trashPage}`,
         );
       }
       return {

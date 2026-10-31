@@ -25,17 +25,27 @@
  * reaches a URL : the rewrapped tools carry them as JSON-RPC arguments, the
  * variable tools as GraphQL variables of a constant document.
  *
- * The lower layer (`callUpstream`, `callGraphql`, `executeCall`) takes a
- * bare `fetch` + token ; `executeRailway` and `discoverRailwayResources`
- * feed it from the context.
+ * Failures, all typed : what the plugin declines (an unknown tool, an
+ * undeclared argument, a target the mission cannot resolve) is an `isError`
+ * result before any request (`refusalResult`, `ExecutorRefusal` inside
+ * `declining`) ; what Railway fails is thrown — 401 / 403
+ * `UpstreamAuthError`, another failed status `UpstreamHttpError`, a JSON-RPC
+ * error frame, GraphQL `errors` or an answer of the wrong shape
+ * `UpstreamProtocolError` (`graphql.ts`, the SDK's MCP client).
  */
 
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
-  UpstreamHttpError,
+  UpstreamProtocolError,
+  callUpstreamTool,
+  declining,
+  isList,
+  isRecord,
+  jsonResult,
+  refusalResult,
   type ConnectionContext,
   type ExecuteContext,
-  type McpToolContent,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -43,229 +53,104 @@ import {
 import {
   AMBIGUOUS_RAILWAY_TARGET,
   NO_RAILWAY_PROJECT,
-  PROVIDER,
   isProjectScopedTool,
   railwayId,
   readVariableWrite,
   resolveTarget,
   undeclaredArgument,
 } from './classify.ts';
-import {
-  CUSTOM_TOOL_NAMES,
-  DELETE_VARIABLE,
-  LIST_VARIABLES,
-  UPSERT_VARIABLE,
-  UPSERT_VARIABLES,
-} from './custom-tools.ts';
-import { askRailwayGraphql, explainMcpRefusal, railwayBearerOf } from './credential.ts';
+import { CUSTOM_TOOL_NAMES } from './custom-tools.ts';
+import { explainMcpRefusal, railwayBearerOf } from './credential.ts';
+import { askRailwayGraphql, nodesOf, railwayGraphql, type GraphqlRequest } from './graphql.ts';
+import { PROVIDER_ID, RAILWAY_MCP_SERVER, TOOL } from './identity.ts';
 import { railwayTools, toUpstreamName } from './tools.ts';
-import { RAILWAY_USER_AGENT } from './user-agent.ts';
 
-export type FetchImpl = typeof fetch;
-
-export const RAILWAY_MCP_URL = 'https://mcp.railway.com/';
-export const RAILWAY_GRAPHQL_URL = 'https://backboard.railway.com/graphql/v2';
 /** Projects fetched per GraphQL page during discovery. */
 export const RAILWAY_PROJECT_PAGE_SIZE = 100;
 /** Hard stop on discovery paging : 5 × 100 projects is far beyond any single workspace. */
 export const RAILWAY_MAX_PROJECT_PAGES = 5;
 
-const AGENT_TOOL = 'railway__railway-agent';
-
 /** Appended to every `railway-agent` answer : the agent stages, `accept-deploy` commits. */
 export const RAILWAY_AGENT_HINT =
   'Vaubaan hint: the railway-agent stages configuration changes (repo source, Dockerfile, build settings, etc.) ' +
   'but does NOT commit or deploy them. If the agent reports that changes were made or a ' +
-  '"deployment was triggered", the changes are only staged. Call railway__accept-deploy ' +
+  `"deployment was triggered", the changes are only staged. Call ${TOOL.acceptDeploy} ` +
   'with the environmentId to commit the staged changes and trigger the actual deployment.';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// JSON-RPC over Streamable HTTP
+// The variable tools, over GraphQL
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface JsonRpcSuccess {
-  jsonrpc: '2.0';
-  id: string | number | null;
-  result: unknown;
+/** `variables(...)` answers an object mapping each name to its value. */
+function isVariablesAnswer(x: unknown): x is { readonly variables: Record<string, unknown> } {
+  return isRecord(x) && isRecord(x.variables);
 }
 
-interface JsonRpcError {
-  jsonrpc: '2.0';
-  id: string | number | null;
-  error: { code: number; message: string; data?: unknown };
+/** A mutation of the variable tools answers one Boolean under its own field. */
+function isBooleanAnswer(field: string) {
+  return (x: unknown): x is Readonly<Record<string, boolean>> =>
+    isRecord(x) && typeof x[field] === 'boolean';
 }
 
-type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;
-
-/**
- * Extract the first JSON-RPC frame whose id matches (or is null) from a
- * Streamable HTTP body : SSE `data:` lines, or a bare JSON document.
- */
-export function parseFirstJsonRpcFrame(body: string, id: number): JsonRpcResponse {
-  const candidates: string[] = [];
-  const trimmed = body.trim();
-  if (trimmed.startsWith('{')) candidates.push(trimmed);
-  for (const line of body.split('\n')) {
-    if (line.startsWith('data:')) candidates.push(line.slice('data:'.length).trim());
-  }
-  for (const payload of candidates) {
-    if (!payload) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(payload);
-    } catch {
-      continue;
-    }
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'jsonrpc' in parsed &&
-      ((parsed as { id?: unknown }).id === id || (parsed as { id?: unknown }).id === null)
-    ) {
-      return parsed as JsonRpcResponse;
-    }
-  }
-  throw new Error(`No JSON-RPC frame matched id ${id} in the Railway MCP response.`);
-}
-
-export async function callUpstream(
-  fetchImpl: FetchImpl,
+/** One boolean mutation, its answer as `{ ok }`. */
+async function mutate(
+  ctx: ExecuteContext,
   token: string,
-  method: string,
-  params: Record<string, unknown> | undefined,
-  options: { readonly signal?: AbortSignal; readonly id?: number } = {},
-): Promise<unknown> {
-  const id = options.id ?? Math.floor(Math.random() * 1_000_000_000);
-  const res = await fetchImpl(RAILWAY_MCP_URL, {
-    redirect: 'error',
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': RAILWAY_USER_AGENT,
-      Accept: 'application/json, text/event-stream',
-      'MCP-Protocol-Version': '2025-06-18',
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    const msg = `Railway MCP upstream ${res.status}: ${errText.slice(0, 300)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  const frame = parseFirstJsonRpcFrame(await res.text(), id);
-  if ('error' in frame) {
-    throw new Error(`Railway MCP upstream error ${frame.error.code}: ${frame.error.message}`);
-  }
-  return frame.result;
+  request: GraphqlRequest,
+): Promise<{ readonly ok: boolean }> {
+  const data = await railwayGraphql(ctx, token, request, isBooleanAnswer(request.operation));
+  return { ok: data[request.operation] === true };
 }
 
-/**
- * Run one tool with a bare token : MCP forward for upstream tools, GraphQL
- * for the custom variable tools. Returns the raw upstream result.
- */
-export async function executeCall(
-  fetchImpl: FetchImpl,
+/** The variable tool `tool`, run with the arguments `pinTarget` wrote ; the data Railway answered. */
+async function executeVariableTool(
+  ctx: ExecuteContext,
   token: string,
   tool: string,
   args: Readonly<Record<string, unknown>>,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  if (CUSTOM_TOOL_NAMES.has(tool)) return executeCustom(fetchImpl, token, tool, args, signal);
-  return callUpstream(
-    fetchImpl,
-    token,
-    'tools/call',
-    { name: toUpstreamName(tool), arguments: args },
-    { signal },
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GraphQL
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function callGraphql<T>(
-  fetchImpl: FetchImpl,
-  token: string,
-  query: string,
-  variables: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const res = await fetchImpl(RAILWAY_GRAPHQL_URL, {
-    redirect: 'error',
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': RAILWAY_USER_AGENT,
-    },
-    body: JSON.stringify({ query, variables }),
-    ...(signal ? { signal } : {}),
-  });
-  if (!res.ok) {
-    const errText = await res.text();
-    const msg = `Railway GraphQL ${res.status}: ${errText.slice(0, 300)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new UpstreamHttpError(msg, res.status);
-  }
-  const body = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
-  if (body.errors && body.errors.length > 0) {
-    throw new Error(`Railway GraphQL errors: ${body.errors.map((e) => e.message).join('; ')}`);
-  }
-  if (!body.data) throw new Error('Railway GraphQL: empty data response.');
-  return body.data;
-}
-
-async function executeCustom(
-  fetchImpl: FetchImpl,
-  token: string,
-  tool: string,
-  args: Readonly<Record<string, unknown>>,
-  signal?: AbortSignal,
 ): Promise<unknown> {
   switch (tool) {
-    case LIST_VARIABLES: {
-      const data = await callGraphql<{ variables: Record<string, string> }>(
-        fetchImpl,
+    case TOOL.listVariables: {
+      const data = await railwayGraphql(
+        ctx,
         token,
-        /* GraphQL */ `
-          query variables(
-            $projectId: String!
-            $environmentId: String!
-            $serviceId: String
-            $unrendered: Boolean
-          ) {
-            variables(
-              projectId: $projectId
-              environmentId: $environmentId
-              serviceId: $serviceId
-              unrendered: $unrendered
-            )
-          }
-        `,
         {
-          projectId: args.projectId,
-          environmentId: args.environmentId,
-          serviceId: args.serviceId ?? null,
-          unrendered: args.unrendered ?? false,
+          operation: 'variables',
+          query: /* GraphQL */ `
+            query variables(
+              $projectId: String!
+              $environmentId: String!
+              $serviceId: String
+              $unrendered: Boolean
+            ) {
+              variables(
+                projectId: $projectId
+                environmentId: $environmentId
+                serviceId: $serviceId
+                unrendered: $unrendered
+              )
+            }
+          `,
+          variables: {
+            projectId: args.projectId,
+            environmentId: args.environmentId,
+            serviceId: args.serviceId ?? null,
+            unrendered: args.unrendered ?? false,
+          },
         },
-        signal,
+        isVariablesAnswer,
       );
       return data.variables;
     }
-    case UPSERT_VARIABLE: {
-      const data = await callGraphql<{ variableUpsert: boolean }>(
-        fetchImpl,
-        token,
-        /* GraphQL */ `
+    case TOOL.upsertVariable:
+      return mutate(ctx, token, {
+        operation: 'variableUpsert',
+        query: /* GraphQL */ `
           mutation variableUpsert($input: VariableUpsertInput!) {
             variableUpsert(input: $input)
           }
         `,
-        {
+        variables: {
           input: stripUndefined({
             projectId: args.projectId,
             environmentId: args.environmentId,
@@ -275,20 +160,16 @@ async function executeCustom(
             skipDeploys: args.skipDeploys,
           }),
         },
-        signal,
-      );
-      return { ok: data.variableUpsert === true };
-    }
-    case UPSERT_VARIABLES: {
-      const data = await callGraphql<{ variableCollectionUpsert: boolean }>(
-        fetchImpl,
-        token,
-        /* GraphQL */ `
+      });
+    case TOOL.upsertVariables:
+      return mutate(ctx, token, {
+        operation: 'variableCollectionUpsert',
+        query: /* GraphQL */ `
           mutation variableCollectionUpsert($input: VariableCollectionUpsertInput!) {
             variableCollectionUpsert(input: $input)
           }
         `,
-        {
+        variables: {
           input: stripUndefined({
             projectId: args.projectId,
             environmentId: args.environmentId,
@@ -298,20 +179,16 @@ async function executeCustom(
             skipDeploys: args.skipDeploys,
           }),
         },
-        signal,
-      );
-      return { ok: data.variableCollectionUpsert === true };
-    }
-    case DELETE_VARIABLE: {
-      const data = await callGraphql<{ variableDelete: boolean }>(
-        fetchImpl,
-        token,
-        /* GraphQL */ `
+      });
+    case TOOL.deleteVariable:
+      return mutate(ctx, token, {
+        operation: 'variableDelete',
+        query: /* GraphQL */ `
           mutation variableDelete($input: VariableDeleteInput!) {
             variableDelete(input: $input)
           }
         `,
-        {
+        variables: {
           input: stripUndefined({
             projectId: args.projectId,
             environmentId: args.environmentId,
@@ -319,12 +196,11 @@ async function executeCustom(
             name: args.name,
           }),
         },
-        signal,
-      );
-      return { ok: data.variableDelete === true };
-    }
+      });
     default:
-      throw new Error(`Unknown Railway custom tool: ${tool}`);
+      // `CUSTOM_TOOL_NAMES` routes only the four above here : a fifth one
+      // declared without its case is declined, never sent.
+      throw new ExecutorRefusal(`unknown tool '${tool}'`);
   }
 }
 
@@ -350,31 +226,40 @@ export async function executeRailway(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  if (!DECLARED_TOOLS.has(tool)) {
-    return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
-  }
-  const token = railwayBearerOf(ctx.credential);
-  const effective = pinTarget(tool, args, ctx.resources);
-  // Declined here, before any request : a result the agent reads, not an upstream failure.
-  if ('refused' in effective) {
-    return { content: [{ type: 'text', text: effective.refused }], isError: true };
-  }
-  let result: unknown;
+  return declining(async () => {
+    if (!DECLARED_TOOLS.has(tool)) return refusalResult(`unknown tool '${tool}'`);
+    const token = railwayBearerOf(ctx.credential);
+    const effective = pinTarget(tool, args, ctx.resources);
+    // Declined here, before any request : a result the agent reads, not an upstream failure.
+    if ('refused' in effective) return refusalResult(effective.refused);
+    if (CUSTOM_TOOL_NAMES.has(tool)) {
+      return jsonResult(await executeVariableTool(ctx, token, tool, effective.args));
+    }
+    const result = await callMcpTool(ctx, token, tool, effective.args);
+    if (tool === TOOL.railwayAgent) {
+      return {
+        ...result,
+        content: [...result.content, { type: 'text', text: RAILWAY_AGENT_HINT }],
+      };
+    }
+    return result;
+  });
+}
+
+/** One `tools/call` to Railway's MCP server, the prefix stripped ; Railway's result passed through. */
+async function callMcpTool(
+  ctx: ExecuteContext,
+  token: string,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<McpToolResult> {
   try {
-    result = await executeCall(ctx.fetch, token, tool, effective.args, ctx.signal);
+    return await callUpstreamTool(ctx, RAILWAY_MCP_SERVER, token, toUpstreamName(tool), args);
   } catch (err) {
     // The token refused by the MCP server : dead (401) or a kind the server does not take (403).
-    if (err instanceof UpstreamAuthError && !CUSTOM_TOOL_NAMES.has(tool)) {
-      throw await explainMcpRefusal(ctx.fetch, token, err, ctx.signal);
-    }
+    if (err instanceof UpstreamAuthError) throw await explainMcpRefusal(ctx, token, err);
     throw err;
   }
-
-  const mcp = asToolResult(result);
-  if (tool === AGENT_TOOL) {
-    return { ...mcp, content: [...mcp.content, { type: 'text', text: RAILWAY_AGENT_HINT }] };
-  }
-  return mcp;
 }
 
 /**
@@ -391,17 +276,14 @@ export async function discoverRailwayResources(
   // an account token: its personal ones), then, for an account token only, each
   // of its workspaces'. A workspace token has no `me` : its refusal ends the list.
   const out = await listProjects(ctx, token, PROJECTS_QUERY, {});
-  const me = await askRailwayGraphql<WorkspacesOfMe>(
-    ctx.fetch,
-    token,
-    WORKSPACES_QUERY,
-    {},
-    ctx.signal,
-  );
+  const me = await askRailwayGraphql(ctx, token, WORKSPACES_REQUEST, isRecord);
   if (!me.ok) return out;
-  for (const workspace of me.data.me?.workspaces ?? []) {
+  const account = me.data.me;
+  const workspaces = isRecord(account) ? nodesOf(account.workspaces) : [];
+  for (const { id } of workspaces) {
+    if (typeof id !== 'string') continue;
     for (const project of await listProjects(ctx, token, WORKSPACE_PROJECTS_QUERY, {
-      workspaceId: workspace.id,
+      workspaceId: id,
     })) {
       if (!out.some((known) => known.ref === project.ref)) out.push(project);
     }
@@ -413,47 +295,48 @@ export async function discoverRailwayResources(
 async function listProjects(
   ctx: ConnectionContext,
   token: string,
-  query: string,
+  query: Omit<GraphqlRequest, 'variables'>,
   variables: Readonly<Record<string, unknown>>,
 ): Promise<Resource[]> {
   const out: Resource[] = [];
   let after: string | null = null;
   for (let page = 0; page < RAILWAY_MAX_PROJECT_PAGES; page += 1) {
-    const data: ProjectsPage = await callGraphql<ProjectsPage>(
-      ctx.fetch,
-      token,
-      query,
-      { ...variables, first: RAILWAY_PROJECT_PAGE_SIZE, after },
-      ctx.signal,
-    );
-    for (const edge of data.projects.edges) {
-      const node = edge.node;
+    const request = {
+      ...query,
+      variables: { ...variables, first: RAILWAY_PROJECT_PAGE_SIZE, after },
+    };
+    const data: ProjectsPage = await railwayGraphql(ctx, token, request, isProjectsPage);
+    for (const { node } of data.projects.edges) {
       // A ref the classifier would refuse is of no use to a mission : say so
       // at connection time instead of listing a resource no call can name.
       if (railwayId(node.id) === null) {
-        throw new Error(
-          `${PROVIDER}: project id ${JSON.stringify(node.id)} is not a Railway identifier`,
+        throw new UpstreamProtocolError(
+          `Railway GraphQL ${query.operation}: project id ${JSON.stringify(node.id)} is not a Railway identifier`,
         );
       }
       out.push({
-        provider: PROVIDER,
+        provider: PROVIDER_ID,
         ref: node.id,
         displayName: node.name,
         metadata: {
-          environments: (node.environments?.edges ?? []).map((e) => ({
-            id: e.node.id,
-            name: e.node.name,
-          })),
+          environments: namedNodesOf(node.environments),
           // What a `serviceId` is bound to (`readService`) : always a list, empty included.
-          services: (node.services?.edges ?? []).map((e) => ({
-            id: e.node.id,
-            name: e.node.name,
-          })),
+          services: namedNodesOf(node.services),
         },
       });
     }
-    if (!data.projects.pageInfo?.hasNextPage || !data.projects.pageInfo.endCursor) break;
-    after = data.projects.pageInfo.endCursor;
+    const pageInfo = data.projects.pageInfo;
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) break;
+    after = pageInfo.endCursor;
+  }
+  return out;
+}
+
+/** The `{ id, name }` nodes of a connection ; a node without both as strings is skipped. */
+function namedNodesOf(connection: unknown): Array<{ id: string; name: string }> {
+  const out: Array<{ id: string; name: string }> = [];
+  for (const { id, name } of nodesOf(connection)) {
+    if (typeof id === 'string' && typeof name === 'string') out.push({ id, name });
   }
   return out;
 }
@@ -481,89 +364,95 @@ const PROJECT_NODE_FIELDS = /* GraphQL */ `
 `;
 
 /** The workspaces of the account an account token belongs to (Railway docs, "Fetch workspaces"). */
-const WORKSPACES_QUERY = /* GraphQL */ `
-  query vaubaanWorkspaces {
-    me {
-      workspaces {
-        id
-        name
-      }
-    }
-  }
-`;
-
-interface WorkspacesOfMe {
-  readonly me?: {
-    readonly workspaces?: ReadonlyArray<{ readonly id: string; readonly name: string }>;
-  };
-}
-
-/** The projects of one workspace (Railway docs, "List projects in a workspace"). */
-const WORKSPACE_PROJECTS_QUERY = /* GraphQL */ `
-  query vaubaanWorkspaceProjects($workspaceId: String!, $first: Int!, $after: String) {
-    projects(workspaceId: $workspaceId, first: $first, after: $after) {
-      edges {
-        node {
-          ${PROJECT_NODE_FIELDS}
-        }
-      }
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-    }
-  }
-`;
-
-const PROJECTS_QUERY = /* GraphQL */ `
-  query vaubaanProjects($first: Int!, $after: String) {
-    projects(first: $first, after: $after) {
-      edges {
-        node {
+const WORKSPACES_REQUEST: GraphqlRequest = {
+  operation: 'vaubaanWorkspaces',
+  query: /* GraphQL */ `
+    query vaubaanWorkspaces {
+      me {
+        workspaces {
           id
           name
-          environments {
-            edges {
-              node {
-                id
-                name
-              }
-            }
-          }
-          services {
-            edges {
-              node {
-                id
-                name
-              }
-            }
-          }
         }
       }
-      pageInfo {
-        hasNextPage
-        endCursor
+    }
+  `,
+  variables: {},
+};
+
+/** The projects of one workspace (Railway docs, "List projects in a workspace"). */
+const WORKSPACE_PROJECTS_QUERY = {
+  operation: 'vaubaanWorkspaceProjects',
+  query: /* GraphQL */ `
+    query vaubaanWorkspaceProjects($workspaceId: String!, $first: Int!, $after: String) {
+      projects(workspaceId: $workspaceId, first: $first, after: $after) {
+        edges {
+          node {
+            ${PROJECT_NODE_FIELDS}
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
       }
     }
-  }
-`;
+  `,
+};
 
+/** The projects the token reaches. */
+const PROJECTS_QUERY = {
+  operation: 'vaubaanProjects',
+  query: /* GraphQL */ `
+    query vaubaanProjects($first: Int!, $after: String) {
+      projects(first: $first, after: $after) {
+        edges {
+          node {
+            ${PROJECT_NODE_FIELDS}
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  `,
+};
+
+/** A page of projects : what discovery reads of it. Environments and services are read by `namedNodesOf`. */
 interface ProjectsPage {
   readonly projects: {
     readonly edges: ReadonlyArray<{
       readonly node: {
         readonly id: string;
         readonly name: string;
-        readonly environments?: {
-          readonly edges: ReadonlyArray<{ readonly node: { id: string; name: string } }>;
-        } | null;
-        readonly services?: {
-          readonly edges: ReadonlyArray<{ readonly node: { id: string; name: string } }>;
-        } | null;
+        readonly environments?: unknown;
+        readonly services?: unknown;
       };
     }>;
     readonly pageInfo?: { readonly hasNextPage: boolean; readonly endCursor: string | null } | null;
   };
+}
+
+function isProjectsPage(x: unknown): x is ProjectsPage {
+  if (!isRecord(x) || !isRecord(x.projects) || !isList(x.projects.edges)) return false;
+  const { edges, pageInfo } = x.projects;
+  const pageInfoOk =
+    pageInfo === undefined ||
+    pageInfo === null ||
+    (isRecord(pageInfo) &&
+      typeof pageInfo.hasNextPage === 'boolean' &&
+      (pageInfo.endCursor === null || typeof pageInfo.endCursor === 'string'));
+  return (
+    pageInfoOk &&
+    edges.every(
+      (edge) =>
+        isRecord(edge) &&
+        isRecord(edge.node) &&
+        typeof edge.node.id === 'string' &&
+        typeof edge.node.name === 'string',
+    )
+  );
 }
 
 /**
@@ -605,19 +494,4 @@ function pinTarget(
   if (target.environmentId !== null) out.environmentId = target.environmentId;
   if (target.serviceId !== null) out.serviceId = target.serviceId;
   return { args: out };
-}
-
-/** The MCP server answers `tools/call` with an MCP result ; GraphQL tools answer with plain data. */
-function asToolResult(result: unknown): McpToolResult {
-  if (
-    typeof result === 'object' &&
-    result !== null &&
-    Array.isArray((result as { content?: unknown }).content)
-  ) {
-    const r = result as { content: McpToolContent[]; isError?: boolean };
-    return r.isError === undefined
-      ? { content: r.content }
-      : { content: r.content, isError: r.isError };
-  }
-  return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
 }

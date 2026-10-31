@@ -9,7 +9,7 @@
  * tools/list` on 2026-05-30 (with a Bearer scoped to
  * `resource=https://mcp.railway.com`). Names are prefixed `railway__` ; the
  * upstream names are kebab-case (`list-projects`), so the prefixed name is
- * `railway__list-projects`. Input schemas are the real ones (`required[]`,
+ * `railway__list-projects` (`TOOL`, `identity.ts`). Input schemas are the real ones (`required[]`,
  * enums, `additionalProperties: false`) — no guesses — minus the two
  * arguments the gateway refuses (`UNBOUND_ARGUMENTS`).
  *
@@ -21,9 +21,8 @@
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 import { customTools } from './custom-tools.ts';
+import { TOOL, TOOL_PREFIX } from './identity.ts';
 import upstream from './upstream-tools.json' with { type: 'json' };
-
-export const RAILWAY_TOOL_PREFIX = 'railway__';
 
 /**
  * Arguments of the upstream tools that name an object the plugin cannot bind
@@ -35,11 +34,11 @@ export const RAILWAY_TOOL_PREFIX = 'railway__';
  * offer it (`withoutUnboundArguments`).
  */
 export const UNBOUND_ARGUMENTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  'railway__get-logs': {
+  [TOOL.getLogs]: {
     deploymentId:
       'Give serviceId and environmentId instead: the logs of the latest deployment of that service are read.',
   },
-  'railway__railway-agent': {
+  [TOOL.railwayAgent]: {
     threadId: 'Every call starts a new conversation: put the context it needs in the message.',
   },
 };
@@ -72,7 +71,5 @@ export const railwayTools: readonly McpToolDeclaration[] = [
 
 /** Strip the `railway__` prefix to get the upstream tool name. */
 export function toUpstreamName(toolName: string): string {
-  return toolName.startsWith(RAILWAY_TOOL_PREFIX)
-    ? toolName.slice(RAILWAY_TOOL_PREFIX.length)
-    : toolName;
+  return toolName.startsWith(TOOL_PREFIX) ? toolName.slice(TOOL_PREFIX.length) : toolName;
 }

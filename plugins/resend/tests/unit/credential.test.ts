@@ -4,7 +4,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { CredentialRefusal, UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import {
+  CredentialRefusal,
+  UpstreamAuthError,
+  UpstreamProtocolError,
+  type ConnectionContext,
+} from '@vaubaan/plugin-sdk';
 import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -66,6 +71,21 @@ describe('resend key — verify at paste', () => {
     const check = verifyResendKey(ctx(fetch));
     await expect(check).rejects.toBeInstanceOf(CredentialRefusal);
     await expect(check).rejects.toThrow(/Create a key with Full access/);
+  });
+
+  test('a Sending access key answered 403 is refused the same way', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: DOMAINS, status: 403, body: { name: 'restricted_api_key' } },
+    ]);
+    await expect(verifyResendKey(ctx(fetch))).rejects.toMatchObject({
+      name: 'CredentialRefusal',
+      upstreamStatus: 403,
+    });
+  });
+
+  test('an answer that is not JSON is an UpstreamProtocolError', async () => {
+    const fetch = mockFetch([{ method: 'GET', url: DOMAINS, body: '<html>maintenance</html>' }]);
+    await expect(verifyResendKey(ctx(fetch))).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('another rejection is an UpstreamAuthError', async () => {

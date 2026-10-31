@@ -5,7 +5,8 @@
  *        in the context, is used for one call, and never reaches the agent.
  *
  * Rules :
- *   - `fetch` comes from the context, never from the global ;
+ *   - every request goes through `cloudflare-api.ts`, on the SDK's transport :
+ *     `fetch` and the signal come from the context, the answer is bounded ;
  *   - the bearer is the `api_token` field of the `api-key` secret ; a
  *     Global API Key (`email|key`) is never accepted ;
  *   - the zone in the URL is the **resolved mission resource**, never the
@@ -18,20 +19,27 @@
  *     the record is apex, wildcard, MX or NS, or cannot be read back, the
  *     call is refused before the PATCH / DELETE ;
  *   - `list_zones` is filtered to the mission's zones ;
- *   - a provider failure is **thrown** : 401 / 403 from Cloudflare →
- *     `UpstreamAuthError`, any other failed status → `UpstreamHttpError`.
- *     The host records it as `upstream_error` in the audit ;
- *   - what this executor declines itself (an unknown tool, a zone outside
- *     the mission, a malformed identifier, a critical record declared as an
- *     ordinary one) is an `ExecutorRefusal`, returned as an `isError`
- *     result : nothing failed at the provider.
+ *   - a provider failure is **thrown**, never turned into a result : 401 /
+ *     403 from Cloudflare → `UpstreamAuthError`, any other failed status →
+ *     `UpstreamHttpError`, an answer that is not JSON (but for the BIND
+ *     export) or not the envelope read → `UpstreamProtocolError`. The host
+ *     records it as `upstream_error` in the audit ;
+ *   - what this executor declines itself (an unknown tool, an undeclared
+ *     argument, a zone outside the mission, a malformed identifier, a
+ *     critical record declared as an ordinary one) is an `ExecutorRefusal`,
+ *     turned into the `isError` result by `declining` : nothing failed at
+ *     the provider.
  */
 
 import {
   ExecutorRefusal,
-  UpstreamAuthError,
-  UpstreamHttpError,
-  expectCredentialKind,
+  anyJson,
+  declining,
+  isList,
+  isRecord,
+  jsonResult,
+  refusalResult,
+  textResult,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
@@ -40,7 +48,14 @@ import {
 
 import { undeclaredArgument } from './classify.ts';
 import {
-  CLOUDFLARE_DNS_PROVIDER,
+  callCloudflareApi,
+  callCloudflareText,
+  envelopeOf,
+  tokenOf,
+  type Endpoint,
+} from './cloudflare-api.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
+import {
   isCriticalRecord,
   pathIdent,
   recordSensitivity,
@@ -48,34 +63,26 @@ import {
   zoneNameOf,
 } from './resources.ts';
 
-/** Public API of the provider — a fact about Cloudflare, not instance configuration. */
-export const CLOUDFLARE_API_BASE = 'https://api.cloudflare.com/client/v4';
-
 /** Discovery stops after this many zones (10 pages of 50). */
 export const MAX_DISCOVERED_ZONES = 500;
 const DISCOVERY_PAGE_SIZE = 50;
 
-/** Credential field holding the API token. */
-export const API_TOKEN_FIELD = 'api_token';
-
-type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Args = Readonly<Record<string, unknown>>;
 
-interface Route {
-  readonly method: HttpMethod;
+interface Route extends Endpoint {
   /** Path under `/client/v4`, built from the zone and (when relevant) the record id. */
   readonly path: (zone: string, record: string) => string;
-  /** How the remaining arguments travel : query string, JSON body, multipart `file`, or not at all. */
-  readonly payload: 'query' | 'json' | 'multipart' | 'none';
   /** Whether the route needs `record_id`. */
   readonly record?: boolean;
+  /** The BIND export answers a text file, passed to the agent as it is ; every other route JSON. */
+  readonly answer?: 'bind-text';
 }
 
 /** One path segment. Refuses anything `pathIdent` refuses : `encodeURIComponent` would let `..` through. */
 function segment(value: string): string {
   if (pathIdent(value) === null) {
     throw new ExecutorRefusal(
-      'cloudflare-dns: refusing to build a request path from an unsafe identifier',
+      `${PROVIDER_ID}: refusing to build a request path from an unsafe identifier`,
     );
   }
   return encodeURIComponent(value);
@@ -86,106 +93,103 @@ const r = (zone: string, record: string) => `${z(zone)}/dns_records/${segment(re
 
 /** Record writes on an existing record : their declared sensitivity is checked against the record. */
 const SENSITIVITY_GUARDED_TOOLS: ReadonlySet<string> = new Set([
-  'cloudflare_dns__update_record',
-  'cloudflare_dns__delete_record',
+  TOOL.updateRecord,
+  TOOL.deleteRecord,
 ]);
 
 /** Tool → Cloudflare endpoint. Every declared tool has a row ; the classifier enforces the inverse. */
 const ROUTES: Readonly<Record<string, Route>> = {
   // reads
-  cloudflare_dns__list_zones: { method: 'GET', path: () => '/zones', payload: 'query' },
-  cloudflare_dns__get_zone: { method: 'GET', path: z, payload: 'none' },
-  cloudflare_dns__list_records: {
+  [TOOL.listZones]: { method: 'GET', path: () => '/zones', payload: 'query' },
+  [TOOL.getZone]: { method: 'GET', path: z, payload: 'none' },
+  [TOOL.listRecords]: {
     method: 'GET',
     path: (zone) => `${z(zone)}/dns_records`,
     payload: 'query',
   },
-  cloudflare_dns__get_record: { method: 'GET', path: r, payload: 'none', record: true },
-  cloudflare_dns__export_records: {
+  [TOOL.getRecord]: { method: 'GET', path: r, payload: 'none', record: true },
+  [TOOL.exportRecords]: {
     method: 'GET',
     path: (zone) => `${z(zone)}/dns_records/export`,
     payload: 'none',
+    answer: 'bind-text',
   },
-  cloudflare_dns__get_zone_settings: {
+  [TOOL.getZoneSettings]: {
     method: 'GET',
     path: (zone) => `${z(zone)}/settings`,
     payload: 'none',
   },
-  cloudflare_dns__get_dnssec: {
+  [TOOL.getDnssec]: {
     method: 'GET',
     path: (zone) => `${z(zone)}/dnssec`,
     payload: 'none',
   },
   // writes — records
-  cloudflare_dns__create_record: {
+  [TOOL.createRecord]: {
     method: 'POST',
     path: (zone) => `${z(zone)}/dns_records`,
     payload: 'json',
   },
-  cloudflare_dns__update_record: { method: 'PATCH', path: r, payload: 'json', record: true },
-  cloudflare_dns__delete_record: { method: 'DELETE', path: r, payload: 'none', record: true },
-  cloudflare_dns__import_records: {
+  [TOOL.updateRecord]: { method: 'PATCH', path: r, payload: 'json', record: true },
+  [TOOL.deleteRecord]: { method: 'DELETE', path: r, payload: 'none', record: true },
+  [TOOL.importRecords]: {
     method: 'POST',
     path: (zone) => `${z(zone)}/dns_records/import`,
     payload: 'multipart',
   },
   // writes — zone-level
-  cloudflare_dns__edit_zone_settings: {
+  [TOOL.editZoneSettings]: {
     method: 'PATCH',
     path: (zone) => `${z(zone)}/settings`,
     payload: 'json',
   },
-  cloudflare_dns__purge_cache: {
+  [TOOL.purgeCache]: {
     method: 'POST',
     path: (zone) => `${z(zone)}/purge_cache`,
     payload: 'json',
   },
-  cloudflare_dns__edit_dnssec: {
+  [TOOL.editDnssec]: {
     method: 'PATCH',
     path: (zone) => `${z(zone)}/dnssec`,
     payload: 'json',
   },
-  cloudflare_dns__delete_zone: { method: 'DELETE', path: z, payload: 'none' },
+  [TOOL.deleteZone]: { method: 'DELETE', path: z, payload: 'none' },
 };
 
 // ─── entry points ─────────────────────────────────────────────────────────────
 
-export async function executeCloudflareDns(
+export function executeCloudflareDns(
   ctx: ExecuteContext,
   tool: string,
   args: Args,
 ): Promise<McpToolResult> {
-  const route = ROUTES[tool];
-  if (!route) return errorResult(`unknown tool '${tool}'`);
-  const headers = bearerHeaders(tokenOf(ctx));
-  try {
-    return await executeRoute(ctx, headers, route, tool, args);
-  } catch (e) {
-    if (e instanceof ExecutorRefusal) return errorResult(e.message);
-    throw e;
-  }
+  return declining(async () => {
+    const route = Object.hasOwn(ROUTES, tool) ? ROUTES[tool] : undefined;
+    if (!route) return refusalResult(`unknown tool '${tool}'`);
+    return executeRoute(ctx, tokenOf(ctx), route, tool, args);
+  });
 }
 
 function refuseUndeclared(tool: string, args: Args): void {
   const undeclared = undeclaredArgument(tool, args);
-  if (undeclared !== null) throw new ExecutorRefusal(`cloudflare-dns: ${undeclared}`);
+  if (undeclared !== null) throw new ExecutorRefusal(`${PROVIDER_ID}: ${undeclared}`);
 }
 
 async function executeRoute(
   ctx: ExecuteContext,
-  headers: Record<string, string>,
+  token: string,
   route: Route,
   tool: string,
   args: Args,
 ): Promise<McpToolResult> {
-  if (tool === 'cloudflare_dns__list_zones') {
+  if (tool === TOOL.listZones) {
     refuseUndeclared(tool, args);
-    const payload = await callCloudflareApi(ctx.fetch, headers, route, '/zones', args, ctx.signal);
-    return textResult(filterZonesToMission(payload, ctx.resources));
+    const answer = await callCloudflareApi(ctx, token, route, '/zones', args, isZoneListAnswer);
+    return jsonResult(zonesOfTheMission(answer, ctx.resources));
   }
 
   const target = resolveZoneResource(args, ctx.resources);
-  if ('denied' in target) throw new ExecutorRefusal(`cloudflare-dns: ${target.denied}`);
+  if ('denied' in target) throw new ExecutorRefusal(`${PROVIDER_ID}: ${target.denied}`);
   // The query string and the JSON body below are built from the arguments: only what
   // the tool declares — hence what the classifier read — may be in them.
   refuseUndeclared(tool, args);
@@ -195,24 +199,32 @@ async function executeRoute(
   const path = route.path(zone.ref, record);
 
   if (SENSITIVITY_GUARDED_TOOLS.has(tool)) {
-    await assertDeclaredSensitivity(ctx, headers, zone, path, args);
+    await assertDeclaredSensitivity(ctx, token, zone, path, args);
   }
 
-  const payload = await callCloudflareApi(ctx.fetch, headers, route, path, rest, ctx.signal);
-  return textResult(payload);
+  if (route.answer === 'bind-text') return textResult(await callCloudflareText(ctx, token, path));
+  // An empty answer (Cloudflare sends none in practice) reads as `{}`, as it always has.
+  return jsonResult((await callCloudflareApi(ctx, token, route, path, rest, anyJson)) ?? {});
 }
 
+/** A zone as `GET /zones` lists it : the id and the name are read, the rest is optional. */
 interface ZoneDto {
   readonly id: string;
   readonly name: string;
-  readonly status?: string;
-  readonly account?: { readonly id?: string; readonly name?: string } | null;
+  readonly status?: unknown;
+  readonly account?: unknown;
 }
 
-interface ZoneListDto {
-  readonly result?: readonly ZoneDto[];
-  readonly result_info?: { readonly total_pages?: number };
+function isZoneDto(value: unknown): value is ZoneDto {
+  return isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string';
 }
+
+function isZoneList(value: unknown): value is readonly ZoneDto[] {
+  return isList(value) && value.every(isZoneDto);
+}
+
+const isZoneListAnswer = envelopeOf(isList);
+const isZonePage = envelopeOf(isZoneList);
 
 /**
  * One resource per zone the token reaches : `GET /zones` paginated (50 per
@@ -222,78 +234,83 @@ interface ZoneListDto {
 export async function discoverCloudflareDnsResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const headers = bearerHeaders(tokenOf(ctx));
+  const token = tokenOf(ctx);
   const resources: Resource[] = [];
   for (let page = 1; resources.length < MAX_DISCOVERED_ZONES; page += 1) {
-    const dto = (await callCloudflareApi(
-      ctx.fetch,
-      headers,
-      ROUTES.cloudflare_dns__list_zones!,
+    const answer = await callCloudflareApi(
+      ctx,
+      token,
+      ROUTES[TOOL.listZones]!,
       '/zones',
       { page, per_page: DISCOVERY_PAGE_SIZE },
-      ctx.signal,
-    )) as ZoneListDto;
-    const zones = dto.result ?? [];
-    if (!isZoneList(zones)) throw new Error("cloudflare-dns: GET /zones: 'result' is not a list");
+      isZonePage,
+    );
+    const zones = answer.result;
     for (const zone of zones) {
       if (resources.length >= MAX_DISCOVERED_ZONES) break;
       resources.push(zoneResource(zone));
     }
-    const totalPages = dto.result_info?.total_pages ?? page;
-    if (zones.length < DISCOVERY_PAGE_SIZE || page >= totalPages) break;
+    if (zones.length < DISCOVERY_PAGE_SIZE || page >= totalPages(answer.result_info, page)) break;
   }
   return resources;
 }
 
+/** `result_info.total_pages` of a page of zones ; the current page when Cloudflare omits it. */
+function totalPages(info: unknown, page: number): number {
+  return isRecord(info) && typeof info.total_pages === 'number' ? info.total_pages : page;
+}
+
 function zoneResource(zone: ZoneDto): Resource {
   const metadata: Record<string, string> = { zone_name: zone.name };
-  if (zone.account?.id) metadata.account_id = zone.account.id;
-  if (zone.account?.name) metadata.account_name = zone.account.name;
-  if (zone.status) metadata.status = zone.status;
+  const account = isRecord(zone.account) ? zone.account : {};
+  if (typeof account.id === 'string' && account.id) metadata.account_id = account.id;
+  if (typeof account.name === 'string' && account.name) metadata.account_name = account.name;
+  if (typeof zone.status === 'string' && zone.status) metadata.status = zone.status;
   return {
-    provider: CLOUDFLARE_DNS_PROVIDER,
+    provider: PROVIDER_ID,
     ref: zone.id,
     displayName: zone.name,
     metadata,
   };
 }
 
-/** The pasted API token of a connection. */
-export function tokenOf(ctx: ConnectionContext): string {
-  const secret = expectCredentialKind(CLOUDFLARE_DNS_PROVIDER, ctx.credential, 'api-key');
-  const token = secret.fields[API_TOKEN_FIELD];
-  if (!token) throw new Error(`cloudflare-dns: the credential has no '${API_TOKEN_FIELD}' field`);
-  return token;
-}
-
 function recordIdArg(value: unknown): string {
   const recordId = pathIdent(value);
   if (recordId === null) {
-    throw new ExecutorRefusal('cloudflare-dns: record_id: missing or malformed identifier');
+    throw new ExecutorRefusal(`${PROVIDER_ID}: record_id: missing or malformed identifier`);
   }
   return recordId;
 }
 
-/** Keep only the zones of the mission in a `GET /zones` answer ; `result_info` is left as upstream sent it. */
-function filterZonesToMission(payload: unknown, resources: readonly Resource[]): unknown {
-  if (typeof payload !== 'object' || payload === null) return payload;
-  const dto = payload as ZoneListDto;
-  const zones = dto.result;
-  if (!isZoneList(zones)) return payload;
-  const refs = new Set(
-    resources.filter((x) => x.provider === CLOUDFLARE_DNS_PROVIDER).map((x) => x.ref),
-  );
-  return { ...dto, result: zones.filter((zone) => refs.has(zone.id)) };
+/**
+ * The `GET /zones` answer with only the zones of the mission ; `result_info`
+ * and the rest of the envelope are left as upstream sent them. A listed
+ * entry without an id is dropped : it cannot be a zone of the mission.
+ */
+function zonesOfTheMission(
+  answer: { readonly result: readonly unknown[] },
+  resources: readonly Resource[],
+): unknown {
+  const refs = new Set(resources.filter((x) => x.provider === PROVIDER_ID).map((x) => x.ref));
+  return {
+    ...answer,
+    result: answer.result.filter(
+      (zone) => isRecord(zone) && typeof zone.id === 'string' && refs.has(zone.id),
+    ),
+  };
 }
 
-/** `Array.isArray` narrows to `any[]` ; this guard keeps the element type. */
-function isZoneList(x: unknown): x is readonly ZoneDto[] {
-  return Array.isArray(x);
+/**
+ * The `result` of `GET …/dns_records/<id>` : a record whose type or name is
+ * absent is read as critical below, so the guard accepts a missing one.
+ */
+function isRecordResult(
+  value: unknown,
+): value is Readonly<Record<string, unknown>> | null | undefined {
+  return value === null || value === undefined || isRecord(value);
 }
 
-interface RecordDto {
-  readonly result?: { readonly type?: string; readonly name?: string } | null;
-}
+const isRecordAnswer = envelopeOf(isRecordResult);
 
 /**
  * An update or a deletion declared as an ordinary record (`type` + `name` of
@@ -304,101 +321,23 @@ interface RecordDto {
  */
 async function assertDeclaredSensitivity(
   ctx: ExecuteContext,
-  headers: Record<string, string>,
+  token: string,
   zone: Resource,
   recordPath: string,
   args: Args,
 ): Promise<void> {
   const zoneName = zoneNameOf(zone);
   if (recordSensitivity(args, zoneName) === 'critical') return;
-  const current = (await callCloudflareApi(
-    ctx.fetch,
-    headers,
-    ROUTES.cloudflare_dns__get_record!,
-    recordPath,
-    {},
-    ctx.signal,
-  )) as RecordDto;
-  const type = current.result?.type ?? '';
-  const name = current.result?.name ?? '';
+  const current = (
+    await callCloudflareApi(ctx, token, ROUTES[TOOL.getRecord]!, recordPath, {}, isRecordAnswer)
+  ).result;
+  const type = typeof current?.type === 'string' ? current.type : '';
+  const name = typeof current?.name === 'string' ? current.name : '';
   if (isCriticalRecord(type, name, zoneName)) {
     throw new ExecutorRefusal(
-      `cloudflare-dns: the record is a critical record (${type} ${name}) but the call ` +
+      `${PROVIDER_ID}: the record is a critical record (${type} ${name}) but the call ` +
         `declared an ordinary one (${String(args.type)} ${String(args.name)}) ; name the ` +
         'record as it is so the change is classified as a critical record write',
     );
-  }
-}
-
-function errorResult(message: string): McpToolResult {
-  return { content: [{ type: 'text', text: message }], isError: true };
-}
-
-function textResult(payload: unknown): McpToolResult {
-  const text = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
-  return { content: [{ type: 'text', text }] };
-}
-
-// ─── HTTP ─────────────────────────────────────────────────────────────────────
-
-function bearerHeaders(token: string): Record<string, string> {
-  return { Authorization: `Bearer ${token}`, Accept: 'application/json' };
-}
-
-function toQueryString(args: Args): string {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(args)) {
-    if (value === null || value === undefined) continue;
-    parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
-  }
-  return parts.length > 0 ? `?${parts.join('&')}` : '';
-}
-
-async function callCloudflareApi(
-  fetchImpl: typeof fetch,
-  authHeaders: Readonly<Record<string, string>>,
-  route: Pick<Route, 'method' | 'payload'>,
-  path: string,
-  args: Args,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  let url = `${CLOUDFLARE_API_BASE}${path}`;
-  const headers: Record<string, string> = { ...authHeaders };
-  const init: RequestInit = { method: route.method, headers, ...(signal ? { signal } : {}) };
-
-  switch (route.payload) {
-    case 'query':
-      url += toQueryString(args);
-      break;
-    case 'json':
-      headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(args);
-      break;
-    case 'multipart': {
-      const form = new FormData();
-      form.append(
-        'file',
-        new Blob([String(args.file ?? '')], { type: 'application/octet-stream' }),
-        'records.txt',
-      );
-      init.body = form;
-      break;
-    }
-    case 'none':
-      break;
-  }
-
-  const res = await fetchImpl(url, { ...init, redirect: 'error' });
-  const text = await res.text();
-  if (!res.ok) {
-    const message = `Cloudflare API ${route.method} ${path} ${res.status}: ${text.slice(0, 500)}`;
-    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(message, res.status);
-    throw new UpstreamHttpError(message, res.status);
-  }
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
   }
 }

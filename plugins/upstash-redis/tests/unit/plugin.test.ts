@@ -17,6 +17,7 @@ import {
   type ExecuteContext,
   type PluginLogger,
   type Resource,
+  UpstreamProtocolError,
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
@@ -637,6 +638,32 @@ describe('discoverUpstashRedisResources with mockFetch', () => {
       total: MAX_DISCOVERED_DATABASES + 1,
       cap: MAX_DISCOVERED_DATABASES,
     });
+  });
+
+  test('an answer that is not a list is an upstream protocol failure, not an empty account', async () => {
+    const fetch = mockFetch([{ url: /\/redis\/databases$/, body: { databases: [] } }]);
+    const attempt = upstashRedisPlugin.discoverResources(ctx(fetch));
+    await expect(attempt).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(attempt).rejects.toThrow(
+      'Upstash Management API GET /redis/databases: unexpected answer',
+    );
+  });
+
+  test('a metadata value of another type than Upstash documents is left out', async () => {
+    const fetch = mockFetch([
+      {
+        url: /\/redis\/databases$/,
+        body: [{ database_id: 'db-1', database_name: 7, region: { r: 1 }, state: 'active' }],
+      },
+    ]);
+    expect(await upstashRedisPlugin.discoverResources(ctx(fetch))).toEqual([
+      {
+        provider: 'upstash-redis',
+        ref: 'db-1',
+        displayName: 'db-1',
+        metadata: { state: 'active' },
+      },
+    ]);
   });
 
   test('a rejected key surfaces as UpstreamAuthError', async () => {

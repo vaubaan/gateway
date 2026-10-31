@@ -18,14 +18,16 @@
 import {
   CredentialRefusal,
   UpstreamAuthError,
-  UpstreamHttpError,
+  isList,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
   type TokenPermission,
 } from '@vaubaan/plugin-sdk';
 
-import { API_TOKEN_FIELD, CLOUDFLARE_API_BASE, tokenOf } from './execute.ts';
+import { callCloudflareApi, envelopeOf, tokenOf, type Endpoint } from './cloudflare-api.ts';
+import { API_TOKEN_FIELD, TOOL } from './identity.ts';
 
 /** Where a person creates and deletes their user API tokens. */
 export const CLOUDFLARE_TOKENS_PAGE = 'https://dash.cloudflare.com/profile/api-tokens';
@@ -41,30 +43,30 @@ export const CLOUDFLARE_TOKEN_PERMISSIONS: readonly TokenPermission[] = [
   {
     name: 'Zone · Zone',
     access: 'read',
-    tools: ['cloudflare_dns__list_zones', 'cloudflare_dns__get_zone'],
+    tools: [TOOL.listZones, TOOL.getZone],
   },
-  { name: 'Zone · Zone', access: 'read-write', tools: ['cloudflare_dns__delete_zone'] },
+  { name: 'Zone · Zone', access: 'read-write', tools: [TOOL.deleteZone] },
   {
     name: 'Zone · DNS',
     access: 'read-write',
     tools: [
-      'cloudflare_dns__list_records',
-      'cloudflare_dns__get_record',
-      'cloudflare_dns__export_records',
-      'cloudflare_dns__get_dnssec',
-      'cloudflare_dns__create_record',
-      'cloudflare_dns__update_record',
-      'cloudflare_dns__delete_record',
-      'cloudflare_dns__import_records',
-      'cloudflare_dns__edit_dnssec',
+      TOOL.listRecords,
+      TOOL.getRecord,
+      TOOL.exportRecords,
+      TOOL.getDnssec,
+      TOOL.createRecord,
+      TOOL.updateRecord,
+      TOOL.deleteRecord,
+      TOOL.importRecords,
+      TOOL.editDnssec,
     ],
   },
   {
     name: 'Zone · Zone Settings',
     access: 'read-write',
-    tools: ['cloudflare_dns__get_zone_settings', 'cloudflare_dns__edit_zone_settings'],
+    tools: [TOOL.getZoneSettings, TOOL.editZoneSettings],
   },
-  { name: 'Zone · Cache Purge', access: 'read-write', tools: ['cloudflare_dns__purge_cache'] },
+  { name: 'Zone · Cache Purge', access: 'read-write', tools: [TOOL.purgeCache] },
 ];
 
 export const cloudflareDnsCredential: ApiKeyCredentialSpec = {
@@ -112,13 +114,13 @@ export const cloudflareDnsCredential: ApiKeyCredentialSpec = {
   verify: verifyCloudflareToken,
 };
 
-interface VerifyDto {
-  readonly result?: { readonly status?: unknown; readonly expires_on?: unknown };
-}
+/** `GET /user/tokens/verify` : `result` carries `status` and, with a TTL, `expires_on`. */
+const isVerifyAnswer = envelopeOf(isRecord);
 
-interface ZonesDto {
-  readonly result?: readonly { readonly account?: { readonly name?: unknown } }[];
-}
+/** The first page of zones : only `account.name` of each is read. */
+const isZonesAnswer = envelopeOf(isList);
+
+const GET: Endpoint = { method: 'GET', payload: 'query' };
 
 /**
  * The token's status and expiry (`GET /user/tokens/verify`), then the
@@ -126,32 +128,30 @@ interface ZonesDto {
  * no zone (none reached, or no zone read), is refused with what to change.
  */
 export async function verifyCloudflareToken(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const verified = (await cloudflareGet(ctx, '/user/tokens/verify')) as VerifyDto;
-  const status = verified.result?.status;
+  const token = tokenOf(ctx);
+  const verified = (
+    await callCloudflareApi(ctx, token, GET, '/user/tokens/verify', {}, isVerifyAnswer)
+  ).result;
+  const status = verified.status;
   if (status !== 'active') {
     throw new CredentialRefusal(
       `Cloudflare says this token is ${typeof status === 'string' ? status : 'not active'}: create a new one under My Profile, API Tokens.`,
     );
   }
-  const zones = (await listZones(ctx)).result ?? [];
+  const zones = await listZones(ctx, token);
   if (zones.length === 0) throw new CredentialRefusal(NO_ZONE);
-  const accounts = [
-    ...new Set(
-      zones
-        .map((zone) => zone.account?.name)
-        .filter((name): name is string => typeof name === 'string' && name !== ''),
-    ),
-  ];
-  return { account: namesShown(accounts), expiresAt: isoOrNull(verified.result?.expires_on) };
+  const accounts = [...new Set(zones.map(accountNameOf).filter((name) => name !== null))];
+  return { account: namesShown(accounts), expiresAt: isoOrNull(verified.expires_on) };
 }
 
 const NO_ZONE =
   'Cloudflare: this token lists no zone. Give it Zone · Zone · Read and, under Zone Resources, Include, All zones.';
 
 /** The first page of zones ; a token refused there lacks the zone read, which is said. */
-async function listZones(ctx: ConnectionContext): Promise<ZonesDto> {
+async function listZones(ctx: ConnectionContext, token: string): Promise<readonly unknown[]> {
   try {
-    return (await cloudflareGet(ctx, `/zones?page=1&per_page=${ZONES_SAMPLE}`)) as ZonesDto;
+    const args = { page: 1, per_page: ZONES_SAMPLE };
+    return (await callCloudflareApi(ctx, token, GET, '/zones', args, isZonesAnswer)).result;
   } catch (err) {
     if (err instanceof UpstreamAuthError && err.upstreamStatus === 403) {
       throw new CredentialRefusal(NO_ZONE, 403);
@@ -160,23 +160,11 @@ async function listZones(ctx: ConnectionContext): Promise<ZonesDto> {
   }
 }
 
-async function cloudflareGet(ctx: ConnectionContext, path: string): Promise<unknown> {
-  const res = await ctx.fetch(`${CLOUDFLARE_API_BASE}${path}`, {
-    method: 'GET',
-    redirect: 'error',
-    headers: { Authorization: `Bearer ${tokenOf(ctx)}`, Accept: 'application/json' },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new UpstreamAuthError(`Cloudflare rejected the token (HTTP ${res.status})`, res.status);
-  }
-  if (!res.ok) {
-    throw new UpstreamHttpError(
-      `Cloudflare GET ${path} failed with HTTP ${res.status}`,
-      res.status,
-    );
-  }
-  return res.json();
+/** The name of the account a listed zone belongs to, or `null`. */
+function accountNameOf(zone: unknown): string | null {
+  if (!isRecord(zone) || !isRecord(zone.account)) return null;
+  const name = zone.account.name;
+  return typeof name === 'string' && name !== '' ? name : null;
 }
 
 function namesShown(names: readonly string[]): string | null {

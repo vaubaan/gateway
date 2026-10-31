@@ -3,7 +3,7 @@ title: Google Calendar provider plugin
 tracks:
   - plugins/google-calendar/src/
   - plugins/google-calendar/package.json
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Google Calendar provider plugin — handbook
@@ -22,9 +22,8 @@ common to every plugin: [providers README](README.md).
   classify and execute.
 - [`src/classify.ts`](../../../plugins/google-calendar/src/classify.ts) — guest zoning, the
   notification marker.
-- [`src/execute.ts`](../../../plugins/google-calendar/src/execute.ts),
-  [`src/mcp.ts`](../../../plugins/google-calendar/src/mcp.ts) — one `tools/call` per call;
-  discovery and the drift check.
+- [`src/execute.ts`](../../../plugins/google-calendar/src/execute.ts) — one `tools/call` per call
+  through the SDK's MCP client (`GOOGLE_CALENDAR_MCP_SERVER`); discovery and the drift check.
 - [`src/upstream-tools.json`](../../../plugins/google-calendar/src/upstream-tools.json) — the
   modelled tool list.
 
@@ -50,7 +49,10 @@ common to every plugin: [providers README](README.md).
   without a token. Read from Google's "MCP Reference: calendarmcp.googleapis.com" via Context7
   (2026-10-27). Discovery compares the live `tools/list` and logs the drift.
 - `search_events` searches the primary calendar only, whatever `calendarId` says.
-- A session is initialized only if Google answers 400 or 404 to a bare request (not observed yet).
+- A session is initialized only if Google answers 400 or 404 to a bare request (not observed yet;
+  the SDK client's default session mode). A JSON-RPC error frame, or `list_calendars` answering
+  `isError` at discovery, is an `UpstreamProtocolError` (HTTP 502 for the host), never a plain
+  `Error`.
 - Google's deprecated `eventTypeFilter`, `attendeeEmails`, `addedAttendeeEmails` are not offered.
 
 ## Outside the repo

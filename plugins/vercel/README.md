@@ -10,19 +10,19 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
   (data model, tool → slice mapping, catalog, edge cases).
 - Upstream: ADR [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md).
 - Arguments and refusals: ADR [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
-- Plugin version 3.0.0, catalog version 2.
 
 ## Layout
 
-| File                    | Role                                                                                                                                                         |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                                                                       |
-| `src/risk-catalog.yaml` | 16 risks + fallback, five macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                               |
-| `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                          |
-| `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).                                                   |
-| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources; denies the five thread-addressed tools (`UNBOUND_TOOLS`).      |
-| `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                                                                   |
-| `src/execute.ts`        | Team and project pinning, deployment binding, JSON-RPC forward to the Vercel MCP server, REST for custom tools, `discoverResources` (paged project listing). |
+| File                    | Role                                                                                                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                                                                        |
+| `src/identity.ts`       | `PROVIDER_ID`, `TOOL` (the 31 tool names), the REST base and the MCP server: every name written once.                                                         |
+| `src/risk-catalog.yaml` | 16 risks + fallback, five macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                                |
+| `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                           |
+| `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).                                                    |
+| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources; denies the five thread-addressed tools (`UNBOUND_TOOLS`).       |
+| `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                                                                    |
+| `src/execute.ts`        | Team and project pinning, deployment binding, `tools/call` to the Vercel MCP server (SDK client), REST for custom tools, `discoverResources` (paged listing). |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
 (`VERCEL_CATALOG_PATH`), not with `new URL('./risk-catalog.yaml', import.meta.url)`:
@@ -48,7 +48,10 @@ The **project** (`prj_xxx`) is the resource a connection exposes and a mission
 selects. The **environment** is not a resource: it is the closed Vercel triad,
 emitted as the `env[<label>]` segment of the slice. It is read from `target`
 for `upsert_env_var` (an unreadable `target` is refused); `deploy_to_vercel`
-has no such argument upstream and is always classified on `prod`.
+has no such argument upstream and is always classified on `prod`. The
+deployment and env-var reads and the bypass-token mint name no environment
+and sit under `env[*]` (`get_runtime_logs` names the one its `environment`
+filter gives); no env-scoped risk matches them.
 
 A second identifier is never trusted. A tool addressed by a deployment id or
 URL is forwarded only after the deployment was resolved through the REST API
@@ -76,7 +79,9 @@ credential and the resolved project.
 
 What `execute` declines itself is an `isError` result carrying the reason;
 what Vercel fails is thrown (`UpstreamAuthError` on 401/403,
-`UpstreamHttpError` on another failed status).
+`UpstreamHttpError` on another failed status, `UpstreamProtocolError` for a
+JSON-RPC error frame or an answer that is not JSON or not of the expected
+shape). Vercel's own tool result is passed through, its `isError` included.
 
 ## Credential
 
@@ -156,7 +161,7 @@ npx vitest run plugins/vercel
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
 `assertNoWildcard`, `assertCatalogCoverage` with at
-least one sample per tool), the classifier conventions, the credential spec,
+least one sample per tool, `assertSlicesOnDataModel`, `catalogPathIssues`), the classifier conventions, the credential spec,
 and `execute` / `discoverResources` against `mockFetch` (including the request
 shapes of the custom REST tools). `classify.test.ts` pins the slices of each
 tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.
@@ -166,4 +171,4 @@ carries the credential's team and that no team id comes from the arguments;
 `identifier-injection.test.ts` feeds dot segments, separators and encoded
 forms to every identifier position of `classify` and `execute`;
 `firewall.test.ts` covers the five firewall tools (slices, risks, request
-shapes). 623 tests; none reaches the network.
+shapes). 653 tests; none reaches the network.

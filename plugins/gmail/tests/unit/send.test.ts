@@ -9,6 +9,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  jsonObjectsOf,
   type ExecuteContext,
   type McpToolResult,
   parseSlice,
@@ -76,7 +77,8 @@ async function run(
 ): Promise<McpToolResult> {
   return createGmailPlugin({ transport: imap, smtp, now: () => NOW }).execute(ctx(), tool, args);
 }
-const body = (r: McpToolResult) => r.structuredContent as Record<string, unknown>;
+/** The JSON a result's text carries : the answer, or a refusal's code and words. */
+const body = (r: McpToolResult) => jsonObjectsOf(r)[0] ?? {};
 
 /** The risk of the one slice a send emits. */
 function riskOf(tool: string, args: Record<string, unknown>): string[] {

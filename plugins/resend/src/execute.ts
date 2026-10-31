@@ -21,25 +21,36 @@
  *   - only the fields a tool declares are forwarded (`declaredFieldsOf`) : an
  *     argument the schema does not name was read by no classifier rule, so it
  *     is dropped before the call ;
- *   - 401 → `UpstreamAuthError` ; 403 → `UpstreamAuthError` unless Resend
- *     names a `validation_error` (an unverified `from` domain is a 403 too).
+ *   - every request goes through the SDK's `httpJson` : 401 →
+ *     `UpstreamAuthError` ; 403 → `UpstreamAuthError` unless Resend names a
+ *     `validation_error` (an unverified `from` domain is a 403 too) ; an
+ *     answer that is not JSON, or not the shape a guard below reads →
+ *     `UpstreamProtocolError`.
  */
 
 import {
   ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
+  UpstreamProtocolError,
+  anyJson,
   declining,
   expectCredentialKind,
+  httpJson,
+  isList,
+  isRecord,
+  jsonResult,
+  readShape,
   type ConnectionContext,
+  type Guard,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
 import { MALFORMED_CONTACT, MALFORMED_ID, classifyResend } from './classify.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import {
-  RESEND_PROVIDER,
   contactSelector,
   domainIdOf,
   domainRef,
@@ -65,6 +76,8 @@ export const MAX_DISCOVERED_PER_KIND = 500;
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Args = Readonly<Record<string, unknown>>;
 
+// ─── What Resend answers, read through guards ─────────────────────────────────
+
 interface ListPage<T> {
   readonly data?: readonly T[];
   readonly has_more?: boolean;
@@ -77,13 +90,54 @@ interface DomainDto {
 }
 interface SegmentDto {
   readonly id: string;
-  readonly name: string;
+  readonly name?: string;
 }
 interface BroadcastDto {
-  readonly id: string;
+  readonly id?: string;
   readonly segment_id?: string | null;
   readonly audience_id?: string | null;
 }
+
+const optional = (value: unknown, type: 'string' | 'boolean'): boolean =>
+  value === undefined || typeof value === type;
+const optionalOrNull = (value: unknown): boolean => value === null || optional(value, 'string');
+
+function isDomainDto(x: unknown): x is DomainDto {
+  return (
+    isRecord(x) &&
+    typeof x.id === 'string' &&
+    typeof x.name === 'string' &&
+    optional(x.status, 'string') &&
+    optional(x.region, 'string')
+  );
+}
+
+function isSegmentDto(x: unknown): x is SegmentDto {
+  return isRecord(x) && typeof x.id === 'string' && optional(x.name, 'string');
+}
+
+/** A broadcast as the segment guard reads it : its segment, under its current or its former name. */
+function isBroadcastDto(x: unknown): x is BroadcastDto {
+  return (
+    isRecord(x) &&
+    optional(x.id, 'string') &&
+    optionalOrNull(x.segment_id) &&
+    optionalOrNull(x.audience_id)
+  );
+}
+
+/** A listed broadcast : its id is the cursor of the next page. */
+function isListedBroadcast(x: unknown): x is BroadcastDto & { readonly id: string } {
+  return isBroadcastDto(x) && typeof x.id === 'string';
+}
+
+function isListPageOf<T>(item: Guard<T>): Guard<ListPage<T>> {
+  return (x: unknown): x is ListPage<T> =>
+    isRecord(x) &&
+    (x.data === undefined || (isList(x.data) && x.data.every(item))) &&
+    optional(x.has_more, 'boolean');
+}
+
 // ─── v5 entry points ──────────────────────────────────────────────────────────
 
 /**
@@ -103,74 +157,74 @@ export function executeResend(
         RESEND_TOOL_NAMES.has(tool) ? `resend: ${outcome.denied}` : outcome.denied,
       );
     }
-    return text(await dispatch(ctx, tool, args));
+    return jsonResult(await dispatch(ctx, tool, args));
   });
 }
 
 async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<unknown> {
   switch (tool) {
     // ─── Reads ────────────────────────────────────────────────────────────
-    case 'resend__get_email':
+    case TOOL.getEmail:
       return request(ctx, 'GET', `/emails/${idSegment(args.id)}`);
-    case 'resend__list_domains': {
+    case TOOL.listDomains: {
       const refs = new Set(domainResources(ctx.resources).map((r) => r.ref));
-      const all = await listAll<DomainDto>(ctx, '/domains');
+      const all = await listAll(ctx, '/domains', isDomainDto);
       return { data: all.filter((d) => refs.has(domainRef(d.name))) };
     }
-    case 'resend__get_domain':
+    case TOOL.getDomain:
       return request(ctx, 'GET', `/domains/${domainId(args.domain, ctx.resources)}`);
-    case 'resend__list_segments': {
+    case TOOL.listSegments: {
       const refs = new Set(segmentResources(ctx.resources).map((r) => r.ref));
-      const all = await listAll<SegmentDto>(ctx, '/segments');
+      const all = await listAll(ctx, '/segments', isSegmentDto);
       return { data: all.filter((s) => refs.has(s.id)) };
     }
-    case 'resend__get_segment':
+    case TOOL.getSegment:
       return request(ctx, 'GET', `/segments/${segmentRef(args.segment_id, ctx.resources)}`);
-    case 'resend__list_contacts': {
+    case TOOL.listContacts: {
       const query = forwarded(tool, args, ['segment_id']);
       if (args.segment_id !== undefined) {
         query.segment_id = segmentRef(args.segment_id, ctx.resources);
       }
       return request(ctx, 'GET', '/contacts', undefined, query);
     }
-    case 'resend__get_contact':
+    case TOOL.getContact:
       return request(ctx, 'GET', `/contacts/${contactSegment(args.id)}`);
-    case 'resend__list_broadcasts': {
+    case TOOL.listBroadcasts: {
       const refs = new Set(segmentResources(ctx.resources).map((r) => r.ref));
-      const all = await listAll<BroadcastDto>(ctx, '/broadcasts');
+      const all = await listAll(ctx, '/broadcasts', isListedBroadcast);
       return { data: all.filter((b) => refs.has(segmentOf(b) ?? '')) };
     }
-    case 'resend__get_broadcast':
+    case TOOL.getBroadcast:
       return broadcastInSegment(ctx, args);
 
     // ─── Writes — sends ───────────────────────────────────────────────────
-    case 'resend__send_email':
+    case TOOL.sendEmail:
       return request(ctx, 'POST', '/emails', forwarded(tool, args));
-    case 'resend__send_batch_emails':
+    case TOOL.sendBatchEmails:
       // The batch endpoint takes the bare array as its body.
       return request(ctx, 'POST', '/emails/batch', batchBody(args.emails));
 
     // ─── Writes — domains ─────────────────────────────────────────────────
-    case 'resend__create_domain':
+    case TOOL.createDomain:
       return request(ctx, 'POST', '/domains', forwarded(tool, args));
-    case 'resend__update_domain':
+    case TOOL.updateDomain:
       return request(
         ctx,
         'PATCH',
         `/domains/${domainId(args.domain, ctx.resources)}`,
         forwarded(tool, args, ['domain']),
       );
-    case 'resend__delete_domain':
+    case TOOL.deleteDomain:
       return request(ctx, 'DELETE', `/domains/${domainId(args.domain, ctx.resources)}`);
-    case 'resend__verify_domain':
+    case TOOL.verifyDomain:
       return request(ctx, 'POST', `/domains/${domainId(args.domain, ctx.resources)}/verify`);
 
     // ─── Writes — segments and members ────────────────────────────────────
-    case 'resend__create_segment':
+    case TOOL.createSegment:
       return request(ctx, 'POST', '/segments', { name: args.name });
-    case 'resend__delete_segment':
+    case TOOL.deleteSegment:
       return request(ctx, 'DELETE', `/segments/${segmentRef(args.segment_id, ctx.resources)}`);
-    case 'resend__create_contact': {
+    case TOOL.createContact: {
       const body = forwarded(tool, args, ['segment_id']);
       const created = await request(ctx, 'POST', '/contacts', body);
       if (args.segment_id === undefined) return created;
@@ -178,29 +232,30 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       // The id comes from the provider's answer : it is not trusted to be a path segment.
       const contact = isRecord(created) ? pathIdent(created.id) : null;
       if (!isRecord(created) || contact === null) {
-        throw new Error(
+        // Resend answered a creation without the id its API promises : its failure.
+        throw new UpstreamProtocolError(
           `resend: the contact was created but Resend returned no id — it was not added to segment '${seg}'`,
         );
       }
       const membership = await request(ctx, 'POST', `/contacts/${contact}/segments/${seg}`);
       return { ...created, segment: membership };
     }
-    case 'resend__update_contact':
+    case TOOL.updateContact:
       return request(
         ctx,
         'PATCH',
         `/contacts/${contactSegment(args.id)}`,
         forwarded(tool, args, ['id']),
       );
-    case 'resend__delete_contact':
+    case TOOL.deleteContact:
       return request(ctx, 'DELETE', `/contacts/${contactSegment(args.id)}`);
-    case 'resend__add_contact_to_segment':
+    case TOOL.addContactToSegment:
       return request(
         ctx,
         'POST',
         `/contacts/${contactSegment(args.id)}/segments/${segmentRef(args.segment_id, ctx.resources)}`,
       );
-    case 'resend__remove_contact_from_segment':
+    case TOOL.removeContactFromSegment:
       return request(
         ctx,
         'DELETE',
@@ -208,12 +263,12 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       );
 
     // ─── Writes — broadcasts ──────────────────────────────────────────────
-    case 'resend__create_broadcast':
+    case TOOL.createBroadcast:
       return request(ctx, 'POST', '/broadcasts', {
         ...forwarded(tool, args, ['segment_id']),
         segment_id: segmentRef(args.segment_id, ctx.resources),
       });
-    case 'resend__update_broadcast':
+    case TOOL.updateBroadcast:
       await broadcastInSegment(ctx, args);
       return request(
         ctx,
@@ -221,15 +276,15 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
         `/broadcasts/${idSegment(args.id)}`,
         forwarded(tool, args, ['segment_id', 'id']),
       );
-    case 'resend__send_broadcast':
+    case TOOL.sendBroadcast:
       await broadcastInSegment(ctx, args);
       return request(ctx, 'POST', `/broadcasts/${idSegment(args.id)}/send`, {});
-    case 'resend__delete_broadcast':
+    case TOOL.deleteBroadcast:
       await broadcastInSegment(ctx, args);
       return request(ctx, 'DELETE', `/broadcasts/${idSegment(args.id)}`);
 
     // ─── Synthetic ────────────────────────────────────────────────────────
-    case 'resend__describe_zones':
+    case TOOL.describeZones:
       return {
         domains: domainResources(ctx.resources).map((r) => ({
           domain: r.ref,
@@ -240,7 +295,7 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
 
     default:
       // Unreachable : the classifier refused unknown tools above.
-      throw new Error(`resend: tool not implemented: ${tool}`);
+      throw new ExecutorRefusal(`resend: tool not implemented: ${tool}`);
   }
 }
 
@@ -253,12 +308,12 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
 export async function discoverResendResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  expectCredentialKind(RESEND_PROVIDER, ctx.credential, 'api-key');
-  const domains = await listAll<DomainDto>(ctx, '/domains');
-  const segments = await listAll<SegmentDto>(ctx, '/segments');
+  expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const domains = await listAll(ctx, '/domains', isDomainDto);
+  const segments = await listAll(ctx, '/segments', isSegmentDto);
   return [
     ...domains.map((d): Resource => ({
-      provider: RESEND_PROVIDER,
+      provider: PROVIDER_ID,
       ref: domainRef(d.name),
       displayName: d.status === 'verified' || !d.status ? d.name : `${d.name} (${d.status})`,
       metadata: {
@@ -272,19 +327,16 @@ export async function discoverResendResources(
       },
     })),
     ...segments.map((s): Resource => ({
-      provider: RESEND_PROVIDER,
+      provider: PROVIDER_ID,
       ref: s.id,
-      displayName: s.name,
+      // A segment Resend lists without a name is shown by its id.
+      displayName: s.name ?? s.id,
       metadata: { kind: 'segment', segment_id: s.id },
     })),
   ];
 }
 
 // ─── Forwarded fields ────────────────────────────────────────────────────────
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /** The listed keys the source really carries ; nothing else leaves the plugin. */
 function pick(source: Args, keys: readonly string[]): Record<string, unknown> {
@@ -357,11 +409,12 @@ function segmentOf(broadcast: BroadcastDto): string | null {
 /** Read the broadcast and refuse it unless it targets the segment the call names. */
 async function broadcastInSegment(ctx: ExecuteContext, args: Args): Promise<BroadcastDto> {
   const seg = segmentRef(args.segment_id, ctx.resources);
-  const broadcast = (await request(
-    ctx,
-    'GET',
-    `/broadcasts/${idSegment(args.id)}`,
-  )) as BroadcastDto;
+  const path = `/broadcasts/${idSegment(args.id)}`;
+  const broadcast = readShape(
+    await request(ctx, 'GET', path),
+    isBroadcastDto,
+    `GET ${path}: a broadcast`,
+  );
   const actual = segmentOf(broadcast);
   if (actual !== seg) {
     throw new ExecutorRefusal(
@@ -384,14 +437,17 @@ export function fromDomainOf(from: unknown, resources: readonly Resource[]): Res
 async function listAll<T extends { readonly id: string }>(
   ctx: ConnectionContext,
   path: string,
+  item: Guard<T>,
 ): Promise<T[]> {
+  const isPage = isListPageOf(item);
   const out: T[] = [];
   let after: string | undefined;
   while (out.length < MAX_DISCOVERED_PER_KIND) {
-    const page = (await request(ctx, 'GET', path, undefined, {
+    const answer = await request(ctx, 'GET', path, undefined, {
       limit: DISCOVERY_PAGE_SIZE,
       ...(after ? { after } : {}),
-    })) as ListPage<T>;
+    });
+    const page = readShape(answer, isPage, `GET ${path}: a page of { data: [{ id, … }] }`);
     const data = page.data ?? [];
     out.push(...data);
     const last = data[data.length - 1];
@@ -410,6 +466,29 @@ function toQueryString(query: Args): string {
   return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
 
+/** The `authorization` header of a Resend connection. */
+export function authorizationOf(ctx: ConnectionContext): Readonly<Record<string, string>> {
+  const key = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key').fields.api_key;
+  if (!key) throw new Error('resend: the credential carries no api_key');
+  return { authorization: `Bearer ${key}` };
+}
+
+/**
+ * The `name` of Resend's error document (`{ statusCode, name, message }`),
+ * read from the answer the failure quotes, or `null`. The SDK quotes the
+ * first 300 characters : Resend's error documents are shorter.
+ */
+export function resendErrorName(failure: Error): string | null {
+  return /"name"\s*:\s*"([a-z_]+)"/i.exec(failure.message)?.[1] ?? null;
+}
+
+/** Resend's name of a request it refuses as invalid, whatever its status. */
+const VALIDATION_ERROR = 'validation_error';
+
+/**
+ * One request to the Resend API. An answer without content is `{}` : the
+ * agent reads a confirmation.
+ */
 async function request(
   ctx: ConnectionContext,
   method: HttpMethod,
@@ -417,47 +496,29 @@ async function request(
   body?: unknown,
   query?: Args,
 ): Promise<unknown> {
-  const secret = expectCredentialKind(RESEND_PROVIDER, ctx.credential, 'api-key');
-  const key = secret.fields.api_key;
-  if (!key) throw new Error('resend: the credential carries no api_key');
-
   const url = `${RESEND_API_BASE}${path}${query ? toQueryString(query) : ''}`;
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${key}`,
-    Accept: 'application/json',
-  };
-  const init: RequestInit = { method, headers, ...(ctx.signal ? { signal: ctx.signal } : {}) };
-  if (body !== undefined && method !== 'GET') {
-    headers['Content-Type'] = 'application/json';
-    init.body = JSON.stringify(body);
-  }
-
-  const res = await ctx.fetch(url, { ...init, redirect: 'error' });
-  const raw = await res.text();
-  if (!res.ok) {
-    const message = `Resend API ${method} ${path} ${res.status}: ${raw.slice(0, 500)}`;
-    if (res.status === 401 || (res.status === 403 && errorNameOf(raw) !== 'validation_error')) {
-      throw new UpstreamAuthError(message, res.status);
+  try {
+    const answer = await httpJson(
+      ctx,
+      {
+        url,
+        method,
+        headers: authorizationOf(ctx),
+        what: `Resend API ${method} ${path}`,
+        ...(body !== undefined && method !== 'GET' ? { body } : {}),
+      },
+      anyJson,
+    );
+    return answer ?? {};
+  } catch (error) {
+    // An unverified `from` domain is answered 403 too : the request's fault, not the key's.
+    if (
+      error instanceof UpstreamAuthError &&
+      error.upstreamStatus === 403 &&
+      resendErrorName(error) === VALIDATION_ERROR
+    ) {
+      throw new UpstreamHttpError(error.message, error.upstreamStatus);
     }
-    throw new UpstreamHttpError(message, res.status);
+    throw error;
   }
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return raw;
-  }
-}
-
-function errorNameOf(raw: string): string | null {
-  try {
-    const parsed = JSON.parse(raw) as { name?: unknown };
-    return typeof parsed.name === 'string' ? parsed.name : null;
-  } catch {
-    return null;
-  }
-}
-
-function text(payload: unknown): McpToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
 }

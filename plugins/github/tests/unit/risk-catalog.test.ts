@@ -74,6 +74,15 @@ const BRANCH_AND_FILE_WRITES: readonly Row[] = [
   ['create_branch', 'feat/*', { ...repo, branch: 'feat/x' }, ['feature-branch-write']],
   ['create_branch', 'release-*', { ...repo, branch: 'release-2026' }, ['merge-protected']],
   ['create_branch', 'unconventional name', { ...repo, branch: 'wip-x' }, [FALLBACK]],
+  // A name the slice grammar cannot carry is "any" (`branch[*]`), whatever its
+  // prefix : it touches what any branch may, the working AND the protected
+  // branches' risk. Repaired (`feature/-`, `release--`), it touched one of them.
+  ...['feature/ü', 'feature/a+b', 'release-ü'].map((branch): Row => [
+    'create_branch',
+    `${branch}, outside the slice grammar`,
+    { ...repo, branch },
+    ['feature-branch-write', 'merge-protected'],
+  ]),
 
   ['create_or_update_file', 'feature/*', file('feature/x'), ['feature-branch-write']],
   ['create_or_update_file', 'feat/*', file('feat/x'), ['feature-branch-write']],
@@ -99,6 +108,13 @@ const BRANCH_AND_FILE_WRITES: readonly Row[] = [
     ['feature-branch-write'],
   ],
   ['create_or_update_file', 'unconventional branch', file('wip-x'), [FALLBACK]],
+  // A path the slice grammar cannot carry is "any" (`file[*]`) : the branch decides.
+  [
+    'create_or_update_file',
+    'a path with a space on feature/*',
+    file('feature/x', 'docs/my notes.md'),
+    ['feature-branch-write'],
+  ],
   [
     'create_or_update_file',
     'workflow on an unconventional branch',

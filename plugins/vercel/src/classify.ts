@@ -22,6 +22,12 @@
  *     `env[<label>]` segment. It is read from `target` only where the
  *     provider receives that argument (`upsert_env_var`) ; `deploy_to_vercel`
  *     has no such argument upstream and is always classified on `prod` ;
+ *   - a deployment and an env var sit under their environment in the data
+ *     model (`project[p].env[e].deployment[d]`, `….env[e].env-var[k]`). The
+ *     reads and the bypass-token mint name none (`env[*]`), except
+ *     `get_runtime_logs` when its `environment` filter does : no env-scoped
+ *     risk matches those slices, so the `NO_SINGLE_ENV` of `env[*]` changes
+ *     no decision ;
  *   - an identifier that reaches a request path (project, env var id,
  *     domain, deployment) is read by one grammar per kind — `pathIdent`,
  *     `domainName`, `readDeploymentTargets` — which `execute` calls too : a
@@ -45,6 +51,7 @@
  */
 
 import {
+  ANY_IDENT,
   NO_SINGLE_ENV,
   declaredArgumentsOf,
   undeclaredArgumentDenial,
@@ -54,9 +61,8 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { isCustomTool, toolDeclaresProperty, toolRequiresProperty, vercelTools } from './tools.ts';
-
-export const PROVIDER = 'vercel';
 
 /** Vaubaan env labels of a Vercel project. The closed Vercel triad. */
 export const VERCEL_ENVS = ['prod', 'preview', 'development'] as const;
@@ -209,11 +215,12 @@ export function toVercelEnv(target: unknown): VercelEnv | null {
  * one label of the triad (`env[*]`, `env[prod,preview]`, `env[staging]`) :
  * such a slice reaches several environments, or one the provider does not
  * have. No env-scoped risk can be priced on it, and the owner's label must
- * not stand in — the host refuses. This classifier emits no such slice ; the
- * rule is what keeps a future one from failing open.
+ * not stand in — the host refuses. This classifier emits `env[*]` only on
+ * slices no env-scoped risk matches (the deployment and env-var reads, the
+ * bypass-token mint) ; elsewhere the rule keeps a future slice from failing open.
  */
 export function vercelEnvOf(slice: Slice): VercelEnv | null | typeof NO_SINGLE_ENV {
-  if (slice.provider !== PROVIDER) return null;
+  if (slice.provider !== PROVIDER_ID) return null;
   for (let i = 0; i < slice.path.length - 1; i++) {
     const seg = slice.path[i]!;
     if (seg.kind !== 'name' || seg.value !== 'env') continue;
@@ -223,6 +230,26 @@ export function vercelEnvOf(slice: Slice): VercelEnv | null | typeof NO_SINGLE_E
     return env ?? NO_SINGLE_ENV;
   }
   return null;
+}
+
+/** The `environment` literals `get_runtime_logs` accepts upstream, mapped to env labels. */
+const RUNTIME_LOG_ENVS: Readonly<Record<string, VercelEnv>> = {
+  production: 'prod',
+  preview: 'preview',
+};
+
+/**
+ * The `env` segment of a `get_runtime_logs` call : the environment its
+ * `environment` filter names, `[*]` when it names none (absent, or a value
+ * the upstream schema refuses — forwarded as given, so not denied here).
+ * Audit precision only : no env-scoped risk matches a read.
+ */
+function runtimeLogEnv(environment: unknown): SliceSegment {
+  const env =
+    typeof environment === 'string' && Object.hasOwn(RUNTIME_LOG_ENVS, environment)
+      ? RUNTIME_LOG_ENVS[environment]
+      : undefined;
+  return env === undefined ? ANY_IDENT : ident(env);
 }
 
 /** The `target` literals the Vercel API accepts, mapped to env labels. `execute`
@@ -255,7 +282,7 @@ function envsForUpsert(target: unknown): VercelEnv[] | null {
 }
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: PROVIDER, path: segments, action };
+  return { provider: PROVIDER_ID, path: segments, action };
 }
 
 function name(value: string): SliceSegment {
@@ -266,42 +293,38 @@ function ident(value: string): SliceSegment {
   return { kind: 'ident', value };
 }
 
-/** Concrete placeholder for an unknown identifier : the matcher treats
- *  `ident('*')` on the concrete side as "any specific identifier". */
-const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
-
 /** Tools that need no project : account-rooted reads. */
-const ACCOUNT_TOOLS = new Set([
-  'vercel__search_vercel_documentation',
-  'vercel__list_teams',
-  'vercel__list_projects',
-  'vercel__check_domain_availability_and_price',
+const ACCOUNT_TOOLS: ReadonlySet<string> = new Set([
+  TOOL.searchVercelDocumentation,
+  TOOL.listTeams,
+  TOOL.listProjects,
+  TOOL.checkDomainAvailabilityAndPrice,
 ]);
 
 /** Every tool the classifier knows, project-rooted ones included. */
-const PROJECT_TOOLS = new Set([
-  'vercel__get_project',
-  'vercel__list_project_domains',
-  'vercel__list_deployments',
-  'vercel__get_deployment',
-  'vercel__get_deployment_build_logs',
-  'vercel__get_runtime_logs',
-  'vercel__web_fetch_vercel_url',
-  'vercel__list_toolbar_threads',
-  'vercel__list_env_vars',
-  'vercel__deploy_to_vercel',
-  'vercel__get_access_to_vercel_url',
-  'vercel__upsert_env_var',
-  'vercel__delete_env_var',
-  'vercel__update_project_settings',
-  'vercel__add_project_domain',
-  'vercel__verify_project_domain',
-  'vercel__remove_project_domain',
-  'vercel__get_firewall_config',
-  'vercel__toggle_firewall',
-  'vercel__upsert_firewall_rule',
-  'vercel__remove_firewall_rule',
-  'vercel__manage_ip_blocking',
+const PROJECT_TOOLS: ReadonlySet<string> = new Set([
+  TOOL.getProject,
+  TOOL.listProjectDomains,
+  TOOL.listDeployments,
+  TOOL.getDeployment,
+  TOOL.getDeploymentBuildLogs,
+  TOOL.getRuntimeLogs,
+  TOOL.webFetchVercelUrl,
+  TOOL.listToolbarThreads,
+  TOOL.listEnvVars,
+  TOOL.deployToVercel,
+  TOOL.getAccessToVercelUrl,
+  TOOL.upsertEnvVar,
+  TOOL.deleteEnvVar,
+  TOOL.updateProjectSettings,
+  TOOL.addProjectDomain,
+  TOOL.verifyProjectDomain,
+  TOOL.removeProjectDomain,
+  TOOL.getFirewallConfig,
+  TOOL.toggleFirewall,
+  TOOL.upsertFirewallRule,
+  TOOL.removeFirewallRule,
+  TOOL.manageIpBlocking,
 ]);
 
 /**
@@ -311,11 +334,11 @@ const PROJECT_TOOLS = new Set([
  * of the team. `list_toolbar_threads` takes `projectId` and stays available.
  */
 export const UNBOUND_TOOLS: ReadonlySet<string> = new Set([
-  'vercel__get_toolbar_thread',
-  'vercel__change_toolbar_thread_resolve_status',
-  'vercel__reply_to_toolbar_thread',
-  'vercel__edit_toolbar_message',
-  'vercel__add_toolbar_reaction',
+  TOOL.getToolbarThread,
+  TOOL.changeToolbarThreadResolveStatus,
+  TOOL.replyToToolbarThread,
+  TOOL.editToolbarMessage,
+  TOOL.addToolbarReaction,
 ]);
 
 /** The refusal an agent reads for a tool of `UNBOUND_TOOLS`. */
@@ -323,7 +346,7 @@ export function unboundToolDenial(tool: string): string {
   return (
     `${tool}: a toolbar thread cannot be bound to a project of this mission ` +
     `(the tool takes a thread id and no project) — the tool is refused. ` +
-    `Use vercel__list_toolbar_threads to read the threads of a mission project.`
+    `Use ${TOOL.listToolbarThreads} to read the threads of a mission project.`
   );
 }
 
@@ -347,7 +370,7 @@ export function resolveProject(
   resources: readonly Resource[],
   required: boolean,
 ): { ref: string | null } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER);
+  const own = resources.filter((r) => r.provider === PROVIDER_ID);
   if (args.projectId !== undefined) {
     const explicit = pathIdent(args.projectId);
     if (explicit === null) return { denied: 'projectId: malformed project ref' };
@@ -427,88 +450,73 @@ function classifyDeclaredArguments(
   const deployments = readDeploymentTargets(tool, args);
   if ('denied' in deployments) return deployments;
   const deploymentSeg = deploymentSegment(deployments.targets);
+  /** `project[p].env[<env>].deployment` : a deployment sits under its environment. */
+  const deploymentIn = (env: SliceSegment): SliceSegment[] => [
+    name('project'),
+    projectSeg,
+    name('env'),
+    env,
+    name('deployment'),
+  ];
 
   switch (tool) {
     // ─── Reads — account-level ────────────────────────────────────────
 
-    case 'vercel__search_vercel_documentation':
+    case TOOL.searchVercelDocumentation:
       return { slices: [slice('R', [name('account'), name('docs')])] };
 
-    case 'vercel__list_teams':
+    case TOOL.listTeams:
       return { slices: [slice('R', [name('account'), name('team'), ANY_IDENT])] };
 
-    case 'vercel__list_projects':
+    case TOOL.listProjects:
       return { slices: [slice('R', [name('account'), name('project'), ANY_IDENT])] };
 
-    case 'vercel__check_domain_availability_and_price':
+    case TOOL.checkDomainAvailabilityAndPrice:
       return { slices: [slice('R', [name('account'), name('domain-registrar')])] };
 
     // ─── Reads — project-rooted metadata ──────────────────────────────
 
-    case 'vercel__get_project':
+    case TOOL.getProject:
       return { slices: [slice('R', [name('project'), projectSeg, name('project-settings')])] };
 
-    case 'vercel__list_project_domains':
+    case TOOL.listProjectDomains:
       return { slices: [slice('R', [name('project'), projectSeg, name('domain'), ANY_IDENT])] };
 
-    // ─── Reads — deployment-rooted ────────────────────────────────────
+    // ─── Reads — under an environment the call does not name (`env[*]`) ─
 
-    case 'vercel__list_deployments':
+    case TOOL.listDeployments:
+      return { slices: [slice('R', [...deploymentIn(ANY_IDENT), ANY_IDENT])] };
+
+    case TOOL.getDeployment:
+      return { slices: [slice('R', [...deploymentIn(ANY_IDENT), deploymentSeg])] };
+
+    case TOOL.getDeploymentBuildLogs:
       return {
-        slices: [slice('R', [name('project'), projectSeg, name('deployment'), ANY_IDENT])],
+        slices: [slice('R', [...deploymentIn(ANY_IDENT), deploymentSeg, name('build-log')])],
       };
 
-    case 'vercel__get_deployment':
-      return {
-        slices: [slice('R', [name('project'), projectSeg, name('deployment'), deploymentSeg])],
-      };
-
-    case 'vercel__get_deployment_build_logs':
+    // The one read that names its environment : `environment` filters the logs.
+    case TOOL.getRuntimeLogs:
       return {
         slices: [
           slice('R', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentSeg,
-            name('build-log'),
-          ]),
-        ],
-      };
-
-    case 'vercel__get_runtime_logs':
-      return {
-        slices: [
-          slice('R', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
+            ...deploymentIn(runtimeLogEnv(args.environment)),
             deploymentSeg,
             name('runtime-log'),
           ]),
         ],
       };
 
-    case 'vercel__web_fetch_vercel_url':
+    case TOOL.webFetchVercelUrl:
       return {
-        slices: [
-          slice('R', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentSeg,
-            name('fetch'),
-          ]),
-        ],
+        slices: [slice('R', [...deploymentIn(ANY_IDENT), deploymentSeg, name('fetch')])],
       };
 
-    case 'vercel__list_toolbar_threads':
+    case TOOL.listToolbarThreads:
       return {
         slices: [
           slice('R', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
+            ...deploymentIn(ANY_IDENT),
             deploymentSeg,
             name('toolbar-thread'),
             ANY_IDENT,
@@ -516,23 +524,12 @@ function classifyDeclaredArguments(
         ],
       };
 
-    // ─── Reads — env-var (plaintext discriminated) ────────────────────
-
-    case 'vercel__list_env_vars': {
-      const baseRead = slice('R', [name('project'), projectSeg, name('env-var'), ANY_IDENT]);
+    // Plaintext discriminated : `decrypt=true` adds its own slice.
+    case TOOL.listEnvVars: {
+      const envVars = [name('project'), projectSeg, name('env'), ANY_IDENT, name('env-var')];
+      const baseRead = slice('R', [...envVars, ANY_IDENT]);
       if (args.decrypt === true) {
-        return {
-          slices: [
-            baseRead,
-            slice('R', [
-              name('project'),
-              projectSeg,
-              name('env-var'),
-              ANY_IDENT,
-              name('plaintext'),
-            ]),
-          ],
-        };
+        return { slices: [baseRead, slice('R', [...envVars, ANY_IDENT, name('plaintext')])] };
       }
       return { slices: [baseRead] };
     }
@@ -541,7 +538,7 @@ function classifyDeclaredArguments(
 
     // The upstream tool declares no argument : a `target` would be read here
     // and ignored there, letting the caller pick the cheaper risk. Always prod.
-    case 'vercel__deploy_to_vercel':
+    case TOOL.deployToVercel:
       return {
         slices: [
           slice('W', [name('project'), projectSeg, name('env'), ident('prod'), name('deployment')]),
@@ -549,22 +546,14 @@ function classifyDeclaredArguments(
       };
 
     // A credential mint, not a deployment read, even though the API is a GET.
-    case 'vercel__get_access_to_vercel_url':
+    case TOOL.getAccessToVercelUrl:
       return {
-        slices: [
-          slice('W', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentSeg,
-            name('bypass-token'),
-          ]),
-        ],
+        slices: [slice('W', [...deploymentIn(ANY_IDENT), deploymentSeg, name('bypass-token')])],
       };
 
     // ─── Writes — env-var (fan-out + delete-all-envs) ─────────────────
 
-    case 'vercel__upsert_env_var': {
+    case TOOL.upsertEnvVar: {
       const envs = envsForUpsert(args.target);
       if (envs === null) return { denied: UPSERT_TARGET_DENIAL };
       const key = safeIdent(args.key);
@@ -577,7 +566,7 @@ function classifyDeclaredArguments(
       return { slices };
     }
 
-    case 'vercel__delete_env_var': {
+    case TOOL.deleteEnvVar: {
       // The upstream API removes the var from EVERY env it lives in — the
       // `target` arg is only a hint. Emit slices on all 3 envs so the right
       // risks are touched regardless of the hint, plus the fan-out marker.
@@ -599,13 +588,13 @@ function classifyDeclaredArguments(
 
     // ─── Writes — project settings ───────────────────────────────────
 
-    case 'vercel__update_project_settings':
+    case TOOL.updateProjectSettings:
       return { slices: [slice('W', [name('project'), projectSeg, name('project-settings')])] };
 
     // ─── Writes — domains ────────────────────────────────────────────
 
     // Domains contain `.`, which the slice DSL refuses : FQDNs fall back to `[*]`.
-    case 'vercel__add_project_domain': {
+    case TOOL.addProjectDomain: {
       const domain = domainName(args.name);
       if (domain === null) return { denied: MALFORMED_DOMAIN_NAME };
       return {
@@ -614,8 +603,8 @@ function classifyDeclaredArguments(
     }
 
     // The domain is a path segment of the request : `execute` reads it with `domainName` too.
-    case 'vercel__verify_project_domain':
-    case 'vercel__remove_project_domain': {
+    case TOOL.verifyProjectDomain:
+    case TOOL.removeProjectDomain: {
       const domain = domainName(args.domain);
       if (domain === null) return { denied: MALFORMED_DOMAIN };
       return {
@@ -625,16 +614,16 @@ function classifyDeclaredArguments(
 
     // ─── Reads — firewall ────────────────────────────────────────────
 
-    case 'vercel__get_firewall_config':
+    case TOOL.getFirewallConfig:
       return { slices: [slice('R', [name('project'), projectSeg, name('firewall')])] };
 
     // ─── Writes — firewall ───────────────────────────────────────────
 
-    case 'vercel__toggle_firewall':
+    case TOOL.toggleFirewall:
       return { slices: [slice('W', [name('project'), projectSeg, name('firewall')])] };
 
-    case 'vercel__upsert_firewall_rule':
-    case 'vercel__remove_firewall_rule':
+    case TOOL.upsertFirewallRule:
+    case TOOL.removeFirewallRule:
       return {
         slices: [
           slice('W', [
@@ -648,7 +637,7 @@ function classifyDeclaredArguments(
       };
 
     // `id` names the rule of a `remove` only : `execute` does not send it on an `insert`.
-    case 'vercel__manage_ip_blocking':
+    case TOOL.manageIpBlocking:
       return {
         slices: [
           slice('W', [

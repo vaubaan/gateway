@@ -22,13 +22,17 @@
  * (`createGmailRuntime({ transport, smtp })`) so tests never open a socket.
  */
 
-import type {
-  ApiKeyCredentialSpec,
-  ConnectionContext,
-  CredentialCheck,
-  ExecuteContext,
-  McpToolResult,
-  Resource,
+import {
+  declining,
+  ExecutorRefusal,
+  refusalResult,
+  textResult,
+  type ApiKeyCredentialSpec,
+  type ConnectionContext,
+  type CredentialCheck,
+  type ExecuteContext,
+  type McpToolResult,
+  type Resource,
 } from '@vaubaan/plugin-sdk';
 
 import { collectRecipients, parseBareAddress, type EmailAddress } from './address.ts';
@@ -42,12 +46,7 @@ import {
   SYSTEM_LABEL_IDS,
   writableLabel,
 } from './classify.ts';
-import {
-  GMAIL_PLUGIN_ID,
-  gmailAccount,
-  gmailCredentialFields,
-  type GmailAccount,
-} from './credential.ts';
+import { gmailAccount, gmailCredentialFields, type GmailAccount } from './credential.ts';
 import { buildDraft, draftProblem, hasControlCharacter, withoutBccHeader } from './draft.ts';
 import { htmlToText, MAX_HTML_BYTES } from './html.ts';
 import {
@@ -57,6 +56,7 @@ import {
   type SmtpMail,
   type SmtpReceipt,
 } from './smtp.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 import {
   imapflowTransport,
@@ -69,8 +69,6 @@ import {
   type ImapMessage,
   type ImapStore,
 } from './transport.ts';
-
-export { GMAIL_PLUGIN_ID };
 
 // ─── Bounds ────────────────────────────────────────────────────────────────
 
@@ -153,28 +151,32 @@ export function userLabels(mailboxes: readonly ImapMailbox[]): string[] {
 
 // ─── Results ───────────────────────────────────────────────────────────────
 
-function ok(payload: Record<string, unknown>): McpToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(payload) }], structuredContent: payload };
+/**
+ * What a tool answers : the payload as JSON text, and as its machine-readable
+ * twin (`structuredContent`), which the host forwards to the agent's client
+ * as it is. The SDK's `jsonResult` has no twin.
+ */
+function structuredResult(payload: Record<string, unknown>): McpToolResult {
+  return { ...textResult(JSON.stringify(payload)), structuredContent: payload };
 }
 
-function fail(code: string, message: string): McpToolResult {
-  const payload = { error: code, message: `gmail: ${message}` };
-  return {
-    content: [{ type: 'text', text: JSON.stringify(payload) }],
-    structuredContent: payload,
-    isError: true,
-  };
+/**
+ * The text of a declined call : the plugin's code and its words, as JSON
+ * (`{"error":"not_found","message":"gmail: …"}`). Agents and the handbook's
+ * Debug section read the code.
+ */
+function refusalText(code: string, message: string): string {
+  return JSON.stringify({ error: code, message: `gmail: ${message}` });
 }
 
-/** A refusal decided inside a session : it ends the session and becomes a tool error. */
-class GmailToolError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'GmailToolError';
-  }
+/** A declined call, as the result `execute` returns. */
+function refused(code: string, message: string): McpToolResult {
+  return refusalResult(refusalText(code, message));
+}
+
+/** A call declined inside a session : thrown, it ends the session ; `declining` returns it. */
+function refusal(code: string, message: string): ExecutorRefusal {
+  return new ExecutorRefusal(refusalText(code, message));
 }
 
 const formatAddress = (a: ImapAddress): string | null =>
@@ -224,7 +226,7 @@ function messageView(m: ImapMessage, withText: boolean, withBcc = false): Record
 async function folder(session: GmailImapSession, specialUse: '\\All' | '\\Drafts') {
   const found = (await session.mailboxes()).find((m) => m.specialUse === specialUse);
   if (!found) {
-    throw new GmailToolError(
+    throw refusal(
       'folder_not_found',
       `the mailbox has no ${specialUse} folder over IMAP; in Gmail's settings, under Labels, "Show in IMAP" must be on for ${specialUse === '\\All' ? 'All Mail' : 'Drafts'}.`,
     );
@@ -253,13 +255,13 @@ const isSmtpWork = (plan: Plan): plan is SmtpWork => 'smtp' in plan;
 function planSearchThreads(args: Readonly<Record<string, unknown>>): Plan {
   const q = args.q;
   if (typeof q !== 'string' || q.trim().length === 0)
-    return fail('invalid_argument', 'q: missing.');
+    return refused('invalid_argument', 'q: missing.');
   if (q.length > MAX_QUERY_LENGTH || hasControlCharacter(q)) {
-    return fail('invalid_argument', 'q: too long, or holds a control character.');
+    return refused('invalid_argument', 'q: too long, or holds a control character.');
   }
   const max = maxResultsOf(args.max_results);
   if (max === null) {
-    return fail('invalid_argument', `max_results: an integer from 1 to ${MAX_MAX_RESULTS}.`);
+    return refused('invalid_argument', `max_results: an integer from 1 to ${MAX_MAX_RESULTS}.`);
   }
   return async (session) => {
     const all = await folder(session, '\\All');
@@ -275,7 +277,7 @@ function planSearchThreads(args: Readonly<Record<string, unknown>>): Plan {
         else if (threads.size < max) threads.set(m.threadId, { latest: m, count: 1 });
       }
     }
-    return ok({
+    return structuredResult({
       threads: [...threads.values()].map(({ latest, count }) => ({
         id: imapIdToHex(latest.threadId),
         subject: latest.subject,
@@ -302,9 +304,9 @@ function imapIdArg(
   key: string,
 ): { hex: string; decimal: string } | McpToolResult {
   const hex = gmailId(args[key]);
-  if (hex === null) return fail('invalid_argument', `${key}: missing or malformed.`);
+  if (hex === null) return refused('invalid_argument', `${key}: missing or malformed.`);
   const decimal = hexToImapId(hex);
-  if (decimal === null) return fail('invalid_argument', `${key}: out of range.`);
+  if (decimal === null) return refused('invalid_argument', `${key}: out of range.`);
   return { hex, decimal };
 }
 
@@ -317,7 +319,7 @@ async function threadUids(
   id: { hex: string; decimal: string },
 ) {
   const uids = await session.search(all, { threadId: id.decimal });
-  if (uids.length === 0) throw new GmailToolError('not_found', `no thread ${id.hex} in All Mail.`);
+  if (uids.length === 0) throw refusal('not_found', `no thread ${id.hex} in All Mail.`);
   return uids;
 }
 
@@ -336,7 +338,7 @@ function planGetThread(args: Readonly<Record<string, unknown>>): Plan {
     ]
       .filter((m) => m.threadId === id.decimal)
       .sort((a, b) => a.uid - b.uid);
-    return ok({
+    return structuredResult({
       id: id.hex,
       messages: messages.map((m) => messageView(m, true)),
       messages_in_thread: uids.length,
@@ -358,7 +360,7 @@ async function messageUid(
     uids.includes(uid),
   );
   if (found.length === 0) {
-    throw new GmailToolError('not_found', `no message ${message.hex} in thread ${thread.hex}.`);
+    throw refusal('not_found', `no message ${message.hex} in thread ${thread.hex}.`);
   }
   return found[0]!;
 }
@@ -369,9 +371,9 @@ function planGetAttachment(args: Readonly<Record<string, unknown>>): Plan {
   const message = imapIdArg(args, 'message_id');
   if (isRefusal(message)) return message;
   const part = gmailPartId(args.part);
-  if (part === null) return fail('invalid_argument', 'part: missing or malformed.');
+  if (part === null) return refused('invalid_argument', 'part: missing or malformed.');
   const tooLarge = (size: string) =>
-    fail(
+    refused(
       'too_large',
       `attachment ${part} is ${size}; get_attachment returns at most ${MAX_ATTACHMENT_BYTES} bytes (5 MiB).`,
     );
@@ -381,16 +383,16 @@ function planGetAttachment(args: Readonly<Record<string, unknown>>): Plan {
     const [fetched] = await session.fetch(all, [uid], { bodyBytes: null, structure: true });
     const attachment = fetched?.attachments.find((a) => a.part === part);
     if (!attachment) {
-      return fail(
+      return refused(
         'not_found',
         `message ${message.hex} has no attachment ${part} (get_thread lists them).`,
       );
     }
     if (attachment.size > MAX_ATTACHMENT_BYTES) return tooLarge(`about ${attachment.size} bytes`);
     const content = await session.download(all, uid, part, MAX_ATTACHMENT_BYTES);
-    if (content === null) return fail('not_found', `attachment ${part} could not be read.`);
+    if (content === null) return refused('not_found', `attachment ${part} could not be read.`);
     if (content.truncated) return tooLarge(`larger than ${MAX_ATTACHMENT_BYTES} bytes`);
-    return ok({
+    return structuredResult({
       thread_id: thread.hex,
       message_id: message.hex,
       part,
@@ -408,7 +410,7 @@ const sameName = (a: string, b: string): boolean =>
 function planCreateLabel(args: Readonly<Record<string, unknown>>): Plan {
   const label = creatableLabel(args.name);
   if (label === null) {
-    return fail(
+    return refused(
       'invalid_argument',
       'name: missing or malformed, a system label, TRASH or SPAM, or under [Gmail]/.',
     );
@@ -419,18 +421,19 @@ function planCreateLabel(args: Readonly<Record<string, unknown>>): Plan {
     const container = all && all.parentPath !== '' ? all.parentPath : null;
     const clash = mailboxes.find((m) => sameName(m.path, label));
     if (clash && clash.specialUse !== null) {
-      return fail('invalid_argument', `'${label}' is a system folder of the mailbox.`);
+      return refused('invalid_argument', `'${label}' is a system folder of the mailbox.`);
     }
-    if (clash) return fail('already_exists', `label '${clash.path}' already exists.`);
+    if (clash) return refused('already_exists', `label '${clash.path}' already exists.`);
     if (
       container !== null &&
       (sameName(label, container) || label.toLowerCase().startsWith(`${container.toLowerCase()}/`))
     ) {
-      return fail('invalid_argument', `'${label}' is under the system folders of the mailbox.`);
+      return refused('invalid_argument', `'${label}' is under the system folders of the mailbox.`);
     }
     const created = await session.createMailbox(label.split('/'));
-    if (!created.created) return fail('already_exists', `label '${created.path}' already exists.`);
-    return ok({ label: created.path, created: true });
+    if (!created.created)
+      return refused('already_exists', `label '${created.path}' already exists.`);
+    return structuredResult({ label: created.path, created: true });
   };
 }
 
@@ -440,7 +443,7 @@ const listDrafts: Work = async (session) => {
   const messages = [...(await session.fetch(drafts, uids, { bodyBytes: null }))].sort(
     (a, b) => b.uid - a.uid,
   );
-  return ok({ drafts: messages.map((m) => messageView(m, false, true)) });
+  return structuredResult({ drafts: messages.map((m) => messageView(m, false, true)) });
 };
 
 /** Recipients of one field, with the classifier's parser ; the refusal when one does not parse. */
@@ -449,7 +452,9 @@ function recipientsOf(
   field: 'to' | 'cc' | 'bcc',
 ): readonly EmailAddress[] | McpToolResult {
   const collected = collectRecipients({ [field]: args[field] });
-  return 'denied' in collected ? fail('invalid_argument', collected.denied) : collected.recipients;
+  return 'denied' in collected
+    ? refused('invalid_argument', collected.denied)
+    : collected.recipients;
 }
 
 function planCreateDraft(
@@ -458,13 +463,13 @@ function planCreateDraft(
   now: () => Date,
 ): Plan {
   const to = recipientsOf(args, 'to');
-  if (!Array.isArray(to)) return to as McpToolResult;
+  if (isRefusal(to)) return to;
   const cc = recipientsOf(args, 'cc');
-  if (!Array.isArray(cc)) return cc as McpToolResult;
+  if (isRefusal(cc)) return cc;
   const bcc = recipientsOf(args, 'bcc');
-  if (!Array.isArray(bcc)) return bcc as McpToolResult;
+  if (isRefusal(bcc)) return bcc;
   const problem = draftProblem(args.subject, args.body);
-  if (problem !== null) return fail('invalid_argument', problem);
+  if (problem !== null) return refused('invalid_argument', problem);
   const message = buildDraft({
     from: account.email,
     to,
@@ -479,7 +484,7 @@ function planCreateDraft(
     const uid = await session.append(drafts, message, ['\\Draft', SEEN]);
     const stored = uid === null ? [] : await session.fetch(drafts, [uid], { bodyBytes: null });
     const draft = stored[0];
-    return ok({
+    return structuredResult({
       draft: draft
         ? { id: imapIdToHex(draft.messageId), thread_id: imapIdToHex(draft.threadId) }
         : null,
@@ -494,17 +499,17 @@ function sendRecipients(
 ): readonly string[] | McpToolResult {
   const all = fields.flat();
   if (all.length === 0) {
-    return fail('invalid_argument', 'a send needs at least one recipient in to, cc or bcc.');
+    return refused('invalid_argument', 'a send needs at least one recipient in to, cc or bcc.');
   }
   if (all.length > MAX_SEND_RECIPIENTS) {
-    return fail('invalid_argument', `a send has at most ${MAX_SEND_RECIPIENTS} recipients.`);
+    return refused('invalid_argument', `a send has at most ${MAX_SEND_RECIPIENTS} recipients.`);
   }
   return [...new Set(all.map((a) => a.address))];
 }
 
 /** What a send answers : who Gmail took, and that the copy is Gmail's to file. */
 function sentResult(receipt: SmtpReceipt, extra: Record<string, unknown> = {}): McpToolResult {
-  return ok({
+  return structuredResult({
     sent: true,
     accepted: receipt.accepted,
     rejected: receipt.rejected,
@@ -519,15 +524,15 @@ function planSendMessage(
   now: () => Date,
 ): Plan {
   const to = recipientsOf(args, 'to');
-  if (!Array.isArray(to)) return to as McpToolResult;
+  if (isRefusal(to)) return to;
   const cc = recipientsOf(args, 'cc');
-  if (!Array.isArray(cc)) return cc as McpToolResult;
+  if (isRefusal(cc)) return cc;
   const bcc = recipientsOf(args, 'bcc');
-  if (!Array.isArray(bcc)) return bcc as McpToolResult;
+  if (isRefusal(bcc)) return bcc;
   const envelope = sendRecipients([to, cc, bcc]);
-  if (!Array.isArray(envelope)) return envelope as McpToolResult;
+  if (isRefusal(envelope)) return envelope;
   const problem = draftProblem(args.subject, args.body);
-  if (problem !== null) return fail('invalid_argument', problem);
+  if (problem !== null) return refused('invalid_argument', problem);
   // The message a draft would be, without the Bcc header : Bcc travels in the envelope only.
   const raw = buildDraft({
     from: account.email,
@@ -578,13 +583,13 @@ function draftRecipientsProblem(
   for (const field of SEND_FIELDS) {
     const actual = envelopeAddresses(held[field]);
     if (actual === null) {
-      return fail(
+      return refused(
         'invalid_argument',
         `draft ${hex}: a ${field} recipient is not exactly one address; nothing was sent.`,
       );
     }
     if (!sameAddresses(actual, declared[field])) {
-      return fail(
+      return refused(
         'recipients_mismatch',
         `draft ${hex} is addressed ${field}: [${actual.join(', ')}], not [${declared[field].join(', ')}]; nothing was sent. Call again with the draft's recipients as list_drafts shows them.`,
       );
@@ -605,23 +610,23 @@ function planSendDraft(account: GmailAccount, args: Readonly<Record<string, unkn
     declared[field] = parsed.map((a) => a.address).sort();
   }
   const envelope = sendRecipients(fields);
-  if (!Array.isArray(envelope)) return envelope as McpToolResult;
+  if (isRefusal(envelope)) return envelope;
   const recipients: readonly string[] = envelope;
   return async (session, send) => {
     const drafts = await folder(session, '\\Drafts');
     const [uid] = await session.search(drafts, { messageId: id.decimal });
     if (uid === undefined) {
-      return fail('not_found', `no draft ${id.hex} in Drafts (list_drafts gives the ids).`);
+      return refused('not_found', `no draft ${id.hex} in Drafts (list_drafts gives the ids).`);
     }
     const [draft] = await session.fetch(drafts, [uid], { bodyBytes: null });
-    if (!draft) return fail('not_found', `draft ${id.hex} could not be read.`);
+    if (!draft) return refused('not_found', `draft ${id.hex} could not be read.`);
     // The call was classified on the declared recipients : the draft must hold exactly them.
     const mismatch = draftRecipientsProblem(id.hex, draft, declared);
     if (mismatch !== null) return mismatch;
     const source = await session.source(drafts, uid, MAX_SENT_DRAFT_BYTES);
-    if (source === null) return fail('not_found', `draft ${id.hex} could not be read.`);
+    if (source === null) return refused('not_found', `draft ${id.hex} could not be read.`);
     if (source.truncated) {
-      return fail(
+      return refused(
         'too_large',
         `draft ${id.hex} is larger than ${MAX_SENT_DRAFT_BYTES} bytes (7 MiB), the most send_draft relays.`,
       );
@@ -644,7 +649,7 @@ function planSendDraft(account: GmailAccount, args: Readonly<Record<string, unkn
 
 const listLabels: Work = async (session) => {
   const user = userLabels(await session.mailboxes());
-  return ok({
+  return structuredResult({
     labels: [
       ...[...Object.keys(SYSTEM_TO_IMAP), UNREAD].map((id) => ({ id, name: id, type: 'system' })),
       ...user.map((name) => ({ id: name, name, type: 'user' })),
@@ -668,10 +673,7 @@ async function labelChange(
   const wanted = label.normalize('NFC');
   const listed = userLabels(await session.mailboxes()).find((l) => l.normalize('NFC') === wanted);
   if (listed === undefined) {
-    throw new GmailToolError(
-      'not_found',
-      `no user label '${label}' (list_labels gives the names).`,
-    );
+    throw refusal('not_found', `no user label '${label}' (list_labels gives the names).`);
   }
   return { op, labels: [listed] };
 }
@@ -680,12 +682,13 @@ function planLabelWrite(tool: string, args: Readonly<Record<string, unknown>>): 
   const thread = imapIdArg(args, 'thread_id');
   if (isRefusal(thread)) return thread;
   const label = writableLabel(args.label);
-  if (label === null) return fail('invalid_argument', 'label: missing, malformed, TRASH or SPAM.');
+  if (label === null)
+    return refused('invalid_argument', 'label: missing, malformed, TRASH or SPAM.');
   if (SYSTEM_LABEL_IDS.has(label) && SYSTEM_TO_IMAP[label] === undefined && label !== UNREAD) {
-    return fail('unsupported_label', `label ${label} cannot be written over IMAP.`);
+    return refused('unsupported_label', `label ${label} cannot be written over IMAP.`);
   }
-  const onMessage = tool === 'gmail__label_message' || tool === 'gmail__unlabel_message';
-  const adding = tool === 'gmail__label_message' || tool === 'gmail__label_thread';
+  const onMessage = tool === TOOL.labelMessage || tool === TOOL.unlabelMessage;
+  const adding = tool === TOOL.labelMessage || tool === TOOL.labelThread;
   let message: { hex: string; decimal: string } | null = null;
   if (onMessage) {
     const parsed = imapIdArg(args, 'message_id');
@@ -700,7 +703,7 @@ function planLabelWrite(tool: string, args: Readonly<Record<string, unknown>>): 
         ? [await messageUid(session, all, thread, message)]
         : await threadUids(session, all, thread);
     await session.store(all, uids, change);
-    return ok({
+    return structuredResult({
       thread_id: thread.hex,
       ...(message !== null ? { message_id: message.hex } : {}),
       label,
@@ -717,23 +720,23 @@ function planOf(
   now: () => Date,
 ): Plan {
   switch (tool) {
-    case 'gmail__search_threads':
+    case TOOL.searchThreads:
       return planSearchThreads(args);
-    case 'gmail__get_thread':
+    case TOOL.getThread:
       return planGetThread(args);
-    case 'gmail__get_attachment':
+    case TOOL.getAttachment:
       return planGetAttachment(args);
-    case 'gmail__create_label':
+    case TOOL.createLabel:
       return planCreateLabel(args);
-    case 'gmail__list_drafts':
+    case TOOL.listDrafts:
       return listDrafts;
-    case 'gmail__create_draft':
+    case TOOL.createDraft:
       return planCreateDraft(account, args, now);
-    case 'gmail__send_message':
+    case TOOL.sendMessage:
       return planSendMessage(account, args, now);
-    case 'gmail__send_draft':
+    case TOOL.sendDraft:
       return planSendDraft(account, args);
-    case 'gmail__list_labels':
+    case TOOL.listLabels:
       return listLabels;
     default:
       return planLabelWrite(tool, args);
@@ -766,7 +769,7 @@ export interface GmailRuntime {
 /** The mailbox as the connection's single resource. */
 export function mailboxResource(email: string): Resource {
   return {
-    provider: GMAIL_PLUGIN_ID,
+    provider: PROVIDER_ID,
     ref: email,
     displayName: email,
     metadata: { account_email: email },
@@ -815,30 +818,35 @@ export function createGmailRuntime(options: GmailRuntimeOptions = {}): GmailRunt
     },
 
     async execute(ctx, tool, args) {
-      if (!(GMAIL_CLASSIFIED_TOOLS as readonly string[]).includes(tool)) {
-        return fail('unknown_tool', `unknown tool '${tool}'.`);
+      if (!GMAIL_CLASSIFIED_TOOLS.includes(tool)) {
+        return refused('unknown_tool', `unknown tool '${tool}'.`);
       }
       const mailbox = selectMailbox(ctx.resources);
-      if ('denied' in mailbox) return fail('invalid_resource', mailbox.denied);
-      if (tool === 'gmail__describe_zones') {
-        return ok({ mailbox: mailbox.ref, zones: readMailboxMetadata(mailbox) });
+      if ('denied' in mailbox) return refused('invalid_resource', mailbox.denied);
+      if (tool === TOOL.describeZones) {
+        return structuredResult({ mailbox: mailbox.ref, zones: readMailboxMetadata(mailbox) });
       }
       const account = gmailAccount(ctx.credential);
       if (mailbox.ref.toLowerCase() !== account.email) {
-        return fail(
+        return refused(
           'invalid_resource',
           `mailbox '${mailbox.ref}' is not the mailbox of this connection.`,
         );
       }
       const send: SendMail = (mail) => smtp.send(account, sessionOptions(ctx), mail);
       try {
-        const plan = planOf(tool, args, account, now);
-        if (isWork(plan)) return await inSession(account, ctx, (s) => plan(s, send));
-        if (isSmtpWork(plan)) return await plan.smtp(send);
-        return plan;
+        return await declining(async () => {
+          const plan = planOf(tool, args, account, now);
+          if (isWork(plan)) return inSession(account, ctx, (s) => plan(s, send));
+          if (isSmtpWork(plan)) return plan.smtp(send);
+          return plan;
+        });
       } catch (err) {
-        if (err instanceof GmailToolError) return fail(err.code, err.message);
-        if (err instanceof GmailSmtpError) return fail(err.code, err.message);
+        // ⚠ Gmail refusing a send is the provider's failure, yet it stays the
+        // tool error the handbook documents (Traps, Debug) : its code for the
+        // agent, never an `UpstreamAuthError` — a Workspace administrator can
+        // block SMTP while IMAP works.
+        if (err instanceof GmailSmtpError) return refused(err.code, err.message);
         throw err;
       }
     },

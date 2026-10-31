@@ -132,6 +132,12 @@ export function depotPlugin(): DepotPlugin {
               cardinalities: ['one', 'unbounded'],
               description: 'An item.',
             },
+            {
+              name: 'account',
+              parent: null,
+              cardinalities: ['one'],
+              description: 'The account behind the connection: its profile, its spaces.',
+            },
           ],
         },
       ],

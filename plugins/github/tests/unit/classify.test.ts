@@ -323,7 +323,7 @@ describe('classifyGithub — refuses what it cannot place exactly', () => {
     expect(expectDenied(r)).toContain("must be a branch name such as 'main', not a ref");
   });
 
-  test('wildcard characters never reach a concrete slice', () => {
+  test('wildcard characters never reach a slice identifier', () => {
     // No branch holds a `*` (git refuses it) : the call is refused, not rewritten.
     for (const branch of ['*', 'feature/**']) {
       const r = classifyGithub('github__create_branch', { ...baseArgs, branch }, resources);
@@ -331,15 +331,14 @@ describe('classifyGithub — refuses what it cannot place exactly', () => {
         `tool 'github__create_branch' branch '${branch}' is not a branch name`,
       );
     }
-    // In a file path `*` is an ordinary character : the slice stays concrete.
+    // In a file path `*` is an ordinary character, which the slice grammar cannot
+    // carry : the file is "any", never a glob and never a repaired name.
     const file = classifyGithub(
       'github__create_or_update_file',
       { ...baseArgs, branch: 'feature/x', path: 'src/*.ts', content: 'x', message: 'm' },
       resources,
     );
-    expect(expectSlices(file)).toEqual([
-      `github.repo[${repoRef}].branch[feature/x].file[src/-.ts].W`,
-    ]);
+    expect(expectSlices(file)).toEqual([`github.repo[${repoRef}].branch[feature/x].file[*].W`]);
   });
 });
 
@@ -500,5 +499,71 @@ describe('classifyGithub — structural denials', () => {
       resources,
     );
     expect(expectDenied(r)).toContain("'branch' and 'path'");
+  });
+});
+
+// ─── identifiers the slice grammar cannot carry ───────────────────────────────
+
+/**
+ * A name git and GitHub accept may hold characters the slice grammar has no
+ * place for (`ü`, `+`, a space, `*` in a path, `:` in a fork head). It is
+ * written as "any" (`[*]`), never repaired into another name : `feature/ü`
+ * is not `feature/-`. The risks "any branch" touches are pinned in
+ * `risk-catalog.test.ts`.
+ */
+describe('classifyGithub — identifiers the slice grammar cannot carry are "any"', () => {
+  const repo = `github.repo[${repoRef}]`;
+
+  test.each(['feature/ü', 'feature/a+b', 'release-ü'])(
+    'create_branch %s → branch[*].W, not a repaired name',
+    (branch) => {
+      const r = classifyGithub('github__create_branch', { ...baseArgs, branch }, resources);
+      expect(expectSlices(r)).toEqual([`${repo}.branch[*].W`]);
+    },
+  );
+
+  test('a file path with a space or a star → file[*], on its branch', () => {
+    for (const path of ['docs/my notes.md', 'src/a*.ts']) {
+      const r = classifyGithub(
+        'github__create_or_update_file',
+        { ...baseArgs, branch: 'feature/x', path, content: '', message: 'm' },
+        resources,
+      );
+      expect(expectSlices(r)).toEqual([`${repo}.branch[feature/x].file[*].W`]);
+    }
+  });
+
+  test('a fork head owner:branch → branch[*].propose-to[base]', () => {
+    const r = classifyGithub(
+      'github__create_pull_request',
+      { ...baseArgs, title: 't', head: 'someone:feature/x', base: 'main' },
+      resources,
+    );
+    expect(expectSlices(r)).toEqual([
+      `${repo}.pull_request.W`,
+      `${repo}.branch[*].propose-to[main].W`,
+    ]);
+  });
+
+  test('a git push to such a branch → branch[*] slices', () => {
+    const r = classifyGithub(
+      'github__git_push',
+      {
+        repository: repoRef,
+        updates: [
+          {
+            ref: 'refs/heads/feature/ü',
+            old: null,
+            new: 'b'.repeat(40),
+            kind: 'create',
+            commits: 1,
+            files: ['a.ts'],
+            workflow_files: [],
+          },
+        ],
+      },
+      resources,
+    );
+    expect(expectSlices(r)).toEqual([`${repo}.branch[*].push.W`, `${repo}.branch[*].W`]);
   });
 });

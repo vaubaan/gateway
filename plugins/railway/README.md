@@ -7,7 +7,6 @@ tools) and adds four GraphQL-backed environment-variable tools, under the
 handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
 decisions: [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md),
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
-Plugin version 4.2.0, catalog version 3.
 
 ## Data model
 
@@ -85,12 +84,13 @@ What `execute` declines — an unknown tool, an undeclared argument, a target
 the mission cannot resolve, a malformed id or variable name — is an
 `isError` result returned before any request. What Railway fails is thrown:
 `UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed
-status, an `Error` for a JSON-RPC error frame or GraphQL `errors`.
+status, an `UpstreamProtocolError` for a JSON-RPC error frame, GraphQL
+`errors` (named by the operation) or an answer of the wrong shape.
 
 ## Catalog and macro-actions
 
 `src/risk-catalog.yaml` — nine risks plus the mandatory
-`railway.uncategorized-write` fallback, `catalog_version: 6`. Env-scoped
+`railway.uncategorized-write` fallback. Env-scoped
 risks (`deploy`, `upsert-variable`, `read-variables`) accept `staging`,
 `preview`, `dev`, `prod` and carry a stricter `prod` vector.
 
@@ -154,7 +154,7 @@ settings → Tokens. ADR
 ## Development
 
 ```
-npx vitest run plugins/railway     # 421 tests, no network
+npx vitest run plugins/railway     # 427 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 

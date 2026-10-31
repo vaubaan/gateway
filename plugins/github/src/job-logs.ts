@@ -1,5 +1,5 @@
 /**
- * `github__get_job_logs` : the log of one workflow job, as plain text, bounded.
+ * `get_job_logs` : the log of one workflow job, as plain text, bounded.
  *
  * `GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs` answers a redirect
  * (302) to a short-lived download URL. The redirect is not followed by
@@ -9,18 +9,28 @@
  *
  * The body is read as a stream and at most `maxBytes` of it is kept : the
  * beginning, or with `tail` the end (the whole log is read, the last
- * `maxBytes` kept). The answer says when the log was truncated.
+ * `maxBytes` kept) — a window the SDK's `readBounded`, which refuses an
+ * answer past its bound, does not offer. The answer says when the log was
+ * truncated.
  *
  * Neither the download URL nor the log is ever logged or put in an error
  * message : the URL is a bearer of the log for its lifetime, and the log can
  * hold what a step printed.
  */
-import { UpstreamHttpError, type ExecuteContext, type McpToolResult } from '@vaubaan/plugin-sdk';
+import {
+  UpstreamHttpError,
+  UpstreamProtocolError,
+  textResult,
+  upstreamFailure,
+  type ExecuteContext,
+  type McpToolResult,
+} from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
+import { GITHUB_API_BASE, githubApiHeaders } from './api.ts';
 import type { RepoCall } from './call.ts';
+import type { TOOL } from './identity.ts';
 
-export type JobLogsCall = Extract<RepoCall, { tool: 'github__get_job_logs' }>;
+export type JobLogsCall = Extract<RepoCall, { tool: typeof TOOL.getJobLogs }>;
 
 /** The most a `tail` read streams before giving up (256 MiB) : the end of a larger log is not read. */
 export const JOB_LOG_TAIL_READ_MAX = 256 * 1024 * 1024;
@@ -44,12 +54,7 @@ export async function readJobLogs(
   const signal = ctx.signal ? { signal: ctx.signal } : {};
   const asked = await ctx.fetch(
     `${GITHUB_API_BASE}/repos/${owner}/${repo}/actions/jobs/${call.jobId}/logs`,
-    {
-      method: 'GET',
-      headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${token}` },
-      redirect: 'manual',
-      ...signal,
-    },
+    { method: 'GET', headers: githubApiHeaders(token), redirect: 'manual', ...signal },
   );
   let answer = asked;
   if (REDIRECTS.has(asked.status)) {
@@ -58,6 +63,7 @@ export async function readJobLogs(
     // No Authorization : the download URL is signed, and the token stays with GitHub's API.
     answer = await ctx.fetch(location, { method: 'GET', redirect: 'follow', ...signal });
     if (!answer.ok) {
+      // The status alone : what the download host answers is not quoted.
       await answer.body?.cancel();
       throw new UpstreamHttpError(
         `github: the download of the log of job ${call.jobId} answered HTTP ${answer.status}`,
@@ -65,13 +71,10 @@ export async function readJobLogs(
       );
     }
   } else if (!asked.ok) {
-    throw new UpstreamHttpError(
-      `github GET actions/jobs/${call.jobId}/logs failed with HTTP ${asked.status}${await messageOf(asked)}`,
-      asked.status,
-    );
+    throw await upstreamFailure(asked, `github GET actions/jobs/${call.jobId}/logs`);
   }
-  const log = await readBounded(answer.body, call.maxBytes, call.tail);
-  return { content: [{ type: 'text', text: render(log, call) }] };
+  const log = await readLogWindow(answer.body, call.maxBytes, call.tail);
+  return textResult(render(log, call));
 }
 
 /** The download location GitHub answered, when it is an https URL ; never quoted back. */
@@ -83,22 +86,11 @@ function downloadUrlOf(location: string | null): string {
     url = null;
   }
   if (url === null || url.protocol !== 'https:') {
-    throw new UpstreamHttpError(
+    throw new UpstreamProtocolError(
       'github: the job log redirect did not name an https download URL',
-      502,
     );
   }
   return url.toString();
-}
-
-/** GitHub's `message` of a failed API answer, as ` (message)`, bounded ; empty when absent. */
-async function messageOf(res: Response): Promise<string> {
-  try {
-    const body = (await res.json()) as { message?: unknown };
-    return typeof body.message === 'string' ? ` (${body.message.slice(0, 200)})` : '';
-  } catch {
-    return '';
-  }
 }
 
 /**
@@ -106,7 +98,7 @@ async function messageOf(res: Response): Promise<string> {
  * soon as more arrive ; or with `tail` the last ones, the stream read to its
  * end (up to `JOB_LOG_TAIL_READ_MAX`) with only the end kept in memory.
  */
-export async function readBounded(
+export async function readLogWindow(
   body: ReadableStream<Uint8Array> | null,
   max: number,
   tail: boolean,

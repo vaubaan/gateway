@@ -15,8 +15,11 @@ import { Octokit } from '@octokit/rest';
 import {
   ExecutorRefusal,
   UpstreamAuthError,
-  UpstreamHttpError,
   declining,
+  httpJson,
+  isList,
+  isRecord,
+  jsonResult,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
@@ -24,11 +27,12 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS, HTTP_FORBIDDEN } from './api.ts';
-import { PROVIDER, githubRepoRefs, readGithubCall, repoFullName, type GithubCall } from './call.ts';
+import { GITHUB_API_BASE, HTTP_FORBIDDEN, githubApiHeaders } from './api.ts';
+import { githubRepoRefs, readGithubCall, repoFullName, type GithubCall } from './call.ts';
 import { githubTokenOf } from './credential.ts';
 import { isGitTool } from './git-call.ts';
 import { executeGit } from './git-remote.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { readJobLogs } from './job-logs.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 
@@ -73,19 +77,19 @@ async function send(
   args: Readonly<Record<string, unknown>>,
   token: string,
 ): Promise<McpToolResult> {
-  if (call.tool === 'github__get_job_logs') return readJobLogs(ctx, token, call);
+  if (call.tool === TOOL.getJobLogs) return readJobLogs(ctx, token, call);
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },
     // Octokit logs failed requests ; route them to the host logger, never to the console.
     log: octokitLog(ctx.logger),
   });
-  return json(await dispatchGithubTool(octokit, call, args));
+  return jsonResult(await dispatchGithubTool(octokit, call, args));
 }
 
+/** The HTTP status Octokit's `RequestError` carries, if `e` is one. */
 function statusOf(e: unknown): number | undefined {
-  const status = (e as { status?: unknown } | null)?.status;
-  return typeof status === 'number' ? status : undefined;
+  return isRecord(e) && typeof e.status === 'number' ? e.status : undefined;
 }
 
 function messageOf(e: unknown): string {
@@ -112,63 +116,32 @@ function refusalOf(tool: string, denied: string): string {
   return denied.startsWith(tool) ? denied : `${tool}: ${denied}`;
 }
 
-interface RepositoryDto {
-  readonly full_name: string;
-  readonly default_branch?: string;
-  readonly private?: boolean;
-  readonly archived?: boolean;
-}
-
 /**
  * Resources reachable through the connection : one `Resource` per
  * repository the token reaches (`GET /user/repos`, a bare list), paged by
  * `DISCOVERY_PAGE_SIZE` up to `DISCOVERY_MAX_PAGES`. The owner labels the
- * environment later.
+ * environment later. An answer that is not a list is GitHub's failure
+ * (`UpstreamProtocolError`), not an account without repositories.
  */
 export async function discoverGithubResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const token = githubTokenOf(ctx);
-  const path = '/user/repos';
+  const headers = githubApiHeaders(githubTokenOf(ctx));
   const out: Resource[] = [];
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
-    const url = `${GITHUB_API_BASE}${path}?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
-    const res = await ctx.fetch(url, {
-      redirect: 'error',
-      method: 'GET',
-      headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${token}` },
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
-    if (res.status === 401 || res.status === HTTP_FORBIDDEN) {
-      throw new UpstreamAuthError(
-        `github rejected the personal access token (HTTP ${res.status})`,
-        res.status,
-      );
-    }
-    if (!res.ok) {
-      throw new UpstreamHttpError(`github GET ${path} failed with HTTP ${res.status}`, res.status);
-    }
-    const repositories = repositoriesOf(await res.json());
-    for (const r of repositories) {
+    const url = `${GITHUB_API_BASE}/user/repos?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
+    const repositories = await httpJson(ctx, { url, headers }, isList);
+    for (const repository of repositories) {
+      const resource = resourceOf(repository);
+      if (resource !== null) {
+        out.push(resource);
+        continue;
+      }
       // A name the reader of the calls would refuse is of no use to a
       // mission : it is left out, and said, instead of listing a resource no
       // call can name.
-      const named = repoFullName(r.full_name);
-      if (named === null) {
-        ctx.logger?.warn('github: repository left out, its name is not owner/repo', {
-          full_name: String(r.full_name).slice(0, 200),
-        });
-        continue;
-      }
-      out.push({
-        provider: PROVIDER,
-        ref: named.ref,
-        displayName: named.ref,
-        metadata: {
-          ...(r.default_branch !== undefined ? { default_branch: r.default_branch } : {}),
-          ...(r.private !== undefined ? { private: r.private } : {}),
-          ...(r.archived !== undefined ? { archived: r.archived } : {}),
-        },
+      ctx.logger?.warn('github: repository left out, its name is not owner/repo', {
+        full_name: String(isRecord(repository) ? repository.full_name : repository).slice(0, 200),
       });
     }
     if (repositories.length < DISCOVERY_PAGE_SIZE) break;
@@ -176,9 +149,22 @@ export async function discoverGithubResources(
   return out;
 }
 
-/** `/user/repos` answers a bare list ; anything else lists nothing. */
-function repositoriesOf(body: unknown): readonly RepositoryDto[] {
-  return Array.isArray(body) ? (body as RepositoryDto[]) : [];
+/** One repository of `/user/repos` as a resource, or `null` when its `full_name` is not `owner/repo`. */
+function resourceOf(repository: unknown): Resource | null {
+  if (!isRecord(repository)) return null;
+  const named = repoFullName(repository.full_name);
+  if (named === null) return null;
+  const { default_branch: defaultBranch, private: isPrivate, archived } = repository;
+  return {
+    provider: PROVIDER_ID,
+    ref: named.ref,
+    displayName: named.ref,
+    metadata: {
+      ...(typeof defaultBranch === 'string' ? { default_branch: defaultBranch } : {}),
+      ...(typeof isPrivate === 'boolean' ? { private: isPrivate } : {}),
+      ...(typeof archived === 'boolean' ? { archived } : {}),
+    },
+  };
 }
 
 type OctokitLog = NonNullable<ConstructorParameters<typeof Octokit>[0]>['log'];
@@ -192,8 +178,4 @@ function octokitLog(logger: PluginLogger | undefined): OctokitLog {
       logger[level](parts.map(String).join(' '), { source: 'octokit' });
     };
   return { debug: to('debug'), info: to('info'), warn: to('warn'), error: to('error') };
-}
-
-function json(payload: unknown): McpToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
 }

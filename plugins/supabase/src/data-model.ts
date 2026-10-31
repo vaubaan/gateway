@@ -21,8 +21,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const supabaseDataModel: DataModel = {
-  provider: 'supabase',
+  provider: PROVIDER_ID,
   planes: [
     // ─────────────────────────────────────────────────────────────────────
     // Plane `db` — Postgres, RLS policies and the migrations ledger.

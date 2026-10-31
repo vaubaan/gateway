@@ -9,19 +9,21 @@
  * has its title : a new tool is added here with its declaration.
  */
 
+import { TOOL } from './identity.ts';
+
 export const gmailToolTitles: Readonly<Record<string, string>> = {
-  gmail__describe_zones: 'Show how the mailbox is zoned',
-  gmail__search_threads: 'Search the mailbox',
-  gmail__get_thread: 'Read a thread',
-  gmail__get_attachment: 'Download an attachment',
-  gmail__list_drafts: 'List the drafts',
-  gmail__create_draft: 'Save a draft (never sent)',
-  gmail__send_message: 'Send a message',
-  gmail__send_draft: 'Send a draft',
-  gmail__list_labels: 'List the labels',
-  gmail__create_label: 'Create a label',
-  gmail__label_message: 'Add a label to a message',
-  gmail__unlabel_message: 'Remove a label from a message',
-  gmail__label_thread: 'Add a label to a thread',
-  gmail__unlabel_thread: 'Remove a label from a thread',
+  [TOOL.describeZones]: 'Show how the mailbox is zoned',
+  [TOOL.searchThreads]: 'Search the mailbox',
+  [TOOL.getThread]: 'Read a thread',
+  [TOOL.getAttachment]: 'Download an attachment',
+  [TOOL.listDrafts]: 'List the drafts',
+  [TOOL.createDraft]: 'Save a draft (never sent)',
+  [TOOL.sendMessage]: 'Send a message',
+  [TOOL.sendDraft]: 'Send a draft',
+  [TOOL.listLabels]: 'List the labels',
+  [TOOL.createLabel]: 'Create a label',
+  [TOOL.labelMessage]: 'Add a label to a message',
+  [TOOL.unlabelMessage]: 'Remove a label from a message',
+  [TOOL.labelThread]: 'Add a label to a thread',
+  [TOOL.unlabelThread]: 'Remove a label from a thread',
 };

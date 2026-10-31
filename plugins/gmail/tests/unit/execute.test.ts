@@ -6,7 +6,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { ExecuteContext, McpToolResult, Resource } from '@vaubaan/plugin-sdk';
+import {
+  jsonObjectsOf,
+  type ExecuteContext,
+  type McpToolResult,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -97,7 +102,8 @@ interface Body {
   readonly labels: readonly Listed[];
   readonly [key: string]: unknown;
 }
-const body = (r: McpToolResult): Body => r.structuredContent as unknown as Body;
+/** The JSON a result's text carries : the answer, or a refusal's code and words. */
+const body = (r: McpToolResult): Body => jsonObjectsOf(r)[0] as Body;
 
 describe('ids : the Gmail API hexadecimal of IMAP’s decimal numbers', () => {
   test('round trip, 64 bits at most', () => {
@@ -182,6 +188,28 @@ describe('get_thread', () => {
     const r = await run(fresh, 'gmail__get_thread', { id: 'FMfcgzQXJZsr' });
     expect(r.isError).toBe(true);
     expect(fresh.calls).toEqual([]);
+  });
+});
+
+describe('results', () => {
+  test('an answer is JSON text with its structured twin ; a refusal is the code and words as text, isError', async () => {
+    const t = seeded();
+    const answered = await run(t, 'gmail__list_labels', {});
+    expect(answered.isError).toBeUndefined();
+    expect(answered.structuredContent).toEqual(body(answered));
+    const declined = await run(seeded(), 'gmail__get_thread', { id: 'abc' });
+    expect(declined).toEqual({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            error: 'not_found',
+            message: 'gmail: no thread abc in All Mail.',
+          }),
+        },
+      ],
+      isError: true,
+    });
   });
 });
 

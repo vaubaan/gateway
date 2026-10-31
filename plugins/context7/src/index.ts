@@ -35,7 +35,7 @@ export const context7Plugin = definePlugin({
   icon: CONTEXT7_ICON,
   iconColor: CONTEXT7_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.5',
+  version: '0.2.0',
   description:
     'Look up current library documentation with Context7, through the official Context7 MCP server.',
   summary:
@@ -70,12 +70,14 @@ export {
   resolveIndex,
 } from './classify.ts';
 export { CONTEXT7_DASHBOARD, context7CredentialSpec, verifyContext7Key } from './credential.ts';
+export { INDEX_DISPLAY_NAME, discoverContext7Resources, executeContext7 } from './execute.ts';
 export {
+  API_KEY_FIELD,
+  CONTEXT7_MCP_SERVER,
   CONTEXT7_MCP_URL,
-  INDEX_DISPLAY_NAME,
-  discoverContext7Resources,
-  executeContext7,
-  firstJsonRpcFrame,
-} from './execute.ts';
-export { API_KEY_FIELD, INDEX_REF, PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+  INDEX_REF,
+  PROVIDER_ID,
+  TOOL,
+  TOOL_PREFIX,
+} from './identity.ts';
 export { CONTEXT7_API_BASE, CONTEXT7_PLANS, CONTEXT7_USAGE_URL } from './usage.ts';

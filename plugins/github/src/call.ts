@@ -23,16 +23,12 @@
  * separators and everything else are percent-encoded by Octokit.
  */
 
-import type { Resource } from '@vaubaan/plugin-sdk';
+import { isList, type Resource } from '@vaubaan/plugin-sdk';
 
-export const PROVIDER = 'github';
+import { PROVIDER_ID, RETIRED_TOOL, TOOL } from './identity.ts';
 
 /** Tools retired by the risk-model spec §7.2 #1. Refused explicitly, even if a client still names them. */
-const RETIRED_TOOLS = new Set<string>([
-  'github__dispatch_workflow',
-  'github__cancel_workflow_run',
-  'github__rerun_workflow_run',
-]);
+const RETIRED_TOOLS: ReadonlySet<string> = new Set(Object.values(RETIRED_TOOL));
 
 const RETIRED_HINT =
   'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.';
@@ -239,9 +235,9 @@ export const FILES_SHAPE = "'files' to be a non-empty array of { path, content }
  */
 function readFileEntries(args: Readonly<Record<string, unknown>>): FileEntry[] | undefined {
   const raw: unknown = args.files;
-  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  if (!isList(raw) || raw.length === 0) return undefined;
   const out: FileEntry[] = [];
-  for (const item of raw as readonly unknown[]) {
+  for (const item of raw) {
     if (!isFileEntry(item)) return undefined;
     out.push({ path: item.path, content: item.content });
   }
@@ -263,42 +259,42 @@ function isFileEntry(item: unknown): item is FileEntry {
 export type RepoCall = { readonly target: RepoTarget } & (
   | {
       readonly tool:
-        | 'github__list_branches'
-        | 'github__list_tags'
-        | 'github__list_pull_requests'
-        | 'github__list_issues'
-        | 'github__list_releases'
-        | 'github__list_workflows';
+        | typeof TOOL.listBranches
+        | typeof TOOL.listTags
+        | typeof TOOL.listPullRequests
+        | typeof TOOL.listIssues
+        | typeof TOOL.listReleases
+        | typeof TOOL.listWorkflows;
     }
-  | { readonly tool: 'github__list_commits'; readonly sha: string | undefined }
+  | { readonly tool: typeof TOOL.listCommits; readonly sha: string | undefined }
   | {
-      readonly tool: 'github__get_file_contents';
+      readonly tool: typeof TOOL.getFileContents;
       readonly path: string;
       readonly ref: string | undefined;
     }
-  | { readonly tool: 'github__get_commit'; readonly sha: string }
+  | { readonly tool: typeof TOOL.getCommit; readonly sha: string }
   | {
-      readonly tool: 'github__get_pull_request';
+      readonly tool: typeof TOOL.getPullRequest;
       readonly pullNumber: number;
     }
   | {
-      readonly tool: 'github__get_issue' | 'github__add_issue_comment';
+      readonly tool: typeof TOOL.getIssue | typeof TOOL.addIssueComment;
       readonly issueNumber: number;
     }
   | {
-      readonly tool: 'github__list_workflow_runs';
+      readonly tool: typeof TOOL.listWorkflowRuns;
       readonly workflowId: string | number | undefined;
       /** Filter of the listing, sent in the query string ; not a slice segment. */
       readonly branch: string | undefined;
     }
   | {
-      readonly tool: 'github__list_workflow_jobs';
+      readonly tool: typeof TOOL.listWorkflowJobs;
       readonly runId: number;
       /** Which attempts of the run, sent in the query string ; not a slice segment. */
       readonly filter: JobFilter | undefined;
     }
   | {
-      readonly tool: 'github__get_job_logs';
+      readonly tool: typeof TOOL.getJobLogs;
       readonly jobId: number;
       /** Most bytes of the log returned. */
       readonly maxBytes: number;
@@ -306,48 +302,48 @@ export type RepoCall = { readonly target: RepoTarget } & (
       readonly tail: boolean;
     }
   | {
-      readonly tool: 'github__get_branch_protection' | 'github__update_branch_protection';
+      readonly tool: typeof TOOL.getBranchProtection | typeof TOOL.updateBranchProtection;
       readonly branch: string;
     }
   | {
-      readonly tool: 'github__create_branch';
+      readonly tool: typeof TOOL.createBranch;
       readonly branch: string;
       /** The branch to start from ; the repository's default branch when absent. */
       readonly fromBranch: string | undefined;
     }
   | {
-      readonly tool: 'github__create_or_update_file' | 'github__delete_file';
+      readonly tool: typeof TOOL.createOrUpdateFile | typeof TOOL.deleteFile;
       readonly branch: string;
       readonly path: string;
     }
   | {
-      readonly tool: 'github__push_files';
+      readonly tool: typeof TOOL.pushFiles;
       readonly branch: string;
       readonly files: readonly FileEntry[];
     }
   | {
-      readonly tool: 'github__create_pull_request';
+      readonly tool: typeof TOOL.createPullRequest;
       readonly head: string;
       readonly base: string;
     }
   | {
-      readonly tool: 'github__merge_pull_request';
+      readonly tool: typeof TOOL.mergePullRequest;
       readonly pullNumber: number;
       /** The declared base : classified on, then compared with the pull request's real base. */
       readonly base: string;
     }
   | {
-      readonly tool: 'github__create_release';
+      readonly tool: typeof TOOL.createRelease;
       readonly tagName: string;
       /** Where a new tag is put ; not a slice segment. */
       readonly targetCommitish: string | undefined;
     }
-  | { readonly tool: 'github__delete_release'; readonly releaseId: number }
+  | { readonly tool: typeof TOOL.deleteRelease; readonly releaseId: number }
 );
 
 export type GithubCall =
   /** Account-shaped : not bound to a repository of the mission. */
-  { readonly tool: 'github__search_code' | 'github__search_issues' } | RepoCall;
+  { readonly tool: typeof TOOL.searchCode | typeof TOOL.searchIssues } | RepoCall;
 
 export interface Denied {
   readonly denied: string;
@@ -357,7 +353,7 @@ export interface Denied {
 export function githubRepoRefs(resources: readonly Resource[]): string[] {
   const out: string[] = [];
   for (const r of resources) {
-    if (r.provider === PROVIDER) out.push(r.ref);
+    if (r.provider === PROVIDER_ID) out.push(r.ref);
   }
   return out;
 }
@@ -388,27 +384,27 @@ export function readGithubCall(
   if (RETIRED_TOOLS.has(tool)) return { denied: RETIRED_HINT };
 
   // Global searches — not repo-scoped, so no resource lookup.
-  if (tool === 'github__search_code' || tool === 'github__search_issues') return { tool };
+  if (tool === TOOL.searchCode || tool === TOOL.searchIssues) return { tool };
 
   // Every other tool needs `owner` + `repo` and must resolve to a resource.
   const target = resolveRepo(args, missionRepos);
   if ('denied' in target) return target;
 
   switch (tool) {
-    case 'github__list_branches':
-    case 'github__list_tags':
-    case 'github__list_pull_requests':
-    case 'github__list_issues':
-    case 'github__list_releases':
-    case 'github__list_workflows':
+    case TOOL.listBranches:
+    case TOOL.listTags:
+    case TOOL.listPullRequests:
+    case TOOL.listIssues:
+    case TOOL.listReleases:
+    case TOOL.listWorkflows:
       return { tool, target };
 
-    case 'github__list_commits': {
+    case TOOL.listCommits: {
       const sha = optional(args.sha, revision);
       if (sha === null) return denied(tool, notARevision('sha', args.sha));
       return { tool, target, sha };
     }
-    case 'github__get_file_contents': {
+    case TOOL.getFileContents: {
       if (!isGiven(args.path)) return denied(tool, "requires 'path'");
       const path = repoPath(args.path);
       if (path === null) return denied(tool, notACanonicalPath(args.path));
@@ -416,24 +412,24 @@ export function readGithubCall(
       if (ref === null) return denied(tool, notARevision('ref', args.ref));
       return { tool, target, path, ref };
     }
-    case 'github__get_commit': {
+    case TOOL.getCommit: {
       if (!isGiven(args.sha)) return denied(tool, "requires 'sha'");
       const sha = revision(args.sha);
       if (sha === null) return denied(tool, notARevision('sha', args.sha));
       return { tool, target, sha };
     }
-    case 'github__get_pull_request': {
+    case TOOL.getPullRequest: {
       const pullNumber = positiveInteger(args.pull_number);
       if (pullNumber === null) return denied(tool, "requires 'pull_number'");
       return { tool, target, pullNumber };
     }
-    case 'github__get_issue':
-    case 'github__add_issue_comment': {
+    case TOOL.getIssue:
+    case TOOL.addIssueComment: {
       const issueNumber = positiveInteger(args.issue_number);
       if (issueNumber === null) return denied(tool, "requires 'issue_number'");
       return { tool, target, issueNumber };
     }
-    case 'github__list_workflow_runs': {
+    case TOOL.listWorkflowRuns: {
       const workflowId = optional(args.workflow_id, workflowRef);
       if (workflowId === null) {
         return denied(tool, "'workflow_id' must be a workflow id or a workflow file name");
@@ -442,14 +438,14 @@ export function readGithubCall(
       if (branch === null) return denied(tool, notABranch(args.branch));
       return { tool, target, workflowId, branch };
     }
-    case 'github__list_workflow_jobs': {
+    case TOOL.listWorkflowJobs: {
       const runId = positiveInteger(args.run_id);
       if (runId === null) return denied(tool, "requires 'run_id', a positive integer");
       const filter = optional(args.filter, jobFilter);
       if (filter === null) return denied(tool, "'filter' must be 'latest' or 'all'");
       return { tool, target, runId, filter };
     }
-    case 'github__get_job_logs': {
+    case TOOL.getJobLogs: {
       const jobId = positiveInteger(args.job_id);
       if (jobId === null) return denied(tool, "requires 'job_id', a positive integer");
       const maxBytes = optional(args.max_bytes, logByteCount);
@@ -466,14 +462,14 @@ export function readGithubCall(
         tail: tail ?? false,
       };
     }
-    case 'github__get_branch_protection':
-    case 'github__update_branch_protection': {
+    case TOOL.getBranchProtection:
+    case TOOL.updateBranchProtection: {
       if (!isGiven(args.branch)) return denied(tool, "requires 'branch'");
       const branch = branchName(args.branch);
       if (branch === null) return denied(tool, notABranch(args.branch));
       return { tool, target, branch };
     }
-    case 'github__create_branch': {
+    case TOOL.createBranch: {
       if (!isGiven(args.branch)) return denied(tool, "requires 'branch'");
       const branch = branchName(args.branch);
       if (branch === null) return denied(tool, notABranch(args.branch));
@@ -481,8 +477,8 @@ export function readGithubCall(
       if (fromBranch === null) return denied(tool, notABranch(args.from_branch));
       return { tool, target, branch, fromBranch };
     }
-    case 'github__create_or_update_file':
-    case 'github__delete_file': {
+    case TOOL.createOrUpdateFile:
+    case TOOL.deleteFile: {
       if (!isGiven(args.branch) || !isGiven(args.path)) {
         return denied(tool, "requires 'branch' and 'path'");
       }
@@ -492,7 +488,7 @@ export function readGithubCall(
       if (path === null) return denied(tool, notACanonicalPath(args.path));
       return { tool, target, branch, path };
     }
-    case 'github__push_files': {
+    case TOOL.pushFiles: {
       if (!isGiven(args.branch)) return denied(tool, "requires 'branch'");
       const branch = branchName(args.branch);
       if (branch === null) return denied(tool, notABranch(args.branch));
@@ -502,7 +498,7 @@ export function readGithubCall(
       if (badPath !== undefined) return denied(tool, notACanonicalPath(badPath.path));
       return { tool, target, branch, files };
     }
-    case 'github__create_pull_request': {
+    case TOOL.createPullRequest: {
       if (!isGiven(args.head) || !isGiven(args.base)) {
         return denied(tool, "requires 'head' and 'base'");
       }
@@ -514,7 +510,7 @@ export function readGithubCall(
       if (base === null) return denied(tool, notABranch(args.base));
       return { tool, target, head, base };
     }
-    case 'github__merge_pull_request': {
+    case TOOL.mergePullRequest: {
       const pullNumber = positiveInteger(args.pull_number);
       if (pullNumber === null) return denied(tool, "requires 'pull_number'");
       // The declared base selects the risk class (`merge-protected` covers
@@ -525,7 +521,7 @@ export function readGithubCall(
       if (base === null) return denied(tool, notABranch(args.base));
       return { tool, target, pullNumber, base: base ?? DEFAULT_MERGE_BASE };
     }
-    case 'github__create_release': {
+    case TOOL.createRelease: {
       if (!isGiven(args.tag_name)) return denied(tool, "requires 'tag_name'");
       const tag = tagName(args.tag_name);
       if (tag === null) {
@@ -537,7 +533,7 @@ export function readGithubCall(
       }
       return { tool, target, tagName: tag, targetCommitish };
     }
-    case 'github__delete_release': {
+    case TOOL.deleteRelease: {
       const releaseId = positiveInteger(args.release_id);
       if (releaseId === null) return denied(tool, "requires 'release_id'");
       return { tool, target, releaseId };

@@ -26,6 +26,7 @@ import {
   printableRef,
 } from '@vaubaan/plugin-sdk/git';
 import type { GitReviewedUpdate, GitUpdateKind } from '@vaubaan/plugin-sdk/git';
+import { isList, isRecord } from '@vaubaan/plugin-sdk';
 
 import {
   branchName,
@@ -35,9 +36,10 @@ import {
   type Denied,
   type RepoTarget,
 } from './call.ts';
+import { TOOL } from './identity.ts';
 
-export const GIT_FETCH_TOOL = 'github__git_fetch';
-export const GIT_PUSH_TOOL = 'github__git_push';
+export const GIT_FETCH_TOOL = TOOL.gitFetch;
+export const GIT_PUSH_TOOL = TOOL.gitPush;
 
 /** Ref updates one push may carry. git sends one per ref ; more is not a development push. */
 export const MAX_GIT_PUSH_UPDATES = 50;
@@ -121,7 +123,7 @@ export function readGitCall(
 }
 
 function readPush(target: RepoTarget, raw: unknown): GitCall | Denied {
-  if (!Array.isArray(raw) || raw.length === 0) {
+  if (!isList(raw) || raw.length === 0) {
     return { denied: `${GIT_PUSH_TOOL} requires a non-empty list of 'updates'` };
   }
   if (raw.length > MAX_GIT_PUSH_UPDATES) {
@@ -131,7 +133,7 @@ function readPush(target: RepoTarget, raw: unknown): GitCall | Denied {
   }
   const updates: GitTargetUpdate[] = [];
   const seen = new Set<string>();
-  for (const item of raw as readonly unknown[]) {
+  for (const item of raw) {
     const read = readUpdate(item);
     if ('denied' in read) return read;
     if (seen.has(read.update.ref)) {
@@ -143,11 +145,8 @@ function readPush(target: RepoTarget, raw: unknown): GitCall | Denied {
   return { tool: GIT_PUSH_TOOL, target, updates };
 }
 
-function readUpdate(item: unknown): GitTargetUpdate | Denied {
-  if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-    return { denied: `${GIT_PUSH_TOOL}: each update must be an object` };
-  }
-  const u = item as Record<string, unknown>;
+function readUpdate(u: unknown): GitTargetUpdate | Denied {
+  if (!isRecord(u)) return { denied: `${GIT_PUSH_TOOL}: each update must be an object` };
   if (typeof u.ref !== 'string') return { denied: `${GIT_PUSH_TOOL}: an update has no 'ref'` };
   const pushed = pushedRef(u.ref);
   if ('denied' in pushed) return pushed;
@@ -205,8 +204,7 @@ function oidOrNull(value: unknown): string | null | undefined {
 }
 
 function stringList(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  return (value as readonly unknown[]).every((v) => typeof v === 'string')
-    ? [...(value as string[])]
-    : null;
+  if (!isList(value)) return null;
+  const strings = value.filter((v): v is string => typeof v === 'string');
+  return strings.length === value.length ? strings : null;
 }

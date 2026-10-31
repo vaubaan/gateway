@@ -27,6 +27,8 @@
  * pairs, which sign in as those phones).
  */
 
+import { isList, isRecord } from '@vaubaan/plugin-sdk';
+
 /** The fixed marker that replaces a secret value. */
 export const REDACTED_VALUE = '[redacted by Vaubaan]';
 
@@ -244,12 +246,12 @@ function isEmpty(value: unknown): boolean {
 
 /** Keep the allowed fields of one object, replace the value of every other field by the marker. */
 export function redactObject(payload: unknown, allowed: ReadonlySet<string>): unknown {
-  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+  if (!isRecord(payload)) {
     // Not the documented shape : nothing in it can be shown field by field.
     return isEmpty(payload) ? payload : REDACTED_VALUE;
   }
   const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(payload)) {
     out[key] = allowed.has(key) || isEmpty(value) ? value : REDACTED_VALUE;
   }
   return out;
@@ -258,7 +260,7 @@ export function redactObject(payload: unknown, allowed: ReadonlySet<string>): un
 /** `GET /projects/{ref}/secrets` : names and dates, never a value. */
 export function redactFunctionSecrets(payload: unknown): unknown {
   if (isEmpty(payload)) return payload;
-  if (!Array.isArray(payload)) return redactObject(payload, FUNCTION_SECRET_PUBLIC_FIELDS);
+  if (!isList(payload)) return redactObject(payload, FUNCTION_SECRET_PUBLIC_FIELDS);
   return payload.map((entry) => redactObject(entry, FUNCTION_SECRET_PUBLIC_FIELDS));
 }
 

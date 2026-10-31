@@ -15,6 +15,8 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
+
 const ZONE_ID = {
   type: 'string',
   description: 'The zone identifier — one of the Cloudflare DNS zones of the mission.',
@@ -24,7 +26,7 @@ const RECORD_ID = { type: 'string', description: 'The DNS record identifier.' } 
 
 const READ_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'cloudflare_dns__list_zones',
+    name: TOOL.listZones,
     description:
       'List the DNS zones of the mission with their status and nameservers. Backed by GET /zones ; the answer is filtered to the zones the mission may touch.',
     inputSchema: {
@@ -36,12 +38,12 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__get_zone',
+    name: TOOL.getZone,
     description: 'Retrieve one DNS zone. Backed by GET /zones/:zone_id.',
     inputSchema: { type: 'object', properties: { zone_id: ZONE_ID }, required: ['zone_id'] },
   },
   {
-    name: 'cloudflare_dns__list_records',
+    name: TOOL.listRecords,
     description:
       'List the DNS records of a zone with optional filters. Backed by GET /zones/:zone_id/dns_records.',
     inputSchema: {
@@ -58,7 +60,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__get_record',
+    name: TOOL.getRecord,
     description:
       'Retrieve one DNS record by id. Backed by GET /zones/:zone_id/dns_records/:record_id.',
     inputSchema: {
@@ -68,19 +70,19 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__export_records',
+    name: TOOL.exportRecords,
     description:
       'Export every DNS record of a zone as a BIND zone file. Backed by GET /zones/:zone_id/dns_records/export.',
     inputSchema: { type: 'object', properties: { zone_id: ZONE_ID }, required: ['zone_id'] },
   },
   {
-    name: 'cloudflare_dns__get_zone_settings',
+    name: TOOL.getZoneSettings,
     description:
       'Retrieve every setting of a zone (SSL mode, minimum TLS version, cache level…). Backed by GET /zones/:zone_id/settings.',
     inputSchema: { type: 'object', properties: { zone_id: ZONE_ID }, required: ['zone_id'] },
   },
   {
-    name: 'cloudflare_dns__get_dnssec',
+    name: TOOL.getDnssec,
     description:
       'Retrieve the DNSSEC status and DS record of a zone. Backed by GET /zones/:zone_id/dnssec.',
     inputSchema: { type: 'object', properties: { zone_id: ZONE_ID }, required: ['zone_id'] },
@@ -89,7 +91,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
 
 const WRITE_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'cloudflare_dns__create_record',
+    name: TOOL.createRecord,
     description:
       'Create a DNS record in a zone. Backed by POST /zones/:zone_id/dns_records. Apex, wildcard, MX and NS records count as critical changes.',
     inputSchema: {
@@ -117,7 +119,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__update_record',
+    name: TOOL.updateRecord,
     description:
       'Update an existing DNS record. Backed by PATCH /zones/:zone_id/dns_records/:record_id. `type` and `name` are required so the gateway can classify the change ; the call is refused when they do not describe the current record.',
     inputSchema: {
@@ -140,7 +142,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__delete_record',
+    name: TOOL.deleteRecord,
     description:
       'Delete a DNS record. Backed by DELETE /zones/:zone_id/dns_records/:record_id. Pass the `type` and `name` of the record : without them the deletion counts as a critical change (apex, wildcard, MX, NS) ; with them the call is refused when they do not describe the current record.',
     inputSchema: {
@@ -162,7 +164,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__import_records',
+    name: TOOL.importRecords,
     description:
       'Bulk import DNS records from a BIND zone file (creates / overwrites records in batch). Backed by POST /zones/:zone_id/dns_records/import (multipart/form-data).',
     inputSchema: {
@@ -175,7 +177,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__edit_zone_settings',
+    name: TOOL.editZoneSettings,
     description:
       'Edit one or more zone settings (SSL mode, minimum TLS version, cache level…). Backed by PATCH /zones/:zone_id/settings.',
     inputSchema: {
@@ -199,7 +201,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__purge_cache',
+    name: TOOL.purgeCache,
     description:
       'Purge cached content of a zone — everything, or by URL, tag, host or prefix. Backed by POST /zones/:zone_id/purge_cache.',
     inputSchema: {
@@ -223,7 +225,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__edit_dnssec',
+    name: TOOL.editDnssec,
     description: 'Enable or disable DNSSEC on a zone. Backed by PATCH /zones/:zone_id/dnssec.',
     inputSchema: {
       type: 'object',
@@ -239,7 +241,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'cloudflare_dns__delete_zone',
+    name: TOOL.deleteZone,
     description:
       'Delete a DNS zone. The domain stops resolving at once ; every record, setting and the DNSSEC configuration are lost. Backed by DELETE /zones/:zone_id.',
     inputSchema: { type: 'object', properties: { zone_id: ZONE_ID }, required: ['zone_id'] },

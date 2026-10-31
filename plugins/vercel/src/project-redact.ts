@@ -14,15 +14,13 @@
  * fields and its deploy hooks without their URL. An answer that is not JSON is
  * replaced whole (`redactProjectResult`): the filter fails closed.
  */
-import type { McpToolResult } from '@vaubaan/plugin-sdk';
+import { isList, isRecord, type McpToolResult } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
 import { isEmpty, REDACTED_VALUE, redactEntry } from './redact.ts';
 
 /** The tools whose answer is a project object. */
-export const PROJECT_TOOLS: ReadonlySet<string> = new Set([
-  'vercel__get_project',
-  'vercel__list_projects',
-]);
+export const PROJECT_TOOLS: ReadonlySet<string> = new Set([TOOL.getProject, TOOL.listProjects]);
 
 /** Fields of a project that describe it. `env` and `link` are filtered on their own. */
 export const PROJECT_PUBLIC_FIELDS: ReadonlySet<string> = new Set([
@@ -71,10 +69,6 @@ export const PROJECT_LINK_FIELDS: ReadonlySet<string> = new Set([
 /** Fields of a deploy hook that describe it; `url` is the capability and is not one. */
 export const DEPLOY_HOOK_FIELDS: ReadonlySet<string> = new Set(['id', 'name', 'ref', 'createdAt']);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function keepOnly(
   record: Readonly<Record<string, unknown>>,
   allowed: ReadonlySet<string>,
@@ -117,7 +111,7 @@ export function redactProjectPayload(payload: unknown): unknown {
   if (Array.isArray(payload.projects)) {
     const out: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(payload)) {
-      if (key === 'projects') out.projects = (value as unknown[]).map(redactProject);
+      if (key === 'projects' && isList(value)) out.projects = value.map(redactProject);
       else if (key === 'pagination') out.pagination = value;
       else out[key] = isEmpty(value) ? value : REDACTED_VALUE;
     }
@@ -147,13 +141,10 @@ export function redactProjectResult(result: McpToolResult): McpToolResult {
     }
     return { type: 'text' as const, text: JSON.stringify(redactProjectPayload(parsed), null, 2) };
   });
+  // A record stays a record through `redactProjectPayload` (allow-list, never replaced whole).
   const structured =
     result.structuredContent === undefined
-      ? {}
-      : {
-          structuredContent: redactProjectPayload(result.structuredContent) as Readonly<
-            Record<string, unknown>
-          >,
-        };
-  return { ...result, content, ...structured };
+      ? undefined
+      : redactProjectPayload(result.structuredContent);
+  return { ...result, content, ...(isRecord(structured) ? { structuredContent: structured } : {}) };
 }

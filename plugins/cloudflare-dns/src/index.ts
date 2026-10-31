@@ -18,6 +18,7 @@ import { cloudflareDnsCredential } from './credential.ts';
 import { cloudflareDnsDataModel } from './data-model.ts';
 import { discoverCloudflareDnsResources, executeCloudflareDns } from './execute.ts';
 import { CLOUDFLARE_DNS_ICON, CLOUDFLARE_DNS_ICON_COLOR } from './icon.ts';
+import { PROVIDER_ID } from './identity.ts';
 import { cloudflareDnsToolTitles } from './tool-titles.ts';
 import { cloudflareDnsTools } from './tools.ts';
 
@@ -26,11 +27,11 @@ import { cloudflareDnsTools } from './tools.ts';
 export const cloudflareDnsCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const cloudflareDnsPlugin = definePlugin({
-  id: 'cloudflare-dns',
+  id: PROVIDER_ID,
   displayName: 'Cloudflare DNS',
   icon: CLOUDFLARE_DNS_ICON,
   iconColor: CLOUDFLARE_DNS_ICON_COLOR,
-  version: '3.0.5',
+  version: '4.0.0',
   description:
     'DNS zones and records on Cloudflare : records, BIND import / export, zone settings, ' +
     'DNSSEC and cache purge — one resource per zone.',
@@ -61,12 +62,16 @@ export {
 export {
   API_TOKEN_FIELD,
   CLOUDFLARE_API_BASE,
+  PROVIDER_ID,
+  TOOL,
+  TOOL_PREFIX,
+} from './identity.ts';
+export {
   MAX_DISCOVERED_ZONES,
   discoverCloudflareDnsResources,
   executeCloudflareDns,
 } from './execute.ts';
 export {
-  CLOUDFLARE_DNS_PROVIDER,
   CRITICAL_RECORD_TYPES,
   DNS_NAME,
   PATH_IDENT,

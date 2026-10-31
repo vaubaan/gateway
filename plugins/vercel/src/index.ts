@@ -20,7 +20,6 @@ import {
   type VercelEnv,
 } from './classify.ts';
 import {
-  VERCEL_API_BASE,
   vercelAuth,
   vercelCredential,
   verifyVercelToken,
@@ -33,9 +32,15 @@ import {
   DISCOVERY_PAGE_SIZE,
   discoverVercelResources,
   executeVercel,
-  VERCEL_MCP_URL,
 } from './execute.ts';
 import { VERCEL_ICON, VERCEL_ICON_COLOR } from './icon.ts';
+import {
+  PROVIDER_ID,
+  TOOL,
+  VERCEL_API_BASE,
+  VERCEL_MCP_SERVER,
+  VERCEL_MCP_URL,
+} from './identity.ts';
 import { vercelToolTitles } from './tool-titles.ts';
 import { vercelTools } from './tools.ts';
 
@@ -46,11 +51,11 @@ export const VERCEL_CATALOG_PATH = catalogPathNextTo(import.meta.url);
 export const vercelCatalog = loadCatalogFile(VERCEL_CATALOG_PATH);
 
 export const vercelPlugin = definePlugin({
-  id: 'vercel',
+  id: PROVIDER_ID,
   displayName: 'Vercel',
   icon: VERCEL_ICON,
   iconColor: VERCEL_ICON_COLOR,
-  version: '3.0.5',
+  version: '4.0.0',
   description:
     'Runtime hosting plane — projects, deployments, logs, env vars, custom domains, firewall, preview comments.',
   summary:
@@ -85,8 +90,11 @@ export {
   vercelTools,
   DISCOVERY_MAX_PAGES,
   DISCOVERY_PAGE_SIZE,
+  PROVIDER_ID,
+  TOOL,
   VERCEL_API_BASE,
   VERCEL_ENVS,
+  VERCEL_MCP_SERVER,
   VERCEL_MCP_URL,
   VERCEL_TEAM_ID_PATTERN,
   VERCEL_TOKENS_URL,

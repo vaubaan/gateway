@@ -12,8 +12,11 @@
  *     the upstream arguments are the ones it returned, never `args`;
  *   - `list_calendars` is answered from the mission's calendars;
  *   - every other tool is one `tools/call` to Google's Calendar MCP server
- *     with the access token the broker issued; Google's tool result is passed
- *     through (its `isError` included);
+ *     through the SDK's client (`callUpstreamTool`), with the access token
+ *     the broker issued; Google's tool result is passed through (its
+ *     `isError` included); a failure is thrown typed (401 / 403
+ *     `UpstreamAuthError`, another status `UpstreamHttpError`, a JSON-RPC
+ *     error frame `UpstreamProtocolError`);
  *   - what Google answers is untrusted: discovery reads calendar ids through
  *     their grammar and keeps only what it recognises as a calendar.
  */
@@ -21,11 +24,15 @@
 import {
   CredentialRefusal,
   UpstreamAuthError,
+  UpstreamProtocolError,
+  callUpstreamTool,
   expectCredentialKind,
+  isList,
+  isRecord,
+  mcpRequest,
   refusalResult,
   type ConnectionContext,
   type ExecuteContext,
-  type McpToolContent,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -33,8 +40,7 @@ import {
 import { readCalendarCall } from './call.ts';
 import { missingScopes, scopesNotGrantedMessage } from './credential.ts';
 import { calendarIdOf, calendarRefOf, parseAddress } from './identifiers.ts';
-import { PROVIDER_ID, UPSTREAM_TOOL } from './identity.ts';
-import { mcpRequest } from './mcp.ts';
+import { GOOGLE_CALENDAR_MCP_SERVER, PROVIDER_ID, UPSTREAM_TOOL } from './identity.ts';
 import { UPSTREAM_TOOL_LIST, type UpstreamTool } from './tools.ts';
 
 /** Discovery keeps at most this many calendars. */
@@ -75,11 +81,13 @@ export async function executeGoogleCalendar(
   if ('denied' in read) return refusalResult(read.denied);
   const { call } = read;
   if (call.kind === 'list-calendars') return listCalendarsResult(call.calendars);
-  const result = await mcpRequest(ctx, tokenOf(ctx), 'tools/call', {
-    name: call.upstream,
-    arguments: call.arguments,
-  });
-  return toolResultOf(result);
+  return callUpstreamTool(
+    ctx,
+    GOOGLE_CALENDAR_MCP_SERVER,
+    tokenOf(ctx),
+    call.upstream,
+    call.arguments,
+  );
 }
 
 /** `list_calendars`: the mission's calendars, as discovery described them. */
@@ -92,33 +100,6 @@ function listCalendarsResult(calendars: readonly Resource[]): McpToolResult {
     ...(typeof c.metadata?.access_role === 'string' ? { accessRole: c.metadata.access_role } : {}),
   }));
   return { content: [{ type: 'text', text: JSON.stringify({ calendars: listed }, null, 2) }] };
-}
-
-/** Google's tool result, passed through; a block of a type MCP clients may not know becomes its JSON. */
-export function toolResultOf(result: unknown): McpToolResult {
-  if (
-    typeof result !== 'object' ||
-    result === null ||
-    !Array.isArray((result as Record<string, unknown>).content)
-  ) {
-    throw new Error(`${PROVIDER_ID}: the MCP server answered something that is not a tool result`);
-  }
-  const r = result as Record<string, unknown>;
-  const content = (r.content as unknown[]).map(contentBlock);
-  const structured = r.structuredContent;
-  return {
-    content,
-    ...(typeof structured === 'object' && structured !== null && !Array.isArray(structured)
-      ? { structuredContent: structured as Record<string, unknown> }
-      : {}),
-    ...(r.isError === true ? { isError: true } : {}),
-  };
-}
-
-function contentBlock(block: unknown): McpToolContent {
-  const b = (typeof block === 'object' && block !== null ? block : {}) as Record<string, unknown>;
-  if (b.type === 'text' && typeof b.text === 'string') return { type: 'text', text: b.text };
-  return { type: 'text', text: JSON.stringify(block) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,21 +144,27 @@ async function listCalendars(
   token: string,
   pageToken: string | null,
 ): Promise<McpToolResult> {
-  let result: unknown;
+  let answer: McpToolResult;
   try {
-    result = await mcpRequest(ctx, token, 'tools/call', {
-      name: UPSTREAM_TOOL.listCalendars,
-      arguments: { pageSize: DISCOVERY_PAGE_SIZE, ...(pageToken ? { pageToken } : {}) },
-    });
+    answer = await callUpstreamTool(
+      ctx,
+      GOOGLE_CALENDAR_MCP_SERVER,
+      token,
+      UPSTREAM_TOOL.listCalendars,
+      { pageSize: DISCOVERY_PAGE_SIZE, ...(pageToken ? { pageToken } : {}) },
+    );
   } catch (err) {
     if (err instanceof UpstreamAuthError && err.upstreamStatus === 403) {
       throw new CredentialRefusal(MCP_SERVER_REFUSED, 403);
     }
     throw err;
   }
-  const answer = toolResultOf(result);
   if (answer.isError === true) {
-    throw new Error(`${PROVIDER_ID}: ${UPSTREAM_TOOL.listCalendars} failed`);
+    // Google answered, and refused: its failure, not the plugin's. Its text is
+    // not quoted: discovery's failure reaches a person, not the agent.
+    throw new UpstreamProtocolError(
+      `${GOOGLE_CALENDAR_MCP_SERVER.name}, tool ${UPSTREAM_TOOL.listCalendars} failed`,
+    );
   }
   return answer;
 }
@@ -208,12 +195,13 @@ function documentsOf(result: McpToolResult): unknown[] {
 export function calendarsIn(result: McpToolResult): FoundCalendar[] {
   const found = new Map<string, FoundCalendar>();
   const visit = (value: unknown, depth: number): void => {
-    if (depth > 6 || typeof value !== 'object' || value === null) return;
-    if (Array.isArray(value)) {
+    if (depth > 6) return;
+    if (isList(value)) {
       value.forEach((v) => visit(v, depth + 1));
       return;
     }
-    const calendar = calendarObject(value as Record<string, unknown>);
+    if (!isRecord(value)) return;
+    const calendar = calendarObject(value);
     if (calendar && !found.has(calendar.id)) found.set(calendar.id, calendar);
     Object.values(value).forEach((v) => visit(v, depth + 1));
   };
@@ -238,8 +226,8 @@ function calendarObject(o: Record<string, unknown>): FoundCalendar | null {
 
 function nextPageTokenOf(result: McpToolResult): string | null {
   for (const doc of documentsOf(result)) {
-    if (typeof doc !== 'object' || doc === null) continue;
-    const token = (doc as Record<string, unknown>).nextPageToken;
+    if (!isRecord(doc)) continue;
+    const token = doc.nextPageToken;
     if (typeof token === 'string' && token.length > 0 && token.length <= 512) return token;
   }
   return null;
@@ -283,12 +271,7 @@ export function toolDrift(
   live: unknown,
   model: readonly UpstreamTool[] = UPSTREAM_TOOL_LIST.tools,
 ): ToolDrift {
-  const listed = Array.isArray((live as { tools?: unknown } | null)?.tools)
-    ? ((live as { tools: unknown[] }).tools.filter(
-        (t) =>
-          typeof t === 'object' && t !== null && typeof (t as { name?: unknown }).name === 'string',
-      ) as { name: string; inputSchema?: { properties?: Record<string, unknown> } }[])
-    : [];
+  const listed = liveToolsOf(live);
   const liveByName = new Map(listed.map((t) => [t.name, t] as const));
   const modelByName = new Map(model.map((t) => [t.name, t] as const));
   const args: Record<string, string[]> = {};
@@ -296,7 +279,7 @@ export function toolDrift(
     const other = liveByName.get(tool.name);
     if (!other) continue;
     const mine = new Set(Object.keys(tool.inputSchema.properties));
-    const theirs = new Set(Object.keys(other.inputSchema?.properties ?? {}));
+    const theirs = new Set(other.arguments);
     const diff = [
       ...[...theirs].filter((n) => !mine.has(n)).map((n) => `+${n}`),
       ...[...mine].filter((n) => !theirs.has(n)).map((n) => `-${n}`),
@@ -310,9 +293,22 @@ export function toolDrift(
   };
 }
 
+/** The tools of a live `tools/list` answer: each named one, with its argument names. */
+function liveToolsOf(live: unknown): { readonly name: string; readonly arguments: string[] }[] {
+  if (!isRecord(live) || !isList(live.tools)) return [];
+  return live.tools.flatMap((tool) => {
+    if (!isRecord(tool) || typeof tool.name !== 'string') return [];
+    const schema = tool.inputSchema;
+    const properties = isRecord(schema) ? schema.properties : undefined;
+    return [{ name: tool.name, arguments: isRecord(properties) ? Object.keys(properties) : [] }];
+  });
+}
+
 async function reportDrift(ctx: ConnectionContext, token: string): Promise<void> {
   try {
-    const drift = toolDrift(await mcpRequest(ctx, token, 'tools/list', {}));
+    const drift = toolDrift(
+      await mcpRequest(ctx, GOOGLE_CALENDAR_MCP_SERVER, token, 'tools/list', {}),
+    );
     if (drift.gone.length + drift.unmodelled.length + Object.keys(drift.arguments).length > 0) {
       ctx.logger?.warn(
         "Google's Calendar MCP tools differ from the plugin's model; model them again (handbook providers/google-calendar, Procedures)",

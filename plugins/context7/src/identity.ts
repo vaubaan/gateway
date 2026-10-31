@@ -9,10 +9,30 @@
  * places the id is written.
  */
 
-import { toolPrefixFor } from '@vaubaan/plugin-sdk';
+import { toolPrefixFor, type UpstreamMcpServer } from '@vaubaan/plugin-sdk';
 
 /** The provider id. */
 export const PROVIDER_ID = 'context7';
+
+/** Sent on every request, to the MCP server and to the REST API alike. */
+export const CONTEXT7_USER_AGENT = 'vaubaan-gateway';
+
+/** Context7's official MCP server (Streamable HTTP, SSE-framed JSON-RPC). */
+export const CONTEXT7_MCP_URL = 'https://mcp.context7.com/mcp';
+
+/**
+ * Context7's MCP server for the SDK's client. It is stateless (no
+ * `Mcp-Session-Id`, no `initialize` before `tools/call`, checked live on
+ * 2026-10-16), so `session: 'never'` : each call stays the one request it
+ * always was, and a 400 or 404 is the failure it says, not a cue to open a
+ * session.
+ */
+export const CONTEXT7_MCP_SERVER: UpstreamMcpServer = {
+  url: CONTEXT7_MCP_URL,
+  name: 'Context7 MCP server',
+  headers: { 'user-agent': CONTEXT7_USER_AGENT },
+  session: 'never',
+};
 
 /** Name of the secret field of the `api-key` credential, declared in `credential.ts`, read in `usage.ts`. */
 export const API_KEY_FIELD = 'api_key';

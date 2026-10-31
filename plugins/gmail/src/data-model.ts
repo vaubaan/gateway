@@ -29,8 +29,10 @@
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 export const gmailDataModel: DataModel = {
-  provider: 'gmail',
+  provider: PROVIDER_ID,
   planes: [
     {
       slug: 'mailbox',

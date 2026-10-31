@@ -10,7 +10,7 @@
  * SDK's rule (`toolPrefixFor`): `google_calendar__`.
  */
 
-import { toolPrefixFor } from '@vaubaan/plugin-sdk';
+import { toolPrefixFor, type UpstreamMcpServer } from '@vaubaan/plugin-sdk';
 
 export const PROVIDER_ID = 'google-calendar';
 
@@ -23,6 +23,17 @@ export const TOOL_PREFIX = toolPrefixFor(PROVIDER_ID);
  * 2026-10-27). It authenticates a Google access token as a Bearer.
  */
 export const CALENDAR_MCP_URL = 'https://calendarmcp.googleapis.com/mcp/v1';
+
+/**
+ * Google's Calendar MCP server for the SDK's client (`callUpstreamTool`,
+ * `mcpRequest`). ⚠ Whether it needs an `initialize` first is not documented
+ * and could not be checked without an account: with the client's default
+ * session mode it is asked one only when it answers a bare request 400 or 404.
+ */
+export const GOOGLE_CALENDAR_MCP_SERVER: UpstreamMcpServer = {
+  url: CALENDAR_MCP_URL,
+  name: 'Google Calendar MCP server',
+};
 
 /** The broker provider whose OAuth client the access token is issued to. */
 export const BROKER_PROVIDER = 'google';

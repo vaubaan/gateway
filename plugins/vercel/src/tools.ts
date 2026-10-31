@@ -13,9 +13,8 @@
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
 import { customTools, isCustomTool } from './custom-tools.ts';
+import { TOOL_PREFIX } from './identity.ts';
 import upstream from './upstream-tools.json' with { type: 'json' };
-
-export const VERCEL_TOOL_PREFIX = 'vercel__';
 
 const upstreamTools = upstream as ReadonlyArray<McpToolDeclaration>;
 
@@ -54,9 +53,7 @@ export function toolAcceptsArgument(name: string, property: string): boolean {
 
 /** Strip the `vercel__` prefix to get the upstream tool name. */
 export function toUpstreamName(toolName: string): string {
-  return toolName.startsWith(VERCEL_TOOL_PREFIX)
-    ? toolName.slice(VERCEL_TOOL_PREFIX.length)
-    : toolName;
+  return toolName.startsWith(TOOL_PREFIX) ? toolName.slice(TOOL_PREFIX.length) : toolName;
 }
 
 export { isCustomTool };

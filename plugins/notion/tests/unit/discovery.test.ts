@@ -4,6 +4,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import { NOTION_API_BASE } from '../../src/api.ts';
@@ -113,15 +114,19 @@ describe('discoverResources', () => {
     expect(fetch.calls[1]!.json).toMatchObject({ start_cursor: 'c-1' });
   });
 
-  test('refuses a payload it does not recognise', async () => {
+  test('a payload it does not recognise is Notion’s failure, typed', async () => {
     const odd = discovery([
       { method: 'POST', url: `${NOTION_API_BASE}/search`, body: { data: [] } },
     ]);
-    await expect(odd.run()).rejects.toThrow(/unexpected search answer/);
+    const oddRun = odd.run();
+    await expect(oddRun).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(oddRun).rejects.toThrow(/search: unexpected answer/);
     const badId = discovery([
       searchFor('page', [{ object: 'page', id: '../x', parent: workspace }]),
     ]);
-    await expect(badId.run()).rejects.toThrow(/unexpected page/);
+    const badIdRun = badId.run();
+    await expect(badIdRun).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(badIdRun).rejects.toThrow(/unexpected page/);
     const badCursor = discovery([
       {
         method: 'POST',
@@ -129,7 +134,9 @@ describe('discoverResources', () => {
         body: { results: [], has_more: true, next_cursor: 'a/b' },
       },
     ]);
-    await expect(badCursor.run()).rejects.toThrow(/next_cursor/);
+    const badCursorRun = badCursor.run();
+    await expect(badCursorRun).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(badCursorRun).rejects.toThrow(/next_cursor/);
   });
 
   test('a provider failure while probing a parent is thrown', async () => {

@@ -12,15 +12,15 @@ ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contrac
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
 [`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md),
 [`gateway-as-git-remote`](../../docs/decisions/gateway-as-git-remote.md).
-Plugin version 4.0.1, catalog version 9.
 
 ## Layout
 
 | File                      | Role                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                 |
+| `src/identity.ts`         | `PROVIDER_ID` and `TOOL`, every tool name: the one place they are written.                               |
 | `src/risk-catalog.yaml`   | The risks, the fallback and the macro-actions. Loaded by the SDK at boot; the only catalog artefact.     |
-| `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release, pull request, issue, workflow → run → job.    |
+| `src/data-model.ts`       | Planes `repo` (branch → file / commit; tag, release, PR, issue, workflow → run → job) and `search`.      |
 | `src/tools.ts`            | 27 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                     |
 | `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.     |
 | `src/classify.ts`         | Pure `(tool, args, resources) → slices \| denied`. The security-critical file.                           |
@@ -36,12 +36,20 @@ The plugin imports the SDK only (plus `@octokit/rest`); nothing from
 
 ## Data model
 
-Single plane `repo`. The repository is the resource; the **branch is the
+One plane, `repo`, with two roots. Under `repo`, the repository is the resource; the **branch is the
 environment of files and commits** (`branch[main]` ≠ `branch[feature/x]`),
 so the catalog tells protected branches by name, not by the owner's
-environment label. Virtual leaves carry intentions that are not entities:
-`branch[X].merge-into`, `branch[X].propose-to[Y]`,
-`branch[X].workflow-via-file`, `branch[X].files-bulk`, `release[id].delete`.
+environment label. A job is named through its run and workflow
+(`workflow[*].workflow-run[7].job`), `[*]` where the arguments do not name
+the parent. The second root, `search`, is GitHub's global search (`search.code`,
+`search.issues`): not a resource, beyond the mission's repositories. Virtual
+leaves carry intentions that are not entities: `branch[X].merge-into`,
+`branch[X].propose-to[Y]`, `branch[X].workflow-via-file`,
+`branch[X].files-bulk`, `release[id].delete`.
+
+An identifier the slice grammar cannot carry (`feature/ü`, `my notes.md`, a
+fork head `owner:branch`) is written as "any" (`[*]`), never repaired into
+another name: a branch so written touches every risk a branch may.
 
 ## Catalog and macro-actions
 
@@ -52,6 +60,7 @@ classification. What a reviewer must know:
   `merge-protected`; on `feature/*, feat/*, fix/*, chore/*, bug/*, docs/*,
 refactor/*` it touches `feature-branch-write`; any other branch name falls
   to the fallback `github.uncategorized-write`, which no macro-action offers.
+  A name outside the slice grammar (`feature/ü`) touches both named risks.
 - A file under `.github/workflows/` touches `workflow-write-via-file` (a
   privilege-escalation vector), through the API or through a push.
 - `search_code` / `search_issues` touch `search-global`: they are bounded by
@@ -93,7 +102,10 @@ parser then drops them — `path: '..'` on `delete_file` would become
 absent); the merge is declined when the pull request targets another
 branch. What `execute` declines itself is an `isError` result; what GitHub
 fails is thrown (`UpstreamAuthError` on 401/403, `UpstreamHttpError`
-otherwise).
+otherwise, `UpstreamProtocolError` for an answer that is not what its API
+says). Every answer the plugin reads itself goes through the SDK's
+transport (`httpJson`, type guards); Octokit's answers are passed through,
+the jobs of a run read field by field.
 
 ## Diagnosing a workflow run
 
@@ -172,7 +184,8 @@ npx vitest run plugins/github
 ```
 
 - `plugin.test.ts` — SDK kit (well-formed, no wildcard, catalog coverage
-  with samples per tool, `fallbackHits` empty), the macro-actions at each cran.
+  with samples per tool, `fallbackHits` empty, every pattern and slice a path
+  of the data model), the macro-actions at each cran.
 - `risk-catalog.test.ts` — the table `[tool, arguments, risks touched]`: add
   a row whenever a tool, a classifier branch or a catalog pattern changes.
 - `classify.test.ts` — the classifier's security suite: exact slices or
@@ -184,7 +197,8 @@ npx vitest run plugins/github
 - `execute.test.ts`, `job-logs.test.ts`, `data-model.test.ts` — Octokit over
   `mockFetch`, declined calls as `isError`, the bounded log, data-model
   integrity.
-- `git-inspect.test.ts`, `git-moves.test.ts` — workflow detection before the
-  pack leaves, the ref moves and their per-ref reports.
+- `git-inspect.test.ts`, `git-moves.test.ts`, `git-rest.test.ts` — workflow
+  detection before the pack leaves, the ref moves and their per-ref reports,
+  the REST reads and their typed failures.
 
 None reaches GitHub.

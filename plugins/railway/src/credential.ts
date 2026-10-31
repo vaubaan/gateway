@@ -36,22 +36,22 @@
 import {
   UpstreamAuthError,
   expectCredentialKind,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
   type CredentialSecret,
+  type UpstreamIo,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER } from './classify.ts';
-import { RAILWAY_USER_AGENT } from './user-agent.ts';
+import { askRailwayGraphql, nodesOf } from './graphql.ts';
+import { PROVIDER_ID } from './identity.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
 export const RAILWAY_TOKEN_FIELD = 'api_token';
 
 /** Where a person creates and deletes workspace and account tokens. */
 export const RAILWAY_TOKENS_PAGE = 'https://railway.com/account/tokens';
-
-const RAILWAY_GRAPHQL = 'https://backboard.railway.com/graphql/v2';
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
@@ -106,58 +106,13 @@ export const railwayCredential: ApiKeyCredentialSpec = {
 
 /** The bearer of a Railway connection : the pasted token. */
 export function railwayBearerOf(credential: CredentialSecret): string {
-  const token = expectCredentialKind(PROVIDER, credential, 'api-key').fields[RAILWAY_TOKEN_FIELD];
+  const token = expectCredentialKind(PROVIDER_ID, credential, 'api-key').fields[
+    RAILWAY_TOKEN_FIELD
+  ];
   if (typeof token !== 'string' || token.length === 0) {
-    throw new Error(`railway: the stored token has no '${RAILWAY_TOKEN_FIELD}' field`);
+    throw new Error(`${PROVIDER_ID}: the stored token has no '${RAILWAY_TOKEN_FIELD}' field`);
   }
   return token;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GraphQL, answered or refused
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** A GraphQL answer, or what Railway said when it refused the token. */
-export type GraphqlAnswer<T> =
-  { readonly ok: true; readonly data: T } | { readonly ok: false; readonly said: string };
-
-/**
- * One GraphQL request whose refusal is an answer, not an exception : a 401 or
- * 403, GraphQL `errors` or no `data` come back as `{ ok: false }`. Any other
- * failed status is thrown — Railway did not answer, which says nothing of the
- * token.
- */
-export async function askRailwayGraphql<T>(
-  fetchImpl: typeof fetch,
-  token: string,
-  query: string,
-  variables: Readonly<Record<string, unknown>>,
-  signal?: AbortSignal,
-): Promise<GraphqlAnswer<T>> {
-  const res = await fetchImpl(RAILWAY_GRAPHQL, {
-    redirect: 'error',
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': RAILWAY_USER_AGENT,
-    },
-    body: JSON.stringify({ query, variables }),
-    ...(signal ? { signal } : {}),
-  });
-  if (res.status === HTTP_UNAUTHORIZED || res.status === HTTP_FORBIDDEN) {
-    return { ok: false, said: `HTTP ${res.status}` };
-  }
-  if (!res.ok) throw new Error(`railway GraphQL answered HTTP ${res.status}`);
-  const body = (await res.json()) as {
-    data?: T | null;
-    errors?: ReadonlyArray<{ message?: unknown }>;
-  };
-  if (body.errors && body.errors.length > 0) {
-    return { ok: false, said: body.errors.map((e) => String(e.message)).join('; ') };
-  }
-  if (body.data === undefined || body.data === null) return { ok: false, said: 'no data' };
-  return { ok: true, data: body.data };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,59 +124,60 @@ export type RailwayTokenProbe =
   | { readonly kind: RailwayTokenKind; readonly account: string | null }
   | { readonly kind: 'rejected'; readonly said: string };
 
-const OWNER_QUERY = /* GraphQL */ `
-  query vaubaanTokenOwner {
-    me {
-      name
-      email
-    }
-  }
-`;
-
-/** The projects a workspace token reaches : the fields discovery reads anyway. */
-const REACH_QUERY = /* GraphQL */ `
-  query vaubaanTokenReach {
-    projects(first: 100) {
-      edges {
-        node {
-          id
-          name
-        }
+const OWNER_QUERY = {
+  operation: 'vaubaanTokenOwner',
+  query: /* GraphQL */ `
+    query vaubaanTokenOwner {
+      me {
+        name
+        email
       }
     }
-  }
-`;
+  `,
+  variables: {},
+};
 
-/** The workspace of those projects ; a name only, asked apart so its absence refuses nothing. */
-const WORKSPACE_NAME_QUERY = /* GraphQL */ `
-  query vaubaanTokenWorkspace {
-    projects(first: 1) {
-      edges {
-        node {
-          workspace {
+/** The projects a workspace token reaches : the fields discovery reads anyway. */
+const REACH_QUERY = {
+  operation: 'vaubaanTokenReach',
+  query: /* GraphQL */ `
+    query vaubaanTokenReach {
+      projects(first: 100) {
+        edges {
+          node {
+            id
             name
           }
         }
       }
     }
-  }
-`;
+  `,
+  variables: {},
+};
 
-interface OwnerAnswer {
-  readonly me?: { readonly name?: unknown; readonly email?: unknown } | null;
-}
-interface ReachAnswer {
-  readonly projects?: {
-    readonly edges?: ReadonlyArray<{ readonly node?: { readonly name?: unknown } }>;
-  };
-}
-interface WorkspaceNameAnswer {
-  readonly projects?: {
-    readonly edges?: ReadonlyArray<{
-      readonly node?: { readonly workspace?: { readonly name?: unknown } | null };
-    }>;
-  };
-}
+/** The workspace of those projects ; a name only, asked apart so its absence refuses nothing. */
+const WORKSPACE_NAME_QUERY = {
+  operation: 'vaubaanTokenWorkspace',
+  query: /* GraphQL */ `
+    query vaubaanTokenWorkspace {
+      projects(first: 1) {
+        edges {
+          node {
+            workspace {
+              name
+            }
+          }
+        }
+      }
+    }
+  `,
+  variables: {},
+};
+
+/**
+ * The three answers are read field by field (`isRecord`, `nodesOf`) : an
+ * absent or odd field proves nothing and names nobody, it refuses nothing.
+ */
 
 const PROJECTS_NAMED = 3;
 
@@ -231,26 +187,23 @@ const PROJECTS_NAMED = 3;
  * answer → a workspace token, named by its workspace (else by the projects
  * it reaches). Neither → rejected.
  */
-export async function probeRailwayToken(
-  fetchImpl: typeof fetch,
-  token: string,
-  signal?: AbortSignal,
-): Promise<RailwayTokenProbe> {
-  const owner = await askRailwayGraphql<OwnerAnswer>(fetchImpl, token, OWNER_QUERY, {}, signal);
-  if (owner.ok && owner.data.me) {
-    const { email, name } = owner.data.me;
+export async function probeRailwayToken(io: UpstreamIo, token: string): Promise<RailwayTokenProbe> {
+  const owner = await askRailwayGraphql(io, token, OWNER_QUERY, isRecord);
+  const me = owner.ok ? owner.data.me : undefined;
+  if (isRecord(me)) {
+    const { email, name } = me;
     const account = typeof email === 'string' ? email : typeof name === 'string' ? name : null;
     return { kind: 'account', account };
   }
-  const reach = await askRailwayGraphql<ReachAnswer>(fetchImpl, token, REACH_QUERY, {}, signal);
+  const reach = await askRailwayGraphql(io, token, REACH_QUERY, isRecord);
   if (!reach.ok) {
     const said = owner.ok ? reach.said : `${owner.said}; ${reach.said}`;
     return { kind: 'rejected', said };
   }
-  const workspace = await workspaceNameOf(fetchImpl, token, signal);
+  const workspace = await workspaceNameOf(io, token);
   if (workspace !== null) return { kind: 'workspace', account: `the ${workspace} workspace` };
-  const projects = (reach.data.projects?.edges ?? [])
-    .map((edge) => edge.node?.name)
+  const projects = nodesOf(reach.data.projects)
+    .map((node) => node.name)
     .filter((name): name is string => typeof name === 'string');
   if (projects.length === 0) return { kind: 'workspace', account: null };
   const named = projects.slice(0, PROJECTS_NAMED).join(', ');
@@ -259,20 +212,12 @@ export async function probeRailwayToken(
   return { kind: 'workspace', account: `the workspace of ${named}${more}` };
 }
 
-async function workspaceNameOf(
-  fetchImpl: typeof fetch,
-  token: string,
-  signal?: AbortSignal,
-): Promise<string | null> {
-  const answer = await askRailwayGraphql<WorkspaceNameAnswer>(
-    fetchImpl,
-    token,
-    WORKSPACE_NAME_QUERY,
-    {},
-    signal,
-  );
+async function workspaceNameOf(io: UpstreamIo, token: string): Promise<string | null> {
+  const answer = await askRailwayGraphql(io, token, WORKSPACE_NAME_QUERY, isRecord);
   if (!answer.ok) return null;
-  const name = answer.data.projects?.edges?.[0]?.node?.workspace?.name;
+  const [first] = nodesOf(answer.data.projects);
+  const workspace = first?.workspace;
+  const name = isRecord(workspace) ? workspace.name : undefined;
   return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
@@ -281,7 +226,7 @@ async function workspaceNameOf(
  * A token Railway's API refuses either way throws `UpstreamAuthError`.
  */
 export async function verifyRailwayToken(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const probe = await probeRailwayToken(ctx.fetch, railwayBearerOf(ctx.credential), ctx.signal);
+  const probe = await probeRailwayToken(ctx, railwayBearerOf(ctx.credential));
   if (probe.kind === 'rejected') {
     throw new UpstreamAuthError(
       `railway accepted it neither as a workspace token nor as an account token (${probe.said})`,
@@ -302,14 +247,13 @@ export async function verifyRailwayToken(ctx: ConnectionContext): Promise<Creden
  * A probe that cannot reach Railway leaves the original refusal as it was.
  */
 export async function explainMcpRefusal(
-  fetchImpl: typeof fetch,
+  io: UpstreamIo,
   token: string,
   refusal: UpstreamAuthError,
-  signal?: AbortSignal,
 ): Promise<UpstreamAuthError> {
   let probe: RailwayTokenProbe;
   try {
-    probe = await probeRailwayToken(fetchImpl, token, signal);
+    probe = await probeRailwayToken(io, token);
   } catch {
     return refusal;
   }

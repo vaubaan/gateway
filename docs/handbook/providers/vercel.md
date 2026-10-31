@@ -3,7 +3,7 @@ title: Vercel provider plugin
 tracks:
   - plugins/vercel/src/
   - plugins/vercel/README.md
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Vercel provider plugin — handbook
@@ -26,9 +26,14 @@ Resource: the project; the environment is a slice segment, not a resource label.
 - **Environment axis**: the project spans three environments, so the owner's label is meaningless;
   the plugin declares `envOf` (`vercelEnvOf`), asked before the label
   ([plugin SDK](../plugin-sdk.md)). An `env` segment followed by anything but one triad label
-  (`env[*]`, `env[staging]`) answers `NO_SINGLE_ENV`: every env-scoped risk refused, so a future
-  multi-env slice cannot fail open. A host resolving from the label alone would qualify every
+  (`env[*]`, `env[staging]`) answers `NO_SINGLE_ENV`: every env-scoped risk refused, so a
+  multi-env write cannot fail open. A host resolving from the label alone would qualify every
   preview deploy as prod.
+- **Slices walk the data model**: deployments and env vars sit under `env` (`project[p].env[e].…`).
+  The deployment, log and env-var reads and the bypass-token mint do not know their environment and
+  emit `env[*]` (`get_runtime_logs` names it when its `environment` filter does). No env-scoped risk
+  matches those slices, so their `NO_SINGLE_ENV` changes no decision: keep it so (a test checks every
+  sample); the catalog's `project[**]` patterns match with or without the `env` segment.
 - **The team is pinned to the credential**: a `teamId` argument other than the credential's is
   refused on every tool; the sent value always comes from the credential. Rewrapped tools that
   cannot carry it (`TEAMLESS_UPSTREAM_TOOLS`) are forwarded only when they read no team data or

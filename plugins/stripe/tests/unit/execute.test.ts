@@ -7,7 +7,12 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
+import {
+  UpstreamAuthError,
+  UpstreamProtocolError,
+  type ExecuteContext,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 import {
   mockFetch,
   type MockFetch,
@@ -192,28 +197,35 @@ describe('execute — POST form-encoding', () => {
 });
 
 describe('execute — only declared arguments reach Stripe', () => {
-  test('an undeclared argument is dropped from a GET query', async () => {
-    const call = await requestOf(
-      'stripe__list_invoices',
-      { customer: 'cus_1', 'expand[]': 'data.customer', expand: ['data.customer'], created: 1 },
-      { data: [] },
+  /** The refusal `classify` gives the same call : `execute` declines with that sentence. */
+  const undeclared = (key: string, tool: string): string =>
+    `${key}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
+
+  test('an undeclared argument of a GET is declined with the classifier sentence, nothing sent', async () => {
+    const fetch = mockFetch([]);
+    const args = { customer: 'cus_1', expand: ['data.customer'] };
+    expect(await refusalText(stripePlugin.execute(ctx(fetch), 'stripe__list_invoices', args))).toBe(
+      undeclared('expand', 'stripe__list_invoices'),
     );
-    expect(call.url).toBe('https://api.stripe.com/v1/invoices?customer=cus_1');
+    expect(stripePlugin.classify('stripe__list_invoices', args, [testResource])).toEqual({
+      denied: undeclared('expand', 'stripe__list_invoices'),
+    });
+    expect(fetch.calls).toHaveLength(0);
   });
 
-  test('an undeclared argument is dropped from a POST body', async () => {
-    const call = await requestOf(
-      'stripe__create_refund',
-      { charge: 'ch_abc', reverse_transfer: true, expand: ['charge.customer'] },
-      { id: 're_new' },
+  test('an undeclared argument of a POST is declined, nothing sent', async () => {
+    const fetch = mockFetch([]);
+    const args = { charge: 'ch_abc', reverse_transfer: true };
+    expect(await refusalText(stripePlugin.execute(ctx(fetch), 'stripe__create_refund', args))).toBe(
+      undeclared('reverse_transfer', 'stripe__create_refund'),
     );
-    expect(call.body).toBe('charge=ch_abc');
+    expect(fetch.calls).toHaveLength(0);
   });
 
-  test('create_invoice states the draft explicitly, and forwards nothing it does not declare', async () => {
+  test('create_invoice states the draft explicitly', async () => {
     const draft = await requestOf(
       'stripe__create_invoice',
-      { customer: 'cus_1', collection_method: 'charge_automatically', pending: 'include' },
+      { customer: 'cus_1' },
       { id: 'in_new' },
     );
     expect(draft.body).toBe('auto_advance=false&customer=cus_1');
@@ -225,10 +237,10 @@ describe('execute — only declared arguments reach Stripe', () => {
     expect(advancing.body).toBe('auto_advance=true&customer=cus_1');
   });
 
-  test('update_subscription forwards the declared cancellation fields', async () => {
+  test('update_subscription forwards the declared cancellation fields, the id to the path', async () => {
     const call = await requestOf(
       'stripe__update_subscription',
-      { id: 'sub_x', cancel_at_period_end: true, cancellation_details: { comment: 'x' } },
+      { id: 'sub_x', cancel_at_period_end: true },
       { id: 'sub_x' },
     );
     expect(call.url).toBe('https://api.stripe.com/v1/subscriptions/sub_x');
@@ -236,12 +248,16 @@ describe('execute — only declared arguments reach Stripe', () => {
   });
 
   test('pause_subscription cannot carry a cancellation', async () => {
-    const call = await requestOf(
-      'stripe__pause_subscription',
-      { id: 'sub_x', pause_collection: { behavior: 'void' }, cancel_at_period_end: true },
-      { id: 'sub_x' },
-    );
-    expect(call.body).toBe('pause_collection%5Bbehavior%5D=void');
+    const fetch = mockFetch([]);
+    const args = {
+      id: 'sub_x',
+      pause_collection: { behavior: 'void' },
+      cancel_at_period_end: true,
+    };
+    expect(
+      await refusalText(stripePlugin.execute(ctx(fetch), 'stripe__pause_subscription', args)),
+    ).toBe(undeclared('cancel_at_period_end', 'stripe__pause_subscription'));
+    expect(fetch.calls).toHaveLength(0);
   });
 
   test('a path id that is missing or made of dots never becomes a collection endpoint', async () => {
@@ -276,6 +292,23 @@ describe('execute — error handling', () => {
     const run = stripePlugin.execute(ctx(fetch), 'stripe__list_products', {});
     await expect(run).rejects.toThrow(/401/);
     await expect(run).rejects.toBeInstanceOf(UpstreamAuthError);
+  });
+
+  test('an answer that is not JSON is an UpstreamProtocolError : Stripe always answers JSON', async () => {
+    const fetch = mockFetch([{ url: () => true, body: '<html>maintenance</html>' }]);
+    const run = stripePlugin.execute(ctx(fetch), 'stripe__list_products', {});
+    await expect(run).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(run).rejects.toThrow(
+      'GET https://api.stripe.com/v1/products: the answer is not JSON',
+    );
+  });
+
+  test('an empty answer reads as an empty object', async () => {
+    const fetch = mockFetch([{ url: () => true, status: 200, body: '' }]);
+    const result = await stripePlugin.execute(ctx(fetch), 'stripe__delete_customer', {
+      id: 'cus_1',
+    });
+    expect(result).toEqual({ content: [{ type: 'text', text: '{}' }] });
   });
 
   test('an unknown tool is an error result and sends nothing', async () => {

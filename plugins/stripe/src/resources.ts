@@ -18,7 +18,7 @@
 
 import type { Resource } from '@vaubaan/plugin-sdk';
 
-export const STRIPE_PROVIDER = 'stripe';
+import { PROVIDER_ID } from './identity.ts';
 
 export const STRIPE_MODES = ['test', 'live'] as const;
 export type StripeMode = (typeof STRIPE_MODES)[number];
@@ -142,7 +142,7 @@ export function resolveStripeResource(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ResolvedResource {
-  const own = resources.filter((r) => r.provider === STRIPE_PROVIDER);
+  const own = resources.filter((r) => r.provider === PROVIDER_ID);
   const explicit = args.account;
   if (explicit !== undefined) {
     const ref = stripeAccountRef(explicit);

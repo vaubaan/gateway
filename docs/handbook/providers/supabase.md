@@ -78,3 +78,7 @@ resource per project, the owner's label as environment.
 - A migration asks for all five write risks → one statement is off the allow-list; split it.
 - `execute_sql` on an application table asks for `read-managed-schemas` → the query is unread.
 - "acceptable only in [preview, staging]" → a bulk write on prod (schema changes and RLS only).
+
+## Open questions
+
+- Should `get_anon_key`, which hands out a standing Data API key (public by design, protected by RLS), get its own leaf and risk instead of being priced as `supabase.read-data`?

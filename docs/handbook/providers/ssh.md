@@ -15,8 +15,9 @@ the resource and its owner label (`dev | staging | prod`) its environment.
 
 - [`src/shell-lex.ts`](../../../plugins/ssh/src/shell-lex.ts) — tokenises as `sh` / `bash` do.
 - [`src/policy.ts`](../../../plugins/ssh/src/policy.ts) — the read allow-list, on whole argv.
-- [`src/command-classes.ts`](../../../plugins/ssh/src/command-classes.ts) — normalisation, wrappers,
-  class detectors; `profileCommandLine`.
+- [`src/command/`](../../../plugins/ssh/src/command/) — one module per concern: wrappers
+  (`wrappers.ts`), secret paths (`secret-paths.ts`), opaque commands (`opaque.ts`), class
+  detectors (`classes.ts`) and `profileCommandLine` (`profile.ts`).
 - [`src/transport.ts`](../../../plugins/ssh/src/transport.ts) — ssh2, the host-key pin, output caps.
 
 ## Invariants

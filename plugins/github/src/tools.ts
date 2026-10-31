@@ -13,6 +13,8 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
+
 const repoArgs = {
   owner: { type: 'string', description: 'Repository owner (user or org).' },
   repo: { type: 'string', description: 'Repository name.' },
@@ -21,12 +23,12 @@ const repoArgs = {
 export const githubTools: readonly McpToolDeclaration[] = [
   // Read - list
   {
-    name: 'github__list_branches',
+    name: TOOL.listBranches,
     description: 'List branches of a repository.',
     inputSchema: { type: 'object', properties: { ...repoArgs }, required: ['owner', 'repo'] },
   },
   {
-    name: 'github__list_commits',
+    name: TOOL.listCommits,
     description: 'List commits on a branch / ref.',
     inputSchema: {
       type: 'object',
@@ -35,7 +37,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__list_pull_requests',
+    name: TOOL.listPullRequests,
     description: 'List pull requests on a repository.',
     inputSchema: {
       type: 'object',
@@ -44,7 +46,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__list_issues',
+    name: TOOL.listIssues,
     description: 'List issues on a repository.',
     inputSchema: {
       type: 'object',
@@ -54,7 +56,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Read - get
   {
-    name: 'github__get_file_contents',
+    name: TOOL.getFileContents,
     description: 'Get the contents of a file at a ref.',
     inputSchema: {
       type: 'object',
@@ -63,7 +65,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__get_pull_request',
+    name: TOOL.getPullRequest,
     description: 'Get a single pull request.',
     inputSchema: {
       type: 'object',
@@ -72,7 +74,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__get_issue',
+    name: TOOL.getIssue,
     description: 'Get a single issue.',
     inputSchema: {
       type: 'object',
@@ -81,7 +83,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__get_commit',
+    name: TOOL.getCommit,
     description: 'Get a single commit by SHA.',
     inputSchema: {
       type: 'object',
@@ -91,18 +93,18 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Search — account-shaped : not bounded to the mission resources (risk `github.search-global`).
   {
-    name: 'github__search_code',
+    name: TOOL.searchCode,
     description: 'Search code with a GitHub search query.',
     inputSchema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
   },
   {
-    name: 'github__search_issues',
+    name: TOOL.searchIssues,
     description: 'Search issues and pull requests.',
     inputSchema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] },
   },
   // Write - branches
   {
-    name: 'github__create_branch',
+    name: TOOL.createBranch,
     description: 'Create a branch from a base ref.',
     inputSchema: {
       type: 'object',
@@ -116,7 +118,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Write - files
   {
-    name: 'github__create_or_update_file',
+    name: TOOL.createOrUpdateFile,
     description: 'Create or update a single file in a branch.',
     inputSchema: {
       type: 'object',
@@ -132,7 +134,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__push_files',
+    name: TOOL.pushFiles,
     description: 'Push multiple files in one commit to a branch.',
     inputSchema: {
       type: 'object',
@@ -154,7 +156,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Write - pull requests
   {
-    name: 'github__create_pull_request',
+    name: TOOL.createPullRequest,
     description: 'Open a pull request from head to base.',
     inputSchema: {
       type: 'object',
@@ -170,7 +172,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__add_issue_comment',
+    name: TOOL.addIssueComment,
     description: 'Add a comment on an issue or pull request.',
     inputSchema: {
       type: 'object',
@@ -184,12 +186,12 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Read - ci (workflows + their runs)
   {
-    name: 'github__list_workflows',
+    name: TOOL.listWorkflows,
     description: 'List the workflows defined under .github/workflows on the repository.',
     inputSchema: { type: 'object', properties: { ...repoArgs }, required: ['owner', 'repo'] },
   },
   {
-    name: 'github__list_workflow_runs',
+    name: TOOL.listWorkflowRuns,
     description:
       'List recent workflow runs on the repository (optionally filtered by branch or workflow id).',
     inputSchema: {
@@ -207,9 +209,8 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__list_workflow_jobs',
-    description:
-      'List the jobs of a workflow run: name, status, conclusion, steps with their conclusions, html_url, started and completed times. Pass a job `id` to `github__get_job_logs`.',
+    name: TOOL.listWorkflowJobs,
+    description: `List the jobs of a workflow run: name, status, conclusion, steps with their conclusions, html_url, started and completed times. Pass a job \`id\` to \`${TOOL.getJobLogs}\`.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -226,7 +227,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__get_job_logs',
+    name: TOOL.getJobLogs,
     description:
       'Read the log of one workflow job as plain text, bounded: at most `max_bytes` (default 65536, at most 1048576). With `tail: true` the end of the log is kept, where a failure usually is. The answer says when the log was truncated.',
     inputSchema: {
@@ -248,7 +249,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Read - rules (branch protection)
   {
-    name: 'github__get_branch_protection',
+    name: TOOL.getBranchProtection,
     description:
       'Get the protection rules for a branch (required reviewers, status checks, restrictions).',
     inputSchema: {
@@ -259,7 +260,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Write - merge (touches `github.merge-protected` when the base is a protected branch)
   {
-    name: 'github__merge_pull_request',
+    name: TOOL.mergePullRequest,
     description:
       'Merge a pull request. Pass `base`, the base branch of the pull request : the call is classified on it and refused when the pull request targets another branch ; defaults to `main`.',
     inputSchema: {
@@ -274,7 +275,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__delete_file',
+    name: TOOL.deleteFile,
     description: 'Delete a file in a branch.',
     inputSchema: {
       type: 'object',
@@ -290,7 +291,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Write - rules (branch protection)
   {
-    name: 'github__update_branch_protection',
+    name: TOOL.updateBranchProtection,
     description:
       'Set/replace branch protection rules. Backed by PUT /repos/{owner}/{repo}/branches/{branch}/protection. `required_status_checks`, `required_pull_request_reviews`, `enforce_admins`, `restrictions` follow the GitHub REST shape. Pass `null` for any top-level field to disable it.',
     inputSchema: {
@@ -325,7 +326,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Read - releases & tags
   {
-    name: 'github__list_releases',
+    name: TOOL.listReleases,
     description: 'List releases on a repository. Backed by GET /repos/{owner}/{repo}/releases.',
     inputSchema: {
       type: 'object',
@@ -334,7 +335,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__list_tags',
+    name: TOOL.listTags,
     description: 'List tags on a repository. Backed by GET /repos/{owner}/{repo}/tags.',
     inputSchema: {
       type: 'object',
@@ -344,7 +345,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   },
   // Write - releases (create a tag + a release record)
   {
-    name: 'github__create_release',
+    name: TOOL.createRelease,
     description:
       'Create a new release on a tag (creates the tag if needed). Backed by POST /repos/{owner}/{repo}/releases.',
     inputSchema: {
@@ -366,7 +367,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'github__delete_release',
+    name: TOOL.deleteRelease,
     description:
       'Delete a release (does not delete the underlying tag). Backed by DELETE /repos/{owner}/{repo}/releases/{release_id}.',
     inputSchema: {

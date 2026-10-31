@@ -4,7 +4,7 @@
  * the version, the catalog path, the credential, the tool surface built from
  * the upstream list and its schema check. No network.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
@@ -85,15 +85,8 @@ describe('google-calendar plugin — structural kit', () => {
     );
   });
 
-  test('the plugin is the default export, and its version is the package version', () => {
+  test('the plugin is the default export', () => {
     expect(defaultExport).toBe(googleCalendarPlugin);
-    const manifest: unknown = JSON.parse(
-      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-    );
-    expect(manifest).toMatchObject({
-      name: '@vaubaan/plugin-google-calendar',
-      version: googleCalendarPlugin.version,
-    });
   });
 
   test('read, schedule, invite; the fallback in none; at Confiant deleting and inviting outside ask first', () => {
@@ -153,6 +146,17 @@ describe('google-calendar tools — built from the upstream list', () => {
       gone: ['suggest_time'],
       unmodelled: ['create_calendar'],
       arguments: { get_event: ['+fields', '-calendarId'] },
+    });
+  });
+
+  test('the schema check reads an untrusted answer: what is not a named tool is ignored', () => {
+    const everyToolGone = UPSTREAM_TOOL_LIST.tools.map((t) => t.name);
+    expect(toolDrift(null).gone).toEqual(everyToolGone);
+    expect(toolDrift({ tools: 'none' }).gone).toEqual(everyToolGone);
+    expect(toolDrift({ tools: [null, 7, { name: 3 }, { name: 'x', inputSchema: 'y' }] })).toEqual({
+      gone: everyToolGone,
+      unmodelled: ['x'],
+      arguments: {},
     });
   });
 

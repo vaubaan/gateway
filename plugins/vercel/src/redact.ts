@@ -14,6 +14,8 @@
  * included.
  */
 
+import { isList, isRecord } from '@vaubaan/plugin-sdk';
+
 /** The fixed marker that replaces a value the risk does not cover. */
 export const REDACTED_VALUE = '[redacted by Vaubaan]';
 
@@ -40,11 +42,9 @@ export function isEmpty(value: unknown): boolean {
 }
 
 export function redactEntry(entry: unknown): unknown {
-  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-    return isEmpty(entry) ? entry : REDACTED_VALUE;
-  }
+  if (!isRecord(entry)) return isEmpty(entry) ? entry : REDACTED_VALUE;
   const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(entry as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(entry)) {
     out[key] = ENV_VAR_PUBLIC_FIELDS.has(key) || isEmpty(value) ? value : REDACTED_VALUE;
   }
   return out;
@@ -56,9 +56,8 @@ export function redactEntry(entry: unknown): unknown {
  * fields only ; `pagination` stays as it is.
  */
 export function redactEncryptedEnvListing(payload: unknown): unknown {
-  if (Array.isArray(payload)) return payload.map(redactEntry);
-  if (typeof payload !== 'object' || payload === null) return payload;
-  const record = payload as Record<string, unknown>;
-  if (Array.isArray(record.envs)) return { ...record, envs: record.envs.map(redactEntry) };
+  if (isList(payload)) return payload.map(redactEntry);
+  if (!isRecord(payload)) return payload;
+  if (isList(payload.envs)) return { ...payload, envs: payload.envs.map(redactEntry) };
   return redactEntry(payload);
 }

@@ -196,14 +196,15 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'plugins-read-through-the-transport',
     statement:
-      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own; the plugins written before the transport are listed and the list only shrinks.",
+      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own, and never casts an answer to a DTO type.",
     source: 'ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-transport.test.ts`,
         tests: [
+          'the checks read a body read and a DTO cast, and nothing else',
           'reads no response body itself',
-          'is listed as not yet migrated only while it still reads a body itself',
+          "casts no provider's answer to a DTO",
         ],
       },
       {
@@ -216,18 +217,46 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugin-names-declared-once',
+    statement:
+      'A plugin writes its provider id and its tool names once, in src/identity.ts (and declares its tools in src/tools.ts); no other source file writes a tool name or the provider id as a literal.',
+    source: 'plugins/README.md step 1 and step 4',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-names-declared-once.test.ts`,
+        tests: [
+          'writes no tool name and no provider id outside identity.ts and tools.ts',
+          'every literal of another meaning is still in its file',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'plugin-identifiers-never-repaired',
+    statement:
+      'A plugin writes "every instance" with the SDK\'s ANY_IDENT / identSegment, never a copy of its own, and never repairs an identifier by replacing the characters it may not hold.',
+    source: 'ADR plugin-identifiers-one-grammar-for-classify-and-execute; plugins/README.md step 4',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-identifier-helpers.test.ts`,
+        tests: [
+          'the check reads an identifier repair, and not a printable-text filter',
+          'declares no ANY_IDENT of its own',
+          'replaces no character an identifier may not hold',
+        ],
+      },
+    ],
+  },
+  {
     id: 'catalogs-on-their-data-model',
     statement:
-      "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only. Known gaps are pinned and only shrink.",
+      "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only.",
     source:
       'risk-model spec §2, §3; ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-data-model-paths.test.ts`,
-        tests: [
-          'every live pattern walks its data model, known gaps aside',
-          'every plugin with a known gap is shipped',
-        ],
+        tests: ['every live pattern walks its data model'],
       },
       {
         file: 'packages/plugin-sdk/tests/unit/data-model-paths.test.ts',
@@ -492,6 +521,21 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'is stamped into the build from the root package.json',
           'has the same value in the lockfile',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'plugin-version-two-places',
+    statement:
+      "A shipped plugin's version is written in definePlugin and in its package.json, equal; its README states neither the plugin's version nor its catalog's.",
+    source: 'plugins/README.md step 9 and step 11',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-versions.test.ts`,
+        tests: [
+          'has the version of its package.json',
+          'states no version in its README, of the plugin or of its catalog',
         ],
       },
     ],

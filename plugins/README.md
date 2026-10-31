@@ -134,8 +134,10 @@ dependencies; ignore it, and do not run `npm audit fix`, which would rewrite
 the lockfile.
 
 In the code, never write the provider id or a tool name as a string literal
-outside `identity.ts` and the YAML: every other file imports `PROVIDER_ID`
-and `TOOL`. (The id also appears, later, in your two documents and in the
+outside `identity.ts`, `tools.ts` and the YAML: every other file imports
+`PROVIDER_ID` and `TOOL`, and keys its tables with `[TOOL.x]`
+(`plugin-names-declared-once.test.ts` refuses such a literal, with its file
+and line). (The id also appears, later, in your two documents and in the
 registration of step 10.)
 
 ## Step 2 — Data model (`src/data-model.ts`)
@@ -434,8 +436,10 @@ The rules the template already applies and a plugin must keep:
   The call is then classified on every instance of the entity, so only a
   mission whose pattern covers them all accepts it. Never drop the
   identifier (the slice would match a narrower pattern than the call
-  deserves) and never escape it (the slice would no longer be the name an
-  owner writes). The value sent to the provider is unchanged.
+  deserves) and never escape or repair it (the slice would no longer be the
+  name an owner writes). The value sent to the provider is unchanged.
+  `plugin-identifier-helpers.test.ts` refuses an `ANY_IDENT` of your own and
+  a `.replace` of the characters an identifier may not hold.
 - **No glob inside an executed identifier.** A slice your classifier emits
   names what the call touches: a `*` inside an identifier (`feature/*`), or
   in a value of a list, is read by the matcher as a pattern, and the gateway
@@ -558,7 +562,7 @@ return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w
 - Do not set `env` unless the provider itself tells production from test
   (Stripe's live and test modes): the environment is the owner's label.
 - **The provider's answer is untrusted.** Read it through a type guard,
-  never a cast: `httpJson`'s third argument, or `readShape(value, guard,
+  never a cast (`plugin-transport.test.ts` refuses an `as …Dto`): `httpJson`'s third argument, or `readShape(value, guard,
 what)` for a value you hold already. A payload the guard refuses is the
   provider's failure (`UpstreamProtocolError`, naming the request), never a
   `TypeError` deep in your code. Pass every id it carries through the grammar
@@ -855,7 +859,10 @@ Two documents, both in English, both in the same pull request as the code.
 
 **`plugins/<id>/README.md`** — for somebody who will use the plugin. Replace
 the template's README, keeping its sections: Data model, Credential and
-resources, Tools, Catalog (one line per risk), Macro-actions, Tests.
+resources, Tools, Catalog (one line per risk), Macro-actions, Tests. It
+states no version, neither the plugin's nor the catalog's: they are in
+`package.json` and `catalog_version`, and a third copy drifts
+(`plugin-versions.test.ts` refuses one).
 
 **`docs/handbook/providers/<id>.md`** — for the reviewer and the next
 maintainer: the model and the reasons behind it. Start it with this
@@ -943,7 +950,8 @@ the build and the tests. Fix it (`npm run format`) and run the gate again.
 
 **Plugin version** — `version` in `src/index.ts` and in the plugin's
 `package.json`, always equal (after changing it: `npm install`, which updates
-`package-lock.json`). A new plugin starts at `0.1.0`. It is what telemetry
+`package-lock.json`; `plugin-versions.test.ts` holds every shipped plugin to
+it). A new plugin starts at `0.1.0`. It is what telemetry
 reports, so one version never designates two different classifiers.
 
 | Change                                                                                                                   | From `1.0.0` | Before `1.0.0`        |

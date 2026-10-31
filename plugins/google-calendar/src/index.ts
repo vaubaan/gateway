@@ -33,7 +33,7 @@ export const googleCalendarPlugin = definePlugin({
   icon: GOOGLE_CALENDAR_ICON,
   iconColor: GOOGLE_CALENDAR_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.2',
+  version: '0.2.0',
   description:
     "Google Calendar through Google's own Calendar MCP server: read the agenda, suggest a time, create, change and delete events, answer invitations — one resource per calendar.",
   summary:
@@ -77,7 +77,6 @@ export {
   executeGoogleCalendar,
   resourcesOf,
   toolDrift,
-  toolResultOf,
   type FoundCalendar,
   type ToolDrift,
 } from './execute.ts';
@@ -94,6 +93,7 @@ export {
 export {
   BROKER_PROVIDER,
   CALENDAR_MCP_URL,
+  GOOGLE_CALENDAR_MCP_SERVER,
   LOCATOR,
   PROVIDER_ID,
   SCOPES,
@@ -101,7 +101,6 @@ export {
   UPSTREAM_TOOL,
   WITHHELD_ARGUMENTS,
 } from './identity.ts';
-export { MCP_PROTOCOL_VERSION, firstJsonRpcFrame, mcpRequest } from './mcp.ts';
 export {
   MODELLED_LOCATING_ARGUMENTS,
   UPSTREAM_TOOL_LIST,

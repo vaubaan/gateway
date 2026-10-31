@@ -11,7 +11,12 @@
  * against a fake transport.
  */
 import { describe, expect, test } from 'vitest';
-import { serializeSlice, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
+import {
+  jsonObjectsOf,
+  serializeSlice,
+  type ExecuteContext,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -164,7 +169,7 @@ describe('identifier positions — hostile values', () => {
     expect(result.isError).toBe(true);
     if (position.accepted.includes(value)) {
       // A label name nobody created : looked up, never stored (a STORE would create it).
-      expect(result.structuredContent).toMatchObject({ error: 'not_found' });
+      expect(jsonObjectsOf(result)[0]).toMatchObject({ error: 'not_found' });
       expect(transport.ops()).not.toContain('store');
     } else {
       // What classify refuses, execute refuses too, before any IMAP connection.

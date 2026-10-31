@@ -8,19 +8,21 @@
  *   - 6 management tools (Management API, api.upstash.com/v2, Basic auth) ;
  *   - 15 data tools (per-database REST endpoint, Bearer token).
  *
- * Names are prefixed `upstash_redis__` (the SDK prefix rule : `-` → `_`,
- * then `__`). Every database-scoped tool takes the database id as the
+ * Names are `TOOL` (`identity.ts`), prefixed `upstash_redis__` (the SDK
+ * prefix rule : `-` → `_`, then `__`). Every database-scoped tool takes the database id as the
  * explicit `databaseId` argument, which must be a resource of the mission ;
  * absent, the mission's single Upstash database applies.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
+
 // ─── Management tools ────────────────────────────────────────────────────────
 
 const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'upstash_redis__list_databases',
+    name: TOOL.listDatabases,
     description:
       'List all Redis databases in the Upstash account. Backed by GET /v2/redis/databases.',
     inputSchema: {
@@ -29,7 +31,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__get_database',
+    name: TOOL.getDatabase,
     description:
       'Get details of a specific Redis database (name, endpoint, region, state, etc.). Backed by GET /v2/redis/database/{id}.',
     inputSchema: {
@@ -44,7 +46,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__create_database',
+    name: TOOL.createDatabase,
     description: 'Create a new Redis database. Backed by POST /v2/redis/database.',
     inputSchema: {
       type: 'object',
@@ -79,7 +81,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__delete_database',
+    name: TOOL.deleteDatabase,
     description: 'Delete a Redis database permanently. Backed by DELETE /v2/redis/database/{id}.',
     inputSchema: {
       type: 'object',
@@ -93,7 +95,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__rename_database',
+    name: TOOL.renameDatabase,
     description: 'Rename a Redis database. Backed by POST /v2/redis/rename/{id}.',
     inputSchema: {
       type: 'object',
@@ -111,7 +113,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__get_database_stats',
+    name: TOOL.getDatabaseStats,
     description: 'Get usage statistics for a Redis database. Backed by GET /v2/redis/stats/{id}.',
     inputSchema: {
       type: 'object',
@@ -130,7 +132,7 @@ const MANAGEMENT_TOOLS: readonly McpToolDeclaration[] = [
 
 const DATA_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'upstash_redis__execute',
+    name: TOOL.execute,
     description:
       'Execute one generic Redis command. The command is an array of strings (e.g. ["SET", "key", "value"]). Use this for commands not covered by specific tools. The command is authorized as what it does: a read, a write, a deletion (DEL, UNLINK, EXPIRE with a TTL of 0…), a flush, or — for scripts, administration and any command the gateway does not know — arbitrary execution.',
     inputSchema: {
@@ -151,7 +153,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__get',
+    name: TOOL.get,
     description: 'GET a key from Redis. Returns the value or null if the key does not exist.',
     inputSchema: {
       type: 'object',
@@ -170,7 +172,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__set',
+    name: TOOL.set,
     description: 'SET a key in Redis with optional TTL and conditional flags.',
     inputSchema: {
       type: 'object',
@@ -209,7 +211,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__del',
+    name: TOOL.del,
     description: 'DEL one or more keys from Redis.',
     inputSchema: {
       type: 'object',
@@ -229,7 +231,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__keys',
+    name: TOOL.keys,
     description: 'KEYS — find all keys matching a glob-style pattern.',
     inputSchema: {
       type: 'object',
@@ -248,7 +250,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__scan',
+    name: TOOL.scan,
     description:
       'SCAN — incrementally iterate through the key space. Returns a cursor and a list of keys.',
     inputSchema: {
@@ -276,7 +278,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__ttl',
+    name: TOOL.ttl,
     description:
       'TTL — get the time-to-live of a key in seconds. Returns -1 if no TTL, -2 if key does not exist.',
     inputSchema: {
@@ -296,7 +298,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__expire',
+    name: TOOL.expire,
     description:
       'EXPIRE — set a timeout on a key in seconds. The key is removed when it elapses (at once for a TTL of 0 or less), so the call is authorized as a deletion, whatever the TTL.',
     inputSchema: {
@@ -320,7 +322,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__hset',
+    name: TOOL.hset,
     description: 'HSET — set one or more field-value pairs in a hash.',
     inputSchema: {
       type: 'object',
@@ -343,7 +345,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__hgetall',
+    name: TOOL.hgetall,
     description: 'HGETALL — get all field-value pairs from a hash.',
     inputSchema: {
       type: 'object',
@@ -362,7 +364,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__lpush',
+    name: TOOL.lpush,
     description: 'LPUSH — prepend one or more values to a list.',
     inputSchema: {
       type: 'object',
@@ -386,7 +388,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__lrange',
+    name: TOOL.lrange,
     description: 'LRANGE — get a range of elements from a list.',
     inputSchema: {
       type: 'object',
@@ -413,7 +415,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__sadd',
+    name: TOOL.sadd,
     description: 'SADD — add one or more members to a set.',
     inputSchema: {
       type: 'object',
@@ -437,7 +439,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__smembers',
+    name: TOOL.smembers,
     description: 'SMEMBERS — get all members of a set.',
     inputSchema: {
       type: 'object',
@@ -456,7 +458,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'upstash_redis__dbsize',
+    name: TOOL.dbsize,
     description: 'DBSIZE — get the number of keys in the database.',
     inputSchema: {
       type: 'object',
@@ -487,6 +489,6 @@ export const DATA_TOOL_NAMES: ReadonlySet<string> = new Set(DATA_TOOLS.map((t) =
 
 /** Management tools that need no database : account-rooted. */
 export const ACCOUNT_TOOL_NAMES: ReadonlySet<string> = new Set([
-  'upstash_redis__list_databases',
-  'upstash_redis__create_database',
+  TOOL.listDatabases,
+  TOOL.createDatabase,
 ]);

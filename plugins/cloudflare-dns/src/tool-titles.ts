@@ -9,20 +9,22 @@
  * has its title : a new tool is added here with its declaration.
  */
 
+import { TOOL } from './identity.ts';
+
 export const cloudflareDnsToolTitles: Readonly<Record<string, string>> = {
-  cloudflare_dns__list_zones: 'List DNS zones',
-  cloudflare_dns__get_zone: 'Read a DNS zone',
-  cloudflare_dns__list_records: 'List DNS records',
-  cloudflare_dns__get_record: 'Read a DNS record',
-  cloudflare_dns__export_records: 'Export the DNS records of a zone',
-  cloudflare_dns__get_zone_settings: 'Read the settings of a zone',
-  cloudflare_dns__get_dnssec: 'Read the DNSSEC status',
-  cloudflare_dns__create_record: 'Create a DNS record',
-  cloudflare_dns__update_record: 'Change a DNS record',
-  cloudflare_dns__delete_record: 'Delete a DNS record',
-  cloudflare_dns__import_records: 'Import DNS records in bulk',
-  cloudflare_dns__edit_zone_settings: 'Change the settings of a zone',
-  cloudflare_dns__purge_cache: 'Purge the cache of a zone',
-  cloudflare_dns__edit_dnssec: 'Turn DNSSEC on or off',
-  cloudflare_dns__delete_zone: 'Delete a DNS zone',
+  [TOOL.listZones]: 'List DNS zones',
+  [TOOL.getZone]: 'Read a DNS zone',
+  [TOOL.listRecords]: 'List DNS records',
+  [TOOL.getRecord]: 'Read a DNS record',
+  [TOOL.exportRecords]: 'Export the DNS records of a zone',
+  [TOOL.getZoneSettings]: 'Read the settings of a zone',
+  [TOOL.getDnssec]: 'Read the DNSSEC status',
+  [TOOL.createRecord]: 'Create a DNS record',
+  [TOOL.updateRecord]: 'Change a DNS record',
+  [TOOL.deleteRecord]: 'Delete a DNS record',
+  [TOOL.importRecords]: 'Import DNS records in bulk',
+  [TOOL.editZoneSettings]: 'Change the settings of a zone',
+  [TOOL.purgeCache]: 'Purge the cache of a zone',
+  [TOOL.editDnssec]: 'Turn DNSSEC on or off',
+  [TOOL.deleteZone]: 'Delete a DNS zone',
 };

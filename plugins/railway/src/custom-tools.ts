@@ -13,6 +13,8 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
+
 const projectIdArg = {
   projectId: {
     type: 'string',
@@ -35,21 +37,16 @@ const serviceIdArg = {
   },
 } as const;
 
-export const LIST_VARIABLES = 'railway__list-variables';
-export const UPSERT_VARIABLE = 'railway__upsert-variable';
-export const UPSERT_VARIABLES = 'railway__upsert-variables';
-export const DELETE_VARIABLE = 'railway__delete-variable';
-
 export const CUSTOM_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
-  LIST_VARIABLES,
-  UPSERT_VARIABLE,
-  UPSERT_VARIABLES,
-  DELETE_VARIABLE,
+  TOOL.listVariables,
+  TOOL.upsertVariable,
+  TOOL.upsertVariables,
+  TOOL.deleteVariable,
 ]);
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
-    name: LIST_VARIABLES,
+    name: TOOL.listVariables,
     description:
       'List environment variables on a Railway project / environment / service. Backed by GraphQL `variables(projectId, environmentId, serviceId)`. Returns an object mapping each variable name to its (rendered) value. Pass `unrendered: true` to keep `${{Ref}}` references intact.',
     inputSchema: {
@@ -67,7 +64,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: UPSERT_VARIABLE,
+    name: TOOL.upsertVariable,
     description:
       'Create or update a single Railway environment variable. Backed by GraphQL `variableUpsert(VariableUpsertInput)`. Pass `skipDeploys: true` to change the value without triggering a redeploy.',
     inputSchema: {
@@ -87,7 +84,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: UPSERT_VARIABLES,
+    name: TOOL.upsertVariables,
     description:
       'Bulk-upsert Railway environment variables in one call. Backed by GraphQL `variableCollectionUpsert(VariableCollectionUpsertInput)`. With `replace: true`, ANY variable not present in `variables` is DELETED — destructive.',
     inputSchema: {
@@ -114,7 +111,7 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: DELETE_VARIABLE,
+    name: TOOL.deleteVariable,
     description:
       'Delete a single Railway environment variable by name. Backed by GraphQL `variableDelete(VariableDeleteInput)`.',
     inputSchema: {

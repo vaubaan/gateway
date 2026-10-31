@@ -21,17 +21,23 @@
 
 import {
   ExecutorRefusal,
-  UpstreamAuthError,
   UpstreamHttpError,
+  anyJson,
   declining,
+  httpJson,
+  isList,
+  isRecord,
+  jsonResult,
+  readShape,
   type ConnectionContext,
+  type Guard,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
 import { META, isDenial, readFlyCall, type FlyCall } from './call.ts';
-import { appName, configImageRefusal, imageRefusal, isRecord, pathIdent } from './identifiers.ts';
+import { appName, configImageRefusal, imageRefusal, pathIdent } from './identifiers.ts';
 import { IMAGE_PREFIX_SEPARATOR } from './identifiers.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
 import {
@@ -101,7 +107,8 @@ export function executeFly(
     const call = readFlyCall(tool, args, ctx.resources);
     if (isDenial(call)) throw new ExecutorRefusal(call.denied);
     if (call.app && APP_WRITES.has(tool)) await checkAppIdentity(ctx, call.app);
-    return text(await run(ctx, call));
+    // A success without content (a 204) is shown as a confirmation.
+    return jsonResult((await run(ctx, call)) ?? { ok: true });
   });
 }
 
@@ -323,7 +330,7 @@ async function checkFreshSnapshots(
 async function checkRestoreSource(ctx: ExecuteContext, call: FlyCall, app: string): Promise<void> {
   const { source_volume_id: source, snapshot_id: snapshot } = call.values;
   if (typeof source === 'string') {
-    const volume = await get(ctx, `${app}/volumes/${source}`, '', [404]);
+    const volume = await lookup(ctx, `${app}/volumes/${source}`);
     if (!isRecord(volume) || volume.id !== source) {
       throw new ExecutorRefusal(
         `source_volume_id: ${source} is not a volume of app '${call.app!.ref}'`,
@@ -357,11 +364,21 @@ interface CurrentMachine {
   readonly version: string | undefined;
 }
 
+interface MachineDto {
+  readonly config: Record<string, unknown>;
+  readonly version?: unknown;
+}
+
+function isMachineDto(x: unknown): x is MachineDto {
+  return isRecord(x) && isRecord(x.config);
+}
+
 async function currentMachine(ctx: ExecuteContext, machine: string): Promise<CurrentMachine> {
-  const answer = await get(ctx, machine);
-  if (!isRecord(answer) || !isRecord(answer.config)) {
-    throw new UpstreamHttpError(`Fly answered GET ${machine} without a config`, 502);
-  }
+  const answer = readShape(
+    await get(ctx, machine),
+    isMachineDto,
+    `GET ${machine}: a machine with a config`,
+  );
   const version = typeof answer.version === 'string' ? answer.version : undefined;
   return { config: answer.config, version };
 }
@@ -380,6 +397,14 @@ async function updateMachine(
     ...(now.version ? { current_version: now.version } : {}),
     ...(call.values.skip_launch !== undefined ? { skip_launch: call.values.skip_launch } : {}),
   });
+}
+
+interface LeaseDto {
+  readonly nonce: string;
+}
+
+function isLease(x: unknown): x is LeaseDto {
+  return isRecord(x) && typeof x.nonce === 'string' && x.nonce.length > 0;
 }
 
 /** Read the config, change one field, write it back under a lease. */
@@ -404,9 +429,7 @@ async function replaceInConfig(
     ttl: LEASE_TTL_SECONDS,
     description: 'vaubaan gateway',
   });
-  const nonce = isRecord(lease) && typeof lease.nonce === 'string' ? lease.nonce : null;
-  if (!nonce)
-    throw new UpstreamHttpError(`Fly answered the lease of ${machine} without a nonce`, 502);
+  const { nonce } = readShape(lease, isLease, `POST ${machine}/lease: a lease with a nonce`);
   try {
     return await send(
       ctx,
@@ -482,7 +505,7 @@ async function getLogs(ctx: ExecuteContext, call: FlyCall): Promise<unknown> {
     region: v.region,
     next_token: v.next_token,
   })}`;
-  return fetchJson(ctx, 'GET', url);
+  return flyJson(ctx, 'GET', url, anyJson);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -508,20 +531,26 @@ function isAppDto(x: unknown): x is AppDto {
   );
 }
 
+interface AppPageDto {
+  readonly apps: readonly AppDto[];
+  readonly next_cursor?: unknown;
+}
+
+function isAppPage(x: unknown): x is AppPageDto {
+  return isRecord(x) && isList(x.apps) && x.apps.every(isAppDto);
+}
+
 /** Every app of the connection's organization, page by page, up to the ceiling. */
 async function allApps(ctx: ConnectionContext): Promise<AppDto[]> {
   const org = orgSlugOf(ctx.credential);
   const apps: AppDto[] = [];
   let cursor: string | undefined;
   do {
-    const page = await fetchJson(
-      ctx,
-      'GET',
-      `${FLY_API_BASE}/apps${query({ org_slug: org, limit: DISCOVERY_PAGE, cursor })}`,
+    const page = readShape(
+      await get(ctx, '/apps', query({ org_slug: org, limit: DISCOVERY_PAGE, cursor })),
+      isAppPage,
+      'GET /apps: a page of { apps: [{ id, name }] }',
     );
-    if (!isRecord(page) || !Array.isArray(page.apps) || !page.apps.every(isAppDto)) {
-      throw new Error(`${PROVIDER_ID}: unexpected app list (expected { apps: [{ id, name }] })`);
-    }
     apps.push(...page.apps);
     cursor =
       typeof page.next_cursor === 'string' && page.next_cursor ? page.next_cursor : undefined;
@@ -571,13 +600,18 @@ function query(values: Readonly<Record<string, unknown>>): string {
   return built ? `?${built}` : '';
 }
 
-function get(
-  ctx: ConnectionContext,
-  path: string,
-  search = '',
-  missing: readonly number[] = [],
-): Promise<unknown> {
-  return fetchJson(ctx, 'GET', `${FLY_API_BASE}${path}${search}`, undefined, {}, missing);
+function get(ctx: ConnectionContext, path: string, search = ''): Promise<unknown> {
+  return flyJson(ctx, 'GET', `${FLY_API_BASE}${path}${search}`, anyJson);
+}
+
+/** `get`, where Fly's 404 is the answer : `null`, nothing found. */
+async function lookup(ctx: ConnectionContext, path: string): Promise<unknown> {
+  try {
+    return await get(ctx, path);
+  } catch (error) {
+    if (error instanceof UpstreamHttpError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 function send(
@@ -587,64 +621,31 @@ function send(
   body?: unknown,
   headers: Readonly<Record<string, string>> = {},
 ): Promise<unknown> {
-  return fetchJson(ctx, method, `${FLY_API_BASE}${path}`, body, headers);
+  return flyJson(ctx, method, `${FLY_API_BASE}${path}`, anyJson, body, headers);
 }
 
 /**
- * One request. 401 / 403 → `UpstreamAuthError`, another failure →
- * `UpstreamHttpError` ; a status listed in `missing` answers `null` (a lookup
- * whose absence is the answer).
+ * One request to Fly with the connection's token, through the SDK's
+ * `httpJson` : 401 / 403 `UpstreamAuthError`, another failed status
+ * `UpstreamHttpError`, an answer that is not JSON or not what `guard` accepts
+ * `UpstreamProtocolError`, an empty answer `null`.
  */
-async function fetchJson(
+function flyJson<T>(
   ctx: ConnectionContext,
   method: string,
   url: string,
+  guard: Guard<T>,
   body?: unknown,
   headers: Readonly<Record<string, string>> = {},
-  missing: readonly number[] = [],
-): Promise<unknown> {
-  const res = await ctx.fetch(url, {
-    redirect: 'error',
-    method,
-    headers: {
-      authorization: authorizationOf(ctx.credential),
-      accept: 'application/json',
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...headers,
+): Promise<T> {
+  return httpJson(
+    ctx,
+    {
+      url,
+      method,
+      headers: { authorization: authorizationOf(ctx.credential), ...headers },
+      ...(body !== undefined ? { body } : {}),
     },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  const where = url.replace(/\?.*$/, '');
-  if (res.status === 401 || res.status === 403) {
-    throw new UpstreamAuthError(
-      `Fly refused the token for ${method} ${where} (HTTP ${res.status})`,
-      res.status,
-    );
-  }
-  if (missing.includes(res.status)) return null;
-  if (!res.ok)
-    throw new UpstreamHttpError(
-      `Fly ${method} ${where} failed with HTTP ${res.status}`,
-      res.status,
-    );
-  const raw = await res.text();
-  if (raw.trim() === '') return null;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return raw;
-  }
-}
-
-function text(payload: unknown): McpToolResult {
-  return {
-    content: [
-      {
-        type: 'text',
-        text:
-          typeof payload === 'string' ? payload : JSON.stringify(payload ?? { ok: true }, null, 2),
-      },
-    ],
-  };
+    guard,
+  );
 }

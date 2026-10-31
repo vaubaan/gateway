@@ -20,8 +20,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { parseBareAddress } from './address.ts';
-
-export const GMAIL_PLUGIN_ID = 'gmail';
+import { PROVIDER_ID } from './identity.ts';
 
 /** Gmail's IMAP server : implicit TLS on 993 (Google, "IMAP, POP and SMTP"). */
 export const GMAIL_IMAP_HOST = 'imap.gmail.com';
@@ -120,7 +119,7 @@ export function normalizeAppPassword(value: unknown): string | null {
  * a host bug, not a provider answer.
  */
 export function gmailAccount(secret: CredentialSecret): GmailAccount {
-  const key = expectCredentialKind(GMAIL_PLUGIN_ID, secret, 'api-key');
+  const key = expectCredentialKind(PROVIDER_ID, secret, 'api-key');
   const address = parseBareAddress(key.fields[GMAIL_FIELDS.email]);
   if (address === null) {
     throw new Error("gmail credential: field 'email' is missing or is not one e-mail address");

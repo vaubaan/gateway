@@ -84,7 +84,7 @@ needed), write the array, re-read the classifier, bump the version.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 1: one named risk and the fallback.
+`src/risk-catalog.yaml`: one named risk and the fallback.
 
 | Risk                           | Action | Notes                                                                                                         |
 | ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
@@ -118,8 +118,12 @@ pass it through and does not read its text to decide: it asks
   included requests is billed overage, not blocked, so it is not a 429;
 - otherwise an `Error` carrying Context7's text, which the agent reads.
 
-A failed HTTP status of the MCP server is thrown with its status. An aborted
-call is rethrown as the abort.
+A failed HTTP status of the MCP server is thrown with its status
+(`UpstreamAuthError` for 401 and 403, `UpstreamHttpError` otherwise); a
+JSON-RPC error frame, or an answer that is not a tool result, is an
+`UpstreamProtocolError`. The same holds for `verify` and discovery: a usage
+answer that is not the documented one is an `UpstreamProtocolError`. An
+aborted call is rethrown as the abort.
 
 ## Tests
 

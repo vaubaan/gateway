@@ -136,6 +136,31 @@ describe('httpJson', () => {
     expect(call?.json).toEqual({ name: 'n' });
   });
 
+  test('a raw body is sent as it is : a form with the type fetch gives it, bytes with the type the plugin gives', async () => {
+    const fetch = mockFetch([{ method: 'POST', url, body: { id: 'w-1' } }]);
+    await httpJson(
+      { fetch },
+      { url, method: 'POST', rawBody: new URLSearchParams({ 'items[0][price]': 'p' }) },
+      anyJson,
+    );
+    await httpJson(
+      { fetch },
+      {
+        url,
+        method: 'POST',
+        headers: { 'content-type': 'image/png' },
+        rawBody: new Uint8Array([1, 2, 3]),
+      },
+      anyJson,
+    );
+    const [form, bytes] = fetch.calls;
+    expect(form?.body).toBe('items%5B0%5D%5Bprice%5D=p');
+    // No JSON type written over the form's : `fetch` derives it from the body.
+    expect(form?.headers['content-type']).toBeUndefined();
+    expect(bytes?.headers['content-type']).toBe('image/png');
+    expect(bytes?.body).toBe('\u0001\u0002\u0003');
+  });
+
   test('401 and 403 are a rejected credential, quoting the answer ; the query string is never named', async () => {
     for (const status of [401, 403]) {
       const fetch = mockFetch([{ url, status, body: { message: 'bad token' } }]);

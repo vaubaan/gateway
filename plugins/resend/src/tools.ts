@@ -22,6 +22,8 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
+import { TOOL } from './identity.ts';
+
 const DOMAIN_ARG = {
   domain: {
     type: 'string',
@@ -87,7 +89,7 @@ const BROADCAST_CONTENT_PROPS = {
 
 const READ_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'resend__get_email',
+    name: TOOL.getEmail,
     description: 'Retrieve the status and metadata of a sent email. Backed by GET /emails/:id.',
     inputSchema: {
       type: 'object',
@@ -96,29 +98,29 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__list_domains',
+    name: TOOL.listDomains,
     description:
       'List the sending domains of the mission with their verification status. Backed by GET /domains.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'resend__get_domain',
+    name: TOOL.getDomain,
     description:
       'Retrieve a sending domain with its DNS records (DKIM, SPF, DMARC). Backed by GET /domains/:id.',
     inputSchema: { type: 'object', properties: { ...DOMAIN_ARG }, required: ['domain'] },
   },
   {
-    name: 'resend__list_segments',
+    name: TOOL.listSegments,
     description: 'List the segments (contact lists) of the mission. Backed by GET /segments.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'resend__get_segment',
+    name: TOOL.getSegment,
     description: 'Retrieve a segment. Backed by GET /segments/:id.',
     inputSchema: { type: 'object', properties: { ...SEGMENT_ARG }, required: ['segment_id'] },
   },
   {
-    name: 'resend__list_contacts',
+    name: TOOL.listContacts,
     description:
       'List contacts, optionally those of one segment. Contacts carry PII. Backed by GET /contacts.',
     inputSchema: {
@@ -135,7 +137,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__get_contact',
+    name: TOOL.getContact,
     description:
       'Retrieve a contact by id or email address. Carries PII. Backed by GET /contacts/:id.',
     inputSchema: {
@@ -145,12 +147,12 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__list_broadcasts',
+    name: TOOL.listBroadcasts,
     description: 'List the broadcasts of the segments of the mission. Backed by GET /broadcasts.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'resend__get_broadcast',
+    name: TOOL.getBroadcast,
     description: 'Retrieve a broadcast of a segment of the mission. Backed by GET /broadcasts/:id.',
     inputSchema: {
       type: 'object',
@@ -160,7 +162,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
   },
   // A read : it returns configuration and is classified `domain[*].R`.
   {
-    name: 'resend__describe_zones',
+    name: TOOL.describeZones,
     description:
       'Return the recipient-zone configuration (internal_domains, allowlist_domains, allowlist_addresses) ' +
       'of every sending domain of the mission. Synthetic : no upstream call.',
@@ -172,7 +174,7 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
 
 const WRITE_TOOLS: readonly McpToolDeclaration[] = [
   {
-    name: 'resend__send_email',
+    name: TOOL.sendEmail,
     description:
       'Send a transactional email from a sending domain of the mission. Classified by recipient zone ' +
       '(internal / allowlist / external-unbounded) : the worst zone among to, cc and bcc. Attachments ' +
@@ -184,7 +186,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__send_batch_emails',
+    name: TOOL.sendBatchEmails,
     description:
       'Send up to 100 transactional emails in one call. Every from address must be on a sending domain ' +
       'of the mission ; the worst recipient zone per domain applies. Backed by POST /emails/batch.',
@@ -205,7 +207,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__create_domain',
+    name: TOOL.createDomain,
     description:
       'Add a sending domain to the account. Posture shift : the owner must publish the DNS records and ' +
       'add the new resource to missions. Backed by POST /domains.',
@@ -225,7 +227,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__update_domain',
+    name: TOOL.updateDomain,
     description:
       'Update the tracking and TLS settings of a sending domain. Backed by PATCH /domains/:id.',
     inputSchema: {
@@ -240,19 +242,19 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__delete_domain',
+    name: TOOL.deleteDomain,
     description:
       'Remove a sending domain. Breaks delivery for every sender on it. Backed by DELETE /domains/:id.',
     inputSchema: { type: 'object', properties: { ...DOMAIN_ARG }, required: ['domain'] },
   },
   {
-    name: 'resend__verify_domain',
+    name: TOOL.verifyDomain,
     description:
       'Ask Resend to re-check the DNS records of a sending domain. Idempotent. Backed by POST /domains/:id/verify.',
     inputSchema: { type: 'object', properties: { ...DOMAIN_ARG }, required: ['domain'] },
   },
   {
-    name: 'resend__create_segment',
+    name: TOOL.createSegment,
     description: 'Create a segment (contact list). Backed by POST /segments.',
     inputSchema: {
       type: 'object',
@@ -261,13 +263,13 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__delete_segment',
+    name: TOOL.deleteSegment,
     description:
       'Delete a segment of the mission. Memberships are lost, contacts survive. Backed by DELETE /segments/:id.',
     inputSchema: { type: 'object', properties: { ...SEGMENT_ARG }, required: ['segment_id'] },
   },
   {
-    name: 'resend__create_contact',
+    name: TOOL.createContact,
     description:
       'Create a contact, optionally as a member of a segment of the mission. Carries PII. ' +
       'Backed by POST /contacts (+ POST /contacts/:id/segments/:segment_id).',
@@ -287,7 +289,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__update_contact',
+    name: TOOL.updateContact,
     description: 'Update a contact by id or email. Carries PII. Backed by PATCH /contacts/:id.',
     inputSchema: {
       type: 'object',
@@ -301,7 +303,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__delete_contact',
+    name: TOOL.deleteContact,
     description: 'Delete a contact by id or email. Backed by DELETE /contacts/:id.',
     inputSchema: {
       type: 'object',
@@ -310,7 +312,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__add_contact_to_segment',
+    name: TOOL.addContactToSegment,
     description:
       'Add an existing contact to a segment of the mission. Backed by POST /contacts/:id/segments/:segment_id.',
     inputSchema: {
@@ -323,7 +325,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__remove_contact_from_segment',
+    name: TOOL.removeContactFromSegment,
     description:
       'Remove a contact from a segment of the mission. Backed by DELETE /contacts/:id/segments/:segment_id.',
     inputSchema: {
@@ -336,7 +338,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__create_broadcast',
+    name: TOOL.createBroadcast,
     description:
       'Create a draft broadcast for a segment of the mission. Never sends : "send" and "scheduled_at" ' +
       'are refused. Backed by POST /broadcasts.',
@@ -347,7 +349,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__update_broadcast',
+    name: TOOL.updateBroadcast,
     description:
       'Update a draft broadcast of a segment of the mission. Backed by PATCH /broadcasts/:id.',
     inputSchema: {
@@ -361,7 +363,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__send_broadcast',
+    name: TOOL.sendBroadcast,
     description:
       'Send a broadcast to its segment now. Cardinal risk : mass delivery, irreversible. The broadcast ' +
       'must belong to the named segment. Backed by POST /broadcasts/:id/send.',
@@ -372,7 +374,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'resend__delete_broadcast',
+    name: TOOL.deleteBroadcast,
     description:
       'Delete a broadcast of a segment of the mission (cancels it if scheduled). Backed by DELETE /broadcasts/:id.',
     inputSchema: {

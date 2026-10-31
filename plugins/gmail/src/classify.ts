@@ -43,10 +43,18 @@
  *      the draft and refuses it, unsent, when it holds any other.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  ANY_IDENT,
+  identSegment,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
 import { collectRecipients, parseBareAddress, type EmailAddress } from './address.ts';
 import { parseQ, type QParsed } from './q-parser.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 
 // ─── Zone names ────────────────────────────────────────────────────────────
@@ -188,18 +196,17 @@ function toZoneOf(recipient: EmailAddress, md: GmailMailboxMetadata): ToZone {
 // ─── Slice helpers ─────────────────────────────────────────────────────────
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
-  return { provider: 'gmail', path: segments, action };
+  return { provider: PROVIDER_ID, path: segments, action };
 }
 const name = (value: string): SliceSegment => ({ kind: 'name', value });
 const ident = (value: string): SliceSegment => ({ kind: 'ident', value });
-const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
 const fromZoneSlice = (zone: FromZone): Slice =>
   slice('R', [name('mailbox'), name('from-zone'), ident(zone)]);
 
 /** `sensitive-label[<name>]` ; `*` when the owner's label name is not a legal slice identifier. */
 function sensitiveLabelSlice(action: 'R' | 'W', label: string | null): Slice {
-  const segment = label !== null && SLICE_IDENT.test(label) ? ident(label) : ANY_IDENT;
+  const segment = label !== null ? identSegment(label) : ANY_IDENT;
   return slice(action, [name('mailbox'), name('sensitive-label'), segment]);
 }
 
@@ -229,8 +236,6 @@ const PART_NUMBER = /^[1-9][0-9]{0,3}$/;
  * starts with `{`), brackets (`[Gmail]`) or angle brackets.
  */
 const LABEL_CHAR = /^[\p{L}\p{M}\p{N} _.,;:!?'’&+()@#=~^$€£«»–—/-]$/u;
-/** What a bracket identifier of a slice may hold (the slice grammar of the policy engine). */
-const SLICE_IDENT = /^[A-Za-z0-9_./~-]+$/;
 
 /**
  * A Gmail thread or message id, or `null` : 1 to 16 lower-case hexadecimal
@@ -437,7 +442,7 @@ function sensitiveLabelsReadBySearch(parsed: QParsed, md: GmailMailboxMetadata):
  * later decision).
  */
 export function selectMailbox(resources: readonly Resource[]): Resource | { denied: string } {
-  const mailboxes = resources.filter((r) => r.provider === 'gmail');
+  const mailboxes = resources.filter((r) => r.provider === PROVIDER_ID);
   if (mailboxes.length === 0) return { denied: 'no gmail mailbox is a resource of this mission.' };
   if (mailboxes.length > 1) {
     return { denied: 'ambiguous gmail target: this mission has several mailboxes.' };
@@ -459,21 +464,21 @@ export function classifyGmail(
 ): ClassifyOutcome {
   const mailbox = selectMailbox(resources);
   if ('denied' in mailbox) return mailbox;
-  if (!(GMAIL_CLASSIFIED_TOOLS as readonly string[]).includes(tool)) {
+  if (!GMAIL_CLASSIFIED_TOOLS.includes(tool)) {
     return { denied: `unknown gmail tool '${tool}'.` };
   }
   const md = readMailboxMetadata(mailbox);
 
   switch (tool) {
     // Synthetic Vaubaan tool — returns the zoning configuration, read-only.
-    case 'gmail__describe_zones':
+    case TOOL.describeZones:
       return { slices: [slice('R', [name('mailbox'), name('label'), ANY_IDENT])] };
 
-    case 'gmail__search_threads':
+    case TOOL.searchThreads:
       return { slices: classifySearch(args.q, md) };
 
     // Worst case : neither the sender nor the labels are known until the thread is fetched.
-    case 'gmail__get_thread': {
+    case TOOL.getThread: {
       const tid = requireArg(args, 'id', gmailId);
       if (typeof tid !== 'string') return tid;
       const slices: Slice[] = [
@@ -485,7 +490,7 @@ export function classifyGmail(
     }
 
     // Like get_thread : the sender and the labels are unknown before the fetch.
-    case 'gmail__get_attachment': {
+    case TOOL.getAttachment: {
       const tid = requireArg(args, 'thread_id', gmailId);
       if (typeof tid !== 'string') return tid;
       const mid = requireArg(args, 'message_id', gmailId);
@@ -500,20 +505,19 @@ export function classifyGmail(
       return { slices };
     }
 
-    case 'gmail__create_label': {
+    case TOOL.createLabel: {
       const label = requireArg(args, 'name', creatableLabel);
       if (typeof label !== 'string') return label;
-      const segment = SLICE_IDENT.test(label) ? ident(label) : ANY_IDENT;
-      const slices: Slice[] = [slice('W', [name('mailbox'), name('label'), segment])];
+      const slices: Slice[] = [slice('W', [name('mailbox'), name('label'), identSegment(label)])];
       const named = md.sensitive_labels.find((s) => isLabelOrNested(label, s));
       if (named !== undefined) slices.push(sensitiveLabelSlice('W', named));
       return { slices };
     }
 
-    case 'gmail__list_drafts':
+    case TOOL.listDrafts:
       return { slices: [slice('R', [name('mailbox'), name('draft'), ANY_IDENT])] };
 
-    case 'gmail__create_draft': {
+    case TOOL.createDraft: {
       const collected = collectRecipients(args);
       if ('denied' in collected) return collected;
       const zone = worstToZone(collected.recipients, md);
@@ -535,9 +539,9 @@ export function classifyGmail(
 
     // Irreversible : a sent message cannot be called back. One slice, the recipient zone ;
     // removing the sent draft from Drafts is part of the send, not a draft write.
-    case 'gmail__send_message':
-    case 'gmail__send_draft': {
-      if (tool === 'gmail__send_draft') {
+    case TOOL.sendMessage:
+    case TOOL.sendDraft: {
+      if (tool === TOOL.sendDraft) {
         const id = requireArg(args, 'id', gmailId);
         if (typeof id !== 'string') return id;
       }
@@ -553,11 +557,11 @@ export function classifyGmail(
       return { slices: [slice('W', [name('mailbox'), name('send-zone'), ident(zone)])] };
     }
 
-    case 'gmail__list_labels':
+    case TOOL.listLabels:
       return { slices: [slice('R', [name('mailbox'), name('label'), ANY_IDENT])] };
 
-    case 'gmail__label_message':
-    case 'gmail__unlabel_message': {
+    case TOOL.labelMessage:
+    case TOOL.unlabelMessage: {
       const tid = requireArg(args, 'thread_id', gmailId);
       if (typeof tid !== 'string') return tid;
       const mid = requireArg(args, 'message_id', gmailId);
@@ -568,8 +572,8 @@ export function classifyGmail(
       return { slices: labelWriteSlices([...target, name('label')], label, md) };
     }
 
-    case 'gmail__label_thread':
-    case 'gmail__unlabel_thread': {
+    case TOOL.labelThread:
+    case TOOL.unlabelThread: {
       const tid = requireArg(args, 'thread_id', gmailId);
       if (typeof tid !== 'string') return tid;
       const label = requireWritableLabel(args);

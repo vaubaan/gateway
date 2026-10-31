@@ -257,10 +257,10 @@ describe('vercel identifiers — legitimate shapes keep working, and the request
       expect(forwardedArgs(fetch.calls.find(isMcpCall)!).idOrUrl).toBe('dpl_own');
     }
     expect(slicesOf('vercel__get_deployment', { idOrUrl: 'dpl_abc' })).toEqual([
-      'vercel.project[prj_abc].deployment[dpl_abc].R',
+      'vercel.project[prj_abc].env[*].deployment[dpl_abc].R',
     ]);
     expect(slicesOf('vercel__get_deployment', { idOrUrl: 'my-app-abc123.vercel.app' })).toEqual([
-      'vercel.project[prj_abc].deployment[*].R',
+      'vercel.project[prj_abc].env[*].deployment[*].R',
     ]);
   });
 });
@@ -291,7 +291,7 @@ describe('vercel identifiers — the deployment segment is read like execute rea
     await expectRefusedWithoutCall('vercel__get_deployment', {});
     // Optional : `get_runtime_logs` without `deploymentId` reads the whole project.
     expect(slicesOf('vercel__get_runtime_logs', {})).toEqual([
-      'vercel.project[prj_abc].deployment[*].runtime-log.R',
+      'vercel.project[prj_abc].env[*].deployment[*].runtime-log.R',
     ]);
   });
 });

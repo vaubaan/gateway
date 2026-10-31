@@ -1,7 +1,7 @@
 /**
  * SSH read-vs-write classification — the read allow-list : "this whole
  * simple command is an inspection". Anything else is a write. Used by the
- * command profiler (`command-classes.ts`) to decide which side (`R` or `W`)
+ * command profiler (`command/profile.ts`) to decide which side (`R` or `W`)
  * each simple command of an `ssh__exec` line falls on.
  *
  * Handbook : docs/handbook/providers/ssh.md, Invariants, "Reading the allow-list".
