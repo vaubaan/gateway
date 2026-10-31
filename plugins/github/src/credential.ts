@@ -25,15 +25,16 @@
  */
 
 import {
-  UpstreamAuthError,
-  UpstreamHttpError,
   expectCredentialKind,
+  httpJson,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
 } from '@vaubaan/plugin-sdk';
 
-import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
+import { GITHUB_API_BASE, githubApiHeaders } from './api.ts';
+import { PROVIDER_ID } from './identity.ts';
 import { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
 
 /** Name of the form field, and key of the secret, holding the token. */
@@ -92,7 +93,7 @@ export const githubCredential: ApiKeyCredentialSpec = {
 
 /** The pasted token of a token connection. */
 export function githubTokenOf(ctx: ConnectionContext): string {
-  const secret = expectCredentialKind('github', ctx.credential, 'api-key');
+  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const token = secret.fields[GITHUB_TOKEN_FIELD];
   if (typeof token !== 'string' || token.length === 0) {
     throw new Error(`github: the stored token has no '${GITHUB_TOKEN_FIELD}' field`);
@@ -102,26 +103,26 @@ export function githubTokenOf(ctx: ConnectionContext): string {
 
 /**
  * Who the token acts as and when it expires : `GET /user` (any valid token
- * may read its own user) and the expiration header. A 401 is a rejected
- * token ; any other failure is GitHub's.
+ * may read its own user) and the expiration header. A 401 or a 403 is a
+ * rejected token (`UpstreamAuthError`) ; any other failure is GitHub's.
  */
 export async function verifyGithubToken(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const res = await ctx.fetch(`${GITHUB_API_BASE}/user`, {
-    redirect: 'error',
-    method: 'GET',
-    headers: { ...GITHUB_API_HEADERS, Authorization: `Bearer ${githubTokenOf(ctx)}` },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new UpstreamAuthError(`github rejected the token (HTTP ${res.status})`, res.status);
-  }
-  if (!res.ok) {
-    throw new UpstreamHttpError(`github GET /user failed with HTTP ${res.status}`, res.status);
-  }
-  const body = (await res.json()) as { login?: unknown };
+  // `httpJson` reads the body ; the expiry is a header of the same answer,
+  // kept by the fetch it is given.
+  let expiration: string | null = null;
+  const fetchKeepingExpiry: typeof fetch = async (input, init) => {
+    const res = await ctx.fetch(input, init);
+    expiration = res.headers.get(GITHUB_TOKEN_EXPIRATION_HEADER);
+    return res;
+  };
+  const user = await httpJson(
+    { fetch: fetchKeepingExpiry, ...(ctx.signal ? { signal: ctx.signal } : {}) },
+    { url: `${GITHUB_API_BASE}/user`, headers: githubApiHeaders(githubTokenOf(ctx)) },
+    isRecord,
+  );
   return {
-    account: typeof body.login === 'string' ? body.login : null,
-    expiresAt: expiryOf(res.headers.get(GITHUB_TOKEN_EXPIRATION_HEADER)),
+    account: typeof user.login === 'string' ? user.login : null,
+    expiresAt: expiryOf(expiration),
   };
 }
 

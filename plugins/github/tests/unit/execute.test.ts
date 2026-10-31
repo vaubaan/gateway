@@ -5,10 +5,11 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { DISCOVERY_PAGE_SIZE } from '../../src/execute.ts';
-import { githubPlugin } from '../../src/index.ts';
+import { TOOL, githubPlugin } from '../../src/index.ts';
 import { PAT, connectionCtx, executeCtx } from './fixtures.ts';
 
 const text = (r: { content: readonly unknown[] }) => (r.content[0] as { text: string }).text;
@@ -239,7 +240,35 @@ describe('execute — merge_pull_request is bound to the declared base', () => {
         base: 'main',
       }),
     ).rejects.toThrow(/could not read the base branch of pull request #7/);
+    // GitHub's answer is not what its API says : its failure, not the executor's.
+    await expect(
+      githubPlugin.execute(executeCtx(mockFetch([pullRoute(undefined)])), TOOL.mergePullRequest, {
+        ...repo,
+        pull_number: 7,
+        base: 'main',
+      }),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
     expect(merges(fetch)).toEqual([]);
+  });
+});
+
+describe('execute — create_branch from the default branch', () => {
+  test('a default branch GitHub answers that is not a branch name is its failure, nothing created', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: 'https://api.github.com/repos/acme/app',
+        body: { default_branch: 'refs/heads/main' },
+      },
+    ]);
+    await expect(
+      githubPlugin.execute(executeCtx(fetch), TOOL.createBranch, {
+        owner: 'acme',
+        repo: 'app',
+        branch: 'feature/x',
+      }),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
+    expect(fetch.calls).toHaveLength(1);
   });
 });
 
@@ -301,6 +330,30 @@ describe('discoverResources — the repositories the token reaches, paged', () =
     expect(resources).toHaveLength(DISCOVERY_PAGE_SIZE + 1);
     expect(resources.at(-1)!.ref).toBe('acme/repo-999');
     expect(fetch.pending()).toEqual([]);
+  });
+
+  test('a repository whose name is not owner/repo is left out ; metadata of another type is not said', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: pageUrl(1),
+        body: [
+          { full_name: 'acme/app', default_branch: 7, private: 'yes' },
+          { full_name: 'no-slash' },
+          'acme/not-an-object',
+        ],
+      },
+    ]);
+    expect(await githubPlugin.discoverResources(connectionCtx(fetch))).toEqual([
+      { provider: 'github', ref: 'acme/app', displayName: 'acme/app', metadata: {} },
+    ]);
+  });
+
+  test('an answer that is not a list is GitHub failing, not an account without repositories', async () => {
+    const fetch = mockFetch([{ method: 'GET', url: pageUrl(1), body: { message: 'moved' } }]);
+    await expect(githubPlugin.discoverResources(connectionCtx(fetch))).rejects.toBeInstanceOf(
+      UpstreamProtocolError,
+    );
   });
 
   test('401 on the listing becomes UpstreamAuthError', async () => {

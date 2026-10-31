@@ -7,16 +7,25 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { type Resource } from '@vaubaan/plugin-sdk';
+import { catalogPathIssues, toolPrefixFor, type Resource } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { classifyGithub, githubCatalog, githubCredential, githubPlugin } from '../../src/index.ts';
+import {
+  PROVIDER_ID,
+  TOOL,
+  TOOL_PREFIX,
+  classifyGithub,
+  githubCatalog,
+  githubCredential,
+  githubPlugin,
+} from '../../src/index.ts';
 import { appRepo, executeCtx, libRepo } from './fixtures.ts';
 
 const repo = { owner: 'acme', repo: 'app' };
@@ -140,9 +149,23 @@ describe('github plugin — structural kit', () => {
     assertNoWildcard(githubPlugin);
   });
 
-  test('27 tools declared, all prefixed', () => {
+  test('27 tools declared, all prefixed ; the names are those of identity.ts', () => {
+    expect(TOOL_PREFIX).toBe(toolPrefixFor(PROVIDER_ID));
+    expect(githubPlugin.id).toBe(PROVIDER_ID);
     expect(githubPlugin.tools).toHaveLength(27);
-    for (const t of githubPlugin.tools) expect(t.name.startsWith('github__')).toBe(true);
+    for (const t of githubPlugin.tools) expect(t.name.startsWith(TOOL_PREFIX)).toBe(true);
+    // The 27 MCP tools, then the git remote's two.
+    expect([
+      ...githubPlugin.tools.map((t) => t.name),
+      githubPlugin.gitRemote.fetchTool,
+      githubPlugin.gitRemote.pushTool,
+    ]).toEqual(Object.values(TOOL));
+  });
+
+  test('every catalog pattern and every sample slice is a path of the data model', () => {
+    expect(catalogPathIssues(githubPlugin)).toEqual([]);
+    // Cardinalities included : `[*]` names only an entity that declares `unbounded`.
+    assertSlicesOnDataModel(githubPlugin, samples, { resources });
   });
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {

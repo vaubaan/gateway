@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { UpstreamAuthError } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import githubPlugin, { expiryOf, githubCredential, verifyGithubToken } from '../../src/index.ts';
@@ -60,6 +60,24 @@ describe('github token — verify at paste', () => {
     await expect(
       verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential })),
     ).rejects.toBeInstanceOf(UpstreamAuthError);
+  });
+
+  test('a token GitHub forbids (403) is an UpstreamAuthError too', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: 'https://api.github.com/user', status: 403, body: { message: 'no' } },
+    ]);
+    await expect(
+      verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential })),
+    ).rejects.toBeInstanceOf(UpstreamAuthError);
+  });
+
+  test('an answer that is not a JSON object is GitHub failing', async () => {
+    for (const body of ['<html>maintenance</html>', [{ login: 'acme-bot' }]]) {
+      const fetch = mockFetch([{ method: 'GET', url: 'https://api.github.com/user', body }]);
+      await expect(
+        verifyGithubToken(connectionCtx(fetch, { credential: tokenCredential })),
+      ).rejects.toBeInstanceOf(UpstreamProtocolError);
+    }
   });
 
   test('an unreadable expiry is not guessed', () => {

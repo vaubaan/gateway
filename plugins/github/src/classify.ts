@@ -121,7 +121,7 @@ function gitUpdateSlices(repo: string, target: GitTargetUpdate): Slice[] {
 /** The slices of a call whose identifiers `readGithubCall` has checked. */
 export function slicesOf(call: GithubCall): Slice[] {
   switch (call.tool) {
-    // ── Global searches — not repo-scoped ──────────────────────────────────
+    // ── The search plane : GitHub's global search, beyond the repositories ──
     case TOOL.searchCode:
       return [build(`${PROVIDER_ID}.search.code.R`)];
     case TOOL.searchIssues:
@@ -251,12 +251,12 @@ const ANY = '*';
 /**
  * A checked identifier as a slice names it : itself when the slice grammar
  * can carry it, "any" otherwise. Never repaired : `feature/ü` written
- * `feature/-` would name a branch that does not exist, in the audit and in
- * the refusal the agent reads, and would still match the `feature/*`
- * pattern the real name escapes. Written as "any", it matches only what
- * accepts every identifier at that place (`[**]`) : a write to such a branch
- * falls outside the working-branch and protected-branch lists, to the
- * fallback. The request carries the identifier itself.
+ * `feature/-` names a branch that does not exist — in the audit, in the
+ * refusal the agent reads — and the catalog would decide on that other name.
+ * Written as "any", it touches every risk some identifier at that place
+ * could : a write to such a branch takes both the working-branch and the
+ * protected-branch risk, whatever its prefix. The request carries the
+ * identifier itself.
  */
 function identOrAny(value: string): string {
   return isSliceIdent(value) ? value : ANY;
