@@ -32,9 +32,12 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor.
 
+# catalog_version 5 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: resend
-catalog_version: 4
-catalog_date: 2026-10-14
+catalog_version: 5
+catalog_date: 2026-10-30
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -355,6 +358,73 @@ risks:
 # Values are a starting point — ADR `mission-presets-default-values` is
 # deferred. `send-email-external-unbounded` is env-scoped and never offered :
 # a creator adds `resend[staging].send-email-external-unbounded` by hand.
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: check
+    label: 'Check'
+    description: 'Email statuses, domains, broadcasts and segments.'
+    entries:
+      - risk_id: resend.read-email-status
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: resend.read-domains
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: resend.read-broadcasts
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: resend.read-segments
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+  - id: send
+    label: 'Send'
+    description: 'Transactional emails, one by one or in batches.'
+    entries:
+      - risk_id: resend.send-email-internal
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: resend.send-email-allowlist
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: resend.send-email-external-unbounded
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: resend.send-batch
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: campaign
+    label: 'Campaign'
+    description: 'Contacts, segments and broadcasts.'
+    entries:
+      - risk_id: resend.contact-write
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: resend.segment-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: resend.broadcast-draft
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: resend.broadcast-send
+        quota: 10
+        rate_limit: { max: 1, window_seconds: 60 }
+      - risk_id: resend.broadcast-delete
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: domains
+    label: 'Domains'
+    description: 'Verify and change sending domains.'
+    entries:
+      - risk_id: resend.domain-verify
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: resend.domain-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
 
 presets:
   - id: read-only

@@ -34,9 +34,12 @@
 # catalog_version 6 (2026-10-27) : the `developer` preset's description no
 # longer says "Experimental" (docs/handbook/plugin-sdk.md). No risk, pattern,
 # limit or entry changed.
+# catalog_version 7 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: gmail
-catalog_version: 6
-catalog_date: 2026-10-27
+catalog_version: 7
+catalog_date: 2026-10-30
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -335,6 +338,69 @@ risks:
 # acceptance), `gmail.draft-to-zone-external-unbounded` (deprecated : the
 # classifier refuses the draft), `gmail.bulk-label-write` (no tool can touch
 # it) and the fallback.
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: search
+    label: 'Search the mail'
+    description: 'Read the structure, the threads and the messages, whoever sent them.'
+    entries:
+      - risk_id: gmail.read-mailbox
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: gmail.read-from-zone-automated
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: gmail.read-from-zone-internal
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: gmail.read-from-zone-known-external
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: gmail.read-from-zone-unknown
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: gmail.read-drafts
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: gmail.read-sensitive-label
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: gmail.bulk-read
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: draft
+    label: 'Draft'
+    description: 'Write and edit drafts. Nothing leaves.'
+    entries:
+      - risk_id: gmail.draft-write
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: gmail.draft-to-zone-self
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: gmail.draft-to-zone-internal
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: gmail.draft-to-zone-allowlist
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: tidy
+    label: 'Tidy'
+    description: 'Apply, remove and create labels.'
+    entries:
+      - risk_id: gmail.label-write
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: gmail.label-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: gmail.bulk-label-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+
 presets:
   - id: read-only
     label: Read-only triage

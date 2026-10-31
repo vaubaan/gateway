@@ -20,9 +20,12 @@
 # none, no risk is env-scoped. No `infra_limits` : Context7 publishes no rate
 # figure, and a 429 is a provider failure.
 
+# catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: context7
-catalog_version: 1
-catalog_date: 2026-10-16
+catalog_version: 2
+catalog_date: 2026-10-30
 
 risks:
   - id: context7.query-docs
@@ -55,6 +58,19 @@ risks:
         visibility: team,
         persistence: posture,
       }
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: ask
+    label: 'Ask the docs'
+    description: 'Ask Context7 about library documentation.'
+    entries:
+      - risk_id: context7.query-docs
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
 
 presets:
   - id: read-only

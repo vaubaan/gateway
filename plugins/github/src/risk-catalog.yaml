@@ -20,9 +20,12 @@
 # conventions, a future tool without an entry). No preset offers it ; the
 # creator adds it explicitly when a mission needs unconventional branches.
 
+# catalog_version 10 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: github
-catalog_version: 9
-catalog_date: 2026-10-20
+catalog_version: 10
+catalog_date: 2026-10-30
 
 risks:
   # ---------------------------------------------------------------
@@ -427,6 +430,76 @@ risks:
 # PRESETS — UI sugar ; the persisted policy is always the explicit list.
 # Quotas are actions per period ; rate limits are per sliding window.
 # ---------------------------------------------------------------
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: read
+    label: 'Read'
+    description: 'Code, metadata and global search.'
+    entries:
+      - risk_id: github.read-code
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: github.read-meta
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: github.search-global
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: propose
+    label: 'Propose'
+    description: 'Work branches, push, pull requests and comments.'
+    entries:
+      - risk_id: github.feature-branch-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: github.git-push
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.bulk-file-write
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: github.create-pr
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.comment-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.branch-delete
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.force-push
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: ship
+    label: 'Ship'
+    description: 'Merge on protected branches, tags and releases.'
+    entries:
+      - risk_id: github.merge-protected
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: github.tag-write
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: github.create-release
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: github.delete-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+  - id: administer
+    label: 'Administer'
+    description: 'Branch protection and workflow files.'
+    entries:
+      - risk_id: github.branch-protection-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.workflow-write-via-file
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+
 presets:
   - id: read-only
     label: Read-only

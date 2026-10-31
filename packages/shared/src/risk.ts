@@ -152,8 +152,10 @@ export interface RiskEntry {
    *  (a risk can have multiple patterns when no single pattern can
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
-  /** 6D vector explaining the risk's profile. Drives UI ordering and
-   *  audit explainability only — no gate is derived from it.
+  /** 6D vector explaining the risk's profile. Drives UI ordering, audit
+   *  explainability and the palier a trust cran pre-fills a gate from
+   *  (ADR macro-actions-and-trust-crans-prefill-the-policy) ; the runtime
+   *  derives no decision from it.
    *  When `vector_overrides` is present this is the default (non-prod)
    *  profile ; per-env overrides replace individual axes. */
   readonly vector: RiskVector;
@@ -260,6 +262,27 @@ export interface Preset {
   readonly entries: readonly PresetEntry[];
 }
 
+/** One entry of a macro-action : a catalog risk with its base budget, never a gate. */
+export interface MacroActionEntry extends Budget {
+  /** Unqualified id of a non-fallback entry of the same catalog. */
+  readonly risk_id: RiskId;
+}
+
+/**
+ * What a mission creator ticks on a connection, in the connector's own words
+ * (ADR macro-actions-and-trust-crans-prefill-the-policy). Every entry but the
+ * fallback belongs to exactly one macro-action ; a trust cran turns its
+ * entries into explicit policy lines. Never a grant by itself.
+ */
+export interface MacroAction {
+  /** Slug, unique within the catalog (`search`, `ship`). */
+  readonly id: string;
+  readonly label: string;
+  /** One line shown under the label. */
+  readonly description: string;
+  readonly entries: readonly MacroActionEntry[];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Catalog
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,6 +296,8 @@ export interface RiskCatalog {
   readonly provider: string;
   readonly risks: readonly RiskEntry[];
   readonly presets?: readonly Preset[];
+  /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+  readonly macro_actions?: readonly MacroAction[];
   /** Monotonic integer bumped on every reviewed change of the YAML. */
   readonly catalog_version?: number;
   /** ISO date of the last reviewed change. */

@@ -48,9 +48,12 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor, so existing missions keep working.
 
+# catalog_version 5 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: ssh
-catalog_version: 4
-catalog_date: 2026-10-14
+catalog_version: 5
+catalog_date: 2026-10-30
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -218,6 +221,45 @@ risks:
       cost: moderate
       visibility: internal
       persistence: session
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: look
+    label: 'Look'
+    description: 'Read-only commands, credential files included.'
+    entries:
+      - risk_id: ssh.exec-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: ssh.exec-read-secret-files
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: fix
+    label: 'Fix'
+    description: 'Write, restart and destroy.'
+    entries:
+      - risk_id: ssh.exec-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: ssh.exec-service-control
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: ssh.exec-destructive
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: install
+    label: 'Install'
+    description: 'Packages and sudo.'
+    entries:
+      - risk_id: ssh.exec-package-install
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: ssh.exec-sudo
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
 
 presets:
   - id: read-only

@@ -8,9 +8,12 @@
 # trash of the root page itself, which emits two slices (`page-trash` and
 # `root-trash`).
 
+# catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: notion
-catalog_version: 1
-catalog_date: 2026-10-16
+catalog_version: 2
+catalog_date: 2026-10-30
 
 risks:
   # ─── Reads ─────────────────────────────────────────────────────────────────
@@ -272,6 +275,70 @@ risks:
       cost: free
       visibility: team
       persistence: posture
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: read
+    label: 'Read'
+    description: 'Pages, databases and comments.'
+    entries:
+      - risk_id: notion.read-content
+        quota: 3000
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: notion.query-databases
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: notion.read-comments
+        quota: 500
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: comment
+    label: 'Comment'
+    description: 'Leave comments.'
+    entries:
+      - risk_id: notion.comment-create
+        quota: 100
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: write
+    label: 'Write'
+    description: 'Create and edit pages, their content and database entries.'
+    entries:
+      - risk_id: notion.page-create
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: notion.page-update
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: notion.content-append
+        quota: 500
+        rate_limit: { max: 15, window_seconds: 60 }
+      - risk_id: notion.block-update
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: notion.entry-create
+        quota: 300
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: notion.entry-update
+        quota: 500
+        rate_limit: { max: 15, window_seconds: 60 }
+  - id: reorganize
+    label: 'Reorganize'
+    description: 'Delete blocks, move to the trash and restore.'
+    entries:
+      - risk_id: notion.block-delete
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: notion.page-trash
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: notion.page-restore
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: notion.root-trash
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
 
 presets:
   - id: read-only

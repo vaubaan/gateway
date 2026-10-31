@@ -6,7 +6,7 @@ host…). It is one folder, `plugins/<provider>`, named
 
 1. describes the provider's **data model** (what exists there);
 2. ships a **risk catalog** (`risk-catalog.yaml`): the named risks an agent's
-   call can carry, and at least one **preset**;
+   call can carry, grouped into **macro-actions**, and at least one **preset**;
 3. **classifies** each tool call into the part of the data model it touches;
 4. declares the **credential**: how a connection to the provider is obtained;
 5. **discovers the resources** a connection can reach;
@@ -265,6 +265,25 @@ risks:
         persistence: session,
       }
 
+macro_actions:
+  - id: read
+    label: Read
+    description: One line shown under the macro-action in New mission.
+    entries:
+      - risk_id: acme.read-widgets # unqualified, never the fallback
+        quota: 500 # the base budget a cran multiplies (×1, ×3, ×10)
+        rate_limit: { max: 60, window_seconds: 60 }
+  - id: change
+    label: Change widgets
+    description: Create, modify and delete widgets.
+    entries:
+      - risk_id: acme.widget-write
+        quota: 100
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: acme.widget-delete
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+
 presets:
   - id: developer
     label: Developer
@@ -319,6 +338,14 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   in the name. In a mission and in a preset it appears qualified,
   `acme[prod].widget-write`. A call on a resource its owner has not labelled
   cannot touch an env-scoped risk: it is refused.
+- **Macro-actions.** 3 to 6, named in the provider's words ("Read", "Ship",
+  "Move money out"), independent of each other: every entry but the fallback
+  and deprecated ones belongs to **exactly one**, unqualified, with a base
+  budget and no gate. A creator ticks them at a trust cran; the gate follows
+  the entry's vector (irreversible asks or stays out, costly asks, a
+  sensitive read asks at the lowest cran), so the vector must be right. The
+  gateway adds "Anything else" for the fallback
+  ([ADR](../docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
 - **Presets.** At least one. Every entry names one explicit risk id of this
   catalog, with a numeric `quota`, a `rate_limit` and a `gate`. **Never a
   wildcard, never "all"**: a preset that allows everything lists everything.

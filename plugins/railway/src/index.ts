@@ -37,7 +37,7 @@ export const railwayPlugin = definePlugin({
   displayName: 'Railway',
   icon: RAILWAY_ICON,
   iconColor: RAILWAY_ICON_COLOR,
-  version: '5.1.1',
+  version: '5.1.2',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:

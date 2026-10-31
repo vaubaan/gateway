@@ -28,6 +28,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **Every risk catalog groups its risks into macro-actions** (ADR
+  macro-actions-and-trust-crans-prefill-the-policy), 3 to 5 per connector in
+  its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,
+  Ship, Administer…), each risk listed once with a base budget. A catalog
+  without them, or with a live risk in none or in two, no longer loads. The
+  policy engine gains the trust crans (Prudent, Confiant, Autonome) that turn
+  a macro-action into explicit lines: the gate follows the risk's palier, read
+  from its vector, and the budget is multiplied ×1, ×3 or ×10. Nothing uses
+  them yet: the creation form still starts from presets. Every shipped plugin
+  gains a patch version and a `catalog_version`.
 - **The OAuth broker logs why a redeem was refused** (`@vaubaan/oauth-broker`
   0.2.1). The gateway still gets one `invalid_grant`; the access log line of
   `/grants/redeem` now carries a fixed `reason`: `grant_unknown`,

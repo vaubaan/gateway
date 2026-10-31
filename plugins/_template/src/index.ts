@@ -32,7 +32,7 @@ export const templatePlugin = definePlugin({
   icon: _TEMPLATE_ICON,
   iconColor: _TEMPLATE_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.1',
+  version: '0.1.2',
   description: 'Scaffold plugin. Copy it to start a real one.',
   // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
   // connection is, what one resource is, where the environment of a call comes from.

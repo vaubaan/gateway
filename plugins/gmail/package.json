@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-gmail",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for Gmail : search, read, draft and label over IMAP with an app password, under identity-zoned risks ; never sends",

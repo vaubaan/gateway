@@ -105,7 +105,7 @@ describe('the catalog keeps the ids of catalogs 1 and 2', () => {
     for (const id of ['miro.read-format-guide', 'miro.board-create']) {
       expect(ids, 'catalog 2').toContain(id);
     }
-    expect(miroCatalog.catalog.catalog_version).toBe(3);
+    expect(miroCatalog.catalog.catalog_version).toBe(4);
   });
 });
 

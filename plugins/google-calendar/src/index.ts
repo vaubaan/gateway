@@ -33,7 +33,7 @@ export const googleCalendarPlugin = definePlugin({
   icon: GOOGLE_CALENDAR_ICON,
   iconColor: GOOGLE_CALENDAR_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.0',
+  version: '0.1.1',
   description:
     "Google Calendar through Google's own Calendar MCP server: read the agenda, suggest a time, create, change and delete events, answer invitations — one resource per calendar.",
   summary:

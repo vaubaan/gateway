@@ -237,7 +237,7 @@ describe('github catalog — presets', () => {
 
   test('ships read-only, developer and release-manager', () => {
     expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'release-manager']);
-    expect(githubCatalog.catalog.catalog_version).toBe(9);
+    expect(githubCatalog.catalog.catalog_version).toBe(10);
   });
 
   test('read-only grants reads only, no search, gate auto', () => {

@@ -94,6 +94,29 @@ export const ACME_CATALOG: RiskCatalog = {
       vector: { ...READ_VECTOR, reversibility: 'costly', blast: 'env', persistence: 'session' },
     },
   ],
+  macro_actions: [
+    {
+      id: 'read',
+      label: 'Read',
+      description: 'Read records.',
+      entries: [{ risk_id: 'acme.read', quota: 100, rate_limit: { max: 60, window_seconds: 60 } }],
+    },
+    {
+      id: 'change',
+      label: 'Change',
+      description: 'Write and bulk-delete records.',
+      entries: [
+        { risk_id: 'acme.write', quota: 100, rate_limit: { max: 60, window_seconds: 60 } },
+        { risk_id: 'acme.bulk-delete', quota: 5, rate_limit: { max: 1, window_seconds: 60 } },
+      ],
+    },
+    {
+      id: 'administer',
+      label: 'Administer',
+      description: 'Administer the account.',
+      entries: [{ risk_id: 'acme.admin', quota: 5, rate_limit: { max: 1, window_seconds: 60 } }],
+    },
+  ],
   presets: [
     {
       id: 'reader',

@@ -49,6 +49,8 @@ import {
   isProviderId,
   isRiskId,
   parseRiskId,
+  type MacroAction,
+  type MacroActionEntry,
   type Preset,
   type PresetEntry,
   type RiskCatalog,
@@ -58,9 +60,10 @@ import {
   type ScopeCaps,
 } from '@vaubaan/shared';
 
-/** A catalog as the SDK requires it : presets present. */
+/** A catalog as the SDK requires it : presets and macro-actions present. */
 export interface PluginCatalog extends RiskCatalog {
   readonly presets: readonly Preset[];
+  readonly macro_actions: readonly MacroAction[];
 }
 
 export interface LoadedCatalog {
@@ -76,6 +79,8 @@ export interface LoadCatalogOptions {
   readonly requireFallback?: boolean;
   /** Fail when the catalog ships no preset. Default true (spec §10). */
   readonly requirePresets?: boolean;
+  /** Fail when the catalog declares no macro-action. Default true (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+  readonly requireMacroActions?: boolean;
   /** Receives non-fatal findings (`catalogWarnings` : a fallback without the flag). Defaults to `console.warn`. */
   readonly warn?: (message: string) => void;
 }
@@ -153,14 +158,82 @@ export function validateCatalog(doc: unknown, options: LoadCatalogOptions = {}):
 // Semantic checks (reused by the test kit and `definePlugin`)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Issues beyond structure : fallback, presets, wildcards. Empty array = valid. */
+/** Issues beyond structure : fallback, presets, macro-actions, wildcards. Empty array = valid. */
 export function semanticIssues(catalog: RiskCatalog, options: LoadCatalogOptions = {}): string[] {
   const issues: string[] = [];
   const requireFallback = options.requireFallback ?? true;
   const requirePresets = options.requirePresets ?? true;
+  const requireMacroActions = options.requireMacroActions ?? true;
   issues.push(...fallbackIssues(catalog, { requireFallback }));
   issues.push(...wildcardIssues(catalog));
   issues.push(...presetIssues(catalog, { requirePresets }));
+  issues.push(...macroActionIssues(catalog, { requireMacroActions }));
+  return issues;
+}
+
+/** The id the gateway gives the macro-action holding the fallback ; no catalog may declare it. */
+export const ANYTHING_ELSE_MACRO_ACTION = 'anything-else';
+
+/**
+ * Macro-action rules (ADR macro-actions-and-trust-crans-prefill-the-policy) :
+ * unique slugs, none named `anything-else` ; each non-empty ; each entry an
+ * unqualified, non-fallback risk of this catalog with a valid base budget ;
+ * every entry that is neither the fallback nor deprecated in exactly one
+ * macro-action.
+ */
+export function macroActionIssues(
+  catalog: RiskCatalog,
+  options: { readonly requireMacroActions?: boolean } = {},
+): string[] {
+  const issues: string[] = [];
+  const actions = catalog.macro_actions ?? [];
+  if (actions.length === 0) {
+    if (options.requireMacroActions ?? true) {
+      issues.push(
+        'macro_actions: every catalog groups its risks into macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy)',
+      );
+    }
+    return issues;
+  }
+  const byId = new Map<string, RiskEntry>(catalog.risks.map((r) => [r.id, r]));
+  const fallbackIds = new Set(fallbackEntriesOf(catalog).map((r) => r.id));
+  const owner = new Map<string, string>();
+  const actionIds = new Set<string>();
+  actions.forEach((action, a) => {
+    const at = `macro_actions[${a}]`;
+    if (action.id === ANYTHING_ELSE_MACRO_ACTION)
+      issues.push(`${at}.id '${action.id}' is the gateway's own macro-action for the fallback`);
+    if (actionIds.has(action.id)) issues.push(`${at}.id '${action.id}' is declared twice`);
+    actionIds.add(action.id);
+    if (action.entries.length === 0) issues.push(`${at}.entries is empty`);
+    action.entries.forEach((entry, e) => {
+      const where = `${at}.entries[${e}]`;
+      issues.push(
+        ...budgetIssues({ ...entry, gate: 'auto' }).map((i) => `${where}.${i.field}: ${i.message}`),
+      );
+      const risk = byId.get(entry.risk_id);
+      if (!risk) {
+        issues.push(
+          `${where}.risk_id '${entry.risk_id}' is not an unqualified risk of the '${catalog.provider}' catalog`,
+        );
+        return;
+      }
+      if (fallbackIds.has(risk.id))
+        issues.push(
+          `${where}.risk_id '${entry.risk_id}' is the fallback, which belongs to no macro-action`,
+        );
+      const previous = owner.get(entry.risk_id);
+      if (previous !== undefined)
+        issues.push(
+          `${where}.risk_id '${entry.risk_id}' already belongs to macro-action '${previous}'`,
+        );
+      else owner.set(entry.risk_id, action.id);
+    });
+  });
+  for (const risk of catalog.risks) {
+    if (fallbackIds.has(risk.id) || risk.deprecated === true || owner.has(risk.id)) continue;
+    issues.push(`risks: '${risk.id}' belongs to no macro-action`);
+  }
   return issues;
 }
 
@@ -431,7 +504,16 @@ const RISK_KEYS = new Set([
   'deprecated',
   'replaced_by',
 ]);
-const CATALOG_KEYS = new Set(['provider', 'risks', 'presets', 'catalog_version', 'catalog_date']);
+const CATALOG_KEYS = new Set([
+  'provider',
+  'risks',
+  'macro_actions',
+  'presets',
+  'catalog_version',
+  'catalog_date',
+]);
+const MACRO_ACTION_KEYS = new Set(['id', 'label', 'description', 'entries']);
+const MACRO_ENTRY_KEYS = new Set(['risk_id', 'quota', 'rate_limit']);
 const PRESET_KEYS = new Set(['id', 'label', 'description', 'entries']);
 const ENTRY_KEYS = new Set(['risk_id', 'quota', 'rate_limit', 'gate']);
 const RATE_LIMIT_KEYS = new Set(['max', 'window_seconds']);
@@ -471,12 +553,14 @@ export function structuralIssues(doc: unknown): StructuralResult {
   const declaredProvider = typeof doc.provider === 'string' ? doc.provider : null;
   const risks = risksFrom(doc.risks, child(root, 'risks'), declaredProvider);
   const presets = presetsFrom(doc.presets, child(root, 'presets'));
+  const macroActions = macroActionsFrom(doc.macro_actions, child(root, 'macro_actions'));
 
   if (issues.length > 0 || provider === undefined) return { issues };
   const catalog: PluginCatalog = {
     provider,
     risks,
     presets,
+    macro_actions: macroActions,
     ...(catalogVersion !== undefined ? { catalog_version: catalogVersion } : {}),
     ...(catalogDate !== undefined ? { catalog_date: catalogDate } : {}),
   };
@@ -811,6 +895,42 @@ function presetEntriesFrom(raw: unknown, ctx: ParseContext): PresetEntry[] {
     const entry = presetEntryFrom(item, { at: `${ctx.at}[${j}]`, issues: ctx.issues });
     return entry ? [entry] : [];
   });
+}
+
+function macroActionsFrom(raw: unknown, ctx: ParseContext): MacroAction[] {
+  if (raw === undefined) return [];
+  if (!isUnknownList(raw)) {
+    ctx.issues.push(`${ctx.at}: expected a list`);
+    return [];
+  }
+  return raw.flatMap((item, i) => {
+    const action = macroActionFrom(item, { at: `${ctx.at}[${i}]`, issues: ctx.issues });
+    return action ? [action] : [];
+  });
+}
+
+/** One macro-action ; its entries are presets' entries without a gate. */
+function macroActionFrom(raw: unknown, ctx: ParseContext): MacroAction | undefined {
+  if (!isRecord(raw)) return notAMapping(ctx);
+  const own = scoped(ctx);
+  unknownKeys(raw, MACRO_ACTION_KEYS, own);
+  const id = requireString(raw, 'id', own);
+  if (id !== undefined && !PRESET_ID_PATTERN.test(id))
+    own.issues.push(`${own.at}.id '${id}' must be a lowercase slug`);
+  const label = requireString(raw, 'label', own);
+  const description = requireString(raw, 'description', own);
+  const entriesCtx = child(own, 'entries');
+  if (isUnknownList(raw.entries)) {
+    for (const [j, item] of raw.entries.entries()) {
+      if (isRecord(item))
+        unknownKeys(item, MACRO_ENTRY_KEYS, { at: `${entriesCtx.at}[${j}]`, issues: own.issues });
+    }
+  }
+  const entries: MacroActionEntry[] = presetEntriesFrom(raw.entries, entriesCtx).map(
+    ({ risk_id, quota, rate_limit }) => ({ risk_id, quota, rate_limit }),
+  );
+  if (!own.commit() || !id || !label || !description) return undefined;
+  return { id, label, description, entries };
 }
 
 /** Assemble one preset ; `undefined` when its header or any of its entries reported. */

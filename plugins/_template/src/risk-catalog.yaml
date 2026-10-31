@@ -13,9 +13,12 @@
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor, so existing missions keep working.
 
+# catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
+# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# pattern or preset changed.
 provider: template
-catalog_version: 1
-catalog_date: 2026-10-13
+catalog_version: 2
+catalog_date: 2026-10-30
 
 risks:
   - id: template.read-widgets
@@ -93,6 +96,29 @@ risks:
       cost: moderate
       visibility: internal
       persistence: session
+
+# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# mission creator ticks, each at a trust cran. Every entry but the fallback
+# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# ×3, ×10). The gateway adds "Anything else", holding the fallback.
+macro_actions:
+  - id: read
+    label: 'Read'
+    description: 'Read widgets.'
+    entries:
+      - risk_id: template.read-widgets
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+  - id: write
+    label: 'Write'
+    description: 'Create, modify and delete widgets.'
+    entries:
+      - risk_id: template.widget-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: template.widget-delete
+        quota: 5
+        rate_limit: { max: 2, window_seconds: 60 }
 
 presets:
   - id: reader

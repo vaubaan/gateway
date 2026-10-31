@@ -182,6 +182,36 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
           vector: { ...vector, reversibility: 'costly', blast: 'env' },
         },
       ],
+      macro_actions: [
+        {
+          id: 'read',
+          label: 'Read',
+          description: 'Read things.',
+          entries: [
+            {
+              risk_id: `${id}.read-things`,
+              quota: 100,
+              rate_limit: { max: 60, window_seconds: 60 },
+            },
+          ],
+        },
+        ...(options.envs && options.envs.length > 0
+          ? [
+              {
+                id: 'write',
+                label: 'Write',
+                description: 'Write things.',
+                entries: [
+                  {
+                    risk_id: `${id}.write-things`,
+                    quota: 100,
+                    rate_limit: { max: 60, window_seconds: 60 },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
       presets: [
         {
           id: 'reader',
