@@ -45,7 +45,8 @@ import type { Authenticator, UserPrincipal } from './authenticator';
 import type { IdentityClaims } from './claims';
 import { LocalAccountError, LoginError } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
-import { AUTH_LIMITS, LOGIN_PAGE, notAFormResponse, readForm, safeReturnTo } from './handlers';
+import { notAFormResponse, rawField, readForm } from '../http/form';
+import { AUTH_LIMITS, LOGIN_PAGE, safeReturnTo } from './handlers';
 import {
   CREATE_ACCOUNT_PAGE,
   FORGOT_PASSWORD_PAGE,
@@ -131,11 +132,6 @@ export interface LocalAuthHandlers {
   confirmSecondFactor(request: Request): Promise<Response>;
   removeSecondFactor(request: Request): Promise<Response>;
   changePassword(request: Request): Promise<Response>;
-}
-
-function stringField(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === 'string' ? value : '';
 }
 
 /** The identity a local account signs in as: the provider's issuer, the account id. */
@@ -373,11 +369,11 @@ export function createLocalAuthHandlers(
       if (!provider) return loginError('provider-unknown');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const returnTo = safeReturnTo(stringField(form, RETURN_TO_PARAM), deps.publicUrl, '/');
+      const returnTo = safeReturnTo(rawField(form, RETURN_TO_PARAM), deps.publicUrl, '/');
       const check = await deps.accounts.checkPassword(
         provider.id,
-        stringField(form, 'email'),
-        stringField(form, 'password'),
+        rawField(form, 'email'),
+        rawField(form, 'password'),
       );
       if (!check.ok) {
         logger.warn('sign-in failed', { code: 'password-refused', cause: check.cause });
@@ -399,7 +395,7 @@ export function createLocalAuthHandlers(
       }
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const check = await deps.secondFactors.check(step.userId, stringField(form, 'code'));
+      const check = await deps.secondFactors.check(step.userId, rawField(form, 'code'));
       if (!check.ok) {
         // The step is kept: the person may try again, within the same ten minutes.
         const again = await deps.sessions.createLocalStep(step);
@@ -435,7 +431,7 @@ export function createLocalAuthHandlers(
       const confirmed = await deps.secondFactors.confirmEnrolment(
         { id: step.userId, email: step.login.email },
         step.totpSecret,
-        stringField(form, 'code'),
+        rawField(form, 'code'),
         step.userId,
       );
       if (!confirmed) {
@@ -467,9 +463,9 @@ export function createLocalAuthHandlers(
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const token = stringField(form, LINK_TOKEN_PARAM);
-      const password = stringField(form, 'password');
-      if (password !== stringField(form, 'password_again')) {
+      const token = rawField(form, LINK_TOKEN_PARAM);
+      const password = rawField(form, 'password');
+      if (password !== rawField(form, 'password_again')) {
         return refused(CREATE_ACCOUNT_PAGE, token, 'password-mismatch');
       }
       // The account would be a new person: refused at the ceiling of users before the
@@ -502,9 +498,9 @@ export function createLocalAuthHandlers(
       if (await throttled(request, 'password')) return loginError('too-many-attempts');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const token = stringField(form, LINK_TOKEN_PARAM);
-      const password = stringField(form, 'password');
-      if (password !== stringField(form, 'password_again')) {
+      const token = rawField(form, LINK_TOKEN_PARAM);
+      const password = rawField(form, 'password');
+      if (password !== rawField(form, 'password_again')) {
         return refused(RESET_PASSWORD_PAGE, token, 'password-mismatch');
       }
       try {
@@ -524,7 +520,7 @@ export function createLocalAuthHandlers(
       if (await throttled(request, 'forgot')) return loginError('too-many-attempts');
       const form = await readForm(request);
       if (!form) return notAFormResponse();
-      const email = stringField(form, 'email');
+      const email = rawField(form, 'email');
       const provider = await localProvider();
       // One answer whatever the address, whether the instance sends mail or not: the
       // page said beforehand what to expect. A link is made only for an existing account
@@ -587,7 +583,7 @@ export function createLocalAuthHandlers(
       const confirmed = await deps.secondFactors.confirmEnrolment(
         who.user,
         step.totpSecret,
-        stringField(form, 'code'),
+        rawField(form, 'code'),
         who.user.id,
       );
       if (!confirmed) {
@@ -649,9 +645,9 @@ export function createLocalAuthHandlers(
       const form = await readForm(request);
       if (!form) return notAFormResponse();
       const local = await localProvider();
-      const current = stringField(form, 'current_password');
-      const password = stringField(form, 'password');
-      if (password !== stringField(form, 'password_again')) {
+      const current = rawField(form, 'current_password');
+      const password = rawField(form, 'password');
+      if (password !== rawField(form, 'password_again')) {
         return redirectWithNotice(who.principal.sessionId, SECURITY_PAGE, {
           tone: 'danger',
           title: 'Password not changed',

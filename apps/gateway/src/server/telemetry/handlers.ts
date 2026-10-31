@@ -13,7 +13,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import { auditActorId, type Authenticator } from '../auth/authenticator';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from '../auth/guard';
-import { notAFormResponse, readForm } from '../auth/handlers';
+import { notAFormResponse, readForm } from '../http/form';
 import type { Logger } from '../logging';
 import { toIso, type Clock } from '../store/clock';
 import {
