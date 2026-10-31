@@ -24,17 +24,15 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  policyFromMacroActions,
-  type MacroActionCranChoice,
-  type ToolSamples,
-} from '@vaubaan/plugin-sdk/testing';
-import type { MissionPolicyEntry } from '@vaubaan/shared';
-import {
   evaluateCall,
   indexCatalog,
+  type MacroActionCranChoice,
+  type MissionPolicyEntry,
+  policyFromMacroActions,
   resourceEnvResolver,
   risksTouchedBy,
-} from '@vaubaan/policy-engine';
+  type ToolSamples,
+} from '@vaubaan/plugin-sdk/testing';
 
 import {
   classifySsh,

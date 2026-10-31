@@ -7,8 +7,7 @@
  */
 import { describe, expect, test } from 'vitest';
 import { serializeSlice } from '@vaubaan/plugin-sdk';
-import { mockFetch } from '@vaubaan/plugin-sdk/testing';
-import { risksTouchedBy } from '@vaubaan/policy-engine';
+import { mockFetch, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { classifyVercel } from '../../src/classify.ts';

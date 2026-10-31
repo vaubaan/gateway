@@ -7,9 +7,6 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-// Test-only : which risks a slice touches. A plugin's sources import the SDK alone.
-import { risksTouchedBy } from '@vaubaan/policy-engine';
-
 import {
   UpstreamProtocolError,
   catalogPathNextTo,
@@ -26,6 +23,7 @@ import {
   assertPluginWellFormed,
   mockFetch,
   policyFromMacroActions,
+  risksTouchedBy,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 

@@ -9,8 +9,7 @@
  * `policy.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
-import type { Resource } from '@vaubaan/plugin-sdk';
-import { serializeSlice } from '@vaubaan/policy-engine';
+import { type Resource, serializeSlice } from '@vaubaan/plugin-sdk';
 
 import {
   classifyRedisCommands,

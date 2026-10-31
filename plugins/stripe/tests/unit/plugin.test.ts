@@ -23,9 +23,9 @@ import {
   mockFetch,
   policyFromMacroActions,
   refusalText,
+  resourceEnvResolver,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
-import { resourceEnvResolver } from '@vaubaan/policy-engine';
 
 import { STRIPE_API_BASE } from '../../src/execute.ts';
 import { classifyStripe, modeOf, stripePlugin, stripeResourceRef } from '../../src/index.ts';

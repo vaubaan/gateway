@@ -14,13 +14,13 @@
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice, type ProviderPlugin, type Resource, type RiskId } from '@vaubaan/plugin-sdk';
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 import {
   envResolverFor,
   evaluateCall,
+  policyFromMacroActions,
   qualifyRiskId,
   resourceEnvResolver,
-} from '@vaubaan/policy-engine';
+} from '@vaubaan/plugin-sdk/testing';
 
 import { stripeCatalog, stripePlugin } from '../../src/index.ts';
 

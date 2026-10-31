@@ -10,7 +10,8 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { prepareCatalog, risksTouchedByAll } from '@vaubaan/policy-engine';
+import { prepareCatalog, risksTouchedByAll } from '@vaubaan/plugin-sdk/testing';
+
 import type { Resource } from '@vaubaan/plugin-sdk';
 
 import { classifyGithub } from '../../src/classify.ts';

@@ -13,8 +13,5 @@
   },
   "dependencies": {
     "@vaubaan/plugin-sdk": "*"
-  },
-  "devDependencies": {
-    "@vaubaan/policy-engine": "*"
   }
 }

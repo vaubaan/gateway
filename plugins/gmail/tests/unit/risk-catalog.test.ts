@@ -15,8 +15,9 @@
  *     (signals a hole in the catalog).
  */
 import { describe, expect, test } from 'vitest';
-import type { Resource, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
-import { matches, parseSlice, prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
+
+import { matches, prepareCatalog, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
+import { parseSlice, type Resource, type RiskEntry, type Slice } from '@vaubaan/plugin-sdk';
 
 import { classifyGmail } from '../../src/classify.ts';
 import { gmailCatalog } from '../../src/index.ts';

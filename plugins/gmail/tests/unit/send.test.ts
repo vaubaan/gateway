@@ -9,13 +9,13 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  serializeSlice,
   type ExecuteContext,
   type McpToolResult,
+  parseSlice,
   type Resource,
+  serializeSlice,
 } from '@vaubaan/plugin-sdk';
-import { mockFetch } from '@vaubaan/plugin-sdk/testing';
-import { palierOf, parseSlice, risksTouchedBy } from '@vaubaan/policy-engine';
+import { mockFetch, palierOf, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 
 import {
   GMAIL_SMTP_HOST,

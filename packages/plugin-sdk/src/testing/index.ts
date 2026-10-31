@@ -10,3 +10,4 @@ export * from './identifiers.ts';
 export * from './property.ts';
 export * from './macro-actions.ts';
 export * from './guide.ts';
+export * from './decide.ts';

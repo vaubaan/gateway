@@ -194,6 +194,28 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugins-read-through-the-transport',
+    statement:
+      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own; the plugins written before the transport are listed and the list only shrinks.",
+    source: 'ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-transport.test.ts`,
+        tests: [
+          'reads no response body itself',
+          'is listed as not yet migrated only while it still reads a body itself',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/transport-http.test.ts',
+        tests: [
+          'cuts and cancels a body without content-length as soon as it passes the bound',
+          '401 and 403 are a rejected credential, quoting the answer ; the query string is never named',
+        ],
+      },
+    ],
+  },
+  {
     id: 'macro-actions-group-the-catalog',
     statement:
       'Every shipped catalog groups each of its live risks but the fallback in exactly one macro-action of its own explicit risks, never a wildcard; no catalog ships presets or declares a macro-action named "anything-else" or "everything-i-hold".',

@@ -12,11 +12,9 @@
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@vaubaan/plugin-sdk": "*",
-    "@vaubaan/shared": "*"
+    "@vaubaan/plugin-sdk": "*"
   },
   "devDependencies": {
-    "@vaubaan/policy-engine": "*",
     "js-yaml": "^5.4.3"
   }
 }

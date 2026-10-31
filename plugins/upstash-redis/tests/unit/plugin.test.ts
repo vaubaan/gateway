@@ -25,9 +25,9 @@ import {
   assertPluginWellFormed,
   mockFetch,
   policyFromMacroActions,
+  resourceEnvResolver,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
-import { resourceEnvResolver } from '@vaubaan/policy-engine';
 
 import {
   basicAuthHeader,

@@ -16,8 +16,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { parseSlice, serializeSlice } from '@vaubaan/policy-engine';
-import type { Resource } from '@vaubaan/plugin-sdk';
+import { parseSlice, type Resource, serializeSlice } from '@vaubaan/plugin-sdk';
 
 import { classifySupabase } from '../../src/classify.ts';
 

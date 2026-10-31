@@ -10,23 +10,24 @@ import { describe, expect, test } from 'vitest';
 
 import {
   CredentialKindMismatch,
-  parseSlice,
-  serializeSlice,
   type EnvOf,
   type ExecuteContext,
+  NO_SINGLE_ENV,
+  parseSlice,
   type Resource,
+  serializeSlice,
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  envResolverFor,
   mockFetch,
   policyFromMacroActions,
   type RecordedCall,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
-import { envResolverFor, NO_SINGLE_ENV } from '@vaubaan/policy-engine';
 
 import {
   classifyVercel,
