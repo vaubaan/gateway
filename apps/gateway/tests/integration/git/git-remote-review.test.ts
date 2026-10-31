@@ -16,7 +16,7 @@ import {
   flushPkt,
   pktLine,
   type RefCommand,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MAX_TEMPORARY_REFS_PER_MISSION } from '../../../src/server/git';

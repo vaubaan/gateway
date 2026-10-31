@@ -5,7 +5,7 @@
  * gateway's messages on the progress channel (`remote: Vaubaan: …`).
  */
 import type { CallOutcome, Refusal } from '@vaubaan/gateway-core';
-import type { GitPushResult, RefCommand } from '@vaubaan/plugin-sdk';
+import type { GitPushResult, RefCommand } from '@vaubaan/plugin-sdk/git';
 
 import { firstLine } from './temporary-refs';
 import { pushReport, type RefOutcome, type ReportFormat } from './wire';

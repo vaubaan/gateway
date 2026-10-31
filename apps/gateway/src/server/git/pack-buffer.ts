@@ -7,7 +7,7 @@
  * Memory: at most `git.max_pack_mb` per push, and at most
  * `MAX_PUSHES_IN_FLIGHT_PER_MISSION` pushes of a mission at once.
  */
-import { concatBytes, type PktLineReader } from '@vaubaan/plugin-sdk';
+import { concatBytes, type PktLineReader } from '@vaubaan/plugin-sdk/git';
 
 import { interrupted, PushStop, tooLarge } from './push-stop';
 

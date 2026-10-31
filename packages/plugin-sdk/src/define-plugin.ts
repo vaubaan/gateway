@@ -432,7 +432,7 @@ function hookIssues(plugin: ProviderPlugin): string[] {
   for (const fn of ['classify', 'execute', 'discoverResources'] as const) {
     if (typeof plugin[fn] !== 'function') issues.push(`${fn}: expected a function`);
   }
-  for (const fn of ['envOf', 'refresh', 'normalizeForCaps', 'normalizeArgs'] as const) {
+  for (const fn of ['envOf', 'refresh'] as const) {
     if (plugin[fn] !== undefined && typeof plugin[fn] !== 'function')
       issues.push(`${fn}: expected a function when present`);
   }

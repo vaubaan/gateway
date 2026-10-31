@@ -42,7 +42,7 @@ import {
   type GitInspectedUpdate,
   type GitReview,
   type GitReviewedUpdate,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import type { Logger } from '../logging';
 import { provisional, readPushCommands } from './command-list';

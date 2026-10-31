@@ -17,7 +17,7 @@ import {
   UPLOAD_PACK_SERVICE,
   type GitPackObjects,
   type GitRefUpdate,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 import { inspectPack, WORKFLOWS_UNVERIFIED } from '../../src/git-inspect.ts';

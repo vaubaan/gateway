@@ -1,7 +1,7 @@
 /**
  * Scope caps and the door (ADR scope-caps-amplification-axis).
  *
- * The v5.0 door has no cap stage: `plugin.normalizeForCaps` is not called and
+ * The v5.0 door has no cap stage (the plugin contract has no cap hook), and
  * a catalog's `caps` block is applied nowhere. The one catalog limit the
  * gateway does enforce is the ceiling on a mission's rate limit, checked when
  * the mission is issued (`missions/preview.ts`, `budgetProblem`) and then

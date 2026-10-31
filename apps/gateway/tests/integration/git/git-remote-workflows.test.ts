@@ -12,7 +12,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { concatBytes, encodeCommandList } from '@vaubaan/plugin-sdk';
+import { concatBytes, encodeCommandList } from '@vaubaan/plugin-sdk/git';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AuditCallRecord } from '../../../src/server/store';

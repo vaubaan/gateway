@@ -11,6 +11,11 @@
  * `@vaubaan/policy-engine`) ; it never imports `@vaubaan/gateway-core` or
  * `apps/gateway`. The host builds one `PluginRegistry` from the plugins it
  * ships — the single provider list every other list derives from.
+ *
+ * Two subpaths hold what most plugins never import :
+ *   - `@vaubaan/plugin-sdk/testing` — the test kit every plugin runs ;
+ *   - `@vaubaan/plugin-sdk/git` — the git wire code and `GitRemoteCapability`,
+ *     for the one plugin that is the instance's git remote and the host's git door.
  */
 
 export * from './plugin.ts';
@@ -23,10 +28,8 @@ export * from './refusal.ts';
 export * from './env-of.ts';
 export * from './define-plugin.ts';
 export * from './registry.ts';
-export * from './flags.ts';
 export * from './streaming.ts';
 export * from './created-resources.ts';
-export * from './git/index.ts';
 
 // Re-exported so a plugin can import its whole vocabulary from one place.
 export type {
@@ -42,7 +45,6 @@ export type {
   RiskEntry,
   RiskId,
   RiskVector,
-  ScopeCaps,
   Slice,
   SliceAction,
   SliceSegment,

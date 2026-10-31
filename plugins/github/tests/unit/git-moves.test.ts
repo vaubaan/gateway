@@ -5,6 +5,7 @@
  * expected value (compare-and-swap), one report per ref, and the review of
  * every commit a push brings. No test reaches GitHub.
  */
+import { UpstreamHttpError } from '@vaubaan/plugin-sdk';
 import {
   concatBytes,
   encodeAdvertisement,
@@ -12,8 +13,7 @@ import {
   flushPkt,
   sideBand,
   SIDE_BAND,
-  UpstreamHttpError,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, test } from 'vitest';
 

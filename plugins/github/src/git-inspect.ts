@@ -37,17 +37,17 @@
  * nor at GitHub, a GitHub error, a truncated tree, a tag chain too deep)
  * counts as a change of `.github/workflows/`.
  */
+import { type ExecuteContext } from '@vaubaan/plugin-sdk';
 import {
   parseCommit,
   parseTag,
   parseTree,
   TREE_MODE,
-  type ExecuteContext,
   type GitInspectedUpdate,
   type GitPackObjects,
   type GitRefUpdate,
   type GitTreeEntry,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import { targetOf } from './git-credential.ts';
 import { GithubRest } from './git-rest.ts';

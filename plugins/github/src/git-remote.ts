@@ -18,7 +18,8 @@
  *
  * `github__git_fetch` is never executed here : the host relays the bytes.
  */
-import type { GitRemoteCapability, RiskCatalog } from '@vaubaan/plugin-sdk';
+import type { RiskCatalog } from '@vaubaan/plugin-sdk';
+import type { GitRemoteCapability } from '@vaubaan/plugin-sdk/git';
 
 import { GITHUB_WEB_BASE } from './api.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL } from './git-call.ts';

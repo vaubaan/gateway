@@ -35,7 +35,7 @@ import {
   readV2RequestHead,
   V2_HEAD_MAX_LINES,
   type CommandList,
-} from '../../src/index.ts';
+} from '../../src/git/index.ts';
 
 const A = 'a'.repeat(40);
 const B = 'b'.repeat(40);

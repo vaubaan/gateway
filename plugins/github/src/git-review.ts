@@ -34,13 +34,13 @@
  * `COMMITS_REVIEWED_MAX` commits per push, an unrelated history, an empty
  * repository — the push is refused.
  */
+import { type ExecuteContext } from '@vaubaan/plugin-sdk';
 import {
-  type ExecuteContext,
   type GitRefUpdate,
   type GitReview,
   type GitReviewedUpdate,
   type GitUpdateKind,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import { isUnderWorkflowDirectory, repoFullName } from './call.ts';
 import { GITHUB_WEB_BASE } from './api.ts';

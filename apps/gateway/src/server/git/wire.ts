@@ -21,7 +21,7 @@ import {
   RECEIVE_PACK_RESULT_TYPE,
   SIDE_BAND,
   sideBand,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import { HTTP_NOT_IMPLEMENTED, HTTP_OK, HTTP_UNAUTHORIZED, NO_CACHE } from './constants';
 import { oneLine, prefixed } from './words';

@@ -7,14 +7,14 @@
  * neither the receive-pack advertisement nor a write credential minted for it.
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
+import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
 import {
   advertisementType,
   encodeAdvertisement,
-  ExecutorRefusal,
   GitProtocolError,
   parseAdvertisement,
   RECEIVE_PACK_SERVICE,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import type { Logger } from '../logging';
 import { GIT_AGENT, HTTP_FORBIDDEN, HTTP_UNAUTHORIZED, NO_CACHE } from './constants';

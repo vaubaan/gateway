@@ -20,11 +20,11 @@
 import { randomBytes } from 'node:crypto';
 
 import type { MissionContext } from '@vaubaan/gateway-core';
+import { ExecutorRefusal, type ExecuteContext } from '@vaubaan/plugin-sdk';
 import {
   advertisementType,
   concatBytes,
   encodeCommandList,
-  ExecutorRefusal,
   GIT_TEMPORARY_REF_PREFIX,
   parseAdvertisement,
   parseReceivePackResult,
@@ -34,11 +34,10 @@ import {
   RECEIVE_PACK_SERVICE,
   sendRefUpdates,
   type CommandList,
-  type ExecuteContext,
   type GitReviewedUpdate,
   type GitUpstream,
   type RefCommand,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';

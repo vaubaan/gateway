@@ -23,11 +23,8 @@
  * never comes back. Nothing here imports `next`.
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
-import {
-  RECEIVE_PACK_SERVICE,
-  UPLOAD_PACK_SERVICE,
-  type PluginRegistry,
-} from '@vaubaan/plugin-sdk';
+import { type PluginRegistry } from '@vaubaan/plugin-sdk';
+import { RECEIVE_PACK_SERVICE, UPLOAD_PACK_SERVICE } from '@vaubaan/plugin-sdk/git';
 
 import type { InstanceConfig } from '../config';
 import { isDenial, type AdmissionDenial, type MissionAdmission } from '../execution/admission';
