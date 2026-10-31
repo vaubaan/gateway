@@ -109,7 +109,8 @@ docs/                    specification, decisions, handbooks, test plans, workfl
 ```
 
 These are npm workspaces (`apps/*`, `packages/*`, `plugins/*`). A plugin
-imports the SDK only, never the application. The layout is decided in the ADR
+imports the SDK only, never the application nor another package: a lint rule
+on `plugins/**` refuses it, tests included. The layout is decided in the ADR
 [repository-layout-and-contribution-workflow](docs/decisions/repository-layout-and-contribution-workflow.md).
 
 ## The documentation comes first

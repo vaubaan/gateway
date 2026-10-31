@@ -16,18 +16,18 @@ SDK handbook: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md)
 
 ## Files
 
-| File                        | What goes in it                                                                                                                           |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency.                       |
-| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.                         |
-| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                                        |
-| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and the macro-actions.                                  |
-| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.                                    |
-| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.                              |
-| `src/credential.ts`         | The `CredentialSpec`: the token page, the guide (steps, how wide to grant and why, permissions, expiry) and `verify`, the check at paste. |
-| `src/execute.ts`            | The calls to the provider with the credential the gateway hands over, and `discoverResources`.                                            |
-| `src/index.ts`              | `definePlugin({...})`: the wiring, the default export the gateway registers.                                                              |
-| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, no wildcard), a mission from macro-actions, the classifier cases, `execute` against `mockFetch`.      |
+| File                        | What goes in it                                                                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency.                                            |
+| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.                                              |
+| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                                                             |
+| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and the macro-actions.                                                       |
+| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.                                                         |
+| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.                                                   |
+| `src/credential.ts`         | The `CredentialSpec`: the token page, the guide (steps, how wide to grant and why, permissions, expiry) and `verify`, the check at paste.                      |
+| `src/execute.ts`            | The calls to the provider through the SDK's `httpJson`, with the credential the gateway hands over, and `discoverResources`.                                   |
+| `src/index.ts`              | `definePlugin({...})`: the wiring, the default export the gateway registers.                                                                                   |
+| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, slices on the data model, no wildcard), a mission from macro-actions, the classifier cases, `execute` against `mockFetch`. |
 
 ## Data model
 
@@ -54,8 +54,10 @@ key acts as before anything is stored.
 
 `discoverResources` calls `GET /workspaces` and returns **one resource per
 workspace**: `ref` is the workspace id every tool takes as `workspace`,
-`displayName` its name. The answer is checked with a type guard, and a
-workspace id that is not a path-safe identifier fails the discovery.
+`displayName` its name. The answer is read through a type guard, and a
+payload the guard refuses, or a workspace id that is not a path-safe
+identifier, fails the discovery as the provider's failure
+(`UpstreamProtocolError`).
 
 ## Tools
 
