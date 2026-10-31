@@ -12,9 +12,9 @@
  */
 import { AllowSummary, EnvTag, GateMark, Mono } from '@/components/ui';
 import { count, formatNumber, gateWordOf, reachedOnAccount, TERMS } from '@/lib/vocabulary';
-import { groupVariants } from '@/server/missions/catalog-view';
-import type { IssuanceConnection } from '@/server/missions/model';
-import { defaultResources } from '@/server/missions/preview';
+import { groupVariants } from '@/lib/missions/catalog-view';
+import type { IssuanceConnection } from '@/lib/missions/model';
+import { defaultResources } from '@/lib/missions/preview';
 
 import styles from '../missions.module.css';
 import { allowLines } from '../mission-view';

@@ -85,9 +85,9 @@ import {
 } from '@/server/connections';
 import { providerGrantForecast, providerGrantReport } from '@/server/connections/provider-grant';
 import type { MissionOnConnection } from '@/server/missions/mission-service';
-import type { CatalogRisk } from '@/server/missions/model';
+import type { CatalogRisk } from '@/lib/missions/model';
 import { toolTitleOf } from '@/server/providers/tool-titles';
-import { providerPath } from '@/server/providers/links';
+import { providerPath } from '@/lib/providers/links';
 import {
   sharePath,
   type ConnectionHolders,

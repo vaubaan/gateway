@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { LocalDate } from '@/components/LocalDate';
 import { AgentLabel, DataTable, Mono, type Column, type RowTone } from '@/components/ui';
 import type { MissionSessionView, SessionEventView } from '@/server/audit';
-import { riskReferencePath } from '@/server/providers/links';
+import { riskReferencePath } from '@/lib/providers/links';
 
 import styles from '../missions.module.css';
 import { yesOf } from '../mission-view';

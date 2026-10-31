@@ -59,7 +59,7 @@ import {
   type ConnectableProvider,
   type ConnectionDetail,
 } from '@/server/connections';
-import { providerPath } from '@/server/providers/links';
+import { providerPath } from '@/lib/providers/links';
 
 import styles from '../../accounts.module.css';
 

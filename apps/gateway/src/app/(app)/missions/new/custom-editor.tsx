@@ -28,15 +28,10 @@ import {
   Tag,
 } from '@/components/ui';
 import { GATE_WORDS, gateWordOf } from '@/lib/vocabulary';
-import {
-  DEPRECATED_NOTE,
-  FALLBACK_NOTE,
-  groupByKind,
-  noteBody,
-} from '@/server/missions/catalog-view';
-import type { IssuanceConnection } from '@/server/missions/model';
-import { riskReferencePath } from '@/server/providers/links';
-import type { RiskPlanes } from '@/server/providers/planes';
+import { DEPRECATED_NOTE, FALLBACK_NOTE, groupByKind, noteBody } from '@/lib/missions/catalog-view';
+import type { IssuanceConnection } from '@/lib/missions/model';
+import { riskReferencePath } from '@/lib/providers/links';
+import type { RiskPlanes } from '@/lib/providers/planes';
 
 import styles from '../missions.module.css';
 import {

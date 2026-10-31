@@ -17,7 +17,7 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import { ACCOUNT_PAGES, PAGES, ROUTES } from '@/lib/vocabulary';
-import { PROVIDERS_PATH } from '@/server/providers/links';
+import { PROVIDERS_PATH } from '@/lib/providers/links';
 
 export const dynamic = 'force-dynamic';
 

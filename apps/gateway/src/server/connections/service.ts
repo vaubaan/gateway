@@ -48,7 +48,7 @@ import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
-import { catalogEnvsOf } from '../missions/catalog-view';
+import { catalogEnvsOf } from '../../lib/missions/catalog-view';
 import type { Store } from '../store';
 import { ownResourceEnv } from '../store/resource-env';
 import { toIso, type Clock } from '../store/clock';

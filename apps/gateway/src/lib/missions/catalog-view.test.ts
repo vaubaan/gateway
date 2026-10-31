@@ -1,7 +1,7 @@
 import { RISK_VECTOR_AXES, type RiskCatalog } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
-import { fullCatalogRiskIds } from '../authority';
+import { fullCatalogRiskIds } from '../../server/authority';
 import {
   enumerateCatalog,
   formatRate,
@@ -20,7 +20,7 @@ import {
   DEPRECATED_NOTE,
   vectorBadges,
 } from './catalog-view';
-import { ACME_CATALOG } from './testing';
+import { ACME_CATALOG } from '../../server/missions/testing';
 
 describe('enumerateCatalog', () => {
   const rows = enumerateCatalog(ACME_CATALOG);

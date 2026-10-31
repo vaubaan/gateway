@@ -854,6 +854,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'client-imports-no-server-value',
+    statement:
+      'A client component imports no value from src/server (types only), and the pure rules the forms run (src/lib/authority, missions, providers, shares) import no value from src/server.',
+    source: 'Packages audit 2026-10-31, F6; handbook web-app',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/client-imports.test.ts`,
+        tests: [
+          'a client component imports no value from src/server',
+          'the pure rules of src/lib import no value from src/server',
+        ],
+      },
+    ],
+  },
+  {
     id: 'no-french-vocabulary',
     statement:
       'The repository speaks English: no file names the trust level, its tier or the three levels by their first, French names, except the changelog, the applied migrations that stored them and the History of their ADR.',

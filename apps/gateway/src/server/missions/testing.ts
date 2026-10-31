@@ -15,9 +15,9 @@ import type { Principal, RiskCatalog } from '@vaubaan/shared';
 import { fullCatalogRiskIds } from '../authority';
 import type { Store } from '../store';
 import type { ConnectionRecord, ConnectionResourceRecord } from '../store/types';
-import { enumerateCatalog } from './catalog-view';
-import { macroActionsOf } from './macro-actions';
-import type { IssuanceConnection, IssuanceResource } from './model';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
+import { macroActionsOf } from '../../lib/missions/macro-actions';
+import type { IssuanceConnection, IssuanceResource } from '../../lib/missions/model';
 
 const READ_VECTOR = {
   reversibility: 'reversible',

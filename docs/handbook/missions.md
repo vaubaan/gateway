@@ -2,7 +2,8 @@
 title: Missions — issuance, edit, members and keys, bootstrap kit
 tracks:
   - apps/gateway/src/server/missions/
-  - apps/gateway/src/server/authority/catalog-authority.ts
+  - apps/gateway/src/lib/authority/catalog-authority.ts
+  - apps/gateway/src/lib/missions/
   - apps/gateway/src/server/store/membership.ts
   - apps/gateway/src/server/store/mission-reach.ts
   - apps/gateway/src/server/store/repositories/missions.ts
@@ -20,16 +21,16 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 ## Start here
 
 - [`mission-service.ts`](../../apps/gateway/src/server/missions/mission-service.ts) — every act on a mission: issue, preview, edit, gate, limits, rotate, revoke, `verifyToken`, `access`.
-- [`preview.ts`](../../apps/gateway/src/server/missions/preview.ts) — `previewDraft`, the pure decision behind the form, the management door's `preview_policy`, `issue` and `edit`.
-- [`macro-actions.ts`](../../apps/gateway/src/server/missions/macro-actions.ts) — the connection's macro-actions ("Anything else" added for the fallback) and the lines a trust level writes (risk model §4.6); the form's Simple view is `missions/new/macro-action-panel.tsx`.
-- [`everything-i-hold.ts`](../../apps/gateway/src/server/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by level for a risk in no macro-action (spec §3.2; `RATE_BY_LEVEL`, `QUOTA_BY_LEVEL`).
+- [`preview.ts`](../../apps/gateway/src/lib/missions/preview.ts) — `previewDraft`, the pure decision behind the form, the management door's `preview_policy`, `issue` and `edit`.
+- [`macro-actions.ts`](../../apps/gateway/src/lib/missions/macro-actions.ts) — the connection's macro-actions ("Anything else" added for the fallback) and the lines a trust level writes (risk model §4.6); the form's Simple view is `missions/new/macro-action-panel.tsx`.
+- [`everything-i-hold.ts`](../../apps/gateway/src/lib/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by level for a risk in no macro-action (spec §3.2; `RATE_BY_LEVEL`, `QUOTA_BY_LEVEL`).
 - [`team-service.ts`](../../apps/gateway/src/server/missions/team-service.ts) — teammates and keys (member and named tokens).
 - [`mission-reach.ts`](../../apps/gateway/src/server/store/mission-reach.ts) — what a mission reaches on a connection.
 - [`bootstrap-kit.ts`](../../apps/gateway/src/server/missions/bootstrap-kit.ts) — what the agent is told.
 
 ## Invariants
 
-- **One decision, run in the browser too.** `preview.ts`, `model.ts`, `catalog-view.ts`, `macro-actions.ts`, `summary.ts`, `everything-i-hold.ts`, `mission-edit.ts` are browser-safe: the forms import them and show the server's own verdict. The `index.ts` barrel is server-only (`node:crypto`, argon2); never import it from those files.
+- **One decision, run in the browser too.** `preview.ts`, `model.ts`, `catalog-view.ts`, `macro-actions.ts`, `summary.ts`, `everything-i-hold.ts`, `mission-edit.ts`, `token-name.ts` live under `src/lib/missions/` (with `lib/authority/catalog-authority.ts`, `lib/providers/{links,planes,reference}.ts`, `lib/shares/restriction.ts`): the forms import them and show the server's own verdict. They import no value from `src/server/`, and a client component imports only types from there (**[inv: client-imports-no-server-value]**); `server/missions/index.ts` re-exports them for the server.
 - **The persisted policy is the enumeration.** `issue` recomputes what the trust levels or `everything-i-hold` write, server-side, and stores explicit lines only: the row, the token, the `mission-issued` entry and the kit never name a macro-action, a trust level or `everything-i-hold`, so a later catalog or authority change cannot widen a mission.
 - **Trust levels write a policy only when the draft gives none.** Without `policy` (the management door, an agent's proposal) `prefillOfTrustLevels` writes the lines and `left_out` says what it left out; beside explicit lines they decide nothing, and a line without a budget is `missing-budget`. The form therefore sends them only beside lines: an emptied account must not be refilled. `knownTrustLevels` keeps those of the connection's macro-actions and `mission_connections.trust_levels_json` stores them, to redraw the form: a mission loads in the Simple view only when its trust levels write exactly its lines (`loadResolved`), else in the Advanced view. A trust level change alone is no edit (`hasChanges` ignores it).
 - **One reach rule, three readers.** `reachedResources` is read at every request by the execution door (`loadMissionContext`), the mission detail and the kit, never cached, so the agent is never told it may touch what the door refuses.

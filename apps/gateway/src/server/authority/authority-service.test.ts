@@ -7,7 +7,11 @@ import { openMemoryStore, type Store } from '../store';
 import { StubEncryptor } from '../store/testing';
 import type { ConnectionRecord, Principal, UserRecord } from '../store/types';
 import { ConnectionAuthorityService } from './authority-service';
-import { explicitRiskIdsOf, fullCatalogRiskIds, uncoveredRisks } from './catalog-authority';
+import {
+  explicitRiskIdsOf,
+  fullCatalogRiskIds,
+  uncoveredRisks,
+} from '../../lib/authority/catalog-authority';
 
 /** The fake plugin's catalog as explicit ids: `acme.thing-write` is env-scoped. */
 const ACME_FULL = [

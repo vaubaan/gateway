@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 
 import { budgetAtTrustLevel, tierOf, TRUST_LEVEL_GATES } from '@vaubaan/policy-engine';
 
-import { enumerateCatalog } from '../missions/catalog-view';
-import { macroActionsOf } from '../missions/macro-actions';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
+import { macroActionsOf } from '../../lib/missions/macro-actions';
 import {
   IMPORT_TRUST_LEVEL,
   providerOfV4Risk,

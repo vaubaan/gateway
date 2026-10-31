@@ -44,7 +44,7 @@ import {
 } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type { MissionTeam, TeamTokenView } from '@/server/missions/team-service';
-import { TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from '@/server/missions/token-name';
+import { TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from '@/lib/missions/token-name';
 
 import { KitSteps, RevealDialog, revealedOf, type RevealedKey } from '../bootstrap-kit-view';
 import { messageOf } from '../message-of';

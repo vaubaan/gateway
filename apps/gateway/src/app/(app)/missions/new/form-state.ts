@@ -8,7 +8,7 @@
  */
 import type { Gate, MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
-import { isResolvable } from '@/server/missions/catalog-view';
+import { isResolvable } from '@/lib/missions/catalog-view';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -19,8 +19,8 @@ import type {
   MissionDraft,
   PreviewIssue,
   ResolvedDraftConnection,
-} from '@/server/missions/model';
-import { expansionDigest } from '@/server/missions/everything-i-hold';
+} from '@/lib/missions/model';
+import { expansionDigest } from '@/lib/missions/everything-i-hold';
 import {
   DEFAULT_TRUST_LEVEL,
   defaultLineOf,
@@ -32,8 +32,8 @@ import {
   type MacroActionTrustLevels,
   type Tier,
   type TrustLevel,
-} from '@/server/missions/macro-actions';
-import { defaultResources, previewConnection } from '@/server/missions/preview';
+} from '@/lib/missions/macro-actions';
+import { defaultResources, previewConnection } from '@/lib/missions/preview';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The inputs of one accepted risk; strings, as typed. An empty string is "no value yet". */

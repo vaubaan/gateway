@@ -7,7 +7,7 @@
  * no mission and no credential — every specimen is invented.
  */
 import { requirePrincipal } from '@/lib/auth/session';
-import { providerCards } from '@/server/providers/reference';
+import { providerCards } from '@/lib/providers/reference';
 
 import { Gallery } from './gallery';
 import type { GalleryIcons } from './specimen';

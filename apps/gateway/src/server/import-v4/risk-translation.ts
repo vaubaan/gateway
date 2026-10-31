@@ -40,9 +40,9 @@ import {
   type RiskId,
 } from '@vaubaan/shared';
 
-import { isResolvable } from '../missions/catalog-view';
-import { defaultLineOf, macroActionOfRisk } from '../missions/macro-actions';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '../missions/model';
+import { isResolvable } from '../../lib/missions/catalog-view';
+import { defaultLineOf, macroActionOfRisk } from '../../lib/missions/macro-actions';
+import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '../../lib/missions/model';
 
 export type DropReason =
   | 'denied-in-v4'

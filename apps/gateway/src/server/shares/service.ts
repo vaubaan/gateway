@@ -41,8 +41,8 @@ import {
 } from '../authority';
 import { ConnectError, ownerActRefusal, type Actor, type ConnectionService } from '../connections';
 import type { Logger } from '../logging';
-import { enumerateCatalog } from '../missions/catalog-view';
-import type { CatalogRisk } from '../missions/model';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
+import type { CatalogRisk } from '../../lib/missions/model';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import { InvariantError } from '../store/errors';
@@ -55,7 +55,7 @@ import type {
   UserRecord,
 } from '../store/types';
 import { ShareError, type ShareErrorCode } from './errors';
-import type { EnvLabelling } from './restriction';
+import type { EnvLabelling } from '../../lib/shares/restriction';
 
 /** Who a share is made to, as the owner names them: a user by email, or a group. */
 export type ShareTargetInput =

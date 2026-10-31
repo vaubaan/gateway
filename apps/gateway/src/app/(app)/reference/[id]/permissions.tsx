@@ -29,21 +29,16 @@ import {
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
 } from '@/lib/vocabulary';
-import {
-  DEPRECATED_NOTE,
-  FALLBACK_NOTE,
-  formatRate,
-  noteBody,
-} from '@/server/missions/catalog-view';
-import { TRUST_LEVELS } from '@/server/missions/macro-actions';
-import type { CatalogRisk } from '@/server/missions/model';
-import { riskReferencePath } from '@/server/providers/links';
+import { DEPRECATED_NOTE, FALLBACK_NOTE, formatRate, noteBody } from '@/lib/missions/catalog-view';
+import { TRUST_LEVELS } from '@/lib/missions/macro-actions';
+import type { CatalogRisk } from '@/lib/missions/model';
+import { riskReferencePath } from '@/lib/providers/links';
 import {
   type TrustLevelCell,
   type MacroActionReference,
   type RiskReference,
   type RiskReferenceGroup,
-} from '@/server/providers/reference';
+} from '@/lib/providers/reference';
 
 import styles from '../reference.module.css';
 

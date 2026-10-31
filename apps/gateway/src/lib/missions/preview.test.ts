@@ -8,7 +8,12 @@ import type {
   ResolvedDraftConnection,
 } from './model';
 import { budgetProblem, envNotices, previewConnection, previewDraft, uncoveredOf } from './preview';
-import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from './testing';
+import {
+  ACME_HIDDEN,
+  ACME_RESOURCES,
+  ACME_STALE,
+  acmeConnection,
+} from '../../server/missions/testing';
 
 /** The explicit ids a resolved line carries; `undefined` for a whole-connection line. */
 function idsOf(line: ResolvedDraftConnection | undefined): readonly string[] | undefined {

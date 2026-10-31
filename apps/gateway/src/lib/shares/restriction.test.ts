@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { depotPlugin } from '../execution/testing';
+import { depotPlugin } from '../../server/execution/testing';
 import { enumerateCatalog } from '../missions/catalog-view';
 import {
   envNotes,

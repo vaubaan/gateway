@@ -1,7 +1,7 @@
 import { createRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
+import { SHIPPED_PLUGINS } from '../../server/compose/shipped-plugins';
 import { RISK_KINDS } from '../missions/model';
 import {
   macroActionAnchor,

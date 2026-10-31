@@ -11,14 +11,14 @@ import type {
   IssuanceConnection,
   MissionDraft,
   ResolvedDraftConnection,
-} from '@/server/missions/model';
+} from '@/lib/missions/model';
 import {
   draftConnectionOf,
   type MissionChanges,
   type MissionSnapshot,
   type StoredResourceScope,
-} from '@/server/missions/mission-edit';
-import { trustLevelsOf } from '@/server/missions/macro-actions';
+} from '@/lib/missions/mission-edit';
+import { trustLevelsOf } from '@/lib/missions/macro-actions';
 
 import {
   draftOf,
