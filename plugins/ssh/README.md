@@ -5,7 +5,7 @@ Bash over SSH as a Vaubaan Gateway provider plugin on the plugin SDK
 host the connection reaches with its own ed25519 key pair and a **pinned host
 key**. Inspection commands on a read allow-list are low-risk; everything else
 is a write, and the classes that hurt (recursive deletes, package changes,
-service control, sudo) carry their own risk so a preset can gate them with
+service control, sudo) carry their own risk so a trust cran can gate them with
 `approval`. A line the classifier cannot see through carries every class: the
 classifier fails closed.
 
@@ -18,7 +18,7 @@ Contributor guide: [`plugins/README.md`](../README.md).
 | File                     | Role                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`           | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                                   |
-| `src/risk-catalog.yaml`  | 7 risks + fallback, three presets, `catalog_version: 3`. Loaded at boot by the SDK; the only catalog artefact.                      |
+| `src/risk-catalog.yaml`  | 7 risks + fallback, three macro-actions, `catalog_version: 6`. Loaded at boot by the SDK; the only catalog artefact.                |
 | `src/data-model.ts`      | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                         |
 | `src/tools.ts`           | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                         |
 | `src/shell-lex.ts`       | `lexCommandLine`: the line as a POSIX shell tokenises it (words, redirections, simple commands), and what it cannot model, by name. |
@@ -101,10 +101,10 @@ The owner then labels it `dev`, `staging` or `prod` on the account's page (Accou
 what qualifies the write risks** (`ssh[prod].exec-write`): the default
 `resourceEnvResolver` reads it from the `host[<ref>]` segment of every slice,
 so no plugin hook is needed. An unlabelled host cannot be written to through
-a preset — label it. One credential is one host; a second host is a second
+a macro-action — label it. One credential is one host; a second host is a second
 connection.
 
-## Catalog and presets
+## Catalog and macro-actions
 
 Risks (ids stable, never renamed): `exec-read`, `exec-read-secret-files`,
 `exec-write`¹, `exec-destructive`¹, `exec-package-install`¹,
@@ -112,15 +112,18 @@ Risks (ids stable, never renamed): `exec-read`, `exec-read-secret-files`,
 ¹ env-scoped: `acceptable_in_envs: [dev, staging, prod]`; `exec-write`,
 `exec-destructive` and `exec-service-control` carry a `vector_overrides.prod`.
 
-| Preset      | Intent                                                                                                          | Approval-gated by default                                                                                             |
-| ----------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `read-only` | Inspect: logs, processes, disk, services, files outside credential paths.                                       | —                                                                                                                     |
-| `developer` | One mission per code project: reads, file and process writes on `dev` and `staging`, service restarts on `dev`. | `ssh[staging].exec-service-control`. No prod, no packages, no destructive, no sudo, no credential files.              |
-| `operator`  | Everything on every labelled host.                                                                              | Credential-file reads; every `prod` entry; destructive, package, service and sudo on `staging` (all `auto` on `dev`). |
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome),
+risk model §4.6; the cran writes the explicit lines, one per labelled
+environment the mission's hosts carry.
 
-Budgets are per period; see the YAML for the numbers. Presets are UI sugar;
-the persisted mission policy is always the explicit enumeration. No preset
-references the fallback.
+| Macro-action | What it covers                                 | Its risks                                                |
+| ------------ | ---------------------------------------------- | -------------------------------------------------------- |
+| `look`       | Read-only commands, credential files included. | `exec-read`, `exec-read-secret-files`                    |
+| `fix`        | Write, restart and destroy.                    | `exec-write`, `exec-service-control`, `exec-destructive` |
+| `install`    | Packages and sudo.                             | `exec-package-install`, `exec-sudo`                      |
+
+Base budgets are in the YAML. The fallback is in no macro-action: the gateway
+offers it under "Anything else".
 
 ## Classification rules
 
@@ -196,14 +199,14 @@ Stdout is capped at 1 MiB (`truncated: true`), stderr at 4 KiB. The gateway's
 npx vitest run plugins/ssh
 ```
 
-| Suite                      | Tests | What it pins                                                                                                                                                                                                                                                                                                                                                          |
-| -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin.test.ts`           | 300   | The SDK kit (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **the three presets evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
-| `adversarial.test.ts`      | 181   | Command lines written to be read as milder than what the shell runs — quoting, comments, redirections, wrappers, interpreters, paths — each with its exact slices.                                                                                                                                                                                                    |
-| `classify.test.ts`         | 90    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                          |
-| `host-key-pinning.test.ts` | 37    | The real `ssh2Transport` against an in-process `ssh2.Server` on `127.0.0.1` (ephemeral port, closed after each test): a missing, malformed or mismatched pin is refused before authentication, proven from the server's side.                                                                                                                                         |
-| `injection.test.ts`        | 87    | `host` and `cmd` fed `..`, `a/../b`, encoded forms, empty, overlong and multi-line values, to `classify` and to `execute` over a recording transport: only a hostname or an IPv4 address names a host (argument or resource ref), a refused value opens no connection, and the line sent is the line classified.                                                      |
-| `data-model.test.ts`       | 2     | The data model's integrity and its markers.                                                                                                                                                                                                                                                                                                                           |
+| Suite                      | Tests | What it pins                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin.test.ts`           | 300   | The SDK kit (`assertPluginWellFormed`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **missions written from macro-actions at trust crans, evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
+| `adversarial.test.ts`      | 181   | Command lines written to be read as milder than what the shell runs — quoting, comments, redirections, wrappers, interpreters, paths — each with its exact slices.                                                                                                                                                                                                                |
+| `classify.test.ts`         | 90    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                                      |
+| `host-key-pinning.test.ts` | 37    | The real `ssh2Transport` against an in-process `ssh2.Server` on `127.0.0.1` (ephemeral port, closed after each test): a missing, malformed or mismatched pin is refused before authentication, proven from the server's side.                                                                                                                                                     |
+| `injection.test.ts`        | 87    | `host` and `cmd` fed `..`, `a/../b`, encoded forms, empty, overlong and multi-line values, to `classify` and to `execute` over a recording transport: only a hostname or an IPv4 address names a host (argument or resource ref), a refused value opens no connection, and the line sent is the line classified.                                                                  |
+| `data-model.test.ts`       | 2     | The data model's integrity and its markers.                                                                                                                                                                                                                                                                                                                                       |
 
 No test reaches an external host or needs an `ssh` binary; only
 `host-key-pinning.test.ts` opens a socket, on loopback.

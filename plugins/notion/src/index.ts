@@ -29,11 +29,11 @@ export const notionPlugin = definePlugin({
   icon: NOTION_ICON,
   iconColor: NOTION_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.3',
+  version: '0.1.4',
   description:
     'Read and edit the pages, page content, databases and comments of the Notion pages shared with an internal connection.',
   summary:
-    'One account is one internal connection of a Notion workspace, connected with its token. One resource is one top-level page or database shared with that connection, with everything under it. Notion has no environments: moving a page to the trash and deleting a block ask first in the presets. Writes are sent silently, so Notion notifies nobody.',
+    'One account is one internal connection of a Notion workspace, connected with its token. One resource is one top-level page or database shared with that connection, with everything under it. Notion has no environments: moving a page to the trash and deleting a block are permissions of their own. Writes are sent silently, so Notion notifies nobody.',
   manualRevocation:
     "In Notion's Developer portal, open the connection and refresh its token on the Configuration tab, or remove the connection from the shared pages (••• menu, Connections).",
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/notion.md',

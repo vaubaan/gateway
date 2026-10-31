@@ -64,7 +64,7 @@ export const upstashRedisPlugin = definePlugin({
   displayName: 'Upstash Redis',
   icon: UPSTASH_REDIS_ICON,
   iconColor: UPSTASH_REDIS_ICON_COLOR,
-  version: '3.2.2',
+  version: '3.2.3',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:

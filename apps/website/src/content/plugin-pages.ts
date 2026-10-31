@@ -6,7 +6,7 @@
 import { githubBlob, githubTree } from '../site/constants';
 import { type Health, type HealthSnapshot, healthOf, healthWords } from './health';
 import { code, markdownTable, text } from './markdown';
-import type { CredentialInfo, PluginInfo, PresetEntryInfo } from './plugins';
+import type { CredentialInfo, MacroActionEntryInfo, PluginInfo } from './plugins';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
 export interface PluginWithHealth extends PluginInfo {
@@ -28,13 +28,15 @@ function windowWords(seconds: number): string {
   return `${seconds} s`;
 }
 
-function presetRow(entry: PresetEntryInfo, labels: ReadonlyMap<string, string>): string[] {
+function macroActionRow(
+  entry: MacroActionEntryInfo,
+  labels: ReadonlyMap<string, string>,
+): string[] {
   return [
     code(entry.riskId),
     text(labels.get(entry.riskId) ?? ''),
     String(entry.quota),
     `${entry.rateMax} per ${windowWords(entry.rateWindowSeconds)}`,
-    entry.gate === 'approval' ? 'ask me first' : 'runs freely',
   ];
 }
 
@@ -43,10 +45,10 @@ export function pluginPageTitle(plugin: Pick<PluginInfo, 'name'>): string {
 }
 
 export function pluginPageDescription(plugin: PluginInfo): string {
-  return `${plugin.name} plugin of Vaubaan Gateway, version ${plugin.version}: ${plugin.risks.length} permissions, ${plugin.presets.length} presets, ${plugin.tools.length} tools.`;
+  return `${plugin.name} plugin of Vaubaan Gateway, version ${plugin.version}: ${plugin.risks.length} permissions, ${plugin.macroActions.length} macro-actions, ${plugin.tools.length} tools.`;
 }
 
-/** `/plugins/<id>`: what the plugin covers, its permissions, presets, tools and health. */
+/** `/plugins/<id>`: what the plugin covers, its permissions, macro-actions, tools and health. */
 export function pluginPageMarkdown(
   plugin: PluginWithHealth,
   thresholds: ValidationThresholds,
@@ -92,20 +94,20 @@ export function pluginPageMarkdown(
       }),
     ),
     '',
-    '## Presets',
+    '## Macro-actions',
     '',
-    'A preset pre-fills the permissions of a mission for one account, with a limit per period, a rate and whether each permission runs freely or asks the mission creator first. The person creating the mission adjusts it; the mission stores the explicit list.',
+    'A macro-action groups the permissions of one thing to do with the service, each with a base limit per period and a base rate. The person creating a mission ticks macro-actions and sets each to a trust level, Prudent, Confiant or Autonome: the level decides, from how hard each permission is to undo, whether it runs freely, asks first or is left out, and raises the limits. "Anything else", added by the gateway, holds the catch-all permission. The mission stores the explicit list, which the person can still edit line by line.',
     '',
   );
-  for (const preset of plugin.presets) {
+  for (const action of plugin.macroActions) {
     lines.push(
-      `### ${text(preset.label)}`,
+      `### ${text(action.label)}`,
       '',
-      `${code(preset.id)} — ${text(preset.description)}`,
+      `${code(action.id)} — ${text(action.description)}`,
       '',
       markdownTable(
-        ['Permission', 'What it allows', 'Limit per period', 'Rate', 'Runs'],
-        preset.entries.map((entry) => presetRow(entry, labels)),
+        ['Permission', 'What it allows', 'Base limit per period', 'Base rate'],
+        action.entries.map((entry) => macroActionRow(entry, labels)),
       ),
       '',
     );
@@ -206,7 +208,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
   ];
   if (plugin.summary) lines.push(text(plugin.summary), '');
   lines.push(
-    `Permissions, presets and tools of this service: [${plugin.name} plugin](/plugins/${plugin.id}).`,
+    `Permissions, macro-actions and tools of this service: [${plugin.name} plugin](/plugins/${plugin.id}).`,
     '',
     '## How to connect',
     '',

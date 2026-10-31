@@ -1,7 +1,7 @@
 /**
  * The provider reference of the web interface (spec §4.2 "Providers"): what
  * each shipped plugin connects to, its data model, its risk catalog, its
- * tools and its presets fully expanded.
+ * tools and its macro-actions, each risk with what every trust cran gives it.
  *
  * Everything here is a read-only projection of the plugin registry — the
  * single provider list. Nothing is written per provider: a plugin added to
@@ -22,8 +22,8 @@ import type {
   DataModelCardinality,
   DataModelEntity,
   Gate,
+  MacroAction,
   McpToolDeclaration,
-  Preset,
   RateLimit,
   RiskEntry,
   RiskId,
@@ -39,9 +39,16 @@ import {
   RISK_KIND_GROUPS,
   type RiskFamily,
 } from '../missions/catalog-view';
+import {
+  expandMacroAction,
+  macroActionsOf,
+  palierOf,
+  TRUST_CRANS,
+  type Palier,
+  type TrustCran,
+} from '../missions/macro-actions';
 import { RISK_KINDS, type CatalogRisk, type RiskKind } from '../missions/model';
-import { expandPreset } from '../missions/preview';
-import { presetAnchor, riskAnchor } from './links';
+import { macroActionAnchor, riskAnchor } from './links';
 import { hasSeveralPlanes, OTHER_PLANE, planesOfPatterns, planesOfToolName } from './planes';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -53,7 +60,8 @@ export interface ProviderCounts {
   readonly risks: number;
   /** Explicit ids: an env-scoped entry counts once per environment. */
   readonly risk_ids: number;
-  readonly presets: number;
+  /** The catalog's macro-actions, "Anything else" not counted. */
+  readonly macro_actions: number;
   readonly tools: number;
 }
 
@@ -78,7 +86,7 @@ function countsOf({ plugin }: RegisteredPlugin, risks: readonly CatalogRisk[]): 
   return {
     risks: plugin.catalog.risks.length,
     risk_ids: risks.length,
-    presets: plugin.catalog.presets?.length ?? 0,
+    macro_actions: plugin.catalog.macro_actions?.length ?? 0,
     tools: plugin.tools.length,
   };
 }
@@ -287,22 +295,35 @@ export interface RiskReference extends RiskFamily {
   /**
    * What the handed token can do at the provider: `read-only` when the plugin declares
    * it so (`readOnlyRiskIds`), `write` otherwise; `null` when the risk hands no token.
-   * A preset gates a `write` one by approval (spec §2.4).
+   * A cran pre-fills a `write` one `approval` (spec §2.4).
    */
   readonly token_access: TokenAccess | null;
   /** The tools the plugin declares as touching this risk (`tokenHandouts`); usually none. */
   readonly declared_tools: readonly string[];
   /** The planes of the data model its patterns reach (`planes.ts`); `['other']` when none. */
   readonly planes: readonly string[];
-  /** The presets that include it, wholly or in some environment, catalog order. */
-  readonly presets: readonly PresetTag[];
+  /** The macro-action it belongs to; `null` for a retired entry, in none. */
+  readonly macro_action: MacroActionTag | null;
+  /** Per cran, what each variant gets there, variant order. */
+  readonly at_cran: Readonly<Record<TrustCran, readonly CranCell[]>>;
 }
 
-/** A preset as a risk names it: enough to print its tag and link to it. */
-export interface PresetTag {
+/** A macro-action as a risk names it: enough to print its tag and link to it. */
+export interface MacroActionTag {
   readonly id: string;
   readonly label: string;
   readonly anchor: string;
+}
+
+/** What one variant of a risk gets at one cran: its line, or `null` when the cran leaves it out. */
+export interface CranCell {
+  readonly risk: CatalogRisk;
+  readonly palier: Palier;
+  readonly line: {
+    readonly quota: number;
+    readonly rate_limit: RateLimit;
+    readonly gate: Gate;
+  } | null;
 }
 
 export interface RiskReferenceGroup {
@@ -312,11 +333,13 @@ export interface RiskReferenceGroup {
   readonly entries: readonly RiskReference[];
 }
 
-/** What an entry is read against, besides itself: the model, the handouts, the presets. */
+/** What an entry is read against, besides itself: the model, the handouts, the macro-actions. */
 interface CatalogContext {
   readonly model: DataModel;
   readonly handouts: readonly TokenHandout[];
-  readonly presets: readonly PresetReference[];
+  readonly macroActions: readonly MacroActionReference[];
+  /** Per explicit id, per cran: its line, `null` when left out. */
+  readonly cells: ReadonlyMap<RiskId, Readonly<Record<TrustCran, CranCell['line']>>>;
 }
 
 function worstKind(variants: readonly CatalogRisk[]): RiskKind {
@@ -338,11 +361,22 @@ function riskReferenceOf(
     token_access: tools.length === 0 ? null : readOnly ? 'read-only' : 'write',
     declared_tools: tools,
     planes: planesOfPatterns(context.model, patternsOf(entry)),
-    presets: context.presets
-      .filter((preset) =>
-        [...preset.auto, ...preset.approval].some((line) => line.risk.base_id === entry.id),
-      )
-      .map(({ id, label, anchor }) => ({ id, label, anchor })),
+    macro_action: (() => {
+      const action = context.macroActions.find((candidate) =>
+        candidate.risk_ids.includes(entry.id),
+      );
+      return action ? { id: action.id, label: action.label, anchor: action.anchor } : null;
+    })(),
+    at_cran: Object.fromEntries(
+      TRUST_CRANS.map((cran) => [
+        cran,
+        family.variants.map((risk) => ({
+          risk,
+          palier: palierOf(risk.vector),
+          line: context.cells.get(risk.risk_id)?.[cran] ?? null,
+        })),
+      ]),
+    ) as Record<TrustCran, CranCell[]>,
     ...family,
     anchor: riskAnchor(entry.id),
     kind: worstKind(family.variants),
@@ -378,52 +412,68 @@ function riskGroupsOf(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Presets, fully expanded
+// Macro-actions, at every cran
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** One explicit line a preset contributes: the risk with its budget and gate. */
-export interface PresetLine {
-  readonly risk: CatalogRisk;
-  readonly quota: number;
-  readonly rate_limit: RateLimit;
-  readonly gate: Gate;
-}
-
-export interface PresetReference {
+export interface MacroActionReference {
   readonly id: string;
   readonly anchor: string;
   readonly label: string;
   readonly description: string;
-  /** Lines the agent may act on without asking, catalog order. */
-  readonly auto: readonly PresetLine[];
-  /** Lines where each action waits for the creator's approval. */
-  readonly approval: readonly PresetLine[];
-  /** Catalog entries the preset leaves out, wholly or in some environments. */
-  readonly not_included: readonly RiskFamily[];
+  /** Its catalog entries, unqualified, catalog order. */
+  readonly risk_ids: readonly RiskId[];
+}
+
+/** Base ids whose tool hands a token that can write (the SDK's `writeHandoutRiskIds`, spelled out). */
+function writeTokenRisks(handouts: readonly TokenHandout[]): RiskId[] {
+  return handouts.flatMap((handout) =>
+    handout.riskIds.filter((id) => !(handout.readOnlyRiskIds ?? []).includes(id)),
+  );
 }
 
 /**
- * A preset against the whole catalog: an entry naming the base id of an
- * env-scoped risk stands for that risk in every environment the catalog
- * lists, exactly as issuance expands it when every environment is reachable.
- * What a mission gets is this list bounded by the creator's authority and by
- * the resources selected.
+ * Every macro-action against the whole catalog, every environment reached and
+ * every risk held: what each cran writes for each explicit id. What a mission
+ * gets is this bounded by the creator's authority and by the resources
+ * selected.
  */
-export function presetReferenceOf(preset: Preset, risks: readonly CatalogRisk[]): PresetReference {
-  const { lines } = expandPreset(preset, { risks, derives_env: true }, []);
-  const byId = new Map(lines.map((line) => [line.risk_id, line]));
-  const included = risks.flatMap((risk): PresetLine[] => {
-    const line = byId.get(risk.risk_id);
-    return line ? [{ risk, quota: line.quota, rate_limit: line.rate_limit, gate: line.gate }] : [];
-  });
+function cranCellsOf(
+  actions: readonly MacroAction[],
+  risks: readonly CatalogRisk[],
+  handouts: readonly TokenHandout[],
+): Map<RiskId, Record<TrustCran, CranCell['line']>> {
+  const whole = {
+    risks,
+    authority: risks.map((risk) => risk.risk_id),
+    derives_env: true,
+    write_token_risks: writeTokenRisks(handouts),
+  };
+  const cells = new Map<RiskId, Record<TrustCran, CranCell['line']>>();
+  for (const action of actions) {
+    for (const cran of TRUST_CRANS) {
+      const { lines, left_out } = expandMacroAction(whole, action, cran, []);
+      for (const line of lines) {
+        const row = cells.get(line.risk_id) ?? { prudent: null, confiant: null, autonome: null };
+        row[cran] = { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
+        cells.set(line.risk_id, row);
+      }
+      for (const out of left_out) {
+        if (!cells.has(out.risk_id)) {
+          cells.set(out.risk_id, { prudent: null, confiant: null, autonome: null });
+        }
+      }
+    }
+  }
+  return cells;
+}
+
+function macroActionReferenceOf(action: MacroAction): MacroActionReference {
   return {
-    id: preset.id,
-    anchor: presetAnchor(preset.id),
-    label: preset.label,
-    description: preset.description,
-    auto: included.filter((line) => line.gate === 'auto'),
-    approval: included.filter((line) => line.gate === 'approval'),
-    not_included: groupVariants(risks.filter((risk) => !byId.has(risk.risk_id))),
+    id: action.id,
+    anchor: macroActionAnchor(action.id),
+    label: action.label,
+    description: action.description,
+    risk_ids: action.entries.map((entry) => entry.risk_id),
   };
 }
 
@@ -479,7 +529,7 @@ export const TOOL_RISKS_NOTE =
 
 /** What the mark "hands a token to the agent" means (spec §2.4). */
 export const TOKEN_HANDOUT_NOTE =
-  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. In a preset, a token that can write is handed only after the creator approves the call; a read-only token may be handed without asking. The long-lived credential never leaves the gateway.';
+  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. At every trust cran, a token that can write is handed only after the creator approves the call; a read-only token follows its palier. The long-lived credential never leaves the gateway.';
 
 /** What a handed token can do at the provider. */
 export type TokenAccess = 'read-only' | 'write';
@@ -509,7 +559,8 @@ export interface ProviderReference extends ProviderCard {
   readonly plane_filters: readonly PlaneFilter[];
   readonly environment: EnvironmentReference;
   readonly risk_groups: readonly RiskReferenceGroup[];
-  readonly presets: readonly PresetReference[];
+  /** The macro-actions a creator ticks, "Anything else" last. */
+  readonly macro_actions: readonly MacroActionReference[];
   readonly tools: readonly ToolReference[];
 }
 
@@ -550,8 +601,15 @@ export function providerReferenceOf(registered: RegisteredPlugin): ProviderRefer
   const risks = enumerateCatalog(plugin.catalog);
   const handouts = plugin.tokenHandouts ?? [];
   const model = plugin.dataModel;
-  const presets = (plugin.catalog.presets ?? []).map((preset) => presetReferenceOf(preset, risks));
-  const riskGroups = riskGroupsOf(plugin.catalog.risks, risks, { model, handouts, presets });
+  const actions = macroActionsOf(plugin.catalog);
+  const macroActions = actions.map(macroActionReferenceOf);
+  const cells = cranCellsOf(actions, risks, handouts);
+  const riskGroups = riskGroupsOf(plugin.catalog.risks, risks, {
+    model,
+    handouts,
+    macroActions,
+    cells,
+  });
   const tools = plugin.tools.map((tool) => toolReferenceOf(tool, handouts, model));
   return {
     ...cardOf(registered, risks),
@@ -563,7 +621,7 @@ export function providerReferenceOf(registered: RegisteredPlugin): ProviderRefer
     plane_filters: planeFiltersOf(model, riskGroups, tools),
     environment: environmentOf(registered),
     risk_groups: riskGroups,
-    presets,
+    macro_actions: macroActions,
     tools,
   };
 }

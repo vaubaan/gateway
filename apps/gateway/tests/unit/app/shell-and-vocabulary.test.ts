@@ -26,7 +26,7 @@ import {
   giveAccessLabel,
   holderWords,
   ownedBy,
-  presetHolds,
+  palierWord,
   REFUSAL_WORDS,
   shortDate,
   stepsDone,
@@ -235,7 +235,7 @@ describe('the theme choice', () => {
 });
 
 describe('the vocabulary', () => {
-  it('names each thing with one word, and keeps mission and preset', () => {
+  it('names each thing with one word, and keeps mission and macro-action', () => {
     expect(TERMS.connection.one).toBe('account');
     expect(TERMS.risk.many).toBe('permissions');
     expect(TERMS.missionToken.one).toBe('key');
@@ -244,7 +244,8 @@ describe('the vocabulary', () => {
     expect(TERMS.member.one).toBe('teammate');
     expect(TERMS.operator.one).toBe('administrator');
     expect(TERMS.mission.one).toBe('mission');
-    expect(TERMS.preset.one).toBe('preset');
+    expect(TERMS.macroAction.one).toBe('macro-action');
+    expect(TERMS).not.toHaveProperty('preset');
     const words = Object.values(TERMS).map((term) => term.one);
     expect(new Set(words).size).toBe(words.length);
   });
@@ -350,9 +351,8 @@ describe('the words of the accounts, reference, activity and settings pages', ()
     expect(shortDate('2025-09-02T08:00:00Z', now)).toBe('2 Sep 2025');
   });
 
-  it('says what a preset holds, the retention of the record and the setup count', () => {
-    expect(presetHolds(10, 2)).toBe('10 · 2 ask');
-    expect(presetHolds(2, 0)).toBe('2 permissions');
+  it('names a palier, the retention of the record and the setup count', () => {
+    expect(palierWord(3)).toBe('Palier 3');
     expect(activityLede(90)).toBe(
       'Every call an agent made and every change a person made, kept 90 days. This is the audit record.',
     );

@@ -3,8 +3,8 @@
  *
  * `ACME_CATALOG` is a small catalog with every shape issuance must handle
  * (account-scoped and env-scoped risks, a rate ceiling, a deprecated entry,
- * the fallback, three presets, one of which names an env-scoped risk by its
- * base id); `acmeConnection()` is the issuance context of
+ * the fallback, three macro-actions, one of which holds env-scoped risks by
+ * their base id); `acmeConnection()` is the issuance context of
  * one connection on it, for the pure tests. `seedConnection()` writes a
  * connection and its resources straight through the store repositories, the
  * way the Connections feature will, for the integration and browser tests.
@@ -118,60 +118,6 @@ export const ACME_CATALOG: RiskCatalog = {
       entries: [{ risk_id: 'acme.admin', quota: 5, rate_limit: { max: 1, window_seconds: 60 } }],
     },
   ],
-  presets: [
-    {
-      id: 'reader',
-      label: 'Reader',
-      description: 'Read-only access.',
-      entries: [
-        {
-          risk_id: 'acme.read',
-          quota: 100,
-          rate_limit: { max: 60, window_seconds: 60 },
-          gate: 'auto',
-        },
-      ],
-    },
-    {
-      id: 'developer',
-      label: 'Developer',
-      description: 'Read everywhere, write on staging, bulk deletes under approval.',
-      entries: [
-        {
-          risk_id: 'acme.read',
-          quota: 1000,
-          rate_limit: { max: 120, window_seconds: 60 },
-          gate: 'auto',
-        },
-        {
-          risk_id: 'acme[staging].write',
-          quota: 200,
-          rate_limit: { max: 30, window_seconds: 60 },
-          gate: 'auto',
-        },
-        {
-          risk_id: 'acme[staging].bulk-delete',
-          quota: 5,
-          rate_limit: { max: 1, window_seconds: 60 },
-          gate: 'approval',
-        },
-      ],
-    },
-    {
-      // A base id on an env-scoped risk: "write, in whatever env is selected".
-      id: 'writer',
-      label: 'Writer',
-      description: 'Write things in every selected environment.',
-      entries: [
-        {
-          risk_id: 'acme.write',
-          quota: 50,
-          rate_limit: { max: 10, window_seconds: 60 },
-          gate: 'auto',
-        },
-      ],
-    },
-  ],
 };
 
 const LISTED = { hidden: false, stale: false, self: false } as const;
@@ -222,7 +168,7 @@ export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): Iss
     resources: ACME_RESOURCES,
     risks: enumerateCatalog(ACME_CATALOG),
     authority: fullCatalogRiskIds(ACME_CATALOG),
-    presets: ACME_CATALOG.presets ?? [],
+    write_token_risks: [],
     macro_actions: macroActionsOf(ACME_CATALOG),
     ...overrides,
   };

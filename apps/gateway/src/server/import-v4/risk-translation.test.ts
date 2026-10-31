@@ -4,9 +4,12 @@ import supabasePlugin from '@vaubaan/plugin-supabase';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
 
+import { budgetAtCran, palierOf, CRAN_GATES } from '@vaubaan/policy-engine';
+
 import { enumerateCatalog } from '../missions/catalog-view';
+import { macroActionsOf } from '../missions/macro-actions';
 import {
-  isDeveloperLike,
+  IMPORT_CRAN,
   providerOfV4Risk,
   translateRisks,
   unbindingRateLimit,
@@ -21,58 +24,45 @@ function connectionOf(
   return {
     risks,
     derives_env: typeof plugin.envOf === 'function',
-    presets: plugin.catalog.presets ?? [],
+    macro_actions: macroActionsOf(plugin.catalog),
+    write_token_risks: [],
     authority: authority ?? risks.map((r) => r.risk_id),
   };
 }
 
 describe('v4 risk ids translated to the v5 catalog', () => {
-  it('keeps an id the v5 catalog has, with the developer preset line as budget', () => {
+  it('keeps an id the v5 catalog has, its macro-action base budget at Confiant as the line', () => {
     const github = connectionOf(githubPlugin);
-    const developer = (githubPlugin.catalog.presets ?? []).find((p) => p.id === 'developer');
-    const line = developer?.entries.find((e) => e.risk_id === 'github.create-pr');
-    expect(line).toBeDefined();
+    const propose = github.macro_actions.find((a) => a.id === 'propose');
+    const base = propose?.entries.find((e) => e.risk_id === 'github.create-pr');
+    const risk = github.risks.find((r) => r.risk_id === 'github.create-pr');
+    expect(base && risk).toBeTruthy();
 
     const t = translateRisks(['github.create-pr', 'github.read-code'], github, []);
     expect(t.dropped).toEqual([]);
     expect(t.entries.map((e) => e.risk_id)).toEqual(['github.create-pr', 'github.read-code']);
-    const createPr = t.entries[0]!;
-    expect(createPr).toMatchObject({
-      quota: line!.quota,
-      rate_limit: line!.rate_limit,
-      gate: line!.gate,
-      presetId: 'developer',
+    expect(t.entries[0]).toMatchObject({
+      ...budgetAtCran(base!, IMPORT_CRAN, risk!.rate_ceiling_per_minute),
+      gate: CRAN_GATES[IMPORT_CRAN][palierOf(risk!.vector)],
+      macroActionId: 'propose',
       from: 'github.create-pr',
     });
   });
 
-  it('takes the budget from another preset when no developer-like one carries the risk', () => {
-    const github = connectionOf(githubPlugin);
-    const inDeveloper = new Set(
-      (githubPlugin.catalog.presets ?? [])
-        .filter((p) => isDeveloperLike(p.id))
-        .flatMap((p) => p.entries.map((e) => e.risk_id)),
-    );
-    const elsewhere = (githubPlugin.catalog.presets ?? [])
-      .filter((p) => !isDeveloperLike(p.id))
-      .flatMap((p) => p.entries.map((e) => ({ preset: p.id, risk: e.risk_id })))
-      .find((e) => !inDeveloper.has(e.risk));
-    expect(elsewhere).toBeDefined();
-
-    const t = translateRisks([elsewhere!.risk], github, []);
-    expect(t.entries).toHaveLength(1);
-    expect(t.entries[0]!.presetId).toBe(elsewhere!.preset);
+  it('keeps the fallback in "Anything else", at its default base budget', () => {
+    const t = translateRisks(['github.uncategorized-write'], connectionOf(githubPlugin), []);
+    expect(t.dropped).toEqual([]);
+    expect(t.entries).toMatchObject([
+      { risk_id: 'github.uncategorized-write', quota: 150, macroActionId: 'anything-else' },
+    ]);
   });
 
-  it('drops the fallback: no preset gives it a budget, and none is invented', () => {
-    const t = translateRisks(['github.uncategorized-write'], connectionOf(githubPlugin), []);
+  it('drops a risk in no macro-action: no budget is invented', () => {
+    const bare = { ...connectionOf(githubPlugin), macro_actions: [] };
+    const t = translateRisks(['github.create-pr'], bare, []);
     expect(t.entries).toEqual([]);
     expect(t.dropped).toEqual([
-      {
-        v4RiskId: 'github.uncategorized-write',
-        reason: 'no-preset-budget',
-        v5RiskIds: ['github.uncategorized-write'],
-      },
+      { v4RiskId: 'github.create-pr', reason: 'no-base-budget', v5RiskIds: ['github.create-pr'] },
     ]);
   });
 
@@ -113,10 +103,11 @@ describe('v4 risk ids translated to the v5 catalog', () => {
         v5RiskIds: ['supabase[staging].migration-write', 'supabase[prod].migration-write'],
       },
     ]);
-    expect(t.entries.map((e) => [e.risk_id, e.presetId])).toEqual([
-      ['supabase[staging].migration-write', 'staging-developer'],
-      ['supabase[prod].migration-write', 'migration-operator'],
+    expect(t.entries.map((e) => e.risk_id)).toEqual([
+      'supabase[staging].migration-write',
+      'supabase[prod].migration-write',
     ]);
+    expect(new Set(t.entries.map((e) => e.macroActionId)).size).toBe(1);
   });
 
   it('drops an env-scoped risk no selected resource is labelled for', () => {
@@ -231,20 +222,13 @@ describe('helpers', () => {
     expect(providerOfV4Risk('cloudflare-dns.record-write')).toBe('cloudflare-dns');
     expect(providerOfV4Risk('not a risk')).toBeNull();
   });
-
-  it('recognises developer-like presets', () => {
-    expect(isDeveloperLike('developer')).toBe(true);
-    expect(isDeveloperLike('staging-developer')).toBe(true);
-    expect(isDeveloperLike('read-only')).toBe(false);
-    expect(isDeveloperLike('developers')).toBe(false);
-  });
 });
 
-describe('--carry-unbudgeted: risks no preset budgets, kept under approval', () => {
+describe('--carry-unbudgeted: risks no macro-action budgets, kept under approval', () => {
   const carry = { quota: 5 };
 
-  it('keeps the fallback with the given quota, the approval gate and no binding rate', () => {
-    const github = connectionOf(githubPlugin);
+  it('keeps the risk with the given quota, the approval gate and no binding rate', () => {
+    const github = { ...connectionOf(githubPlugin), macro_actions: [] };
     const t = translateRisks(['github.uncategorized-write'], github, [], [], carry);
     expect(t.dropped).toEqual([]);
     expect(t.carried).toEqual([
@@ -258,30 +242,24 @@ describe('--carry-unbudgeted: risks no preset budgets, kept under approval', () 
         rate_limit: unbindingRateLimit(5, risk),
         gate: 'approval',
         from: 'github.uncategorized-write',
-        presetId: null,
+        macroActionId: null,
       },
     ]);
   });
 
   it('carries an env-qualified risk with an exact v5 counterpart', () => {
-    const supabase = connectionOf(supabasePlugin);
-    const presetIds = new Set(
-      (supabasePlugin.catalog.presets ?? []).flatMap((p) => p.entries.map((e) => e.risk_id)),
-    );
-    const unbudgeted = supabase.risks.find(
-      (r) =>
-        r.env === 'prod' && !r.deprecated && !presetIds.has(r.risk_id) && !presetIds.has(r.base_id),
-    );
-    expect(unbudgeted).toBeDefined();
-    const t = translateRisks([unbudgeted!.risk_id], supabase, [{ env: 'prod' }], [], carry);
-    expect(t.carried.map((c) => c.v5RiskId)).toEqual([unbudgeted!.risk_id]);
+    const supabase = { ...connectionOf(supabasePlugin), macro_actions: [] };
+    const prod = supabase.risks.find((r) => r.env === 'prod' && !r.deprecated);
+    expect(prod).toBeDefined();
+    const t = translateRisks([prod!.risk_id], supabase, [{ env: 'prod' }], [], carry);
+    expect(t.carried.map((c) => c.v5RiskId)).toEqual([prod!.risk_id]);
     expect(t.entries[0]).toMatchObject({ gate: 'approval', quota: 5 });
   });
 
-  it('leaves a preset-budgeted risk on its preset line, gate included', () => {
+  it('leaves a budgeted risk on its macro-action line, gate included', () => {
     const t = translateRisks(['github.create-pr'], connectionOf(githubPlugin), [], [], carry);
     expect(t.carried).toEqual([]);
-    expect(t.entries[0]!.presetId).toBe('developer');
+    expect(t.entries[0]!.macroActionId).toBe('propose');
   });
 
   it('lifts no other reason: authority, denial, unknown and widening still drop', () => {

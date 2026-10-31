@@ -92,7 +92,7 @@ describe('management door — tools of a delegated agent', () => {
   });
 
   describe('reading the authority', () => {
-    it('an owner sees their connections with the whole catalog, resources and presets', async () => {
+    it('an owner sees their connections with the whole catalog, resources and macro-actions', async () => {
       const agent = await rig.agentOf(ADA);
       const { data } = await agent.call<ConnectionsAnswer>('list_my_connections');
       // Every plugin is listed, Gmail included (docs/handbook/plugin-sdk.md).
@@ -108,13 +108,27 @@ describe('management door — tools of a delegated agent', () => {
       expect(gh.authority).toMatchObject({ basis: 'owner', whole_catalog: true });
       expect(gh.authority.risk_ids).toContain(NOT_SHARED);
       expect(gh.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/infra', 'acme/web']);
-      expect(gh.presets.map((p) => p.id)).toEqual([
-        'read-only',
-        'developer',
-        'release-manager',
-        'everything-i-hold',
+      expect(gh.macro_actions.map((a) => a.id)).toEqual([
+        'read',
+        'propose',
+        'ship',
+        'administer',
+        'anything-else',
       ]);
-      expect(gh.presets.every((p) => p.within_authority)).toBe(true);
+      expect(gh.macro_actions.every((a) => a.unavailable.length === 0)).toBe(true);
+      // Ship holds delete-release (irreversible, palier 4): Prudent leaves it out.
+      const ship = gh.macro_actions.find((a) => a.id === 'ship');
+      expect(ship?.at_cran.prudent).toEqual({ auto: 0, approval: 3, left_out: 1 });
+      expect(ship?.at_cran.confiant).toEqual({ auto: 0, approval: 4, left_out: 0 });
+      expect(gh).not.toHaveProperty('presets');
+      // Everything held but the deprecated entries, as `get_catalog` writes it out.
+      const catalog = await agent.call<CatalogView>('get_catalog', {
+        provider: 'github',
+        connection_id: github,
+      });
+      const live = catalog.data.risks.filter((r) => !r.deprecated).map((r) => r.risk_id);
+      expect(catalog.data.everything_i_hold?.entries.map((e) => e.risk_id)).toEqual(live);
+      expect(gh.everything_i_hold.risks).toBe(live.length);
 
       // A client written against an earlier build still sends `include_experimental`:
       // the strict input accepts it and ignores it.
@@ -209,10 +223,15 @@ describe('management door — tools of a delegated agent', () => {
         risk_ids: ['github.read-code', 'github.read-meta', 'github.create-pr'],
         whole_catalog: false,
       });
-      const presets = Object.fromEntries((gh?.presets ?? []).map((p) => [p.id, p]));
-      expect(presets['read-only']).toMatchObject({ within_authority: true });
-      expect(presets.developer?.within_authority).toBe(false);
-      expect(presets.developer?.outside_authority).toContain(NOT_SHARED);
+      const actions = Object.fromEntries((gh?.macro_actions ?? []).map((a) => [a.id, a]));
+      // Read: the two reads shared, the global search not.
+      expect(actions.read?.unavailable).toEqual(['github.search-global']);
+      expect(actions.read?.at_cran.confiant).toEqual({ auto: 2, approval: 0, left_out: 0 });
+      // Propose: only the pull request is shared.
+      expect(actions.propose?.unavailable).toContain(NOT_SHARED);
+      expect(actions.propose?.at_cran.prudent).toEqual({ auto: 1, approval: 0, left_out: 0 });
+      expect(actions.ship?.at_cran.autonome).toEqual({ auto: 0, approval: 0, left_out: 0 });
+      expect(gh?.everything_i_hold.risks).toBe(SHARED.length);
       await agent.close();
     });
 
@@ -224,7 +243,7 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
-    it('get_catalog returns explicit ids with the presets, flagged against the authority on a connection', async () => {
+    it('get_catalog returns explicit ids with the macro-actions and crans, flagged against the authority on a connection', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);
       const plain = await agent.call<CatalogView>('get_catalog', { provider: 'github' });
@@ -233,8 +252,8 @@ describe('management door — tools of a delegated agent', () => {
       expect(plain.data.risks.map((r) => r.risk_id)).toContain(NOT_SHARED);
       expect(plain.data.risks.every((r) => r.in_my_authority === undefined)).toBe(true);
       expect(plain.data.risks.every((r) => !r.risk_id.includes('*'))).toBe(true);
-      const developer = plain.data.presets.find((p) => p.id === 'developer');
-      expect(developer?.entries[0]).toMatchObject({
+      const read = plain.data.macro_actions.find((a) => a.id === 'read');
+      expect(read?.entries[0]).toMatchObject({
         risk_id: 'github.read-code',
         quota: expect.any(Number) as number,
         rate_limit: {
@@ -243,12 +262,25 @@ describe('management door — tools of a delegated agent', () => {
         },
       });
 
+      expect(plain.data.risks.find((r) => r.risk_id === 'github.force-push')).toMatchObject({
+        palier: 3,
+        macro_action: 'propose',
+      });
+      expect(plain.data.crans.prudent).toEqual({
+        gates: { '1': 'auto', '2': 'approval', '3': 'approval', '4': null },
+        budget_factor: 1,
+      });
+      expect(plain.data.crans.autonome.budget_factor).toBe(10);
+      expect(plain.data).not.toHaveProperty('everything_i_hold');
+      expect(plain.data).not.toHaveProperty('presets');
+
       const flagged = await agent.call<CatalogView>('get_catalog', {
         provider: 'github',
         connection_id: github,
       });
       const held = flagged.data.risks.filter((r) => r.in_my_authority).map((r) => r.risk_id);
       expect(held).toEqual(['github.read-code', 'github.read-meta', 'github.create-pr']);
+      expect(flagged.data.everything_i_hold?.entries.map((e) => e.risk_id)).toEqual(held);
 
       // Env-scoped risks are one id per environment.
       const sb = await agent.call<CatalogView>('get_catalog', { provider: 'supabase' });
@@ -309,20 +341,35 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
-    it('a preset alone is bounded by the authority; an env-qualified id with no labelled resource is refused', async () => {
+    it('crans alone are bounded by the authority; an env-qualified id with no labelled resource is refused', async () => {
       await shareWithBob();
       const bob = await rig.agentOf(BOB);
-      const preset = await bob.call<PreviewView>('preview_policy', {
+      const crans = { read: 'confiant', propose: 'confiant' };
+      const fromCrans = await bob.call<PreviewView>('preview_policy', {
         name: 'Review',
-        connections: [{ provider: 'github', preset: 'developer' }],
+        connections: [{ provider: 'github', crans }],
         period: { kind: 'one-off' },
         expires_at: null,
       });
-      expect(preset.data.ok).toBe(true);
-      expect(preset.data.policy.map((entry) => entry.risk_id).sort()).toEqual([...SHARED].sort());
-      expect(
-        preset.data.connections[0]?.skipped_from_preset.map((skipped) => skipped.risk_id),
-      ).toContain(NOT_SHARED);
+      expect(fromCrans.data.ok).toBe(true);
+      expect(fromCrans.data.policy.map((entry) => entry.risk_id).sort()).toEqual(
+        [...SHARED].sort(),
+      );
+      expect(fromCrans.data.connections[0]?.left_out).toContainEqual({
+        risk_id: NOT_SHARED,
+        reason: 'outside-authority',
+        env: null,
+      });
+      expect(fromCrans.data.connections[0]?.crans).toEqual(crans);
+
+      // A macro-action the catalog does not have is named.
+      const unknown = await bob.call<PreviewView>('preview_policy', {
+        name: 'Review',
+        connections: [{ provider: 'github', crans: { review: 'confiant' } }],
+        period: { kind: 'one-off' },
+        expires_at: null,
+      });
+      expect(unknown.data.issues.map((issue) => issue.code)).toContain('unknown-macro-action');
       await bob.close();
 
       const ada = await rig.agentOf(ADA);
@@ -364,14 +411,10 @@ describe('management door — tools of a delegated agent', () => {
       await shareWithBob();
       const bob = await rig.agentOf(BOB);
       const listed = await bob.call<ConnectionsAnswer>('list_my_connections', {});
-      const builtIn = listed.data.connections
-        .find((c) => c.connection_id === github)
-        ?.presets.find((p) => p.id === 'everything-i-hold');
-      expect(builtIn).toMatchObject({
-        built_in: true,
-        within_authority: true,
-        risks: SHARED.length,
-      });
+      const builtIn = listed.data.connections.find(
+        (c) => c.connection_id === github,
+      )?.everything_i_hold;
+      expect(builtIn?.risks).toBe(SHARED.length);
 
       const draft = {
         name: 'My own agents',
@@ -594,7 +637,7 @@ describe('management door — tools of a delegated agent', () => {
       for (const connection of [{ connection_id: github }, { provider: 'github' }]) {
         const answer = await agent.call<Refused>('issue_mission', {
           name: 'Not mine',
-          connections: [{ ...connection, preset: 'read-only' }],
+          connections: [{ ...connection, crans: { read: 'prudent' } }],
           period: { kind: 'one-off' },
           expires_at: null,
         });

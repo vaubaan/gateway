@@ -32,7 +32,7 @@ and the catalog rationale are product rules: spec [`resend.md`](../../spec/resen
   classifier's: the env list lives once, in the catalog, and a touched env-scoped risk is never
   dropped. Pinned by `tests/unit/mission-evaluation.test.ts`.
 - A single send carries no recipient-count marker: a `single` / `multi` marker would hit the
-  fallback, which no preset may carry.
+  fallback, which no macro-action carries.
 - Undeclared arguments are **ignored, not refused**: only what the tool's `inputSchema` declares is
   forwarded (`declaredFieldsOf`, per batch email too); resource arguments go in the path or are
   re-resolved, never copied into the body.

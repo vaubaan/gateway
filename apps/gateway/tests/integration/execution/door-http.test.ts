@@ -66,7 +66,7 @@ interface GithubInstance extends ExecutionInstance {
   readonly upstream: MockFetch;
   readonly github: ConnectionRecord;
   readonly logs: string[];
-  issueGithub(preset?: string): Promise<IssuedMission>;
+  issueGithub(crans?: Readonly<Record<string, string>>): Promise<IssuedMission>;
 }
 
 async function githubInstance(env: Record<string, string> = {}): Promise<GithubInstance> {
@@ -100,14 +100,14 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
     upstream,
     github,
     logs,
-    async issueGithub(preset = 'read-only') {
+    async issueGithub(crans = { read: 'prudent' }) {
       const result = await instance.root.missions.service.issue(instance.ada, {
         name: 'Read the app repository',
         connections: [
           {
             connection_id: github.id,
             resources: { scope: 'selected', resource_refs: ['acme/app'] },
-            preset,
+            crans,
           },
         ],
         period: { kind: 'recurring', length_seconds: 86_400 },
@@ -192,7 +192,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
   }
 
   it('hands the client the whole refusal: code, fields and hint in the JSON-RPC error data', async () => {
-    const mission = await instance.issueGithub('read-only');
+    const mission = await instance.issueGithub({ read: 'prudent' });
     const client = await connect(instance, mission.token);
 
     const outside = await client
@@ -605,7 +605,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
   });
 
   it('rejects a call whose arguments JSON cannot carry (`1e999`): the approver would have read `null`', async () => {
-    const mission = await instance.issueGithub('read-only');
+    const mission = await instance.issueGithub({ read: 'prudent' });
     // Written by hand: `JSON.stringify` would already have turned the number into `null`.
     const body =
       '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"github__list_branches",' +

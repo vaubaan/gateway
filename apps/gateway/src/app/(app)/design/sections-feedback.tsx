@@ -118,7 +118,7 @@ export function StateSections() {
                 <Row
                   lead={<StepMark n={2} state="next" />}
                   title="Give an agent a mission"
-                  description="Name it, pick the repositories, pick a preset, read the three-line summary, create."
+                  description="Name it, pick the repositories, tick what it may do at a trust cran, read the three-line summary, create."
                   end={
                     <ButtonLink href="#empty" size="sm" variant="primary">
                       {ACTIONS.newMission}
@@ -340,12 +340,12 @@ function ToastSpecimen() {
 
 type Period = 'today' | 'yesterday' | 'week';
 type Facet = 'allowed' | 'refused' | 'asked';
-type TabId = 'presets' | 'permissions' | 'tools';
+type TabId = 'permissions' | 'tools' | 'model';
 
 function FilterSpecimen({ theme }: { theme: string }) {
   const [period, setPeriod] = useState<Period>('today');
   const [facets, setFacets] = useState<readonly Facet[]>(['refused']);
-  const [tab, setTab] = useState<TabId>('presets');
+  const [tab, setTab] = useState<TabId>('permissions');
   const base = `design-tabs-${theme}`;
   return (
     <Pile>
@@ -384,9 +384,9 @@ function FilterSpecimen({ theme }: { theme: string }) {
           active={tab}
           onSelect={setTab}
           tabs={[
-            { id: 'presets', label: 'Presets', count: 3 },
             { id: 'permissions', label: 'Permissions', count: 15 },
             { id: 'tools', label: 'Tools', count: 26 },
+            { id: 'model', label: 'How it is modelled' },
           ]}
         />
         <TabPanel base={base} id={tab}>
@@ -434,7 +434,7 @@ export function OverlaySections() {
                 defaultOpen
                 remember={false}
               >
-                <Hint>The granular editor unfolds here, under the preset.</Hint>
+                <Hint>The granular editor unfolds here, under the macro-actions.</Hint>
               </Disclosure>
             </Pile>
           )}
@@ -550,9 +550,9 @@ export function FormSections() {
                 aria-label="Per day"
                 style={{ width: 84 }}
               />
-              <Select size="sm" aria-label="Preset" defaultValue="developer" style={{ width: 160 }}>
-                <option value="developer">Developer · 10</option>
-                <option value="read">Read-only · 2</option>
+              <Select size="sm" aria-label="Cran" defaultValue="confiant" style={{ width: 160 }}>
+                <option value="prudent">Prudent · ×1</option>
+                <option value="confiant">Confiant · ×3</option>
               </Select>
             </Line>
           )}

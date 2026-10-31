@@ -110,7 +110,8 @@ export default function Home() {
               </Link>
             </span>
           ))}
-          . Each is a catalog of named permissions with presets, generated here from the repository.
+          . Each is a catalog of named permissions grouped into macro-actions, generated here from
+          the repository.
         </p>
 
         <h2>Open source</h2>

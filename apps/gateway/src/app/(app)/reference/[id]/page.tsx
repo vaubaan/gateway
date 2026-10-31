@@ -1,12 +1,12 @@
 /**
  * `/reference/<id>` — the reference of one service (spec §4.2 "Providers"):
  * what it is in the plugin's own words, then its permissions compared across
- * its presets, its tools, and how it is modelled, behind tabs
+ * the trust crans, its tools, and how it is modelled, behind tabs
  * (`service-view.tsx`).
  *
  * Generated from the plugin registry (`server/providers/reference.ts`): no
- * service has a hand-written page. Every permission and every preset has an
- * anchor (`#risk-<id>`, `#preset-<id>`) the other pages link to; the ids are
+ * service has a hand-written page. Every permission and every macro-action has
+ * an anchor (`#risk-<id>`, `#macro-<id>`) the other pages link to; the ids are
  * the protocol's and are printed as it spells them.
  */
 import { notFound } from 'next/navigation';

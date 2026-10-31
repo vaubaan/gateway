@@ -18,7 +18,7 @@
  *   regression here.
  * - **Thin where the shape is not ours.** What comes from the mission service
  *   or the catalog (policy lines, preview issues and notices, the summary,
- *   presets, the bootstrap kit) names the keys an agent reads and leaves the
+ *   macro-actions, the bootstrap kit) names the keys an agent reads and leaves the
  *   rest open; values whose set is owned elsewhere (a state, a gate, a level,
  *   an orphan cause) are strings, with the set in the description.
  *
@@ -39,6 +39,20 @@ const period = z
 
 /** A policy line as the mission service resolves it: the id, and its budget next to it. */
 const policyLine = z.looseObject({ risk_id: riskId });
+
+/** What one macro-action at one cran writes: lines running freely, asking first, left out. */
+const cranYield = z.looseObject({ auto: z.number(), approval: z.number(), left_out: z.number() });
+
+/** Per palier `1`…`4`: `auto`, `approval`, or `null` (left out); and the factor on the base budget. */
+const cranRule = z.looseObject({
+  gates: z.looseObject({
+    '1': z.string().nullable(),
+    '2': z.string().nullable(),
+    '3': z.string().nullable(),
+    '4': z.string().nullable(),
+  }),
+  budget_factor: z.number(),
+});
 
 /** An issue or a notice of a preview: a code, a sentence, and what it points at. */
 const finding = z.looseObject({ code: z.string(), message: z.string() });
@@ -89,21 +103,26 @@ const connectionsAnswer = z.looseObject({
         usable_risk_ids: riskIds,
         unusable_risk_ids: riskIds,
       }),
-      presets: z.array(
+      macro_actions: z.array(
         z.looseObject({
           id: z.string(),
           label: z.string(),
           description: z.string(),
-          risks: z.number(),
-          within_authority: z.boolean(),
-          outside_authority: riskIds,
-          built_in: z
-            .boolean()
+          at_cran: z
+            .looseObject({ prudent: cranYield, confiant: cranYield, autonome: cranYield })
             .describe(
-              'True for `everything-i-hold`: every risk of the authority the resources can reach, written out as explicit lines at preview; `risks` counts them with every resource known now.',
+              'Per cran (`prudent`, `confiant`, `autonome`): what `crans: { [id]: cran }` writes here with every resource known now.',
             ),
+          unavailable: riskIds.describe(
+            'Risks of the macro-action outside the authority here, or that no resource can reach.',
+          ),
         }),
       ),
+      everything_i_hold: z
+        .looseObject({ label: z.string(), description: z.string(), risks: z.number() })
+        .describe(
+          '`everything-i-hold`: every risk of the authority the resources can reach, written out as explicit lines at preview; `risks` counts them with every resource known now.',
+        ),
     }),
   ),
 });
@@ -120,27 +139,32 @@ const catalogAnswer = z.looseObject({
       label: z.string(),
       reason: z.string(),
       level: z.string().describe('`low`, `medium`, `high` or `critical`.'),
+      palier: z.number().describe('1 mild to 4 irreversible: what a cran maps to a gate.'),
+      macro_action: z
+        .string()
+        .nullable()
+        .describe('The macro-action the risk belongs to; `null` when deprecated.'),
       fallback: z.boolean(),
       deprecated: z.boolean(),
       rate_ceiling_per_minute: z.number().nullable(),
       in_my_authority: z.boolean().optional(),
     }),
   ),
-  presets: z.array(
+  macro_actions: z.array(
     z.looseObject({
       id: z.string(),
       label: z.string(),
-      entries: z.array(policyLine),
-      built_in: z
-        .boolean()
-        .optional()
-        .describe(
-          'Present (true) on `everything-i-hold`, listed only with `connection_id`: its entries are the explicit lines it writes out on that connection.',
-        ),
-      within_authority: z.boolean().optional(),
-      risks: z.number().optional(),
+      description: z.string(),
+      entries: z.array(policyLine).describe('Each risk with its base budget (×1 at Prudent).'),
     }),
   ),
+  crans: z
+    .looseObject({ prudent: cranRule, confiant: cranRule, autonome: cranRule })
+    .describe('Per cran: the gate of each palier and the factor on the base budget.'),
+  everything_i_hold: z
+    .looseObject({ label: z.string(), entries: z.array(policyLine) })
+    .optional()
+    .describe('With `connection_id` only: the explicit lines it writes out on that connection.'),
 });
 
 const missionsAnswer = z.looseObject({
@@ -249,7 +273,16 @@ const previewAnswer = z.looseObject({
       unknown: riskIds,
       unresolvable: z.array(policyLine),
       missing_budget: riskIds,
-      skipped_from_preset: z.array(policyLine),
+      left_out: z
+        .array(policyLine)
+        .describe(
+          'What the crans or `everything-i-hold` would have written that is left out: `reason` `outside-authority`, `unresolvable-env` or `cran`.',
+        ),
+      crans: z
+        .looseObject({})
+        .describe(
+          'The crans kept with the mission, by macro-action id; they only redraw the form.',
+        ),
     }),
   ),
   period,

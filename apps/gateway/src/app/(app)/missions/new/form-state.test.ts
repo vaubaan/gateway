@@ -19,7 +19,7 @@ import {
   dropUnresolvable,
   editorRows,
   expiryOf,
-  explainPreset,
+  explainEverything,
   filterRows,
   initialConnectionState,
   initialFormState,
@@ -85,7 +85,7 @@ describe('creation form — initial state', () => {
       resourceScope: 'all',
       resourceIds: ['res-app-staging', 'res-app-prod', 'res-scratch'],
       crans: {},
-      presetId: '',
+      everything: false,
       entries: {},
       edited: false,
     });
@@ -570,11 +570,9 @@ describe('creation form — "Everything I hold on this account"', () => {
   });
 
   it('says how many, the most severe, and names the uncategorized writes, in the words of the interface', () => {
-    const explanation = explainPreset(acme, included(), 'everything-i-hold');
-    expect(explanation).not.toBeNull();
-    if (!explanation) return;
+    const explanation = explainEverything(acme, included());
     expect(explanation.auto.length + explanation.approval.length).toBe(6);
-    const sentences = describeEverything(acme, explanation) ?? [];
+    const sentences = describeEverything(acme, explanation);
     expect(sentences[0]).toContain('Written out as 6 permissions');
     expect(sentences).toContain('Most severe: Delete things in bulk (high).');
     expect(sentences).toContain('None of them is critical.');
@@ -582,9 +580,6 @@ describe('creation form — "Everything I hold on this account"', () => {
     for (const sentence of sentences) {
       expect(sentence).not.toMatch(/\b(risk|quota|budget|connection|authority)\b/i);
     }
-    // A plugin preset has no such paragraph.
-    const developer = explainPreset(acme, included(), 'developer');
-    expect(developer && describeEverything(acme, developer)).toBeNull();
   });
 
   it('names the critical permissions that run freely', () => {
@@ -592,8 +587,7 @@ describe('creation form — "Everything I hold on this account"', () => {
       r.risk_id === 'acme.admin' ? { ...r, severity: 12, level: 'critical' as const } : r,
     );
     const critical = acmeConnection({ risks });
-    const explanation = explainPreset(critical, included(), 'everything-i-hold');
-    expect(explanation && describeEverything(critical, explanation)).toContain(
+    expect(describeEverything(critical, explainEverything(critical, included()))).toContain(
       'Critical, and running freely: Change account settings.',
     );
   });

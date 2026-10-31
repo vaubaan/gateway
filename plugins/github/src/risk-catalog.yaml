@@ -1,6 +1,6 @@
 # Risk catalog of the `github` provider.
 #
-# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/github.md.
 #
 # 16 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
@@ -9,23 +9,26 @@
 # Bracket lists mix exact names and globs (`[main,master,release-*]`).
 #
 # Loaded by `@vaubaan/plugin-sdk` at boot ; the loader refuses unknown keys,
-# malformed ids, patterns of another provider, a missing fallback, zero
-# presets, a preset entry that is not an explicit risk of this catalog.
+# malformed ids, patterns of another provider, a missing fallback, a
+# `presets` key, a live risk in no macro-action, a macro-action entry that is
+# not a risk of this catalog.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Renaming or removing a risk : forbidden — `deprecated: true` + `replaced_by`.
 #
 # Fallback note : `github.uncategorized-write` counts only when no specific
 # entry matched the write (a branch outside the feature/* and protected
-# conventions, a future tool without an entry). No preset offers it ; the
-# creator adds it explicitly when a mission needs unconventional branches.
+# conventions, a future tool without an entry). No macro-action holds it ; the
+# creator ticks "Anything else" when a mission needs unconventional branches.
 
 # catalog_version 10 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 11 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: github
-catalog_version: 10
-catalog_date: 2026-10-30
+catalog_version: 11
+catalog_date: 2026-10-31
 
 risks:
   # ---------------------------------------------------------------
@@ -413,7 +416,7 @@ risks:
     reason: >-
       Catch-all for writes no fine-grained entry categorises — a branch
       outside the feature/* and protected conventions, or a future tool
-      added without a catalog entry. Never offered by a preset ; the
+      added without a catalog entry. In no macro-action ; the
       creator opts in explicitly (no implicit accept).
     matches:
       - 'github.**.W'
@@ -426,10 +429,6 @@ risks:
       visibility: internal
       persistence: session
 
-# ---------------------------------------------------------------
-# PRESETS — UI sugar ; the persisted policy is always the explicit list.
-# Quotas are actions per period ; rate limits are per sliding window.
-# ---------------------------------------------------------------
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
@@ -499,107 +498,3 @@ macro_actions:
       - risk_id: github.workflow-write-via-file
         quota: 50
         rate_limit: { max: 5, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Read code and metadata of the selected repositories; no write, no global search.
-    entries:
-      - risk_id: github.read-code
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.read-meta
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-
-  - id: developer
-    label: Developer
-    description: One mission per code repository — clone and push with git on feature branches (a force-push asks first), read everything, open PRs and comment; no merge on protected branches, no branch-protection changes.
-    entries:
-      - risk_id: github.read-code
-        quota: 10000
-        rate_limit: { max: 240, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.read-meta
-        quota: 10000
-        rate_limit: { max: 240, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.search-global
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.feature-branch-write
-        quota: 3000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.bulk-file-write
-        quota: 1000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.create-pr
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.comment-write
-        quota: 500
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.workflow-write-via-file
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: github.git-push
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.force-push
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-
-  - id: release-manager
-    label: Release manager
-    description: Ship a release — merge into protected branches, create and delete releases, push tags with git, each asking the creator first; read everything.
-    entries:
-      - risk_id: github.read-code
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.read-meta
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.feature-branch-write
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.create-pr
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.comment-write
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.merge-protected
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: github.create-release
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: github.delete-release
-        quota: 5
-        rate_limit: { max: 1, window_seconds: 60 }
-        gate: approval
-      - risk_id: github.git-push
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: github.tag-write
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval

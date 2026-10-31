@@ -422,14 +422,21 @@ describe('import of a v4 organization', () => {
     expect((await store.connections.listResources(cloudflare.id))[0]?.env).toBeNull();
     expect(stderr).toContain('zone_web: left unlabelled');
 
-    // `web` waits for GitHub; `ops` is issued with the one SSH risk that carries over.
+    // `web` waits for GitHub; `ops` is issued with both SSH risks: the fallback
+    // comes from "Anything else", at its base budget at Confiant.
     expect(stderr).toContain('"web" (v4 token web-agent): deferred');
     expect(stderr).toContain('GitHub: no account connected yet');
     const missions = await store.missions.listForCreator(owner);
     expect(missions.map((m) => m.name)).toEqual(['ops']);
-    expect(missions[0]!.policy.map((p) => p.riskId)).toEqual(['ssh.exec-read']);
+    expect(missions[0]!.policy.map((p) => p.riskId)).toEqual([
+      'ssh.exec-read',
+      'ssh.uncategorized-write',
+    ]);
+    const fallback = missions[0]!.policy.find((p) => p.riskId === 'ssh.uncategorized-write')!;
+    // The fallback is costly (palier 3): Confiant asks first.
+    expect([fallback.quota, fallback.gate]).toEqual([150, 'approval']);
     expect(missions[0]!.periodSeconds).toBe(86_400);
-    expect(stderr).toContain('dropped ssh.uncategorized-write');
+    expect(stderr).not.toContain('dropped ssh.uncategorized-write');
 
     const keys = stdout
       .trim()
@@ -661,19 +668,18 @@ describe('import of a v4 organization', () => {
     expect(garbage.stderr).not.toContain(CLOUDFLARE_TOKEN);
   });
 
-  it('--carry-unbudgeted keeps a risk no preset budgets, under approval only', async () => {
+  it('--carry-unbudgeted carries nothing a macro-action budgets: the fallback keeps its base budget', async () => {
+    // Every live risk of a shipped catalog is in a macro-action, the fallback in
+    // "Anything else": the flag has nothing left to carry from them.
     const { code, stderr } = await run(['--owner', OWNER, '--apply', '--carry-unbudgeted', '5']);
     expect(code).toBe(0);
-    expect(stderr).toContain('~ carried under approval: ssh.uncategorized-write');
+    expect(stderr).not.toContain('~ carried under approval');
     expect(stderr).not.toContain('dropped ssh.uncategorized-write');
     const [ops] = await store.missions.listForCreator(await ownerId());
     expect(ops!.policy.map((p) => [p.riskId, p.quota, p.gate]).sort()).toEqual([
       ['ssh.exec-read', expect.any(Number), expect.stringMatching(/^(auto|approval)$/)],
-      ['ssh.uncategorized-write', 5, 'approval'],
+      ['ssh.uncategorized-write', 150, 'approval'],
     ]);
-    const carried = ops!.policy.find((p) => p.riskId === 'ssh.uncategorized-write')!;
-    expect(carried.rateWindowSeconds).toBe(60);
-    expect(carried.rateLimit).toBeLessThanOrEqual(5);
 
     // Every other reason stays a drop.
     await connectGithubByHand();
@@ -696,7 +702,7 @@ describe('import of a v4 organization', () => {
     expect(dry.stderr).toContain(
       `previous import [${old!.id.slice(-8)} · ${old!.id}] still active: revoke it once the new key is installed`,
     );
-    expect(dry.stderr).toContain('~ carried under approval: ssh.uncategorized-write');
+    expect(dry.stderr).not.toContain('~ carried under approval');
     expect(adminEntries()).toBe(entriesBefore);
 
     const applied = await run([

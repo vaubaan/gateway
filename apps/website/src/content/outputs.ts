@@ -112,13 +112,12 @@ export function pluginsJson(
           acceptable_in_envs: r.acceptableInEnvs,
           fallback: r.fallback,
         })),
-        presets: p.presets.map((preset) => ({
-          id: preset.id,
-          label: preset.label,
-          description: preset.description,
-          entries: preset.entries.map((e) => ({
+        macro_actions: p.macroActions.map((action) => ({
+          id: action.id,
+          label: action.label,
+          description: action.description,
+          entries: action.entries.map((e) => ({
             risk_id: e.riskId,
-            gate: e.gate,
             quota: e.quota,
             rate_limit: { max: e.rateMax, window_seconds: e.rateWindowSeconds },
           })),

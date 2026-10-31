@@ -3,7 +3,7 @@
  *
  * Handbook : docs/handbook/providers/vercel.md (env vars).
  *
- * `vercel.read-env-var` (`data: metadata`, in every preset) prices the
+ * `vercel.read-env-var` (`data: metadata`, in the `watch` macro-action) prices the
  * listing of env-var **keys** ; reading values is `vercel.read-env-var-plaintext`
  * (`data: secret`, `decrypt=true`). Without `decrypt`, Vercel still answers
  * with a `value` per entry — ciphertext for `encrypted` vars, but the value in

@@ -2,12 +2,10 @@ import { createRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
-import { enumerateCatalog } from '../missions/catalog-view';
 import { RISK_KINDS } from '../missions/model';
-import { ACME_CATALOG } from '../missions/testing';
 import {
-  presetAnchor,
-  presetReferencePath,
+  macroActionAnchor,
+  macroActionReferencePath,
   providerPath,
   riskAnchor,
   riskReferencePath,
@@ -16,7 +14,6 @@ import {
 import {
   dataModelTrees,
   describePattern,
-  presetReferenceOf,
   providerCards,
   providerReference,
   riskExplainer,
@@ -47,12 +44,12 @@ describe('links into the provider reference', () => {
     expect(riskReferencePath('not a risk id')).toBeNull();
   });
 
-  it('builds the provider, preset and section paths', () => {
+  it('builds the provider, macro-action and section paths', () => {
     expect(providerPath('upstash-redis')).toBe('/reference/upstash-redis');
-    expect(presetReferencePath('github', 'developer')).toBe('/reference/github#preset-developer');
-    expect(sectionPath('github', 'presets')).toBe('/reference/github#presets');
+    expect(macroActionReferencePath('github', 'read')).toBe('/reference/github#macro-read');
+    expect(sectionPath('github', 'macro-actions')).toBe('/reference/github#macro-actions');
     expect(riskAnchor('github.read-code')).toBe('risk-github.read-code');
-    expect(presetAnchor('developer')).toBe('preset-developer');
+    expect(macroActionAnchor('read')).toBe('macro-read');
   });
 });
 
@@ -114,50 +111,13 @@ describe('dataModelTrees', () => {
   });
 });
 
-describe('presetReferenceOf', () => {
-  const risks = enumerateCatalog(ACME_CATALOG);
-  const preset = (id: string) => {
-    const found = ACME_CATALOG.presets?.find((p) => p.id === id);
-    if (!found) throw new Error(`fixture preset ${id} missing`);
-    return presetReferenceOf(found, risks);
-  };
-
-  it('splits the lines by gate, with the budget of each, and names what is left out', () => {
-    const developer = preset('developer');
-    expect(developer.auto.map((line) => line.risk.risk_id)).toEqual([
-      'acme.read',
-      'acme[staging].write',
-    ]);
-    expect(
-      developer.approval.map((line) => [line.risk.risk_id, line.quota, line.rate_limit, line.gate]),
-    ).toEqual([['acme[staging].bulk-delete', 5, { max: 1, window_seconds: 60 }, 'approval']]);
-    // The prod variant of an entry accepted on staging only is "not included" too.
-    expect(developer.not_included.map((family) => family.base_id)).toEqual([
-      'acme.write',
-      'acme.admin',
-      'acme.legacy-export',
-      'acme.uncategorized-write',
-    ]);
-    expect(developer.not_included[0]?.variants.map((risk) => risk.env)).toEqual(['prod']);
-  });
-
-  it('expands a base id to every environment of the catalog', () => {
-    const writer = preset('writer');
-    expect(writer.auto.map((line) => line.risk.risk_id)).toEqual([
-      'acme[staging].write',
-      'acme[prod].write',
-    ]);
-    expect(writer.approval).toEqual([]);
-  });
-});
-
 describe('the reference of the shipped plugins', () => {
   it('has one card per plugin of the registry, in registration order', () => {
     const cards = providerCards(registry);
     expect(cards.map((card) => card.id)).toEqual([...registry.ids]);
     for (const card of cards) {
       expect(card.counts.risks).toBeGreaterThan(0);
-      expect(card.counts.presets).toBeGreaterThan(0);
+      expect(card.counts.macro_actions).toBeGreaterThan(0);
       expect(card.counts.risk_ids).toBeGreaterThanOrEqual(card.counts.risks);
     }
   });
@@ -200,27 +160,29 @@ describe('the reference of the shipped plugins', () => {
     }
   });
 
-  it('expands every preset to explicit catalog ids, never the fallback, with what it leaves out', () => {
+  it('gives every live entry one macro-action and a line or "left out" at each cran', () => {
     for (const reference of references) {
-      const ids = new Set(
-        enumerateCatalog(registry.require(reference.id).plugin.catalog).map((r) => r.risk_id),
+      expect(new Set(reference.macro_actions.map((action) => action.anchor)).size).toBe(
+        reference.macro_actions.length,
       );
-      expect(new Set(reference.presets.map((preset) => preset.anchor)).size).toBe(
-        reference.presets.length,
-      );
-      for (const preset of reference.presets) {
-        const lines = [...preset.auto, ...preset.approval];
-        expect(lines.length, `${reference.id}/${preset.id}`).toBeGreaterThan(0);
-        for (const line of lines) {
-          expect(ids.has(line.risk.risk_id)).toBe(true);
-          expect(line.risk.fallback).toBe(false);
-          expect(line.quota).toBeGreaterThan(0);
+      for (const entry of reference.risk_groups.flatMap((group) => group.entries)) {
+        if (entry.deprecated) continue;
+        expect(entry.macro_action, `${reference.id}/${entry.base_id}`).not.toBeNull();
+        for (const cells of Object.values(entry.at_cran)) {
+          expect(cells.map((cell) => cell.risk.risk_id)).toEqual(
+            entry.variants.map((risk) => risk.risk_id),
+          );
+          for (const cell of cells) {
+            if (cell.line) expect(cell.line.quota).toBeGreaterThan(0);
+          }
         }
-        const left = preset.not_included.flatMap((family) => family.variants);
-        expect(lines.length + left.length).toBe(ids.size);
-        // No preset includes the fallback: it is always among what is left out.
-        expect(preset.not_included.some((family) => family.fallback)).toBe(true);
+        // Prudent leaves out palier 4 and nothing else.
+        for (const cell of entry.at_cran.prudent) {
+          expect(cell.line === null).toBe(cell.palier === 4);
+        }
       }
+      // The fallback is in "Anything else", last.
+      expect(reference.macro_actions.at(-1)?.id).toBe('anything-else');
     }
   });
 
@@ -279,31 +241,31 @@ describe('the reference of the shipped plugins', () => {
     });
   });
 
-  it('names, on each risk, the presets that include it and the tools declared for it', () => {
+  it('names, on each risk, its macro-action and the tools declared for it', () => {
     const github = referenceOf('github');
     const entries = github.risk_groups.flatMap((group) => group.entries);
     const byId = new Map(entries.map((entry) => [entry.base_id, entry]));
-    expect(byId.get('github.read-code')?.presets.map((preset) => preset.id)).toEqual(
-      github.presets.map((preset) => preset.id),
-    );
-    expect(byId.get('github.uncategorized-write')?.presets).toEqual([]);
-    // The deprecated mint risk of the App: no preset, no tool.
+    expect(byId.get('github.read-code')?.macro_action?.id).toBe('read');
+    expect(byId.get('github.uncategorized-write')?.macro_action?.id).toBe('anything-else');
+    // The deprecated mint risk of the App: no macro-action, no tool.
     expect(byId.get('github.mint-install-token-push')).toMatchObject({
       declared_tools: [],
-      presets: [],
+      macro_action: null,
     });
-    expect(byId.get('github.force-push')?.presets.map((p) => p.id)).toEqual(['developer']);
-    // Both ways agree: a preset's lines are exactly the risks that name it.
+    // Force-push is costly (palier 3): it asks first until Autonome.
+    expect(
+      Object.values(byId.get('github.force-push')?.at_cran ?? {}).map(
+        (cells) => cells[0]?.line?.gate,
+      ),
+    ).toEqual(['approval', 'approval', 'auto']);
+    // Both ways agree: a macro-action's ids are exactly the risks that name it.
     for (const reference of references) {
-      for (const preset of reference.presets) {
-        const lines = new Set(
-          [...preset.auto, ...preset.approval].map((line) => line.risk.base_id),
-        );
+      for (const action of reference.macro_actions) {
         const naming = reference.risk_groups
           .flatMap((group) => group.entries)
-          .filter((entry) => entry.presets.some((tag) => tag.id === preset.id))
+          .filter((entry) => entry.macro_action?.id === action.id)
           .map((entry) => entry.base_id);
-        expect(new Set(naming)).toEqual(lines);
+        expect(new Set(naming)).toEqual(new Set(action.risk_ids));
       }
     }
   });

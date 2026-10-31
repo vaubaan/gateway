@@ -30,7 +30,7 @@ the decision in the ADR
 | `src/created.ts`                    | The board `board_create` made, read from its answer (`createdResources`)          |
 | `src/credential.ts`                 | The `oauth2` spec with `clientRegistration`                                       |
 | `src/data-model.ts`                 | The `board` and `guide` planes                                                    |
-| `src/risk-catalog.yaml`             | Thirteen risks, the fallback, three presets (catalog 3)                           |
+| `src/risk-catalog.yaml`             | Thirteen risks, the fallback, four macro-actions (catalog 5)                      |
 | `scripts/capture-upstream-tools.ts` | Captures `tools/list` into `src/upstream-tools.json` (needs a Miro account)       |
 
 ## Credential and resources
@@ -92,19 +92,24 @@ upload URL, `user_who_am_i`, `user_search_organization_users`,
 `board_move_to_team`, `board_restore`, and the space, section and blog-post
 tools.
 
-## Risks and presets
+## Risks and macro-actions
 
-| Preset        | What it allows                                                                                                                                             |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only`   | Read the boards, their content and comments, the space they are in, Miro's format guides                                                                   |
-| `scribe`      | + add content, fill tables, write comments; never deletes, so never updates what is drawn                                                                  |
-| `facilitator` | + see who can open a board, rename it, record a walkthrough; update what is drawn, delete, create boards and share a board — each of those four asks first |
+A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
+Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The fallback sits apart, under "Anything else".
+
+| Macro-action | What it covers                                                         | Its risks                                                                                           |
+| ------------ | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `look`       | Read the boards, what is on them, their details and who can open them. | `read-boards`, `read-board-content`, `read-format-guide`, `read-board-details`, `read-board-access` |
+| `draw`       | Add content, in bulk too, and record a walkthrough.                    | `content-write`, `bulk-create`, `boardcast-create`                                                  |
+| `rework`     | Delete items and frames.                                               | `item-delete`, `frame-delete`                                                                       |
+| `manage`     | Create, rename and share boards.                                       | `board-create`, `board-details-write`, `board-share`                                                |
 
 An update of the canvas (`canvas_update_from_svg`) may delete what the new
 SVG no longer holds: it needs `item-delete` and `frame-delete`. Sharing a
 board or changing a role on it (`board-share`) gives whoever is named
-everything on the board, possibly outside the company: it is in
-`facilitator` only, behind an approval.
+everything on the board, possibly outside the company: it is in `manage`
+only, left out at Prudent and asked first above.
 
 ## Refreshing the tool list
 

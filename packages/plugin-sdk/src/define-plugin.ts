@@ -5,7 +5,7 @@
  *
  * A plugin that passes `definePlugin` is well-formed by construction : id
  * grammar, semver, tool prefixes, catalog provider, data-model integrity,
- * presets, credential spec. The registry repeats nothing of this ; it only
+ * macro-actions, credential spec. The registry repeats nothing of this ; it only
  * checks what spans several plugins (unique ids, unique tool names).
  */
 
@@ -16,7 +16,6 @@ import {
   toolPrefixFor,
   validateDataModel,
 } from '@vaubaan/shared';
-import { baseRiskId, isRiskId } from '@vaubaan/shared/risk-id';
 
 import { semanticIssues } from './catalog-loader.ts';
 import {
@@ -175,12 +174,14 @@ function tokenHandoutIssues(plugin: ProviderPlugin): string[] {
       }
     }
   });
-  return [...issues, ...handoutGateIssues(plugin)];
+  return issues;
 }
 
 /**
  * The risks whose call hands the agent a token that can write at the provider :
  * every handout risk the plugin did not declare read-only. Unqualified ids.
+ * Spec §2.4 : a trust cran never runs one freely, its line asks first
+ * (`CranCandidate.hands_write_token`).
  */
 export function writeHandoutRiskIds(plugin: Pick<ProviderPlugin, 'tokenHandouts'>): Set<string> {
   const write = new Set<string>();
@@ -194,27 +195,6 @@ export function writeHandoutRiskIds(plugin: Pick<ProviderPlugin, 'tokenHandouts'
     }
   }
   return write;
-}
-
-/**
- * Spec §2.4 : a preset that carries a token-handing risk which grants write gates
- * it by approval. A preset is what a creator accepts in one click ; a token that
- * writes outside the gateway is not handed on a click.
- */
-function handoutGateIssues(plugin: ProviderPlugin): string[] {
-  const write = writeHandoutRiskIds(plugin);
-  if (write.size === 0) return [];
-  const issues: string[] = [];
-  for (const preset of plugin.catalog?.presets ?? []) {
-    for (const entry of preset.entries ?? []) {
-      if (typeof entry?.risk_id !== 'string' || !isRiskId(entry.risk_id)) continue;
-      if (!write.has(baseRiskId(entry.risk_id)) || entry.gate === 'approval') continue;
-      issues.push(
-        `catalog: preset '${preset.id}': '${entry.risk_id}' hands the agent a token that can write ; its gate must be 'approval' (declare it in tokenHandouts.readOnlyRiskIds if the token is read-only)`,
-      );
-    }
-  }
-  return issues;
 }
 
 function identityIssues(plugin: ProviderPlugin): string[] {
@@ -429,8 +409,8 @@ function dataModelIssues(plugin: ProviderPlugin): string[] {
 }
 
 /**
- * The catalog rules of `semanticIssues` — fallback, wildcards, presets and
- * their budgets. This is the only validation a catalog written in
+ * The catalog rules of `semanticIssues` — fallback, wildcards, macro-actions
+ * and their base budgets. This is the only validation a catalog written in
  * TypeScript goes through, so everything that must hold for every catalog
  * lives there, not in the YAML parser.
  */

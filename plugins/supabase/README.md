@@ -12,7 +12,7 @@ Contract : `@vaubaan/plugin-sdk` (`definePlugin`, see
 ```
 plugins/supabase/
   src/
-    risk-catalog.yaml     24 risks + 1 deprecated + fallback, 3 presets (loaded at boot)
+    risk-catalog.yaml     24 risks + 1 deprecated + fallback, 5 macro-actions (loaded at boot)
     data-model.ts         4 planes : db, storage, auth, functions ; the managed schemas
     tools.ts              44 MCP tools, prefix `supabase__`
     classify.ts           (tool, args, resources) → slices ; security-critical
@@ -23,7 +23,7 @@ plugins/supabase/
     credential.ts         oauth2 spec (the host runs the flow and the refresh)
     index.ts              definePlugin() — default export `supabasePlugin`
   tests/unit/             plugin.test.ts (kit), classify, execute, risk-catalog,
-                          mission-evaluation (engine decisions, presets),
+                          mission-evaluation (engine decisions, macro-actions),
                           identifier-injection (hostile identifiers, both sides), data-model
 ```
 
@@ -79,7 +79,7 @@ Rules a reviewer must know (`src/classify.ts`) :
   manages (`auth`, `vault`, `storage`…) or cannot be read with confidence
   (`src/query-sql.ts`, an allow-list : a function outside its inert list,
   `$$`, a statement that is not a plain query). The second slice is the
-  risk `supabase.read-managed-schemas`, which no read-only preset carries.
+  risk `supabase.read-managed-schemas`, which asks first at Prudent.
   `execute.ts` enforces read-only by calling the Management API
   **read-only query endpoint**
   (`POST /v1/projects/{ref}/database/query/read-only`), where Postgres
@@ -158,26 +158,27 @@ is not dropped. So :
   type, a migration the reader does not recognise, a bucket delete.
 
 The fallback counts only when no specific entry matched the write
-(policy-engine rule). Presets never carry it ; a creator who
+(policy-engine rule). No macro-action carries it ; a creator who
 accepts it for an environment accepts every uncategorized write there, which
 should stay the exception.
 
-## Presets
+## Macro-actions
 
-| Preset               | Intent                                                                                                                    | Writes                                                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `read-only-analyst`  | Query data and schema, list buckets and objects, on every project. No PII user listing.                                   | none                                                                                                                           |
-| `staging-developer`  | One mission per application : development on `staging` projects, reads of data, schema, objects and functions everywhere. | on `[staging]`, `gate: auto` : migrations of any kind, RLS, buckets, objects, users one by one, links, edge functions, secrets |
-| `migration-operator` | Migrations : any on `staging` ; on prod, plain schema changes and RLS changes only, each gated.                           | `[staging]` auto (the five db write risks) ; `[prod].migration-write`, `[prod].policy-write` on `approval`                     |
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome),
+risk model §4.6; the cran writes the explicit lines, one per environment the
+selected projects carry, and the stored policy is that list.
 
-`staging-developer` carries no auth, storage, SSO or third-party-auth
-configuration write, no bulk user write and no signed URL.
-`mission-evaluation.test.ts` asserts, call by call, what each preset allows
-and refuses on staging, prod and unlabelled projects.
+| Macro-action     | What it covers                                            | Its risks                                                                                                                                      |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`          | Data, storage objects, functions, users, managed schemas. | `read-data`, `storage.object-read`, `storage.signed-url-read`, `functions.read`, `auth.read-users`, `read-managed-schemas`                     |
+| `change-data`    | Rows, storage objects, users and sign-in links.           | `bulk-row-write`, `storage.object-write-one`, `storage.bulk-object-write`, `auth.user-write-one`, `auth.bulk-user-write`, `auth.generate-link` |
+| `change-schema`  | Migrations, row-level security, extensions and buckets.   | `migration-write`, `policy-write`, `extension-write`, `bucket-write`                                                                           |
+| `ship-functions` | Code, deployment and secrets of Edge Functions.           | `functions.body-write`, `functions.deploy`, `function-secret-write`                                                                            |
+| `administer`     | Database roles, storage and auth configuration, SSO.      | `db-role-write`, `storage-config-write`, `sso-provider-write`, `third-party-auth-write`, `auth-config-write`                                   |
 
-Presets are UI sugar : the persisted policy is always the explicit list of
-risk ids, quotas, rate limits and gates (spec §3.2). The numbers are
-provisional until the `mission-presets-default-values` ADR.
+`mission-evaluation.test.ts` asserts, call by call, what missions written
+from these macro-actions allow and refuse on staging, prod and unlabelled
+projects.
 
 ## Credential — the company's Supabase OAuth app
 
@@ -242,16 +243,16 @@ preferences → Access tokens. ADR
 ## Tests
 
 `npx vitest run plugins/supabase` — `plugin.test.ts` runs the SDK kit
-(`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`,
+(`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage` with samples per tool and an empty `fallbackHits`),
 the credential spec, `execute` and `discoverResources` against `mockFetch`,
-and the presets ; `risk-catalog.test.ts` lints the loaded catalog and binds
+and the macro-actions ; `risk-catalog.test.ts` lints the loaded catalog and binds
 tools to their exact risks ; `classify.test.ts` is the classifier's security
 suite (expected slices per tool family, the adversarial SQL table, the
 denials) ; `execute.test.ts` pins the request shapes, the target-project
 resolution and the body built from declared arguments only ;
 `mission-evaluation.test.ts` runs the engine's `evaluateCall` on the real
-catalog (unlabelled project, bulk writes on prod, each preset) ;
+catalog (unlabelled project, bulk writes on prod, missions from macro-actions) ;
 `identifier-injection.test.ts` feeds hostile values to every identifier
-position of `classify` and `execute`. 1740 tests ; none ever reaches
+position of `classify` and `execute`. 1755 tests ; none ever reaches
 Supabase.

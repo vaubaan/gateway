@@ -1,10 +1,10 @@
 ---
-title: Plugin contract, credential spec, presets and the single registry
+title: Plugin contract, credential spec, macro-actions and the single registry
 status: accepted
 date: 2026-10-13
 ---
 
-# Plugin contract, credential spec, presets and the single registry
+# Plugin contract, credential spec, macro-actions and the single registry
 
 ## Context
 
@@ -25,9 +25,9 @@ shipped plugins, and nothing else in the repository enumerates providers.
 
 - A plugin is written, tested and reviewed without the gateway; it receives `fetch` injected, never
   reads `process.env`, and never sees a client secret or the stored ciphertext.
-- A catalog risk is never renamed or removed, only `deprecated` with `replaced_by`; presets ship in
-  the catalog and are copied into the mission policy at issuance.
-- Every plugin runs the SDK test kit (well-formed, catalog coverage, no wildcard, presets,
+- A catalog risk is never renamed or removed, only `deprecated` with `replaced_by`; macro-actions
+  ship in the catalog and what they write is copied into the mission policy at issuance.
+- Every plugin runs the SDK test kit (well-formed, catalog coverage, no wildcard, macro-actions,
   identifiers); `plugins/_template` is the reference.
 - Changing this contract breaks third-party plugins: it moves only by a decision, with the
   versioning rules of the [plugin-sdk handbook](../handbook/plugin-sdk.md).
@@ -47,6 +47,6 @@ Spreads OAuth security details (PKCE, state, redirect validation) across code by
 
 Two sources of truth for the security artefact under review.
 
-### Persist a preset reference on the mission
+### Persist a macro-action or cran reference on the mission
 
-A preset changed in a later plugin version would silently alter running missions.
+A macro-action changed in a later plugin version would silently alter running missions.

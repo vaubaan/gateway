@@ -6,7 +6,7 @@ host…). It is one folder, `plugins/<provider>`, named
 
 1. describes the provider's **data model** (what exists there);
 2. ships a **risk catalog** (`risk-catalog.yaml`): the named risks an agent's
-   call can carry, grouped into **macro-actions**, and at least one **preset**;
+   call can carry, grouped into **macro-actions**;
 3. **classifies** each tool call into the part of the data model it touches;
 4. declares the **credential**: how a connection to the provider is obtained;
 5. **discovers the resources** a connection can reach;
@@ -34,18 +34,18 @@ check to run after each file.
 
 Set up the repository as [`CONTRIBUTING.md`](../CONTRIBUTING.md) says
 (`npm ci`, then `npm run ci` green). Run `npm run demo` once, create a mission in the interface (Missions → New
-mission) and open Reference: the risks, presets, resources and environments
+mission) and open Reference: the risks, macro-actions, resources and environments
 you are about to write are what those pages show.
 
 Five words used on every line below:
 
-| Word         | Meaning                                                                                                                                                                                                                            |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Resource** | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                  |
-| **Slice**    | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                        |
-| **Risk**     | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`. |
-| **Preset**   | A ready-made list of risks with a budget for each, offered when a mission is issued. A shortcut of the form only: the mission stores the explicit list.                                                                            |
-| **Mission**  | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                   |
+| Word             | Meaning                                                                                                                                                                                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Resource**     | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                               |
+| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                     |
+| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.              |
+| **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust cran (Prudent, Confiant, Autonome), which writes the explicit lines; the mission stores those lines. |
+| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                |
 
 The interface shows these to people under other words: a provider is a
 **service**, a connection an **account**, a risk a **permission**, a gate
@@ -93,12 +93,12 @@ cp -r plugins/_template plugins/acme
 Then give the copy its identity. Inside the plugin folder the id is written
 in **three** places and derived everywhere else:
 
-| Where                                | Change                                                                                                                |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `plugins/acme/package.json`          | `"name": "@vaubaan/plugin-acme"`, the `description`.                                                                  |
-| `plugins/acme/src/identity.ts`       | `PROVIDER_ID = 'acme'`.                                                                                               |
-| `plugins/acme/src/icon.ts`           | The service's mark: a Simple Icons path (CC0 1.0; name the slug in the comment) or one drawn by hand on the 24 grid.  |
-| `plugins/acme/src/risk-catalog.yaml` | `provider: acme`, and the `template` prefix of every risk id, pattern and preset entry (`template.` and `template[`). |
+| Where                                | Change                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `plugins/acme/package.json`          | `"name": "@vaubaan/plugin-acme"`, the `description`.                                                                        |
+| `plugins/acme/src/identity.ts`       | `PROVIDER_ID = 'acme'`.                                                                                                     |
+| `plugins/acme/src/icon.ts`           | The service's mark: a Simple Icons path (CC0 1.0; name the slug in the comment) or one drawn by hand on the 24 grid.        |
+| `plugins/acme/src/risk-catalog.yaml` | `provider: acme`, and the `template` prefix of every risk id, pattern and macro-action entry (`template.` and `template[`). |
 
 Rename the exported symbols too (`templatePlugin` → `acmePlugin`,
 `classifyTemplate` → `classifyAcme`, `TEMPLATE_API_BASE` → `ACME_API_BASE`…)
@@ -193,7 +193,7 @@ export const acmeDataModel: DataModel = {
 npx tsc -p plugins/acme --noEmit   # the check to run after each file of steps 2 to 7
 ```
 
-## Step 3 — Risk catalog and presets (`src/risk-catalog.yaml`)
+## Step 3 — Risk catalog and macro-actions (`src/risk-catalog.yaml`)
 
 The catalog is the plugin's security statement, and the file reviewers read
 first. Write one entry per **intent that deserves its own decision**: not one
@@ -283,28 +283,6 @@ macro_actions:
       - risk_id: acme.widget-delete
         quota: 10
         rate_limit: { max: 2, window_seconds: 60 }
-
-presets:
-  - id: developer
-    label: Developer
-    description: One line shown with the preset in New mission and in Reference.
-    entries:
-      - risk_id: acme.read-widgets
-        quota: 5000 # actions per period, always a number
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto # auto | approval
-      - risk_id: acme[staging].widget-write # env-qualified: the risk is env-scoped
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: acme[prod].widget-write
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: acme[prod].widget-delete
-        quota: 5
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
 ```
 
 Rules, all enforced when the file is loaded (at gateway boot and in tests):
@@ -312,7 +290,7 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
 - **Ids.** `<provider>.<name>`, lowercase with dashes. An id is never renamed
   and never deleted, because missions store it: mark the entry
   `deprecated: true` with `replaced_by: <id>` instead.
-- **Words people read.** `label`, `reason` and a preset's `description` are
+- **Words people read.** `label`, `reason` and a macro-action's `description` are
   shown verbatim in Reference and in the dialogs of a mission, where a risk
   is called a permission, a gate "runs freely" or "ask me first", and a
   budget "limits". A sentence that addresses the reader about the product
@@ -331,11 +309,11 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
 - **The fallback.** Exactly one entry named `<provider>.uncategorized-…`,
   matching `<provider>.**.W`, flagged `fallback: true`. It is touched only by
   a write no other entry covers. Seeing it in an audit log means the catalog
-  misses an entry; a preset may not contain it
+  misses an entry; no macro-action may contain it
   ([ADR](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
 - **Environment.** A risk whose severity depends on the environment is
   **one** entry with `acceptable_in_envs`, never two ids with the environment
-  in the name. In a mission and in a preset it appears qualified,
+  in the name. In a mission it appears qualified,
   `acme[prod].widget-write`. A call on a resource its owner has not labelled
   cannot touch an env-scoped risk: it is refused.
 - **Macro-actions.** 3 to 6, named in the provider's words ("Read", "Ship",
@@ -346,13 +324,10 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   sensitive read asks at the lowest cran), so the vector must be right. The
   gateway adds "Anything else" for the fallback
   ([ADR](../docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
-- **Presets.** At least one. Every entry names one explicit risk id of this
-  catalog, with a numeric `quota`, a `rate_limit` and a `gate`. **Never a
-  wildcard, never "all"**: a preset that allows everything lists everything.
-  No deprecated risk, no risk twice, an env-qualified id only for an
-  env-scoped risk and one of its environments. Offer at least a read-only
-  preset and one for daily work; put `gate: approval` on what you would want
-  to be asked about.
+- **No presets.** Presets were retired: a catalog with a `presets` key does
+  not load ([ADR](../docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
+  A risk whose tool hands the agent a token that can write
+  (`tokenHandouts`) asks first at every cran.
 - **Limits.** The only limit the gateway enforces is
   `infra_limits.calls_per_minute_max` on a risk: the ceiling of the rate
   limit a mission can be issued with. Do not declare `caps` or another
@@ -369,7 +344,7 @@ npx vitest run plugins/acme -t 'well-formed'
 ```
 
 A failure lists every problem with its path
-(`presets[0].entries[2].risk_id 'acme.nope' is not a risk of the 'acme' catalog`).
+(`macro_actions[0].entries[2].risk_id 'acme.nope' is not an unqualified risk of the 'acme' catalog`).
 This checks the catalog against its own rules only. Whether it covers what
 your tools really do is checked in step 8, by `assertCatalogCoverage`.
 
@@ -710,13 +685,12 @@ import {
   assertCatalogCoverage,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
 assertPluginWellFormed(acmePlugin); // the definition and the catalog, fallback flag included
-assertPresetsValid(acmePlugin); //     presets: explicit risks of this catalog, legal budgets
-assertNoWildcard(acmePlugin); //       no `*` or `?` in a risk id or a preset entry
+assertNoWildcard(acmePlugin); //       no `*` or `?` in a risk id
 const report = assertCatalogCoverage(
   acmePlugin,
   {
@@ -731,6 +705,22 @@ const report = assertCatalogCoverage(
 );
 expect(report.fallbackHits).toEqual([]); //  no realistic call lands on the fallback
 expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave unreached
+```
+
+**Test a mission the way a creator composes it.** `policyFromMacroActions`
+writes the explicit lines of ticked macro-actions at their crans, for the
+environments given, with the policy engine's own rules (gate from the
+palier, budget scaled by the cran, a write-token handout asked first):
+
+```ts
+const policy = policyFromMacroActions(
+  acmePlugin,
+  { read: 'prudent', change: 'confiant' },
+  {
+    envs: ['staging', 'prod'],
+  },
+);
+// [{ risk_id: 'acme.read-widgets', gate: 'auto', … }, { risk_id: 'acme[prod].widget-write', … }, …]
 ```
 
 `assertCatalogCoverage` fails when a tool has no sample, when a sample is
@@ -819,7 +809,7 @@ Two documents, both in English, both in the same pull request as the code.
 
 **`plugins/<id>/README.md`** — for somebody who will use the plugin. Replace
 the template's README, keeping its sections: Data model, Credential and
-resources, Tools, Catalog (one line per risk), Presets, Tests.
+resources, Tools, Catalog (one line per risk), Macro-actions, Tests.
 
 **`docs/handbook/providers/<id>.md`** — for the reviewer and the next
 maintainer: the model and the reasons behind it. Start it with this
@@ -845,7 +835,7 @@ tracks:
 
 ## 2. Tool → slice mapping
 
-## 3. Catalog and presets
+## 3. Catalog and macro-actions
 
 ## 4. Coverage
 
@@ -864,7 +854,7 @@ handbook describes; the project's drift check compares the two.
 Add your plugin's row to the index table in
 [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md),
 in alphabetical order, with its seven columns (plugin, handbook, planes,
-number of risks "+ fallback", presets, credential kind, notes), and correct
+number of risks "+ fallback", macro-actions, credential kind, notes), and correct
 the count of plugins in the sentence above the table. Optionally set
 `docsUrl` in `definePlugin` to the handbook's address in the repository,
 `https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/<id>.md`.
@@ -912,8 +902,8 @@ reports, so one version never designates two different classifiers.
 
 | Change                                                                                                                   | From `1.0.0` | Before `1.0.0`        |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------ | --------------------- |
-| A fix that changes no tool, risk or preset                                                                               | patch        | patch                 |
-| A new tool, risk or preset; a widened pattern                                                                            | minor        | patch                 |
+| A fix that changes no tool, risk or macro-action                                                                         | patch        | patch                 |
+| A new tool, risk or macro-action; a widened pattern                                                                      | minor        | patch                 |
 | A removed tool; a stricter classification (calls once allowed are refused); a change of what `execute` throws or returns | major        | minor (`0.2` → `0.3`) |
 
 The third row is the one that is forgotten. A classification that became
@@ -926,15 +916,15 @@ on a more severe risk are all breaking steps.
 **Catalog version** — `catalog_version` in the YAML, an integer, independent
 of the plugin version. Bump it and set `catalog_date` on every reviewed
 change of the catalog's content: an entry, a pattern, a vector, a limit, a
-preset, a label, a reason. Not for a YAML comment.
+macro-action, a label, a reason. Not for a YAML comment.
 
 **Changelog** — one entry in the root [`CHANGELOG.md`](../CHANGELOG.md) under
 `## [Unreleased]`, in `### Added` for a new plugin (`### Changed` or
 `### Security` for a change), naming the plugin and its version:
 
 ```markdown
-- **Acme plugin** (`@vaubaan/plugin-acme` 0.1.0): workspaces and widgets, API key, presets
-  `reader` and `developer`.
+- **Acme plugin** (`@vaubaan/plugin-acme` 0.1.0): workspaces and widgets, API key,
+  macro-actions `read` and `change`.
 ```
 
 Plugins have no changelog of their own.
@@ -965,18 +955,19 @@ change yourself:
 - **A vector, a label or a reason is wrong**: change the entry, bump
   `catalog_version`, say why in the pull request.
 - **A risk must go**: never delete or rename it. `deprecated: true`, with
-  `replaced_by` when a successor exists; remove it from the presets.
-- **Preset values** (quotas, rate limits, gates) are a starting point chosen
-  by the plugin's author. Propose a change with the usage that motivates it.
+  `replaced_by` when a successor exists; remove it from its macro-action.
+- **Base budgets** of the macro-actions are a starting point chosen by the
+  plugin's author; the gate follows the vector and the cran. Propose a change with the usage that motivates it.
 
 ## When something fails
 
 | Message                                                                               | Cause and fix                                                                                                                                                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Cannot find package '@vaubaan/plugin-<id>'`                                          | The workspace is not linked: run `npm install` at the root.                                                                                                                                                                                                                                                                                        |
-| `Invalid risk catalog '…'` followed by bullets                                        | Read every bullet; each path is exact (`risks[3].vector.blast`, `presets[1].entries[2].risk_id`).                                                                                                                                                                                                                                                  |
+| `Invalid risk catalog '…'` followed by bullets                                        | Read every bullet; each path is exact (`risks[3].vector.blast`, `macro_actions[1].entries[2].risk_id`).                                                                                                                                                                                                                                            |
 | `exactly one fallback entry per catalog, found 2`                                     | A second entry matches `<id>.**.W` or carries the flag: give it a narrower pattern.                                                                                                                                                                                                                                                                |
-| `… is the fallback — a preset must not pre-accept uncategorized writes`               | Remove the fallback from the preset; the writes you meant are covered by their own entries.                                                                                                                                                                                                                                                        |
+| `… is the fallback, which belongs to no macro-action`                                 | Remove the fallback from the macro-action; the gateway offers it as "Anything else".                                                                                                                                                                                                                                                               |
+| `presets: presets were retired …`                                                     | Move the risks into `macro_actions` and delete the `presets` key.                                                                                                                                                                                                                                                                                  |
 | `PluginDefinitionError … must start with '<prefix>'`                                  | A tool name was written by hand: build it in `identity.ts` with `toolPrefixFor`.                                                                                                                                                                                                                                                                   |
 | `assertCatalogCoverage … no catalog risk matches it`                                  | The classifier emits a slice outside every `matches`. A read needs its own entry: the fallback only catches writes.                                                                                                                                                                                                                                |
 | `assertCatalogCoverage … cannot be read back` or `… carries '*' inside an identifier` | The classifier wrote a raw value into an identifier segment: refuse it in its grammar, or emit `identSegment(value)` (step 4).                                                                                                                                                                                                                     |

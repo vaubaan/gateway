@@ -147,7 +147,7 @@ export function summarize(input: SummaryInput): MissionSummaryLines {
   return {
     can:
       can.length === 0
-        ? 'Nothing yet — include a connection and pick a preset.'
+        ? 'Nothing yet — include a connection and tick a macro-action.'
         : `${can.join(' · ')}.`,
     cannot:
       cannot.length === 0

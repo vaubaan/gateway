@@ -11,7 +11,8 @@ import {
   isCompleteVector,
   loadCatalogFile,
   parseCatalogYaml,
-  presetWildcardIssues,
+  RETIRED_PRESETS_ISSUE,
+  semanticIssues,
   riskIdWildcardIssues,
   validateCatalog,
   wildcardIssues,
@@ -63,21 +64,6 @@ function baseDoc(overrides: Record<string, unknown>): Record<string, unknown> {
         ],
       },
     ],
-    presets: [
-      {
-        id: 'reader',
-        label: 'Reader',
-        description: 'Reads.',
-        entries: [
-          {
-            risk_id: 'acme.read-things',
-            quota: 100,
-            rate_limit: { max: 10, window_seconds: 60 },
-            gate: 'auto',
-          },
-        ],
-      },
-    ],
     ...overrides,
   };
 }
@@ -114,8 +100,8 @@ describe('loadCatalogFile — fixture', () => {
 
   test('parses provider, version and the date scalar', () => {
     expect(loaded.catalog.provider).toBe('acme');
-    expect(loaded.catalog.catalog_version).toBe(3);
-    expect(loaded.catalog.catalog_date).toBe('2026-10-13');
+    expect(loaded.catalog.catalog_version).toBe(4);
+    expect(loaded.catalog.catalog_date).toBe('2026-10-31');
   });
 
   test('keeps every risk and indexes every pattern', () => {
@@ -141,16 +127,12 @@ describe('loadCatalogFile — fixture', () => {
     expect(loaded.catalog.risks[2]!.deprecated).toBe(true);
   });
 
-  test('loads the presets with default gate auto', () => {
-    expect(loaded.catalog.presets.map((p) => p.id)).toEqual(['reader', 'developer']);
-    const dev = loaded.catalog.presets[1]!;
-    expect(dev.entries[0]).toEqual({
+  test('loads the macro-action entries with their base budgets and no gate', () => {
+    expect(loaded.catalog.macro_actions[0]!.entries[0]).toEqual({
       risk_id: 'acme.read-things',
-      quota: 2000,
-      rate_limit: { max: 120, window_seconds: 60 },
-      gate: 'auto',
+      quota: 500,
+      rate_limit: { max: 60, window_seconds: 60 },
     });
-    expect(dev.entries[2]!.gate).toBe('approval');
   });
 
   test('parseCatalogYaml gives the same result from text', () => {
@@ -315,159 +297,67 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     expect(catalogWarnings(validateCatalog(doc()).catalog)).toEqual([]);
   });
 
-  test('a preset that includes the fallback is an error', () => {
-    const d = doc();
-    (d.presets as Array<{ entries: unknown[] }>)[0]!.entries.push({
-      risk_id: 'acme.uncategorized-write',
-      quota: 1,
-      rate_limit: { max: 1, window_seconds: 1 },
-      gate: 'approval',
-    });
-    expect(issuesOf(() => validateCatalog(d))).toEqual([
-      "presets[0].entries[1].risk_id 'acme.uncategorized-write' is the fallback — a preset must not pre-accept uncategorized writes (preset 'reader')",
-    ]);
+  test('a catalog with a presets key does not load, whatever its value', () => {
+    for (const presets of [[], [{ id: 'reader' }], null]) {
+      expect(issuesOf(() => validateCatalog(doc({ presets })))).toEqual([RETIRED_PRESETS_ISSUE]);
+    }
+    expect(RETIRED_PRESETS_ISSUE).toMatch(
+      /presets were retired \(ADR macro-actions-and-trust-crans-prefill-the-policy\) ; group the risks in macro_actions/,
+    );
+    // A catalog built in code is held to it too (`definePlugin`, the registry).
+    const built = { ...validateCatalog(doc()).catalog, presets: [] } as RiskCatalog;
+    expect(semanticIssues(built)).toEqual([RETIRED_PRESETS_ISSUE]);
   });
 
-  test('zero presets is an error, unless disabled', () => {
-    const d = doc({ presets: [] });
-    expect(issuesOf(() => validateCatalog(d))).toEqual([
-      expect.stringMatching(/at least one preset/),
-    ]);
-    expect(() => validateCatalog(d, { requirePresets: false })).not.toThrow();
-    const noKey = doc();
-    delete noKey.presets;
-    expect(issuesOf(() => validateCatalog(noKey))).toEqual([
-      expect.stringMatching(/at least one preset/),
-    ]);
-  });
-
-  test('preset entry referencing a foreign or unknown risk', () => {
+  test('a wildcard or a sentinel in a macro-action entry names no risk', () => {
     const d = doc();
-    (d.presets as Array<{ entries: unknown[] }>)[0]!.entries.push(
-      {
-        risk_id: 'github.read-code',
-        quota: 1,
-        rate_limit: { max: 1, window_seconds: 1 },
-        gate: 'auto',
-      },
-      { risk_id: 'acme.nope', quota: 1, rate_limit: { max: 1, window_seconds: 1 }, gate: 'auto' },
-    );
-    const issues = issuesOf(() => validateCatalog(d));
-    expect(issues).toEqual(
-      expect.arrayContaining([
-        expect.stringMatching(
-          /presets\[0\]\.entries\[1\]\.risk_id 'github.read-code' belongs to provider 'github'/,
-        ),
-        expect.stringMatching(
-          /presets\[0\]\.entries\[2\]\.risk_id 'acme.nope' is not a risk of the 'acme' catalog/,
-        ),
-      ]),
-    );
-  });
-
-  test('env-qualified preset entries must target an env-scoped risk and an allowed env', () => {
-    const d = doc();
-    (d.presets as Array<{ entries: unknown[] }>)[0]!.entries.push(
-      {
-        risk_id: 'acme[prod].read-things',
-        quota: 1,
-        rate_limit: { max: 1, window_seconds: 1 },
-        gate: 'auto',
-      },
-      {
-        risk_id: 'acme[dev].thing-write',
-        quota: 1,
-        rate_limit: { max: 1, window_seconds: 1 },
-        gate: 'auto',
-      },
-      {
-        risk_id: 'acme[staging].thing-write',
-        quota: 1,
-        rate_limit: { max: 1, window_seconds: 1 },
-        gate: 'approval',
-      },
-    );
-    const issues = issuesOf(() => validateCatalog(d));
-    expect(issues).toHaveLength(2);
-    expect(issues.join('\n')).toMatch(
-      /'acme\[prod\].read-things' qualifies an env on a risk that is not env-scoped/,
-    );
-    expect(issues.join('\n')).toMatch(
-      /'acme\[dev\].thing-write' uses env 'dev' outside acceptable_in_envs \[staging, prod\]/,
-    );
-  });
-
-  test('wildcard or sentinel in a preset entry', () => {
-    const d = doc();
-    (d.presets as Array<{ entries: unknown[] }>)[0]!.entries.push(
+    (d.macro_actions as Array<{ entries: unknown[] }>)[0]!.entries.push(
       { risk_id: 'acme.*', quota: 1, rate_limit: { max: 1, window_seconds: 1 } },
       { risk_id: 'all', quota: 1, rate_limit: { max: 1, window_seconds: 1 } },
     );
-    const issues = issuesOf(() => validateCatalog(d));
-    expect(issues.filter((m) => /not an explicit RiskId/.test(m))).toHaveLength(2);
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      "macro_actions[0].entries[1].risk_id 'acme.*' is not an unqualified risk of the 'acme' catalog",
+      "macro_actions[0].entries[2].risk_id 'all' is not an unqualified risk of the 'acme' catalog",
+    ]);
   });
 
-  test('budget must be explicit positive integers, gate from the closed set', () => {
-    const d = doc({
-      presets: [
-        {
-          id: 'bad',
-          label: 'Bad',
-          description: 'x',
-          entries: [
-            {
-              risk_id: 'acme.read-things',
-              quota: 0,
-              rate_limit: { max: 1.5, window_seconds: 'x' },
-              gate: 'maybe',
-            },
-          ],
-        },
-      ],
-    });
+  test('a base budget must be explicit positive integers', () => {
+    const d = doc();
+    (d.macro_actions as Array<{ entries: Record<string, unknown>[] }>)[0]!.entries[0] = {
+      risk_id: 'acme.read-things',
+      quota: 0,
+      rate_limit: { max: 1.5, window_seconds: 'x' },
+    };
     const issues = issuesOf(() => validateCatalog(d));
     expect(issues).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/presets\[0\]\.entries\[0\]\.quota: expected a positive integer/),
+        expect.stringMatching(
+          /macro_actions\[0\]\.entries\[0\]\.quota: expected a positive integer/,
+        ),
         expect.stringMatching(/rate_limit\.max: expected a positive integer/),
         expect.stringMatching(/rate_limit\.window_seconds: expected a positive integer/),
-        expect.stringMatching(/gate: expected one of auto \| approval/),
       ]),
     );
   });
 
   test('an unknown key inside rate_limit is reported at its path', () => {
     const d = doc();
-    (d.presets as Array<{ entries: Record<string, unknown>[] }>)[0]!.entries[0]!.rate_limit = {
-      max: 1,
-      window_seconds: 60,
-      burst: 5,
-    };
+    (d.macro_actions as Array<{ entries: Record<string, unknown>[] }>)[0]!.entries[0]!.rate_limit =
+      { max: 1, window_seconds: 60, burst: 5 };
     expect(issuesOf(() => validateCatalog(d))).toEqual([
-      'presets[0].entries[0].rate_limit.burst: unknown key',
+      'macro_actions[0].entries[0].rate_limit.burst: unknown key',
     ]);
   });
 
-  test('a preset id declared twice, a risk repeated inside one preset', () => {
-    const entry = {
+  test('a risk repeated inside one macro-action', () => {
+    const d = doc();
+    (d.macro_actions as Array<{ entries: unknown[] }>)[0]!.entries.push({
       risk_id: 'acme.read-things',
       quota: 1,
       rate_limit: { max: 1, window_seconds: 1 },
-    };
-    const twice = doc({
-      presets: [
-        { id: 'reader', label: 'A', description: 'a', entries: [entry] },
-        { id: 'reader', label: 'B', description: 'b', entries: [entry] },
-      ],
     });
-    expect(issuesOf(() => validateCatalog(twice))).toEqual([
-      "presets[1].id 'reader' is declared twice",
-    ]);
-    const repeated = doc({
-      presets: [{ id: 'reader', label: 'A', description: 'a', entries: [entry, entry] }],
-    });
-    expect(issuesOf(() => validateCatalog(repeated))).toEqual([
-      "presets[0].entries[1].risk_id 'acme.read-things' repeated in preset 'reader'",
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      "macro_actions[0].entries[1].risk_id 'acme.read-things' already belongs to macro-action 'read'",
     ]);
   });
 
@@ -544,15 +434,10 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     ]);
   });
 
-  test('deprecated risks may not appear in a preset', () => {
+  test('a deprecated risk needs no macro-action', () => {
     const d = doc();
     (d.risks as unknown[]).push({ ...risk('acme.old', 'acme.space[**].old.R'), deprecated: true });
-    (d.presets as Array<{ entries: unknown[] }>)[0]!.entries.push({
-      risk_id: 'acme.old',
-      quota: 1,
-      rate_limit: { max: 1, window_seconds: 1 },
-    });
-    expect(issuesOf(() => validateCatalog(d)).join('\n')).toMatch(/'acme.old' is deprecated/);
+    expect(() => validateCatalog(d)).not.toThrow();
   });
 
   test('unknown keys, bad vector values and bad env labels are reported at their path', () => {
@@ -626,36 +511,18 @@ describe('isCompleteVector', () => {
   });
 });
 
-describe('wildcardIssues — two rules, one concatenation', () => {
+describe('wildcardIssues', () => {
   const base = validateCatalog(doc()).catalog;
   const catalog: RiskCatalog = {
     ...base,
     risks: [...base.risks, { ...base.risks[0]!, id: 'acme.read-*' }],
-    presets: [
-      {
-        id: 'p',
-        label: 'P',
-        description: 'p',
-        entries: [
-          { risk_id: 'acme.*', quota: 1, rate_limit: { max: 1, window_seconds: 1 }, gate: 'auto' },
-          { risk_id: 'all', quota: 1, rate_limit: { max: 1, window_seconds: 1 }, gate: 'auto' },
-        ],
-      },
-    ],
   };
 
-  test('risk ids and preset entries are reported by their own function', () => {
+  test('reports the risk ids that are patterns', () => {
     expect(riskIdWildcardIssues(catalog)).toEqual([
       "risks[3].id 'acme.read-*' contains a wildcard",
     ]);
-    expect(presetWildcardIssues(catalog)).toEqual([
-      "presets[0].entries[0].risk_id 'acme.*' is not an explicit RiskId (no wildcard, no sentinel)",
-      "presets[0].entries[1].risk_id 'all' is not an explicit RiskId (no wildcard, no sentinel)",
-    ]);
-    expect(wildcardIssues(catalog)).toEqual([
-      ...riskIdWildcardIssues(catalog),
-      ...presetWildcardIssues(catalog),
-    ]);
+    expect(wildcardIssues(catalog)).toEqual(riskIdWildcardIssues(catalog));
   });
 });
 

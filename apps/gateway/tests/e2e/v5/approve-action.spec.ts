@@ -3,8 +3,10 @@
  * simulated IdP and a mocked GitHub (spec §7.7, §3.5, §4.1 `approval-required`,
  * §4.2 "Request inbox").
  *
- * The mission is issued from the GitHub plugin's `developer` preset as it
- * ships: writing a workflow file is one of its entries gated `approval`. The
+ * The mission is composed from the GitHub plugin's macro-actions as they ship:
+ * Administer at Prudent gates writing a workflow file (palier 3) `approval`, at
+ * its base budget of 50; Propose at Confiant runs the feature-branch write
+ * freely, at three times its base budget of 500. The
  * executor is an MCP client holding the mission token; its calls go over HTTP
  * on `/mcp`, through the real execution door.
  *
@@ -77,7 +79,7 @@ test.afterEach(async () => {
   agent = null;
 });
 
-test('a gated action of the developer preset: refused, approved by its creator only, replayed once', async ({
+test('a gated action of the developer crans: refused, approved by its creator only, replayed once', async ({
   browser,
   request,
 }) => {
@@ -147,7 +149,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
   // What is left of every permission the call counts against, once it has run: the
   // whole call is what waits, so the one that runs freely is listed too.
   await expect(hedy.getByTestId(`approval-room-${GATED}`)).toContainText('49 of 50 left');
-  await expect(hedy.getByTestId(`approval-room-${UNGATED}`)).toContainText('2,999 of 3,000 left');
+  await expect(hedy.getByTestId(`approval-room-${UNGATED}`)).toContainText('1,499 of 1,500 left');
   // The fingerprint and what the call touches are one click away.
   await showCallDetails(hedy);
   await expect(hedy.getByTestId('approval-fingerprint')).toHaveText(String(refusal.fingerprint));
@@ -240,7 +242,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(hedy.getByTestId('approval-outcome')).toContainText('The agent ran it on');
   // The approved action counted against both permissions it touches.
   await expect(hedy.getByTestId(`approval-room-${GATED}`)).toContainText('49 of 50 left');
-  await expect(hedy.getByTestId(`approval-room-${UNGATED}`)).toContainText('2,999 of 3,000 left');
+  await expect(hedy.getByTestId(`approval-room-${UNGATED}`)).toContainText('1,499 of 1,500 left');
 
   // The same call again: the approval was single-use, a new request is dropped.
   const second = approvalRequired(await write());

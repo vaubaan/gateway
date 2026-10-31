@@ -117,7 +117,7 @@ describe('robots.txt and sitemap.xml', () => {
 });
 
 describe('plugins.json', () => {
-  it('carries every plugin with its version, risks, presets and a health that is never a rate offline', () => {
+  it('carries every plugin with its version, risks, macro-actions and a health that is never a rate offline', () => {
     const json = JSON.parse(site.files.get('plugins.json') ?? '{}') as {
       plugins: Record<string, unknown>[];
     };

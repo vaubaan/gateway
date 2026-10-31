@@ -3,7 +3,7 @@
 # Handbook : docs/handbook/providers/notion.md.
 #
 # No risk is env-scoped (product owner, 2026-10-16) : the destructive
-# operations ask first in the presets instead. Write patterns do not
+# operations are gated by their palier instead. Write patterns do not
 # overlap : each write slice touches exactly one named risk, except the
 # trash of the root page itself, which emits two slices (`page-trash` and
 # `root-trash`).
@@ -11,9 +11,11 @@
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: notion
-catalog_version: 2
-catalog_date: 2026-10-30
+catalog_version: 3
+catalog_date: 2026-10-31
 
 risks:
   # ─── Reads ─────────────────────────────────────────────────────────────────
@@ -195,8 +197,7 @@ risks:
     reason: >-
       Trashing the page that was shared with the connection takes the whole
       resource away: every page under it, for every person and every
-      mission. Listed in no preset; a mission that needs it holds it
-      explicitly, beside the permission to trash a page.
+      mission. A mission that needs it holds it explicitly, beside the permission to trash a page.
     matches: 'notion.root[*].root-trash.W'
     infra_limits: { calls_per_minute_max: 2 }
     vector:
@@ -339,102 +340,3 @@ macro_actions:
       - risk_id: notion.root-trash
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Read the pages, databases and comments of the selected roots. No write, no comment.
-    entries:
-      - risk_id: notion.read-content
-        quota: 3000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.query-databases
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.read-comments
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-
-  - id: reviewer
-    label: Reviewer
-    description: Read everything in the selected roots and leave comments. No change to pages or databases.
-    entries:
-      - risk_id: notion.read-content
-        quota: 3000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.query-databases
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.read-comments
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.comment-create
-        quota: 100
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: auto
-
-  - id: editor
-    label: Editor
-    description: >-
-      Daily work: read, comment, create and edit pages, their content and
-      database entries freely; moving a page to the trash and deleting a block
-      ask first. Never trashes a whole root.
-    entries:
-      - risk_id: notion.read-content
-        quota: 5000
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.query-databases
-        quota: 1000
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.read-comments
-        quota: 1000
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.comment-create
-        quota: 200
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.page-create
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.page-update
-        quota: 300
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.content-append
-        quota: 500
-        rate_limit: { max: 15, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.block-update
-        quota: 300
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.entry-create
-        quota: 300
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.entry-update
-        quota: 500
-        rate_limit: { max: 15, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.page-restore
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: auto
-      - risk_id: notion.page-trash
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: notion.block-delete
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval

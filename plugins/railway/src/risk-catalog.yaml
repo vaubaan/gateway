@@ -1,15 +1,15 @@
 # Risk catalog of the `railway` provider.
 #
-# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # ADR  : docs/decisions/rewrap-official-mcps.md ; docs/decisions/plugin-contract-and-credential-spec.md.
 # Handbook : docs/handbook/providers/railway.md.
 #
 # Loaded by the plugin SDK at boot (`loadCatalogFile`) ; this file is the only
 # catalog artefact. Rules the loader enforces : `provider` is the plugin id,
 # every risk id starts with it, every `matches` pattern parses as a slice of
-# this provider, a `railway.uncategorized-*` fallback exists, at least one
-# preset, every preset entry an explicit risk of THIS catalog with a numeric
-# quota, a rate limit and a gate — never a wildcard.
+# this provider, a `railway.uncategorized-*` fallback exists, every other
+# live risk in exactly one macro-action with a numeric base quota and rate
+# limit — never a wildcard.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Changing a `matches` pattern : same bump (v3 repointed `bulk-variables-replace`).
@@ -24,9 +24,11 @@
 # catalog_version 5 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 6 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: railway
-catalog_version: 5
-catalog_date: 2026-10-30
+catalog_version: 6
+catalog_date: 2026-10-31
 
 risks:
   # ───── Reads ────────────────────────────────────────────────────────────────
@@ -173,7 +175,7 @@ risks:
       The upstream agent decides alone what to mutate ; no fine
       classification is possible. Catch-all by construction : the classifier
       also emits the deployment, variable write and variable replace slices,
-      so a mission must hold those permissions too. Explicit opt-in only ; absent from every preset.
+      so a mission must hold those permissions too. Explicit opt-in only.
     matches: 'railway.account[**].agent-session.W'
     vector:
       reversibility: costly
@@ -200,11 +202,6 @@ risks:
       visibility: internal
       persistence: session
 
-# Presets are UI sugar : the issuance form pre-fills a mission policy from one
-# of them and the creator adjusts risk by risk ; the persisted policy is always
-# the explicit enumeration. Values are default suggestions (ADR plugin-contract
-# D5) ; `approval` is suggested on production deploys and production variable
-# writes, and on every destructive bulk replace or project creation.
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
@@ -253,155 +250,3 @@ macro_actions:
       - risk_id: railway.agent-action
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Inspect projects, services, deployments and logs. No variable values, no write.
-    entries:
-      - risk_id: railway.read-account
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway.read-runtime
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway.read-logs
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-
-  - id: developer
-    label: Developer
-    description: One mission per code project — deploy, redeploy and manage variables on non-production environments freely; read logs; production deploys and variable writes ask first.
-    entries:
-      - risk_id: railway.read-account
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway.read-runtime
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway.read-logs
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[dev].read-variables
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[preview].read-variables
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[staging].read-variables
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[dev].deploy
-        quota: 300
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[preview].deploy
-        quota: 300
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[staging].deploy
-        quota: 300
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[prod].deploy
-        quota: 20
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: railway[dev].upsert-variable
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[preview].upsert-variable
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[staging].upsert-variable
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[prod].upsert-variable
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-
-  - id: operator
-    label: Operator
-    description: Run production — every read including production variables, deploys everywhere, destructive variable replacement and project creation asking first.
-    entries:
-      - risk_id: railway.read-account
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway.read-runtime
-        quota: 10000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway.read-logs
-        quota: 5000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[dev].read-variables
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[preview].read-variables
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[staging].read-variables
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[prod].read-variables
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[dev].deploy
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[preview].deploy
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[staging].deploy
-        quota: 500
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[prod].deploy
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: railway[dev].upsert-variable
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[preview].upsert-variable
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[staging].upsert-variable
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: railway[prod].upsert-variable
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: railway.bulk-variables-replace
-        quota: 5
-        rate_limit: { max: 1, window_seconds: 60 }
-        gate: approval
-      - risk_id: railway.create-project
-        quota: 5
-        rate_limit: { max: 1, window_seconds: 60 }
-        gate: approval

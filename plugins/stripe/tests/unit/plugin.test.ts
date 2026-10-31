@@ -20,8 +20,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   refusalText,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
@@ -65,9 +65,8 @@ const denied = (
 };
 
 describe('stripe plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(stripePlugin);
-    assertPresetsValid(stripePlugin);
     assertNoWildcard(stripePlugin);
   });
 
@@ -519,28 +518,41 @@ describe('credential spec', () => {
     expect(new RegExp(liveField!.pattern).test('sk_test_abc')).toBe(false);
   });
 
-  test('presets : the three the brief asks for, approval on the live money-out and irreversible entries', () => {
-    const presets = stripePlugin.catalog.presets;
-    expect(presets.map((p) => p.id)).toEqual([
-      'read-only',
-      'test-mode-developer',
-      'finance-operator',
-    ]);
-    const finance = presets.find((p) => p.id === 'finance-operator')!;
-    const approval = finance.entries
-      .filter((e) => e.gate === 'approval')
-      .map((e) => e.risk_id)
-      .sort();
-    expect(approval).toEqual([
+  test('macro-actions : the live money-out and irreversible entries never run freely', () => {
+    const actions = stripePlugin.catalog.macro_actions ?? [];
+    expect(actions.map((a) => a.id)).toEqual(['books', 'set-up', 'bill', 'money-out', 'cancel']);
+    const irreversible = [
       'stripe[live].customer-delete',
       'stripe[live].invoice-void',
       'stripe[live].payout-create',
       'stripe[live].refund-create',
       'stripe[live].subscription-cancel',
-    ]);
-    const dev = presets.find((p) => p.id === 'test-mode-developer')!;
-    expect(dev.entries.every((e) => e.risk_id.startsWith('stripe[test].'))).toBe(true);
-    const ro = presets.find((p) => p.id === 'read-only')!;
-    expect(ro.entries.map((e) => e.risk_id)).not.toContain('stripe.read-customer-pii');
+    ];
+    // Left out at Prudent ; asked first at Confiant and at Autonome.
+    const prudent = policyFromMacroActions(
+      stripePlugin,
+      { 'money-out': 'prudent', cancel: 'prudent' },
+      { envs: ['live'] },
+    );
+    expect(prudent).toEqual([]);
+    for (const cran of ['confiant', 'autonome'] as const) {
+      const lines = policyFromMacroActions(
+        stripePlugin,
+        { 'money-out': cran, cancel: cran },
+        { envs: ['live'] },
+      );
+      expect(lines.map((e) => e.risk_id).sort(), cran).toEqual(irreversible);
+      expect(
+        lines.every((e) => e.gate === 'approval'),
+        cran,
+      ).toBe(true);
+    }
+    // One mode given, one mode written.
+    const testMode = policyFromMacroActions(
+      stripePlugin,
+      { books: 'confiant' },
+      { envs: ['test'] },
+    );
+    expect(testMode.every((e) => e.risk_id.startsWith('stripe[test].'))).toBe(true);
   });
 });

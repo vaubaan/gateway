@@ -37,7 +37,7 @@ One resource, the mailbox; no environment. Rules common to every plugin:
 - **Sensitive labels cannot be opted into**: when the mailbox declares `sensitive_labels`, a thread
   fetch always touches `sensitive-label[*]`, and a search only escapes it with `-label:<l>` written
   for each declared label. Writing a label that is or may be sensitive lands on the fallback, which
-  no preset offers.
+  no macro-action offers.
 - Zoning matches exactly, never by substring; a no-reply local part is `automated` only on an
   internal or allowlisted domain. An unconfigured mailbox zones every sender `unknown`. Discovery
   pre-fills no zoning list: `internal_domains` from a `gmail.com` address would make every Gmail

@@ -29,10 +29,6 @@ function cloneAs(id: string, overrides: Partial<ProviderPlugin> = {}): ProviderP
         matches: typeof r.matches === 'string' ? rename(r.matches) : r.matches.map(rename),
         ...(r.replaced_by ? { replaced_by: rename(r.replaced_by) } : {}),
       })),
-      presets: (acmePlugin.catalog.presets ?? []).map((p) => ({
-        ...p,
-        entries: p.entries.map((e) => ({ ...e, risk_id: rename(e.risk_id) })),
-      })),
       macro_actions: (acmePlugin.catalog.macro_actions ?? []).map((a) => ({
         ...a,
         entries: a.entries.map((e) => ({ ...e, risk_id: rename(e.risk_id) })),
@@ -119,12 +115,9 @@ describe('PluginRegistry — derivations', () => {
     expect(() => new PluginRegistry([]).idEnum()).toThrow(/empty/);
   });
 
-  test('catalogOf is indexed, presetsOf lists the plugin presets', () => {
+  test('catalogOf is indexed', () => {
     expect(registry.catalogOf('acme').entries).toHaveLength(4);
-    expect(registry.presetsOf('beta-cloud').map((p) => p.id)).toEqual(['reader', 'developer']);
-    expect(registry.presetsOf('beta-cloud')[1]!.entries[1]!.risk_id).toBe(
-      'beta-cloud[staging].thing-write',
-    );
+    expect(registry.catalogOf('beta-cloud').entries[1]!.entry.id).toBe('beta-cloud.thing-write');
   });
 
   test('registered plugin exposes its prefix and tool names', () => {

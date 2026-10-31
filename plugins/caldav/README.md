@@ -60,13 +60,19 @@ Events go in and out as JSON fields; the plugin builds the iCalendar itself.
 - `caldav.attendees-external` — notify anybody else
 - `caldav.uncategorized-write` — the fallback, reached by no tool
 
-## Presets
+## Macro-actions
 
-- `read-only` — list calendars, read events.
-- `own-agenda` — read, create and change events that concern nobody else;
-  deleting asks first.
-- `assistant` — own agenda, wide ranges, meetings with colleagues and
-  allowlisted contacts; inviting anybody else and deleting ask first.
+| Macro-action | What it covers                               | Risks                                                               |
+| ------------ | -------------------------------------------- | ------------------------------------------------------------------- |
+| `read`       | Calendars and events, over a wide range too. | `read-calendars`, `read-events`, `read-wide-range`                  |
+| `schedule`   | Create, change and delete events.            | `event-create`, `event-change`, `event-delete`                      |
+| `invite`     | Invite, update or cancel attendees.          | `attendees-internal`, `attendees-allowlisted`, `attendees-external` |
+
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The mission stores the explicit list. Deleting an event and
+reaching allowlisted or outside attendees are irreversible: left out at
+Prudent, they ask first at the other crans.
 
 ## Tests
 

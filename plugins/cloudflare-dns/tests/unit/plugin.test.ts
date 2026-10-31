@@ -2,7 +2,7 @@
  * Mandatory suite of the Cloudflare DNS plugin : the SDK kit, the
  * classifier (zone resolution, critical / delete overlays, malformed ids),
  * `execute` and `discoverResources` against `mockFetch`, the credential spec
- * and the presets. The per-tool classifier cases live in `classify.test.ts`.
+ * and the macro-actions. The per-tool classifier cases live in `classify.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -18,9 +18,9 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   declaredOnly,
   mockFetch,
+  policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -74,9 +74,8 @@ const denied = (
 };
 
 describe('cloudflare-dns plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(cloudflareDnsPlugin);
-    assertPresetsValid(cloudflareDnsPlugin);
     assertNoWildcard(cloudflareDnsPlugin);
   });
 
@@ -942,7 +941,7 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
   });
 });
 
-describe('credential spec and presets', () => {
+describe('credential spec and macro-actions', () => {
   test('api-key with one required secret field ; the pattern refuses a Global API Key', () => {
     const spec = cloudflareDnsPlugin.credential;
     expect(spec.kind).toBe('api-key');
@@ -957,51 +956,44 @@ describe('credential spec and presets', () => {
     expect(pattern.test('short')).toBe(false);
   });
 
-  test('presets : read-only, dns-operator, zone-admin ; approval on the destructive entries', () => {
-    const presets = cloudflareDnsPlugin.catalog.presets;
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'dns-operator', 'zone-admin']);
+  test('macro-actions : look-up, point, change-domain, rule-zone ; the writes ask first below Autonome', () => {
+    expect((cloudflareDnsPlugin.catalog.macro_actions ?? []).map((a) => a.id)).toEqual([
+      'look-up',
+      'point',
+      'change-domain',
+      'rule-zone',
+    ]);
+    const all = (cran: 'prudent' | 'confiant' | 'autonome') =>
+      policyFromMacroActions(cloudflareDnsPlugin, {
+        'look-up': cran,
+        point: cran,
+        'change-domain': cran,
+        'rule-zone': cran,
+      });
+    const withGate = (cran: 'prudent' | 'confiant' | 'autonome', gate: string) =>
+      all(cran)
+        .filter((l) => l.gate === gate)
+        .map((l) => l.risk_id);
 
-    const ids = (id: string) => presets.find((p) => p.id === id)!.entries.map((e) => e.risk_id);
-    expect(ids('read-only')).toEqual([
+    expect(withGate('prudent', 'auto')).toEqual([
       'cloudflare-dns.read-zone-metadata',
       'cloudflare-dns.read-records',
     ]);
-    expect(ids('dns-operator')).toEqual([
-      'cloudflare-dns.read-zone-metadata',
-      'cloudflare-dns.read-records',
-      'cloudflare-dns.record-write',
-      'cloudflare-dns.cache-purge',
-    ]);
-    expect(ids('zone-admin')).toEqual([
-      'cloudflare-dns.read-zone-metadata',
-      'cloudflare-dns.read-records',
-      'cloudflare-dns.export-zone-file',
+    expect(withGate('confiant', 'approval')).toEqual([
       'cloudflare-dns.record-write',
       'cloudflare-dns.critical-record-write',
       'cloudflare-dns.record-delete',
       'cloudflare-dns.import-records',
       'cloudflare-dns.zone-settings-write',
       'cloudflare-dns.dnssec-write',
-      'cloudflare-dns.cache-purge',
+      'cloudflare-dns.zone-delete',
     ]);
-
-    const admin = presets.find((p) => p.id === 'zone-admin')!;
-    const approval = admin.entries
-      .filter((e) => e.gate === 'approval')
-      .map((e) => e.risk_id)
-      .sort();
-    expect(approval).toEqual([
-      'cloudflare-dns.critical-record-write',
-      'cloudflare-dns.dnssec-write',
-      'cloudflare-dns.import-records',
-      'cloudflare-dns.record-delete',
-      'cloudflare-dns.zone-settings-write',
-    ]);
-
-    for (const preset of presets) {
-      const risks = preset.entries.map((e) => e.risk_id);
-      expect(risks, preset.id).not.toContain('cloudflare-dns.uncategorized-write');
-      expect(risks, preset.id).not.toContain('cloudflare-dns.zone-delete');
+    // Autonome : only the irreversible zone deletion still asks first.
+    expect(withGate('autonome', 'approval')).toEqual(['cloudflare-dns.zone-delete']);
+    // Prudent leaves the zone deletion out ; the fallback is ticked on its own.
+    expect(all('prudent').map((l) => l.risk_id)).not.toContain('cloudflare-dns.zone-delete');
+    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
+      expect(all(cran).map((l) => l.risk_id)).not.toContain('cloudflare-dns.uncategorized-write');
     }
   });
 });

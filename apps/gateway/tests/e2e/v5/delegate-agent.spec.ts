@@ -134,7 +134,24 @@ interface ListedConnection {
   readonly provider: string;
   readonly authority: { readonly basis: string; readonly risk_ids: readonly string[] };
   readonly resources: readonly { readonly ref: string }[];
-  readonly presets: readonly { readonly id: string; readonly within_authority: boolean }[];
+  readonly macro_actions: readonly {
+    readonly id: string;
+    readonly at_cran: Readonly<
+      Record<string, { readonly auto: number; readonly approval: number }>
+    >;
+    readonly unavailable: readonly string[];
+  }[];
+  readonly everything_i_hold: { readonly risks: number };
+}
+
+interface Catalog {
+  readonly risks: readonly {
+    readonly risk_id: string;
+    readonly palier: number;
+    readonly macro_action: string | null;
+  }[];
+  readonly macro_actions: readonly { readonly id: string; readonly entries: readonly unknown[] }[];
+  readonly crans: Readonly<Record<string, { readonly budget_factor: number }>>;
 }
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
@@ -220,34 +237,46 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   if (!github) throw new Error('the user holds no GitHub connection');
   expect(github.authority.basis).toBe('owner');
   expect(github.resources.map((resource) => resource.ref)).toContain('acme/app');
-  expect(github.presets.find((preset) => preset.id === 'read-only')?.within_authority).toBe(true);
-  const catalog = await manage<{ risks: { risk_id: string }[]; presets: { id: string }[] }>(
-    manager,
-    'get_catalog',
-    { provider: 'github', connection_id: github.connection_id },
-  );
-  expect(catalog.risks.map((risk) => risk.risk_id)).toContain('github.read-code');
+  const readAction = github.macro_actions.find((action) => action.id === 'read');
+  expect(readAction?.unavailable).toEqual([]);
+  expect(readAction?.at_cran.prudent?.auto).toBeGreaterThan(0);
+  expect(github.everything_i_hold.risks).toBeGreaterThan(0);
+  const catalog = await manage<Catalog>(manager, 'get_catalog', {
+    provider: 'github',
+    connection_id: github.connection_id,
+  });
+  expect(catalog.risks.find((risk) => risk.risk_id === 'github.read-code')).toMatchObject({
+    palier: 1,
+    macro_action: 'read',
+  });
+  expect(catalog.macro_actions.map((action) => action.id)).toContain('read');
+  expect(catalog.crans.confiant?.budget_factor).toBe(3);
 
-  // ── It composes a policy from a preset, previews it, issues the mission ────
+  // ── It ticks a macro-action at a cran, previews it, issues the mission ─────
   const draft = {
     name: MISSION_NAME,
     connections: [
       {
         connection_id: github.connection_id,
-        preset: 'read-only',
+        crans: { read: 'prudent' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
       },
     ],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   };
-  const preview = await manage<{ ok: boolean; uncovered: unknown[]; policy: unknown[] }>(
-    manager,
-    'preview_policy',
-    draft,
-  );
+  const preview = await manage<{
+    ok: boolean;
+    uncovered: unknown[];
+    policy: { risk_id: string; gate: string }[];
+    connections: { crans: Record<string, string>; left_out: unknown[] }[];
+  }>(manager, 'preview_policy', draft);
   expect(preview).toMatchObject({ ok: true, uncovered: [] });
-  expect(preview.policy.length).toBeGreaterThan(0);
+  expect(preview.policy.map((entry) => [entry.risk_id, entry.gate])).toContainEqual([
+    'github.read-code',
+    'auto',
+  ]);
+  expect(preview.connections[0]).toMatchObject({ crans: { read: 'prudent' }, left_out: [] });
 
   const issued = await manage<{
     mission: { mission_id: string; issued_via_client_id: string };

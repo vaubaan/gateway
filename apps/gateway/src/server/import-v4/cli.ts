@@ -73,7 +73,7 @@ instance, under <email>, an active user who has signed in once.
   --apply          write; without it, print the plan and write nothing
   --allow-stale    accept a bundle exported more than an hour ago
   --carry-unbudgeted <quota>
-                   keep a v4 permission no preset gives a budget, with this
+                   keep a v4 permission no macro-action gives a budget, with this
                    quota per day and every use waiting for the owner's approval
                    (otherwise it is dropped)
   --reissue <v4 token id>

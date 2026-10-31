@@ -168,7 +168,7 @@ They are checked in review, and several by tests:
 - **One list of providers.** The plugin registry is the only list; nothing
   else enumerates providers.
 - **Never a wildcard in what is granted.** Accepted risks, share restrictions
-  and presets are explicit lists of risk identifiers. "Allow all" is the full
+  and macro-actions are explicit lists of risk identifiers. "Allow all" is the full
   list, written out.
 - **Fail closed.** What cannot be classified, verified or parsed is refused.
 - **Tests beside the change.** Unit tests next to the code; integration tests

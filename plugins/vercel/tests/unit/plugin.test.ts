@@ -21,8 +21,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   type RecordedCall,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
@@ -72,17 +72,25 @@ function sseError(call: RecordedCall, code: number, message: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('vercel plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(vercelPlugin);
-    assertPresetsValid(vercelPlugin);
     assertNoWildcard(vercelPlugin);
   });
 
-  test('ships read-only, developer and operator presets ; developer never touches production configuration', () => {
-    const ids = vercelPlugin.catalog.presets.map((p) => p.id);
-    expect(ids).toEqual(['read-only', 'developer', 'operator']);
-    const developer = vercelPlugin.catalog.presets.find((p) => p.id === 'developer')!;
-    const risks = developer.entries.map((e) => e.risk_id);
+  test('macro-actions : watch, deploy, configure, protect, own ; the fallback in none', () => {
+    const actions = vercelPlugin.catalog.macro_actions ?? [];
+    expect(actions.map((a) => a.id)).toEqual(['watch', 'deploy', 'configure', 'protect', 'own']);
+    const listed = actions.flatMap((a) => a.entries.map((e) => e.risk_id));
+    expect(listed).not.toContain('vercel.uncategorized-write');
+  });
+
+  test('a developer mission (watch and deploy on preview) never touches production configuration', () => {
+    const developer = policyFromMacroActions(
+      vercelPlugin,
+      { watch: 'confiant', deploy: 'confiant' },
+      { envs: ['preview', 'development'] },
+    );
+    const risks = developer.map((line) => line.risk_id);
     for (const forbidden of [
       'vercel[prod].deploy',
       'vercel[prod].env-var-write',
@@ -97,10 +105,18 @@ describe('vercel plugin — structural kit', () => {
     ]) {
       expect(risks, `developer must not include ${forbidden}`).not.toContain(forbidden);
     }
-    expect(risks).toContain('vercel[preview].deploy');
-    expect(risks).toContain('vercel[preview].env-var-write');
-    const operator = vercelPlugin.catalog.presets.find((p) => p.id === 'operator')!;
-    const gated = operator.entries.filter((e) => e.gate === 'approval').map((e) => e.risk_id);
+    expect(developer).toContainEqual(
+      expect.objectContaining({ risk_id: 'vercel[preview].deploy', gate: 'auto' }),
+    );
+  });
+
+  test('an operator mission at Confiant asks first for production deploys and configuration', () => {
+    const operator = policyFromMacroActions(
+      vercelPlugin,
+      { watch: 'confiant', deploy: 'confiant', configure: 'confiant', own: 'confiant' },
+      { envs: ['preview', 'development', 'prod'] },
+    );
+    const gated = operator.filter((e) => e.gate === 'approval').map((e) => e.risk_id);
     expect(gated).toEqual(
       expect.arrayContaining([
         'vercel[prod].deploy',
@@ -108,9 +124,9 @@ describe('vercel plugin — structural kit', () => {
         'vercel.env-var-fan-out',
         'vercel.project-settings-write',
         'vercel.domain-write',
-        'vercel.firewall-write',
       ]),
     );
+    expect(gated).not.toContain('vercel[preview].env-var-write');
   });
 
   const p = { projectId: 'prj_abc' };

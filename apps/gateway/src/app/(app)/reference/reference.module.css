@@ -149,12 +149,12 @@
   text-align: left;
   vertical-align: bottom;
 }
-.comparison thead th.presetHead {
+.comparison thead th.cranHead {
   width: 132px;
   text-align: center;
   white-space: nowrap;
 }
-.presetName {
+.cranName {
   display: block;
   color: var(--ink);
   font-size: var(--text-sm);
@@ -213,7 +213,7 @@
 .severityCell {
   white-space: nowrap;
 }
-.presetCell {
+.cranCell {
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -229,9 +229,25 @@
 .limit + .limit {
   margin-top: var(--space-1);
 }
-/* What a link pointed at: the row of a permission, the column of a preset. */
-.comparison .marked {
+/* What a link pointed at: the row of a permission, a macro-action. */
+.comparison .marked,
+.macroItem.marked {
   background: var(--accent-soft);
+}
+.macroList {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+.macroItem {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+}
+.macroItem strong {
+  color: var(--ink);
 }
 .comparison tr.open > th,
 .comparison tr.open > td {
@@ -357,7 +373,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-half);
   }
-  .comparison thead th.presetHead {
+  .comparison thead th.cranHead {
     width: 96px;
   }
 }

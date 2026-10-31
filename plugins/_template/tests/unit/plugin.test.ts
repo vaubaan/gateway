@@ -23,8 +23,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -46,9 +46,8 @@ const staging: Resource = {
 const prod: Resource = { provider: PROVIDER_ID, ref: 'ws-prd', env: 'prod', displayName: 'Prod' };
 
 describe('template plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(templatePlugin);
-    assertPresetsValid(templatePlugin);
     assertNoWildcard(templatePlugin);
   });
 
@@ -133,18 +132,22 @@ describe('template plugin — structural kit', () => {
     expect(manifest).toMatchObject({ version: templatePlugin.version });
   });
 
-  test('presets : explicit risks of this catalog, the fallback in none', () => {
-    const { risks, presets } = templateCatalog.catalog;
-    const fallback = risks.find((r) => r.fallback)?.id;
-    expect(presets?.length).toBeGreaterThan(0);
-    for (const preset of presets ?? []) {
-      expect(preset.entries.length).toBeGreaterThan(0);
-      for (const entry of preset.entries) {
-        expect(entry.risk_id).not.toMatch(/[*?]/);
-        expect(entry.risk_id).not.toBe(fallback);
-        expect(Number.isInteger(entry.quota) && entry.quota > 0).toBe(true);
-      }
-    }
+  // A mission is composed by ticking macro-actions at a trust cran (ADR
+  // macro-actions-and-trust-crans-prefill-the-policy) ; `policyFromMacroActions`
+  // writes the explicit lines the creation form would.
+  test('macro-actions : read runs freely ; at Prudent, prod writes ask first', () => {
+    const policy = policyFromMacroActions(
+      templatePlugin,
+      { read: 'prudent', write: 'prudent' },
+      { envs: ['staging', 'prod'] },
+    );
+    const gates = Object.fromEntries(policy.map((line) => [line.risk_id, line.gate]));
+    expect(gates).toMatchObject({
+      'template.read-widgets': 'auto',
+      'template[staging].widget-write': 'auto',
+      'template[prod].widget-write': 'approval',
+    });
+    expect(Object.keys(gates)).not.toContain(`${PROVIDER_ID}.uncategorized-write`);
   });
 });
 

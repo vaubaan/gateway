@@ -2,7 +2,7 @@
  * Mandatory suite of the `gmail` plugin : the SDK kit (tools, catalog
  * coverage, identifiers), the credential spec (an app password over IMAP),
  * `verify` and `discoverResources` against a fake IMAP transport, resource
- * selection and the presets. No network : the transport is `fakeGmail()`.
+ * selection and the macro-actions. No network : the transport is `fakeGmail()`.
  * Tool by tool, execution is in `execute.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
@@ -22,8 +22,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -136,9 +136,8 @@ const SAMPLES: ToolSamples = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('gmail plugin — SDK kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(gmailPlugin);
-    assertPresetsValid(gmailPlugin);
     assertNoWildcard(gmailPlugin);
   });
 
@@ -165,7 +164,7 @@ describe('gmail plugin — SDK kit', () => {
     // Untouched on purpose : the classifier refuses a draft to an external
     // recipient, and no modelled tool emits a bulk write. Every write of
     // these samples is covered by a specific entry, so the fallback is never
-    // the only match — a preset can therefore grant drafts and labels.
+    // the only match — a macro-action can therefore grant drafts and labels.
     expect(report.risksUntouched).toEqual([
       'gmail.draft-to-zone-external-unbounded',
       'gmail.bulk-label-write',
@@ -173,7 +172,7 @@ describe('gmail plugin — SDK kit', () => {
     expect(report.fallbackHits).toEqual([]);
   });
 
-  test('a write on a sensitive label reaches the fallback, which no preset offers', () => {
+  test('a write on a sensitive label reaches the fallback, which no macro-action offers', () => {
     const exposed = definePlugin({
       ...gmailPlugin,
       tools: gmailClassifiedToolDeclarations.filter((t) => t.name === 'gmail__unlabel_thread'),
@@ -427,64 +426,59 @@ describe('gmail verify and discoverResources', () => {
   });
 });
 // ─────────────────────────────────────────────────────────────────────────────
-// Presets
+// Macro-actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('gmail presets', () => {
-  const preset = (id: string) => {
-    const p = gmailPlugin.catalog.presets?.find((x) => x.id === id);
-    if (!p) throw new Error(`preset ${id} missing`);
-    return p;
-  };
+describe('gmail macro-actions', () => {
   const riskOf = (riskId: string) => gmailPlugin.catalog.risks.find((r) => r.id === riskId)!;
   const isWrite = (riskId: string) => String(riskOf(riskId).matches).endsWith('.W');
+  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(policyFromMacroActions(gmailPlugin, crans).map((l) => [l.risk_id, l.gate]));
 
-  test('ships read-only and developer', () => {
-    expect(gmailPlugin.catalog.presets?.map((p) => p.id)).toEqual(['read-only', 'developer']);
+  test('ships search, draft and tidy', () => {
+    expect(gmailPlugin.catalog.macro_actions?.map((a) => a.id)).toEqual([
+      'search',
+      'draft',
+      'tidy',
+    ]);
     expect(gmailPlugin.catalog.catalog_version).toBe(7);
   });
 
-  test('read-only : reads only, no bulk read, no sensitive label, every entry auto', () => {
-    const entries = preset('read-only').entries;
-    const ids = entries.map((e) => e.risk_id);
-    expect(ids.some(isWrite)).toBe(false);
-    expect(ids).not.toContain('gmail.bulk-read');
-    expect(ids).not.toContain('gmail.read-sensitive-label');
-    expect(ids).toContain('gmail.read-from-zone-unknown');
-    expect(entries.every((e) => e.gate === 'auto')).toBe(true);
+  test('search at Prudent : reads only, every sender zone freely ; bulk and sensitive reads ask first', () => {
+    const g = gates({ search: 'prudent' });
+    expect(Object.keys(g).some(isWrite)).toBe(false);
+    expect(g['gmail.read-from-zone-unknown']).toBe('auto');
+    expect(g['gmail.bulk-read']).toBe('approval');
+    expect(g['gmail.read-sensitive-label']).toBe('approval');
   });
 
-  test('developer : drafts to self / internal / allowlist and single labels auto ; bulk read under approval', () => {
-    const entries = preset('developer').entries;
-    const gate = (id: string) => entries.find((e) => e.risk_id === id)?.gate;
-    expect(gate('gmail.draft-to-zone-self')).toBe('auto');
-    expect(gate('gmail.draft-to-zone-internal')).toBe('auto');
-    expect(gate('gmail.draft-to-zone-allowlist')).toBe('auto');
-    expect(gate('gmail.label-write')).toBe('auto');
-    expect(gate('gmail.bulk-read')).toBe('approval');
-    expect(entries.every((e) => e.risk_id.startsWith('gmail.'))).toBe(true);
+  test('draft and tidy : drafts to self / internal / allowlist and single labels run freely ; bulk labels ask first at Prudent', () => {
+    const g = gates({ draft: 'prudent', tidy: 'prudent' });
+    expect(g['gmail.draft-to-zone-self']).toBe('auto');
+    expect(g['gmail.draft-to-zone-internal']).toBe('auto');
+    expect(g['gmail.draft-to-zone-allowlist']).toBe('auto');
+    expect(g['gmail.label-write']).toBe('auto');
+    expect(g['gmail.bulk-label-write']).toBe('approval');
   });
 
-  test('no preset carries the fallback, the refused draft risk, a risk no tool can touch, a sensitive read or an env qualifier', () => {
-    for (const p of gmailPlugin.catalog.presets ?? []) {
-      const ids = p.entries.map((e) => e.risk_id);
-      expect(ids).not.toContain('gmail.uncategorized-write');
-      expect(ids).not.toContain('gmail.draft-to-zone-external-unbounded');
-      expect(ids).not.toContain('gmail.bulk-label-write');
-      expect(ids).not.toContain('gmail.read-sensitive-label');
-      expect(ids.some((id) => id.includes('['))).toBe(false);
-      for (const e of p.entries) {
-        expect(e.quota).toBeGreaterThan(0);
-        expect(e.rate_limit.max).toBeGreaterThan(0);
-      }
-    }
+  test('no macro-action carries the fallback or the refused draft risk ; no line is env-qualified', () => {
+    const listed = (gmailPlugin.catalog.macro_actions ?? []).flatMap((a) =>
+      a.entries.map((e) => e.risk_id),
+    );
+    expect(listed).not.toContain('gmail.uncategorized-write');
+    expect(listed).not.toContain('gmail.draft-to-zone-external-unbounded');
+    const all = policyFromMacroActions(gmailPlugin, {
+      search: 'autonome',
+      draft: 'autonome',
+      tidy: 'autonome',
+    });
+    expect(all.some((l) => l.risk_id.includes('['))).toBe(false);
   });
 
-  test('read-from-zone-unknown never exceeds the catalog cap of 20 calls per minute', () => {
-    for (const p of gmailPlugin.catalog.presets ?? []) {
-      const e = p.entries.find((x) => x.risk_id === 'gmail.read-from-zone-unknown')!;
-      expect(e.rate_limit.window_seconds).toBe(60);
-      expect(e.rate_limit.max).toBeLessThanOrEqual(20);
-    }
+  test('read-from-zone-unknown starts at 20 calls per minute', () => {
+    const entry = gmailPlugin.catalog.macro_actions
+      ?.flatMap((a) => a.entries)
+      .find((e) => e.risk_id === 'gmail.read-from-zone-unknown');
+    expect(entry?.rate_limit).toEqual({ max: 20, window_seconds: 60 });
   });
 });

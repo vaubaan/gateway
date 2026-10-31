@@ -91,7 +91,7 @@ describe('parseMissionDraft', () => {
     connections: [
       {
         provider: 'github',
-        preset: 'developer',
+        crans: { read: 'confiant', propose: 'prudent' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
         policy: [{ risk_id: 'github.code-read', quota: 5, gate: 'approval' }],
       },
@@ -104,6 +104,27 @@ describe('parseMissionDraft', () => {
     const parsed = parseMissionDraft(valid);
     expect(parsed.ok).toBe(true);
     expect(parsed.ok && parsed.draft.connections[0]?.policy?.[0]?.gate).toBe('approval');
+    expect(parsed.ok && parsed.draft.connections[0]?.crans).toEqual({
+      read: 'confiant',
+      propose: 'prudent',
+    });
+  });
+
+  it('accepts the built-in everything-i-hold in place of crans', () => {
+    const parsed = parseMissionDraft({
+      ...valid,
+      connections: [{ provider: 'github', preset: 'everything-i-hold' }],
+    });
+    expect(parsed.ok && parsed.draft.connections[0]?.preset).toBe('everything-i-hold');
+  });
+
+  it('refuses a cran that is not one of the three', () => {
+    const parsed = parseMissionDraft({
+      ...valid,
+      connections: [{ provider: 'github', crans: { read: 'reckless' } }],
+    });
+    expect(parsed.ok).toBe(false);
+    expect(!parsed.ok && parsed.problems.join(' ')).toContain('connections.0.crans');
   });
 
   it('refuses unknown keys, so a typo never drops a restriction silently', () => {

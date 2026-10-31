@@ -1,7 +1,7 @@
 /**
  * Mandatory suite of the `supabase` plugin : the SDK kit, the credential
  * spec, `execute` and `discoverResources` against `mockFetch`,
- * and the presets. No network : an unmatched request fails the test.
+ * and the macro-actions. No network : an unmatched request fails the test.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -16,8 +16,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -71,9 +71,8 @@ const textOf = (result: { content: readonly unknown[] }) =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('supabase plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(supabasePlugin);
-    assertPresetsValid(supabasePlugin);
     assertNoWildcard(supabasePlugin);
   });
 
@@ -258,53 +257,68 @@ describe('supabase plugin — structural kit', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Presets
+// Macro-actions
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('supabase presets', () => {
-  const preset = (id: string) => {
-    const p = supabasePlugin.catalog.presets?.find((x) => x.id === id);
-    if (!p) throw new Error(`preset ${id} missing`);
-    return p;
-  };
+describe('supabase macro-actions', () => {
+  const ALL = {
+    query: 'autonome',
+    'change-data': 'autonome',
+    'change-schema': 'autonome',
+    'ship-functions': 'autonome',
+    administer: 'autonome',
+  } as const;
   const isWrite = (riskId: string) =>
     supabasePlugin.catalog.risks.find((r) => r.id === riskId.replace(/\[[a-z-]+\]/, ''))!
       .matches === 'supabase.**.W' || /write|deploy|generate-link/.test(riskId);
 
-  test('ships read-only-analyst, staging-developer and migration-operator', () => {
-    expect(supabasePlugin.catalog.presets?.map((p) => p.id)).toEqual([
-      'read-only-analyst',
-      'staging-developer',
-      'migration-operator',
+  test('ships query, change-data, change-schema, ship-functions and administer ; the fallback in none', () => {
+    const actions = supabasePlugin.catalog.macro_actions ?? [];
+    expect(actions.map((a) => a.id)).toEqual([
+      'query',
+      'change-data',
+      'change-schema',
+      'ship-functions',
+      'administer',
     ]);
+    for (const a of actions) {
+      expect(a.entries.map((e) => e.risk_id)).not.toContain('supabase.uncategorized-write');
+    }
   });
 
-  test('read-only-analyst accepts no write and no PII user listing', () => {
-    const ids = preset('read-only-analyst').entries.map((e) => e.risk_id);
-    expect(ids.some(isWrite)).toBe(false);
-    expect(ids).not.toContain('supabase.auth.read-users');
+  test('query, at any cran and in any environment, accepts no write', () => {
+    const lines = policyFromMacroActions(
+      supabasePlugin,
+      { query: 'autonome' },
+      { envs: ['preview', 'staging', 'prod'] },
+    );
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.map((l) => l.risk_id).some(isWrite)).toBe(false);
   });
 
-  test('staging-developer writes only on staging, never carries the fallback, never touches prod', () => {
-    const entries = preset('staging-developer').entries;
-    const writes = entries.filter((e) => isWrite(e.risk_id));
+  test('every write is env-scoped : a staging mission writes on staging only, never the fallback', () => {
+    const lines = policyFromMacroActions(supabasePlugin, ALL, { envs: ['staging'] });
+    const writes = lines.filter((l) => isWrite(l.risk_id));
     expect(writes.length).toBeGreaterThan(5);
-    for (const e of writes) expect(e.risk_id.startsWith('supabase[staging].')).toBe(true);
-    expect(entries.some((e) => e.risk_id.includes('uncategorized-write'))).toBe(false);
-    expect(entries.some((e) => e.risk_id.includes('[prod]'))).toBe(false);
-    expect(entries.every((e) => e.gate === 'auto')).toBe(true);
+    for (const l of writes) expect(l.risk_id.startsWith('supabase[staging].')).toBe(true);
+    expect(lines.some((l) => l.risk_id.includes('[prod]'))).toBe(false);
+    // Without an environment, nothing is written.
+    expect(policyFromMacroActions(supabasePlugin, ALL).some((l) => isWrite(l.risk_id))).toBe(false);
   });
 
-  test('migration-operator gates every prod entry on approval and keeps bulk writes off prod', () => {
-    const entries = preset('migration-operator').entries;
-    const prodEntries = entries.filter((e) => e.risk_id.includes('[prod]'));
-    expect(prodEntries.map((e) => e.risk_id)).toEqual([
-      'supabase[prod].migration-write',
-      'supabase[prod].policy-write',
-    ]);
-    expect(entries.some((e) => e.risk_id.includes('uncategorized-write'))).toBe(false);
-    for (const e of prodEntries) expect(e.gate).toBe('approval');
-    expect(entries.some((e) => e.risk_id === 'supabase[prod].bulk-row-write')).toBe(false);
+  test('a prod migration asks first at Prudent and Confiant ; no cran writes bulk rows on prod', () => {
+    for (const cran of ['prudent', 'confiant'] as const) {
+      const lines = policyFromMacroActions(
+        supabasePlugin,
+        { 'change-schema': cran },
+        { envs: ['prod'] },
+      );
+      const gate = (id: string) => lines.find((l) => l.risk_id === id)?.gate;
+      expect(gate('supabase[prod].migration-write'), cran).toBe('approval');
+      expect(gate('supabase[prod].policy-write'), cran).toBe('approval');
+    }
+    const lines = policyFromMacroActions(supabasePlugin, ALL, { envs: ['prod'] });
+    expect(lines.map((l) => l.risk_id).filter((id) => /bulk/.test(id))).toEqual([]);
   });
 
   test('bulk risks are structurally not grantable on prod', () => {

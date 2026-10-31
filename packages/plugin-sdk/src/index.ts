@@ -2,8 +2,8 @@
  * `@vaubaan/plugin-sdk` — everything a provider plugin needs, and nothing
  * from the gateway application.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5 (plugins), §3.2 (presets), §10
- *        (structural tests) ; docs/spec/gateway-risk-model.md §7.
+ * Spec : docs/spec/vaubaan-gateway.md §5 (plugins), §10 (structural tests) ;
+ *        docs/spec/gateway-risk-model.md §4.6 (macro-actions), §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/plugin-sdk.md.
  *
@@ -37,8 +37,6 @@ export type {
   McpToolContent,
   McpToolDeclaration,
   McpToolResult,
-  Preset,
-  PresetEntry,
   Resource,
   RiskCatalog,
   RiskEntry,

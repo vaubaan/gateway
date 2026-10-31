@@ -98,14 +98,14 @@ describe('previewDraft — authority (monotonicity)', () => {
   });
 
   it('answers the same for a connection that does not exist and one the creator holds nothing on', () => {
-    const p = preview([{ connection_id: 'conn-of-someone-else', preset: 'reader' }]);
+    const p = preview([{ connection_id: 'conn-of-someone-else', crans: { read: 'prudent' } }]);
     expect(codes(p)).toEqual(['connection-unknown']);
     expect(p.connections).toEqual([]);
   });
 
   it('refuses a connection that is not active', () => {
     const p = preview(
-      [{ connection_id: 'conn-acme', preset: 'reader' }],
+      [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
       [acmeConnection({ status: 'expired' })],
     );
     expect(codes(p)).toEqual(['connection-unavailable']);
@@ -143,7 +143,7 @@ describe('previewDraft — partition per connection', () => {
       },
     ],
     authority: [],
-    presets: [],
+    write_token_risks: [],
   });
 
   it('checks each partition against the authority on its own connection', () => {
@@ -193,14 +193,14 @@ describe('previewDraft — partition per connection', () => {
   it('refuses the same connection twice and two connections of one provider', () => {
     const second = acmeConnection({ id: 'conn-acme-2', display_name: 'Acme second' });
     const twice = preview([
-      { connection_id: 'conn-acme', preset: 'reader' },
-      { connection_id: 'conn-acme', preset: 'reader' },
+      { connection_id: 'conn-acme', crans: { read: 'prudent' } },
+      { connection_id: 'conn-acme', crans: { read: 'prudent' } },
     ]);
     expect(codes(twice)).toEqual(['duplicate-connection']);
     const sameProvider = preview(
       [
-        { connection_id: 'conn-acme', preset: 'reader' },
-        { connection_id: 'conn-acme-2', preset: 'reader' },
+        { connection_id: 'conn-acme', crans: { read: 'prudent' } },
+        { connection_id: 'conn-acme-2', crans: { read: 'prudent' } },
       ],
       [acmeConnection(), second],
     );
@@ -215,24 +215,24 @@ describe('previewDraft — partition per connection', () => {
   });
 
   it('resolves a connection named by provider, and refuses an ambiguous one', () => {
-    const byProvider = preview([{ provider: 'acme', preset: 'reader' }]);
+    const byProvider = preview([{ provider: 'acme', crans: { read: 'prudent' } }]);
     expect(byProvider.ok).toBe(true);
     expect(byProvider.resolved[0]?.connection_id).toBe('conn-acme');
     const ambiguous = preview(
-      [{ provider: 'acme', preset: 'reader' }],
+      [{ provider: 'acme', crans: { read: 'prudent' } }],
       [acmeConnection(), acmeConnection({ id: 'conn-acme-2' })],
     );
     expect(codes(ambiguous)).toEqual(['connection-ambiguous']);
-    expect(codes(preview([{ provider: 'nope', preset: 'reader' }]))).toEqual([
+    expect(codes(preview([{ provider: 'nope', crans: { read: 'prudent' } }]))).toEqual([
       'connection-unknown',
     ]);
-    expect(codes(preview([{ preset: 'reader' }]))).toEqual(['connection-unknown']);
+    expect(codes(preview([{ crans: { read: 'prudent' } }]))).toEqual(['connection-unknown']);
   });
 });
 
 describe('previewDraft — resource selection', () => {
   it('resolves "all" to the explicit list known now', () => {
-    const p = preview([{ connection_id: 'conn-acme', preset: 'reader' }]);
+    const p = preview([{ connection_id: 'conn-acme', crans: { read: 'prudent' } }]);
     expect(p.resolved[0]?.resources).toEqual({
       scope: 'selected',
       resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
@@ -243,7 +243,7 @@ describe('previewDraft — resource selection', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
-        preset: 'reader',
+        crans: { read: 'prudent' },
         resources: {
           scope: 'selected',
           resource_ids: ['res-scratch'],
@@ -260,7 +260,7 @@ describe('previewDraft — resource selection', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
-        preset: 'reader',
+        crans: { read: 'prudent' },
         resources: { scope: 'selected', resource_ids: ['res-app-prod', 'res-of-another'] },
       },
     ]);
@@ -270,14 +270,14 @@ describe('previewDraft — resource selection', () => {
 
   it('refuses an empty selection', () => {
     const p = preview([
-      { connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'selected' } },
+      { connection_id: 'conn-acme', crans: { read: 'prudent' }, resources: { scope: 'selected' } },
     ]);
     expect(codes(p)).toEqual(['no-resource-selected']);
   });
 
   it('leaves hidden and stale resources out of "all"', () => {
     const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
-    const p = preview([{ connection_id: 'conn-acme', preset: 'reader' }], [curated]);
+    const p = preview([{ connection_id: 'conn-acme', crans: { read: 'prudent' } }], [curated]);
     expect(p.ok).toBe(true);
     expect(idsOf(p.resolved[0])).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
     expect(p.connections[0]?.resources_total).toBe(3);
@@ -289,7 +289,7 @@ describe('previewDraft — resource selection', () => {
       [
         {
           connection_id: 'conn-acme',
-          preset: 'reader',
+          crans: { read: 'prudent' },
           resources: { scope: 'selected', resource_refs: ['app-prod', 'archive'] },
         },
       ],
@@ -303,7 +303,7 @@ describe('previewDraft — resource selection', () => {
       [
         {
           connection_id: 'conn-acme',
-          preset: 'reader',
+          crans: { read: 'prudent' },
           resources: { scope: 'selected', resource_ids: ['res-app-prod', 'res-gone'] },
         },
       ],
@@ -318,7 +318,7 @@ describe('previewDraft — resource selection', () => {
     const own = { ...ACME_RESOURCES[1]!, id: 'res-self', ref: 'gateway-host', self: true };
     const withSelf = acmeConnection({ resources: [...ACME_RESOURCES, own] });
 
-    const all = preview([{ connection_id: 'conn-acme', preset: 'reader' }], [withSelf]);
+    const all = preview([{ connection_id: 'conn-acme', crans: { read: 'prudent' } }], [withSelf]);
     expect(all.ok).toBe(true);
     expect(idsOf(all.resolved[0])).not.toContain('res-self');
     expect(all.connections[0]?.resources_total).toBe(3);
@@ -328,7 +328,7 @@ describe('previewDraft — resource selection', () => {
       { scope: 'selected', resource_refs: ['app-prod', 'gateway-host'] },
     ] as const) {
       const picked = preview(
-        [{ connection_id: 'conn-acme', preset: 'reader', resources }],
+        [{ connection_id: 'conn-acme', crans: { read: 'prudent' }, resources }],
         [withSelf],
       );
       expect(picked.ok).toBe(false);
@@ -341,7 +341,7 @@ describe('previewDraft — resource selection', () => {
       [
         {
           connection_id: 'conn-acme',
-          preset: 'reader',
+          crans: { read: 'prudent' },
           resources: { scope: 'selected', resource_ids: ['res-self'] },
         },
       ],
@@ -368,7 +368,7 @@ describe('previewDraft — resource selection', () => {
 
   it('lets a connection with no known resource through with an empty list', () => {
     const p = preview(
-      [{ connection_id: 'conn-acme', preset: 'reader' }],
+      [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
       [acmeConnection({ resources: [] })],
     );
     expect(p.ok).toBe(true);
@@ -477,166 +477,137 @@ describe('previewDraft — budget is mandatory', () => {
   });
 });
 
-describe('previewDraft — presets', () => {
-  it('applies a preset as the explicit enumeration of its entries', () => {
-    const p = preview([{ connection_id: 'conn-acme', preset: 'developer' }]);
+describe('previewDraft — macro-actions at a cran', () => {
+  it('writes the explicit lines of the ticked macro-actions, gate from the palier, budget from the cran', () => {
+    const p = preview([
+      { connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } },
+    ]);
     expect(p.ok).toBe(true);
-    expect(p.connections[0]?.preset).toEqual({ id: 'developer', label: 'Developer' });
+    expect(p.connections[0]?.preset).toBeNull();
+    expect(p.connections[0]?.crans).toEqual({ read: 'prudent', change: 'confiant' });
     expect(p.policy).toEqual([
       {
         risk_id: 'acme.read',
-        quota: 1000,
-        rate_limit: { max: 120, window_seconds: 60 },
+        quota: 100,
+        rate_limit: { max: 60, window_seconds: 60 },
         gate: 'auto',
       },
       {
         risk_id: 'acme[staging].write',
-        quota: 200,
-        rate_limit: { max: 30, window_seconds: 60 },
-        gate: 'auto',
+        quota: 300,
+        rate_limit: { max: 180, window_seconds: 60 },
+        gate: 'approval',
+      },
+      {
+        risk_id: 'acme[prod].write',
+        quota: 300,
+        rate_limit: { max: 180, window_seconds: 60 },
+        gate: 'approval',
       },
       {
         risk_id: 'acme[staging].bulk-delete',
-        quota: 5,
-        rate_limit: { max: 1, window_seconds: 60 },
+        quota: 15,
+        rate_limit: { max: 3, window_seconds: 60 },
         gate: 'approval',
       },
     ]);
   });
 
-  it('intersects a preset with the authority and reports what it left out', () => {
+  it('leaves out what the cran does not accept, and says so', () => {
+    const p = preview([{ connection_id: 'conn-acme', crans: { change: 'prudent' } }]);
+    expect(p.ok).toBe(true);
+    expect(p.policy.map((e) => [e.risk_id, e.gate])).toEqual([
+      ['acme[staging].write', 'approval'],
+      ['acme[prod].write', 'approval'],
+    ]);
+    expect(p.connections[0]?.left_out).toEqual([
+      { risk_id: 'acme[staging].bulk-delete', reason: 'cran', env: 'staging' },
+    ]);
+  });
+
+  it('intersects the crans with the authority and reports what they left out', () => {
     const p = preview(
-      [{ connection_id: 'conn-acme', preset: 'developer' }],
+      [{ connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } }],
       [acmeConnection({ authority: ['acme.read', 'acme[staging].write'] })],
     );
     expect(p.ok).toBe(true);
     expect(p.policy.map((e) => e.risk_id)).toEqual(['acme.read', 'acme[staging].write']);
-    expect(p.connections[0]?.skipped_from_preset).toEqual([
+    expect(p.connections[0]?.left_out).toEqual([
+      { risk_id: 'acme[prod].write', reason: 'outside-authority', env: 'prod' },
       { risk_id: 'acme[staging].bulk-delete', reason: 'outside-authority', env: 'staging' },
     ]);
   });
 
-  it('leaves out the preset entries no selected resource can resolve', () => {
+  it('leaves out the lines no selected resource can resolve', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
-        preset: 'developer',
+        crans: { read: 'prudent', change: 'confiant' },
         resources: { scope: 'selected', resource_refs: ['app-prod'] },
       },
     ]);
     expect(p.ok).toBe(true);
-    expect(p.policy.map((e) => e.risk_id)).toEqual(['acme.read']);
-    expect(p.connections[0]?.skipped_from_preset.map((s) => s.reason)).toEqual([
-      'unresolvable-env',
-      'unresolvable-env',
+    expect(p.policy.map((e) => e.risk_id)).toEqual(['acme.read', 'acme[prod].write']);
+    expect(p.connections[0]?.left_out.map((s) => [s.risk_id, s.reason])).toEqual([
+      ['acme[staging].write', 'unresolvable-env'],
+      ['acme[staging].bulk-delete', 'unresolvable-env'],
     ]);
-  });
-
-  it('expands a base id of an env-scoped risk into one explicit entry per selected env', () => {
-    const both = preview([{ connection_id: 'conn-acme', preset: 'writer' }]);
-    expect(both.ok).toBe(true);
-    expect(both.policy.map((e) => e.risk_id)).toEqual(['acme[staging].write', 'acme[prod].write']);
-    expect(both.policy.every((e) => e.quota === 50)).toBe(true);
-
-    const prodOnly = preview([
-      {
-        connection_id: 'conn-acme',
-        preset: 'writer',
-        resources: { scope: 'selected', resource_refs: ['app-prod'] },
-      },
-    ]);
-    expect(prodOnly.policy.map((e) => e.risk_id)).toEqual(['acme[prod].write']);
 
     const noLabel = preview([
       {
         connection_id: 'conn-acme',
-        preset: 'writer',
+        crans: { change: 'confiant' },
         resources: { scope: 'selected', resource_refs: ['scratch'] },
       },
     ]);
     expect(codes(noLabel)).toEqual(['no-accepted-risk']);
-    expect(noLabel.connections[0]?.skipped_from_preset).toEqual([
-      { risk_id: 'acme.write', reason: 'unresolvable-env', env: null },
-    ]);
   });
 
-  it('never persists the base id of an env-scoped risk, and uses it as a budget default', () => {
-    const explicitBase = preview([
-      { connection_id: 'conn-acme', policy: [{ risk_id: 'acme.write', ...BUDGET }] },
-    ]);
-    expect(codes(explicitBase)).toEqual(['unknown-risk']);
-    const inherited = preview([
-      { connection_id: 'conn-acme', preset: 'writer', policy: [{ risk_id: 'acme[prod].write' }] },
-    ]);
-    expect(inherited.policy).toEqual([
-      {
-        risk_id: 'acme[prod].write',
-        quota: 50,
-        rate_limit: { max: 10, window_seconds: 60 },
-        gate: 'auto',
-      },
-    ]);
+  it('pre-fills a write-token risk asking first at every cran', () => {
+    const p = preview(
+      [{ connection_id: 'conn-acme', crans: { read: 'autonome' } }],
+      [acmeConnection({ write_token_risks: ['acme.read'] })],
+    );
+    expect(p.policy.map((e) => [e.risk_id, e.gate])).toEqual([['acme.read', 'approval']]);
   });
 
-  it('lets an explicit entry override the preset risk by risk, and inherit what it omits', () => {
+  it('beside explicit lines the crans decide nothing: the lines are the policy, each with its budget', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
-        preset: 'developer',
-        policy: [
-          { risk_id: 'acme.read', quota: 3 },
-          { risk_id: 'acme[staging].write', gate: 'approval' },
-          { risk_id: 'acme[staging].bulk-delete' },
-        ],
-      },
-    ]);
-    expect(p.ok).toBe(true);
-    expect(p.policy).toEqual([
-      {
-        risk_id: 'acme.read',
-        quota: 3,
-        rate_limit: { max: 120, window_seconds: 60 },
-        gate: 'auto',
-      },
-      {
-        risk_id: 'acme[staging].write',
-        quota: 200,
-        rate_limit: { max: 30, window_seconds: 60 },
-        gate: 'approval',
-      },
-      {
-        risk_id: 'acme[staging].bulk-delete',
-        quota: 5,
-        rate_limit: { max: 1, window_seconds: 60 },
-        gate: 'approval',
-      },
-    ]);
-  });
-
-  it('accepts exactly the explicit entries: a preset risk left out is not accepted', () => {
-    const p = preview([
-      { connection_id: 'conn-acme', preset: 'developer', policy: [{ risk_id: 'acme.read' }] },
-    ]);
-    expect(p.policy.map((e) => e.risk_id)).toEqual(['acme.read']);
-  });
-
-  it('gives no budget to a risk the preset does not carry', () => {
-    const p = preview([
-      {
-        connection_id: 'conn-acme',
-        preset: 'reader',
-        policy: [{ risk_id: 'acme.read' }, { risk_id: 'acme.admin' }],
+        crans: { read: 'prudent', change: 'confiant' },
+        policy: [{ risk_id: 'acme.read', ...BUDGET, gate: 'approval' }, { risk_id: 'acme.admin' }],
       },
     ]);
     expect(codes(p)).toEqual(['missing-budget']);
-    expect(p.issues[0]?.risk_ids).toEqual(['acme.admin']);
+    expect(p.connections[0]?.missing_budget).toEqual(['acme.admin']);
+    expect(p.connections[0]?.passes).toEqual([
+      { risk_id: 'acme.read', ...BUDGET, gate: 'approval' },
+    ]);
+    expect(p.connections[0]?.left_out).toEqual([]);
+    // Kept to redraw the form.
+    expect(p.connections[0]?.crans).toEqual({ read: 'prudent', change: 'confiant' });
   });
 
-  it('refuses an unknown preset, a repeated risk and a connection that accepts nothing', () => {
-    expect(codes(preview([{ connection_id: 'conn-acme', preset: 'nope' }]))).toEqual([
+  it('refuses a preset, an unknown macro-action, a repeated risk and a connection that accepts nothing', () => {
+    expect(codes(preview([{ connection_id: 'conn-acme', preset: 'developer' }]))).toEqual([
       'unknown-preset',
       'no-accepted-risk',
     ]);
+    expect(codes(preview([{ connection_id: 'conn-acme', crans: { deploy: 'prudent' } }]))).toEqual([
+      'unknown-macro-action',
+      'no-accepted-risk',
+    ]);
+    // Beside explicit lines an unknown macro-action only redraws nothing: it is dropped.
+    const beside = preview([
+      {
+        connection_id: 'conn-acme',
+        crans: { deploy: 'prudent' },
+        policy: [{ risk_id: 'acme.read', ...BUDGET }],
+      },
+    ]);
+    expect(beside.ok).toBe(true);
+    expect(beside.connections[0]?.crans).toEqual({});
     expect(
       codes(
         preview([
@@ -654,7 +625,7 @@ describe('previewDraft — presets', () => {
     expect(
       codes(
         preview(
-          [{ connection_id: 'conn-acme', preset: 'reader' }],
+          [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
           [acmeConnection({ authority: ['acme.admin'] })],
         ),
       ),
@@ -663,7 +634,7 @@ describe('previewDraft — presets', () => {
 });
 
 describe('previewDraft — name, period, expiry', () => {
-  const one: DraftConnection[] = [{ connection_id: 'conn-acme', preset: 'reader' }];
+  const one: DraftConnection[] = [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }];
 
   it('needs a name and at least one connection', () => {
     expect(codes(preview(one, undefined, { name: '   ' }))).toEqual(['name-missing']);
@@ -718,7 +689,10 @@ describe('previewDraft — name, period, expiry', () => {
 
 describe('previewConnection', () => {
   it('is the same decision the whole-draft preview makes for one connection', () => {
-    const draft: DraftConnection = { connection_id: 'conn-acme', preset: 'developer' };
+    const draft: DraftConnection = {
+      connection_id: 'conn-acme',
+      crans: { read: 'prudent', change: 'confiant' },
+    };
     const single = previewConnection(acmeConnection(), draft);
     expect(single.issues).toEqual([]);
     expect(single.preview).toEqual(preview([draft]).connections[0]);
@@ -726,7 +700,9 @@ describe('previewConnection', () => {
 });
 
 describe('previewDraft — notices (never blocking)', () => {
-  const all = [{ connection_id: 'conn-acme', preset: 'developer' }] as const;
+  const all: DraftConnection[] = [
+    { connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } },
+  ];
 
   it('names the selected resources that carry no environment label and what it costs', () => {
     const p = preview(all);
@@ -737,7 +713,7 @@ describe('previewDraft — notices (never blocking)', () => {
       {
         code: 'resource-without-env',
         resource_refs: ['scratch'],
-        risk_ids: ['acme[staging].write', 'acme[staging].bulk-delete'],
+        risk_ids: ['acme[staging].write', 'acme[prod].write', 'acme[staging].bulk-delete'],
         connection_index: 0,
         connection_id: 'conn-acme',
       },
@@ -752,7 +728,7 @@ describe('previewDraft — notices (never blocking)', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
-        preset: 'developer',
+        crans: { read: 'prudent', change: 'confiant' },
         resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
       },
     ]);
@@ -798,7 +774,13 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
   it('is judged on the resources known now and resolved as the scope, not as a list', () => {
     const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
     const p = preview(
-      [{ connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'connection' } }],
+      [
+        {
+          connection_id: 'conn-acme',
+          crans: { read: 'prudent' },
+          resources: { scope: 'connection' },
+        },
+      ],
       [curated],
     );
     expect(p.ok).toBe(true);
@@ -816,7 +798,13 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
   it('passes on a connection with no resource yet: later ones will be reached', () => {
     const empty = acmeConnection({ resources: [] });
     const p = preview(
-      [{ connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'connection' } }],
+      [
+        {
+          connection_id: 'conn-acme',
+          crans: { read: 'prudent' },
+          resources: { scope: 'connection' },
+        },
+      ],
       [empty],
     );
     expect(p.ok).toBe(true);
@@ -854,7 +842,13 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
       acmeConnection({ default_env: 'staging' }),
     ]) {
       const p = preview(
-        [{ connection_id: 'conn-acme', preset: 'reader', resources: { scope: 'connection' } }],
+        [
+          {
+            connection_id: 'conn-acme',
+            crans: { read: 'prudent' },
+            resources: { scope: 'connection' },
+          },
+        ],
         [connection],
       );
       expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');
@@ -862,7 +856,7 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
   });
 
   it('`all` stays the list known now: no later resource, no notice about one', () => {
-    const p = preview([{ connection_id: 'conn-acme', preset: 'reader' }]);
+    const p = preview([{ connection_id: 'conn-acme', crans: { read: 'prudent' } }]);
     expect(p.connections[0]?.reaches_later).toBe(false);
     expect(p.resolved[0]?.resources.scope).toBe('selected');
     expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');

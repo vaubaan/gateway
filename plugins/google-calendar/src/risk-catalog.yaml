@@ -21,9 +21,11 @@
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: google-calendar
-catalog_version: 2
-catalog_date: 2026-10-30
+catalog_version: 3
+catalog_date: 2026-10-31
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -194,7 +196,7 @@ risks:
     reason: >-
       Catch-all for writes no entry above covers; none of the offered tools
       reaches it today. A tool Google adds is not offered until it is
-      modelled. Never offered in a preset.
+      modelled. In no macro-action.
     matches: 'google-calendar.**.W'
     fallback: true
     vector:
@@ -205,8 +207,6 @@ risks:
       visibility: public
       persistence: session
 
-# Presets are default suggestions copied into a mission policy at issuance
-# (spec §3.2). Deliberately in no preset: the fallback.
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
@@ -254,66 +254,3 @@ macro_actions:
       - risk_id: google-calendar.notify-guests
         quota: 50
         rate_limit: { max: 5, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: List the calendars, read and search their events and see when people are free. Nothing is changed and nobody is emailed.
-    entries:
-      - risk_id: google-calendar.calendar-list
-        quota: 500
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.event-read
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.free-busy-read
-        quota: 300
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-
-  - id: assistant
-    label: Assistant
-    description: Run the agenda like an assistant. Reading, creating and moving events, answering invitations, inviting colleagues and telling the guests of a change run freely; deleting an event and inviting anyone outside the company ask first.
-    entries:
-      - risk_id: google-calendar.calendar-list
-        quota: 500
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.event-read
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.free-busy-read
-        quota: 300
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.event-create
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.event-change
-        quota: 200
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.event-respond
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.invite-internal
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.notify-guests
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: auto
-      - risk_id: google-calendar.event-delete
-        quota: 30
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: google-calendar.invite-external
-        quota: 30
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval

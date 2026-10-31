@@ -76,5 +76,5 @@ Resource: the project; the environment is a slice segment, not a resource label.
   `could not be verified` → another team, deleted, or a custom domain: use the deployment id or its
   `*.vercel.app` URL.
 - `teamId is fixed by the connection` → omit `teamId`.
-- `get_firewall_config` or `deploy_to_vercel` refused under `developer` → by design: nothing
-  production in that preset.
+- `get_firewall_config` or `deploy_to_vercel` refused on a mission without `watch`, or without
+  `vercel[prod].deploy` → by design: the mission holds no such line.

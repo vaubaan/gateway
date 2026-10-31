@@ -129,7 +129,7 @@ describe('management door — hard deny, on the object graph of the real root', 
     expect(await port.list({ id: 'nobody' })).toEqual([]);
   });
 
-  it('the catalog port is data: ids, labels and presets of every shipped plugin, and no plugin', () => {
+  it('the catalog port is data: ids, labels and macro-actions of every shipped plugin, and no plugin', () => {
     const catalog = managementCatalogOf(root.registry);
     expect([...catalog.providers()]).toEqual([...root.registry.ids]);
     const reached = reachableFrom(catalog.get('github'));
@@ -137,6 +137,7 @@ describe('management door — hard deny, on the object graph of the real root', 
       expect(reached.has(root.registry.require(id).plugin), id).toBe(false);
     }
     expect(catalog.get('github')?.risks.length).toBeGreaterThan(5);
+    expect(catalog.get('github')?.macro_actions.map((a) => a.id)).toContain('anything-else');
     expect(catalog.get('nope')).toBeNull();
     for (const object of reached) expect(typeof object).not.toBe('function');
   });

@@ -208,7 +208,7 @@ export class ManagementTools {
   /**
    * The connections the user may build a mission from — the ones they own and
    * the ones shared with them, directly or through a group — each with its
-   * exact restriction, its resources and its presets.
+   * exact restriction, its resources and its macro-actions.
    */
   async listMyConnections(actor: ManagementActor): Promise<ToolOutcome<ConnectionsAnswer>> {
     const context = await this.deps.missions.issuanceContext({ id: actor.userId });
@@ -216,7 +216,7 @@ export class ManagementTools {
   }
 
   /**
-   * One provider's risk catalog as explicit ids, with its presets. With a
+   * One provider's risk catalog as explicit ids, with its macro-actions. With a
    * connection of the user, each id says whether their authority covers it.
    */
   async getCatalog(

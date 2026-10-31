@@ -16,17 +16,17 @@ SDK handbook: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md)
 
 ## Files
 
-| File                        | What goes in it                                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency. |
-| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.   |
-| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                  |
-| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and at least one preset.          |
-| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.              |
-| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.        |
-| `src/execute.ts`            | The calls to the provider with the credential the gateway hands over, and `discoverResources`.                      |
-| `src/index.ts`              | `definePlugin({...})`: the wiring, the `CredentialSpec`, the default export the gateway registers.                  |
-| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, presets, no wildcard), the classifier cases, `execute` against `mockFetch`.     |
+| File                        | What goes in it                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency.                  |
+| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.                    |
+| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                                   |
+| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and the macro-actions.                             |
+| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.                               |
+| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.                         |
+| `src/execute.ts`            | The calls to the provider with the credential the gateway hands over, and `discoverResources`.                                       |
+| `src/index.ts`              | `definePlugin({...})`: the wiring, the `CredentialSpec`, the default export the gateway registers.                                   |
+| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, no wildcard), a mission from macro-actions, the classifier cases, `execute` against `mockFetch`. |
 
 ## Data model
 
@@ -71,33 +71,37 @@ character is refused before classification and before any call.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 1: three named risks and the fallback.
+`src/risk-catalog.yaml`, version 3: three named risks and the fallback.
 
 | Risk                           | Action | Notes                                                                                    |
 | ------------------------------ | ------ | ---------------------------------------------------------------------------------------- |
 | `template.read-widgets`        | R      | Every widget read.                                                                       |
 | `template.widget-write`        | W      | Every widget write, deletions included (`widget[**].W`). Env-scoped (`staging`, `prod`). |
 | `template.widget-delete`       | W      | The `delete` leaf. Env-scoped. Irreversible.                                             |
-| `template.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool of the plugin, in no preset.             |
+| `template.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool of the plugin, in no macro-action.       |
 
 Writes are layered: a deletion touches `widget-write` and `widget-delete`,
 and a mission needs both.
 
-## Presets
+## Macro-actions
 
-| Preset      | Scope                                                                                 |
-| ----------- | ------------------------------------------------------------------------------------- |
-| `reader`    | `read-widgets`, `auto`.                                                               |
-| `developer` | Reads; `widget-write` and `widget-delete` on staging `auto`, on prod with `approval`. |
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome),
+risk model §4.6: the cran sets each risk's gate from its vector and scales its
+base budget; the mission stores the explicit lines.
 
-Presets are a shortcut of the New mission form: the mission that is saved holds
-the explicit list of risks, never a reference to the preset.
+| Macro-action | What it covers                     | Its risks                                         |
+| ------------ | ---------------------------------- | ------------------------------------------------- |
+| `read`       | Read widgets.                      | `template.read-widgets`                           |
+| `write`      | Create, modify and delete widgets. | `template.widget-write`, `template.widget-delete` |
+
+The gateway adds "Anything else", holding the fallback.
 
 ## Tests
 
 `npx vitest run plugins/_template` — 26 tests: the SDK kit
-(`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`, and `assertIdentifiersRefused` on the same samples),
+(`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`, and
+`assertIdentifiersRefused` on the same samples), a mission written from the
+macro-actions (`policyFromMacroActions`),
 the version and default-export check, the classifier
 branch by branch (refusals, path-safe identifiers and the risks a deletion
 touches included), `execute` and

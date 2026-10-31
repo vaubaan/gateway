@@ -27,8 +27,7 @@ provider, written by the plugin author and reviewed like code.
 
 - **Plugin** (per provider): a data model (§2) and a classifier,
   `(tool, arguments, resources) → slices`.
-- **Catalog** (per provider, static, versioned): risk entries, one fallback, macro-actions,
-  presets (§4).
+- **Catalog** (per provider, static, versioned): risk entries, one fallback, macro-actions (§4).
 - **Mission policy** (per mission): `RiskId → (budget, gate)`; the keys are the accepted risks.
 - **Decision** (per call): (1) slices = classify; (2) risks touched = the entries those slices
   match, each qualified by the environment of its slice; (3) risks touched ⊆ accepted risks, else
@@ -125,7 +124,7 @@ Six axes, each a closed scale from mildest to most severe:
 - `visibility`: `internal` · `team` · `public`
 - `persistence`: `stateless` · `session` · `posture`
 
-The vector **explains** and **orders** risks, and gives each entry its **palier** (§4.7), which only
+The vector **explains** and **orders** risks, and gives each entry its **palier** (§4.6), which only
 pre-fills a gate in the creation form. No runtime decision is derived from it.
 
 ### 4.3 The fallback entry
@@ -134,7 +133,7 @@ pre-fills a gate in the creation form. No runtime decision is derived from it.
   `<provider>.**.W`, flagged `fallback: true`; zero or two and the catalog does not load.
 - **It counts only when nothing else matched**, slice by slice: named entries match → only they are
   touched; else a write → the fallback; else a read → refused as a catalog gap.
-- **No preset or macro-action includes it**; a creator may accept it by hand, or tick the
+- **No catalog macro-action includes it**; a creator may accept it by hand, or tick the
   gateway's own "Anything else" macro-action. Its presence in the audit means an
   entry is missing. Decision:
   [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md).
@@ -155,24 +154,10 @@ pre-fills a gate in the creation form. No runtime decision is derived from it.
 - **Adding** an entry: calls it matches are refused for existing missions and shares until the
   creator accepts it. A new risk is never accepted by default.
 - **Renaming or removing** an id is forbidden. An entry that must go is `deprecated`: it still
-  matches, so missions holding it keep working; "select all" skips it; a preset referencing it is
+  matches, so missions holding it keep working; "select all" skips it; a macro-action listing it is
   refused.
 
-### 4.6 Presets
-
-A catalog ships **at least one preset**: a named, described list of its `RiskId`s, each with a
-default quota, rate limit and gate. An unqualified env-scoped risk in a preset stands for it in each
-environment the mission reaches. A catalog is refused when a preset:
-
-- references a risk of another provider or one the catalog does not declare, the fallback, or a
-  deprecated entry;
-- contains anything but explicit ids, or qualifies an environment the entry does not list or an
-  account-scoped entry;
-- repeats a risk, is empty, or shares its identifier with another preset;
-- has a budget that is not a positive whole quota and a positive whole rate over a positive whole
-  window, or a gate outside the closed set.
-
-### 4.7 Macro-actions and trust crans
+### 4.6 Macro-actions and trust crans
 
 What a creator ticks per connection, in the connector's words
 ([ADR](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)):
@@ -194,6 +179,9 @@ What a creator ticks per connection, in the connector's words
 
 - The cran multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
   ceiling (§4bis).
+- A risk whose tool hands the agent a provider token that can write is pre-filled `approval` at
+  every cran, whatever its palier.
+- A catalog ships no presets: a `presets` key does not load.
 - The result is explicit lines (§5), shown before issuance and editable one by one; the mission
   keeps the cran per macro-action only to redraw the form.
 
@@ -211,7 +199,7 @@ What a creator ticks per connection, in the connector's words
 
 Its connections (one provider each); per connection its resources (ref, optional environment label);
 its policy, one explicit entry per accepted risk, env-scoped risks qualified. No slice, pattern,
-explicit deny or preset reference.
+explicit deny, macro-action or cran.
 
 ## 6. Environment resolution
 
@@ -283,8 +271,8 @@ or **budget invalid** (not positive whole numbers, gate outside the closed set, 
 catalog ceiling). Any finding blocks issuance, reported with its risks.
 
 - A macro-action at a cran is expanded into lines first, then checked like any line.
-- A preset taken as is is intersected with what the creator holds: entries exceeding authority or
-  unresolvable are left out and reported, not findings.
+- Macro-actions at a cran are intersected with what the creator holds: risks exceeding authority
+  or unresolvable are left out and reported, not findings.
 - A share's restriction is the same kind of list, each id valid by §4.4.
 
 ## 10. After the risk decision — budget and gate
@@ -322,7 +310,7 @@ none; mint → issue; gates `allow` / `confirm` / `deny` → accepted or not, th
 - **At catalog load** any finding stops the gateway, with its location: malformed fields; an id not
   `<provider>.<name>`, duplicated or with a wildcard; a pattern that does not parse or names another
   provider; a vector axis missing or out of scale; an invalid environment label; a fallback breaking
-  §4.3; no preset, or one breaking §4.6; no macro-action, or macro-actions breaking §4.7.
+  §4.3; a `presets` key; no macro-action, or macro-actions breaking §4.6.
 - **In each plugin's tests**: every tool has a sample call yielding slices its own catalog matches;
   samples landing on the fallback are reported as a missing entry.
 - **Across shipped plugins**: no catalog declares a limit the gateway does not enforce (§4bis).

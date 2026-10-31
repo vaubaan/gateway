@@ -20,8 +20,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   refusalText,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
@@ -112,20 +112,22 @@ function sseFrame(call: { json: unknown }, result: unknown): string {
 // ─── Structural kit ──────────────────────────────────────────────────────────
 
 describe('railway plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(railwayPlugin);
-    assertPresetsValid(railwayPlugin);
     assertNoWildcard(railwayPlugin);
   });
 
-  test('ships the three presets of the brief, every risk id explicit', () => {
-    const presets = railwayPlugin.catalog.presets ?? [];
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'operator']);
-    const dev = presets.find((p) => p.id === 'developer')!;
-    expect(dev.entries.find((e) => e.risk_id === 'railway[prod].deploy')?.gate).toBe('approval');
-    expect(dev.entries.find((e) => e.risk_id === 'railway[staging].deploy')?.gate).toBe('auto');
-    expect(dev.entries.some((e) => e.risk_id === 'railway.agent-action')).toBe(false);
-    for (const p of presets) for (const e of p.entries) expect(e.quota).toBeGreaterThan(0);
+  test('at Prudent, a deploy on staging runs freely and one on prod asks first ; no agent', () => {
+    const lines = policyFromMacroActions(
+      railwayPlugin,
+      { watch: 'prudent', deploy: 'prudent', configure: 'prudent' },
+      { envs: ['staging', 'prod'] },
+    );
+    const gate = (id: string) => lines.find((e) => e.risk_id === id)?.gate;
+    expect(gate('railway[prod].deploy')).toBe('approval');
+    expect(gate('railway[staging].deploy')).toBe('auto');
+    expect(lines.some((e) => e.risk_id === 'railway.agent-action')).toBe(false);
+    for (const e of lines) expect(e.quota).toBeGreaterThan(0);
   });
 
   // One table for the catalog coverage and for the identifier proof.

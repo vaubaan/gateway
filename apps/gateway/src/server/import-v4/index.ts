@@ -47,7 +47,6 @@ export {
 } from './importer';
 export { renderReport } from './report';
 export {
-  isDeveloperLike,
   providerOfV4Risk,
   translateRisks,
   unbindingRateLimit,

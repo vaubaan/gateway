@@ -38,7 +38,7 @@ const entrySchema = z
       .number()
       .optional()
       .describe(
-        'Actions allowed per period on this risk. Mandatory unless the connection names a `preset` that has an entry for this risk.',
+        'Actions allowed per period on this risk. Mandatory unless the connection names `everything-i-hold`, which then supplies it.',
       ),
     rate_limit: rateLimitSchema.optional(),
     gate: z
@@ -95,7 +95,7 @@ const connectionSchema = z
       .nullable()
       .optional()
       .describe(
-        'Id of one preset of the connection’s provider, or `everything-i-hold`: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none.',
+        'Only `everything-i-hold` (catalogs ship no presets): every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
       ),
     policy: z
       .array(entrySchema)
@@ -106,7 +106,7 @@ const connectionSchema = z
       .record(z.string().max(64), z.enum(TRUST_CRANS))
       .optional()
       .describe(
-        'Optional. The trust cran (`prudent`, `confiant`, `autonome`) of each macro-action of `get_catalog` the policy was composed from, by macro-action id. Kept only to redraw the creation form: it never changes the policy, which is `policy` or `preset`.',
+        'The trust cran (`prudent`, `confiant`, `autonome`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their crans write the policy (gate from each risk’s palier, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the crans are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest cran that does it.',
       ),
   })
   .strict();

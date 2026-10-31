@@ -36,7 +36,7 @@ words; §4.2, §4.4 and §7 use them:
 | service; OAuth client; Reference                 | provider; the OAuth client the instance registers at a provider; the reference of each plugin |
 | stopped; without an owner; needs reconnecting    | `revoked`; `orphaned`, `unowned`; `expired` (of a connection)                                 |
 | setup kit                                        | bootstrap kit                                                                                 |
-| mission, preset, resource, environment           | the same                                                                                      |
+| mission, macro-action, resource, environment     | the same                                                                                      |
 
 Page paths follow the interface's words (`/accounts`, `/waiting`, `/activity`, `/reference`,
 `/settings`); protocol paths do not move (the two MCP doors, the request URL a refusal carries, a
@@ -132,11 +132,14 @@ callback registered at a provider).
   a human validates each.
 - **Budget** — a **quota** (actions per period) and a **rate limit** (actions per short sliding
   window).
-- **Preset** — a named policy fragment shipped by a plugin: `RiskId`s of that provider, each with a
-  default budget and gate, a label and a one-line description. It pre-fills one connection's policy,
-  which the creator adjusts; it grants nothing, is bounded by the creator's authority, and never
-  reaches the store, the token or the audit. Every connection also offers the built-in preset
-  **"Everything I hold on this account"** (`everything-i-hold`, §3.2).
+- **Macro-action** — what an agent may do on one account, in the connector's own words ("Read",
+  "Change", "Administer"): a group of `RiskId`s of one catalog, each with a base budget
+  ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every connection also offers "Anything else"
+  (the fallback). A creator ticks macro-actions and sets each to a **trust cran** (Prudent, Confiant,
+  Autonome), which pre-fills the gate and budget of each of its risks from the risk's palier. It
+  grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
+  the token. Every connection also offers the built-in expansion **"Everything I hold on this
+  account"** (`everything-i-hold`, §3.2).
 - **Gate** — `auto` (passes within budget, the default) or `approval` (each action approved by the
   mission creator before it runs).
 - **Period** — for a recurring mission, the interval after which quotas restart from zero. A one-off
@@ -192,7 +195,7 @@ without ever holding a credential, within a declared objective.
 - **No general-purpose secret management**, and no cloud resource provisioning by the instance
   itself.
 - **No policy composed by the instance from a natural-language task**: that is the client's job;
-  presets are the instance-side help.
+  macro-actions and their crans are the instance-side help.
 - **No call held waiting.** The gateway always answers at once; a human steps in outside the call
   (structured refusal, decision in the inbox, replay). No `pending` state, no polling, no mandatory
   notification ([unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)).
@@ -283,9 +286,9 @@ permissions and executes nothing.
   presents the provider's credential upstream, neither crosses.
 - **One deliberate exception:** a tool whose purpose is to hand the agent a short-lived, narrowly
   scoped provider token. It is its own catalog risk, never accepted by default, counted and audited;
-  the long-lived credential never leaves. In a preset, a token-handing risk that grants write is
-  gated `approval`; a read-only one may be `auto`. An undeclared one is write, and a preset leaving
-  it `auto` is refused at load.
+  the long-lived credential never leaves. A trust cran never runs a token-handing risk that grants
+  write freely: its pre-filled gate is `approval` at every cran; a read-only one follows its palier.
+  An undeclared one is write.
 - An exfiltrated mission token grants the mission's rights within its budget until revoked; the
   audit names its holder, and revoking it leaves other holders working.
 - An exfiltrated delegated token issues missions within the user's authority until revoked or
@@ -350,20 +353,22 @@ a mission whose accepted risk has no resolved budget.
   `exhausted` until the next period or a granted claim.
 - **Rate limit.** The mission-level value of the catalog's speed cap
   ([gateway-risk-model](./gateway-risk-model.md) §4bis), bounded by the catalog.
-- **Presets, per plugin.** Every plugin ships at least one. At issuance the creator picks one preset
-  per connection (or starts empty, or duplicates a mission); the policy is pre-filled with its
-  risks, budgets and gates, intersected with the creator's authority, then adjusted risk by risk.
-  The persisted policy never references a preset, so a changed preset alters no mission. A plugin's
-  `developer`-like preset covers "one token per code project" with generous values. The interface
-  shows a preset's width in one line (how many risks, the most severe, the largest quota).
+- **Macro-actions and crans**
+  ([macro-actions-and-trust-crans-prefill-the-policy](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
+  At issuance the creator ticks macro-actions per connection, each at a cran (or duplicates a
+  mission); the policy is pre-filled with their risks, gates and budgets, intersected with the
+  creator's authority, then adjusted risk by risk. The persisted policy never references a
+  macro-action or a cran, so a changed catalog alters no mission; the crans are recorded with the
+  mission only to redraw the form. The interface shows what each macro-action yields at its cran
+  (how many run freely, ask first, are left out) and the account's highest palier.
 - **`everything-i-hold`**
   ([preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md)).
   At preview and issuance it expands to one line per non-deprecated `RiskId` the creator's authority
   covers now and the selected resources can reach (an environment-qualified id only when a selected
   resource carries that label, own or default, or the plugin derives the environment), the fallback
-  included and named. Each line gets the catalog's rate ceiling (else the largest rate a preset of
-  the plugin gives, else a value by severity), the largest quota any preset gives (else by severity)
-  sized for a daily period, and gate `auto`. The preview states the line count, the most severe,
+  included and named. Each line gets the catalog's rate ceiling (else its base budget's rate at
+  Autonome, else a value by severity), its base budget's quota at Autonome (else by severity) sized
+  for a daily period, and gate `auto`. The preview states the line count, the most severe,
   which critical lines run freely, and the fallback; no gate is added silently.
 - **Editing a mission**
   ([mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)). The creator
@@ -495,10 +500,12 @@ providers to identify the user at consent
 ([management-door-authorization-server](../decisions/management-door-authorization-server.md)).
 
 - **Read**: my connections and those shared with me, with the exact restriction; each provider's
-  catalog and presets; my missions, policy, session and remaining budget.
+  catalog with its macro-actions, each risk's palier and the cran table; my missions, policy,
+  session and remaining budget.
 - **Preview** a draft `RiskId → (budget, gate)` on some connections: what passes, what exceeds the
-  authority, what the mission could call; issues nothing. A draft connection may name a preset,
-  `everything-i-hold` included; the preview answers with the explicit lines.
+  authority, what the mission could call; issues nothing. A draft connection may give crans per
+  macro-action, which write its policy when it gives none and the missing budgets when it does, or
+  name `everything-i-hold`; the preview answers with the explicit lines.
 - **Issue** a mission. The creator is the **delegating user**, never the agent. The answer holds the
   token, revealed once, and the bootstrap kit.
 - **Rotate** the token of a mission this delegation issued (another mission is refused
@@ -574,7 +581,7 @@ stands in without one.
   the connected app that prepared it. **Creating**, on one screen: a name (or a copy of a mission,
   or a pasted agent proposal); the accounts and their resources (every resource known now, the whole
   account including later ones, or a pick); per account its macro-actions, each ticked at a trust cran
-  and saying what it yields within what I may allow ([risk model](gateway-risk-model.md) §4.7), or
+  and saying what it yields within what I may allow ([risk model](gateway-risk-model.md) §4.6), or
   `everything-i-hold`, which says how many permissions it writes out, the most severe, which critical
   ones run freely and that it includes uncategorized writes; the permissions one by one in an
   Advanced view; the view is never sent, the crans only to redraw the screen; the period and the end; a
@@ -599,7 +606,8 @@ stands in without one.
   all", each with severity and reason; it lists the orphaned missions the access would bring back.
   Ownerless accounts are the last region for an administrator, who names a new owner there.
 - **Reference** — generated for every registered plugin, read-only, for any signed-in user:
-  **Permissions** (permissions against presets, each cell the preset's limits and gate; a permission
+  **Permissions** (permissions by macro-action, each with its palier, base budget and its gate at each
+  cran; a permission
   unfolds its reason, the six dimensions behind its severity and its tools), **Tools** ("depends on
   the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
   permission shown elsewhere links here.
@@ -702,7 +710,7 @@ values.
   ephemeral credential. Each declares its one way of connecting (a pasted key with its form, check
   and guide; a key pair the instance generates; or the service's sign-in), how to withdraw the grant
   on revocation (or where a person removes it), how to discover resources and which tools create
-  one, and at least one preset. Contribution: [CONTRIBUTING](../../CONTRIBUTING.md),
+  one, and its macro-actions. Contribution: [CONTRIBUTING](../../CONTRIBUTING.md),
   [plugins/README](../../plugins/README.md).
 - **Sign-in providers** — authenticate humans with subject, verified email and, for a directory,
   groups. Trusted for their own issuer's identities only, never for authorization.
@@ -732,7 +740,8 @@ values.
   the bucket is touched.
 - **No credential to the executor.** §2.4. No read returns a secret value under a non-secret risk:
   an answer that may carry secrets passes an allow-list of non-secret fields (others become
-  `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk in no preset.
+  `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk, palier 2 at least, so
+  Prudent asks before it.
 - **Transport.** Plain HTTP on the local network, behind a TLS termination held by the company.
 - **Human authentication.** Each sign-in attempt carries its own `state`, nonce and PKCE verifier
   and is bound to the provider that started it. A sign-in is admitted only on an email the provider
@@ -821,7 +830,7 @@ confirmed their list.
 
 ### 7.4 Create a mission
 
-Accounts, resources, one preset per account, adjustments, period (default daily) and end (default
+Accounts, resources, macro-actions at a cran per account, adjustments, period (default daily) and end (default
 never), confirmation of the explicit list; the key is revealed once with the setup kit.
 
 ### 7.4 bis Edit a mission
@@ -976,8 +985,8 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
   - no configuration value is hard-coded;
   - every persisted restriction and `accepted_risks` is an enumerated list, never a wildcard, never
     a preset reference;
-  - every plugin ships at least one preset, and every preset references only `RiskId`s of its own
-    catalog;
+  - every catalog groups each of its risks but the fallback in exactly one macro-action, and no
+    catalog ships presets;
   - a user's authority on a connection is recomputed from their current group membership, never from
     a snapshot;
   - the git remote admits with the execution door's own admission.

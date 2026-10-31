@@ -35,7 +35,11 @@ import {
 } from '@/server/shares';
 
 import { AccountView, loadAccount, type AccountData } from '../account-view';
-import { GiveAccessDialog, type AccessPreset, type GiveAccessInitial } from './give-access-dialog';
+import {
+  GiveAccessDialog,
+  type AccessMacroAction,
+  type GiveAccessInitial,
+} from './give-access-dialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -129,12 +133,16 @@ export default async function GiveAccessPage({
       }
     }
   }
-  const presets: AccessPreset[] = (
-    providerReference(root.registry, connection.provider)?.presets ?? []
-  ).map((preset) => ({
-    id: preset.id,
-    label: preset.label,
-    riskIds: [...preset.auto, ...preset.approval].map((line) => line.risk.risk_id),
+  // A macro-action names unqualified ids: it ticks every explicit id of them, retired ones aside.
+  const macroActions: AccessMacroAction[] = (
+    providerReference(root.registry, connection.provider)?.macro_actions ?? []
+  ).map((action) => ({
+    id: action.id,
+    label: action.label,
+    description: action.description,
+    riskIds: context.risks
+      .filter((risk) => action.risk_ids.includes(risk.base_id) && !risk.deprecated)
+      .map((risk) => risk.risk_id),
   }));
 
   return (
@@ -164,7 +172,7 @@ export default async function GiveAccessPage({
             fields={SHARE_FIELDS}
             risks={context.risks}
             teams={context.groups.map((group) => ({ id: group.id, name: group.name }))}
-            presets={presets}
+            macroActions={macroActions}
             labelling={context.labelling}
             initial={
               pending ? initialOfPending(pending, forecast, context) : initialOf(editing, context)

@@ -130,7 +130,7 @@ describe('management door — every answer matches its advertised output schema'
     await agent.close();
   });
 
-  it('preview_policy: a draft that passes, one beyond the authority, a preset alone, an unresolvable environment, an unknown risk', async () => {
+  it('preview_policy: a draft that passes, one beyond the authority, crans alone, an unresolvable environment, an unknown risk', async () => {
     await shareWithBob();
     const bob = await agentOf(BOB);
     await yes(bob, 'preview_policy', draftOn(github, ['github.read-code']));
@@ -141,10 +141,10 @@ describe('management door — every answer matches its advertised output schema'
       draftOn(github, ['github.read-code', 'github.feature-branch-write']),
     );
     expect(beyond.ok).toBe(false);
-    // A preset bounded by the authority: entries skipped.
+    // Crans bounded by the authority: what they leave out is listed.
     await yes(bob, 'preview_policy', {
-      name: 'From a preset',
-      connections: [{ connection_id: github, preset: 'developer' }],
+      name: 'From crans',
+      connections: [{ connection_id: github, crans: { read: 'confiant', propose: 'confiant' } }],
       period: { kind: 'one-off' },
       expires_at: '2027-01-01T00:00:00.000Z',
     });
@@ -158,8 +158,8 @@ describe('management door — every answer matches its advertised output schema'
     await yes(ada, 'preview_policy', {
       name: 'Two providers',
       connections: [
-        { connection_id: github, preset: 'read-only' },
-        { provider: 'supabase', preset: 'read-only', resources: { scope: 'all' } },
+        { connection_id: github, crans: { read: 'prudent' } },
+        { provider: 'supabase', crans: { query: 'prudent' }, resources: { scope: 'all' } },
       ],
       period: { kind: 'recurring', length_seconds: 3600 },
       expires_at: null,
@@ -168,7 +168,11 @@ describe('management door — every answer matches its advertised output schema'
     await yes(ada, 'preview_policy', {
       name: 'The whole account',
       connections: [
-        { connection_id: supabase, preset: 'read-only', resources: { scope: 'connection' } },
+        {
+          connection_id: supabase,
+          crans: { query: 'prudent' },
+          resources: { scope: 'connection' },
+        },
       ],
       period: { kind: 'one-off' },
       expires_at: null,
@@ -180,7 +184,7 @@ describe('management door — every answer matches its advertised output schema'
     await shareWithBob();
     const agent = await agentOf(BOB);
 
-    // ── issue: explicit policy, and a preset with an expiry ──
+    // ── issue: explicit policy, and crans with an expiry ──
     const issued = await yes<IssuedMissionAnswer>(
       agent,
       'issue_mission',
@@ -188,19 +192,19 @@ describe('management door — every answer matches its advertised output schema'
     );
     expect(issued.token.secret).toMatch(/^vbn_live_/);
     expect(issued.bootstrap_kit.env).toContain(issued.token.secret);
-    const fromPreset = await yes<IssuedMissionAnswer>(agent, 'issue_mission', {
-      name: 'One-off from a preset',
-      connections: [{ connection_id: github, preset: 'read-only' }],
+    const fromCrans = await yes<IssuedMissionAnswer>(agent, 'issue_mission', {
+      name: 'One-off from crans',
+      connections: [{ connection_id: github, crans: { read: 'prudent' } }],
       period: { kind: 'one-off' },
       expires_at: '2027-01-01T00:00:00.000Z',
     });
-    expect(fromPreset.token.secret).toMatch(/^vbn_live_/);
+    expect(fromCrans.token.secret).toMatch(/^vbn_live_/);
 
     // ── read: the list, one mission in detail ──
     const listed = await yes<MissionsAnswer>(agent, 'list_my_missions');
     expect(listed.missions).toHaveLength(2);
     await yes(agent, 'list_my_missions', { mission_id: issued.mission.mission_id });
-    await yes(agent, 'list_my_missions', { mission_id: fromPreset.mission.mission_id });
+    await yes(agent, 'list_my_missions', { mission_id: fromCrans.mission.mission_id });
 
     // ── rotate: the new token arrives ──
     const rotated = await yes<RotatedTokenAnswer>(agent, 'rotate_mission_token', {

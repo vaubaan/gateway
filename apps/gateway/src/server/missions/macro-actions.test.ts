@@ -8,6 +8,8 @@ import {
   knownCrans,
   linesOfCrans,
   macroActionsOf,
+  prefillOfCrans,
+  unknownMacroActions,
 } from './macro-actions';
 import { ACME_CATALOG, ACME_RESOURCES, acmeConnection } from './testing';
 
@@ -82,5 +84,36 @@ describe('macro-actions of a connection', () => {
     expect(highestPalier(acme.risks.filter((r) => r.risk_id === 'acme.read'))).toBe(1);
     expect(highestPalier(acme.risks)).toBe(4);
     expect(highestPalier([])).toBeNull();
+  });
+
+  it('says what the crans leave out, and why', () => {
+    const narrow = acmeConnection({ authority: ['acme.read', 'acme[staging].write'] });
+    const prodOnly = ACME_RESOURCES.filter((r) => r.env !== 'staging');
+    const { lines, left_out } = prefillOfCrans(
+      narrow,
+      { read: 'prudent', change: 'prudent' },
+      prodOnly,
+    );
+    expect(lines.map((l) => l.risk_id)).toEqual(['acme.read']);
+    expect(left_out.map((l) => [l.risk_id, l.reason])).toEqual([
+      ['acme[staging].write', 'unresolvable-env'],
+      ['acme[prod].write', 'outside-authority'],
+      ['acme[staging].bulk-delete', 'outside-authority'],
+    ]);
+    expect(
+      prefillOfCrans(acme, { change: 'prudent' }, ACME_RESOURCES).left_out.map((l) => l.reason),
+    ).toEqual(['cran']);
+  });
+
+  it('asks first for a risk that hands a write token, at every cran', () => {
+    const minting = acmeConnection({ write_token_risks: ['acme.read'] });
+    expect(expandMacroAction(minting, action('read'), 'autonome', []).lines[0]?.gate).toBe(
+      'approval',
+    );
+  });
+
+  it('names the crans of a draft that are no macro-action here', () => {
+    expect(unknownMacroActions(acme, { read: 'prudent', deploy: 'autonome' })).toEqual(['deploy']);
+    expect(unknownMacroActions(acme, undefined)).toEqual([]);
   });
 });

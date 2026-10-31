@@ -114,13 +114,14 @@ Things to try
                              permissions a real token would need
      Any value of the right shape is accepted; each field says its shape.
      Gmail signs in over IMAP with an app password, which the demo does not simulate.
-  3. Read what a service allows: Reference -> GitHub. Its permissions compared
-     across its presets ("why?" unfolds the reason and the six words behind a
+  3. Read what a service allows: Reference -> GitHub. Its permissions grouped
+     by macro-action and compared across the trust crans Prudent, Confiant and
+     Autonome ("why?" unfolds the reason and the six words behind a
      severity), its tools, how it is modelled. Supabase adds a filter by part
      (db, storage, auth, functions).
   4. Create a mission on one screen: Missions -> New mission. Include an
-     account and pick a preset: it says what it yields here, and the rail says
-     what the mission will be able to do. "Edit the permissions one by one"
+     account and tick its macro-actions at a cran: each says what it yields
+     here, and the rail says what the mission will be able to do. "Edit the permissions one by one"
      opens every permission with its limits and "ask me first". "Create
      mission" lists every permission with its limit before anything exists.
   5. Read what follows the creation: the key (shown once), then the kit — the

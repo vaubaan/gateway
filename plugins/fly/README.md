@@ -75,51 +75,57 @@ redacted from every answer; `exec` capped at 60 s and 64 KiB of output.
 
 `src/risk-catalog.yaml`, version 1: 24 named risks and the fallback.
 
-| Risk                         | Env-scoped | Notes                                                          |
-| ---------------------------- | ---------- | -------------------------------------------------------------- |
-| `fly.read-org`               |            | Apps and regions of the organization.                          |
-| `fly.read-runtime`           |            | Machines, volumes, snapshots, addresses, certificates.         |
-| `fly.read-secret-names`      |            | Names and digests only.                                        |
-| `fly.read-logs`              |            | May carry customer data.                                       |
-| `fly.app-create`             |            | Creation names no resource; own network required.              |
-| `fly.app-destroy`            | yes        | Irreversible: volumes and snapshots go with it.                |
-| `fly.machine-create`         | yes        | With `machine-config-write` and `deploy`.                      |
-| `fly.machine-config-write`   | yes        | `data: secret`: a config can run anything.                     |
-| `fly.deploy`                 | yes        | `data: secret`: the image runs with the app's secrets.         |
-| `fly.scale`                  | yes        | `cost: unbounded`.                                             |
-| `fly.machine-power`          | yes        | Start, stop, restart, suspend, cordon, uncordon.               |
-| `fly.machine-destroy`        | yes        |                                                                |
-| `fly.machine-exec`           | yes        | Irreversible, `data: secret`.                                  |
-| `fly.volume-create`          |            | Empty volume.                                                  |
-| `fly.volume-restore`         | yes        | From a snapshot or a volume of the same app.                   |
-| `fly.volume-extend`          | yes        | Never shrinks.                                                 |
-| `fly.volume-backup-settings` | yes        | Daily snapshots and retention.                                 |
-| `fly.volume-snapshot`        |            |                                                                |
-| `fly.volume-destroy`         | yes        | Irreversible.                                                  |
-| `fly.secret-write`           | yes        | Values masked in the approval view.                            |
-| `fly.ip-write`               | yes        |                                                                |
-| `fly.ip-release`             | yes        |                                                                |
-| `fly.certificate-write`      | yes        | Request or check (ACME).                                       |
-| `fly.certificate-remove`     | yes        |                                                                |
-| `fly.uncategorized-write`    |            | Fallback (`fallback: true`); reached by no tool, in no preset. |
+| Risk                         | Env-scoped | Notes                                                                |
+| ---------------------------- | ---------- | -------------------------------------------------------------------- |
+| `fly.read-org`               |            | Apps and regions of the organization.                                |
+| `fly.read-runtime`           |            | Machines, volumes, snapshots, addresses, certificates.               |
+| `fly.read-secret-names`      |            | Names and digests only.                                              |
+| `fly.read-logs`              |            | May carry customer data.                                             |
+| `fly.app-create`             |            | Creation names no resource; own network required.                    |
+| `fly.app-destroy`            | yes        | Irreversible: volumes and snapshots go with it.                      |
+| `fly.machine-create`         | yes        | With `machine-config-write` and `deploy`.                            |
+| `fly.machine-config-write`   | yes        | `data: secret`: a config can run anything.                           |
+| `fly.deploy`                 | yes        | `data: secret`: the image runs with the app's secrets.               |
+| `fly.scale`                  | yes        | `cost: unbounded`.                                                   |
+| `fly.machine-power`          | yes        | Start, stop, restart, suspend, cordon, uncordon.                     |
+| `fly.machine-destroy`        | yes        |                                                                      |
+| `fly.machine-exec`           | yes        | Irreversible, `data: secret`.                                        |
+| `fly.volume-create`          |            | Empty volume.                                                        |
+| `fly.volume-restore`         | yes        | From a snapshot or a volume of the same app.                         |
+| `fly.volume-extend`          | yes        | Never shrinks.                                                       |
+| `fly.volume-backup-settings` | yes        | Daily snapshots and retention.                                       |
+| `fly.volume-snapshot`        |            |                                                                      |
+| `fly.volume-destroy`         | yes        | Irreversible.                                                        |
+| `fly.secret-write`           | yes        | Values masked in the approval view.                                  |
+| `fly.ip-write`               | yes        |                                                                      |
+| `fly.ip-release`             | yes        |                                                                      |
+| `fly.certificate-write`      | yes        | Request or check (ACME).                                             |
+| `fly.certificate-remove`     | yes        |                                                                      |
+| `fly.uncategorized-write`    |            | Fallback (`fallback: true`); reached by no tool, in no macro-action. |
 
-## Presets
+## Macro-actions
 
-| Preset          | Scope                                                                                                                                   |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only`     | The four reads.                                                                                                                         |
-| `operator`      | Daily care of existing apps: staging runs freely; production config, deploys, resizes, secrets, `exec` and destruction ask first.       |
-| `fleet-upgrade` | Reads, snapshots, `deploy` and `machine-power` on staging and prod, all running freely — relies on the image and fresh-snapshot guards. |
-| `provisioner`   | Create and configure apps; secrets, restores and every destruction ask first; no `exec`.                                                |
+A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
+Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The fallback sits apart, under "Anything else".
 
-Destroying an app or a volume, writing secrets and `exec` ask first in every
-preset that has them.
+| Macro-action | What it covers                                               | Its risks                                                                                                              |
+| ------------ | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `observe`    | Apps, machines, volumes, secret names and logs.              | `read-org`, `read-runtime`, `read-secret-names`, `read-logs`                                                           |
+| `operate`    | Deploy, power, resize, snapshot, certificates and shell.     | `deploy`, `machine-power`, `scale`, `volume-snapshot`, `volume-backup-settings`, `certificate-write`, `machine-exec`   |
+| `build`      | Create apps, machines, volumes and addresses.                | `app-create`, `machine-create`, `machine-config-write`, `volume-create`, `volume-extend`, `volume-restore`, `ip-write` |
+| `secrets`    | Set or remove app secrets.                                   | `secret-write`                                                                                                         |
+| `tear-down`  | Destroy machines, volumes, apps, addresses and certificates. | `machine-destroy`, `volume-destroy`, `app-destroy`, `ip-release`, `certificate-remove`                                 |
+
+Destroying an app or a volume and `exec` are irreversible: left out at
+Prudent, they ask first at every other cran. Writing secrets asks first below
+Autonome.
 
 ## Tests
 
 `npx vitest run plugins/fly` — 74 tests: the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` on one
+`assertNoWildcard`, `assertCatalogCoverage` on one
 sample per tool, `assertIdentifiersRefused`), the classifier branch by
 branch (refusals, the image guard, hostile identifiers fed to `classify`
 and `execute`), the executor and its guards, discovery and the token check
-against `mockFetch`, and the catalog's gates. No test calls Fly.
+against `mockFetch`, and the gates each cran gives. No test calls Fly.

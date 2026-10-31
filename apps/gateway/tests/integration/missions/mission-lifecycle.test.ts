@@ -1,7 +1,7 @@
 /**
  * Missions end to end inside the process (spec §10 "integration on an
  * ephemeral instance"): the composition root on the `:memory:` store, real
- * plugin catalogs and presets, connections and resources seeded through the
+ * plugin catalogs and their macro-actions, connections and resources seeded through the
  * repositories. Issue → the token verifies → rotate → the old token is
  * refused → revoke → `mission-inactive`.
  */
@@ -12,13 +12,32 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { GatewayRoot } from '../../../src/server/compose/root';
 import { loadMissionContext } from '../../../src/server/execution/mission-context';
-import { MissionService, type MissionDraft } from '../../../src/server/missions';
+import {
+  macroActionsOf,
+  MissionService,
+  TRUST_CRANS,
+  type MissionDraft,
+} from '../../../src/server/missions';
 import { catalogEnvs, seedConnection } from '../../../src/server/missions/testing';
 import { ManualClock } from '../../../src/server/store/clock';
 import { agePastStaleGrace } from '../../../src/server/store/testing';
 import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
+/**
+ * Read and propose at Confiant: reads, pushes and pull requests run freely,
+ * a force-push or a branch delete asks first.
+ */
+const DEVELOPER_CRANS = { read: 'confiant', propose: 'confiant' } as const;
+/** What the former Supabase `staging-developer` preset stood for: query, change data, schema and functions. */
+const SUPABASE_STAGING_CRANS = {
+  query: 'confiant',
+  'change-data': 'confiant',
+  'change-schema': 'confiant',
+  'ship-functions': 'confiant',
+} as const;
+/** Watch and deploy on Vercel at Confiant. */
+const VERCEL_DEVELOPER_CRANS = { watch: 'confiant', deploy: 'confiant' } as const;
 
 describe('missions: issue, rotate, revoke', () => {
   let root: GatewayRoot;
@@ -37,11 +56,20 @@ describe('missions: issue, rotate, revoke', () => {
   function githubDraft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     return {
       name: 'Ship the billing page',
-      connections: [{ connection_id: seeded.github.connection.id, preset: 'developer' }],
+      connections: [{ connection_id: seeded.github.connection.id, crans: DEVELOPER_CRANS }],
       period: DAILY,
       expires_at: null,
       ...overrides,
     };
+  }
+
+  /** The risk ids the named GitHub macro-actions hold, as the catalog ships them. */
+  function githubActionRows(ids: readonly string[]): string[] {
+    const github = root.registry.get('github');
+    if (!github) throw new Error('github is not registered');
+    return macroActionsOf(github.plugin.catalog)
+      .filter((action) => ids.includes(action.id))
+      .flatMap((action) => action.entries.map((entry) => entry.risk_id));
   }
 
   async function issued(draft: MissionDraft = githubDraft(), user = seeded.ada) {
@@ -112,15 +140,20 @@ describe('missions: issue, rotate, revoke', () => {
         connectionId: seeded.github.connection.id,
         resourceScope: 'selected',
         resourceIds: seeded.github.resources.map((r) => r.id).sort(),
+        // Kept only to redraw the form: the policy below is what decides.
+        crans: DEVELOPER_CRANS,
       },
     ]);
-    const developer = root.registry.presetsOf('github').find((p) => p.id === 'developer');
+    // Every row of the two macro-actions: at Confiant, none is left out.
     expect(mission.policy.map((e) => e.riskId).sort()).toEqual(
-      developer?.entries.map((e) => e.risk_id).sort(),
+      githubActionRows(Object.keys(DEVELOPER_CRANS)).sort(),
+    );
+    expect(mission.policy.map((e) => e.riskId).sort()).toEqual(
+      preview.policy.map((e) => e.risk_id).sort(),
     );
     expect(mission.policy.every((e) => e.quota >= 1 && e.rateLimit >= 1)).toBe(true);
-    expect(preview.connections[0]?.skipped_from_preset).toEqual([]);
-    expect(JSON.stringify(mission)).not.toContain('developer');
+    expect(preview.connections[0]?.left_out).toEqual([]);
+    expect(JSON.stringify(mission)).not.toContain('preset');
   });
 
   it('does not cover a resource discovered after issuance', async () => {
@@ -149,14 +182,19 @@ describe('missions: issue, rotate, revoke', () => {
     const { mission, token } = await issued(
       {
         name: 'Nothing to touch yet',
-        connections: [{ connection_id: empty.connection.id, preset: 'read-only' }],
+        connections: [{ connection_id: empty.connection.id, crans: { read: 'prudent' } }],
         period: DAILY,
         expires_at: null,
       },
       seeded.bob,
     );
     expect(mission.connections).toEqual([
-      { connectionId: empty.connection.id, resourceScope: 'all', resourceIds: [] },
+      {
+        connectionId: empty.connection.id,
+        resourceScope: 'all',
+        resourceIds: [],
+        crans: { read: 'prudent' },
+      },
     ]);
 
     await root.store.connections.syncDiscoveredResources(empty.connection.id, [
@@ -248,7 +286,7 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: connectionId,
-            preset: 'developer',
+            crans: DEVELOPER_CRANS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/infra'] },
           },
         ],
@@ -264,7 +302,7 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: connectionId,
-            preset: 'developer',
+            crans: DEVELOPER_CRANS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
           },
         ],
@@ -281,12 +319,16 @@ describe('missions: issue, rotate, revoke', () => {
       githubDraft({
         name: 'Run the whole account',
         connections: [
-          { connection_id: connectionId, preset: 'developer', resources: { scope: 'connection' } },
+          {
+            connection_id: connectionId,
+            crans: DEVELOPER_CRANS,
+            resources: { scope: 'connection' },
+          },
         ],
       }),
     );
     expect(mission.connections).toEqual([
-      { connectionId, resourceScope: 'connection', resourceIds: [] },
+      { connectionId, resourceScope: 'connection', resourceIds: [], crans: DEVELOPER_CRANS },
     ]);
     expect(kit.agent_instructions).toContain(
       'the whole account, including resources discovered later (known now:',
@@ -470,7 +512,6 @@ describe('missions: issue, rotate, revoke', () => {
     });
     // The audit is immutable: its payload is pinned, snake_case domain shapes
     // only, never the store's camelCase record.
-    const developer = root.registry.presetsOf('github').find((p) => p.id === 'developer');
     expect(entry?.kind === 'admin' && entry.after).toEqual({
       name: 'Ship the billing page',
       connections: [
@@ -490,7 +531,7 @@ describe('missions: issue, rotate, revoke', () => {
       expires_at: null,
       token_prefix: token.prefix,
     });
-    expect(mission.policy).toHaveLength(developer?.entries.length ?? -1);
+    expect(mission.policy).toHaveLength(githubActionRows(Object.keys(DEVELOPER_CRANS)).length);
     expect(JSON.stringify(entry)).not.toMatch(/connectionId|resourceScope|resourceIds|riskId/);
     const secretPart = token.secret.slice(-32);
     expect(JSON.stringify(audit)).not.toContain(secretPart);
@@ -546,21 +587,34 @@ describe('missions: issue, rotate, revoke', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          preset: 'read-only',
+          crans: { read: 'prudent' },
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
         },
-        { connection_id: seeded.supabase.connection.id, preset: 'staging-developer' },
-        { connection_id: seeded.vercel.connection.id, preset: 'developer' },
+        { connection_id: seeded.supabase.connection.id, crans: SUPABASE_STAGING_CRANS },
+        { connection_id: seeded.vercel.connection.id, crans: VERCEL_DEVELOPER_CRANS },
       ],
       period: DAILY,
       expires_at: null,
     });
     const providers = result.mission.policy.map((e) => e.riskId.split(/[.[]/)[0]);
     expect(new Set(providers)).toEqual(new Set(['github', 'supabase', 'vercel']));
-    expect(result.preview.connections.map((c) => c.passes.length)).toEqual([
-      root.registry.presetsOf('github').find((p) => p.id === 'read-only')?.entries.length,
-      root.registry.presetsOf('supabase').find((p) => p.id === 'staging-developer')?.entries.length,
-      root.registry.presetsOf('vercel').find((p) => p.id === 'developer')?.entries.length,
+    // One partition per connection: each holds its own provider's lines, all of them.
+    expect(result.preview.connections.map((c) => c.passes.length)).toEqual(
+      ['github', 'supabase', 'vercel'].map((p) => providers.filter((q) => q === p).length),
+    );
+    for (const [index, provider] of ['github', 'supabase', 'vercel'].entries()) {
+      const passes = result.preview.connections[index]?.passes ?? [];
+      expect(passes.length, provider).toBeGreaterThan(0);
+      expect(
+        passes.every((e) => e.risk_id.startsWith(provider)),
+        provider,
+      ).toBe(true);
+    }
+    // Prudent on Read: the global search, of palier 2, asks first.
+    expect(result.preview.connections[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
+      ['github.read-code', 'auto'],
+      ['github.read-meta', 'auto'],
+      ['github.search-global', 'approval'],
     ]);
     // Vercel resources carry no label: the plugin derives the env from the call.
     expect(result.mission.policy.some((e) => e.riskId === 'vercel[preview].deploy')).toBe(true);
@@ -568,7 +622,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(result.kit.agent_instructions).not.toContain('`acme/web`');
   });
 
-  it('refuses env-qualified entries no selected resource carries, and skips them from a preset', async () => {
+  it('refuses env-qualified entries no selected resource carries, and leaves them out of the crans', async () => {
     const prodOnly = { scope: 'selected', resource_refs: ['prdprojectref'] } as const;
     const explicit = await missions.preview(seeded.ada, {
       name: 'Prod only',
@@ -598,24 +652,26 @@ describe('missions: issue, rotate, revoke', () => {
       { risk_id: 'supabase[staging].bulk-row-write', env: 'staging' },
     ]);
 
-    const fromPreset = await missions.preview(seeded.ada, {
+    const fromCrans = await missions.preview(seeded.ada, {
       name: 'Prod only',
       connections: [
         {
           connection_id: seeded.supabase.connection.id,
           resources: prodOnly,
-          preset: 'staging-developer',
+          crans: SUPABASE_STAGING_CRANS,
         },
       ],
       period: DAILY,
       expires_at: null,
     });
-    expect(fromPreset.ok).toBe(true);
-    expect(fromPreset.connections[0]?.skipped_from_preset.length).toBeGreaterThan(0);
-    expect(
-      fromPreset.connections[0]?.skipped_from_preset.every((s) => s.reason === 'unresolvable-env'),
-    ).toBe(true);
-    expect(fromPreset.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);
+    expect(fromCrans.ok).toBe(true);
+    const leftOut = fromCrans.connections[0]?.left_out ?? [];
+    expect(leftOut.length).toBeGreaterThan(0);
+    // At Confiant no palier is left out: only the environments no project carries.
+    expect(leftOut.every((s) => s.reason === 'unresolvable-env' && s.env !== 'prod')).toBe(true);
+    expect(leftOut.map((s) => s.risk_id)).toContain('supabase[staging].bulk-row-write');
+    expect(fromCrans.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);
+    expect(fromCrans.policy.map((e) => e.risk_id)).toContain('supabase[prod].migration-write');
   });
 
   it('duplicates a mission: same policy, its own token and budget, source untouched', async () => {
@@ -624,9 +680,13 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: seeded.github.connection.id,
-            preset: 'developer',
+            crans: DEVELOPER_CRANS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
-            policy: [{ risk_id: 'github.read-code', quota: 7 }, { risk_id: 'github.create-pr' }],
+            // Beside a policy the crans decide nothing: each line carries its budget.
+            policy: [
+              { risk_id: 'github.read-code', quota: 7, rate_limit: { max: 5, window_seconds: 60 } },
+              { risk_id: 'github.create-pr', quota: 3, rate_limit: { max: 1, window_seconds: 60 } },
+            ],
           },
         ],
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
@@ -811,7 +871,7 @@ describe('missions: issuance context', () => {
     await root.close();
   });
 
-  it('carries resources, catalog, authority and presets; flags env-deriving plugins', async () => {
+  it('carries resources, catalog, authority and macro-actions; flags env-deriving plugins', async () => {
     const context = await root.missions.service.issuanceContext(seeded.ada);
     const byProvider = new Map(context.map((c) => [c.provider, c]));
     expect([...byProvider.keys()].sort()).toEqual(['github', 'gmail', 'supabase', 'vercel']);
@@ -819,8 +879,12 @@ describe('missions: issuance context', () => {
     expect(byProvider.get('vercel')?.derives_env).toBe(true);
     expect(byProvider.get('supabase')?.derives_env).toBe(false);
     for (const connection of context) {
-      expect(connection.presets).toEqual(root.registry.presetsOf(connection.provider));
-      expect(connection.presets.length).toBeGreaterThan(0);
+      const registered = root.registry.get(connection.provider);
+      expect(connection.macro_actions).toEqual(
+        registered ? macroActionsOf(registered.plugin.catalog) : undefined,
+      );
+      expect(connection.macro_actions.length).toBeGreaterThan(0);
+      expect(connection).not.toHaveProperty('presets');
       expect(connection.authority).toEqual(connection.risks.map((r) => r.risk_id));
       expect(connection.authority.every((id) => !/[*?]/.test(id))).toBe(true);
     }
@@ -841,7 +905,7 @@ describe('missions: issuance context', () => {
     expect(context.find((c) => c.provider === 'github')?.status).toBe('expired');
     const preview = await service.preview(seeded.ada, {
       name: 'On an expired connection',
-      connections: [{ connection_id: seeded.github.connection.id, preset: 'read-only' }],
+      connections: [{ connection_id: seeded.github.connection.id, crans: { read: 'prudent' } }],
       period: DAILY,
       expires_at: null,
     });
@@ -859,7 +923,7 @@ describe('missions: issuance context', () => {
     });
     const preview = await service.preview(seeded.bob, {
       name: 'One project without a label',
-      connections: [{ connection_id: connection.id, preset: 'staging-developer' }],
+      connections: [{ connection_id: connection.id, crans: SUPABASE_STAGING_CRANS }],
       period: DAILY,
       expires_at: null,
     });
@@ -875,7 +939,7 @@ describe('missions: issuance context', () => {
     // Vercel derives the environment from the call: nothing to say.
     const vercel = await root.missions.service.preview(seeded.ada, {
       name: 'Vercel',
-      connections: [{ connection_id: seeded.vercel.connection.id, preset: 'developer' }],
+      connections: [{ connection_id: seeded.vercel.connection.id, crans: VERCEL_DEVELOPER_CRANS }],
       period: DAILY,
       expires_at: null,
     });
@@ -904,7 +968,7 @@ describe('missions: issuance context', () => {
             scope: 'selected' as const,
             resource_refs: ['created-yesterday', 'created-today'],
           },
-          preset: 'staging-developer',
+          crans: SUPABASE_STAGING_CRANS,
         },
       ],
       period: DAILY,
@@ -931,10 +995,10 @@ describe('missions: issuance context', () => {
     expect(issued.ok).toBe(true);
   });
 
-  it('issues every preset of every registered plugin cleanly for an owner with labelled resources', async () => {
+  it('issues every macro-action of every registered plugin at every cran cleanly for an owner with labelled resources', async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
-    let presets = 0;
+    let composed = 0;
     for (const provider of root.registry.ids) {
       const envs = catalogEnvs(root.registry, provider);
       const { connection } = await seedConnection(root.store, {
@@ -943,40 +1007,67 @@ describe('missions: issuance context', () => {
         displayName: `${provider} (bob)`,
         resources: [{ ref: 'unlabelled' }, ...envs.map((env) => ({ ref: `res-${env}`, env }))],
       });
-      for (const preset of root.registry.presetsOf(provider)) {
-        const preview = await service.preview(seeded.bob, {
-          name: `${provider} ${preset.id}`,
-          connections: [{ connection_id: connection.id, preset: preset.id }],
-          period: DAILY,
-          expires_at: null,
-        });
-        expect(preview.issues, `${provider}/${preset.id}`).toEqual([]);
-        expect(preview.connections[0]?.skipped_from_preset, `${provider}/${preset.id}`).toEqual([]);
-        // Explicit ids pass as they are; a base id of an env-scoped risk
-        // (stripe's `read-only`) becomes one entry per labelled environment.
-        const known = new Set(
-          (await service.issuanceContext(seeded.bob))
-            .find((c) => c.id === connection.id)
-            ?.risks.map((r) => r.risk_id),
-        );
-        expect(preview.policy.every((e) => known.has(e.risk_id))).toBe(true);
-        expect(new Set(preview.policy.map((e) => unqualifyRiskId(e.risk_id)))).toEqual(
-          new Set(preset.entries.map((e) => unqualifyRiskId(e.risk_id))),
-        );
-        // The fallback is never pre-accepted by a preset.
-        expect(preview.policy.some((e) => e.risk_id.includes('uncategorized'))).toBe(false);
-        presets += 1;
+      const issuance = (await service.issuanceContext(seeded.bob)).find(
+        (c) => c.id === connection.id,
+      );
+      const known = new Set(issuance?.risks.map((r) => r.risk_id));
+      for (const action of issuance?.macro_actions ?? []) {
+        for (const cran of TRUST_CRANS) {
+          const where = `${provider}/${action.id}@${cran}`;
+          const preview = await service.preview(seeded.bob, {
+            name: where,
+            connections: [{ connection_id: connection.id, crans: { [action.id]: cran } }],
+            period: DAILY,
+            expires_at: null,
+          });
+          const leftOut = preview.connections[0]?.left_out ?? [];
+          // The owner holds the whole catalog and every environment is labelled:
+          // only the cran itself leaves a risk out.
+          expect(
+            leftOut.every((s) => s.reason === 'cran'),
+            where,
+          ).toBe(true);
+          if (preview.policy.length === 0) {
+            expect(
+              preview.issues.map((i) => i.code),
+              where,
+            ).toEqual(['no-accepted-risk']);
+            continue;
+          }
+          expect(preview.issues, where).toEqual([]);
+          expect(
+            preview.policy.every((e) => known.has(e.risk_id)),
+            where,
+          ).toBe(true);
+          // Explicit ids pass as they are; an env-scoped entry becomes one line per environment.
+          const written = new Set(preview.policy.map((e) => unqualifyRiskId(e.risk_id)));
+          const dropped = new Set(leftOut.map((e) => unqualifyRiskId(e.risk_id)));
+          for (const entry of action.entries) {
+            expect(written.has(entry.risk_id) || dropped.has(entry.risk_id), where).toBe(true);
+          }
+          expect(
+            [...written].every((id) => action.entries.some((e) => e.risk_id === id)),
+            where,
+          ).toBe(true);
+          // The fallback is only ever written by "Anything else".
+          expect(
+            preview.policy.some((e) => e.risk_id.includes('uncategorized')),
+            where,
+          ).toBe(action.id === 'anything-else');
+          composed += 1;
+        }
       }
     }
-    expect(presets).toBeGreaterThanOrEqual(root.registry.size);
+    expect(composed).toBeGreaterThanOrEqual(root.registry.size);
   });
 
   it('issues "Everything I hold" on every registered plugin: the explicit list of the authority, within every ceiling', async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
     for (const provider of root.registry.ids) {
+      const registered = root.registry.get(provider);
       expect(
-        root.registry.presetsOf(provider).map((p) => p.id),
+        registered ? macroActionsOf(registered.plugin.catalog).map((a) => a.id) : [],
         `${provider} must not ship the built-in id`,
       ).not.toContain('everything-i-hold');
       const envs = catalogEnvs(root.registry, provider);

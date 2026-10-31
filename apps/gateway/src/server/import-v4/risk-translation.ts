@@ -19,27 +19,28 @@
  * target whose id or base id a v4 denial names, are dropped and reported
  * (`denied-in-v4`).
  *
- * Each kept id takes its budget and gate from a preset line: the plugin's
- * developer preset first, then its other presets in catalog order (the
- * interface's rule for a hand-ticked risk, `defaultEntryFor`). An id no
- * preset carries — every catalog's fallback among them — has no budget to
- * take: dropped and reported, since a quota is never invented — unless the
+ * Each kept id takes its budget and gate from its macro-action at the cran
+ * Confiant (`IMPORT_CRAN`; the interface's rule for a hand-ticked risk,
+ * `defaultLineOf`): base budget ×3, gate from its palier. An id in no
+ * macro-action has no budget to take: dropped and reported, since a quota is
+ * never invented — unless the
  * operator asks for it with `carryUnbudgeted` (`--carry-unbudgeted <quota>`,
  * docs/handbook/import-from-v4.md): the id is
  * then kept with that quota, a rate limit that adds nothing to it, and the
  * `approval` gate, always — every use waits for the owner's grant. Only that
  * reason is lifted; every other drop stays a drop.
  */
-import { SECONDS_PER_MINUTE } from '@vaubaan/policy-engine';
+import { SECONDS_PER_MINUTE, type TrustCran } from '@vaubaan/policy-engine';
 import {
   formatRiskId,
   parseRiskId,
-  type PresetEntry,
+  type MissionPolicyEntry,
   type RateLimit,
   type RiskId,
 } from '@vaubaan/shared';
 
 import { isResolvable } from '../missions/catalog-view';
+import { defaultLineOf, macroActionOfRisk } from '../missions/macro-actions';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource } from '../missions/model';
 
 export type DropReason =
@@ -48,7 +49,7 @@ export type DropReason =
   | 'deprecated-in-v5'
   | 'no-exact-env-counterpart'
   | 'env-unresolvable'
-  | 'no-preset-budget'
+  | 'no-base-budget'
   | 'outside-authority';
 
 export interface DroppedRisk {
@@ -59,16 +60,19 @@ export interface DroppedRisk {
 }
 
 /** One line of the translated policy: explicit id, numeric budget, gate — nothing left to resolve. */
-export interface TranslatedEntry extends PresetEntry {
+export interface TranslatedEntry extends MissionPolicyEntry {
   /** The v4 id it comes from. */
   readonly from: string;
-  /** The preset whose line gave the budget; `null` for a line carried under approval. */
-  readonly presetId: string | null;
+  /** The macro-action whose base budget gave the line; `null` for a line carried under approval. */
+  readonly macroActionId: string | null;
 }
 
+/** The cran an imported mission's lines are written at: v4 missions ran without asking. */
+export const IMPORT_CRAN: TrustCran = 'confiant';
+
 /**
- * `--carry-unbudgeted <quota>`: a risk dropped only because no preset gives
- * it a budget is kept with this quota per period, under approval.
+ * `--carry-unbudgeted <quota>`: a risk dropped only because no macro-action
+ * gives it a base budget is kept with this quota per period, under approval.
  */
 export interface CarryUnbudgeted {
   /** A positive integer, actions per period (the mission's period). */
@@ -84,7 +88,7 @@ export interface CarriedRisk {
 export interface Translation {
   readonly entries: readonly TranslatedEntry[];
   readonly dropped: readonly DroppedRisk[];
-  /** Ids no preset budgets, kept under approval (`CarryUnbudgeted`); also in `entries`. */
+  /** Ids no macro-action budgets, kept under approval (`CarryUnbudgeted`); also in `entries`. */
   readonly carried: readonly CarriedRisk[];
   /** Account-scoped v4 ids written out per environment (rule 2), for the report. */
   readonly expanded: readonly {
@@ -95,17 +99,12 @@ export interface Translation {
 
 export type TranslatableConnection = Pick<
   IssuanceConnection,
-  'risks' | 'derives_env' | 'presets' | 'authority'
+  'risks' | 'derives_env' | 'macro_actions' | 'write_token_risks' | 'authority'
 >;
 
 /** The provider a v4 risk id belongs to, or `null` when it is not a risk id. */
 export function providerOfV4Risk(v4RiskId: string): string | null {
   return parseRiskId(v4RiskId)?.provider ?? null;
-}
-
-/** A developer-like preset: `developer`, or a qualified one such as `test-mode-developer`. */
-export function isDeveloperLike(presetId: string): boolean {
-  return presetId === 'developer' || presetId.endsWith('-developer');
 }
 
 export function translateRisks(
@@ -145,7 +144,7 @@ export function translateRisks(
         dropped.push({ v4RiskId, reason: 'outside-authority', v5RiskIds: [risk.risk_id] });
         continue;
       }
-      const line = presetLineFor(connection, risk);
+      const line = importLineFor(connection, risk);
       if (!line && carry !== null) {
         entries.set(risk.risk_id, {
           risk_id: risk.risk_id,
@@ -153,13 +152,13 @@ export function translateRisks(
           rate_limit: unbindingRateLimit(carry.quota, risk),
           gate: 'approval',
           from: v4RiskId,
-          presetId: null,
+          macroActionId: null,
         });
         carried.push({ v4RiskId, v5RiskId: risk.risk_id });
         continue;
       }
       if (!line) {
-        dropped.push({ v4RiskId, reason: 'no-preset-budget', v5RiskIds: [risk.risk_id] });
+        dropped.push({ v4RiskId, reason: 'no-base-budget', v5RiskIds: [risk.risk_id] });
         continue;
       }
       entries.set(risk.risk_id, {
@@ -168,7 +167,7 @@ export function translateRisks(
         rate_limit: line.entry.rate_limit,
         gate: line.entry.gate,
         from: v4RiskId,
-        presetId: line.presetId,
+        macroActionId: line.macroActionId,
       });
     }
   }
@@ -232,20 +231,16 @@ function targetsOf(
   return { risks: reachable, expanded: true };
 }
 
-/** The budget line of a risk: the developer-like presets first, then the others, in catalog order. */
-function presetLineFor(
-  connection: Pick<IssuanceConnection, 'presets'>,
-  risk: Pick<CatalogRisk, 'risk_id' | 'base_id'>,
-): { readonly presetId: string; readonly entry: PresetEntry } | null {
-  const ordered = [
-    ...connection.presets.filter((p) => isDeveloperLike(p.id)),
-    ...connection.presets.filter((p) => !isDeveloperLike(p.id)),
-  ];
-  for (const preset of ordered) {
-    const entry =
-      preset.entries.find((e) => e.risk_id === risk.risk_id) ??
-      preset.entries.find((e) => e.risk_id === risk.base_id);
-    if (entry) return { presetId: preset.id, entry };
-  }
-  return null;
+/** The line of a risk: its macro-action's base budget at `IMPORT_CRAN`, gate from its palier. */
+function importLineFor(
+  connection: TranslatableConnection,
+  risk: CatalogRisk,
+): {
+  readonly macroActionId: string;
+  readonly entry: Omit<MissionPolicyEntry, 'risk_id'>;
+} | null {
+  const action = macroActionOfRisk(connection, risk);
+  if (!action) return null;
+  const entry = defaultLineOf(connection, { [action.id]: IMPORT_CRAN }, risk);
+  return entry ? { macroActionId: action.id, entry } : null;
 }

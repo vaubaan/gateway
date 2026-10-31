@@ -1,10 +1,12 @@
 /**
- * The permissions of a service against its presets: one row per catalog
- * entry — what it allows in words, its id in mono, one line on why it
- * matters, its severity — and one column per preset with the limit the preset
- * gives it, or a dash. The difference between two presets is read along a
- * row; "why?" unfolds the entry: the whole reason, the six words behind the
- * severity, what it covers, its tools, and its limits in each preset.
+ * The permissions of a service against the trust crans: first the
+ * macro-actions a mission ticks, then one row per catalog entry — what it
+ * allows in words, its id in mono, its macro-action, one line on why it
+ * matters, its severity and palier — and one column per cran with the gate
+ * and limit that cran writes, or "left out". The difference between two crans
+ * is read along a row; "why?" unfolds the entry: the whole reason, the six
+ * words behind the severity, what it covers, its tools, and its line at each
+ * cran.
  *
  * An entry is listed once, under the kind of its most severe variant, so its
  * anchor (`#risk-<id>`) is unique; an entry that exists once per environment
@@ -15,13 +17,15 @@ import { Fragment } from 'react';
 import { Callout, EnvTag, GateMark, Mono, SeverityChip, Tag, WhyCells } from '@/components/ui';
 import {
   ACTIONS,
+  count,
   formatNumber,
   gateWordOf,
   GATE_WORDS,
+  palierWord,
   PERMISSION_KINDS,
-  presetHolds,
   REFERENCE_WORDS,
   SEVERITY_LABEL,
+  TERMS,
 } from '@/lib/vocabulary';
 import {
   DEPRECATED_NOTE,
@@ -29,13 +33,14 @@ import {
   formatRate,
   noteBody,
 } from '@/server/missions/catalog-view';
+import { CRAN_HINTS, CRAN_LABELS, TRUST_CRANS } from '@/server/missions/macro-actions';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
 import {
   TOKEN_ACCESS_BADGE,
   TOKEN_HANDOUT_NOTE,
-  type PresetLine,
-  type PresetReference,
+  type CranCell,
+  type MacroActionReference,
   type RiskReference,
   type RiskReferenceGroup,
 } from '@/server/providers/reference';
@@ -50,19 +55,25 @@ function worstVariant(entry: RiskReference): CatalogRisk | undefined {
   );
 }
 
-/** The lines of a preset per catalog entry, catalog order kept inside an entry. */
-function linesByEntry(preset: PresetReference): ReadonlyMap<string, readonly PresetLine[]> {
-  const byEntry = new Map<string, PresetLine[]>();
-  for (const line of [...preset.auto, ...preset.approval]) {
-    const lines = byEntry.get(line.risk.base_id);
-    if (lines) lines.push(line);
-    else byEntry.set(line.risk.base_id, [line]);
-  }
-  return byEntry;
+/** One cell: per variant, the gate and limit the cran writes, or "left out". */
+function CranCellView({ cells }: { cells: readonly CranCell[] }) {
+  return cells.map(({ risk, line }) => (
+    <span key={risk.risk_id} className={styles.limit}>
+      {risk.env && <EnvTag env={risk.env} />}
+      {line === null ? (
+        <span>{REFERENCE_WORDS.leftOut}</span>
+      ) : (
+        <>
+          {line.gate === 'approval' && <GateMark gate="ask">{REFERENCE_WORDS.asksFirst}</GateMark>}
+          <span title={`${formatRate(line.rate_limit)} at most`}>{formatNumber(line.quota)}</span>
+        </>
+      )}
+    </span>
+  ));
 }
 
 export function PermissionComparison({
-  presets,
+  macroActions,
   groups,
   expanded,
   onExpanded,
@@ -70,19 +81,18 @@ export function PermissionComparison({
   onGo,
   filtered,
 }: {
-  presets: readonly PresetReference[];
+  macroActions: readonly MacroActionReference[];
   /** The catalog, already narrowed by the filters in view. */
   groups: readonly RiskReferenceGroup[];
   expanded: ReadonlySet<string>;
   onExpanded: (next: ReadonlySet<string>) => void;
-  /** The anchor a link pointed at: its row or its column is marked. */
+  /** The anchor a link pointed at: its row or its macro-action is marked. */
   target: string | null;
   onGo: (fragment: string) => void;
   /** A filter is on: an empty list then means "nothing matches", not "no permission". */
   filtered: boolean;
 }) {
-  const cells = presets.map((preset) => ({ preset, lines: linesByEntry(preset) }));
-  const span = presets.length + 2;
+  const span = TRUST_CRANS.length + 2;
   const ids = groups.flatMap((group) => group.entries.map((entry) => entry.base_id));
   const allOpen = ids.length > 0 && ids.every((id) => expanded.has(id));
 
@@ -117,11 +127,26 @@ export function PermissionComparison({
           </button>
         </span>
       </div>
-      {presets.length === 0 && <p className={styles.note}>{REFERENCE_WORDS.noPreset}</p>}
+      <h4 className={styles.sectionTitle}>{REFERENCE_WORDS.macroActions}</h4>
+      <p className={styles.note}>{REFERENCE_WORDS.macroActionsNote}</p>
+      <ul className={styles.macroList} data-testid="macro-action-list">
+        {macroActions.map((action) => (
+          <li
+            key={action.id}
+            id={action.anchor}
+            data-testid={action.anchor}
+            className={[styles.macroItem, target === action.anchor ? styles.marked : ''].join(' ')}
+          >
+            <strong>{action.label}</strong> — {action.description} ·{' '}
+            {count(action.risk_ids.length, TERMS.risk)}
+          </li>
+        ))}
+      </ul>
       <div className={styles.scroll}>
-        <table className={styles.comparison} data-testid="preset-matrix">
+        <table className={styles.comparison} data-testid="cran-matrix">
           <caption className="vbn-sr-only">
-            The permissions of the service, and the limit each preset gives each of them
+            The permissions of the service, and the gate and limit each trust cran gives each of
+            them
           </caption>
           <thead>
             <tr>
@@ -129,29 +154,15 @@ export function PermissionComparison({
               <th scope="col" className={styles.severityHead}>
                 {SEVERITY_LABEL}
               </th>
-              {presets.map((preset) => (
+              {TRUST_CRANS.map((cran) => (
                 <th
-                  key={preset.id}
+                  key={cran}
                   scope="col"
-                  id={preset.anchor}
-                  data-testid={preset.anchor}
-                  title={preset.description}
-                  className={[
-                    styles.presetHead,
-                    target === preset.anchor ? styles.marked : '',
-                  ].join(' ')}
+                  data-testid={`cran-${cran}`}
+                  title={CRAN_HINTS[cran]}
+                  className={styles.cranHead}
                 >
-                  <a
-                    href={`#${preset.anchor}`}
-                    className={styles.presetName}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      onGo(preset.anchor);
-                    }}
-                  >
-                    {preset.label}
-                  </a>
-                  {presetHolds(preset.auto.length + preset.approval.length, preset.approval.length)}
+                  <span className={styles.cranName}>{CRAN_LABELS[cran]}</span>
                 </th>
               ))}
             </tr>
@@ -183,10 +194,22 @@ export function PermissionComparison({
                         <span className={styles.permissionLabel}>{entry.label}</span>{' '}
                         <Mono quiet>{entry.base_id}</Mono>
                         {(entry.envs.length > 0 ||
+                          entry.macro_action ||
                           entry.fallback ||
                           entry.deprecated ||
                           entry.token_access) && (
                           <span className={styles.tags}>
+                            {entry.macro_action && (
+                              <a
+                                href={`#${entry.macro_action.anchor}`}
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  if (entry.macro_action) onGo(entry.macro_action.anchor);
+                                }}
+                              >
+                                <Tag>{entry.macro_action.label}</Tag>
+                              </a>
+                            )}
                             {entry.envs.map((env) => (
                               <EnvTag key={env} env={env} />
                             ))}
@@ -216,42 +239,26 @@ export function PermissionComparison({
                       <td className={styles.severityCell}>
                         {shown && <SeverityChip level={shown.level} />}
                       </td>
-                      {cells.map(({ preset, lines }) => {
-                        const own = lines.get(entry.base_id) ?? [];
-                        return (
-                          <td
-                            key={preset.id}
-                            className={[
-                              styles.presetCell,
-                              target === preset.anchor ? styles.marked : '',
-                            ].join(' ')}
-                            data-testid={`cell-${preset.id}-${entry.base_id}`}
-                          >
-                            {own.length === 0 ? (
-                              <>
-                                <span aria-hidden="true">—</span>
-                                <span className="vbn-sr-only">{REFERENCE_WORDS.notIncluded}</span>
-                              </>
-                            ) : (
-                              own.map((line) => (
-                                <span key={line.risk.risk_id} className={styles.limit}>
-                                  {line.risk.env && <EnvTag env={line.risk.env} />}
-                                  {line.gate === 'approval' && (
-                                    <GateMark gate="ask">{REFERENCE_WORDS.asksFirst}</GateMark>
-                                  )}
-                                  <span title={`${formatRate(line.rate_limit)} at most`}>
-                                    {formatNumber(line.quota)}
-                                  </span>
-                                </span>
-                              ))
-                            )}
-                          </td>
-                        );
-                      })}
+                      {TRUST_CRANS.map((cran) => (
+                        <td
+                          key={cran}
+                          className={styles.cranCell}
+                          data-testid={`cell-${cran}-${entry.base_id}`}
+                        >
+                          {entry.macro_action ? (
+                            <CranCellView cells={entry.at_cran[cran]} />
+                          ) : (
+                            <>
+                              <span aria-hidden="true">—</span>
+                              <span className="vbn-sr-only">{REFERENCE_WORDS.notIncluded}</span>
+                            </>
+                          )}
+                        </td>
+                      ))}
                     </tr>
                     <tr className={styles.detailRow} hidden={!open}>
                       <td colSpan={span} id={detailId}>
-                        {open && <PermissionDetail entry={entry} presets={cells} />}
+                        {open && <PermissionDetail entry={entry} />}
                       </td>
                     </tr>
                   </Fragment>
@@ -265,20 +272,8 @@ export function PermissionComparison({
   );
 }
 
-function PermissionDetail({
-  entry,
-  presets,
-}: {
-  entry: RiskReference;
-  presets: readonly {
-    preset: PresetReference;
-    lines: ReadonlyMap<string, readonly PresetLine[]>;
-  }[];
-}) {
+function PermissionDetail({ entry }: { entry: RiskReference }) {
   const shown = worstVariant(entry);
-  const included = presets.flatMap(({ preset, lines }) =>
-    (lines.get(entry.base_id) ?? []).map((line) => ({ preset, line })),
-  );
   return (
     <div className={styles.detail}>
       <p className={styles.detailReason}>{entry.reason}</p>
@@ -347,26 +342,35 @@ function PermissionDetail({
             </dd>
           </>
         )}
-        <dt>In the presets</dt>
+        <dt>Macro-action</dt>
         <dd>
-          {included.length === 0 ? (
+          {entry.macro_action === null ? (
             'in none: a mission holds it only when someone picks it.'
           ) : (
-            <ul className={styles.patterns}>
-              {included.map(({ preset, line }) => (
-                <li key={`${preset.id}:${line.risk.risk_id}`}>
-                  {preset.label}
-                  {line.risk.env && (
-                    <>
-                      {' '}
-                      <EnvTag env={line.risk.env} />
-                    </>
-                  )}
-                  : {formatNumber(line.quota)} per period, {formatRate(line.rate_limit)},{' '}
-                  {GATE_WORDS[gateWordOf(line.gate)]}
-                </li>
-              ))}
-            </ul>
+            <>
+              {entry.macro_action.label}
+              <ul className={styles.patterns}>
+                {TRUST_CRANS.flatMap((cran) =>
+                  entry.at_cran[cran].map(({ risk, palier, line }) => (
+                    <li key={`${cran}:${risk.risk_id}`}>
+                      {CRAN_LABELS[cran]}
+                      {risk.env && (
+                        <>
+                          {' '}
+                          <EnvTag env={risk.env} />
+                        </>
+                      )}{' '}
+                      ({palierWord(palier)}):{' '}
+                      {line === null
+                        ? REFERENCE_WORDS.leftOut
+                        : `${formatNumber(line.quota)} per period, ${formatRate(line.rate_limit)}, ${
+                            GATE_WORDS[gateWordOf(line.gate)]
+                          }`}
+                    </li>
+                  )),
+                )}
+              </ul>
+            </>
           )}
         </dd>
         {entry.rate_ceiling_per_minute !== null && (

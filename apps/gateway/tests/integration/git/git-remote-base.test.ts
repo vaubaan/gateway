@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AuditCallRecord } from '../../../src/server/store';
 import type { IssuedMission } from '../../../src/server/execution/testing';
-import { openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
+import { DEVELOPER_CRANS, openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
 
 const PUSH = 'github__git_push';
 /** More files than GitHub's comparison lists. */
@@ -76,7 +76,7 @@ async function lastPush(): Promise<AuditCallRecord | undefined> {
 
 beforeAll(async () => {
   rig = await openGitRig();
-  developer = await rig.mission({ preset: 'developer' });
+  developer = await rig.mission({ crans: DEVELOPER_CRANS });
   // `main` (the default branch) and `v5` diverge by more than GitHub compares,
   // a workflow included — the dogfood repository: main is v4, v5 is the work.
   const dir = rig.workdir();

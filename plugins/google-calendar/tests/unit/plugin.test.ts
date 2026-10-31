@@ -1,6 +1,6 @@
 /**
  * Mandatory suite of the `google-calendar` plugin: the SDK kit (definition,
- * presets, no wildcard, catalog coverage, identifier proof), the identity,
+ * macro-actions, no wildcard, catalog coverage, identifier proof), the identity,
  * the version, the catalog path, the credential, the tool surface built from
  * the upstream list and its schema check. No network.
  */
@@ -15,7 +15,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
+  policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { toolDrift } from '../../src/execute.ts';
@@ -30,9 +30,8 @@ import {
 import { SAMPLES, context, mcpRoute, primary, team, textResult } from './fixtures.ts';
 
 describe('google-calendar plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(googleCalendarPlugin);
-    assertPresetsValid(googleCalendarPlugin);
     assertNoWildcard(googleCalendarPlugin);
   });
 
@@ -91,19 +90,21 @@ describe('google-calendar plugin — structural kit', () => {
     });
   });
 
-  test('two presets, read-only first; the fallback in none; deleting and inviting outside ask first', () => {
-    const presets = googleCalendarCatalog.catalog.presets ?? [];
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'assistant']);
-    const assistant = presets.find((p) => p.id === 'assistant');
-    const gate = (id: string) => assistant?.entries.find((e) => e.risk_id === id)?.gate;
+  test('read, schedule, invite; the fallback in none; at Confiant deleting and inviting outside ask first', () => {
+    const actions = googleCalendarCatalog.catalog.macro_actions ?? [];
+    expect(actions.map((a) => a.id)).toEqual(['read', 'schedule', 'invite']);
+    const policy = policyFromMacroActions(googleCalendarPlugin, {
+      read: 'confiant',
+      schedule: 'confiant',
+      invite: 'confiant',
+    });
+    const gate = (id: string) => policy.find((l) => l.risk_id === id)?.gate;
     expect(gate('google-calendar.event-delete')).toBe('approval');
     expect(gate('google-calendar.invite-external')).toBe('approval');
     expect(gate('google-calendar.event-create')).toBe('auto');
-    for (const preset of presets) {
-      expect(preset.entries.map((e) => e.risk_id)).not.toContain(
-        'google-calendar.uncategorized-write',
-      );
-    }
+    expect(actions.flatMap((a) => a.entries.map((e) => e.risk_id))).not.toContain(
+      'google-calendar.uncategorized-write',
+    );
   });
 });
 

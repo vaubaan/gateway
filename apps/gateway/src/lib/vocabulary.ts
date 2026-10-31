@@ -81,13 +81,13 @@ export interface Term {
 
 /**
  * Keyed by the name the spec and the code use; the value is what a person
- * reads. `mission` and `preset` are kept as they are.
+ * reads. `mission` and `macroAction` are kept as they are.
  */
 export const TERMS = {
   connection: { one: 'account', many: 'accounts' },
   mission: { one: 'mission', many: 'missions' },
   risk: { one: 'permission', many: 'permissions' },
-  preset: { one: 'preset', many: 'presets' },
+  macroAction: { one: 'macro-action', many: 'macro-actions' },
   missionToken: { one: 'key', many: 'keys' },
   namedToken: { one: 'machine key', many: 'machine keys' },
   request: { one: 'request', many: 'requests' },
@@ -601,21 +601,23 @@ export const PART_LOSS_WORDS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reference (the pages under `/reference`). Protocol names: provider, plugin,
-// risk, preset, tool, plane, slice pattern.
+// risk, macro-action, cran, tool, plane, slice pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const REFERENCE_WORDS = {
   services: 'Services',
   tabs: { permissions: 'Permissions', tools: 'Tools', model: 'How it is modelled' },
   permission: 'Permission',
-  comparison: 'Permissions, and what each preset includes',
+  comparison: 'Permissions, and what each trust cran gives them',
   comparisonNote:
-    'A preset is a starting point; a mission always stores the explicit list. Figures are calls per period.',
+    'A macro-action at a cran is a starting point; a mission always stores the explicit list. Figures are calls per period.',
+  macroActions: 'Macro-actions',
+  macroActionsNote: 'What a mission ticks on this service, each at a trust cran.',
   notIncluded: 'not included',
+  leftOut: 'left out',
   asksFirst: 'asks first',
   howToRead: 'How to read this page',
   hideHowToRead: 'Hide how to read this page',
-  noPreset: 'This service ships no preset: the permissions of a mission are picked one by one.',
   noMatch: 'Nothing matches.',
   byArguments: 'by arguments',
   handsToken: 'hands a token to the agent',
@@ -640,11 +642,9 @@ export const ENVIRONMENT_WORDS = {
   none: 'none: every permission is held once',
 } as const;
 
-/** "10 · 2 ask" — what a preset holds, under its name. */
-export function presetHolds(included: number, asking: number): string {
-  return asking > 0
-    ? `${formatNumber(included)} · ${formatNumber(asking)} ask`
-    : count(included, TERMS.risk);
+/** "Palier 3" — the palier of a permission, 1 mild to 4 irreversible. */
+export function palierWord(palier: number): string {
+  return `Palier ${palier}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1072,7 +1072,7 @@ export const FIRST_RUN = {
     },
     mission: {
       title: 'Give an agent a mission',
-      text: 'Name it, pick the resources, pick a preset, read the three-line summary, create. You get the key.',
+      text: 'Name it, pick the resources, tick what the agent may do at a trust cran, read the three-line summary, create. You get the key.',
     },
     kit: {
       title: 'Paste the kit into your agent',

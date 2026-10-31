@@ -68,14 +68,14 @@ describe('notion catalog', () => {
     ]);
   });
 
-  test('no environment : no env-scoped entity, risk, override or preset entry', () => {
+  test('no environment : no env-scoped entity, risk, override or macro-action entry', () => {
     const entities = notionDataModel.planes.flatMap((p) => p.entities);
     expect(entities.some((e) => e.envScopable)).toBe(false);
     for (const risk of notionCatalog.catalog.risks) {
       expect(risk.acceptable_in_envs, risk.id).toBeUndefined();
       expect(risk.vector_overrides, risk.id).toBeUndefined();
     }
-    for (const entry of (notionCatalog.catalog.presets ?? []).flatMap((p) => p.entries)) {
+    for (const entry of notionCatalog.catalog.macro_actions.flatMap((a) => a.entries)) {
       expect(entry.risk_id).toMatch(/^notion\.[a-z-]+$/);
     }
     expect('envOf' in notionPlugin).toBe(false);

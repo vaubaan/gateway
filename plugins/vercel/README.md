@@ -17,7 +17,7 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 | File                    | Role                                                                                                                                                         |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                                                                       |
-| `src/risk-catalog.yaml` | 16 risks + fallback, three presets. Loaded at boot by the SDK; the only catalog artefact.                                                                    |
+| `src/risk-catalog.yaml` | 16 risks + fallback, five macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                               |
 | `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                          |
 | `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).                                                   |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources; denies the five thread-addressed tools (`UNBOUND_TOOLS`).      |
@@ -97,7 +97,7 @@ the value sent to Vercel is always written from the credential. The four
 rewrapped tools that cannot carry a team are listed with their reason in
 `TEAMLESS_UPSTREAM_TOOLS` (`src/execute.ts`).
 
-## Catalog and presets
+## Catalog and macro-actions
 
 Risks (ids are stable, never renamed): `read-account`, `read-deployment`,
 `read-env-var`, `read-env-var-plaintext`, `fetch-deployment-url`,
@@ -107,14 +107,20 @@ Risks (ids are stable, never renamed): `read-account`, `read-deployment`,
 `uncategorized-write`. ¹ env-scoped: `acceptable_in_envs: [preview, development, prod]`
 with a `vector_overrides.prod` block, qualified as `vercel[prod].deploy` etc.
 
-| Preset      | Intent                                                                                                               | Approval-gated by default                                                                                     |
-| ----------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `read-only` | Inspect projects, deployments, logs, env-var keys, firewall.                                                         | —                                                                                                             |
-| `developer` | One mission per code project: preview/development deploys and env vars, logs, toolbar comments, bypass tokens.       | — (no production configuration at all)                                                                        |
-| `operator`  | Developer plus production deploys and env vars, fan-out writes, project settings, domains, firewall, plaintext read. | prod deploy, prod env var, fan-out, project settings, domains, firewall toggle/rules/IP rules, plaintext read |
+| Macro-action | What it covers                                                  | Risks                                                                  |
+| ------------ | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `watch`      | Projects, deployments, encrypted environment keys and firewall. | `read-account`, `read-deployment`, `read-env-var`, `firewall-read`     |
+| `deploy`     | Deploy, open a preview and comment.                             | `deploy`, `fetch-deployment-url`, `mint-bypass-token`, `toolbar-write` |
+| `configure`  | Environment variables, in clear and in writing.                 | `read-env-var-plaintext`, `env-var-write`, `env-var-fan-out`           |
+| `protect`    | Firewall and IP rules.                                          | `firewall-write`, `firewall-rule-write`, `ip-rule-write`               |
+| `own`        | Project settings and domains.                                   | `project-settings-write`, `domain-write`                               |
 
-Budgets are per period; see the YAML for the numbers. Presets are UI sugar;
-the persisted mission policy is always the explicit enumeration.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran turns each risk's vector into a gate and scales its
+base budget. The persisted policy is the explicit list.
+Budgets are per period; see the YAML for the base numbers. A mission with
+no production configuration ticks `watch` and `deploy` on `preview` /
+`development` only.
 
 ### Environment axis — note for the host
 
@@ -144,7 +150,7 @@ npx vitest run plugins/vercel
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with at
+`assertNoWildcard`, `assertCatalogCoverage` with at
 least one sample per tool), the classifier conventions, the credential spec,
 and `execute` / `discoverResources` against `mockFetch` (including the request
 shapes of the custom REST tools). `classify.test.ts` pins the slices of each

@@ -12,28 +12,35 @@
  * from the creator's current authority at every read (spec §2.3), with the
  * reason in `MissionOverview.orphan`. Nothing here reads a stored status.
  *
- * **No mission rule is restated here.** What a preset stands for on a
- * connection is `expandPreset`, what the built-in `everything-i-hold` writes
- * out is `everythingIHold`, whether an env-qualified id can be reached is
+ * **No mission rule is restated here.** What a macro-action yields at a cran
+ * on a connection is `expandMacroAction`, what the built-in `everything-i-hold`
+ * writes out is `everythingIHold`, whether an env-qualified id can be reached is
  * `isResolvable`, whether an orphaned mission can serve again is
  * `explainOrphan` — the functions the interface and the preview use, so the
  * agent's tools and the web pages cannot answer differently.
  */
-import type { Gate, Preset, RiskId } from '@vaubaan/shared';
+import type { Budget, Gate, MissionPolicyEntry, RiskId } from '@vaubaan/shared';
 
 import {
+  CRAN_BUDGET_FACTOR,
+  CRAN_GATES,
   defaultResources,
   everythingIHold,
-  expandPreset,
+  expandMacroAction,
   explainOrphan,
   isResolvable,
+  macroActionOfRisk,
+  palierOf,
+  TRUST_CRANS,
   type DraftPeriod,
   type IssuanceConnection,
   type MissionDetail,
   type MissionIssuer,
   type MissionOverview,
   type MissionPreview,
+  type Palier,
   reachesLaterResources,
+  type TrustCran,
 } from '../missions';
 import type { ProviderCatalog } from './ports';
 
@@ -71,30 +78,36 @@ export interface EnvUsabilityView {
   readonly unusable_risk_ids: readonly RiskId[];
 }
 
-export interface PresetSummaryView {
+/** What one macro-action at one cran writes on this connection, with the resources known now. */
+export interface CranYieldView {
+  /** Lines that run freely. */
+  readonly auto: number;
+  /** Lines that ask the creator first. */
+  readonly approval: number;
+  /** Risks the cran does not accept (palier 4 at Prudent). */
+  readonly left_out: number;
+}
+
+export interface MacroActionSummaryView {
   readonly id: string;
   readonly label: string;
   readonly description: string;
+  /**
+   * What `crans: { [id]: cran }` writes here at each cran, over the resources
+   * known now (the draft's default `all`). A narrower selection yields fewer
+   * lines; `preview_policy` says which.
+   */
+  readonly at_cran: Readonly<Record<TrustCran, CranYieldView>>;
+  /** Risks of the macro-action outside the user's authority here, or that no resource can reach. */
+  readonly unavailable: readonly RiskId[];
+}
+
+/** The gateway's own `everything-i-hold` on this connection, over the resources known now. */
+export interface EverythingSummaryView {
+  readonly label: string;
+  readonly description: string;
+  /** How many explicit lines it writes. */
   readonly risks: number;
-  /**
-   * True when every entry of the preset is inside the user's authority here.
-   * About authority only: whether a resource carries the environment an entry
-   * needs is `env_qualified_risks`, and `preview_policy` says what a selection
-   * leaves out (`skipped_from_preset`).
-   */
-  readonly within_authority: boolean;
-  /**
-   * The preset entries the user's authority does not cover on this connection.
-   * An entry naming an env-scoped risk is covered when the user holds it in at
-   * least one environment (the preset is then issued for those).
-   */
-  readonly outside_authority: readonly RiskId[];
-  /**
-   * True for the gateway's own `everything-i-hold`: every risk of the authority
-   * the connection's resources known now can reach, written out as explicit lines
-   * at preview and issuance (`risks` counts them). False for a plugin's preset.
-   */
-  readonly built_in: boolean;
 }
 
 export interface ConnectionView {
@@ -114,7 +127,9 @@ export interface ConnectionView {
   };
   readonly resources: readonly ResourceView[];
   readonly env_qualified_risks: EnvUsabilityView;
-  readonly presets: readonly PresetSummaryView[];
+  /** What the user may tick here, catalog order, "Anything else" last. */
+  readonly macro_actions: readonly MacroActionSummaryView[];
+  readonly everything_i_hold: EverythingSummaryView;
 }
 
 /** The resources a new mission can select: the ones discovery still returns. */
@@ -123,46 +138,33 @@ function selectable(connection: IssuanceConnection): IssuanceConnection['resourc
   return connection.resources.filter((r) => !r.stale && !r.self);
 }
 
-function presetSummary(preset: Preset, connection: IssuanceConnection): PresetSummaryView {
-  const held = new Set(connection.authority);
-  // Authority: the preset expanded over the part of the catalog the user holds,
-  // whatever the labels. An entry that expands to nothing held comes back as
-  // itself, and is outside. The expansion is the mission module's.
-  const heldRisks = connection.risks.filter((risk) => held.has(risk.risk_id));
-  const { lines } = expandPreset(preset, { risks: heldRisks, derives_env: true }, []);
-  const outside = lines.map((line) => line.risk_id).filter((id) => !held.has(id));
+function macroActionSummary(
+  connection: IssuanceConnection,
+  action: IssuanceConnection['macro_actions'][number],
+): MacroActionSummaryView {
+  const resources = defaultResources(connection);
+  const at = (cran: TrustCran): CranYieldView => {
+    const { lines, left_out } = expandMacroAction(connection, action, cran, resources);
+    const approval = lines.filter((line) => line.gate === 'approval').length;
+    return { auto: lines.length - approval, approval, left_out: left_out.length };
+  };
+  const { unavailable } = expandMacroAction(connection, action, 'prudent', resources);
   return {
-    id: preset.id,
-    label: preset.label,
-    description: preset.description,
-    risks: preset.entries.length,
-    within_authority: outside.length === 0,
-    outside_authority: outside,
-    built_in: false,
+    id: action.id,
+    label: action.label,
+    description: action.description,
+    at_cran: { prudent: at('prudent'), confiant: at('confiant'), autonome: at('autonome') },
+    unavailable: unavailable.map((risk) => risk.risk_id),
   };
 }
 
 /**
- * The built-in preset on this connection, written out over every resource known
- * now (`defaultResources`, the draft's default `all`): inside the authority by
- * construction. A narrower selection yields fewer lines; `preview_policy` says
- * which.
+ * The built-in `everything-i-hold` on this connection, written out over every
+ * resource known now (`defaultResources`, the draft's default `all`): inside
+ * the authority by construction.
  */
-function builtInPresetOf(connection: IssuanceConnection): Preset {
+function everythingOf(connection: IssuanceConnection) {
   return everythingIHold(connection, defaultResources(connection));
-}
-
-function builtInSummary(connection: IssuanceConnection): PresetSummaryView {
-  const preset = builtInPresetOf(connection);
-  return {
-    id: preset.id,
-    label: preset.label,
-    description: preset.description,
-    risks: preset.entries.length,
-    within_authority: true,
-    outside_authority: [],
-    built_in: true,
-  };
 }
 
 function envUsability(connection: IssuanceConnection): EnvUsabilityView {
@@ -201,10 +203,15 @@ export function connectionView(connection: IssuanceConnection): ConnectionView {
       hidden: r.hidden,
     })),
     env_qualified_risks: envUsability(connection),
-    presets: [
-      ...connection.presets.map((preset) => presetSummary(preset, connection)),
-      builtInSummary(connection),
-    ],
+    macro_actions: connection.macro_actions.map((action) => macroActionSummary(connection, action)),
+    everything_i_hold: (() => {
+      const everything = everythingOf(connection);
+      return {
+        label: everything.label,
+        description: everything.description,
+        risks: everything.entries.length,
+      };
+    })(),
   };
 }
 
@@ -219,7 +226,11 @@ export interface CatalogRiskView {
   readonly label: string;
   readonly reason: string;
   readonly level: string;
-  /** The catalog's catch-all for writes it does not name; never in a preset. */
+  /** 1 mild to 4 irreversible, read from the vector: what a cran maps to a gate. */
+  readonly palier: Palier;
+  /** The macro-action the risk belongs to; `anything-else` for the fallback, `null` when deprecated. */
+  readonly macro_action: string | null;
+  /** The catalog's catch-all for writes it does not name; only in "Anything else". */
   readonly fallback: boolean;
   readonly deprecated: boolean;
   /** Hard ceiling of the rate limit, per minute, when the catalog sets one. */
@@ -235,21 +246,45 @@ export interface CatalogView {
   /** The connection the `in_my_authority` flags are about; `null` when none was named. */
   readonly connection_id: string | null;
   readonly risks: readonly CatalogRiskView[];
-  /**
-   * The plugin's presets as shipped; with a connection, then the built-in
-   * `everything-i-hold` written out for it (`built_in: true`, `within_authority:
-   * true`, `risks` its count), entry by entry.
-   */
-  readonly presets: readonly CatalogPresetView[];
+  /** The macro-actions, each risk with its base budget (unqualified ids: one line per environment reached). */
+  readonly macro_actions: readonly CatalogMacroActionView[];
+  /** Per cran: the gate of each palier (`null`: not accepted) and the factor on the base budget. */
+  readonly crans: Readonly<Record<TrustCran, CranRuleView>>;
+  /** With a connection: the built-in `everything-i-hold` written out for it, entry by entry. */
+  readonly everything_i_hold?: {
+    readonly label: string;
+    readonly description: string;
+    readonly entries: readonly MissionPolicyEntry[];
+  };
 }
 
-export type CatalogPresetView =
-  | Preset
-  | (Preset & {
-      readonly built_in: true;
-      readonly within_authority: true;
-      readonly risks: number;
-    });
+export interface CatalogMacroActionView {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  readonly entries: readonly ({ readonly risk_id: RiskId } & Budget)[];
+}
+
+export interface CranRuleView {
+  readonly gates: Readonly<Record<`${Palier}`, Gate | null>>;
+  readonly budget_factor: number;
+}
+
+function cranRules(): Record<TrustCran, CranRuleView> {
+  const rule = (cran: TrustCran): CranRuleView => ({
+    gates: {
+      '1': CRAN_GATES[cran][1],
+      '2': CRAN_GATES[cran][2],
+      '3': CRAN_GATES[cran][3],
+      '4': CRAN_GATES[cran][4],
+    },
+    budget_factor: CRAN_BUDGET_FACTOR[cran],
+  });
+  return Object.fromEntries(TRUST_CRANS.map((cran) => [cran, rule(cran)])) as Record<
+    TrustCran,
+    CranRuleView
+  >;
+}
 
 export function catalogView(
   catalog: ProviderCatalog,
@@ -267,18 +302,37 @@ export function catalogView(
       label: risk.label,
       reason: risk.reason,
       level: risk.level,
+      palier: palierOf(risk.vector),
+      macro_action: macroActionOfRisk(catalog, risk)?.id ?? null,
       fallback: risk.fallback,
       deprecated: risk.deprecated,
       rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
       ...(held ? { in_my_authority: held.has(risk.risk_id) } : {}),
     })),
-    presets: connection ? [...catalog.presets, builtInCatalogPreset(connection)] : catalog.presets,
+    macro_actions: catalog.macro_actions.map((action) => ({
+      id: action.id,
+      label: action.label,
+      description: action.description,
+      entries: action.entries.map((entry) => ({
+        risk_id: entry.risk_id,
+        quota: entry.quota,
+        rate_limit: entry.rate_limit,
+      })),
+    })),
+    crans: cranRules(),
+    ...(connection
+      ? (() => {
+          const everything = everythingOf(connection);
+          return {
+            everything_i_hold: {
+              label: everything.label,
+              description: everything.description,
+              entries: everything.entries,
+            },
+          };
+        })()
+      : {}),
   };
-}
-
-function builtInCatalogPreset(connection: IssuanceConnection): CatalogPresetView {
-  const preset = builtInPresetOf(connection);
-  return { ...preset, built_in: true, within_authority: true, risks: preset.entries.length };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -550,7 +604,9 @@ export interface PreviewView {
     readonly unknown: readonly RiskId[];
     readonly unresolvable: MissionPreview['connections'][number]['unresolvable'];
     readonly missing_budget: readonly RiskId[];
-    readonly skipped_from_preset: MissionPreview['connections'][number]['skipped_from_preset'];
+    readonly left_out: MissionPreview['connections'][number]['left_out'];
+    /** The crans kept with the mission: the ones naming a macro-action of the connection. */
+    readonly crans: MissionPreview['connections'][number]['crans'];
   }[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
@@ -578,7 +634,8 @@ export function previewView(preview: MissionPreview): PreviewView {
       unknown: c.unknown,
       unresolvable: c.unresolvable,
       missing_budget: c.missing_budget,
-      skipped_from_preset: c.skipped_from_preset,
+      left_out: c.left_out,
+      crans: c.crans,
     })),
     period: preview.period,
     expires_at: preview.expires_at,

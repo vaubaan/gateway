@@ -1,5 +1,5 @@
 /**
- * The built-in preset "Everything I hold on this account" (ADR
+ * The built-in "Everything I hold on this account" (ADR
  * preset-everything-i-hold-expands-explicitly): bounded by the authority,
  * env-qualified ids only when usable, budgets by one rule and within the
  * catalog ceilings, the fallback included and named, and a preview whose
@@ -13,8 +13,6 @@ import {
   EVERYTHING_I_HOLD,
   everythingIHold,
   expansionDigest,
-  findPreset,
-  presetIdsOf,
   QUOTA_BY_LEVEL,
   RATE_BY_LEVEL,
 } from './everything-i-hold';
@@ -57,7 +55,7 @@ describe('everything I hold — the expansion', () => {
       'acme.admin',
       'acme.uncategorized-write',
     ]);
-    // Deprecated ids are held but left out, as "select all" and the plugin presets do.
+    // Deprecated ids are held but left out, as "select all" and the macro-actions do.
     expect(connection.authority).toContain('acme.legacy-export');
   });
 
@@ -100,52 +98,46 @@ describe('everything I hold — the expansion', () => {
     expect(idsOf(connection, [])).toContain('acme[staging].bulk-delete');
   });
 
-  it('budgets: rate at the catalog ceiling, else the largest preset rate, else by level; quota the largest preset quota, else by level', () => {
+  it('budgets: the macro-action base budget at Autonome, the rate at the catalog ceiling when it sets one; by level in no macro-action', () => {
     const connection = acmeConnection();
     const byId = new Map(
       everythingIHold(connection, ACME_RESOURCES).entries.map((e) => [e.risk_id, e]),
     );
     const risks = new Map(connection.risks.map((r) => [r.risk_id, r]));
-    // Two presets name it: the largest quota (developer 1000) and rate (120/min) win.
+    // Base 100 a day, 60 a minute, ×10.
     expect(byId.get('acme.read')).toMatchObject({
       quota: 1000,
-      rate_limit: { max: 120, window_seconds: 60 },
+      rate_limit: { max: 600, window_seconds: 60 },
       gate: 'auto',
     });
-    // Named exactly by developer (200) and by its base id by writer (50).
-    expect(byId.get('acme[staging].write')?.quota).toBe(200);
-    expect(byId.get('acme[prod].write')).toMatchObject({
+    // An env-scoped risk takes its base id's entry in every environment.
+    expect(byId.get('acme[staging].write')?.quota).toBe(1000);
+    expect(byId.get('acme[prod].write')?.quota).toBe(1000);
+    // The catalog ceiling (10/min) is the rate; the quota is the base ×10.
+    expect(byId.get('acme.admin')).toMatchObject({
       quota: 50,
       rate_limit: { max: 10, window_seconds: 60 },
     });
-    // The catalog ceiling (10/min) wins; no preset names it, so the quota is by level.
-    const admin = risks.get('acme.admin');
-    expect(byId.get('acme.admin')).toMatchObject({
-      rate_limit: { max: 10, window_seconds: 60 },
-      quota: admin ? QUOTA_BY_LEVEL[admin.level] : -1,
-    });
-    // The fallback is in no preset: both by level.
-    const fallback = risks.get('acme.uncategorized-write');
+    // The fallback is in "Anything else", at its default base budget.
     expect(byId.get('acme.uncategorized-write')).toMatchObject({
-      quota: fallback ? QUOTA_BY_LEVEL[fallback.level] : -1,
-      rate_limit: { max: fallback ? RATE_BY_LEVEL[fallback.level] : -1, window_seconds: 60 },
+      quota: 500,
+      rate_limit: { max: 100, window_seconds: 60 },
       gate: 'auto',
+    });
+    // A risk in no macro-action: by level.
+    const lone = acmeConnection({ macro_actions: [] });
+    const read = risks.get('acme.read');
+    expect(
+      everythingIHold(lone, ACME_RESOURCES).entries.find((e) => e.risk_id === 'acme.read'),
+    ).toMatchObject({
+      quota: read ? QUOTA_BY_LEVEL[read.level] : -1,
+      rate_limit: { max: read ? RATE_BY_LEVEL[read.level] : -1, window_seconds: 60 },
     });
     // Every line passes the issuance budget check, ceilings included.
     for (const entry of byId.values()) {
       const risk = risks.get(entry.risk_id);
       expect(risk && budgetProblem(entry, risk), entry.risk_id).toBeNull();
     }
-  });
-
-  it('is offered after the plugin presets, and found by its id', () => {
-    const connection = acmeConnection();
-    expect(presetIdsOf(connection)).toEqual(['reader', 'developer', 'writer', EVERYTHING_I_HOLD]);
-    expect(findPreset(connection, EVERYTHING_I_HOLD, ACME_RESOURCES)?.label).toBe(
-      'Everything I hold on this account',
-    );
-    expect(findPreset(connection, 'developer', ACME_RESOURCES)?.id).toBe('developer');
-    expect(findPreset(connection, 'everything', ACME_RESOURCES)).toBeUndefined();
   });
 
   it('never yields a wildcard, a pattern or a base id of an env-scoped risk', () => {
@@ -159,13 +151,13 @@ describe('everything I hold — the expansion', () => {
 });
 
 describe('everything I hold — the preview', () => {
-  it('passes at once, and the policy is the explicit list, not the preset', () => {
+  it('passes at once, and the policy is the explicit list, not "everything"', () => {
     const connection = acmeConnection();
     const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
     expect(p.ok).toBe(true);
     expect(p.issues).toEqual([]);
     expect(p.policy).toEqual(everythingIHold(connection, ACME_RESOURCES).entries);
-    expect(p.connections[0]?.skipped_from_preset).toEqual([]);
+    expect(p.connections[0]?.left_out).toEqual([]);
     expect(JSON.stringify(p.policy)).not.toContain(EVERYTHING_I_HOLD);
   });
 
@@ -243,7 +235,7 @@ describe('everything I hold — the preview', () => {
     ]);
   });
 
-  it('an unknown preset names the built-in one among the known', () => {
+  it('a preset id names the built-in one instead', () => {
     const connection = acmeConnection();
     const p = previewDraft(
       { connections: [connection], now: NOW },

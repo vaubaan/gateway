@@ -95,12 +95,12 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 Semver. **Breaking** = an installation that worked stops working, or works differently, without its
 owner doing anything:
 
-| Surface                 | Breaking (major)                                                                                 | Not breaking (minor)                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| **Configuration keys**  | a key removed or renamed; optional made required; a default or format changing an existing setup | a new optional key; a new accepted value |
-| **Refusal codes**       | a code removed, renamed or given another meaning; a cause answered with another code             | a new code for a new cause               |
-| **Plugin SDK contract** | an export changed so a plugin that compiled and loaded no longer does                            | a new optional member; a new helper      |
-| **Catalog ids**         | a provider id, tool name or preset id removed or renamed (a risk id never is)                    | a new provider, tool, risk or preset     |
+| Surface                 | Breaking (major)                                                                                 | Not breaking (minor)                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| **Configuration keys**  | a key removed or renamed; optional made required; a default or format changing an existing setup | a new optional key; a new accepted value   |
+| **Refusal codes**       | a code removed, renamed or given another meaning; a cause answered with another code             | a new code for a new cause                 |
+| **Plugin SDK contract** | an export changed so a plugin that compiled and loaded no longer does                            | a new optional member; a new helper        |
+| **Catalog ids**         | a provider id, tool name or macro-action id removed or renamed (a risk id never is)              | a new provider, tool, risk or macro-action |
 
 - Also covered: both MCP doors and the OAuth endpoints, `/healthz`, the image's promises (uid 10001,
   `/data`, the port, exit code 78); a release that cannot migrate the store itself. Not covered:

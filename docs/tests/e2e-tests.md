@@ -41,7 +41,7 @@ last_reviewed: 2026-10-27
 - No spec creates state in a real cloud: there is no dedicated test org and no sweeper; the state dies with the `:memory:` store.
 - `E2E_V5_SCREENSHOT_DIR=<folder>` keeps a screenshot per step.
 - The container smoke takes `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT`, `SMOKE_EXPECT_ARCH`; the release sets all three, per architecture, on the built image and again on the pushed digest.
-- Manual acceptance: an expected refusal is a limit answered or waited out, a permission a `developer` mission should not hold unattended, an `approval-required` on a gated permission, or a resource left out on purpose. Unexpected (blocks the cutover): a refusal on an action the day needs, an unplaceable call, `risk-not-accepted` on `uncategorized-write`, `connection-unavailable` or `mission-inactive` on a healthy connection, a v4 tool v5 does not list. Each is fixed in the preset, catalog or code, and the day is run again.
+- Manual acceptance: an expected refusal is a limit answered or waited out, a permission a daily-work mission should not hold unattended, an `approval-required` on a gated permission, or a resource left out on purpose. Unexpected (blocks the cutover): a refusal on an action the day needs, an unplaceable call, `risk-not-accepted` on `uncategorized-write`, `connection-unavailable` or `mission-inactive` on a healthy connection, a v4 tool v5 does not list. Each is fixed in the macro-actions, catalog or code, and the day is run again.
 
 ## Known gaps
 

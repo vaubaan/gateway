@@ -1,6 +1,6 @@
 /**
  * One choice among a few, each said in a word or two with a short hint beside
- * it: the presets of an account while a mission is created.
+ * it: the trust cran of a macro-action while a mission is created.
  *
  * `ChoiceRow` is the group (a `fieldset` named by its `legend`, which is read
  * out and not drawn); `ChoiceChip` is one radio, drawn as a chip. A chip that
@@ -17,7 +17,7 @@ export function ChoiceRow({
   children,
   testId,
 }: {
-  /** Names the group for assistive technology: "Preset for GitHub · acme". */
+  /** Names the group for assistive technology: "Cran of Read on GitHub acme". */
   legend: string;
   children: React.ReactNode;
   testId?: string;

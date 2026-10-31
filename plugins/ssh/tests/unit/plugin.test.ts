@@ -1,7 +1,7 @@
 /**
  * Mandatory suite of the SSH plugin : the SDK kit, the v5 classifier (host
- * resolution, read / write, command classes, opaque lines), the presets
- * evaluated through the policy engine, the command-line splitter, the
+ * resolution, read / write, command classes, opaque lines), missions written
+ * from macro-actions at trust crans evaluated through the policy engine, the command-line splitter, the
  * credential spec and the pin helpers, `execute` and `discoverResources` over
  * a fake transport. No socket is opened here : the real `ssh2` transport is
  * replaced through `createSshPlugin({ transport })` ; it is exercised, host
@@ -24,9 +24,11 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
+  policyFromMacroActions,
+  type MacroActionCranChoice,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
+import type { MissionPolicyEntry } from '@vaubaan/shared';
 import {
   evaluateCall,
   indexCatalog,
@@ -141,9 +143,8 @@ const denied = (args: Record<string, unknown>, resources: readonly Resource[] = 
 // ─── kit ─────────────────────────────────────────────────────────────────────
 
 describe('ssh plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(sshPlugin);
-    assertPresetsValid(sshPlugin);
     assertNoWildcard(sshPlugin);
   });
 
@@ -209,38 +210,32 @@ describe('ssh plugin — structural kit', () => {
     ]);
   });
 
-  test('ships read-only, developer and operator ; developer lists no prod, package, destructive, sudo or credential-file risk ; no preset references the fallback', () => {
-    const presets = sshPlugin.catalog.presets ?? [];
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'operator']);
-    for (const p of presets) {
-      expect(p.entries.map((e) => e.risk_id)).not.toContain('ssh.uncategorized-write');
-    }
-    const ro = presets.find((p) => p.id === 'read-only')!;
-    expect(ro.entries.map((e) => e.risk_id)).toEqual(['ssh.exec-read']);
-
-    const dev = presets.find((p) => p.id === 'developer')!;
-    const devIds = dev.entries.map((e) => e.risk_id);
-    expect(devIds.some((id) => id.includes('[prod]'))).toBe(false);
-    expect(
-      devIds.some((id) => /exec-(destructive|package-install|sudo)|secret-files/.test(id)),
-    ).toBe(false);
-    expect(dev.entries.find((e) => e.risk_id === 'ssh[staging].exec-service-control')?.gate).toBe(
-      'approval',
+  test('macro-actions : look, fix, install ; the fallback in none ; the reads apart from the writes', () => {
+    const actions = sshPlugin.catalog.macro_actions ?? [];
+    const ids = (id: string) =>
+      actions.find((a) => a.id === id)?.entries.map((e) => e.risk_id) ?? [];
+    expect(actions.map((a) => a.id)).toEqual(['look', 'fix', 'install']);
+    expect(actions.flatMap((a) => a.entries.map((e) => e.risk_id))).not.toContain(
+      'ssh.uncategorized-write',
     );
+    expect(ids('look')).toEqual(['ssh.exec-read', 'ssh.exec-read-secret-files']);
+    expect(ids('install')).toEqual(['ssh.exec-package-install', 'ssh.exec-sudo']);
+  });
 
-    const op = presets.find((p) => p.id === 'operator')!;
-    const approval = op.entries.filter((e) => e.gate === 'approval').map((e) => e.risk_id);
-    expect(approval).toContain('ssh.exec-read-secret-files');
-    for (const cls of [
-      'exec-write',
-      'exec-destructive',
-      'exec-package-install',
-      'exec-service-control',
-      'exec-sudo',
-    ]) {
-      expect(approval).toContain(`ssh[prod].${cls}`);
-    }
-    expect(op.entries.find((e) => e.risk_id === 'ssh[dev].exec-write')?.gate).toBe('auto');
+  test('at Prudent, a credential-file read asks first and a destructive line is left out everywhere', () => {
+    const policy = policyFromMacroActions(
+      sshPlugin,
+      { look: 'prudent', fix: 'prudent' },
+      { envs: ['dev', 'staging', 'prod'] },
+    );
+    const gate = (id: string) => policy.find((line) => line.risk_id === id)?.gate;
+    expect(gate('ssh.exec-read')).toBe('auto');
+    expect(gate('ssh.exec-read-secret-files')).toBe('approval');
+    expect(
+      policy.map((line) => line.risk_id).filter((id) => id.includes('exec-destructive')),
+    ).toEqual([]);
+    // A write on prod is irreversible (vector_overrides) : left out at Prudent.
+    expect(gate('ssh[prod].exec-write')).toBeUndefined();
   });
 });
 
@@ -482,28 +477,38 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
   );
 });
 
-// ─── presets, evaluated ──────────────────────────────────────────────────────
+// ─── missions from macro-actions, evaluated ──────────────────────────────────
 
-describe('presets — evaluated through the policy engine, not just listed', () => {
+describe('missions from macro-actions — evaluated through the policy engine, not just listed', () => {
   const indexed = indexCatalog(sshPlugin.catalog);
   type Verdict = 'auto' | 'approval' | 'denied';
+  const ENVS = ['dev', 'staging', 'prod'];
 
-  /** What a mission holding exactly the preset does with `cmd` on `host`. */
-  const verdict = (presetId: string, cmd: string, host: Resource): Verdict => {
-    const preset = (sshPlugin.catalog.presets ?? []).find((p) => p.id === presetId);
-    if (!preset) throw new Error(`no preset '${presetId}'`);
+  /** A mission holding exactly these lines. */
+  const linesOf = (crans: MacroActionCranChoice): MissionPolicyEntry[] =>
+    policyFromMacroActions(sshPlugin, crans, { envs: ENVS });
+  /** Only the plain read : the narrowest mission. */
+  const READ_ONLY: MissionPolicyEntry[] = [
+    {
+      risk_id: 'ssh.exec-read',
+      quota: 2000,
+      rate_limit: { max: 120, window_seconds: 60 },
+      gate: 'auto',
+    },
+  ];
+
+  /** What a mission holding exactly `policy` does with `cmd` on `host`. */
+  const verdict = (policy: readonly MissionPolicyEntry[], cmd: string, host: Resource): Verdict => {
     const out = classifySsh('ssh__exec', { cmd }, [host]);
     if ('denied' in out) return 'denied';
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(preset.entries.map((e) => e.risk_id)),
+      token_accepted_risks: new Set(policy.map((e) => e.risk_id)),
       catalog: indexed,
       envResolver: resourceEnvResolver([host]),
     });
     if (decision.outcome === 'denied') return 'denied';
-    const gates = decision.risks_touched.map(
-      (id) => preset.entries.find((e) => e.risk_id === id)?.gate,
-    );
+    const gates = decision.risks_touched.map((id) => policy.find((e) => e.risk_id === id)?.gate);
     return gates.includes('approval') ? 'approval' : 'auto';
   };
 
@@ -543,31 +548,50 @@ describe('presets — evaluated through the policy engine, not just listed', () 
     '/bin/ls',
   ];
 
-  test.each(INSPECTION)('every preset allows the inspection %j on every host', (cmd) => {
-    for (const preset of ['read-only', 'developer', 'operator']) {
+  test.each(INSPECTION)('look, at any cran, runs the inspection %j freely on every host', (cmd) => {
+    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
       for (const host of HOSTS) {
-        expect(verdict(preset, cmd, host), `${preset} on ${host.env ?? 'unlabelled'}`).toBe('auto');
+        expect(
+          verdict(linesOf({ look: cran }), cmd, host),
+          `${cran} on ${host.env ?? 'unlabelled'}`,
+        ).toBe('auto');
       }
     }
   });
 
-  test.each(NEVER_A_READ)('read-only refuses %j on every host', (cmd) => {
-    for (const host of HOSTS) {
-      expect(verdict('read-only', cmd, host), host.env ?? 'unlabelled').toBe('denied');
+  test.each(NEVER_A_READ)(
+    'the plain read refuses %j on every host ; look at Prudent never runs it freely',
+    (cmd) => {
+      for (const host of HOSTS) {
+        expect(verdict(READ_ONLY, cmd, host), host.env ?? 'unlabelled').toBe('denied');
+        expect(verdict(linesOf({ look: 'prudent' }), cmd, host), host.env ?? 'unlabelled').not.toBe(
+          'auto',
+        );
+      }
+    },
+  );
+
+  test('fix at Prudent : plain writes ask first on dev and staging, nothing on prod ; service control runs freely', () => {
+    const policy = linesOf({ look: 'prudent', fix: 'prudent' });
+    for (const cmd of ['touch /tmp/x', 'git pull --ff-only', './deploy.sh', 'bash deploy.sh']) {
+      expect(verdict(policy, cmd, dev), cmd).toBe('approval');
+      expect(verdict(policy, cmd, staging), cmd).toBe('approval');
+      expect(verdict(policy, cmd, prod), cmd).toBe('denied');
+      expect(verdict(policy, cmd, unlabelled), cmd).toBe('denied');
     }
   });
 
-  test('developer : plain writes on dev and staging, service control auto on dev and under approval on staging, nothing on prod', () => {
-    for (const cmd of ['touch /tmp/x', 'git pull --ff-only', './deploy.sh', 'bash deploy.sh']) {
-      expect(verdict('developer', cmd, dev), cmd).toBe('auto');
-      expect(verdict('developer', cmd, staging), cmd).toBe('auto');
-      expect(verdict('developer', cmd, prod), cmd).toBe('denied');
-      expect(verdict('developer', cmd, unlabelled), cmd).toBe('denied');
-    }
-    for (const cmd of ['systemctl restart app', 'docker compose up -d', 'kill 1234']) {
-      expect(verdict('developer', cmd, dev), cmd).toBe('auto');
-      expect(verdict('developer', cmd, staging), cmd).toBe('approval');
-      expect(verdict('developer', cmd, prod), cmd).toBe('denied');
+  test('fix at Autonome : plain writes and service control run freely off prod and ask first on prod', () => {
+    const policy = linesOf({ look: 'prudent', fix: 'autonome' });
+    for (const cmd of [
+      'touch /tmp/x',
+      'git pull --ff-only',
+      'systemctl restart app',
+      'kill 1234',
+    ]) {
+      expect(verdict(policy, cmd, dev), cmd).toBe('auto');
+      expect(verdict(policy, cmd, staging), cmd).toBe('auto');
+      expect(verdict(policy, cmd, prod), cmd).toBe('approval');
     }
   });
 
@@ -597,22 +621,25 @@ describe('presets — evaluated through the policy engine, not just listed', () 
     'ssh other-host uptime',
     'systemctl poweroff',
     "python3 -c 'print(1)'",
-  ])('developer refuses %j on dev and on staging', (cmd) => {
-    expect(verdict('developer', cmd, dev)).toBe('denied');
-    expect(verdict('developer', cmd, staging)).toBe('denied');
+  ])('fix at Prudent, without look or install, refuses %j on dev and on staging', (cmd) => {
+    const policy = linesOf({ fix: 'prudent' });
+    expect(verdict(policy, cmd, dev)).toBe('denied');
+    expect(verdict(policy, cmd, staging)).toBe('denied');
   });
 
-  test('operator : auto on dev, approval for the classes that hurt on staging, approval for every write on prod', () => {
+  test('everything at Autonome : the classes that hurt and every prod write still ask first', () => {
+    const policy = linesOf({ look: 'prudent', fix: 'autonome', install: 'autonome' });
     const table: ReadonlyArray<readonly [string, Verdict, Verdict, Verdict]> = [
       ['touch /tmp/x', 'auto', 'auto', 'approval'],
-      ['rm -rf /srv/old', 'auto', 'approval', 'approval'],
-      ['/bin/rm -rf /srv/old', 'auto', 'approval', 'approval'],
-      ['apt-get --yes install nginx', 'auto', 'approval', 'approval'],
-      ['/usr/bin/apt-get install -y nginx', 'auto', 'approval', 'approval'],
-      ['systemctl restart app', 'auto', 'approval', 'approval'],
-      ['sudo systemctl restart app', 'auto', 'approval', 'approval'],
-      ['sudo -n true', 'auto', 'approval', 'approval'],
-      // A credential-file read is under approval everywhere.
+      // Irreversible : asked first at every cran.
+      ['rm -rf /srv/old', 'approval', 'approval', 'approval'],
+      ['/bin/rm -rf /srv/old', 'approval', 'approval', 'approval'],
+      ['apt-get --yes install nginx', 'auto', 'auto', 'approval'],
+      ['/usr/bin/apt-get install -y nginx', 'auto', 'auto', 'approval'],
+      ['systemctl restart app', 'auto', 'auto', 'approval'],
+      ['sudo systemctl restart app', 'auto', 'auto', 'approval'],
+      ['sudo -n true', 'auto', 'auto', 'approval'],
+      // A credential-file read asks first at Prudent.
       ['cat /etc/shadow', 'approval', 'approval', 'approval'],
       ['cat .env', 'approval', 'approval', 'approval'],
       // An opaque line carries the credential-file marker too.
@@ -620,14 +647,14 @@ describe('presets — evaluated through the policy engine, not just listed', () 
       ['echo $(date)', 'approval', 'approval', 'approval'],
     ];
     for (const [cmd, onDev, onStaging, onProd] of table) {
-      expect(verdict('operator', cmd, dev), `${cmd} on dev`).toBe(onDev);
-      expect(verdict('operator', cmd, staging), `${cmd} on staging`).toBe(onStaging);
-      expect(verdict('operator', cmd, prod), `${cmd} on prod`).toBe(onProd);
+      expect(verdict(policy, cmd, dev), `${cmd} on dev`).toBe(onDev);
+      expect(verdict(policy, cmd, staging), `${cmd} on staging`).toBe(onStaging);
+      expect(verdict(policy, cmd, prod), `${cmd} on prod`).toBe(onProd);
     }
     // On an unlabelled host no write risk qualifies ; a credential-file read is not a write.
     for (const [cmd] of table) {
       const readOnly = cmd === 'cat /etc/shadow' || cmd === 'cat .env';
-      expect(verdict('operator', cmd, unlabelled), `${cmd} on an unlabelled host`).toBe(
+      expect(verdict(policy, cmd, unlabelled), `${cmd} on an unlabelled host`).toBe(
         readOnly ? 'approval' : 'denied',
       );
     }

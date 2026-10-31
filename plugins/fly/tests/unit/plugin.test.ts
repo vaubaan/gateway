@@ -1,5 +1,5 @@
 /**
- * Mandatory suite of the `fly` plugin : the SDK kit (definition, presets,
+ * Mandatory suite of the `fly` plugin : the SDK kit (definition, macro-actions,
  * coverage of every tool, the identifier proof), identity and version.
  */
 import { existsSync, readFileSync } from 'node:fs';
@@ -13,7 +13,6 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -98,9 +97,8 @@ export const SAMPLES: ToolSamples = {
 };
 
 describe('fly plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(flyPlugin);
-    assertPresetsValid(flyPlugin);
     assertNoWildcard(flyPlugin);
   });
 

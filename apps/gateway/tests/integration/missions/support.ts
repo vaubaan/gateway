@@ -1,7 +1,7 @@
 /**
  * An ephemeral instance for the mission tests: the real composition root on
  * the `:memory:` store, with the plugins the image ships (their catalogs and
- * presets are what issuance is about) and connections seeded straight through
+ * macro-actions are what issuance is about) and connections seeded straight through
  * the repositories. Shared by the vitest integration suite and the Playwright
  * launcher.
  */

@@ -69,7 +69,12 @@ describe('missions: members and per-holder tokens', () => {
   function draft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     return {
       name: 'Ship the billing page',
-      connections: [{ connection_id: seeded.github.connection.id, preset: 'developer' }],
+      connections: [
+        {
+          connection_id: seeded.github.connection.id,
+          crans: { read: 'confiant', propose: 'confiant' },
+        },
+      ],
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
       ...overrides,

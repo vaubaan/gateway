@@ -8,12 +8,13 @@
  *   - a send to an external-unbounded recipient is refused on a domain
  *     labelled outside `acceptable_in_envs`, or not labelled at all, whatever
  *     else the mission accepted ;
- *   - what each shipped preset allows and refuses, call by call — no preset
- *     needs the fallback to do what its description says.
+ *   - what a mission composed from macro-actions (risk model §4.6) allows
+ *     and refuses, call by call — none needs the fallback to do its job.
  */
 import { describe, expect, test } from 'vitest';
 
 import type { ProviderPlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 import { envResolverFor, evaluateCall } from '@vaubaan/policy-engine';
 
 import { resendCatalog, resendPlugin } from '../../src/index.ts';
@@ -176,12 +177,20 @@ describe('resend — an external-unbounded send outside staging / dev is refused
   });
 });
 
-describe('resend — what each shipped preset allows and refuses', () => {
-  const presetRisks = (id: string): readonly RiskId[] =>
-    catalog.presets.find((p) => p.id === id)!.entries.map((e) => e.risk_id);
+describe('resend — what a mission composed from macro-actions allows and refuses', () => {
+  type Crans = Parameters<typeof policyFromMacroActions>[1];
+  /** The missions of the table : macro-actions ticked at a cran, no environment given. */
+  const MISSIONS: Readonly<Record<string, Crans>> = {
+    check: { check: 'prudent' },
+    'check and send': { check: 'prudent', send: 'prudent' },
+    campaign: { check: 'confiant', send: 'confiant', campaign: 'confiant' },
+    domains: { check: 'prudent', domains: 'prudent' },
+  };
+  const missionRisks = (id: string): readonly RiskId[] =>
+    policyFromMacroActions(resendPlugin, MISSIONS[id]!).map((e) => e.risk_id);
   const seg = { segment_id: 'seg_news' };
 
-  /** One representative call per capability ; the same list is judged under every preset. */
+  /** One representative call per capability ; the same list is judged under every mission. */
   const CALLS: Readonly<Record<string, readonly [string, Readonly<Record<string, unknown>>]>> = {
     'read email status': ['resend__get_email', { id: 'em_1' }],
     'read domains': ['resend__get_domain', { domain: prod.ref }],
@@ -216,18 +225,17 @@ describe('resend — what each shipped preset allows and refuses', () => {
     'create a domain': ['resend__create_domain', { name: 'mail.acme.com' }],
   };
 
-  const READS = ['read email status', 'read domains', 'read broadcasts'];
+  const READS = ['read email status', 'read domains', 'read broadcasts', 'read contacts'];
   const ALLOWED: Readonly<Record<string, readonly string[]>> = {
-    'read-only': READS,
-    developer: [
+    check: READS,
+    'check and send': [
       ...READS,
       'send internal, one recipient',
       'send internal, several recipients',
       'send allow-listed',
     ],
-    'marketing-operator': [
+    campaign: [
       ...READS,
-      'read contacts',
       'send internal, one recipient',
       'send internal, several recipients',
       'send allow-listed',
@@ -238,32 +246,51 @@ describe('resend — what each shipped preset allows and refuses', () => {
       'send a broadcast',
       'delete a broadcast',
     ],
-    'domain-admin': ['read domains', 'verify a domain', 'update a domain', 'create a domain'],
+    domains: [...READS, 'verify a domain', 'update a domain', 'create a domain'],
   };
 
-  test('the table covers every shipped preset', () => {
-    expect(catalog.presets.map((p) => p.id).sort()).toEqual(Object.keys(ALLOWED).sort());
+  test('the table covers every macro-action of the catalog', () => {
+    const ticked = new Set(Object.values(MISSIONS).flatMap((crans) => Object.keys(crans)));
+    expect([...ticked].sort()).toEqual((catalog.macro_actions ?? []).map((a) => a.id).sort());
   });
 
-  test.each(Object.keys(ALLOWED))('%s', (preset) => {
-    const accepted = presetRisks(preset);
+  test.each(Object.keys(ALLOWED))('%s', (mission) => {
+    const accepted = missionRisks(mission);
     const allowed = Object.entries(CALLS)
       .filter(([, [tool, args]]) => evaluate(tool, args, accepted).kind === 'allow')
       .map(([label]) => label);
-    expect(allowed).toEqual(Object.keys(CALLS).filter((label) => ALLOWED[preset]!.includes(label)));
-    // Nothing is refused by the classifier : every refusal above is a risk the preset lacks.
+    expect(allowed).toEqual(
+      Object.keys(CALLS).filter((label) => ALLOWED[mission]!.includes(label)),
+    );
+    // Nothing is refused by the classifier : every refusal above is a risk the mission lacks.
     for (const [label, [tool, args]] of Object.entries(CALLS)) {
       expect(evaluate(tool, args, accepted).kind, label).not.toBe('classify-denied');
     }
   });
 
-  test('no preset can send to an external-unbounded recipient, on any domain', () => {
-    for (const preset of catalog.presets) {
-      const accepted = preset.entries.map((e) => e.risk_id);
-      for (const from of [prod, staging, dev, unlabelled]) {
-        expect(send(from, 'x@evil.com', accepted).kind, `${preset.id} ${from.ref}`).toBe('deny');
-        expect(batch(from, 'x@evil.com', accepted).kind, `${preset.id} ${from.ref}`).toBe('deny');
-      }
+  test('at Prudent, sending reaches no external-unbounded recipient, on any domain', () => {
+    const envs = ['prod', 'staging', 'dev'];
+    const accepted = policyFromMacroActions(resendPlugin, { send: 'prudent' }, { envs }).map(
+      (e) => e.risk_id,
+    );
+    for (const from of [prod, staging, dev, unlabelled]) {
+      expect(send(from, 'x@evil.com', accepted).kind, from.ref).toBe('deny');
+      expect(batch(from, 'x@evil.com', accepted).kind, from.ref).toBe('deny');
+    }
+  });
+
+  test('from Confiant, the external send is offered on staging and dev only, and asks first', () => {
+    const envs = ['prod', 'staging', 'dev'];
+    const lines = policyFromMacroActions(resendPlugin, { send: 'autonome' }, { envs });
+    const external = lines.filter((e) => e.risk_id.endsWith('.send-email-external-unbounded'));
+    expect(external.map((e) => [e.risk_id, e.gate])).toEqual([
+      [qualified('staging'), 'approval'],
+      [qualified('dev'), 'approval'],
+    ]);
+    const accepted = lines.map((e) => e.risk_id);
+    expect(send(staging, 'x@evil.com', accepted).kind).toBe('allow');
+    for (const from of [prod, unlabelled]) {
+      expect(send(from, 'x@evil.com', accepted).kind, from.ref).toBe('deny');
     }
   });
 

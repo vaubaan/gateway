@@ -87,21 +87,26 @@ the mission cannot resolve, a malformed id or variable name — is an
 `UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed
 status, an `Error` for a JSON-RPC error frame or GraphQL `errors`.
 
-## Catalog and presets
+## Catalog and macro-actions
 
 `src/risk-catalog.yaml` — nine risks plus the mandatory
-`railway.uncategorized-write` fallback, `catalog_version: 3`. Env-scoped
+`railway.uncategorized-write` fallback, `catalog_version: 6`. Env-scoped
 risks (`deploy`, `upsert-variable`, `read-variables`) accept `staging`,
 `preview`, `dev`, `prod` and carry a stricter `prod` vector.
 
-| Preset      | Grants                                                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only` | Account, runtime and logs reads. No variable values, no write.                                                                        |
-| `developer` | Reads + variables, deploys and variable writes on `dev` / `preview` / `staging` (`auto`); `prod` deploys and writes under `approval`. |
-| `operator`  | Developer + `prod` variable reads; `bulk-variables-replace` and `create-project` under `approval`.                                    |
+| Macro-action | What it covers                         | Risks                                                         |
+| ------------ | -------------------------------------- | ------------------------------------------------------------- |
+| `watch`      | Projects, services, deployments, logs. | `read-account`, `read-runtime`, `read-logs`                   |
+| `deploy`     | Redeploy and apply staged changes.     | `deploy`                                                      |
+| `configure`  | Read and write variables.              | `read-variables`, `upsert-variable`, `bulk-variables-replace` |
+| `create`     | Projects and Railway's agent.          | `create-project`, `agent-action`                              |
 
-Presets are default suggestions copied into a mission policy at issuance;
-`railway.agent-action` is in none of them and must be accepted explicitly.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran turns each risk's vector into a gate and scales its
+base budget. The persisted policy is the explicit list.
+`prod` deploys and variable writes ask first below Autonome;
+`bulk-variables-replace` is left out at Prudent and always asks first;
+`railway.agent-action` asks first below Autonome.
 
 ## Credential — how the company registers its app
 

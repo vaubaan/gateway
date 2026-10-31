@@ -10,8 +10,8 @@
  *   - a GitHub connection owned by that user, with two repositories. Its
  *     credential is a placeholder token: enough to issue a mission and list
  *     tools, not to call GitHub;
- *   - a mission on one repository with the plugin's `read-only` preset, issued
- *     through `MissionService.issue` like the Missions page does.
+ *   - a mission on one repository with the plugin's Read macro-action at
+ *     Prudent, issued through `MissionService.issue` like the Missions page does.
  *
  * Prints the bootstrap kit (with the token, once) on stdout. Run it before
  * starting the server, from `apps/gateway`:
@@ -51,7 +51,7 @@ async function main(): Promise<void> {
         {
           connection_id: connection.id,
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
-          preset: 'read-only',
+          crans: { read: 'prudent' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },

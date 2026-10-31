@@ -13,7 +13,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 - **New mission and Edit mission compose a policy from macro-actions at a
   trust cran** (ADR macro-actions-and-trust-crans-prefill-the-policy, risk
-  model §4.7). Per account, the Simple view lists the service's
+  model §4.6). Per account, the Simple view lists the service's
   macro-actions, "Anything else" included; each ticked at Prudent, Confiant
   or Autonome says what it writes here (runs freely, asks first, left out,
   not available to you) and the account says its highest palier. The
@@ -23,6 +23,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   redraw the form, which opens in the Advanced view when the lines differ
   from what the crans write. A draft may carry `crans` per connection;
   unknown macro-actions are dropped. The preset chips are gone from the form.
+- **Agents compose missions from macro-actions too; presets are retired.**
+  On the management door a draft connection gives `crans` (macro-action →
+  cran) and the preview writes its policy, reporting what the crans leave
+  out in `left_out` (outside the authority, no resource in the environment,
+  or a palier the cran does not accept). `list_my_connections` says what
+  each macro-action yields at each cran (`at_cran`) and `get_catalog` gives
+  each risk's palier and macro-action, the macro-actions with their base
+  budgets and the cran table. "Give access" ticks a macro-action's
+  permissions in one click; the Reference compares every permission across
+  the three crans. A risk whose tool hands the agent a token that can write
+  asks first at every cran. The v4 import writes each kept risk at
+  Confiant; "Everything I hold" takes its budgets from the macro-actions at
+  Autonome.
 
 - **The OAuth broker runs without an enclave** (`@vaubaan/oauth-broker` 0.2.0,
   ADR oauth-broker-can-run-without-an-enclave). The published image with
@@ -48,15 +61,26 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   without them, or with a live risk in none or in two, no longer loads. The
   policy engine gains the trust crans (Prudent, Confiant, Autonome) that turn
   a macro-action into explicit lines: the gate follows the risk's palier, read
-  from its vector, and the budget is multiplied ×1, ×3 or ×10. Nothing uses
-  them yet: the creation form still starts from presets. Every shipped plugin
-  gains a patch version and a `catalog_version`.
+  from its vector, and the budget is multiplied ×1, ×3 or ×10. Every shipped
+  plugin gains a patch version and a `catalog_version`.
 - **The OAuth broker logs why a redeem was refused** (`@vaubaan/oauth-broker`
   0.2.1). The gateway still gets one `invalid_grant`; the access log line of
   `/grants/redeem` now carries a fixed `reason`: `grant_unknown`,
   `consent_incomplete`, `flow_mismatch`, `provider_not_served`,
   `provider_refused`, `provider_unavailable` or `no_refresh_token`. Never
   provider text.
+
+### Removed
+
+- **Catalog presets.** No plugin ships `presets`, a catalog with the key no
+  longer loads, and the plugin SDK loses `presetsOf`, `assertPresetsValid`
+  and the `Preset` types (`policyFromMacroActions` in `@vaubaan/plugin-sdk/testing`
+  writes a test policy from macro-actions instead). A draft's `preset` takes
+  only `everything-i-hold`; any other id is `unknown-preset`. The management
+  door's `presets` fields are replaced by `macro_actions`, `crans` and
+  `everything_i_hold`, and the preview's `skipped_from_preset` by `left_out`.
+  Every plugin gains a patch version and a `catalog_version`; Gmail's comes
+  with its 1.1.0.
 
 ## [2.0.0-alpha.11] - 2026-10-29
 

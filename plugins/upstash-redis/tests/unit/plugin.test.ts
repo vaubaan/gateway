@@ -23,8 +23,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 import { resourceEnvResolver } from '@vaubaan/policy-engine';
@@ -92,29 +92,29 @@ const databaseRoute = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('upstash-redis plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(upstashRedisPlugin);
-    assertPresetsValid(upstashRedisPlugin);
     assertNoWildcard(upstashRedisPlugin);
   });
 
-  test('ships read-only, developer and operator presets ; developer stays key-level on non-prod ; no preset carries the fallback', () => {
-    const presets = upstashRedisPlugin.catalog.presets;
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'developer', 'operator']);
-
-    for (const p of presets) {
-      expect(p.entries.map((e) => e.risk_id)).not.toContain('upstash-redis.uncategorized-write');
+  test('ships peek, write, delete and manage ; key-level writes off prod at Prudent ; the fallback in none', () => {
+    const actions = upstashRedisPlugin.catalog.macro_actions ?? [];
+    expect(actions.map((a) => a.id)).toEqual(['peek', 'write', 'delete', 'manage']);
+    for (const a of actions) {
       expect(
-        p.entries.some((e) => e.risk_id.includes('uncategorized')),
-        `${p.id} must not carry the fallback`,
+        a.entries.some((e) => e.risk_id.includes('uncategorized')),
+        `${a.id} must not carry the fallback`,
       ).toBe(false);
     }
+    const peek = actions.find((a) => a.id === 'peek')!;
+    expect(peek.entries.every((e) => e.risk_id.startsWith('upstash-redis.read-'))).toBe(true);
 
-    const readOnly = presets.find((p) => p.id === 'read-only')!;
-    expect(readOnly.entries.every((e) => e.risk_id.startsWith('upstash-redis.read-'))).toBe(true);
-
-    const developer = presets.find((p) => p.id === 'developer')!;
-    const devRisks = developer.entries.map((e) => e.risk_id);
+    const developer = policyFromMacroActions(
+      upstashRedisPlugin,
+      { peek: 'prudent', write: 'prudent', delete: 'prudent' },
+      { envs: ['development', 'staging'] },
+    );
+    const devRisks = developer.map((e) => e.risk_id);
     expect(devRisks).toEqual(
       expect.arrayContaining([
         'upstash-redis.read-data',
@@ -123,6 +123,7 @@ describe('upstash-redis plugin — structural kit', () => {
         'upstash-redis[development].delete-data',
       ]),
     );
+    // The irreversible flush is left out at Prudent ; `manage` is not ticked.
     for (const forbidden of [
       'flush-database',
       'execute-arbitrary',
@@ -136,12 +137,19 @@ describe('upstash-redis plugin — structural kit', () => {
         `developer: ${forbidden}`,
       ).toBe(false);
     }
-    expect(developer.entries.every((e) => e.gate === 'auto')).toBe(true);
+    const devGate = (id: string) => developer.find((e) => e.risk_id === id)?.gate;
+    expect(devGate('upstash-redis[staging].write-data')).toBe('auto');
+    expect(devGate('upstash-redis[staging].delete-data')).toBe('approval');
 
-    const operator = presets.find((p) => p.id === 'operator')!;
-    const gated = operator.entries.filter((e) => e.gate === 'approval').map((e) => e.risk_id);
+    const operator = policyFromMacroActions(
+      upstashRedisPlugin,
+      { peek: 'confiant', write: 'confiant', delete: 'confiant', manage: 'confiant' },
+      { envs: ['development', 'staging', 'prod'] },
+    );
+    const gated = operator.filter((e) => e.gate === 'approval').map((e) => e.risk_id);
     expect(gated).toEqual(
       expect.arrayContaining([
+        'upstash-redis[development].flush-database',
         'upstash-redis[staging].flush-database',
         'upstash-redis[prod].flush-database',
         'upstash-redis[development].delete-database',
@@ -154,8 +162,8 @@ describe('upstash-redis plugin — structural kit', () => {
         'upstash-redis[prod].execute-arbitrary',
       ]),
     );
-    const auto = operator.entries.filter((e) => e.gate === 'auto').map((e) => e.risk_id);
-    expect(auto).toContain('upstash-redis[development].flush-database');
+    const auto = operator.filter((e) => e.gate === 'auto').map((e) => e.risk_id);
+    expect(auto).toContain('upstash-redis[prod].write-data');
     expect(auto).toContain('upstash-redis.create-database');
   });
 

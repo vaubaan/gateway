@@ -4,13 +4,13 @@ tracks:
   - plugins/*/src/risk-catalog.yaml
   - plugins/*/src/index.ts
   - apps/gateway/src/server/connections/shipped-providers.test.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Provider plugin handbooks
 
 One handbook per plugin (`plugins/<id>`): where to start, the classification invariants a reviewer
-checks, upstream traps, what to set up at the provider, debug. Tools, slices, risks and presets are
+checks, upstream traps, what to set up at the provider, debug. Tools, slices, risks and macro-actions are
 read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: spec
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) and
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5; contract:
@@ -19,8 +19,9 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 ## Rules every plugin follows (not repeated per handbook)
 
 - The catalog is loaded with `catalogPathNextTo`; exactly one `<id>.uncategorized-write` fallback,
-  `fallback: true`, in no preset; a risk id is deprecated (`replaced_by`), never deleted.
-- A preset is a starting point; the persisted policy is always the explicit list of risk ids.
+  `fallback: true`, in no macro-action; a risk id is deprecated (`replaced_by`), never deleted.
+- A creator ticks macro-actions at a trust cran (risk model §4.6); the persisted policy is always
+  the explicit list of risk ids. A catalog has no `presets` (retired).
 - Every entry but the fallback and deprecated ones is in exactly one macro-action, unqualified,
   with a base budget; a new entry joins one in the same pull request
   ([ADR](../../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
@@ -36,7 +37,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 - An env-scoped risk runs only on a resource labelled with an environment its entry lists: an
   **unlabelled resource cannot run env-scoped operations** (`risk-not-accepted`) until the owner
   labels it.
-- A catalog, classifier or preset change updates the handbook in the same pull request and bumps
+- A catalog, classifier or macro-action change updates the handbook in the same pull request and bumps
   `catalog_version` and the plugin `version` (`plugins/README.md`, "Step 11"). A stricter
   classification, or an executor refusing what it forwarded, is breaking (major; minor before 1.0).
 

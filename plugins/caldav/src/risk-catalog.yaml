@@ -3,7 +3,7 @@
 # Nextcloud, …), reached with an app password (ADR
 # google-calendar-through-an-oauth-broker, D5).
 #
-# Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Spec     : docs/spec/gateway-risk-model.md §4 , §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/caldav.md.
 #
 # 9 named risks + 1 fallback = 10. Ids are never renamed or deleted
@@ -32,9 +32,11 @@
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: caldav
-catalog_version: 2
-catalog_date: 2026-10-30
+catalog_version: 3
+catalog_date: 2026-10-31
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -193,8 +195,8 @@ risks:
     reason: >-
       Catch-all for writes no entry above covers. No tool of the plugin
       reaches it today : a new write (a calendar created, an invitation
-      answered) lands here until it has its own permission. Never offered in
-      a preset.
+      answered) lands here until it has its own permission. In no
+      macro-action.
     matches: 'caldav.[**].W'
     fallback: true
     vector:
@@ -205,9 +207,6 @@ risks:
       visibility: public
       persistence: posture
 
-# Presets are default suggestions copied into a mission at issuance (spec
-# §3.2). No risk is env-scoped, so no entry is env-qualified. Deliberately in
-# no preset : the fallback.
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
@@ -252,83 +251,3 @@ macro_actions:
       - risk_id: caldav.attendees-external
         quota: 20
         rate_limit: { max: 5, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: List the calendars and read events over up to 31 days at a time; no change, nobody notified.
-    entries:
-      - risk_id: caldav.read-calendars
-        quota: 500
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.read-events
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-
-  - id: own-agenda
-    label: Own agenda
-    description: Read-only, plus creating and changing events that concern nobody else, so no invitation, update or cancellation is sent; deleting an event asks first.
-    entries:
-      - risk_id: caldav.read-calendars
-        quota: 500
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.read-events
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.event-create
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.event-change
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.event-delete
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-
-  - id: assistant
-    label: Scheduling assistant
-    description: Own agenda, plus reading wide time ranges and meetings with colleagues and allowlisted contacts; inviting anybody else and deleting an event ask first.
-    entries:
-      - risk_id: caldav.read-calendars
-        quota: 500
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.read-events
-        quota: 2000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.read-wide-range
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.event-create
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.event-change
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.event-delete
-        quota: 50
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: caldav.attendees-internal
-        quota: 200
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.attendees-allowlisted
-        quota: 100
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: caldav.attendees-external
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval

@@ -2,7 +2,7 @@
  * Mandatory suite of the Resend plugin : the SDK kit, the v5 classifier
  * (resource resolution, recipient zones, batch, out-of-scope refusals,
  * broadcasts), `execute` and `discoverResources` against `mockFetch`, the
- * credential spec and the presets. The per-tool classifier scenarios live in
+ * credential spec and the macro-actions. The per-tool classifier scenarios live in
  * `classify.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
@@ -19,8 +19,8 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  assertPresetsValid,
   mockFetch,
+  policyFromMacroActions,
   refusalText,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
@@ -98,9 +98,8 @@ const denied = (
 };
 
 describe('resend plugin — structural kit', () => {
-  test('well-formed, presets valid, no wildcard', () => {
+  test('well-formed, no wildcard', () => {
     assertPluginWellFormed(resendPlugin);
-    assertPresetsValid(resendPlugin);
     assertNoWildcard(resendPlugin);
   });
 
@@ -1088,7 +1087,7 @@ describe('discoverResendResources with mockFetch', () => {
   });
 });
 
-describe('credential spec and presets', () => {
+describe('credential spec and macro-actions', () => {
   test('api-key with one secret field pinned to the re_ prefix', () => {
     const spec = resendPlugin.credential;
     expect(spec.kind).toBe('api-key');
@@ -1101,34 +1100,27 @@ describe('credential spec and presets', () => {
     expect(pattern.test('re_a b')).toBe(false);
   });
 
-  test('presets : the four shipped, approval on bulk sends, segment deletion and domain mutations', () => {
-    const presets = resendPlugin.catalog.presets;
-    expect(presets.map((p) => p.id)).toEqual([
-      'read-only',
-      'developer',
-      'marketing-operator',
-      'domain-admin',
-    ]);
-    const approvals = (id: string) =>
-      presets
-        .find((p) => p.id === id)!
-        .entries.filter((e) => e.gate === 'approval')
-        .map((e) => e.risk_id)
-        .sort();
-    expect(approvals('marketing-operator')).toEqual([
-      'resend.broadcast-send',
-      'resend.segment-write',
-      'resend.send-batch',
-    ]);
-    expect(approvals('domain-admin')).toEqual(['resend.domain-write']);
-    const ids = (id: string) => presets.find((p) => p.id === id)!.entries.map((e) => e.risk_id);
-    expect(ids('read-only')).not.toContain('resend.read-segments');
-    expect(ids('developer')).toEqual([
-      'resend.read-email-status',
-      'resend.read-domains',
-      'resend.read-broadcasts',
-      'resend.send-email-internal',
-      'resend.send-email-allowlist',
-    ]);
+  test('macro-actions : at Confiant, bulk sends, segment writes and domain mutations ask first', () => {
+    const actions = resendPlugin.catalog.macro_actions ?? [];
+    expect(actions.map((a) => a.id)).toEqual(['check', 'send', 'campaign', 'domains']);
+    const crans = Object.fromEntries(actions.map((a) => [a.id, 'confiant' as const]));
+    const approvals = policyFromMacroActions(resendPlugin, crans)
+      .filter((e) => e.gate === 'approval')
+      .map((e) => e.risk_id);
+    expect(approvals).toEqual(
+      expect.arrayContaining([
+        'resend.send-batch',
+        'resend.broadcast-send',
+        'resend.segment-write',
+        'resend.domain-write',
+      ]),
+    );
+    // Bulk sends are irreversible : they ask first even at Autonome.
+    const autonome = Object.fromEntries(actions.map((a) => [a.id, 'autonome' as const]));
+    const gate = (id: string) =>
+      policyFromMacroActions(resendPlugin, autonome).find((e) => e.risk_id === id)?.gate;
+    expect(gate('resend.send-batch')).toBe('approval');
+    expect(gate('resend.broadcast-send')).toBe('approval');
+    expect(gate('resend.read-email-status')).toBe('auto');
   });
 });

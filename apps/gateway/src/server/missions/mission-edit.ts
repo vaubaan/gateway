@@ -43,7 +43,7 @@ export interface MissionSnapshotConnection {
   readonly resource_scope: StoredResourceScope;
   readonly resource_ids: readonly string[];
   readonly policy: readonly MissionPolicyEntry[];
-  /** The crans the form recorded (risk model §4.7): they redraw it, they are no change. */
+  /** The crans the form recorded (risk model §4.6): they redraw it, they are no change. */
   readonly crans?: Readonly<Record<string, string>>;
 }
 
@@ -579,7 +579,7 @@ export function judgeEdit(
       // The creation's own words, also where the creator no longer holds the account.
       counting.push({
         code: 'no-accepted-risk',
-        message: `Connection "${ctx?.display_name ?? was.display_name}" accepts no risk: pick a preset or accept at least one risk, or leave the connection out.`,
+        message: `Connection "${ctx?.display_name ?? was.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
         connection_index: index,
         connection_id: id,
       });

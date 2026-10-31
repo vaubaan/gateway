@@ -1,9 +1,10 @@
 /**
  * "Approve an action" through the real execution door (spec §7.7, §3.5, §4.1
  * `approval-required`; §10 "integration: approval and replay"): the real GitHub
- * plugin, its `developer` preset as shipped, a mocked upstream.
+ * plugin, its Read, Propose and Administer macro-actions at Confiant, a mocked
+ * upstream.
  *
- * The preset gates `github.workflow-write-via-file`. A file write under
+ * Administer at Confiant gates `github.workflow-write-via-file` (palier 3). A file write under
  * `.github/workflows/` on a feature branch touches that risk and the ungated
  * `github.feature-branch-write`: a multi-risk call with one gated risk. Over JSON-RPC
  * on `/mcp`: refusal → the creator grants → the identical replay passes and reaches
@@ -73,8 +74,13 @@ async function openRig(): Promise<Rig> {
   ]);
   const issued = await missions.service.issue(instance.ada, {
     name: 'Develop acme/app',
-    // The preset as the plugin ships it: nothing adjusted.
-    connections: [{ connection_id: github.id, preset: 'developer' }],
+    // The macro-actions as the plugin ships them, at a cran: nothing adjusted.
+    connections: [
+      {
+        connection_id: github.id,
+        crans: { read: 'confiant', propose: 'confiant', administer: 'confiant' },
+      },
+    ],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   });
@@ -87,7 +93,7 @@ async function openRig(): Promise<Rig> {
   };
 }
 
-describe('approve an action through the execution door (GitHub developer preset)', () => {
+describe('approve an action through the execution door (GitHub macro-actions at Confiant)', () => {
   let rig: Rig;
 
   beforeEach(async () => {
@@ -112,12 +118,19 @@ describe('approve an action through the execution door (GitHub developer preset)
     return url.slice(url.lastIndexOf('/') + 1);
   }
 
+  /** The quota the cran wrote: the macro-action's base budget ×3 at Confiant. */
+  const quota = (riskId: string): number => {
+    const entry = rig.mission.mission.policy.find((e) => e.riskId === riskId);
+    if (!entry) throw new Error(`${riskId} is not in the mission`);
+    return entry.quota;
+  };
+
   const counters = async () => {
     const usage = await rig.root.budget.usageOf(budgetMissionOf(rig.mission.mission), new Date());
     return Object.fromEntries(usage.consumed);
   };
 
-  it('the shipped preset gates the workflow write, and nothing else on this call', () => {
+  it('Confiant gates the workflow write, and nothing else on this call', () => {
     const gate = (riskId: string) =>
       rig.mission.mission.policy.find((entry) => entry.riskId === riskId)?.gate;
     expect(gate(GATED)).toBe('approval');
@@ -155,8 +168,8 @@ describe('approve an action through the execution door (GitHub developer preset)
       'github.repo[acme/app].branch[feature/ci].workflow-via-file.W',
     ]);
     expect(call.risks.map((r) => [r.risk_id, r.gate, r.remaining]).sort()).toEqual([
-      [UNGATED, 'auto', 3000],
-      [GATED, 'approval', 50],
+      [UNGATED, 'auto', quota(UNGATED)],
+      [GATED, 'approval', quota(GATED)],
     ]);
     expect(viewed.view.request.risk_label).toBe(
       'Modify a GitHub Actions workflow (.github/workflows/*.yml)',
@@ -183,7 +196,7 @@ describe('approve an action through the execution door (GitHub developer preset)
       tool: TOOL,
       arguments_hash: refusal.fingerprint,
       approval_id: (await rig.root.store.approvals.getByRequest(requestId))?.id,
-      remaining_budget: { [UNGATED]: 2999, [GATED]: 49 },
+      remaining_budget: { [UNGATED]: quota(UNGATED) - 1, [GATED]: quota(GATED) - 1 },
     });
 
     // ── The second identical replay: the approval was single-use ────────────

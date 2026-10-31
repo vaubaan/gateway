@@ -132,7 +132,7 @@ Three behaviours are specific to v5:
 | `cloudflare-dns.dnssec-write`          | W      | Can break resolution.                                                                  |
 | `cloudflare-dns.cache-purge`           | W      | Reversible, load spike.                                                                |
 | `cloudflare-dns.zone-delete`           | W      | Irreversible. `zone[*].W`: the zone itself, never a write under it.                    |
-| `cloudflare-dns.uncategorized-write`   | W      | Fallback; in no preset.                                                                |
+| `cloudflare-dns.uncategorized-write`   | W      | Fallback; in no macro-action.                                                          |
 
 Record writes are layered: a mission needs `record-write` for any record
 change, plus `critical-record-write` for the sensitive ones and
@@ -140,24 +140,28 @@ change, plus `critical-record-write` for the sensitive ones and
 — or any record the call does not name by `type` and `name` — needs all
 three.
 
-## Presets
+## Macro-actions
 
-| Preset         | Scope                                                                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `read-only`    | Zone metadata and record values. No export, no write.                                                                                                                          |
-| `dns-operator` | Reads, `record-write` and `cache-purge`, all `auto`. Cannot touch apex / MX / NS records, delete records, import, or edit zone settings.                                       |
-| `zone-admin`   | Reads including export, `record-write` and `cache-purge` `auto`; `critical-record-write`, `record-delete`, `import-records`, `zone-settings-write`, `dnssec-write` `approval`. |
+| Macro-action    | What it covers                                  | Risks                                                      |
+| --------------- | ----------------------------------------------- | ---------------------------------------------------------- |
+| `look-up`       | Metadata, records and export.                   | `read-zone-metadata`, `read-records`, `export-zone-file`   |
+| `point`         | Ordinary records and cache purge.               | `record-write`, `cache-purge`                              |
+| `change-domain` | Apex, MX and NS records, deletions and imports. | `critical-record-write`, `record-delete`, `import-records` |
+| `rule-zone`     | Zone settings, DNSSEC and zone deletion.        | `zone-settings-write`, `dnssec-write`, `zone-delete`       |
 
-No preset lists `zone-delete` or the fallback. Presets are UI sugar: the
-persisted policy is the explicit enumeration.
+A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
+risk model §4.6); the cran sets each risk's gate from its vector and
+multiplies the base budget. The mission stores the explicit list. `zone-delete` is irreversible: left out at
+Prudent, it asks first at the other crans. The fallback sits in "Anything
+else".
 
 ## Tests
 
 `npx vitest run plugins/cloudflare-dns` — 190 tests: the SDK kit
-(`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the classifier (`plugin.test.ts` and the per-tool
+(`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`),
+the classifier (`plugin.test.ts` and the per-tool
 suite `classify.test.ts`, including the path-safe identifiers), `execute`
 and `discoverResources` against `mockFetch` (the update / delete guard, no
-call for an unsafe identifier), the credential spec and presets, catalog
+call for an unsafe identifier), the credential spec and macro-actions, catalog
 invariants with the exact risks each tool touches, the identifier grammars
 (`identifiers.test.ts`), and the data model. No test ever calls Cloudflare.

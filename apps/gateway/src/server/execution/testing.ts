@@ -200,21 +200,6 @@ export function depotPlugin(): DepotPlugin {
           ],
         },
       ],
-      presets: [
-        {
-          id: 'reader',
-          label: 'Reader',
-          description: 'Read-only access.',
-          entries: [
-            {
-              risk_id: `${DEPOT}.read`,
-              quota: 100,
-              rate_limit: { max: 60, window_seconds: 60 },
-              gate: 'auto',
-            },
-          ],
-        },
-      ],
     },
     credential: { kind: 'api-key', fields: [{ name: 'token', label: 'Token', secret: true }] },
     classify(name, args, resources) {

@@ -109,7 +109,7 @@ test('an agent with a mission key and nothing else clones, pushes, is refused, a
   scratch.push(home, work);
   const git = agentGit(home, issued.token);
   transcript.push(
-    `# Mission "${MISSION}" (developer preset). VAUBAAN_MISSION_TOKEN is set; git has the kit's credential helper.`,
+    `# Mission "${MISSION}" (developer crans). VAUBAAN_MISSION_TOKEN is set; git has the kit's credential helper.`,
     '',
   );
 
@@ -134,7 +134,7 @@ test('an agent with a mission key and nothing else clones, pushes, is refused, a
     '[remote rejected] main -> main (permission github.merge-protected is not in this mission)',
   );
 
-  // A rewrite of the feature branch: the developer preset asks first.
+  // A rewrite of the feature branch: Propose at Confiant asks first (force-push, palier 3).
   await git(repo, ['switch', 'feature/hello']);
   await git(repo, ['commit', '--amend', '-m', 'Say hello, better']);
   const rewritten = (await git(repo, ['rev-parse', 'HEAD'])).out.trim();

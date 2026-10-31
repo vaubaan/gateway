@@ -1,8 +1,8 @@
 /**
- * Which risks each `miro` tool touches, and what the presets hold : the
- * layering (a deletion and a bulk creation need `content-write` too), an
- * update of the canvas touching both deletion risks, the gates of the
- * facilitator preset.
+ * Which risks each `miro` tool touches, and what the macro-actions hold at a
+ * trust cran : the layering (a deletion and a bulk creation need
+ * `content-write` too), an update of the canvas touching both deletion risks,
+ * the gates of every macro-action at Confiant.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -11,7 +11,9 @@ import { risksTouchedBy } from '@vaubaan/policy-engine';
 
 import { classifyMiro } from '../../src/classify.ts';
 import { TOOL } from '../../src/identity.ts';
-import { miroCatalog } from '../../src/index.ts';
+import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
+
+import { miroCatalog, miroPlugin } from '../../src/index.ts';
 import { SAMPLES, workshop } from './fixtures.ts';
 
 function risksOf(tool: string): string[] {
@@ -105,63 +107,65 @@ describe('the catalog keeps the ids of catalogs 1 and 2', () => {
     for (const id of ['miro.read-format-guide', 'miro.board-create']) {
       expect(ids, 'catalog 2').toContain(id);
     }
-    expect(miroCatalog.catalog.catalog_version).toBe(4);
+    expect(miroCatalog.catalog.catalog_version).toBe(5);
   });
 });
 
-describe('presets', () => {
-  const presets = miroCatalog.catalog.presets ?? [];
-  const preset = (id: string) => {
-    const found = presets.find((p) => p.id === id);
-    if (!found) throw new Error(`no preset ${id}`);
-    return found;
-  };
+describe('macro-actions', () => {
+  const actions = miroCatalog.catalog.macro_actions;
+  const idsOf = (id: string) => actions.find((a) => a.id === id)!.entries.map((e) => e.risk_id);
+  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(policyFromMacroActions(miroPlugin, crans).map((l) => [l.risk_id, l.gate]));
 
-  test('read-only, scribe, facilitator', () => {
-    expect(presets.map((p) => p.id)).toEqual(['read-only', 'scribe', 'facilitator']);
-    expect(preset('read-only').entries.map((e) => e.risk_id)).toEqual([
-      'miro.read-boards',
-      'miro.read-board-content',
-      'miro.read-format-guide',
-      'miro.read-board-details',
-    ]);
+  test('look, draw, rework, manage ; looking at Prudent asks first for content and access', () => {
+    expect(actions.map((a) => a.id)).toEqual(['look', 'draw', 'rework', 'manage']);
+    expect(gates({ look: 'prudent' })).toEqual({
+      'miro.read-boards': 'auto',
+      'miro.read-board-content': 'approval',
+      'miro.read-format-guide': 'auto',
+      'miro.read-board-details': 'auto',
+      'miro.read-board-access': 'approval',
+    });
   });
 
-  test('sharing a board is in facilitator alone, behind an approval', () => {
-    for (const id of ['read-only', 'scribe']) {
-      const ids = preset(id).entries.map((e) => e.risk_id);
-      for (const risk of [
-        'miro.board-share',
-        'miro.read-board-access',
-        'miro.board-details-write',
-        'miro.boardcast-create',
-      ]) {
-        expect(ids, `${id} ${risk}`).not.toContain(risk);
-      }
+  test('sharing a board is in manage alone : left out at Prudent, asked first above', () => {
+    for (const action of actions) {
+      expect(idsOf(action.id).includes('miro.board-share'), action.id).toBe(action.id === 'manage');
     }
-    const share = preset('facilitator').entries.find((e) => e.risk_id === 'miro.board-share');
-    expect(share?.gate).toBe('approval');
+    expect(Object.keys(gates({ manage: 'prudent' }))).not.toContain('miro.board-share');
+    for (const cran of ['confiant', 'autonome'] as const) {
+      expect(gates({ manage: cran })['miro.board-share']).toBe('approval');
+    }
   });
 
-  test('scribe never deletes, so it cannot update the canvas', () => {
-    const ids = preset('scribe').entries.map((e) => e.risk_id);
+  test('draw never deletes, so it alone cannot update the canvas', () => {
+    const ids = idsOf('draw');
     expect(ids).not.toContain('miro.item-delete');
     expect(ids).not.toContain('miro.frame-delete');
     expect(ids).not.toContain('miro.board-create');
     expect(ids).toContain('miro.bulk-create');
+    expect(idsOf('rework')).toEqual(['miro.item-delete', 'miro.frame-delete']);
   });
 
-  test('facilitator asks first for every deletion, every new board and every share, runs everything else freely', () => {
+  test('everything at Confiant asks first for deletions, new boards, shares and bulk or recorded content, runs the rest freely', () => {
     const asks = new Set([
+      'miro.bulk-create',
+      'miro.boardcast-create',
       'miro.item-delete',
       'miro.frame-delete',
       'miro.board-create',
       'miro.board-share',
     ]);
-    for (const entry of preset('facilitator').entries) {
-      expect(entry.gate, entry.risk_id).toBe(asks.has(entry.risk_id) ? 'approval' : 'auto');
+    const all = gates({
+      look: 'confiant',
+      draw: 'confiant',
+      rework: 'confiant',
+      manage: 'confiant',
+    });
+    for (const [riskId, gate] of Object.entries(all)) {
+      expect(gate, riskId).toBe(asks.has(riskId) ? 'approval' : 'auto');
     }
-    expect(preset('facilitator').entries).toHaveLength(13);
+    expect(Object.keys(all)).toHaveLength(13);
   });
 
   test('every named risk has a per-minute ceiling', () => {

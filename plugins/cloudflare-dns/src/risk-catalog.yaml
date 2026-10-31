@@ -1,7 +1,7 @@
 # Risk catalog of the `cloudflare-dns` provider.
 #
-# Spec : docs/spec/gateway-risk-model.md §4, docs/spec/vaubaan-gateway.md §3.2 (presets).
-# ADR  : docs/decisions/plugin-contract-and-credential-spec.md (presets, loader),
+# Spec : docs/spec/gateway-risk-model.md §4, §4.6 (macro-actions).
+# ADR  : docs/decisions/plugin-contract-and-credential-spec.md (loader),
 #        docs/decisions/unified-gates-drop-confirm.md (no default_gate).
 #
 # 11 named risks + 1 fallback. Every slice lives under `account[**].zone[**]`
@@ -15,7 +15,7 @@
 # `record-delete`. A mission needs `record-write` for any record change and
 # the specific risk on top for the sensitive ones.
 #
-# Presets never list the fallback : the engine counts it only when no
+# No macro-action lists the fallback : the engine counts it only when no
 # specific risk matched a write.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
@@ -25,9 +25,11 @@
 # catalog_version 4 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
 # pattern or preset changed.
+# catalog_version 5 (2026-10-31) : presets retired (same ADR) ; no risk,
+# pattern or macro-action changed.
 provider: cloudflare-dns
-catalog_version: 4
-catalog_date: 2026-10-30
+catalog_version: 5
+catalog_date: 2026-10-31
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -203,7 +205,6 @@ risks:
       Deletes the zone. The domain stops resolving at once ; every record,
       setting and the DNSSEC configuration are lost. Irreversible in
       practice — the zone must be recreated and every record reimported.
-      Listed in no preset : a mission that needs it enumerates it explicitly.
       The pattern ends on the zone ident (`zone[*]`, not `zone[**]`) : a
       recursive wildcard would make every record or settings write need
       this irreversible permission.
@@ -233,11 +234,6 @@ risks:
       visibility: public
       persistence: posture
 
-# Presets are UI sugar : the persisted policy is always the explicit
-# enumeration. Quotas are actions per mission period ; rate limits are
-# actions per sliding window ; `approval` gates suggest a human in the loop
-# on the entries that take a domain down or are hard to undo. Values are a
-# starting point (ADR `mission-presets-default-values`, deferred).
 # Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
@@ -292,83 +288,3 @@ macro_actions:
       - risk_id: cloudflare-dns.zone-delete
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
-
-presets:
-  - id: read-only
-    label: Read-only
-    description: Zone metadata, settings, DNSSEC posture and record values of the selected zones. No export, no write.
-    entries:
-      - risk_id: cloudflare-dns.read-zone-metadata
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.read-records
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-
-  - id: dns-operator
-    label: DNS operator
-    description: Read, then create and update ordinary subdomain records and purge the cache. No apex / MX / NS change, no deletion, no import, no zone settings.
-    entries:
-      - risk_id: cloudflare-dns.read-zone-metadata
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.read-records
-        quota: 2000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.record-write
-        quota: 500
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.cache-purge
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-
-  - id: zone-admin
-    label: Zone admin
-    description: Everything on the selected zones except deleting them; record deletion, apex / MX / NS changes, imports, zone settings and DNSSEC ask first.
-    entries:
-      - risk_id: cloudflare-dns.read-zone-metadata
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.read-records
-        quota: 5000
-        rate_limit: { max: 120, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.export-zone-file
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.record-write
-        quota: 1000
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
-      - risk_id: cloudflare-dns.critical-record-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: approval
-      - risk_id: cloudflare-dns.record-delete
-        quota: 200
-        rate_limit: { max: 30, window_seconds: 60 }
-        gate: approval
-      - risk_id: cloudflare-dns.import-records
-        quota: 10
-        rate_limit: { max: 3, window_seconds: 60 }
-        gate: approval
-      - risk_id: cloudflare-dns.zone-settings-write
-        quota: 50
-        rate_limit: { max: 10, window_seconds: 60 }
-        gate: approval
-      - risk_id: cloudflare-dns.dnssec-write
-        quota: 10
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: cloudflare-dns.cache-purge
-        quota: 100
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
