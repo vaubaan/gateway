@@ -47,7 +47,7 @@ import type { MissionTeam, TeamTokenView } from '@/server/missions/team-service'
 import { TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from '@/lib/missions/token-name';
 
 import { KitSteps, RevealDialog, revealedOf, type RevealedKey } from '../bootstrap-kit-view';
-import { messageOf } from '../message-of';
+import { useAction } from '@/lib/http/post-json';
 
 type Act =
   | { readonly kind: 'kit' }
@@ -76,8 +76,6 @@ export function useMissionActs(): MissionActs {
   return acts;
 }
 
-const UNREACHABLE = 'The gateway could not be reached.';
-
 export function MissionActsProvider({
   team,
   kit,
@@ -91,8 +89,7 @@ export function MissionActsProvider({
   const router = useRouter();
   const toast = useToast();
   const [act, setAct] = useState<Act | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
   const [revealed, setRevealed] = useState<RevealedKey | null>(null);
   const [candidate, setCandidate] = useState('');
   const [keyName, setKeyName] = useState('');
@@ -100,31 +97,13 @@ export function MissionActsProvider({
   const { mission } = team;
   const base = `/api/missions/${encodeURIComponent(mission.id)}`;
 
+  /** The answer of a mission act, `null` when it failed (its sentence is then `error`). */
   const post = useCallback(
     async (path: string, body?: unknown): Promise<unknown> => {
-      setBusy(true);
-      setError(null);
-      try {
-        const res = await fetch(`${base}${path}`, {
-          method: 'POST',
-          ...(body === undefined
-            ? {}
-            : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-        });
-        const answer: unknown = await res.json().catch(() => null);
-        if (!res.ok) {
-          setError(messageOf(answer, res.status));
-          return null;
-        }
-        return answer ?? {};
-      } catch {
-        setError(UNREACHABLE);
-        return null;
-      } finally {
-        setBusy(false);
-      }
+      const answer = await run(`${base}${path}`, body);
+      return answer.ok ? (answer.body ?? {}) : null;
     },
-    [base],
+    [base, run],
   );
 
   function close() {

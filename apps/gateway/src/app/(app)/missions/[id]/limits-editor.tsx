@@ -29,7 +29,7 @@ import {
 import { ACTIONS, formatNumber, gateWordOf, WAITING, type SeverityWord } from '@/lib/vocabulary';
 import type { Gate } from '@vaubaan/shared';
 
-import { messageOf } from '../message-of';
+import { useAction } from '@/lib/http/post-json';
 import styles from '../missions.module.css';
 import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
@@ -99,8 +99,7 @@ export function LimitsEditor({
     ),
   );
   const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
 
   const draftOf = (row: LimitRow): Draft =>
     drafts[row.risk_id] ?? { quota: String(row.quota), rate: String(row.rate_max) };
@@ -126,36 +125,21 @@ export function LimitsEditor({
   }
 
   async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/missions/${encodeURIComponent(missionId)}/limits`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          limits: changes.map(({ row, quota, rate }) => ({
-            risk_id: row.risk_id,
-            quota,
-            rate_limit: { max: rate },
-          })),
-        }),
-      });
-      if (!res.ok) {
-        setError(messageOf(await res.json().catch(() => null), res.status));
-        return;
-      }
-      setConfirming(false);
-      toast({
-        title: changes.length === 1 ? 'Limit changed' : `${changes.length} limits changed`,
-        description: 'From the next call. What was used stays used.',
-      });
-      router.push(`${missionPath}#permissions`);
-      router.refresh();
-    } catch {
-      setError('The gateway could not be reached.');
-    } finally {
-      setBusy(false);
-    }
+    const answer = await run(`/api/missions/${encodeURIComponent(missionId)}/limits`, {
+      limits: changes.map(({ row, quota, rate }) => ({
+        risk_id: row.risk_id,
+        quota,
+        rate_limit: { max: rate },
+      })),
+    });
+    if (!answer.ok) return;
+    setConfirming(false);
+    toast({
+      title: changes.length === 1 ? 'Limit changed' : `${changes.length} limits changed`,
+      description: 'From the next call. What was used stays used.',
+    });
+    router.push(`${missionPath}#permissions`);
+    router.refresh();
   }
 
   return (

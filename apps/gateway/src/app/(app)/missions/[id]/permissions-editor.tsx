@@ -5,7 +5,28 @@ import { useRouter } from 'next/navigation';
 import { Button, ConfirmDialog, Hint, Input } from '@/components/ui';
 import type { MissionService } from '@/server/missions/mission-service';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
+import { useAction, type PostAnswer } from '@/lib/http/post-json';
+
 import styles from './permissions-editor.module.css';
+
+/** What the editor says of a refused change: a conflict, the issues the gateway named, or a reload. */
+function refusalOf(answer: Extract<PostAnswer, { ok: false }>): string {
+  if (answer.status === 0) return answer.message;
+  const body = answer.body as { error?: unknown; issues?: unknown } | null;
+  if (body?.error === 'conflict') {
+    return 'The mission or request changed. Reload this page and review the current permissions.';
+  }
+  const issues = Array.isArray(body?.issues)
+    ? body.issues
+        .map((issue: unknown) =>
+          typeof issue === 'object' && issue !== null && 'message' in issue
+            ? String(issue.message)
+            : '',
+        )
+        .filter(Boolean)
+    : [];
+  return issues.join(' ') || 'The change was refused. Reload to check your current access.';
+}
 
 type Editor = NonNullable<Awaited<ReturnType<MissionService['permissionOptions']>>>;
 export function PermissionsEditor({
@@ -21,8 +42,7 @@ export function PermissionsEditor({
   const [policy, setPolicy] = useState<readonly MissionPolicyEntry[]>(data.policy);
   const [filter, setFilter] = useState('');
   const [review, setReview] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
   const original = new Map(data.policy.map((p) => [p.risk_id, p]));
   const selected = new Map(policy.map((p) => [p.risk_id, p]));
   const candidates = [
@@ -71,41 +91,17 @@ export function PermissionsEditor({
     setPolicy((current) => current.map((p) => (p.risk_id === id ? { ...p, ...patch } : p)));
   }
   async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      const response = await fetch(
-        `/api/missions/${encodeURIComponent(data.missionId)}/permissions`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            policy,
-            expected_policy: data.policy,
-            ...(requestId ? { request_id: requestId } : {}),
-          }),
-        },
-      );
-      if (!response.ok) {
-        const body = (await response.json()) as { error?: string; issues?: { message: string }[] };
-        setError(
-          body.error === 'conflict'
-            ? 'The mission or request changed. Reload this page and review the current permissions.'
-            : body.issues?.map((i) => i.message).join(' ') ||
-                'The change was refused. Reload to check your current access.',
-        );
-        return;
-      }
-      setReview(false);
-      router.push(
-        requestId ? `/waiting/${requestId}?decided=1` : `/missions/${data.missionId}#permissions`,
-      );
-      router.refresh();
-    } catch {
-      setError('The gateway could not be reached.');
-    } finally {
-      setBusy(false);
-    }
+    const answer = await run(
+      `/api/missions/${encodeURIComponent(data.missionId)}/permissions`,
+      { policy, expected_policy: data.policy, ...(requestId ? { request_id: requestId } : {}) },
+      { errorOf: refusalOf },
+    );
+    if (!answer.ok) return;
+    setReview(false);
+    router.push(
+      requestId ? `/waiting/${requestId}?decided=1` : `/missions/${data.missionId}#permissions`,
+    );
+    router.refresh();
   }
   return (
     <div data-testid="permissions-editor" className={styles.editor}>
