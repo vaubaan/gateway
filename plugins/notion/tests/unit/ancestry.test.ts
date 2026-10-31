@@ -4,6 +4,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { MAX_ANCESTRY_DEPTH } from '../../src/ancestry.ts';
@@ -121,7 +122,7 @@ describe('refused, before any write and before any result leaves', () => {
     expect(writes(fetch)).toEqual([]);
   });
 
-  test('a malformed parent id, an answer that is not the object asked for', async () => {
+  test('a malformed parent id is refused ; an answer that is not the object asked for is Notion’s failure', async () => {
     const bad = mockFetch([served('pages', page(CHILD, { type: 'page_id', page_id: '../x' }))]);
     expect(await refusalText(execute(ctx(bad), TOOL.getPage, { page_id: CHILD }))).toMatch(
       /not under/,
@@ -133,9 +134,9 @@ describe('refused, before any write and before any result leaves', () => {
         body: page(FOREIGN, pageParent(ROOT)),
       },
     ]);
-    expect(await refusalText(execute(ctx(swapped), TOOL.getPage, { page_id: CHILD }))).toMatch(
-      /is not that page/,
-    );
+    const failure = execute(ctx(swapped), TOOL.getPage, { page_id: CHILD });
+    await expect(failure).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(failure).rejects.toThrow(/is not that page/);
   });
 
   test('a cycle', async () => {

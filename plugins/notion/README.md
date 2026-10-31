@@ -166,7 +166,7 @@ its `Retry-After`.
 
 ## Tests
 
-`npx vitest run plugins/notion` — 144 tests: the SDK kit
+`npx vitest run plugins/notion` — 148 tests: the SDK kit
 (`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage` with no fallback hit and no risk untouched,
 `assertIdentifiersRefused` on the same samples), the classifier branch by

@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-notion",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Notion provider plugin for Vaubaan Gateway — pages, page content, databases and comments under the pages shared with an internal connection",

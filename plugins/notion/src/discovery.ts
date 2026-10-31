@@ -11,16 +11,24 @@
  * found through its data sources), and keeps an object whose parent is the
  * workspace, or whose parent is neither in what search returned nor readable
  * with this token (a `GET` answering 404). Every payload goes through a type
- * guard, every id through `notionId` ; a payload it does not recognise, or a
- * search that does not end within the ceilings, fails the discovery.
+ * guard, every id through `notionId` ; a payload it does not recognise is
+ * Notion's failure (`UpstreamProtocolError`), and a search that does not end
+ * within the ceilings fails the discovery (a plain `Error`).
  */
 
-import type { ConnectionContext, Resource } from '@vaubaan/plugin-sdk';
+import {
+  UpstreamProtocolError,
+  anyJson,
+  isList,
+  isRecord,
+  type ConnectionContext,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 
-import { failureOf, request, send } from './api.ts';
+import { readOrMissing, request } from './api.ts';
 import { cursor, notionId } from './ids.ts';
 import { PROVIDER_ID } from './identity.ts';
-import { isObject, type Json } from './json.ts';
+import { isResultList, type Json, type ResultList } from './json.ts';
 import { ENDPOINT, parentRef } from './parents.ts';
 
 /** Search pages read per kind of object (100 objects each). */
@@ -28,38 +36,47 @@ export const MAX_SEARCH_PAGES = 20;
 /** Most roots one connection exposes. */
 export const MAX_DISCOVERED_ROOTS = 200;
 
-function fail(message: string): never {
+/** A ceiling of discovery reached : the connection shares more than one discovery reads. */
+function tooMany(message: string): never {
   throw new Error(`${PROVIDER_ID}: ${message}`);
+}
+
+/** Notion answered something discovery does not recognise : its failure, not the plugin's. */
+function unexpected(message: string): never {
+  throw new UpstreamProtocolError(`Notion discovery: ${message}`);
+}
+
+/** A page of search results : `has_more` says whether to ask for the next one. */
+interface SearchPage extends ResultList {
+  readonly has_more: boolean;
+}
+
+function isSearchPage(value: unknown): value is SearchPage {
+  return isResultList(value) && typeof value.has_more === 'boolean';
 }
 
 async function searchAll(ctx: ConnectionContext, value: 'page' | 'data_source'): Promise<Json[]> {
   const found: Json[] = [];
   let next: string | null = null;
   for (let page = 0; page < MAX_SEARCH_PAGES; page += 1) {
-    const answer = await request(ctx, 'POST', '/search', {
+    // Shape : a search answer `{ results, has_more }`.
+    const answer: SearchPage = await request(ctx, 'POST', '/search', isSearchPage, {
       body: {
         filter: { property: 'object', value },
         page_size: 100,
         ...(next ? { start_cursor: next } : {}),
       },
     });
-    if (
-      !isObject(answer) ||
-      !Array.isArray(answer.results) ||
-      typeof answer.has_more !== 'boolean'
-    ) {
-      return fail('unexpected search answer (expected { results, has_more })');
-    }
     for (const result of answer.results) {
-      if (!isObject(result) || result.object !== value || !notionId(result.id)) {
-        return fail(`unexpected ${value} in the search answer`);
+      if (!isRecord(result) || result.object !== value || !notionId(result.id)) {
+        return unexpected(`unexpected ${value} in the search answer`);
       }
       if (result.in_trash !== true) found.push(result);
     }
     if (!answer.has_more) return found;
-    next = cursor(answer.next_cursor) ?? fail('unexpected next_cursor in the search answer');
+    next = cursor(answer.next_cursor) ?? unexpected('unexpected next_cursor in the search answer');
   }
-  return fail(
+  return tooMany(
     `search returned more than ${MAX_SEARCH_PAGES * 100} ${value === 'page' ? 'pages' : 'data sources'}: share fewer top-level pages with the connection`,
   );
 }
@@ -74,29 +91,26 @@ async function isTopLevel(
   if ('end' in ref) {
     if (ref.end === 'workspace') return true;
     if (ref.end === 'agent') return false; // an agent's instruction page : under no shared page
-    return fail('unexpected parent in the search answer');
+    return unexpected('unexpected parent in the search answer');
   }
   const { kind, id } = ref.node;
   if (found.has(id) || (ref.database !== undefined && found.has(ref.database))) return false;
-  const path = `${ENDPOINT[kind]}/${id}`;
-  const answer = await send(ctx, 'GET', path);
-  if (answer.status === 404) return true;
-  if (answer.status < 200 || answer.status >= 300) throw failureOf('GET', path, answer);
-  return false;
+  // Its body is not read : that the parent answers at all is the fact.
+  return (await readOrMissing(ctx, `${ENDPOINT[kind]}/${id}`, anyJson)) === null;
 }
 
 function plainText(value: unknown): string {
-  if (!Array.isArray(value)) return '';
+  if (!isList(value)) return '';
   return value
-    .map((item) => (isObject(item) && typeof item.plain_text === 'string' ? item.plain_text : ''))
+    .map((item) => (isRecord(item) && typeof item.plain_text === 'string' ? item.plain_text : ''))
     .join('')
     .trim();
 }
 
 function pageTitle(page: Json): string {
-  const properties = isObject(page.properties) ? Object.values(page.properties) : [];
-  const title = properties.find((p) => isObject(p) && p.type === 'title');
-  return (isObject(title) && plainText(title.title)) || 'Untitled';
+  const properties = isRecord(page.properties) ? Object.values(page.properties) : [];
+  const title = properties.find((p) => isRecord(p) && p.type === 'title');
+  return (isRecord(title) && plainText(title.title)) || 'Untitled';
 }
 
 export async function discoverNotionResources(
@@ -106,9 +120,9 @@ export async function discoverNotionResources(
   const sources = await searchAll(ctx, 'data_source');
   const databases = new Map<string, { readonly source: Json; readonly databaseParent: unknown }>();
   for (const source of sources) {
-    const parent = isObject(source.parent) ? source.parent : {};
+    const parent = isRecord(source.parent) ? source.parent : {};
     const database = parent.type === 'database_id' ? notionId(parent.database_id) : null;
-    if (!database) return fail('unexpected data source parent (expected a database)');
+    if (!database) return unexpected('unexpected data source parent (expected a database)');
     if (!databases.has(database)) {
       databases.set(database, { source, databaseParent: source.database_parent });
     }
@@ -142,7 +156,7 @@ export async function discoverNotionResources(
     }
   }
   if (roots.length > MAX_DISCOVERED_ROOTS) {
-    return fail(
+    return tooMany(
       `more than ${MAX_DISCOVERED_ROOTS} top-level pages and databases are shared with the connection`,
     );
   }
@@ -151,8 +165,7 @@ export async function discoverNotionResources(
 
 /** A database's own parent, when its data source did not carry it. */
 async function databaseParentOf(ctx: ConnectionContext, database: string): Promise<unknown> {
-  const answer = await request(ctx, 'GET', `/databases/${database}`);
-  if (!isObject(answer) || notionId(answer.id) !== database)
-    return fail('unexpected database answer');
+  const answer = await request(ctx, 'GET', `/databases/${database}`, isRecord);
+  if (notionId(answer.id) !== database) return unexpected('unexpected database answer');
   return answer.parent;
 }

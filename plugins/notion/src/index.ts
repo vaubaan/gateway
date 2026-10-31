@@ -29,7 +29,7 @@ export const notionPlugin = definePlugin({
   icon: NOTION_ICON,
   iconColor: NOTION_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.5',
+  version: '0.2.0',
   description:
     'Read and edit the pages, page content, databases and comments of the Notion pages shared with an internal connection.',
   summary:

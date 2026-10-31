@@ -16,6 +16,8 @@
 
 import {
   CredentialRefusal,
+  anyJson,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
@@ -23,16 +25,16 @@ import {
 
 import { request } from './api.ts';
 import { API_TOKEN_FIELD, TOOL } from './identity.ts';
-import { isObject } from './json.ts';
 
 /** Where a Workspace Owner creates an internal connection. */
 export const NOTION_CONNECTIONS_PAGE = 'https://app.notion.com/developers/connections';
 
 /** Who a pasted token is : the workspace of an internal connection, or a refusal. */
 export async function verifyNotionToken(ctx: ConnectionContext): Promise<CredentialCheck> {
-  const me = await request(ctx, 'GET', '/users/me');
-  const bot = isObject(me) && me.type === 'bot' && isObject(me.bot) ? me.bot : null;
-  const owner = bot && isObject(bot.owner) ? bot.owner : null;
+  // Read leniently: an answer that is not a workspace's bot is a refused token.
+  const me = await request(ctx, 'GET', '/users/me', anyJson);
+  const bot = isRecord(me) && me.type === 'bot' && isRecord(me.bot) ? me.bot : null;
+  const owner = bot && isRecord(bot.owner) ? bot.owner : null;
   if (!bot || !owner || owner.type !== 'workspace') {
     throw new CredentialRefusal(
       'Notion: this is not an internal connection token. Paste the token of an internal connection (Developer portal, Build, Internal connections), not a personal access token.',

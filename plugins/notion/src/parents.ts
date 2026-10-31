@@ -6,8 +6,9 @@
  *            object reference.
  */
 
+import { isRecord } from '@vaubaan/plugin-sdk';
+
 import { notionId } from './ids.ts';
-import { isObject } from './json.ts';
 
 /** The kinds of object a parent reference names, each read by its own endpoint. */
 export type NodeKind = 'page' | 'block' | 'database' | 'data_source';
@@ -49,7 +50,7 @@ const KIND_OF: Readonly<Record<string, NodeKind>> = {
 };
 
 export function parentRef(parent: unknown): ParentRef {
-  if (!isObject(parent) || typeof parent.type !== 'string') return { end: 'unreadable' };
+  if (!isRecord(parent) || typeof parent.type !== 'string') return { end: 'unreadable' };
   if (parent.type === 'workspace') return { end: 'workspace' };
   if (parent.type === 'agent_id') return { end: 'agent' };
   const kind = KIND_OF[parent.type];

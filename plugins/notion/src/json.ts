@@ -1,12 +1,18 @@
 /**
- * The one reader of untyped JSON in the `notion` plugin : what Notion answers
- * and what an agent forwards are both read through `isObject`.
+ * The shapes of untyped JSON the `notion` plugin reads : what Notion answers
+ * and what an agent forwards, through the SDK's `isRecord` / `isList`.
  */
+
+import { isList, isRecord } from '@vaubaan/plugin-sdk';
 
 /** A JSON object, read-only. */
 export type Json = Readonly<Record<string, unknown>>;
 
-/** True for a plain JSON object (not `null`, not an array). */
-export function isObject(value: unknown): value is Json {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+/** A list Notion answers (`{ object: 'list', results, has_more, next_cursor }`). */
+export interface ResultList extends Json {
+  readonly results: readonly unknown[];
+}
+
+export function isResultList(value: unknown): value is ResultList {
+  return isRecord(value) && isList(value.results);
 }

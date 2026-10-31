@@ -22,12 +22,17 @@
  *      document no such field.
  *
  * Declines are `ExecutorRefusal` under `declining` ; provider failures are
- * thrown (`api.ts`).
+ * thrown (`api.ts`), an answer of an unexpected shape included
+ * (`UpstreamProtocolError`).
  */
 
 import {
   ExecutorRefusal,
+  UpstreamProtocolError,
+  anyJson,
   declining,
+  isRecord,
+  jsonResult,
   refusalResult,
   type ExecuteContext,
   type McpToolResult,
@@ -39,8 +44,8 @@ import { request } from './api.ts';
 import { readCall, undeclaredArgument, type NotionCall } from './classify.ts';
 import { CONTAINER_BLOCK_TYPES, type References } from './content.ts';
 import { cursor, notionId } from './ids.ts';
-import { PROVIDER_ID } from './identity.ts';
-import { isObject, type Json } from './json.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
+import { isResultList, type Json, type ResultList } from './json.ts';
 
 /** Extra requests a search may spend proving its results under the root. */
 export const MAX_SEARCH_VERIFY_REQUESTS = 25;
@@ -58,10 +63,6 @@ export const MAX_DELETE_SCAN_REQUESTS = 20;
 const SILENT = { mode: 'silent' } as const;
 
 type CallOf<Op extends NotionCall['op']> = Extract<NotionCall, { op: Op }>;
-
-function text(payload: unknown): McpToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
-}
 
 function paging(pageSize: number, startCursor: string | null): Record<string, unknown> {
   return { page_size: pageSize, ...(startCursor ? { start_cursor: startCursor } : {}) };
@@ -104,9 +105,9 @@ export function executeNotion(
     if (undeclared) return refusalResult(undeclared);
     const call = readCall(tool, args, ctx.resources);
     if ('denied' in call) return refusalResult(call.denied);
-    if (call.op === 'listRoots') return text({ roots: rootsOf(ctx.resources) });
+    if (call.op === 'listRoots') return jsonResult({ roots: rootsOf(ctx.resources) });
     const walk = new Ancestry(ctx, call.root.ref);
-    return text(await run(ctx, walk, call));
+    return jsonResult(await run(ctx, walk, call));
   });
 }
 
@@ -147,7 +148,7 @@ async function run(
       return listChildren(ctx, walk, call);
     case 'queryDataSource':
       await walk.prove('data_source', call.dataSourceId);
-      return request(ctx, 'POST', `/data_sources/${call.dataSourceId}/query`, {
+      return request(ctx, 'POST', `/data_sources/${call.dataSourceId}/query`, anyJson, {
         body: {
           ...given({ filter: call.filter, sorts: call.sorts }),
           ...paging(call.pageSize, call.startCursor),
@@ -157,7 +158,7 @@ async function run(
     case 'createPage':
       await walk.prove('page', call.parentPageId);
       await proveReferences(walk, call.references);
-      return request(ctx, 'POST', '/pages', {
+      return request(ctx, 'POST', '/pages', anyJson, {
         body: {
           parent: { type: 'page_id', page_id: call.parentPageId },
           properties: titleProperty(call.title),
@@ -169,13 +170,13 @@ async function run(
       // Proven first : nothing is said of an object outside the root, its kind included.
       const page = await walk.fetch('page', call.pageId);
       await walk.prove('page', call.pageId, page);
-      const parent = isObject(page.parent) ? page.parent.type : undefined;
+      const parent = isRecord(page.parent) ? page.parent.type : undefined;
       if (parent === 'data_source_id' || parent === 'database_id') {
         throw new ExecutorRefusal(
-          `notion: page '${call.pageId}' is an entry of a database — change it with notion__update_entry`,
+          `notion: page '${call.pageId}' is an entry of a database — change it with ${TOOL.updateEntry}`,
         );
       }
-      return request(ctx, 'PATCH', `/pages/${call.pageId}`, {
+      return request(ctx, 'PATCH', `/pages/${call.pageId}`, anyJson, {
         body: {
           ...(call.title !== null ? { properties: titleProperty(call.title) } : {}),
           ...given({ icon: call.icon, cover: call.cover }),
@@ -196,7 +197,7 @@ async function run(
             : {
                 position: { type: 'after_block', after_block: { id: call.position.afterBlockId } },
               };
-      return request(ctx, 'PATCH', `/blocks/${call.blockId}/children`, {
+      return request(ctx, 'PATCH', `/blocks/${call.blockId}/children`, anyJson, {
         body: { children: call.children, ...position, notifications: SILENT },
       });
     }
@@ -209,7 +210,7 @@ async function run(
         );
       }
       await proveReferences(walk, call.references);
-      return request(ctx, 'PATCH', `/blocks/${call.blockId}`, {
+      return request(ctx, 'PATCH', `/blocks/${call.blockId}`, anyJson, {
         body: { [call.type]: call.content },
       });
     }
@@ -219,7 +220,7 @@ async function run(
       if (typeof block.type === 'string' && CONTAINER_BLOCK_TYPES.has(block.type)) {
         throw new ExecutorRefusal(
           block.type === 'child_page'
-            ? `notion: block '${call.blockId}' is a page — move it to the trash with notion__trash_page`
+            ? `notion: block '${call.blockId}' is a page — move it to the trash with ${TOOL.trashPage}`
             : `notion: block '${call.blockId}' is a database, which this plugin does not delete`,
         );
       }
@@ -229,20 +230,20 @@ async function run(
       if (block.has_children !== false && syncedOriginOf(block) === null) {
         await refuseNestedContainers(ctx, call.blockId);
       }
-      return request(ctx, 'DELETE', `/blocks/${call.blockId}`);
+      return request(ctx, 'DELETE', `/blocks/${call.blockId}`, anyJson);
     }
     case 'trashPage':
     case 'restorePage': {
       const page = await walk.fetch('page', call.pageId);
       await walk.prove('page', call.pageId, page);
-      return request(ctx, 'PATCH', `/pages/${call.pageId}`, {
+      return request(ctx, 'PATCH', `/pages/${call.pageId}`, anyJson, {
         body: { in_trash: call.op === 'trashPage', notifications: SILENT },
       });
     }
     case 'createEntry':
       await walk.prove('data_source', call.dataSourceId);
       await proveReferences(walk, call.references);
-      return request(ctx, 'POST', '/pages', {
+      return request(ctx, 'POST', '/pages', anyJson, {
         body: {
           parent: { type: 'data_source_id', data_source_id: call.dataSourceId },
           properties: call.properties,
@@ -253,7 +254,7 @@ async function run(
     case 'updateEntry': {
       const page = await walk.fetch('page', call.pageId);
       await walk.prove('page', call.pageId, page);
-      const parent = isObject(page.parent) ? page.parent : {};
+      const parent = isRecord(page.parent) ? page.parent : {};
       if (
         parent.type !== 'data_source_id' ||
         notionId(parent.data_source_id) !== call.dataSourceId
@@ -263,13 +264,13 @@ async function run(
         );
       }
       await proveReferences(walk, call.references);
-      return request(ctx, 'PATCH', `/pages/${call.pageId}`, {
+      return request(ctx, 'PATCH', `/pages/${call.pageId}`, anyJson, {
         body: { properties: call.properties, ...given({ icon: call.icon }), notifications: SILENT },
       });
     }
     case 'listComments':
       await walk.prove('block', call.blockId);
-      return request(ctx, 'GET', '/comments', {
+      return request(ctx, 'GET', '/comments', anyJson, {
         query: commentQuery(call.blockId, call.pageSize, call.startCursor),
       });
     case 'createComment':
@@ -311,27 +312,30 @@ async function refuseNestedContainers(ctx: ExecuteContext, blockId: string): Pro
         );
       }
       listings += 1;
-      const listed = await request(ctx, 'GET', `/blocks/${parent}/children`, {
-        query: pagingQuery(100, startCursor),
-      });
-      if (!isObject(listed) || !Array.isArray(listed.results)) {
-        throw new ExecutorRefusal('notion: unexpected block list (expected { results })');
-      }
+      const listed: ResultList = await request(
+        ctx,
+        'GET',
+        `/blocks/${parent}/children`,
+        isResultList,
+        {
+          query: pagingQuery(100, startCursor),
+        },
+      );
       for (const child of listed.results) {
-        const id = isObject(child) ? notionId(child.id) : null;
-        if (!isObject(child) || !id) {
-          throw new ExecutorRefusal('notion: unexpected block in a block list');
+        const id = isRecord(child) ? notionId(child.id) : null;
+        if (!isRecord(child) || !id) {
+          throw new UpstreamProtocolError('Notion: unexpected block in a block list');
         }
         if (typeof child.type === 'string' && CONTAINER_BLOCK_TYPES.has(child.type)) {
           throw new ExecutorRefusal(
-            `notion: block '${blockId}' contains ${child.type === 'child_page' ? 'a page' : 'a database'} ('${id}'), which deleting it would trash — move the page to the trash with notion__trash_page, or delete the other blocks one by one`,
+            `notion: block '${blockId}' contains ${child.type === 'child_page' ? 'a page' : 'a database'} ('${id}'), which deleting it would trash — move the page to the trash with ${TOOL.trashPage}, or delete the other blocks one by one`,
           );
         }
         if (child.has_children !== false && syncedOriginOf(child) === null) queue.push(id);
       }
       startCursor = listed.has_more === true ? cursor(listed.next_cursor) : null;
       if (listed.has_more === true && !startCursor) {
-        throw new ExecutorRefusal('notion: unexpected next_cursor in a block list');
+        throw new UpstreamProtocolError('Notion: unexpected next_cursor in a block list');
       }
     } while (startCursor);
   }
@@ -341,10 +345,10 @@ async function refuseNestedContainers(ctx: ExecuteContext, blockId: string): Pro
 type SyncedOrigin = { readonly original: string } | { readonly unreadable: true } | null;
 
 function syncedOriginOf(block: Json): SyncedOrigin {
-  if (block.type !== 'synced_block' || !isObject(block.synced_block)) return null;
+  if (block.type !== 'synced_block' || !isRecord(block.synced_block)) return null;
   const from = block.synced_block.synced_from;
   if (from === null || from === undefined) return null;
-  const original = isObject(from) ? notionId(from.block_id) : null;
+  const original = isRecord(from) ? notionId(from.block_id) : null;
   return original ? { original } : { unreadable: true };
 }
 
@@ -364,29 +368,26 @@ async function proveBlockAndOriginal(walk: Ancestry, blockId: string): Promise<J
 // ─── Search : results filtered to the root ───────────────────────────────────
 
 async function search(ctx: ExecuteContext, walk: Ancestry, call: CallOf<'searchContent'>) {
-  const answer = await request(ctx, 'POST', '/search', {
+  const answer = await request(ctx, 'POST', '/search', isResultList, {
     body: {
       ...given({ query: call.query, sort: call.sort }),
       ...(call.object ? { filter: { property: 'object', value: call.object } } : {}),
       ...paging(call.pageSize, call.startCursor),
     },
   });
-  if (!isObject(answer) || !Array.isArray(answer.results)) {
-    throw new ExecutorRefusal('notion: unexpected search answer (expected { results })');
-  }
   const budget: WalkBudget = { left: MAX_SEARCH_VERIFY_REQUESTS };
   const shown: unknown[] = [];
   for (const result of answer.results) {
-    const kind = isObject(result)
+    const kind = isRecord(result)
       ? result.object === 'page'
         ? 'page'
         : result.object === 'data_source'
           ? 'data_source'
           : null
       : null;
-    const id = isObject(result) ? notionId(result.id) : null;
+    const id = isRecord(result) ? notionId(result.id) : null;
     // A result not proven under the root is dropped silently : a count would tell of other roots.
-    if (!kind || !id || !isObject(result)) continue;
+    if (!kind || !id || !isRecord(result)) continue;
     if ((await walk.check(kind, id, result, budget)) === 'in') shown.push(result);
   }
   return {
@@ -412,12 +413,9 @@ async function listChildren(
   call: CallOf<'listBlockChildren'>,
 ) {
   await proveBlockAndOriginal(walk, call.blockId);
-  const first = await request(ctx, 'GET', `/blocks/${call.blockId}/children`, {
+  const first = await request(ctx, 'GET', `/blocks/${call.blockId}/children`, isResultList, {
     query: pagingQuery(call.pageSize, call.startCursor),
   });
-  if (!isObject(first) || !Array.isArray(first.results)) {
-    throw new ExecutorRefusal('notion: unexpected block list (expected { results })');
-  }
   if (call.depth === 1) return first;
   const state: Expansion = {
     budget: { left: MAX_CHILD_REQUESTS },
@@ -441,7 +439,7 @@ async function expand(
 ): Promise<unknown[]> {
   const out: unknown[] = [];
   for (const block of blocks) {
-    if (!isObject(block) || block.has_children !== true || levels <= 0) {
+    if (!isRecord(block) || block.has_children !== true || levels <= 0) {
       out.push(block);
       continue;
     }
@@ -453,12 +451,9 @@ async function expand(
       continue;
     }
     state.budget.left -= 1;
-    const listed = await request(ctx, 'GET', `/blocks/${id}/children`, {
+    const listed = await request(ctx, 'GET', `/blocks/${id}/children`, isResultList, {
       query: pagingQuery(100, null),
     });
-    if (!isObject(listed) || !Array.isArray(listed.results)) {
-      throw new ExecutorRefusal('notion: unexpected block list (expected { results })');
-    }
     const room = MAX_BLOCKS_PER_CALL - state.blocks;
     const kept = listed.results.slice(0, Math.max(0, room));
     state.blocks += kept.length;
@@ -505,13 +500,13 @@ async function comment(ctx: ExecuteContext, walk: Ancestry, call: CallOf<'create
   await proveReferences(walk, call.references);
   if (call.discussionId) {
     await requireOpenDiscussion(ctx, call.blockId, call.discussionId);
-    return request(ctx, 'POST', '/comments', {
+    return request(ctx, 'POST', '/comments', anyJson, {
       body: { discussion_id: call.discussionId, rich_text: call.richText },
     });
   }
   const parent =
     target.type === 'child_page' ? { page_id: call.blockId } : { block_id: call.blockId };
-  return request(ctx, 'POST', '/comments', { body: { parent, rich_text: call.richText } });
+  return request(ctx, 'POST', '/comments', anyJson, { body: { parent, rich_text: call.richText } });
 }
 
 /** A reply lands only on an open discussion of the block the walk proved. */
@@ -523,11 +518,8 @@ async function requireOpenDiscussion(
   let startCursor: string | null = null;
   for (let page = 0; page < MAX_REPLY_LOOKUP_PAGES; page += 1) {
     const query = commentQuery(blockId, 100, startCursor);
-    const listed = await request(ctx, 'GET', '/comments', { query });
-    if (!isObject(listed) || !Array.isArray(listed.results)) {
-      throw new ExecutorRefusal('notion: unexpected comment list (expected { results })');
-    }
-    if (listed.results.some((c) => isObject(c) && notionId(c.discussion_id) === discussionId))
+    const listed = await request(ctx, 'GET', '/comments', isResultList, { query });
+    if (listed.results.some((c) => isRecord(c) && notionId(c.discussion_id) === discussionId))
       return;
     const next = cursor(listed.next_cursor);
     if (listed.has_more !== true || !next) break;

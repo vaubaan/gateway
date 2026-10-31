@@ -13,17 +13,25 @@
  * meets `R`. Refused (an `ExecutorRefusal`) when the chain reaches the
  * workspace, an agent, a parent the connection cannot read (`404` on an
  * ancestor), a parent kind it does not know, an id outside the grammar, an id
- * twice, or more than `MAX_ANCESTRY_DEPTH` levels.
+ * twice, or more than `MAX_ANCESTRY_DEPTH` levels. A target answered by an
+ * object other than the one asked for is Notion's failure, not a decline
+ * (`UpstreamProtocolError`).
  *
  * Memo within one call (siblings share ancestors), nothing across calls : a
  * page can be moved at any moment and the SDK offers no state for it.
  */
 
-import { ExecutorRefusal, type ConnectionContext } from '@vaubaan/plugin-sdk';
+import {
+  ExecutorRefusal,
+  UpstreamProtocolError,
+  anyJson,
+  isRecord,
+  type ConnectionContext,
+} from '@vaubaan/plugin-sdk';
 
-import { failureOf, send } from './api.ts';
+import { readOrMissing, request } from './api.ts';
 import { notionId } from './ids.ts';
-import { isObject, type Json } from './json.ts';
+import type { Json } from './json.ts';
 import { ENDPOINT, LABEL, parentRef, type NodeKind } from './parents.ts';
 
 export type { NodeKind } from './parents.ts';
@@ -89,16 +97,14 @@ export class Ancestry {
    * walk. A failure is the provider's answer to the agent's call, thrown.
    */
   async fetch(kind: NodeKind, id: string): Promise<Json> {
-    const path = `${ENDPOINT[kind]}/${id}`;
-    const answer = await send(this.ctx, 'GET', path);
     this.requests += 1;
-    if (answer.status < 200 || answer.status >= 300) throw failureOf('GET', path, answer);
-    if (!isObject(answer.body) || notionId(answer.body.id) !== id) {
-      throw new ExecutorRefusal(
-        `notion: the answer for ${LABEL[kind]} '${id}' is not that ${LABEL[kind]}`,
+    const object = await request(this.ctx, 'GET', `${ENDPOINT[kind]}/${id}`, isRecord);
+    if (notionId(object.id) !== id) {
+      throw new UpstreamProtocolError(
+        `Notion GET ${ENDPOINT[kind]}/${id}: the answer is not that ${LABEL[kind]}`,
       );
     }
-    return answer.body;
+    return object;
   }
 
   /**
@@ -156,13 +162,17 @@ export class Ancestry {
           budget.left -= 1;
         }
         const path = `${ENDPOINT[node.kind]}/${node.id}`;
-        const answer = await send(this.ctx, 'GET', path);
         this.requests += 1;
         // An ancestor this token cannot read is outside every root. So is a reference's own
         // id (a budgeted walk) : "exists elsewhere" and "not shared" get the same refusal.
-        if (answer.status === 404 && (visited.length > 1 || budget)) return settle('out');
-        if (answer.status < 200 || answer.status >= 300) throw failureOf('GET', path, answer);
-        object = isObject(answer.body) ? answer.body : undefined;
+        // The target's own 404 is Notion's answer to the call, thrown.
+        const missingIsOut = visited.length > 1 || budget !== null;
+        // Read leniently : an answer that is not an object proves nothing, so the walk ends out.
+        const answer = missingIsOut
+          ? await readOrMissing(this.ctx, path, anyJson)
+          : await request(this.ctx, 'GET', path, anyJson);
+        if (answer === null) return settle('out');
+        object = isRecord(answer) ? answer : undefined;
       }
       if (!object || notionId(object.id) !== node.id) return settle('out');
       const step = above(node.kind, object);

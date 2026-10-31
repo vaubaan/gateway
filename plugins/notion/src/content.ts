@@ -24,8 +24,11 @@
  * Pure : a value in, a refusal sentence or the facts `execute` needs out.
  */
 
+import { isRecord } from '@vaubaan/plugin-sdk';
+
 import { MAX_TEXT_LENGTH, malformedId, notionId } from './ids.ts';
-import { isObject, type Json } from './json.ts';
+import { TOOL } from './identity.ts';
+import type { Json } from './json.ts';
 
 /** Longest array Notion accepts anywhere in a request body. */
 export const MAX_ARRAY_ITEMS = 100;
@@ -70,7 +73,7 @@ export const CREATABLE_BLOCK_TYPES: ReadonlySet<string> = new Set([
   'video',
 ]);
 
-/** Block types whose content `notion__update_block` may rewrite. */
+/** Block types whose content `TOOL.updateBlock` may rewrite. */
 export const UPDATABLE_BLOCK_TYPES: ReadonlySet<string> = new Set([
   'audio',
   'bookmark',
@@ -100,7 +103,7 @@ export const UPDATABLE_BLOCK_TYPES: ReadonlySet<string> = new Set([
 export const CONTAINER_BLOCK_TYPES: ReadonlySet<string> = new Set(['child_page', 'child_database']);
 
 const NOT_CREATABLE: Readonly<Record<string, string>> = {
-  child_page: 'create a page with notion__create_page',
+  child_page: `create a page with ${TOOL.createPage}`,
   child_database: 'databases are not created by this plugin',
   link_preview: 'Notion does not create it through the block endpoints',
   meeting_notes: 'Notion does not create it through the block endpoints',
@@ -171,7 +174,7 @@ export function checkJson(value: unknown, path: string, depth = 0): string | nul
     }
     return null;
   }
-  if (isObject(value)) {
+  if (isRecord(value)) {
     if ('file_upload' in value || value.type === 'file_upload') {
       return `${path}: file uploads are not available through this plugin`;
     }
@@ -207,7 +210,7 @@ function mentionIssue(
     }
     return null;
   }
-  if (!isObject(value)) return null;
+  if (!isRecord(value)) return null;
   if ('mention' in value) {
     const issue = checkMention(value.mention, `${path}.mention`, refs);
     if (issue) return issue;
@@ -230,7 +233,7 @@ export const MENTION_TYPES: ReadonlySet<string> = new Set(['page', 'database', '
 
 /** One mention object : `{ type, [type]: … }` and nothing else ; the page or database it names collected. */
 function checkMention(mention: unknown, path: string, refs: References | undefined): string | null {
-  if (!isObject(mention) || typeof mention.type !== 'string' || !MENTION_TYPES.has(mention.type)) {
+  if (!isRecord(mention) || typeof mention.type !== 'string' || !MENTION_TYPES.has(mention.type)) {
     return `${path}.type: one of 'page', 'database', 'user', 'date'`;
   }
   const type = mention.type;
@@ -238,7 +241,7 @@ function checkMention(mention: unknown, path: string, refs: References | undefin
     if (key !== 'type' && key !== type) return `${path}.${key}: not part of a '${type}' mention`;
   }
   const target = mention[type];
-  if (!isObject(target)) return `${path}.${type}: expected an object`;
+  if (!isRecord(target)) return `${path}.${type}: expected an object`;
   if (type === 'date') return null;
   for (const key of Object.keys(target)) {
     if (key !== 'id' && key !== 'object') return `${path}.${type}.${key}: not part of a mention`;
@@ -313,7 +316,7 @@ function newBlock(
   path: string,
   refs: References | undefined,
 ): { readonly type: string; readonly body: Json } | string {
-  if (!isObject(block)) return `${path}: expected a block object`;
+  if (!isRecord(block)) return `${path}: expected a block object`;
   const type = block.type;
   if (typeof type !== 'string') return `${path}.type: required (the block type)`;
   if (type in NOT_CREATABLE) {
@@ -329,7 +332,7 @@ function newBlock(
     return `${path}.object: must be 'block'`;
   }
   const body = block[type];
-  if (!isObject(body)) return `${path}.${type}: expected an object`;
+  if (!isRecord(body)) return `${path}.${type}: expected an object`;
   return blockBodyIssue(type, body, `${path}.${type}`, refs) ?? { type, body };
 }
 
@@ -354,7 +357,7 @@ function blockBodyIssue(
 }
 
 /**
- * The new content of an existing block (`notion__update_block`) : an
+ * The new content of an existing block (`TOOL.updateBlock`) : an
  * updatable type, the object Notion keys by that type, no `children` (a
  * block's children are not updated by this endpoint).
  */
@@ -363,16 +366,16 @@ export function checkBlockUpdate(type: unknown, content: unknown): Checked<Block
   if (typeof type !== 'string') return refused('type: required (the type of the block to rewrite)');
   if (CONTAINER_BLOCK_TYPES.has(type)) {
     return refused(
-      `type: a '${type}' is changed with ${type === 'child_page' ? 'notion__update_page' : 'no tool of this plugin'}`,
+      `type: a '${type}' is changed with ${type === 'child_page' ? TOOL.updatePage : 'no tool of this plugin'}`,
     );
   }
   if (!UPDATABLE_BLOCK_TYPES.has(type)) {
     return refused(`type: a '${type}' block cannot be rewritten here`);
   }
-  if (!isObject(content)) return refused(`content: expected the '${type}' object of the block`);
+  if (!isRecord(content)) return refused(`content: expected the '${type}' object of the block`);
   if ('children' in content) {
     return refused(
-      'content.children: a block’s children are not rewritten; use notion__append_blocks or notion__delete_block',
+      `content.children: a block’s children are not rewritten; use ${TOOL.appendBlocks} or ${TOOL.deleteBlock}`,
     );
   }
   const limits = checkJson(content, 'content');
@@ -387,12 +390,12 @@ export function checkBlockUpdate(type: unknown, content: unknown): Checked<Block
  * relation target and person a Notion id. Returns the relation targets.
  */
 export function checkProperties(value: unknown, references: References): string | null {
-  if (!isObject(value)) return 'properties: expected an object keyed by property name';
+  if (!isRecord(value)) return 'properties: expected an object keyed by property name';
   const limits = checkJson(value, 'properties');
   if (limits) return limits;
   for (const [name, property] of Object.entries(value)) {
     const path = `properties.${JSON.stringify(name)}`;
-    if (!isObject(property)) return `${path}: expected a property value object`;
+    if (!isRecord(property)) return `${path}: expected a property value object`;
     const keys = Object.keys(property).filter((k) => k !== 'id' && k !== 'type');
     const declared = typeof property.type === 'string' ? [property.type] : [];
     for (const type of [...declared, ...keys]) {
@@ -404,9 +407,9 @@ export function checkProperties(value: unknown, references: References): string 
     if (relation !== undefined) {
       if (!Array.isArray(relation)) return `${path}.relation: expected an array`;
       for (const [i, target] of relation.entries()) {
-        const id = isObject(target) ? notionId(target.id) : null;
+        const id = isRecord(target) ? notionId(target.id) : null;
         if (!id)
-          return malformedId(`${path}.relation[${i}].id`, isObject(target) ? target.id : target);
+          return malformedId(`${path}.relation[${i}].id`, isRecord(target) ? target.id : target);
         refer(references, 'pages', id);
       }
     }
@@ -414,8 +417,8 @@ export function checkProperties(value: unknown, references: References): string 
     if (people !== undefined) {
       if (!Array.isArray(people)) return `${path}.people: expected an array`;
       for (const [i, person] of people.entries()) {
-        if (!isObject(person) || !notionId(person.id)) {
-          return malformedId(`${path}.people[${i}].id`, isObject(person) ? person.id : person);
+        if (!isRecord(person) || !notionId(person.id)) {
+          return malformedId(`${path}.people[${i}].id`, isRecord(person) ? person.id : person);
         }
       }
     }
@@ -430,14 +433,14 @@ export function checkProperties(value: unknown, references: References): string 
 
 /** A page icon : an emoji, a Notion icon or an `https:` image ; never an upload. */
 export function checkIcon(value: unknown): string | null {
-  if (!isObject(value)) return 'icon: expected an icon object';
+  if (!isRecord(value)) return 'icon: expected an icon object';
   const limits = checkJson(value, 'icon');
   if (limits) return limits;
   switch (value.type) {
     case 'emoji':
       return typeof value.emoji === 'string' ? null : 'icon.emoji: expected a string';
     case 'icon':
-      return isObject(value.icon) && typeof value.icon.name === 'string'
+      return isRecord(value.icon) && typeof value.icon.name === 'string'
         ? null
         : 'icon.icon.name: expected a string';
     case 'external':
@@ -449,7 +452,7 @@ export function checkIcon(value: unknown): string | null {
 
 /** A page cover : an `https:` image. */
 export function checkCover(value: unknown): string | null {
-  if (!isObject(value)) return 'cover: expected a cover object';
+  if (!isRecord(value)) return 'cover: expected a cover object';
   const limits = checkJson(value, 'cover');
   if (limits) return limits;
   if (value.type !== 'external') return "cover.type: must be 'external'";
@@ -461,7 +464,7 @@ function externalIssue(value: Json, path: string): string | null {
     if (key !== 'type' && key !== 'external') return `${path}.${key}: not part of an external file`;
   }
   const external = value.external;
-  if (!isObject(external) || Object.keys(external).some((k) => k !== 'url')) {
+  if (!isRecord(external) || Object.keys(external).some((k) => k !== 'url')) {
     return `${path}.external: expected { url }`;
   }
   const url = external.url;
