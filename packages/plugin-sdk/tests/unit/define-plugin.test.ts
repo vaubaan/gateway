@@ -8,7 +8,7 @@ import {
   isBrokeredSpec,
 } from '../../src/credential.ts';
 import { PluginRegistry, PluginRegistryError } from '../../src/registry.ts';
-import { RETIRED_PRESETS_ISSUE } from '../../src/catalog-loader.ts';
+import { RETIRED_PRESETS_ISSUE } from '../../src/catalog-rules.ts';
 import { PluginAssertionError, assertPluginWellFormed } from '../../src/testing/assertions.ts';
 import { apiKeyCredentialFixture } from '../../src/testing/guide.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';

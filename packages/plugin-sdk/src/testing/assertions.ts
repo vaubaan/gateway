@@ -24,7 +24,7 @@ import {
   type Slice,
 } from '@vaubaan/shared';
 
-import { fallbackFlagIssues, wildcardIssues } from '../catalog-loader.ts';
+import { fallbackFlagIssues, wildcardIssues } from '../catalog-rules.ts';
 import { declaredToolNames, pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';

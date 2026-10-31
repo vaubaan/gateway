@@ -21,6 +21,7 @@
 export * from './plugin.ts';
 export * from './credential.ts';
 export * from './catalog-loader.ts';
+export * from './catalog-rules.ts';
 export * from './catalog-path.ts';
 export * from './arguments.ts';
 export * from './slices.ts';
