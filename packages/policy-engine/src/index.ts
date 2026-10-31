@@ -5,11 +5,47 @@
  * Handbook : docs/handbook/policy-engine.md.
  */
 
-export * from './slice-dsl.ts';
-export * from './slice-matcher.ts';
-export * from './risk-evaluator.ts';
-export * from './risk-policy.ts';
-export * from './budget.ts';
-export * from './risk-runtime.ts';
-export * from './qualify.ts';
-export * from './trust-level.ts';
+// The public API, named: what the other packages and the applications import.
+// A name missing here is internal to the package (structural test: no `export *`).
+export { BRACKET_IDENT_CHAR_CLASS, parseSlice, serializeSlice } from './slice-dsl.ts';
+export { matches } from './slice-matcher.ts';
+export {
+  fallbackEntriesOf,
+  fallbackRiskPrefix,
+  findRiskEntry,
+  hasCatchAllWritePattern,
+  indexCatalog,
+  isFallbackEntry,
+  risksTouchedBy,
+  risksTouchedByAll,
+} from './risk-evaluator.ts';
+export type { IndexedRiskCatalog } from './risk-evaluator.ts';
+export { prepareCatalog } from './risk-policy.ts';
+export { budgetIssues, exceedsRateCeiling, isValidBudget, ratePerMinute } from './budget.ts';
+export type { BudgetField } from './budget.ts';
+export { carriesGlobIdentifier, evaluateCall, UNQUALIFIED } from './risk-runtime.ts';
+export {
+  envResolverFor,
+  isAcceptableInEnv,
+  isEnvScopedEntry,
+  NO_SINGLE_ENV,
+  noEnvResolver,
+  qualifyRiskId,
+  resolveVector,
+  resourceEnvResolver,
+  unqualifyRiskId,
+} from './qualify.ts';
+export type { EnvResolver } from './qualify.ts';
+export {
+  ANYTHING_ELSE_BASE_BUDGET,
+  ANYTHING_ELSE_MACRO_ACTION,
+  budgetAtTrustLevel,
+  DEFAULT_TRUST_LEVEL,
+  expandAtTrustLevel,
+  isTrustLevel,
+  tierOf,
+  TRUST_LEVEL_BUDGET_FACTOR,
+  TRUST_LEVEL_GATES,
+  TRUST_LEVELS,
+} from './trust-level.ts';
+export type { Tier, TrustLevel, TrustLevelCandidate, TrustLevelLine } from './trust-level.ts';

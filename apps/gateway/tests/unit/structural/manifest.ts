@@ -842,6 +842,18 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'named-package-barrels',
+    statement:
+      'The barrels of @vaubaan/shared, @vaubaan/gateway-core, @vaubaan/policy-engine and @vaubaan/telemetry name every export: no `export *`, so a change of a package contract is a visible line.',
+    source: 'Packages audit 2026-10-31, F5; handbook gateway-core',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/named-barrels.test.ts`,
+        tests: ['names every export, none with export *'],
+      },
+    ],
+  },
+  {
     id: 'no-french-vocabulary',
     statement:
       'The repository speaks English: no file names the trust level, its tier or the three levels by their first, French names, except the changelog, the applied migrations that stored them and the History of their ADR.',

@@ -11,7 +11,7 @@ import {
   tokenAttributionOf,
   tokenHolderLabel,
   type AuthenticatedToken,
-} from '../../src/index.ts';
+} from '../../src/types.ts';
 
 const memberToken: AuthenticatedToken = {
   id: 'tok_1',

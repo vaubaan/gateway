@@ -3,7 +3,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { MemoryCacheClient } from '../../src/index.ts';
+import { MemoryCacheClient } from '../../src/cache.ts';
 
 function clock(start = 1_000_000) {
   let t = start;
