@@ -25,7 +25,6 @@ function connectionOf(
     risks,
     derives_env: typeof plugin.envOf === 'function',
     macro_actions: macroActionsOf(plugin.catalog),
-    write_token_risks: [],
     authority: authority ?? risks.map((r) => r.risk_id),
   };
 }

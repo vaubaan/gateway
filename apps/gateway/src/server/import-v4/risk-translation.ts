@@ -100,7 +100,7 @@ export interface Translation {
 
 export type TranslatableConnection = Pick<
   IssuanceConnection,
-  'risks' | 'derives_env' | 'macro_actions' | 'write_token_risks' | 'authority'
+  'risks' | 'derives_env' | 'macro_actions' | 'authority'
 >;
 
 /** The provider a v4 risk id belongs to, or `null` when it is not a risk id. */

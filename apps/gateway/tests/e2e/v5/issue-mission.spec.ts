@@ -752,16 +752,14 @@ test('the reference explains each service: permissions against the trust levels,
   expect((last.y + last.height - first.y) / viewport.height).toBeLessThan(2.1);
   // The page does not scroll sideways at this width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
-  // No tool of the service hands a token to the agent: git goes through the gateway's
-  // remote, and the two mint risks of the App of earlier builds are retired.
+  // The mint tool of the App of earlier builds is gone, its two risks retired: git goes
+  // through the gateway's remote.
   await page.goto('/reference/github#tools');
   await expect(page.getByRole('tab', { name: /Tools/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('tool-table')).not.toContainText('github__mint_install_token');
-  await expect(page.getByTestId('token-handout-note')).toHaveCount(0);
   await page.goto('/reference/github#permissions');
   await expect(page.getByTestId('risk-github.mint-install-token-push')).toContainText('retired');
-  await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a');
-  await snap(page, 'provider-token-handouts');
+  await snap(page, 'provider-tools');
   // An unknown service is not found.
   const missing = await page.goto('/reference/no-such-provider');
   expect(missing?.status()).toBe(404);

@@ -23,7 +23,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * `connections/mapping.ts` only; no record is written into an audit payload.
  */
 import type { TokenHolder } from '@vaubaan/gateway-core';
-import { writeHandoutRiskIds, type PluginRegistry } from '@vaubaan/plugin-sdk';
+import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import {
   isGate,
   parseRiskId,
@@ -769,7 +769,6 @@ export class MissionService {
       resources: resources.map((r) => toIssuanceResource(r, this.isSelf(connection.provider, r))),
       risks: this.risksOf(connection.provider),
       authority: authority.riskIds,
-      write_token_risks: [...writeHandoutRiskIds(plugin)],
       macro_actions: this.macroActionsOf(connection.provider),
     };
   }

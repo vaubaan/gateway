@@ -76,9 +76,8 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
   `assertCatalogCoverage` (one sample per tool, `risksUntouched` `[]`, `fallbackHits` empty) and
   `assertIdentifiersRefused` (`plugin-identifier-tests.test.ts` fails a plugin without it).
 - A test of what a mission allows builds it with `policyFromMacroActions(plugin, { <id>: <trust level> },
-{ envs })`, not by hand: it runs the policy engine's trust-level rules (`expandAtTrustLevel`) and asks first
-  for a write-token handout (`writeHandoutRiskIds`), as the creation form does. It does not model
-  the creator's authority.
+{ envs })`, not by hand: it runs the policy engine's trust-level rules (`expandAtTrustLevel`), as
+  the creation form does. It does not model the creator's authority.
 - `npx vitest run packages/plugin-sdk plugins/_template`; the standalone test after `next build`.
 
 ## Debug

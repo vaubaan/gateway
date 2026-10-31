@@ -10,12 +10,7 @@
  * community validation status.
  */
 import { parseSlice } from '@vaubaan/policy-engine';
-import type {
-  PluginRegistry,
-  RegisteredPlugin,
-  ServiceIcon,
-  TokenHandout,
-} from '@vaubaan/plugin-sdk';
+import type { PluginRegistry, RegisteredPlugin, ServiceIcon } from '@vaubaan/plugin-sdk';
 import type {
   CredentialKind,
   DataModel,
@@ -290,16 +285,6 @@ export interface RiskReference extends RiskFamily {
   readonly patterns: readonly PatternReference[];
   readonly replaced_by: RiskId | null;
   readonly rate_ceiling_per_minute: number | null;
-  /** Touched by a tool that hands the agent a provider token (`ProviderPlugin.tokenHandouts`). */
-  readonly hands_token: boolean;
-  /**
-   * What the handed token can do at the provider: `read-only` when the plugin declares
-   * it so (`readOnlyRiskIds`), `write` otherwise; `null` when the risk hands no token.
-   * A trust level pre-fills a `write` one `approval` (spec §2.4).
-   */
-  readonly token_access: TokenAccess | null;
-  /** The tools the plugin declares as touching this risk (`tokenHandouts`); usually none. */
-  readonly declared_tools: readonly string[];
   /** The planes of the data model its patterns reach (`planes.ts`); `['other']` when none. */
   readonly planes: readonly string[];
   /** The macro-action it belongs to; `null` for a retired entry, in none. */
@@ -333,10 +318,9 @@ export interface RiskReferenceGroup {
   readonly entries: readonly RiskReference[];
 }
 
-/** What an entry is read against, besides itself: the model, the handouts, the macro-actions. */
+/** What an entry is read against, besides itself: the model and the macro-actions. */
 interface CatalogContext {
   readonly model: DataModel;
-  readonly handouts: readonly TokenHandout[];
   readonly macroActions: readonly MacroActionReference[];
   /** Per explicit id, per trust level: its line, `null` when left out. */
   readonly cells: ReadonlyMap<RiskId, Readonly<Record<TrustLevel, TrustLevelCell['line']>>>;
@@ -352,14 +336,7 @@ function riskReferenceOf(
   family: RiskFamily,
   context: CatalogContext,
 ): RiskReference {
-  const handing = context.handouts.filter((handout) => handout.riskIds.includes(entry.id));
-  const tools = handing.map((handout) => handout.tool);
-  // Write as soon as one tool that touches it does not declare it read-only.
-  const readOnly = handing.every((handout) => handout.readOnlyRiskIds?.includes(entry.id));
   return {
-    hands_token: tools.length > 0,
-    token_access: tools.length === 0 ? null : readOnly ? 'read-only' : 'write',
-    declared_tools: tools,
     planes: planesOfPatterns(context.model, patternsOf(entry)),
     macro_action: (() => {
       const action = context.macroActions.find((candidate) =>
@@ -424,13 +401,6 @@ export interface MacroActionReference {
   readonly risk_ids: readonly RiskId[];
 }
 
-/** Base ids whose tool hands a token that can write (the SDK's `writeHandoutRiskIds`, spelled out). */
-function writeTokenRisks(handouts: readonly TokenHandout[]): RiskId[] {
-  return handouts.flatMap((handout) =>
-    handout.riskIds.filter((id) => !(handout.readOnlyRiskIds ?? []).includes(id)),
-  );
-}
-
 /**
  * Every macro-action against the whole catalog, every environment reached and
  * every risk held: what each trust level writes for each explicit id. What a mission
@@ -440,13 +410,11 @@ function writeTokenRisks(handouts: readonly TokenHandout[]): RiskId[] {
 function trustLevelCellsOf(
   actions: readonly MacroAction[],
   risks: readonly CatalogRisk[],
-  handouts: readonly TokenHandout[],
 ): Map<RiskId, Record<TrustLevel, TrustLevelCell['line']>> {
   const whole = {
     risks,
     authority: risks.map((risk) => risk.risk_id),
     derives_env: true,
-    write_token_risks: writeTokenRisks(handouts),
   };
   const cells = new Map<RiskId, Record<TrustLevel, TrustLevelCell['line']>>();
   for (const action of actions) {
@@ -486,28 +454,13 @@ export interface ToolReference {
   readonly description: string;
   readonly required: readonly string[];
   readonly optional: readonly string[];
-  /**
-   * The risks the plugin declares for this tool, when it declares any
-   * (`tokenHandouts`): the only static tool-to-risk statement a plugin
-   * makes. `null` otherwise — the risks depend on the arguments.
-   */
-  readonly declared_risks: readonly RiskId[] | null;
-  /** The tool returns a short-lived provider token to the agent (spec §2.4). */
-  readonly hands_token: boolean;
   /** The plane its name files it under (`planes.ts`); `['other']` when the name says none. */
   readonly planes: readonly string[];
 }
 
-function toolReferenceOf(
-  tool: McpToolDeclaration,
-  handouts: readonly TokenHandout[],
-  model: DataModel,
-): ToolReference {
+function toolReferenceOf(tool: McpToolDeclaration, model: DataModel): ToolReference {
   const required = tool.inputSchema.required ?? [];
-  const handout = handouts.find((h) => h.tool === tool.name);
   return {
-    declared_risks: handout ? handout.riskIds : null,
-    hands_token: handout !== undefined,
     planes: planesOfToolName(model, tool.name),
     name: tool.name,
     description: tool.description,
@@ -526,19 +479,6 @@ function toolReferenceOf(
  */
 export const TOOL_RISKS_NOTE =
   'Which permissions a call needs depends on its arguments: the same tool can need a mild one on one resource and a severe one on another, and the plugin decides call by call. A plugin declares no table of the permissions of each tool, so none is shown here; the list of permissions is the complete list of what any call can need. For the same reason an agent is listed every tool of the services its mission uses, and a listed tool can still be refused when it is called: what a given mission can call is answered precisely by the catalog endpoint of the execution door, not by the tool list.';
-
-/** What the mark "hands a token to the agent" means (spec §2.4). */
-export const TOKEN_HANDOUT_NOTE =
-  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. At every trust level, a token that can write is handed only after the creator approves the call; a read-only token follows its tier. The long-lived credential never leaves the gateway.';
-
-/** What a handed token can do at the provider. */
-export type TokenAccess = 'read-only' | 'write';
-
-/** The badge of a risk that hands a token: what the token can do, in three words. */
-export const TOKEN_ACCESS_BADGE: Readonly<Record<TokenAccess, string>> = {
-  'read-only': 'hands a read-only token',
-  write: 'hands a write token',
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The whole page
@@ -599,18 +539,16 @@ function planeFiltersOf(
 export function providerReferenceOf(registered: RegisteredPlugin): ProviderReference {
   const { plugin } = registered;
   const risks = enumerateCatalog(plugin.catalog);
-  const handouts = plugin.tokenHandouts ?? [];
   const model = plugin.dataModel;
   const actions = macroActionsOf(plugin.catalog);
   const macroActions = actions.map(macroActionReferenceOf);
-  const cells = trustLevelCellsOf(actions, risks, handouts);
+  const cells = trustLevelCellsOf(actions, risks);
   const riskGroups = riskGroupsOf(plugin.catalog.risks, risks, {
     model,
-    handouts,
     macroActions,
     cells,
   });
-  const tools = plugin.tools.map((tool) => toolReferenceOf(tool, handouts, model));
+  const tools = plugin.tools.map((tool) => toolReferenceOf(tool, model));
   return {
     ...cardOf(registered, risks),
     summary: plugin.summary ?? null,

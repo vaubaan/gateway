@@ -14,7 +14,7 @@
  */
 import { Fragment } from 'react';
 
-import { Callout, EnvTag, GateMark, Mono, SeverityChip, Tag, WhyCells } from '@/components/ui';
+import { EnvTag, GateMark, Mono, SeverityChip, Tag, WhyCells } from '@/components/ui';
 import {
   ACTIONS,
   count,
@@ -39,8 +39,6 @@ import { TRUST_LEVELS } from '@/server/missions/macro-actions';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
 import {
-  TOKEN_ACCESS_BADGE,
-  TOKEN_HANDOUT_NOTE,
   type TrustLevelCell,
   type MacroActionReference,
   type RiskReference,
@@ -198,8 +196,7 @@ export function PermissionComparison({
                         {(entry.envs.length > 0 ||
                           entry.macro_action ||
                           entry.fallback ||
-                          entry.deprecated ||
-                          entry.token_access) && (
+                          entry.deprecated) && (
                           <span className={styles.tags}>
                             {entry.macro_action && (
                               <a
@@ -217,11 +214,6 @@ export function PermissionComparison({
                             ))}
                             {entry.fallback && <Tag>{REFERENCE_WORDS.anythingElse}</Tag>}
                             {entry.deprecated && <Tag>{REFERENCE_WORDS.retired}</Tag>}
-                            {entry.token_access && (
-                              <Tag tone={entry.token_access === 'write' ? 'bad' : 'warn'}>
-                                {TOKEN_ACCESS_BADGE[entry.token_access]}
-                              </Tag>
-                            )}
                           </span>
                         )}
                         <span className={styles.why}>
@@ -293,18 +285,6 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
       ) : (
         shown && <WhyCells values={shown.vector} />
       )}
-      {entry.token_access && (
-        <Callout
-          tone={entry.token_access === 'write' ? 'bad' : 'warn'}
-          title={
-            entry.token_access === 'write'
-              ? 'Hands the agent a token that can write'
-              : 'Hands the agent a read-only token'
-          }
-        >
-          {noteBody(TOKEN_HANDOUT_NOTE)}
-        </Callout>
-      )}
       <dl className={styles.detailFacts}>
         <dt>Held</dt>
         <dd>
@@ -332,18 +312,6 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
             ))}
           </ul>
         </dd>
-        {entry.declared_tools.length > 0 && (
-          <>
-            <dt>Tools</dt>
-            <dd>
-              {entry.declared_tools.map((tool) => (
-                <Fragment key={tool}>
-                  <Mono>{tool}</Mono>{' '}
-                </Fragment>
-              ))}
-            </dd>
-          </>
-        )}
         <dt>Macro-action</dt>
         <dd>
           {entry.macro_action === null ? (

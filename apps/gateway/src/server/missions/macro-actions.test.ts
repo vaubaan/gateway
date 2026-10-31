@@ -111,13 +111,6 @@ describe('macro-actions of a connection', () => {
     ).toEqual(['trust-level']);
   });
 
-  it('asks first for a risk that hands a write token, at every trust level', () => {
-    const minting = acmeConnection({ write_token_risks: ['acme.read'] });
-    expect(expandMacroAction(minting, action('read'), 'autonomous', []).lines[0]?.gate).toBe(
-      'approval',
-    );
-  });
-
   it('names the trust levels of a draft that are no macro-action here', () => {
     expect(unknownMacroActions(acme, { read: 'careful', deploy: 'autonomous' })).toEqual([
       'deploy',

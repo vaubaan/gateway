@@ -185,8 +185,6 @@ What a creator ticks per connection, in the connector's words
 
 - The trust level multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
   ceiling (§4bis).
-- A risk whose tool hands the agent a provider token that can write is pre-filled `approval` at
-  every trust level, whatever its tier.
 - A catalog ships no presets: a `presets` key does not load.
 - The result is explicit lines (§5), shown before issuance and editable one by one; the mission
   keeps the trust level per macro-action only to redraw the form.

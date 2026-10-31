@@ -326,8 +326,9 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 - **No presets.** Presets were retired: a catalog with a `presets` key does
   not load ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
-  A risk whose tool hands the agent a token that can write
-  (`tokenHandouts`) asks first at every trust level.
+- **No tool hands a token.** No tool returns a provider token to the agent;
+  a plugin that declares `tokenHandouts` does not load: route the work through
+  the gateway, as git does through its remote.
 - **Limits.** The only limit the gateway enforces is
   `infra_limits.calls_per_minute_max` on a risk: the ceiling of the rate
   limit a mission can be issued with. Do not declare `caps` or another
@@ -710,7 +711,7 @@ expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave
 **Test a mission the way a creator composes it.** `policyFromMacroActions`
 writes the explicit lines of ticked macro-actions at their trust levels, for the
 environments given, with the policy engine's own rules (gate from the
-tier, budget scaled by the trust level, a write-token handout asked first):
+tier, budget scaled by the trust level):
 
 ```ts
 const policy = policyFromMacroActions(

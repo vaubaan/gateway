@@ -168,7 +168,6 @@ export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): Iss
     resources: ACME_RESOURCES,
     risks: enumerateCatalog(ACME_CATALOG),
     authority: fullCatalogRiskIds(ACME_CATALOG),
-    write_token_risks: [],
     macro_actions: macroActionsOf(ACME_CATALOG),
     ...overrides,
   };

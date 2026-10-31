@@ -134,10 +134,8 @@ findings without a demonstrated impact are out of scope).
    process. The gateway does not defend against its own operator.
 2. **An agent never holds a connection's stored credential.** It holds a
    mission token; the gateway decrypts the credential for the duration of one
-   call and returns only the result. No shipped tool hands a provider token
-   to the agent; a plugin that declared one would make it a risk of its own,
-   which a mission must accept, counted and audited like any call, and which
-   asks first at every trust level.
+   call and returns only the result. No tool hands a provider token to the
+   agent: the plugin SDK has no way to declare one.
 3. **The gateway decides from the plugin's classification.** A call is
    allowed when every risk it touches was accepted by the mission, within its
    budget and gate. A wrong classification is therefore a vulnerability.

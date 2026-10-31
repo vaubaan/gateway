@@ -93,8 +93,6 @@ export interface PluginInfo {
   readonly risks: readonly RiskInfo[];
   readonly macroActions: readonly MacroActionInfo[];
   readonly credentials: readonly CredentialInfo[];
-  /** Tools that hand the agent a short-lived provider token, each a permission of its own. */
-  readonly tokenHandouts: readonly { readonly tool: string; readonly riskIds: readonly string[] }[];
   readonly gitRemote: boolean;
 }
 
@@ -234,10 +232,6 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
       })),
     })),
     credentials: [credentialInfo(plugin.credential)],
-    tokenHandouts: (plugin.tokenHandouts ?? []).map((handout) => ({
-      tool: handout.tool,
-      riskIds: [...handout.riskIds],
-    })),
     gitRemote: plugin.gitRemote !== undefined,
   };
 }

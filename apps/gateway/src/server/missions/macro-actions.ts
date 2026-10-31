@@ -72,7 +72,6 @@ export function rowsOf(
 
 /** A row as `expandAtTrustLevel` reads it, from its macro-action entry's base budget. */
 function candidateOf(
-  connection: Pick<IssuanceConnection, 'write_token_risks'>,
   risk: Pick<CatalogRisk, 'base_id' | 'risk_id' | 'vector' | 'rate_ceiling_per_minute'>,
   entry: MacroAction['entries'][number],
 ): TrustLevelCandidate {
@@ -81,12 +80,11 @@ function candidateOf(
     vector: risk.vector,
     base: { quota: entry.quota, rate_limit: entry.rate_limit },
     rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
-    hands_write_token: connection.write_token_risks.includes(risk.base_id),
   };
 }
 
 export function expandMacroAction(
-  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env' | 'write_token_risks'>,
+  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env'>,
   action: MacroAction,
   trustLevel: TrustLevel,
   resources: readonly Pick<IssuanceResource, 'env'>[],
@@ -102,14 +100,14 @@ export function expandMacroAction(
       unavailable.push(risk);
       continue;
     }
-    candidates.push(candidateOf(connection, risk, entry));
+    candidates.push(candidateOf(risk, entry));
   }
   return { ...expandAtTrustLevel(candidates, trustLevel), unavailable };
 }
 
 type TrustLevelsConnection = Pick<
   IssuanceConnection,
-  'risks' | 'authority' | 'derives_env' | 'macro_actions' | 'write_token_risks'
+  'risks' | 'authority' | 'derives_env' | 'macro_actions'
 >;
 
 /**
@@ -172,7 +170,7 @@ export function macroActionOfRisk(
  * `null` for a risk in no macro-action.
  */
 export function defaultLineOf(
-  connection: Pick<IssuanceConnection, 'macro_actions' | 'write_token_risks'>,
+  connection: Pick<IssuanceConnection, 'macro_actions'>,
   trustLevels: MacroActionTrustLevels,
   risk: Pick<CatalogRisk, 'base_id' | 'risk_id' | 'vector' | 'rate_ceiling_per_minute'>,
 ): {
@@ -184,7 +182,7 @@ export function defaultLineOf(
   const entry = action?.entries.find((e) => e.risk_id === risk.base_id);
   if (!action || !entry) return null;
   const trustLevel = trustLevels[action.id] ?? DEFAULT_TRUST_LEVEL;
-  const [line] = expandAtTrustLevel([candidateOf(connection, risk, entry)], trustLevel).lines;
+  const [line] = expandAtTrustLevel([candidateOf(risk, entry)], trustLevel).lines;
   if (line) return { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
   // Left out at this trust level: ticked by hand, it asks first, at the base budget.
   return { quota: entry.quota, rate_limit: entry.rate_limit, gate: 'approval' };

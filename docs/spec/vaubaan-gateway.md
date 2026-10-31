@@ -289,11 +289,8 @@ permissions and executes nothing.
 - The gateway mints or decrypts in memory an ephemeral upstream credential, uses it, releases it.
   The same for git through the git remote (§4.1 ter): the mission token is the password, the gateway
   presents the provider's credential upstream, neither crosses.
-- **One deliberate exception:** a tool whose purpose is to hand the agent a short-lived, narrowly
-  scoped provider token. It is its own catalog risk, never accepted by default, counted and audited;
-  the long-lived credential never leaves. A trust level never runs a token-handing risk that grants
-  write freely: its pre-filled gate is `approval` at every trust level; a read-only one follows its tier.
-  An undeclared one is write.
+- **No exception:** no tool hands the agent a provider token, short-lived or not (owner decision of
+  2026-10-31); work that needs one goes through the gateway, as git does through its remote.
 - An exfiltrated mission token grants the mission's rights within its budget until revoked; the
   audit names its holder, and revoking it leaves other holders working.
 - An exfiltrated delegated token issues missions within the user's authority until revoked or

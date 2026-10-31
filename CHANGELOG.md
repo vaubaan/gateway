@@ -137,6 +137,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Every plugin gains a patch version and a `catalog_version`; Gmail's comes
   with its 1.1.0.
 
+### Plugin SDK
+
+- **`@vaubaan/plugin-sdk` 0.1.1: no tool hands a token.** `tokenHandouts`,
+  `TokenHandout` and `writeHandoutRiskIds` are gone (owner decision of
+  2026-10-31, spec §2.4): a plugin that still declares `tokenHandouts` does
+  not load (`RETIRED_TOKEN_HANDOUTS_ISSUE`). No shipped plugin declared one.
+  The policy engine's `TrustLevelCandidate` loses `hands_write_token`, the
+  Reference loses its "hands a token" marks and the mission page its raw-token
+  warning. The SDK's test kit speaks the new words: `MacroActionTrustLevelChoice`,
+  trust levels `careful|trusting|autonomous`.
+
 ## [2.0.0-alpha.11] - 2026-10-29
 
 ### Added

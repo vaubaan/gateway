@@ -190,11 +190,6 @@ export interface IssuanceConnection {
   readonly risks: readonly CatalogRisk[];
   /** The creator's authority on this connection: explicit ids, a subset of `risks`. */
   readonly authority: readonly RiskId[];
-  /**
-   * Base ids whose tool hands the agent a provider token that can write (spec
-   * §2.4): a trust level pre-fills them `approval`.
-   */
-  readonly write_token_risks: readonly RiskId[];
   /** The catalog's macro-actions, then "Anything else" holding the fallback (`macroActionsOf`). */
   readonly macro_actions: readonly MacroAction[];
 }
