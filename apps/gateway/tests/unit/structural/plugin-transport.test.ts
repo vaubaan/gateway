@@ -27,7 +27,6 @@ const PLUGINS = join(REPO, 'plugins');
 const NOT_YET_ON_THE_TRANSPORT: readonly string[] = [
   'context7',
   'github',
-  'google-calendar',
   'notion',
   'railway',
   'supabase',

@@ -149,6 +149,17 @@ describe('google-calendar tools — built from the upstream list', () => {
     });
   });
 
+  test('the schema check reads an untrusted answer: what is not a named tool is ignored', () => {
+    const everyToolGone = UPSTREAM_TOOL_LIST.tools.map((t) => t.name);
+    expect(toolDrift(null).gone).toEqual(everyToolGone);
+    expect(toolDrift({ tools: 'none' }).gone).toEqual(everyToolGone);
+    expect(toolDrift({ tools: [null, 7, { name: 3 }, { name: 'x', inputSchema: 'y' }] })).toEqual({
+      gone: everyToolGone,
+      unmodelled: ['x'],
+      arguments: {},
+    });
+  });
+
   test('an upstream tool the model does not know is neither listed nor callable: the module refuses it', () => {
     const extra: UpstreamTool = {
       name: 'delete_calendar',

@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { CredentialRefusal, UpstreamAuthError } from '@vaubaan/plugin-sdk';
+import { CredentialRefusal, UpstreamAuthError, UpstreamProtocolError } from '@vaubaan/plugin-sdk';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -80,6 +80,57 @@ describe('execute', () => {
       executeGoogleCalendar(context(denied), TOOL.getEvent, { eventId: EVENT }),
     ).rejects.toBeInstanceOf(UpstreamAuthError);
   });
+
+  test('a JSON-RPC error frame is a protocol failure, with Google’s text for the agent', async () => {
+    const frame = mockFetch([
+      {
+        method: 'POST',
+        url: CALENDAR_MCP_URL,
+        respond: (call) => ({
+          jsonrpc: '2.0',
+          id: rpcOf(call).id ?? null,
+          error: { code: -32602, message: 'Invalid params: eventId' },
+        }),
+      },
+    ]);
+    const failure = executeGoogleCalendar(context(frame), TOOL.getEvent, { eventId: EVENT });
+    await expect(failure).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(failure).rejects.toThrow(/Invalid params: eventId/);
+  });
+
+  test('a server that wants a session: initialize once, then the call again with its session id', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: CALENDAR_MCP_URL,
+        status: 400,
+        body: { error: 'no session' },
+        times: 1,
+      },
+      {
+        method: 'POST',
+        url: CALENDAR_MCP_URL,
+        times: 1,
+        headers: { 'mcp-session-id': 'session-1' },
+        respond: (call) => ({
+          jsonrpc: '2.0',
+          id: rpcOf(call).id,
+          result: { protocolVersion: '2025-06-18' },
+        }),
+      },
+      { method: 'POST', url: CALENDAR_MCP_URL, status: 202, body: '', times: 1 },
+      mcpRoute(() => textResult('ok')),
+    ]);
+    const result = await executeGoogleCalendar(context(fetch), TOOL.getEvent, { eventId: EVENT });
+    expect(result).toEqual(textResult('ok'));
+    expect(fetch.calls.map((c) => rpcOf(c).method)).toEqual([
+      'tools/call',
+      'initialize',
+      'notifications/initialized',
+      'tools/call',
+    ]);
+    expect(fetch.calls[3]?.headers['mcp-session-id']).toBe('session-1');
+  });
 });
 
 describe('discovery', () => {
@@ -145,6 +196,21 @@ describe('discovery', () => {
         ],
       }),
     ).toEqual([]);
+  });
+
+  test('Google refusing list_calendars at discovery is its failure, typed: a protocol error', async () => {
+    const fetch = mockFetch([
+      mcpRoute((call) =>
+        rpcOf(call).method === 'tools/list'
+          ? { tools: [] }
+          : { ...textResult('rate limited'), isError: true },
+      ),
+    ]);
+    const discovery = discoverGoogleCalendarResources(context(fetch));
+    await expect(discovery).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(discovery).rejects.toThrow(
+      'Google Calendar MCP server, tool list_calendars failed',
+    );
   });
 
   test('a 403 of Google at discovery is a refusal the person can read', async () => {

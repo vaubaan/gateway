@@ -14,19 +14,19 @@ Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/
 
 ## Files
 
-| File                       | What                                                                      |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `src/index.ts`             | `definePlugin`, the default export                                        |
-| `src/identity.ts`          | ids, Google's tool and argument names, the MCP URL, the scopes            |
-| `src/identifiers.ts`       | calendar id ↔ ref (`@` ↔ `~`), event id, strict address parsing           |
-| `src/data-model.ts`        | the `calendar` plane                                                      |
-| `src/risk-catalog.yaml`    | 10 risks + fallback, macro-actions `read`, `schedule`, `invite`           |
-| `src/credential.ts`        | the brokered `oauth2` spec                                                |
-| `src/tools.ts`             | the gateway's declarations, built from `upstream-tools.json`              |
-| `src/upstream-tools.json`  | Google's nine tools, modelled from the reference (source and date inside) |
-| `src/call.ts`              | the one reader of a call, for classify and execute                        |
-| `src/classify.ts`          | slices                                                                    |
-| `src/execute.ts`, `mcp.ts` | the JSON-RPC client, execution, discovery, the schema check               |
+| File                      | What                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin`, the default export                                              |
+| `src/identity.ts`         | ids, Google's tool and argument names, `GOOGLE_CALENDAR_MCP_SERVER`, the scopes |
+| `src/identifiers.ts`      | calendar id ↔ ref (`@` ↔ `~`), event id, strict address parsing                 |
+| `src/data-model.ts`       | the `calendar` plane                                                            |
+| `src/risk-catalog.yaml`   | 10 risks + fallback, macro-actions `read`, `schedule`, `invite`                 |
+| `src/credential.ts`       | the brokered `oauth2` spec                                                      |
+| `src/tools.ts`            | the gateway's declarations, built from `upstream-tools.json`                    |
+| `src/upstream-tools.json` | Google's nine tools, modelled from the reference (source and date inside)       |
+| `src/call.ts`             | the one reader of a call, for classify and execute                              |
+| `src/classify.ts`         | slices                                                                          |
+| `src/execute.ts`          | execution and discovery through the SDK's MCP client, the schema check          |
 
 ## Credential and resources
 
