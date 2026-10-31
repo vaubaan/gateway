@@ -27,16 +27,19 @@ services:
       # The store path belongs here, next to the volume that holds it.
       VAUBAAN_CONFIG_FILE: /config/gateway.yaml
       VAUBAAN_STORE_PATH: /data/gateway.db
-      # The master key on a volume of its own, never beside the store it seals:
-      # a snapshot or backup of gateway-data alone opens nothing (ADR
-      # master-key-generated-and-handed-over-by-the-instance, amendment
-      # 2026-10-31). Back the two volumes up separately; keep the key's copy
-      # off the host too (the setup hands it to you).
-      VAUBAAN_MASTER_KEY_FILE: /keys/master.key
+      # The master key goes on its own volume, gateway-key at /keys, never beside
+      # the store it seals: a snapshot or backup of gateway-data alone opens
+      # nothing (ADR master-key-generated-and-handed-over-by-the-instance,
+      # amendment 2026-10-31). deploy/config/.env names the file
+      # (VAUBAAN_MASTER_KEY_FILE=/keys/master.key), or gives the key itself; the
+      # boot warns while the file sits on /data. Back the two volumes up
+      # separately; keep the key's copy off the host too.
       # The one proxy whose X-Forwarded-For is believed: Caddy, at its fixed
       # address below. Never a whole Docker pool: every container on it could
       # then pick the address it is limited and audited under. A value in
-      # deploy/config/.env wins (another proxy in front of Caddy, say).
+      # deploy/config/.env wins (another proxy in front of Caddy, say). Behind an
+      # edge that overwrites a client-address header (client_ip_header), remove
+      # this line: the two settings exclude each other.
       VAUBAAN_TRUSTED_PROXIES: ${VAUBAAN_TRUSTED_PROXIES:-172.30.253.2}
     networks:
       - edge

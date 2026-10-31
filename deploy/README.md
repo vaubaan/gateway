@@ -54,9 +54,9 @@ curl -s https://<your domain>/healthz
 ```
 
 The encryption key is generated at the first start on a volume of its own,
-never on the store's: `compose.yaml` sets
-`VAUBAAN_MASTER_KEY_FILE=/keys/master.key` on the `gateway-key` volume and the
-example `.env` sets `VAUBAAN_MASTER_KEY_GENERATE=1`. The gateway writes the
+never on the store's: `compose.yaml` mounts the `gateway-key` volume at `/keys`
+and the example `.env` sets `VAUBAAN_MASTER_KEY_FILE=/keys/master.key` and
+`VAUBAAN_MASTER_KEY_GENERATE=1`. The gateway writes the
 file (32 random bytes, base64, mode 0600) and the setup page hands it to you —
 download it and keep it outside the host; a backup of the store opens with it
 only. Back the two volumes up separately: a copy that holds both the store and
@@ -74,13 +74,16 @@ Encryption, after a fresh sign-in; every download is recorded in the activity
 [configuration](../docs/handbook/configuration.md#master-key-generated-at-the-first-start)).
 
 **Upgrading an instance whose key is on the data volume** (`/data/master.key`,
-the default up to 2.0.0-alpha.11): with the gateway stopped, copy the key to
-the new volume, start, check, then remove the old copy.
+the default up to 2.0.0-alpha.11): it keeps starting, with the boot warning.
+To move the key, stop the gateway, copy the key to the new volume, set
+`VAUBAAN_MASTER_KEY_FILE=/keys/master.key` in `deploy/config/.env`, start,
+check, then remove the old copy.
 
 ```bash
 docker compose --env-file deploy/config/.env -f deploy/compose.yaml stop gateway
 docker compose --env-file deploy/config/.env -f deploy/compose.yaml run --rm --no-deps \
   --entrypoint sh gateway -c 'cp -p /data/master.key /keys/master.key'
+$EDITOR deploy/config/.env                 # VAUBAAN_MASTER_KEY_FILE=/keys/master.key
 docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d
 docker compose --env-file deploy/config/.env -f deploy/compose.yaml run --rm --no-deps \
   --entrypoint sh gateway -c 'rm /data/master.key'
