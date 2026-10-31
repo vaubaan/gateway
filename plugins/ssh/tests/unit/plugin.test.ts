@@ -14,6 +14,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   parseSlice,
+  refusalResult,
   serializeSlice,
   type ConnectionContext,
   type ExecuteContext,
@@ -1242,6 +1243,23 @@ describe('execute over an injected transport', () => {
     );
     const unknown = await plugin.execute(execCtx(), 'ssh__nope', { cmd: 'ls' });
     expect(unknown.isError).toBe(true);
+    expect(transport.calls).toHaveLength(0);
+  });
+
+  test('a declined call is the SDK refusal result : the reason as one text block, isError', async () => {
+    const transport = fakeTransport();
+    const plugin = createSshPlugin({ transport });
+    await expect(plugin.execute(execCtx(), 'ssh__nope', { cmd: 'ls' })).resolves.toEqual(
+      refusalResult("unknown tool 'ssh__nope'"),
+    );
+    await expect(plugin.execute(execCtx(), 'ssh__exec', { cmd: '' })).resolves.toEqual(
+      refusalResult('cmd: a non-empty string is required'),
+    );
+    await expect(
+      plugin.execute(execCtx([staging, prod]), 'ssh__exec', { host: OTHER, cmd: 'ls' }),
+    ).resolves.toEqual(
+      refusalResult(`host '${OTHER}' is not the host of this connection ('${HOST}')`),
+    );
     expect(transport.calls).toHaveLength(0);
   });
 

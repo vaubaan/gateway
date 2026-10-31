@@ -23,6 +23,8 @@ import {
   type SshKeyCredentialSpec,
 } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID } from './identity.ts';
+
 /** Longest host accepted : the length of a fully qualified DNS name. */
 export const SSH_HOST_MAX_LENGTH = 253;
 /**
@@ -107,7 +109,7 @@ export interface SshTarget {
  * both mean a host bug, not a provider error, so neither is an `UpstreamAuthError`.
  */
 export function sshTarget(secret: CredentialSecret): SshTarget {
-  const key = expectCredentialKind('ssh', secret, 'ssh-key');
+  const key = expectCredentialKind(PROVIDER_ID, secret, 'ssh-key');
   const host = hostRef(key.fields.host);
   const user = key.fields.user;
   const rawPort = key.fields.port;

@@ -10,7 +10,7 @@
  * single and double quotes, backslash escapes, line continuations, comments,
  * the control operators, plain redirections, `$name` / `${name}` expansions —
  * and **names everything else as opaque** instead of guessing. A line that is
- * opaque is never a read and carries every write class (`command-classes.ts`),
+ * opaque is never a read and carries every write class (`command/profile.ts`),
  * so a disagreement between this lexer and the remote shell on an opaque
  * construct cannot lower a classification.
  *
@@ -429,4 +429,33 @@ export function lexCommandLine(line: string): LexedLine {
   if (malformed) opaque.add('malformed');
 
   return { commands, substitution, redirection, malformed, opaque: [...opaque] };
+}
+
+export interface SplitLine {
+  /** Simple commands in order, trimmed, comments removed, empty ones dropped. */
+  readonly commands: readonly string[];
+  /** `$(`, backtick, `<(`, `>(` or `$[` seen outside single quotes. */
+  readonly substitution: boolean;
+  /** An output redirection (`>`, `>>`, `&>`, `>|`, `>&file`, `<>`) to a file seen outside quotes. */
+  readonly redirection: boolean;
+  /** A quote was left open, a backslash ends the line, or a redirection has no target. */
+  readonly malformed: boolean;
+  /** Why the line cannot be seen through ; empty when it can. */
+  readonly opaque: readonly string[];
+}
+
+/**
+ * Split a shell line into simple commands on `;`, `&&`, `||`, `|`, `&`,
+ * newlines and the grouping parentheses, honouring quotes, backslash escapes
+ * and comments. A view over `lexCommandLine` for callers that want text.
+ */
+export function splitCommandLine(line: string): SplitLine {
+  const lexed = lexCommandLine(line);
+  return {
+    commands: lexed.commands.map((c) => c.text),
+    substitution: lexed.substitution,
+    redirection: lexed.redirection,
+    malformed: lexed.malformed,
+    opaque: lexed.opaque,
+  };
 }

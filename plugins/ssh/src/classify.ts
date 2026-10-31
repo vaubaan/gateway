@@ -7,7 +7,7 @@
  * Pure. The host is a mission resource : named by `host`, or the mission's
  * single SSH host when the argument is absent ; a host the mission does not
  * hold, an ambiguous or malformed one, is `denied`. The command line is
- * profiled by `command-classes.ts` and becomes :
+ * profiled by `command/profile.ts` and becomes :
  *
  *   ssh.host[<ref>].command.R                 a whitelisted read is present
  *   ssh.host[<ref>].command.secret-file.R     a credential-bearing path is referenced, or a path cannot be seen
@@ -29,11 +29,9 @@
 
 import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
 
-import { MAX_CMD_LENGTH, profileCommandLine } from './command-classes.ts';
+import { MAX_CMD_LENGTH, profileCommandLine } from './command/profile.ts';
 import { hostRef } from './credential.ts';
-import { SSH_EXEC } from './tools.ts';
-
-export const PROVIDER = 'ssh';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 
 export interface ExecArgs {
   readonly host: string;
@@ -74,7 +72,7 @@ export function classifySsh(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  if (tool !== SSH_EXEC) return { denied: `unknown tool '${tool}'` };
+  if (tool !== TOOL.exec) return { denied: `unknown tool '${tool}'` };
   const exec = resolveExecArgs(args, resources);
   if ('denied' in exec) return exec;
 
@@ -83,7 +81,7 @@ export function classifySsh(
 
   const slices: Slice[] = [];
   const emit = (suffix: string): void => {
-    slices.push(parseSlice(`${PROVIDER}.host[${exec.host}].command${suffix}`));
+    slices.push(parseSlice(`${PROVIDER_ID}.host[${exec.host}].command${suffix}`));
   };
   if (profile.read) emit('.R');
   if (profile.secretFile) emit('.secret-file.R');
@@ -106,7 +104,7 @@ function resolveHost(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { ref: string } | { denied: string } {
-  const own = resources.filter((r) => r.provider === PROVIDER);
+  const own = resources.filter((r) => r.provider === PROVIDER_ID);
   if (args.host !== undefined) {
     const explicit = hostRef(args.host);
     if (explicit === null) return { denied: 'host: malformed ref' };

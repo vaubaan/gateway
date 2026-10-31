@@ -15,15 +15,17 @@
  */
 
 import {
+  refusalResult,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER, resolveExecArgs } from './classify.ts';
+import { resolveExecArgs } from './classify.ts';
 import { sshTarget, type SshTarget } from './credential.ts';
-import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S, SSH_EXEC } from './tools.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
+import { DEFAULT_TIMEOUT_S, MAX_TIMEOUT_S } from './tools.ts';
 import { ssh2Transport, type ExecResult, type SshTransport } from './transport.ts';
 
 /** Probe run at discovery : hostname, kernel, release, machine. POSIX. */
@@ -48,12 +50,13 @@ export function createSshRuntime(options: SshRuntimeOptions = {}): SshRuntime {
 
   return {
     async execute(ctx, tool, args) {
-      if (tool !== SSH_EXEC) return errorResult(`unknown tool '${tool}'`);
+      // Declined before any connection : nothing failed at the host.
+      if (tool !== TOOL.exec) return refusalResult(`unknown tool '${tool}'`);
       const target = sshTarget(ctx.credential);
       const exec = resolveExecArgs(args, ctx.resources);
-      if ('denied' in exec) return errorResult(exec.denied);
+      if ('denied' in exec) return refusalResult(exec.denied);
       if (exec.host !== target.host) {
-        return errorResult(
+        return refusalResult(
           `host '${exec.host}' is not the host of this connection ('${target.host}')`,
         );
       }
@@ -83,7 +86,7 @@ export function hostResource(target: SshTarget, probe?: ExecResult): Resource {
   const uname = probe && probe.exit_code === 0 ? probe.stdout.trim() : '';
   const [hostname, kernel, release, machine] = uname.split(/\s+/);
   return {
-    provider: PROVIDER,
+    provider: PROVIDER_ID,
     ref: target.host,
     displayName: `${target.user}@${target.host}:${target.port}`,
     metadata: {
@@ -107,8 +110,4 @@ function execResultToTool(result: ExecResult): McpToolResult {
     content: [{ type: 'text', text: lines.join('') }],
     structuredContent: { ...result },
   };
-}
-
-function errorResult(message: string): McpToolResult {
-  return { content: [{ type: 'text', text: message }], isError: true };
 }

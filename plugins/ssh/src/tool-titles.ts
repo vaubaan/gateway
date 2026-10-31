@@ -9,6 +9,8 @@
  * has its title : a new tool is added here with its declaration.
  */
 
+import { TOOL } from './identity.ts';
+
 export const sshToolTitles: Readonly<Record<string, string>> = {
-  ssh__exec: 'Run a shell command on a host',
+  [TOOL.exec]: 'Run a shell command on a host',
 };

@@ -15,19 +15,24 @@ Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Layout
 
-| File                     | Role                                                                                                                                |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`           | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                                   |
-| `src/risk-catalog.yaml`  | 7 risks + fallback, three macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                      |
-| `src/data-model.ts`      | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                         |
-| `src/tools.ts`           | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                         |
-| `src/shell-lex.ts`       | `lexCommandLine`: the line as a POSIX shell tokenises it (words, redirections, simple commands), and what it cannot model, by name. |
-| `src/policy.ts`          | The read allow-list on whole argument vectors (`matchRead`, `isReadAllowed`) and the option parser it shares with the wrappers.     |
-| `src/command-classes.ts` | Credential-path detection, command normalisation and wrappers, opaque commands, the four class detectors, `profileCommandLine`.     |
-| `src/classify.ts`        | `classifySsh(tool, args, resources)` — pure; host resolution against the mission's resources; `resolveExecArgs` shared.             |
-| `src/credential.ts`      | `ssh-key` spec (host, port, user, host key fingerprint); `sshTarget()` narrows the secret; fingerprint helpers.                     |
-| `src/transport.ts`       | `SshTransport` interface; `ssh2Transport` with host key verification, timeouts, output caps; the two host-key errors.               |
-| `src/execute.ts`         | `createSshRuntime({ transport })` → `execute`, `discoverResources`.                                                                 |
+| File                          | Role                                                                                                                                                                   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`                | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                                                                      |
+| `src/risk-catalog.yaml`       | 7 risks + fallback, three macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                                         |
+| `src/data-model.ts`           | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                                                            |
+| `src/tools.ts`                | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                                                            |
+| `src/shell-lex.ts`            | `lexCommandLine`: the line as a POSIX shell tokenises it (words, redirections, simple commands), and what it cannot model, by name; `splitCommandLine`, its text view. |
+| `src/policy.ts`               | The read allow-list on whole argument vectors (`matchRead`, `isReadAllowed`) and the option parser it shares with the wrappers.                                        |
+| `src/identity.ts`             | `PROVIDER_ID`, `TOOL_PREFIX`, `TOOL`: the provider id and tool names, written once.                                                                                    |
+| `src/command/profile.ts`      | `profileCommandLine`: the classes of a whole line, one simple command at a time; the fail-closed rule.                                                                 |
+| `src/command/secret-paths.ts` | Credential-bearing path detection (`looksLikeSecretFileRead`), per path segment, globs included.                                                                       |
+| `src/command/wrappers.ts`     | Normalisation: keywords, assignments, wrappers unwrapped to the command that runs; `stripPrivilegePrefix`.                                                             |
+| `src/command/opaque.ts`       | Commands that cannot be seen through (inline code, another user, host or container) and the tool families.                                                             |
+| `src/command/classes.ts`      | The class detectors (destructive, package, service) and the worst case of unseen arguments.                                                                            |
+| `src/classify.ts`             | `classifySsh(tool, args, resources)` — pure; host resolution against the mission's resources; `resolveExecArgs` shared.                                                |
+| `src/credential.ts`           | `ssh-key` spec (host, port, user, host key fingerprint); `sshTarget()` narrows the secret; fingerprint helpers.                                                        |
+| `src/transport.ts`            | `SshTransport` interface; `ssh2Transport` with host key verification, timeouts, output caps; the two host-key errors.                                                  |
+| `src/execute.ts`              | `createSshRuntime({ transport })` → `execute`, `discoverResources`.                                                                                                    |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
 (`SSH_CATALOG_PATH`), not with `new URL('./risk-catalog.yaml', import.meta.url)`:
@@ -178,7 +183,7 @@ and `npm run build` are plain writes — running a program on the host is what
 price the commands written on the line, and the list of launchers in rule 5
 is a deny-list that cannot be complete; the host-side boundary (the login
 user, its sudoers entry) remains the last word. The allow-list, the wrappers
-and the detectors are tables in `src/policy.ts` and `src/command-classes.ts`;
+and the detectors are tables in `src/policy.ts` and `src/command/`;
 widen them with a catalog review. The lexer assumes a POSIX shell on the host
 (`sh`, `bash`, `dash`) and was checked against `bash` with a differential
 fuzzer.
@@ -201,9 +206,9 @@ npx vitest run plugins/ssh
 
 | Suite                      | Tests | What it pins                                                                                                                                                                                                                                                                                                                                                                      |
 | -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `plugin.test.ts`           | 300   | The SDK kit (`assertPluginWellFormed`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **missions written from macro-actions at trust crans, evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
+| `plugin.test.ts`           | 303   | The SDK kit (`assertPluginWellFormed`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **missions written from macro-actions at trust crans, evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
 | `adversarial.test.ts`      | 181   | Command lines written to be read as milder than what the shell runs — quoting, comments, redirections, wrappers, interpreters, paths — each with its exact slices.                                                                                                                                                                                                                |
-| `classify.test.ts`         | 90    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                                      |
+| `classify.test.ts`         | 95    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                                      |
 | `host-key-pinning.test.ts` | 37    | The real `ssh2Transport` against an in-process `ssh2.Server` on `127.0.0.1` (ephemeral port, closed after each test): a missing, malformed or mismatched pin is refused before authentication, proven from the server's side.                                                                                                                                                     |
 | `injection.test.ts`        | 87    | `host` and `cmd` fed `..`, `a/../b`, encoded forms, empty, overlong and multi-line values, to `classify` and to `execute` over a recording transport: only a hostname or an IPv4 address names a host (argument or resource ref), a refused value opens no connection, and the line sent is the line classified.                                                                  |
 | `data-model.test.ts`       | 2     | The data model's integrity and its markers.                                                                                                                                                                                                                                                                                                                                       |

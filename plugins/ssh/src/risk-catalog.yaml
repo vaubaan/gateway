@@ -12,7 +12,7 @@
 # `exec-sudo`) so their palier can gate them with `approval`.
 #
 # How a command reaches a risk (see `src/shell-lex.ts`, `src/policy.ts`,
-# `src/command-classes.ts`) :
+# `src/command/`) :
 #   - the command line is tokenised the way a POSIX shell does and split into
 #     simple commands on `;`, `&&`, `||`, `|`, `&`, newlines and parentheses
 #     (quotes, escapes and comments honoured) ;

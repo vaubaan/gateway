@@ -22,14 +22,15 @@ import {
   UpstreamAuthError,
   UpstreamHttpError,
   expectCredentialKind,
+  httpJson,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 
-/** The Vercel REST API (custom tools, discovery, the check at paste). A fact about the provider. */
-export const VERCEL_API_BASE = 'https://api.vercel.com';
+import { PROVIDER_ID, VERCEL_API_BASE } from './identity.ts';
 
 /** Where a person creates and deletes their access tokens. */
 export const VERCEL_TOKENS_URL = 'https://vercel.com/account/tokens';
@@ -94,7 +95,7 @@ export interface VercelAuth {
  * a host bug, not a provider error, so neither is an `UpstreamAuthError`.
  */
 export function vercelAuth(secret: CredentialSecret): VercelAuth {
-  const apiKey = expectCredentialKind('vercel', secret, 'api-key');
+  const apiKey = expectCredentialKind(PROVIDER_ID, secret, 'api-key');
   const token = apiKey.fields.token;
   const teamId = apiKey.fields.team_id;
   if (typeof token !== 'string' || token.length === 0) {
@@ -106,15 +107,6 @@ export function vercelAuth(secret: CredentialSecret): VercelAuth {
   return { token, teamId };
 }
 
-interface TokenDto {
-  readonly token?: { readonly expiresAt?: unknown };
-}
-
-interface TeamDto {
-  readonly name?: unknown;
-  readonly slug?: unknown;
-}
-
 /**
  * The token's expiry (`GET /v5/user/tokens/current`), then the team of the
  * form (`GET /v2/teams/{teamId}`), which the token must open : a token
@@ -123,19 +115,22 @@ interface TeamDto {
  */
 export async function verifyVercelToken(ctx: ConnectionContext): Promise<CredentialCheck> {
   const auth = vercelAuth(ctx.credential);
-  const current = (await vercelGet(ctx, auth, '/v5/user/tokens/current')) as TokenDto;
+  const current = await vercelGet(ctx, auth, '/v5/user/tokens/current');
   const team = await readTeamOrRefuse(ctx, auth);
   const name = [team.name, team.slug].find((v): v is string => typeof v === 'string' && v !== '');
-  const expiresAt = current.token?.expiresAt;
+  const expiresAt = isRecord(current.token) ? current.token.expiresAt : undefined;
   return {
     account: `the ${name ?? auth.teamId} team`,
     expiresAt: typeof expiresAt === 'number' ? new Date(expiresAt).toISOString() : null,
   };
 }
 
-async function readTeamOrRefuse(ctx: ConnectionContext, auth: VercelAuth): Promise<TeamDto> {
+async function readTeamOrRefuse(
+  ctx: ConnectionContext,
+  auth: VercelAuth,
+): Promise<Readonly<Record<string, unknown>>> {
   try {
-    return (await vercelGet(ctx, auth, `/v2/teams/${encodeURIComponent(auth.teamId)}`)) as TeamDto;
+    return await vercelGet(ctx, auth, `/v2/teams/${encodeURIComponent(auth.teamId)}`);
   } catch (err) {
     const status = err instanceof UpstreamAuthError ? err.upstreamStatus : null;
     const missing = err instanceof UpstreamHttpError && err.status === HTTP_NOT_FOUND;
@@ -148,22 +143,18 @@ async function readTeamOrRefuse(ctx: ConnectionContext, auth: VercelAuth): Promi
   }
 }
 
-const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
 
-async function vercelGet(ctx: ConnectionContext, auth: VercelAuth, path: string): Promise<unknown> {
-  const res = await ctx.fetch(`${VERCEL_API_BASE}${path}`, {
-    method: 'GET',
-    redirect: 'error',
-    headers: { Authorization: `Bearer ${auth.token}`, Accept: 'application/json' },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === HTTP_UNAUTHORIZED || res.status === HTTP_FORBIDDEN) {
-    throw new UpstreamAuthError(`Vercel rejected the token (HTTP ${res.status})`, res.status);
-  }
-  if (!res.ok) {
-    throw new UpstreamHttpError(`Vercel GET ${path} failed with HTTP ${res.status}`, res.status);
-  }
-  return res.json();
+/** One GET of the REST API ; both answers it reads are objects, their fields read one by one. */
+async function vercelGet(
+  ctx: ConnectionContext,
+  auth: VercelAuth,
+  path: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  return httpJson(
+    ctx,
+    { url: `${VERCEL_API_BASE}${path}`, headers: { authorization: `Bearer ${auth.token}` } },
+    isRecord,
+  );
 }

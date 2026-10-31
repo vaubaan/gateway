@@ -8,7 +8,7 @@ import { describe, expect, test } from 'vitest';
 import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
 import { classifySsh } from '../../src/classify.ts';
-import { looksLikeSecretFileRead } from '../../src/command-classes.ts';
+import { looksLikeSecretFileRead } from '../../src/command/secret-paths.ts';
 
 function host(ref: string, env?: string): Resource {
   return { provider: 'ssh', ref, displayName: `deploy@${ref}:22`, ...(env ? { env } : {}) };
