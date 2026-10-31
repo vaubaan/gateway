@@ -9,7 +9,15 @@
  * kept reporting an old commit across deployments.
  */
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +32,13 @@ const PLACEHOLDER = '$Format:%H$';
 const FULL = '0123456789abcdef0123456789abcdef01234567';
 
 const read = (path: string): string => readFileSync(resolve(REPO, path), 'utf8');
+
+/**
+ * A source tarball (`git archive`, or GitHub's "Download ZIP", which applies
+ * `export-subst` too) has no `.git` and a stamped file: the suite must pass
+ * there as well.
+ */
+const IN_CHECKOUT = existsSync(resolve(REPO, '.git'));
 
 describe('commitFromStamp', () => {
   it('reads the short commit of a stamped file', () => {
@@ -59,8 +74,12 @@ describe('resolveCommitSha', () => {
 });
 
 describe('the stamp is written by git archive and by nothing else', () => {
-  it('the checked-in file is the placeholder', () => {
+  it.runIf(IN_CHECKOUT)('the checked-in file is the placeholder', () => {
     expect(read(STAMP_PATH).trim()).toBe(PLACEHOLDER);
+  });
+
+  it.runIf(!IN_CHECKOUT)('outside a checkout, the file carries the archived commit', () => {
+    expect(read(STAMP_PATH).trim()).toMatch(/^[0-9a-f]{40}$/);
   });
 
   it('.gitattributes marks it export-subst', () => {
@@ -89,7 +108,9 @@ describe('the stamp is written by git archive and by nothing else', () => {
     const repo = join(scratch, 'repo');
     mkdirSync(join(repo, 'apps/gateway'), { recursive: true });
     copyFileSync(resolve(REPO, '.gitattributes'), join(repo, '.gitattributes'));
-    copyFileSync(resolve(REPO, STAMP_PATH), join(repo, STAMP_PATH));
+    // The placeholder itself, not the repository's copy: in a source tarball
+    // that copy is already stamped.
+    writeFileSync(join(repo, STAMP_PATH), `${PLACEHOLDER}\n`);
     const git = (...args: string[]): string =>
       execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
     git('init', '-q');

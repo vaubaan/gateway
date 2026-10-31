@@ -5,15 +5,18 @@ tracks:
   - deploy/config/
   - apps/gateway/src/server/missions/bootstrap-kit.ts
   - apps/gateway/tests/e2e/v5/cutover-smoke.spec.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # First installation — handbook
 
 How to validate a new instance with a real identity provider, real services
-and Claude Code (written for the v4 move, now gone). Installing:
-[`deploy/README.md`](../../deploy/README.md); scenario conventions:
+and Claude Code, after installing it with
+[`deploy/README.md`](../../deploy/README.md). Scenario conventions:
 [e2e-tests](../tests/e2e-tests.md).
+
+Coming from v4, the earlier hosted product: import an organization with
+[import-from-v4](import-from-v4.md), then run this checklist.
 
 ## Start here
 

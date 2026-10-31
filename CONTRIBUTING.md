@@ -18,6 +18,36 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 Security problems are **not** reported in public issues: see
 [Security issues](#security-issues).
 
+## Your first contribution
+
+Issues labelled
+[`good first issue`](https://github.com/vaubaan/gateway/labels/good%20first%20issue) are small,
+self-contained and come with a pointer to the files involved; `help wanted` marks larger ones the
+maintainers would welcome help on. Leave a comment on the issue before you start so that two people
+do not do the same work.
+
+The usual first contribution is a plugin or a catalog correction: the
+[plugin kit](plugins/README.md) is a step-by-step guide that assumes you have never seen the
+project, and [`plugins/_template`](plugins/_template/README.md) is a complete plugin for an
+imaginary provider to copy. A correction to a risk catalog needs no knowledge of the rest of the
+code base.
+
+The labels in use:
+
+| Label              | Meaning                                                             |
+| ------------------ | ------------------------------------------------------------------- |
+| `good first issue` | Small and self-contained, with the files to read named.             |
+| `help wanted`      | The maintainers would welcome a contribution.                       |
+| `bug`              | Set by the bug report form.                                         |
+| `enhancement`      | Set by the feature request form.                                    |
+| `plugin`           | Set by the plugin request form.                                     |
+| `catalog`          | Set by the catalog correction form.                                 |
+| `e2e`              | On a pull request: run the browser tests in CI (billed, on demand). |
+| `dependencies`     | Set by Dependabot on its pull requests.                             |
+
+Who maintains the project and how decisions are taken: [MAINTAINERS.md](MAINTAINERS.md). What is
+planned: [ROADMAP.md](ROADMAP.md).
+
 ## Prerequisites
 
 - **Node.js 26 or later and npm 11 or later** (CI and the image run Node 26).
@@ -31,7 +61,7 @@ Security problems are **not** reported in public issues: see
 
 ```bash
 git clone https://github.com/vaubaan/gateway.git
-cd vaubaan-gateway
+cd gateway
 npm ci            # installs every workspace
 npm run ci        # the gate: type-check, lint, format check, build, tests
 ```
@@ -154,8 +184,9 @@ Three rules about these documents:
 ## English only
 
 Code, comments, commit messages, documentation, issues and pull requests are
-written in English. A few v4 decisions still in force are in French; they
-are not a model to follow.
+written in English. A few words of the interface and the catalogs (the names of
+the trust levels) are still provisional and will be renamed in English
+([ROADMAP.md](ROADMAP.md)); they are not a model to follow.
 
 ## Rules the code follows
 
@@ -189,6 +220,8 @@ They are checked in review, and several by tests:
   `feat(plugin-github): …`, `fix(policy-engine): …`, `docs: …`, `test: …`,
   `chore: …`. Pull requests are squash merged, so the pull request title
   follows the same form.
+- **Every commit is signed off** (`git commit -s`): see
+  [Licence and sign-off](#licence-and-sign-off).
 - Add an entry to [`CHANGELOG.md`](CHANGELOG.md) under `## [Unreleased]` when
   the change is visible to a user, an operator or a plugin author.
 - Rebase on the target branch before asking for review; `npm run ci` green.
@@ -209,6 +242,7 @@ list; every line is either done or explained.
 - [ ] **No hard-coded configuration**, no second list of providers, no
       wildcard in a risk list.
 - [ ] **`npm run ci` is green** locally.
+- [ ] **Every commit signed off** (`git commit -s`).
 - [ ] **CHANGELOG** entry when the change is user-visible.
 - [ ] For a plugin or a catalog: the extra lines of the template (test kit,
       versions, handbook, documentation the classifier was written from).
@@ -256,10 +290,24 @@ GitHub's security advisories: the "Security" tab of the repository, "Report a
 vulnerability". What is in scope, what to include and what to expect is in
 [`SECURITY.md`](SECURITY.md).
 
-## Licence
+## Licence and sign-off
 
 The project is licensed under [Apache-2.0](LICENSE). As that licence states
 (section 5), a contribution you submit for inclusion is provided under the
-same licence. The project has not yet stated whether it will also ask for a
-contributor licence agreement or a sign-off on commits; until this page says
-so, neither is required.
+same licence.
+
+Every commit carries a sign-off: a `Signed-off-by:` line with your name and
+address, by which you certify the
+[Developer Certificate of Origin](https://developercertificate.org/) (you
+wrote the change, or have the right to submit it under the project's
+licence). Git adds the line for you:
+
+```bash
+git commit -s -m "fix(policy-engine): …"
+git rebase --signoff origin/main   # signs the commits of a branch already written
+```
+
+The CI job `audit` refuses a pull request with an unsigned commit
+(`scripts/dco-check.mjs`). The project asks for a sign-off and not a
+contributor licence agreement: the sign-off records where a change comes from
+without asking anyone to sign a separate contract or assign rights.

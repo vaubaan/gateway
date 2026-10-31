@@ -1,0 +1,22 @@
+Vaubaan Gateway
+Copyright 2026 Vaubaan contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+It includes the following third-party material.
+
+Service marks. The logo paths and colours in plugins/*/src/icon.ts come from
+Simple Icons (https://simpleicons.org), dedicated to the public domain under
+CC0 1.0, except those of CalDAV, Context7 and SSH, drawn for this project.
+Each file names its Simple Icons slug. The marks remain trademarks of their
+owners; their use here identifies the service a plugin connects to and
+implies no endorsement.
+
+Miro tool list. plugins/miro/src/upstream-tools.json is the answer of Miro's
+MCP server (https://mcp.miro.com/) to the MCP request tools/list, captured
+verbatim on 2026-10-23 by plugins/miro/scripts/capture-upstream-tools.ts. The
+tool names, descriptions and input schemas are Miro's text, reproduced so
+that the gateway can relay the same tools; they are not covered by this
+project's licence. The upstream-tools.json files of the context7,
+google-calendar, railway and vercel plugins are, in the same way, the tool
+declarations of those services' MCP servers or published references, each
+reproduced for interoperability.

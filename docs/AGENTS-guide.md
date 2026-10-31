@@ -4,9 +4,24 @@ title: Guide for coding agents
 
 # Guide for coding agents
 
-How to work in this repository as a coding agent, or as a person working the way the maintainers'
-agents do. The maintainers' `AGENTS.md` / `CLAUDE.md` are generated from `docs/` and committed;
-point an agent that looks for `AGENTS.md` here.
+How the documentation of this repository is organised, and how to work in it as a coding agent or
+as a person working the way the maintainers do. Most commits are co-authored with coding agents
+under a maintainer's review ([MAINTAINERS](../MAINTAINERS.md)); the rules below are what keeps
+their work reviewable.
+
+**Reading as a person?** Start with [architecture](architecture.md) (ten minutes), then the
+[handbook index](handbook/README.md). The rest of `docs/` is a reference you open when a change
+touches it:
+
+- `spec/` says what the product does and why, without technology;
+- `decisions/` holds one file per structural choice and the options it rejected;
+- `handbook/` says what the code does not say on its own: entry points, traps, procedures;
+- `tests/` and `workflow/` describe the test suites and the CI, branch and release process.
+
+`AGENTS.md` and `CLAUDE.md` at the root, and the `.claude/`, `.agents/` and `.opencode/` folders,
+are generated from `docs/` by `@vaubaan/harness` and committed: the CI linter checks that they
+match their sources. Change the sources, run `npx @vaubaan/harness update .`, commit the result.
+Point an agent that looks for `AGENTS.md` here.
 
 ## Documentation first
 

@@ -11,6 +11,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Contributors sign off their commits** (Developer Certificate of Origin,
+  no CLA): `git commit -s`, explained in `CONTRIBUTING.md`; the CI job
+  `audit` refuses a pull request with an unsigned commit
+  (`scripts/dco-check.mjs`).
+- **Governance and plans are written down**: `MAINTAINERS.md` (who
+  maintains, how decisions are taken, how a maintainer is added, how the code
+  is written with coding agents), `ROADMAP.md`, `.github/CODEOWNERS`, a
+  first-contribution section and the label list in `CONTRIBUTING.md`, a
+  `NOTICE` file, and `docs/architecture.md`, the path of a request in ten
+  minutes.
 - **New mission and Edit mission compose a policy from macro-actions at a
   trust cran** (ADR macro-actions-and-trust-crans-prefill-the-policy, risk
   model §4.6). Per account, the Simple view lists the service's
@@ -65,6 +75,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The README opens for a visitor**: a short pitch, badges, two screenshots
+  of the demo, `npm run demo` first, "How it works" in a few lines, and a
+  Status that says what to expect from a pre-release. The handbook
+  `cutover-from-v4` is now `first-install`. `npm run test` passes in a source
+  tarball, without `.git`.
 - **The documents say what the repository does.** `SECURITY.md` names the
   supported line (the latest `2.0.0-alpha` pre-release, cut from `main`) and
   when each scanner runs; `README.md` and `CONTRIBUTING.md` target `main` and

@@ -5,6 +5,26 @@
   "version": "2.0.0-alpha.11",
   "description": "Vaubaan Gateway v5 — open source, on-prem MCP gateway that gives coding agents risk-budgeted missions instead of cloud credentials",
   "license": "Apache-2.0",
+  "homepage": "https://vaubaan.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vaubaan/gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vaubaan/gateway/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "gateway",
+    "coding-agents",
+    "ai-agents",
+    "on-prem",
+    "self-hosted",
+    "security",
+    "least-privilege",
+    "audit"
+  ],
   "engines": {
     "node": ">=26",
     "npm": ">=11"

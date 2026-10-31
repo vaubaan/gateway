@@ -10,7 +10,7 @@ tracks:
   - deploy/docker/Dockerfile
   - deploy/compose.yaml
   - .gitattributes
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Coding workflow
@@ -76,6 +76,9 @@ v4 documents are deleted; git and the tag `v4-final` are the archive.
 ## PR process
 
 - One feature or fix per pull request, squash merged, its title a Conventional Commit.
+- Every commit signed off (`git commit -s`, Developer Certificate of Origin, no CLA);
+  `scripts/dco-check.mjs` in the job `audit` refuses a pull request with an unsigned commit, merges
+  excepted.
 - Before opening: `npm run ci` green, the [template](../../.github/PULL_REQUEST_TEMPLATE.md)
   answered, a bullet under `## [Unreleased]` of `CHANGELOG.md` for a user-visible change.
 
