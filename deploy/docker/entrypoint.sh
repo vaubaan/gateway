@@ -6,8 +6,9 @@
 # there; Railway's answer is to start the container as root (RAILWAY_RUN_UID=0).
 # This script keeps the server non-root in both cases:
 #
-#   started as uid 0   give /data (and what is in it) to `vaubaan` when anything
-#                      there belongs to someone else, then drop to `vaubaan`
+#   started as uid 0   give /data and /keys (and what is in them) to `vaubaan`
+#                      when anything there belongs to someone else, close
+#                      /keys to group and others, then drop to `vaubaan`
 #                      with setpriv (util-linux, part of the base image) — no
 #                      capability kept, no new privilege possible — and exec
 #                      the server;
@@ -19,12 +20,16 @@ set -eu
 
 APP_USER=vaubaan
 DATA_DIR="${VAUBAAN_DATA_DIR:-/data}"
+KEY_DIR="${VAUBAAN_KEY_DIR:-/keys}"
 
 if [ "$(id -u)" = "0" ]; then
-  if [ -d "$DATA_DIR" ] && [ -n "$(find "$DATA_DIR" ! -user "$APP_USER" -print -quit)" ]; then
-    echo "entrypoint: giving $DATA_DIR to $APP_USER (it was not owned by $APP_USER)" >&2
-    chown -R "$APP_USER:$APP_USER" "$DATA_DIR"
-  fi
+  for dir in "$DATA_DIR" "$KEY_DIR"; do
+    if [ -d "$dir" ] && [ -n "$(find "$dir" ! -user "$APP_USER" -print -quit)" ]; then
+      echo "entrypoint: giving $dir to $APP_USER (it was not owned by $APP_USER)" >&2
+      chown -R "$APP_USER:$APP_USER" "$dir"
+    fi
+  done
+  if [ -d "$KEY_DIR" ]; then chmod 0700 "$KEY_DIR"; fi
   exec setpriv --reuid="$APP_USER" --regid="$APP_USER" --init-groups \
     --inh-caps=-all --bounding-set=-all --no-new-privs -- "$@"
 fi

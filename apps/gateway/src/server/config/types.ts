@@ -79,6 +79,11 @@ export interface EncryptionConfig {
    * start when it is absent (ADR master-key-generated-and-handed-over-by-the-instance).
    */
   readonly generateMasterKey: boolean;
+  /**
+   * `encryption.accept_key_beside_store`: the operator knows the key file shares a mount
+   * with the store and keeps the volume's copies apart; the boot does not warn.
+   */
+  readonly acceptKeyBesideStore: boolean;
 }
 
 /** What an encryptor is built from: the keys of the block, without its provenance. */

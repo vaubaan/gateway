@@ -211,6 +211,14 @@ const KEY_TABLE = [
     kind: 'bool',
     default: false,
   },
+  // The boot warns when the key file and the store share a mount (a snapshot of the
+  // volume holds both); the operator who keeps the volume's copies apart says so here.
+  {
+    path: 'encryption.accept_key_beside_store',
+    env: 'VAUBAAN_ACCEPT_KEY_BESIDE_STORE',
+    kind: 'bool',
+    default: false,
+  },
   {
     path: 'idp.issuer',
     env: 'VAUBAAN_IDP_ISSUER',
