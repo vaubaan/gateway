@@ -7,16 +7,18 @@ import type { RiskCatalog } from '@vaubaan/shared';
 
 import {
   CatalogError,
-  catalogWarnings,
-  isCompleteVector,
   loadCatalogFile,
   parseCatalogYaml,
-  RETIRED_PRESETS_ISSUE,
-  semanticIssues,
-  riskIdWildcardIssues,
   validateCatalog,
-  wildcardIssues,
 } from '../../src/catalog-loader.ts';
+import { isCompleteVector } from '../../src/catalog-risk-entry.ts';
+import {
+  catalogWarnings,
+  RETIRED_PRESETS_ISSUE,
+  riskIdWildcardIssues,
+  semanticIssues,
+  wildcardIssues,
+} from '../../src/catalog-rules.ts';
 
 const FIXTURE = new URL('../fixtures/acme/risk-catalog.yaml', import.meta.url);
 const fixtureText = readFileSync(fileURLToPath(FIXTURE), 'utf8');

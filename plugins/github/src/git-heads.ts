@@ -3,12 +3,8 @@
  * gateway-as-git-remote D4 ter):
  * the bases both the review and the inspection of a push may use.
  */
-import {
-  parseAdvertisement,
-  UPLOAD_PACK_SERVICE,
-  UpstreamHttpError,
-  type ExecuteContext,
-} from '@vaubaan/plugin-sdk';
+import { UpstreamHttpError, type ExecuteContext } from '@vaubaan/plugin-sdk';
+import { parseAdvertisement, UPLOAD_PACK_SERVICE } from '@vaubaan/plugin-sdk/git';
 
 import { upstream } from './git-credential.ts';
 

@@ -15,10 +15,10 @@
  * and is counted as a transfer (fail closed).
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
+import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
 import {
   advertisementType,
   advertisementWithout,
-  ExecutorRefusal,
   GitProtocolError,
   lsRefsWithout,
   PktLineReader,
@@ -26,7 +26,7 @@ import {
   readV2RequestHead,
   UPLOAD_PACK_SERVICE,
   type GitAccess,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import type { Logger } from '../logging';
 import { HTTP_FORBIDDEN, HTTP_UNAUTHORIZED, MAX_REF_LISTING_BYTES, NO_CACHE } from './constants';

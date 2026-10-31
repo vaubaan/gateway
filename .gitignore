@@ -55,3 +55,4 @@ apps/website/content/docs/configuration/keys.mdx
 apps/website/content/docs/known-limitations.mdx
 apps/website/content/docs/providers/*.mdx
 !apps/website/content/docs/providers/index.mdx
+packages/plugin-sdk/package.repo.json

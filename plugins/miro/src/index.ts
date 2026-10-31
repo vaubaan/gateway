@@ -33,7 +33,7 @@ export const miroPlugin = definePlugin({
   icon: MIRO_ICON,
   iconColor: MIRO_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.4.3',
+  version: '0.5.0',
   description:
     "Miro boards through Miro's own MCP server: read and draw on boards, tables, comments, prototypes — one resource per board.",
   summary:
@@ -79,7 +79,6 @@ export {
   executeMiro,
   hasMore,
   toolDrift,
-  toolResultOf,
   type ToolDrift,
 } from './execute.ts';
 export {
@@ -102,6 +101,7 @@ export {
   ITEM_ARGUMENT,
   LEFT_OUT_UPSTREAM_TOOLS,
   LOCATOR,
+  MIRO_MCP_SERVER,
   MIRO_MCP_URL,
   REQUIRED_BY_THE_GATEWAY,
   TELEMETRY_ARGUMENTS,
@@ -112,7 +112,6 @@ export {
   TOOL,
   UPSTREAM_TOOL,
 } from './identity.ts';
-export { MCP_PROTOCOL_VERSION, firstJsonRpcFrame, mcpRequest } from './mcp.ts';
 export {
   UPSTREAM_TOOL_LIST,
   declarationsOf,

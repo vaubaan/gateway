@@ -3,8 +3,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-// Test-only : which risks a slice touches. A plugin's sources import the SDK alone.
-import { risksTouchedBy } from '@vaubaan/policy-engine';
+import { risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 
 import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 

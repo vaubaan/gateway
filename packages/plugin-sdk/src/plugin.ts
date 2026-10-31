@@ -19,7 +19,6 @@ import type {
   McpToolResult,
   Resource,
   RiskCatalog,
-  ScopeCaps,
   Slice,
 } from '@vaubaan/shared';
 
@@ -351,31 +350,4 @@ export interface ProviderPlugin {
    * test).
    */
   readonly manualRevocation?: string;
-
-  /**
-   * Rewrite the arguments so the call respects the scope caps the mission
-   * resolved (page size, time window). Pure. Return the input when nothing
-   * applies ; throw when a cap cannot be enforced upstream so the host
-   * refuses the call.
-   *
-   * Reserved : the v5.0 host has no cap stage and never calls this hook
-   * (ADR scope-caps-amplification-axis). A catalog's `caps` block is
-   * therefore applied nowhere, and the shipped catalogs are not allowed to
-   * declare one ; the hook keeps its place so that enforcing caps later is
-   * not a contract change.
-   */
-  normalizeForCaps?(
-    args: Readonly<Record<string, unknown>>,
-    caps: ScopeCaps,
-  ): Readonly<Record<string, unknown>>;
-
-  /**
-   * Fill in arguments the mission leaves no choice over (the single
-   * repository, the single project). Pure. Only invoked when the host flag
-   * `argNormalization` is on (plan §8-Q4, default off) ; see `flags.ts`.
-   */
-  normalizeArgs?(
-    args: Readonly<Record<string, unknown>>,
-    resources: readonly Resource[],
-  ): Readonly<Record<string, unknown>>;
 }

@@ -6,8 +6,9 @@
  * tool's emitted slices.
  */
 import { describe, expect, test } from 'vitest';
-import type { Resource, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
-import { matches, parseSlice } from '@vaubaan/policy-engine';
+
+import { matches } from '@vaubaan/plugin-sdk/testing';
+import { parseSlice, type Resource, type RiskEntry, type Slice } from '@vaubaan/plugin-sdk';
 
 import { classifyUpstashRedis, upstashRedisCatalog, upstashRedisTools } from '../../src/index.ts';
 

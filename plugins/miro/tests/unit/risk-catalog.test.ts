@@ -6,12 +6,9 @@
  */
 import { describe, expect, test } from 'vitest';
 
-// Test-only : which risks a slice touches. A plugin's sources import the SDK alone.
-import { risksTouchedBy } from '@vaubaan/policy-engine';
-
 import { classifyMiro } from '../../src/classify.ts';
 import { TOOL } from '../../src/identity.ts';
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
+import { policyFromMacroActions, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 
 import { miroCatalog, miroPlugin } from '../../src/index.ts';
 import { SAMPLES, workshop } from './fixtures.ts';

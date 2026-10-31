@@ -10,8 +10,12 @@
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice, type Resource } from '@vaubaan/plugin-sdk';
-import { declaredOnly, policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
-import { prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
+import {
+  declaredOnly,
+  policyFromMacroActions,
+  prepareCatalog,
+  risksTouchedBy,
+} from '@vaubaan/plugin-sdk/testing';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
 import { cloudflareDnsCatalog, cloudflareDnsPlugin, cloudflareDnsTools } from '../../src/index.ts';

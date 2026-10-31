@@ -9,9 +9,12 @@
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice } from '@vaubaan/plugin-sdk';
-import { isEnvScopedEntry, risksTouchedBy } from '@vaubaan/policy-engine';
 
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
+import {
+  isEnvScopedEntry,
+  policyFromMacroActions,
+  risksTouchedBy,
+} from '@vaubaan/plugin-sdk/testing';
 
 import { resendCatalog, resendPlugin } from '../../src/index.ts';
 

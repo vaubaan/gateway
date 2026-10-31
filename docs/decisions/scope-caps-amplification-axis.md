@@ -27,7 +27,9 @@ call; a catalog may declare only the keys in `ENFORCED_CAP_KEYS` / `ENFORCED_INF
   per-call size and time window are bounded by nothing but quota, rate and gate.
 - A new key joins the enforced list in the change that enforces and tests it.
 - Stateful amplitude (rate, quota) is the mission budget, not a second mechanism.
-- The SDK types stay while unenforced, so enforcing later is no contract change.
+- The catalog types (`caps`, `infra_limits`) stay while unenforced. The plugin hook
+  `normalizeForCaps` was removed on 2026-10-31 (ADR plugin-contract-and-credential-spec, amendment):
+  the cap stage that enforces a cap adds it back as an optional member, a non-breaking change.
 
 ## Rejected alternatives
 

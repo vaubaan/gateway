@@ -21,15 +21,17 @@
  */
 import {
   ExecutorRefusal,
-  GIT_TEMPORARY_REF_PREFIX,
   UpstreamAuthError,
   UpstreamHttpError,
-  sendRefUpdates,
   type ExecuteContext,
-  type GitPushResult,
-  type GitReviewedUpdate,
   type McpToolResult,
 } from '@vaubaan/plugin-sdk';
+import {
+  GIT_TEMPORARY_REF_PREFIX,
+  sendRefUpdates,
+  type GitPushResult,
+  type GitReviewedUpdate,
+} from '@vaubaan/plugin-sdk/git';
 
 import { githubRepoRefs } from './call.ts';
 import { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall, type GitCall } from './git-call.ts';

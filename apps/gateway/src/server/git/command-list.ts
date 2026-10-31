@@ -14,7 +14,7 @@ import {
   type GitReviewedUpdate,
   type PktLineReader,
   type RefCommand,
-} from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
 
 import { MAX_COMMAND_LIST_BYTES, MAX_PUSH_COMMANDS, MAX_REF_NAME_LENGTH } from './constants';
 

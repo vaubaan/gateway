@@ -7,9 +7,8 @@ import {
   expectCredentialKind,
   isBrokeredSpec,
 } from '../../src/credential.ts';
-import { DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled } from '../../src/flags.ts';
 import { PluginRegistry, PluginRegistryError } from '../../src/registry.ts';
-import { RETIRED_PRESETS_ISSUE } from '../../src/catalog-loader.ts';
+import { RETIRED_PRESETS_ISSUE } from '../../src/catalog-rules.ts';
 import { PluginAssertionError, assertPluginWellFormed } from '../../src/testing/assertions.ts';
 import { apiKeyCredentialFixture } from '../../src/testing/guide.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
@@ -513,24 +512,5 @@ describe('expectCredentialKind', () => {
     expect(() => expectCredentialKind('acme', apiKey, 'oauth2')).toThrow(
       /expects a 'oauth2' credential, got 'api-key'/,
     );
-  });
-});
-
-describe('normalizeArgsIfEnabled', () => {
-  const plugin = {
-    normalizeArgs: (args: Readonly<Record<string, unknown>>) => ({ ...args, space: 'filled' }),
-  };
-  test('off by default', () => {
-    expect(DEFAULT_HOST_FLAGS.argNormalization).toBe(false);
-    expect(normalizeArgsIfEnabled(plugin, { a: 1 }, [])).toEqual({ a: 1 });
-  });
-  test('applies the hook when the flag is on', () => {
-    expect(normalizeArgsIfEnabled(plugin, { a: 1 }, [], { argNormalization: true })).toEqual({
-      a: 1,
-      space: 'filled',
-    });
-  });
-  test('no hook, no change', () => {
-    expect(normalizeArgsIfEnabled({}, { a: 1 }, [], { argNormalization: true })).toEqual({ a: 1 });
   });
 });

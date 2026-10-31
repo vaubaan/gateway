@@ -194,6 +194,51 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugins-read-through-the-transport',
+    statement:
+      "A plugin reads its provider's answers through the SDK transport (bounded, typed, guarded), never with .json() or .text() of its own; the plugins written before the transport are listed and the list only shrinks.",
+    source: 'ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-transport.test.ts`,
+        tests: [
+          'reads no response body itself',
+          'is listed as not yet migrated only while it still reads a body itself',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/transport-http.test.ts',
+        tests: [
+          'cuts and cancels a body without content-length as soon as it passes the bound',
+          '401 and 403 are a rejected credential, quoting the answer ; the query string is never named',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'catalogs-on-their-data-model',
+    statement:
+      "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only. Known gaps are pinned and only shrink.",
+    source:
+      'risk-model spec §2, §3; ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-data-model-paths.test.ts`,
+        tests: [
+          'every live pattern walks its data model, known gaps aside',
+          'every plugin with a known gap is shipped',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/data-model-paths.test.ts',
+        tests: [
+          'a typo in a pattern is reported with its risk ; a deprecated entry is not read',
+          'lists every slice off the model, naming the sample',
+        ],
+      },
+    ],
+  },
+  {
     id: 'macro-actions-group-the-catalog',
     statement:
       'Every shipped catalog groups each of its live risks but the fallback in exactly one macro-action of its own explicit risks, never a wildcard; no catalog ships presets or declares a macro-action named "anything-else" or "everything-i-hold".',

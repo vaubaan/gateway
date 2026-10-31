@@ -50,3 +50,53 @@ Two sources of truth for the security artefact under review.
 ### Persist a macro-action or cran reference on the mission
 
 A macro-action changed in a later plugin version would silently alter running missions.
+
+## Amendment 2026-10-31: a slim, versioned contract and one way to call a provider
+
+### Context
+
+The SDK was about to be published for plugins written outside the repository, and the contract
+carried hooks no host called (`normalizeForCaps`, `normalizeArgs` behind a flag shipped off), the
+main entry re-exported 1 400 lines of git wire code one plugin uses, twelve plugins each wrote
+their own `fetch → 401/403 → status → JSON` wrapper and five their own JSON-RPC client, and the
+package had kept version 0.1.0 through several breaking changes.
+
+### Decision
+
+- The contract holds only what a host uses. `normalizeForCaps`, `normalizeArgs` and the host flags
+  are removed; a later cap stage adds its hook back as an optional member.
+- Three entry points: `@vaubaan/plugin-sdk` (the contract, the catalog, the transport),
+  `@vaubaan/plugin-sdk/testing` (the kit, with what plugin tests need of the policy engine) and
+  `@vaubaan/plugin-sdk/git` (the git wire code and `GitRemoteCapability`). A plugin imports these
+  and nothing else of the gateway, its tests included: a lint rule holds it.
+- The SDK's transport is the one way to call a provider: `httpJson` (or `upstreamFailure` and
+  `readBounded` for a body read by hand) and the upstream MCP client (`mcpRequest`,
+  `callUpstreamTool`). An answer is bounded, read through a type guard (`readShape`), and a failure
+  is thrown typed: `UpstreamAuthError` for 401/403, `UpstreamHttpError` for another status,
+  `UpstreamProtocolError` (502) for an answer the protocol does not allow, a JSON-RPC error frame
+  included.
+- The SDK has its own semver: it moves when the contract moves, a breaking change is a minor before
+  `1.0.0`, and each is listed under "Plugin SDK" in the changelog
+  ([handbook](../handbook/plugin-sdk.md), Versions of the SDK).
+
+### Consequences
+
+- Plugins written before the transport are listed in `plugin-transport.test.ts` and leave the list
+  one by one; Miro is the worked example.
+- The kit and a structural test walk slices and catalog patterns on the data model
+  (`assertSlicesOnDataModel`, `catalogPathIssues`); the check joins `definePlugin` once the shipped
+  catalogs have no known gap.
+- Publishing needs `@vaubaan/shared` and `@vaubaan/policy-engine` published or inlined; inlining is
+  recommended.
+
+### Rejected alternatives
+
+#### Keep the reserved hooks so a future cap stage is not a contract change
+
+Every external author reads and reviewers carry members no host calls; adding an optional member
+later is a non-breaking change.
+
+#### A transport helper per protocol in each plugin, with a shared checklist
+
+The checklist is what drifted: twelve copies of the 401/403 rule, the caller's `signal` dropped in
+some, unbounded reads in all.

@@ -14,8 +14,10 @@
  *     contract — same shape as ssh's catalog test).
  */
 import { describe, expect, test } from 'vitest';
-import { indexCatalog, prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
-import type { Slice } from '@vaubaan/shared';
+
+import { indexCatalog, prepareCatalog, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
+
+import { type Slice } from '@vaubaan/plugin-sdk';
 
 import { railwayPlugin } from '../../src/index.ts';
 

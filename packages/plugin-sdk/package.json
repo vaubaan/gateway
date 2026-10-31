@@ -1,16 +1,60 @@
 {
   "name": "@vaubaan/plugin-sdk",
-  "version": "0.2.0",
-  "private": true,
+  "version": "0.3.0",
+  "private": false,
   "type": "module",
-  "description": "Contract, registry, catalog loader and test kit for Vaubaan Gateway provider plugins",
+  "description": "The contract, test kit and transport helpers of a Vaubaan Gateway provider plugin: classify a call into slices, execute it with the credential the gateway hands over",
   "license": "Apache-2.0",
+  "keywords": [
+    "vaubaan",
+    "mcp",
+    "model-context-protocol",
+    "mcp-gateway",
+    "plugin",
+    "sdk",
+    "ai-agents",
+    "risk"
+  ],
+  "homepage": "https://github.com/vaubaan/gateway/tree/main/packages/plugin-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vaubaan/gateway.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/vaubaan/gateway/issues"
+  },
   "exports": {
     ".": "./src/index.ts",
-    "./testing": "./src/testing/index.ts"
+    "./testing": "./src/testing/index.ts",
+    "./git": "./src/git/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./testing": {
+        "types": "./dist/testing/index.d.ts",
+        "default": "./dist/testing/index.js"
+      },
+      "./git": {
+        "types": "./dist/git/index.d.ts",
+        "default": "./dist/git/index.js"
+      }
+    }
   },
   "scripts": {
-    "type-check": "tsc -p tsconfig.json --noEmit"
+    "type-check": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build && node scripts/publish-manifest.ts apply",
+    "postpack": "node scripts/publish-manifest.ts restore"
   },
   "dependencies": {
     "@vaubaan/policy-engine": "*",

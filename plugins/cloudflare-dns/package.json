@@ -12,10 +12,6 @@
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@vaubaan/plugin-sdk": "*",
-    "@vaubaan/shared": "*"
-  },
-  "devDependencies": {
-    "@vaubaan/policy-engine": "*"
+    "@vaubaan/plugin-sdk": "*"
   }
 }

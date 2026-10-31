@@ -7,26 +7,35 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/plugin-sdk.md.
  *
- * A plugin imports this package (and, transitively, `@vaubaan/shared` and
- * `@vaubaan/policy-engine`) ; it never imports `@vaubaan/gateway-core` or
- * `apps/gateway`. The host builds one `PluginRegistry` from the plugins it
+ * A plugin imports this package and nothing else of the gateway, its tests
+ * included (the `no-restricted-imports` rule of `plugins/**`) ; what it needs
+ * of `@vaubaan/shared` and `@vaubaan/policy-engine` is re-exported here or
+ * from `/testing`. The host builds one `PluginRegistry` from the plugins it
  * ships — the single provider list every other list derives from.
+ *
+ * Two subpaths hold what most plugins never import :
+ *   - `@vaubaan/plugin-sdk/testing` — the test kit every plugin runs ;
+ *   - `@vaubaan/plugin-sdk/git` — the git wire code and `GitRemoteCapability`,
+ *     for the one plugin that is the instance's git remote and the host's git door.
  */
 
 export * from './plugin.ts';
 export * from './credential.ts';
 export * from './catalog-loader.ts';
+export * from './catalog-rules.ts';
 export * from './catalog-path.ts';
 export * from './arguments.ts';
 export * from './slices.ts';
 export * from './refusal.ts';
+export * from './results.ts';
+export * from './guards.ts';
+export * from './transport/index.ts';
 export * from './env-of.ts';
 export * from './define-plugin.ts';
+export * from './data-model-paths.ts';
 export * from './registry.ts';
-export * from './flags.ts';
 export * from './streaming.ts';
 export * from './created-resources.ts';
-export * from './git/index.ts';
 
 // Re-exported so a plugin can import its whole vocabulary from one place.
 export type {
@@ -42,7 +51,6 @@ export type {
   RiskEntry,
   RiskId,
   RiskVector,
-  ScopeCaps,
   Slice,
   SliceAction,
   SliceSegment,

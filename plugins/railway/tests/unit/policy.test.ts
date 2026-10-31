@@ -1,6 +1,6 @@
 /**
  * Tests — Railway calls decided end to end : the real classifier, the real
- * catalog and the gateway decision core (`evaluateCallForToken`), with the
+ * catalog and the gateway's risk step (`decideCall` of the SDK kit), with the
  * accepted risks of the missions a creator composes from macro-actions.
  *
  * Spec     : docs/spec/gateway-risk-model.md §4.6 (macro-actions), §8
@@ -17,9 +17,8 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { evaluateCallForToken, type CallVerdict } from '@vaubaan/gateway-core';
 import { PluginRegistry, type Resource } from '@vaubaan/plugin-sdk';
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
+import { decideCall, policyFromMacroActions, type CallDecision } from '@vaubaan/plugin-sdk/testing';
 
 import { railwayPlugin } from '../../src/index.ts';
 
@@ -84,23 +83,16 @@ function decide(
   args: Record<string, unknown>,
   resources: readonly Resource[],
   accepted: readonly string[],
-): CallVerdict {
-  return evaluateCallForToken({
-    tool,
-    args,
-    resources,
-    token: { id: 'mission-under-test', accepted_risks: accepted, denied_risks: [] },
-    adapter: railwayPlugin,
-    catalog,
-  });
+): CallDecision {
+  return decideCall(railwayPlugin, { tool, args, resources, accepted, catalog });
 }
 
 /** `allow`, or `deny` followed by the sorted missing risks, or the classifier's refusal. */
-function outcome(verdict: CallVerdict): string {
-  if (verdict.kind === 'allow') return 'allow';
-  if (verdict.kind === 'deny') return `deny: ${[...verdict.missing_risks].sort().join(', ')}`;
-  if (verdict.kind === 'classify-denied') return `classify-denied: ${verdict.reason}`;
-  return verdict.kind;
+function outcome(decision: CallDecision): string {
+  if (decision.outcome === 'allowed') return 'allow';
+  if (decision.outcome === 'denied')
+    return `deny: ${[...decision.missing_risks].sort().join(', ')}`;
+  return `classify-denied: ${decision.reason}`;
 }
 
 const target = { projectId: PROJECT, environmentId: ENV_ID };
@@ -144,7 +136,7 @@ describe('railway variable writes — risks touched', () => {
   function touched(call: CallName): readonly string[] {
     const [tool, args] = CALLS[call];
     const verdict = decide(tool, args, [project('staging')], everyVariableRisk);
-    if (verdict.kind !== 'allow') throw new Error(`expected allow, got ${outcome(verdict)}`);
+    if (verdict.outcome !== 'allowed') throw new Error(`expected allow, got ${outcome(verdict)}`);
     return verdict.risks_touched;
   }
 
@@ -305,10 +297,10 @@ describe('railway env-scoped risks — a label is required', () => {
   test('list-variables with the read-only mission is refused on an unlabelled project', () => {
     const verdict = decide(...CALLS.listVariables, [project()], missionRisks('read-only'));
     expect(outcome(verdict)).toBe('deny: railway.read-variables');
-    if (verdict.kind !== 'deny') throw new Error('unreachable');
+    if (verdict.outcome !== 'denied') throw new Error('unreachable');
     expect(verdict.hint).toContain('no environment label');
     // `read-runtime` alone used to carry this call : it is covered, and not enough.
-    expect(verdict.risks_touched).toContain('railway.read-runtime');
+    expect(verdict.covered_risks).toContain('railway.read-runtime');
   });
 
   test('list-variables with the read-only mission is refused on a project labelled `production`', () => {
@@ -318,7 +310,7 @@ describe('railway env-scoped risks — a label is required', () => {
       missionRisks('read-only'),
     );
     expect(outcome(verdict)).toBe('deny: railway[production].read-variables');
-    if (verdict.kind !== 'deny') throw new Error('unreachable');
+    if (verdict.outcome !== 'denied') throw new Error('unreachable');
     expect(verdict.hint).toContain("labelled 'production'");
   });
 

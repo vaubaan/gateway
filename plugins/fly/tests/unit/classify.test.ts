@@ -7,9 +7,8 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { risksTouchedByAll } from '@vaubaan/policy-engine';
 import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
-import { mockFetch } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, risksTouchedByAll } from '@vaubaan/plugin-sdk/testing';
 
 import { TOOL } from '../../src/identity.ts';
 import { classifyFly, flyCatalog, flyPlugin } from '../../src/index.ts';

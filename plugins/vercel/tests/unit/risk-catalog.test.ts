@@ -21,9 +21,16 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
+
+import { matches } from '@vaubaan/plugin-sdk/testing';
 import { CORE_SCHEMA, load } from 'js-yaml';
-import type { Resource, RiskCatalog, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
-import { matches, parseSlice } from '@vaubaan/policy-engine';
+import {
+  parseSlice,
+  type Resource,
+  type RiskCatalog,
+  type RiskEntry,
+  type Slice,
+} from '@vaubaan/plugin-sdk';
 
 import { classifyVercel, UNBOUND_TOOLS } from '../../src/classify.ts';
 import { vercelTools } from '../../src/tools.ts';

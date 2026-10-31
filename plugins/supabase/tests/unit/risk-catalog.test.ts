@@ -9,9 +9,14 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { parseSlice, risksTouchedByAll, serializeSlice } from '@vaubaan/policy-engine';
-import type { Resource, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
+import {
+  parseSlice,
+  type Resource,
+  type RiskEntry,
+  serializeSlice,
+  type Slice,
+} from '@vaubaan/plugin-sdk';
+import { policyFromMacroActions, risksTouchedByAll } from '@vaubaan/plugin-sdk/testing';
 
 import {
   classifySupabase,

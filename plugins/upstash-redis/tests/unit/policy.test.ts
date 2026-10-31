@@ -19,8 +19,12 @@
 import { describe, expect, test } from 'vitest';
 
 import type { ProviderPlugin, Resource } from '@vaubaan/plugin-sdk';
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
-import { envResolverFor, evaluateCall, indexCatalog } from '@vaubaan/policy-engine';
+import {
+  envResolverFor,
+  evaluateCall,
+  indexCatalog,
+  policyFromMacroActions,
+} from '@vaubaan/plugin-sdk/testing';
 
 import { upstashRedisPlugin } from '../../src/index.ts';
 

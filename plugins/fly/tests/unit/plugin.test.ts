@@ -13,6 +13,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -104,6 +105,11 @@ describe('fly plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers, every risk is reached, no fallback', () => {
     const report = assertCatalogCoverage(flyPlugin, SAMPLES, { resources: [acme, canary] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(flyPlugin, SAMPLES, {
+      resources: [acme, canary],
+      cardinalities: false,
+    });
     expect(report.toolsChecked).toBe(flyPlugin.tools.length);
     expect(report.fallbackHits).toEqual([]);
     expect(report.risksUntouched).toEqual([]);

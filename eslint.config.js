@@ -81,6 +81,31 @@ export default tseslint.config(
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },
+  // A plugin imports the SDK and nothing else of the gateway, its tests included
+  // (ADR plugin-contract-and-credential-spec): what a test needs of the policy
+  // engine comes from `@vaubaan/plugin-sdk/testing`.
+  {
+    files: ['plugins/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@vaubaan/*', '!@vaubaan/plugin-sdk', '!@vaubaan/plugin-sdk/*'],
+              message:
+                'A plugin imports @vaubaan/plugin-sdk (and /testing, /git) and nothing else of the gateway: see plugins/README.md.',
+            },
+            {
+              group: ['**/apps/**', '**/packages/**'],
+              message:
+                'A plugin never reaches into the gateway by path: import @vaubaan/plugin-sdk.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // CLI-ish ops scripts log to stdout by design; console is OK.
   {
     files: ['scripts/**/*.ts', 'scripts/**/*.mjs'],

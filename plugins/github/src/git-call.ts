@@ -24,8 +24,8 @@ import {
   GIT_UPDATE_KINDS,
   OID_SHAPE,
   printableRef,
-} from '@vaubaan/plugin-sdk';
-import type { GitReviewedUpdate, GitUpdateKind } from '@vaubaan/plugin-sdk';
+} from '@vaubaan/plugin-sdk/git';
+import type { GitReviewedUpdate, GitUpdateKind } from '@vaubaan/plugin-sdk/git';
 
 import {
   branchName,

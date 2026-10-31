@@ -24,17 +24,16 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
-  policyFromMacroActions,
-  type MacroActionCranChoice,
-  type ToolSamples,
-} from '@vaubaan/plugin-sdk/testing';
-import type { MissionPolicyEntry } from '@vaubaan/shared';
-import {
+  assertSlicesOnDataModel,
   evaluateCall,
   indexCatalog,
+  type MacroActionCranChoice,
+  type MissionPolicyEntry,
+  policyFromMacroActions,
   resourceEnvResolver,
   risksTouchedBy,
-} from '@vaubaan/policy-engine';
+  type ToolSamples,
+} from '@vaubaan/plugin-sdk/testing';
 
 import {
   classifySsh,
@@ -163,6 +162,7 @@ describe('ssh plugin — structural kit', () => {
 
   test('the single tool classifies to slices every catalog risk covers', () => {
     const report = assertCatalogCoverage(sshPlugin, SAMPLES, { resources: [staging] });
+    assertSlicesOnDataModel(sshPlugin, SAMPLES, { resources: [staging] });
     expect(report.toolsChecked).toBe(1);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);

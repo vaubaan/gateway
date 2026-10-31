@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 
 import { githubPlugin } from '@vaubaan/plugin-github';
-import { parseReceivePackResult } from '@vaubaan/plugin-sdk';
+import { parseReceivePackResult } from '@vaubaan/plugin-sdk/git';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 
 import { serializeSecret } from '../../../src/server/connections';

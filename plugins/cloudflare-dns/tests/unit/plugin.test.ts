@@ -18,6 +18,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   declaredOnly,
   mockFetch,
   policyFromMacroActions,
@@ -117,6 +118,11 @@ describe('cloudflare-dns plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers ; every risk is touched', () => {
     const report = assertCatalogCoverage(cloudflareDnsPlugin, SAMPLES, { resources: [exampleCom] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(cloudflareDnsPlugin, SAMPLES, {
+      resources: [exampleCom],
+      cardinalities: false,
+    });
     expect(report.toolsChecked).toBe(15);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);

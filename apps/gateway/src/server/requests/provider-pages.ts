@@ -6,7 +6,8 @@
  * Derived from the plugin (`gitRemote.compareUrl`) and the arguments in
  * clear; nothing once the arguments are erased. Pure.
  */
-import { GIT_UPDATE_KINDS, type GitReviewedUpdate, type PluginRegistry } from '@vaubaan/plugin-sdk';
+import { type PluginRegistry } from '@vaubaan/plugin-sdk';
+import { GIT_UPDATE_KINDS, type GitReviewedUpdate } from '@vaubaan/plugin-sdk/git';
 import { splitToolName } from '@vaubaan/shared';
 
 export interface ProviderPage {

@@ -13,6 +13,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   policyFromMacroActions,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
@@ -61,6 +62,7 @@ describe('context7 plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers, none on the fallback', () => {
     const report = assertCatalogCoverage(context7Plugin, SAMPLES, { resources: [index] });
+    assertSlicesOnDataModel(context7Plugin, SAMPLES, { resources: [index] });
     const named = context7Catalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(named).toEqual([`${PROVIDER_ID}.query-docs`]);
     expect(report.risksTouched).toEqual(named);

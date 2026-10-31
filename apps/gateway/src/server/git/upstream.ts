@@ -18,14 +18,8 @@ import {
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
 import { ExecutorRefusal, refusalResult } from '@vaubaan/plugin-sdk';
-import type {
-  ExecuteContext,
-  GitAccess,
-  GitRemoteCapability,
-  GitUpstream,
-  PluginRegistry,
-  ProviderPlugin,
-} from '@vaubaan/plugin-sdk';
+import type { ExecuteContext, PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
+import type { GitAccess, GitRemoteCapability, GitUpstream } from '@vaubaan/plugin-sdk/git';
 
 import type { CredentialBroker } from '../connections';
 import type { ConnectionCredentialCache } from '../execution';

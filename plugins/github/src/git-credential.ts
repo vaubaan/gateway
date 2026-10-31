@@ -6,12 +6,8 @@
  * is what narrows a push, and the token's permissions are GitHub's to
  * enforce (a push that changes `.github/workflows/` needs `Workflows`).
  */
-import {
-  ExecutorRefusal,
-  type ExecuteContext,
-  type GitAccess,
-  type GitUpstream,
-} from '@vaubaan/plugin-sdk';
+import { ExecutorRefusal, type ExecuteContext } from '@vaubaan/plugin-sdk';
+import { type GitAccess, type GitUpstream } from '@vaubaan/plugin-sdk/git';
 
 import { GITHUB_WEB_BASE } from './api.ts';
 import { repoFullName, type RepoTarget } from './call.ts';

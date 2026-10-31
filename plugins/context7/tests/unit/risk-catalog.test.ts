@@ -5,7 +5,9 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { matches, parseSlice, risksTouchedBy } from '@vaubaan/policy-engine';
+import { matches, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
+
+import { parseSlice } from '@vaubaan/plugin-sdk';
 
 import { PROVIDER_ID, context7Catalog } from '../../src/index.ts';
 

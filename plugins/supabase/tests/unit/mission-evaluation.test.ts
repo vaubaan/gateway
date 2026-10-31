@@ -16,8 +16,7 @@
 import { describe, expect, test } from 'vitest';
 
 import type { ProviderPlugin, Resource, RiskId } from '@vaubaan/plugin-sdk';
-import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
-import { envResolverFor, evaluateCall } from '@vaubaan/policy-engine';
+import { envResolverFor, evaluateCall, policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
 import { supabaseCatalog, supabasePlugin } from '../../src/index.ts';
 

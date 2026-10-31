@@ -15,6 +15,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -46,6 +47,7 @@ describe('miro plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers, none to the fallback', () => {
     const report = assertCatalogCoverage(miroPlugin, SAMPLES, { resources: [workshop] });
+    assertSlicesOnDataModel(miroPlugin, SAMPLES, { resources: [workshop] });
     const named = miroCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(report.risksTouched).toEqual(named);
     expect(report.risksTouched).toHaveLength(13);

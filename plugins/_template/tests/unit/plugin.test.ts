@@ -7,10 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
-// Test-only : which risks a slice touches. A plugin's sources import the SDK alone.
-import { risksTouchedBy } from '@vaubaan/policy-engine';
-
 import {
+  UpstreamProtocolError,
+  catalogPathIssues,
   catalogPathNextTo,
   parseSlice,
   serializeSlice,
@@ -23,8 +22,10 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
+  risksTouchedBy,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -68,6 +69,9 @@ describe('template plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(templatePlugin, SAMPLES, { resources: [staging] });
+    // What the classifier emits and what the catalog matches are paths of the data model.
+    assertSlicesOnDataModel(templatePlugin, SAMPLES, { resources: [staging] });
+    expect(catalogPathIssues(templatePlugin)).toEqual([]);
     // A categorized write touches its entry alone ; the fallback is reachable
     // by design and left out of `risksUntouched` (ADR fallback-risk-only-when-uncategorized).
     // Expectations are derived from the catalog : every named risk is touched.
@@ -342,8 +346,9 @@ describe('executeTemplate with mockFetch', () => {
     const fetch = mockFetch([
       { url: `${TEMPLATE_API_BASE}/workspaces`, body: { data: [{ id: 'ws-1' }] } },
     ]);
+    // A provider failure (`UpstreamProtocolError`, HTTP 502 for the host), never a plain `Error`.
     await expect(templatePlugin.discoverResources(ctx(fetch))).rejects.toThrow(
-      /unexpected workspace list/,
+      new UpstreamProtocolError('template GET /workspaces: unexpected answer'),
     );
   });
 

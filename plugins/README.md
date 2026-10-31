@@ -28,7 +28,9 @@ check to run after each file.
   the handbook [`plugin-sdk`](../docs/handbook/plugin-sdk.md) and decided in
   the ADR
   [`plugin-contract-and-credential-spec`](../docs/decisions/plugin-contract-and-credential-spec.md).
-  A plugin imports the SDK and nothing else of the gateway.
+  A plugin imports the SDK (`@vaubaan/plugin-sdk`, `/testing`, `/git`) and
+  nothing else of the gateway, its tests included: the lint rule of
+  `plugins/**` in `eslint.config.js` refuses any other `@vaubaan/*` import.
 
 ## Before you start
 
@@ -183,11 +185,15 @@ export const acmeDataModel: DataModel = {
 - Mark at most the entities that carry an environment with `envScopable`.
   Leave it out when the provider has no notion of environment (DNS).
 - Every slice of the classifier and every `matches` pattern of the catalog
-  must use these entities, in this order. `definePlugin` checks that the
-  model is consistent (every `parent` exists); **nothing checks your slices
-  and patterns against it**. A slice naming an entity you did not declare is
-  accepted and falls to the fallback, so the model is what the reviewer
-  compares your classifier with.
+  is a path of these entities: rooted at a declared entity (usually the
+  resource), each name a child of the one before (any descendant after
+  `[**]`), and only the last name may be a **virtual leaf** the model does
+  not declare, an act rather than an entity (`branch[main].merge-into`). A
+  leaf one or two letters from an entity is reported as its typo. The
+  template's test checks both sides: `assertSlicesOnDataModel` walks every
+  sample slice, with the identifiers in a cardinality the entity declares,
+  and `catalogPathIssues` every live pattern. Keep both assertions in your
+  copy.
 
 ```bash
 npx tsc -p plugins/acme --noEmit   # the check to run after each file of steps 2 to 7
@@ -551,9 +557,12 @@ return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w
   needs later, such as an account id or a zone name.
 - Do not set `env` unless the provider itself tells production from test
   (Stripe's live and test modes): the environment is the owner's label.
-- **The provider's answer is untrusted.** Check it with a type guard, never
-  cast it; refuse a payload you do not recognise, and pass every id it
-  carries through the grammar of its kind before it becomes a `ref`.
+- **The provider's answer is untrusted.** Read it through a type guard,
+  never a cast: `httpJson`'s third argument, or `readShape(value, guard,
+what)` for a value you hold already. A payload the guard refuses is the
+  provider's failure (`UpstreamProtocolError`, naming the request), never a
+  `TypeError` deep in your code. Pass every id it carries through the grammar
+  of its kind before it becomes a `ref`.
 - Follow the provider's pagination up to a ceiling, a named constant of the
   plugin that the README states ("at most 500 zones"). When the endpoint is
   not paginated, say so in the README.
@@ -563,23 +572,36 @@ return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w
 `execute(ctx, tool, args)` performs the call and returns an `McpToolResult`.
 It runs only after the gateway allowed the call and counted it.
 
-- Use **`ctx.fetch`**, never the global `fetch`: tests inject a mock, the
-  gateway its own.
-- Write **`redirect: 'error'`** in the options of every call, at the call:
-  a redirect to another origin would carry the plugin's custom headers
-  (`apikey`, `x-api-key`) with it. A provider known to redirect on purpose
-  gets `'manual'` or `'follow'` with the reason beside it. Semgrep refuses a
-  call without a policy (`vaubaan-plugin-fetch-without-redirect-policy`).
+- **Call the provider through the SDK's transport**, the one way the
+  contract allows: `httpJson(ctx, { url, method, headers, body }, guard)` for
+  an API that answers JSON, the upstream MCP client
+  (`callUpstreamTool(ctx, server, token, name, args)`, `mcpRequest`) for a
+  provider's own MCP server. It takes `fetch` and the caller's `signal` from
+  the context (tests inject `mockFetch`, the gateway its own), bounds the
+  answer (`maxBytes`, 10 MB by default), reads it through your guard, and
+  throws every failure typed. The template's `request` wraps it with the
+  credential; Miro is the worked example of the MCP client (`MIRO_MCP_SERVER`
+  in its `identity.ts`). A body you must read yourself (a stream, a binary
+  file) goes through `readBounded`, and its failure through
+  `upstreamFailure(res, what)`: no plugin calls `.json()` or `.text()` on a
+  response (`plugin-transport.test.ts`).
+- The transport **refuses redirects** (`redirect: 'error'`): a redirect to
+  another origin would carry the plugin's custom headers (`apikey`,
+  `x-api-key`) with it. A raw `ctx.fetch` you still write states its policy
+  at the call, `'manual'` or `'follow'` only for a provider known to redirect
+  on purpose, with the reason beside it; Semgrep refuses a call without one
+  (`vaubaan-plugin-fetch-without-redirect-policy`).
 - Take the secret with `expectCredentialKind(PROVIDER_ID, ctx.credential, '<kind>')`.
   Never log it, never put it in a result or an error message.
 - Resolve the target with the **classifier's functions** (step 4).
-- **A provider failure is thrown, never returned**:
-  `UpstreamAuthError(message, status)` on 401 or 403,
-  `UpstreamHttpError(message, status)` on any other failed status; a network
-  error is left to propagate. The gateway records it and still tells the
-  agent. Raise 401 only when the provider says the credential itself is
-  invalid: the gateway then tries a refresh and otherwise marks the
-  connection expired.
+- **A provider failure is thrown, never returned**, and the transport throws
+  it for you: `UpstreamAuthError` on 401 or 403, `UpstreamHttpError` on any
+  other failed status, `UpstreamProtocolError` (HTTP 502 for the gateway)
+  for an answer the protocol does not allow — a JSON-RPC error frame, a body
+  that is not JSON, a shape your guard refuses. A network error is left to
+  propagate. The gateway records it and still tells the agent. A 401 means
+  the credential itself is invalid: the gateway then tries a refresh and
+  otherwise marks the connection expired.
 - **`isError: true` is for what your executor declines itself**, before any
   request: an unknown tool, an argument it cannot read, an undeclared
   argument, a target outside the mission, a guard that does not hold. Never
@@ -590,7 +612,7 @@ It runs only after the gateway allowed the call and counted it.
   upstream error although no request left, and the agent gets a transport
   error instead of a sentence it can act on. Return
   `refusalResult(message)` where the refusal is decided at the entry point,
-  as the template's `refused` does; when it is decided deeper, throw
+  as the template does; when it is decided deeper, throw
   `new ExecutorRefusal(message)` and wrap the body of `execute` in
   `declining(...)`, which turns that one error into the `isError` result and
   lets every other throw through:
@@ -600,15 +622,17 @@ It runs only after the gateway allowed the call and counted it.
     return declining(async () => {
       const id = pathIdent(args.widget_id);
       if (!id) throw new ExecutorRefusal(MALFORMED_WIDGET_ID); // declined: an isError result
-      return text(await request(ctx, 'GET', `/widgets/${id}`)); // a failed status is thrown by request
+      return jsonResult(await request(ctx, 'GET', `/widgets/${id}`, anyJson)); // failures thrown, typed
     });
   }
   ```
 
 - The provider's base URL is a constant of the plugin: it is a fact about the
   provider, not configuration of the instance.
-- A success without content (a 204 after a `DELETE`) is not JSON: return a
-  confirmation of your own, as the template does.
+- A success without content (a 204 after a `DELETE`) reads as `null`
+  through `httpJson` (guard `anyJson`): return a confirmation of your own, as
+  the template does. `jsonResult(payload)` and `textResult(text)` build the
+  result of an answered call.
 
 The full table is in the SDK handbook,
 ["The contract"](../docs/handbook/plugin-sdk.md#the-contract).
@@ -619,11 +643,16 @@ complete result; each part handed to `emitPart` also leaves for the caller at
 once.
 
 ```ts
-import { streamToolResult, textParts } from '@vaubaan/plugin-sdk';
+import { streamToolResult, textParts, upstreamFailure } from '@vaubaan/plugin-sdk';
 
-const response = await ctx.fetch(url, { headers, redirect: 'error' }); // open the response first
-if (response.status === 401) throw new UpstreamAuthError('…', 401);
-if (!response.ok || !response.body) throw new UpstreamHttpError('…', response.status);
+const response = await ctx.fetch(url, { headers, signal: ctx.signal }); // open the response first
+if (!response.ok || !response.body) throw await upstreamFailure(response, 'acme GET /logs');
+- The transport **refuses redirects** (`redirect: 'error'`): a redirect to
+  another origin would carry the plugin's custom headers (`apikey`,
+  `x-api-key`) with it. A raw `ctx.fetch` you still write states its policy
+  at the call, `'manual'` or `'follow'` only for a provider known to redirect
+  on purpose, with the reason beside it; Semgrep refuses a call without one
+  (`vaubaan-plugin-fetch-without-redirect-policy`).
 return streamToolResult(ctx, textParts(response.body));
 ```
 
@@ -683,31 +712,41 @@ problem at once.
 template and make it yours:
 
 ```ts
+import { catalogPathIssues } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
+const SAMPLES = {
+  [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }],
+  [TOOL.updateWidget]: [
+    { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
+    { args: { workspace: 'ws-other', widget_id: 'w1', name: 'x' }, expectDenied: true },
+  ],
+  // … at least one realistic sample for every declared tool
+};
+
 assertPluginWellFormed(acmePlugin); // the definition and the catalog, fallback flag included
 assertNoWildcard(acmePlugin); //       no `*` or `?` in a risk id
-const report = assertCatalogCoverage(
-  acmePlugin,
-  {
-    [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }],
-    [TOOL.updateWidget]: [
-      { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
-      { args: { workspace: 'ws-other', widget_id: 'w1', name: 'x' }, expectDenied: true },
-    ],
-    // … at least one realistic sample for every declared tool
-  },
-  { resources: [staging] }, // the mission's resources, for samples that give none
-);
+// The mission's resources, for samples that give none.
+const report = assertCatalogCoverage(acmePlugin, SAMPLES, { resources: [staging] });
 expect(report.fallbackHits).toEqual([]); //  no realistic call lands on the fallback
 expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave unreached
+assertSlicesOnDataModel(acmePlugin, SAMPLES, { resources: [staging] }); // step 2
+expect(catalogPathIssues(acmePlugin)).toEqual([]); //                    step 2, the catalog side
 ```
+
+What a test needs of the policy engine comes from the kit too:
+`risksTouchedBy(slice, catalog)` (which risks a slice touches, the
+template's layered-risk test), `evaluateCall`, `envResolverFor`, and
+`decideCall(plugin, { tool, args, resources, accepted })`, which decides one
+call the way the gateway's risk step does. Never import
+`@vaubaan/policy-engine` or `@vaubaan/shared`: the lint rule refuses it.
 
 **Test a mission the way a creator composes it.** `policyFromMacroActions`
 writes the explicit lines of ticked macro-actions at their crans, for the
@@ -797,6 +836,11 @@ Then write, in the same folder:
   so the undeclared-argument rule does not hide the rule under test.
 
 **No test ever calls a real provider**, and none needs a credential.
+
+The plugin's `package.json` declares what its sources import at run time in
+`dependencies` (`@vaubaan/plugin-sdk` and any third-party library) and the
+types of those in `devDependencies`; nothing the repository root provides
+(`typescript`, `vitest`, `fast-check`) and no other `@vaubaan` package.
 
 ```bash
 npx vitest run plugins/acme        # the plugin alone (a plugin has no `test` script)

@@ -10,7 +10,7 @@
  * Which repository `<repository>` names is the plugin's call
  * (`GitRemoteCapability.repositoryOf`); this module only cuts the path.
  */
-import { RECEIVE_PACK_SERVICE, UPLOAD_PACK_SERVICE } from '@vaubaan/plugin-sdk';
+import { RECEIVE_PACK_SERVICE, UPLOAD_PACK_SERVICE } from '@vaubaan/plugin-sdk/git';
 
 /** The path segment the door lives under (`src/app/git/[...path]/route.ts`). */
 export const GIT_DOOR_SEGMENT = '/git/';

@@ -16,6 +16,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
   type ToolSamples,
@@ -192,6 +193,11 @@ describe('supabase plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(supabasePlugin, SAMPLES, { resources: [staging] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(supabasePlugin, SAMPLES, {
+      resources: [staging],
+      cardinalities: false,
+    });
     expect(report.toolsChecked).toBe(44);
     // No sample lands on the fallback : every write a tool can make has a
     // dedicated catalog entry (ADR fallback-risk-only-when-uncategorized).

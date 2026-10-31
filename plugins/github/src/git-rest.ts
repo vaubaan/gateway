@@ -6,13 +6,8 @@
  * database — reads, with the read grant — and the ref writes of a create and
  * a fast-forward, with the write grant.
  */
-import {
-  normalizeMode,
-  UpstreamAuthError,
-  UpstreamHttpError,
-  type ExecuteContext,
-  type GitTreeEntry,
-} from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, UpstreamHttpError, type ExecuteContext } from '@vaubaan/plugin-sdk';
+import { normalizeMode, type GitTreeEntry } from '@vaubaan/plugin-sdk/git';
 
 import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './api.ts';
 import type { RepoTarget } from './call.ts';

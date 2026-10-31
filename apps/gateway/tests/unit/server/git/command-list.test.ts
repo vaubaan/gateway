@@ -6,7 +6,7 @@
  * property that whatever is accepted is exactly what the door implements.
  * And the per-mission bound on pushes in flight.
  */
-import { concatBytes, flushPkt, PktLineReader, pktLine, ZERO_OID } from '@vaubaan/plugin-sdk';
+import { concatBytes, flushPkt, PktLineReader, pktLine, ZERO_OID } from '@vaubaan/plugin-sdk/git';
 import { describe, expect, it } from 'vitest';
 
 import {

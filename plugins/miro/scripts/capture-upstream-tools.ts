@@ -20,9 +20,10 @@ import { writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+import { mcpRequest } from '@vaubaan/plugin-sdk';
+
 import { toolDrift } from '../src/execute.ts';
-import { MIRO_MCP_URL, MIRO_OAUTH } from '../src/identity.ts';
-import { mcpRequest } from '../src/mcp.ts';
+import { MIRO_MCP_SERVER, MIRO_MCP_URL, MIRO_OAUTH } from '../src/identity.ts';
 import { REQUIRED_SCOPES } from '../src/credential.ts';
 
 const OUTPUT = new URL('../src/upstream-tools.json', import.meta.url);
@@ -132,7 +133,7 @@ async function main(): Promise<void> {
       `Signed in. Lifetime of the access token: ${String(token.expires_in)} s; refresh token: ${typeof token.refresh_token === 'string' ? 'yes' : 'no'}.`,
     );
 
-    const listed = await mcpRequest({ fetch }, accessToken, 'tools/list', {});
+    const listed = await mcpRequest({ fetch }, MIRO_MCP_SERVER, accessToken, 'tools/list', {});
     const tools = (listed as { tools?: unknown } | null)?.tools;
     if (!Array.isArray(tools)) throw new Error(`${MIRO_MCP_URL} answered no tool list`);
     const drift = toolDrift(listed);

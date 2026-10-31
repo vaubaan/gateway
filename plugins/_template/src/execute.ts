@@ -6,14 +6,15 @@
  *        returned to the executor.
  *
  * Rules :
- *   - `fetch` comes from the context, never from the global : tests inject
- *     `mockFetch`, the host injects a fetch with its own timeouts and proxy.
- *   - a provider failure is thrown, never returned : 401 / 403 →
- *     `UpstreamAuthError` (on a 401 the host tries `refresh` and otherwise
- *     marks the connection `expired`), any other failed status →
- *     `UpstreamHttpError` ; a network error is left to propagate. The host
+ *   - every request goes through the SDK's `httpJson` : `fetch` and the
+ *     caller's `signal` come from the context (tests inject `mockFetch`, the
+ *     host a fetch with its own timeouts and proxy), the answer is bounded,
+ *     and a failure is thrown typed — 401 / 403 `UpstreamAuthError` (on a
+ *     401 the host tries `refresh` and otherwise marks the connection
+ *     `expired`), any other failed status `UpstreamHttpError`, an answer
+ *     that is not what the guard says `UpstreamProtocolError`. The host
  *     records it as `upstream_error` in the audit.
- *   - `isError: true` is returned only for what this executor declines
+ *   - `refusalResult` is returned only for what this executor declines
  *     itself (an unknown tool, a workspace outside the mission) : nothing
  *     failed at the provider.
  *   - the provider's public API base is a constant of the plugin : it is a
@@ -22,16 +23,22 @@
  *     and every identifier that reaches the request path goes through the
  *     classifier's own `pathIdent` : the call runs on the workspace and the
  *     widget the slice named, or not at all.
- *   - what the provider answers is untrusted : checked by a type guard
- *     before it becomes a `Resource`.
+ *   - what the provider answers is untrusted : read through a type guard
+ *     (`httpJson`'s third argument) before it becomes a `Resource` ; an
+ *     answer passed to the agent as it is takes `anyJson`.
  */
 
 import {
-  UpstreamAuthError,
-  UpstreamHttpError,
+  UpstreamProtocolError,
+  anyJson,
   expectCredentialKind,
+  httpJson,
+  isRecord,
+  jsonResult,
+  refusalResult,
   type ConnectionContext,
   type ExecuteContext,
+  type Guard,
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -54,34 +61,36 @@ export async function executeTemplate(
 ): Promise<McpToolResult> {
   const resolved = resolveWorkspace(args, ctx.resources);
   // Declined here, before any request : a result the agent reads, not an upstream failure.
-  if ('denied' in resolved) return refused(resolved.denied);
+  if ('denied' in resolved) return refusalResult(resolved.denied);
   // `resolved.ref` and the widget id went through `pathIdent` : one path
   // segment each, so they are interpolated as they are.
   const widgets = `/workspaces/${resolved.ref}/widgets`;
   switch (tool) {
     case TOOL.listWidgets:
-      return text(await request(ctx, 'GET', widgets));
+      return jsonResult(await request(ctx, 'GET', widgets, anyJson));
     case TOOL.getWidget: {
       const id = pathIdent(args.widget_id);
-      if (!id) return refused(MALFORMED_WIDGET_ID);
-      return text(await request(ctx, 'GET', `${widgets}/${id}`));
+      if (!id) return refusalResult(MALFORMED_WIDGET_ID);
+      return jsonResult(await request(ctx, 'GET', `${widgets}/${id}`, anyJson));
     }
     case TOOL.updateWidget: {
       const id = pathIdent(args.widget_id);
-      if (!id) return refused(MALFORMED_WIDGET_ID);
+      if (!id) return refusalResult(MALFORMED_WIDGET_ID);
       if (typeof args.name !== 'string' || args.name.length === 0) {
-        return refused('name: expected a non-empty string');
+        return refusalResult('name: expected a non-empty string');
       }
-      return text(await request(ctx, 'PATCH', `${widgets}/${id}`, { name: args.name }));
+      return jsonResult(
+        await request(ctx, 'PATCH', `${widgets}/${id}`, anyJson, { name: args.name }),
+      );
     }
     case TOOL.deleteWidget: {
       const id = pathIdent(args.widget_id);
-      if (!id) return refused(MALFORMED_WIDGET_ID);
-      await request(ctx, 'DELETE', `${widgets}/${id}`);
-      return text({ deleted: id });
+      if (!id) return refusalResult(MALFORMED_WIDGET_ID);
+      await request(ctx, 'DELETE', `${widgets}/${id}`, anyJson);
+      return jsonResult({ deleted: id });
     }
     default:
-      return refused(`unknown tool '${tool}'`);
+      return refusalResult(`unknown tool '${tool}'`);
   }
 }
 
@@ -89,15 +98,14 @@ export async function executeTemplate(
 export async function discoverTemplateResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const workspaces = await request(ctx, 'GET', '/workspaces');
-  if (!isWorkspaceDtoList(workspaces)) {
-    throw new Error(`${PROVIDER_ID}: unexpected workspace list (expected [{ id, name }])`);
-  }
+  const workspaces = await request(ctx, 'GET', '/workspaces', isWorkspaceDtoList);
   // A ref the classifier would refuse is of no use to a mission : say so at
   // connection time instead of listing a resource no call can name.
   const unusable = workspaces.find((w) => pathIdent(w.id) === null);
   if (unusable) {
-    throw new Error(`${PROVIDER_ID}: workspace id '${unusable.id}' is not a path-safe identifier`);
+    throw new UpstreamProtocolError(
+      `${PROVIDER_ID}: workspace id '${unusable.id}' is not a path-safe identifier`,
+    );
   }
   return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w.name }));
 }
@@ -107,53 +115,32 @@ function isWorkspaceDtoList(x: unknown): x is readonly WorkspaceDto[] {
 }
 
 function isWorkspaceDto(x: unknown): x is WorkspaceDto {
-  if (typeof x !== 'object' || x === null) return false;
-  return 'id' in x && typeof x.id === 'string' && 'name' in x && typeof x.name === 'string';
+  return isRecord(x) && typeof x.id === 'string' && typeof x.name === 'string';
 }
 
-/** One call to the provider with the connection's key ; a failure is thrown, typed. */
-export async function request(
+/**
+ * One call to the provider with the connection's key, its answer read
+ * through `guard` ; a failure is thrown, typed (`httpJson`).
+ */
+export async function request<T>(
   ctx: ConnectionContext,
   method: string,
   path: string,
+  guard: Guard<T>,
   body?: unknown,
-): Promise<unknown> {
+): Promise<T> {
   const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
   const apiKey = secret.fields[API_KEY_FIELD];
   if (!apiKey) throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
-  const res = await ctx.fetch(`${TEMPLATE_API_BASE}${path}`, {
-    redirect: 'error',
-    method,
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      accept: 'application/json',
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+  return httpJson(
+    ctx,
+    {
+      url: `${TEMPLATE_API_BASE}${path}`,
+      method,
+      headers: { authorization: `Bearer ${apiKey}` },
+      ...(body !== undefined ? { body } : {}),
+      what: `${PROVIDER_ID} ${method} ${path}`,
     },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new UpstreamAuthError(
-      `${PROVIDER_ID} rejected the credential (HTTP ${res.status})`,
-      res.status,
-    );
-  }
-  if (!res.ok) {
-    throw new UpstreamHttpError(
-      `${PROVIDER_ID} ${method} ${path} failed with HTTP ${res.status}`,
-      res.status,
-    );
-  }
-  // A success without content (the answer to a DELETE) is not JSON.
-  if (res.status === 204) return null;
-  return await res.json();
-}
-
-/** What the executor declines itself. A provider failure is thrown instead. */
-function refused(message: string): McpToolResult {
-  return { content: [{ type: 'text', text: message }], isError: true };
-}
-
-function text(payload: unknown): McpToolResult {
-  return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
+    guard,
+  );
 }

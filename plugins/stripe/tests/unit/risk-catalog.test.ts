@@ -8,8 +8,9 @@
  */
 import { describe, expect, test } from 'vitest';
 
+import { risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
+
 import { parseSlice } from '@vaubaan/plugin-sdk';
-import { risksTouchedBy } from '@vaubaan/policy-engine';
 
 import { stripeCatalog } from '../../src/index.ts';
 
