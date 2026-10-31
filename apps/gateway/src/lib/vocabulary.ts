@@ -1297,10 +1297,14 @@ export const TOKEN_CONNECT = {
   readAccess: 'read',
   writeAccess: 'read and write',
   usedBy: (titles: string) => `for ${titles}`,
-  expiry: (days: number) =>
-    `Choose an expiry of about ${days} days. The account page shows the date, and you reconnect with a new token before it.`,
-  noExpiry: (service: string) =>
-    `${service} gives these tokens no expiry: delete the token there when you no longer need it.`,
+  reachTitle: (what: string, grant: string) => `${what}: ${grant}`,
+  openStepPage: 'open the page',
+  stepCommand: 'Command to copy',
+  docsLink: (service: string) => `${service}’s documentation of this token`,
+  expiryReported: (service: string) =>
+    `Choose the expiry you want at ${service}: it tells this gateway the date, and the account page warns you ${TOKEN_EXPIRY_NOTICE_DAYS} days before.`,
+  expiryTyped: (service: string, days: number) =>
+    `Choose an expiry of about ${days} days at ${service}. ${service} does not tell this gateway the date: note it, the account page cannot warn you.`,
   sharedAccount:
     'A shared service account is fine: agents act through missions, and Activity records which person and which mission made each call.',
   whatWeDo: (service: string) =>

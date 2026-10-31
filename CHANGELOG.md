@@ -92,6 +92,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Railway and Gmail guides move to the new shape (`@vaubaan/plugin-github`
   4.0.5, `-supabase` 5.0.5, `-notion` 0.1.5, `-caldav` 0.1.3, `-fly` 0.3.4,
   `-context7` 0.1.5, `-railway` 5.1.4, `-gmail` 1.1.1).
+- **The connect page shows the whole guide, open.** How wide to grant and
+  why sits above the steps; a step links its page and shows its command as
+  code to copy; the service's documentation is linked; the expiry is worded
+  by who knows it (the service reports it and the account page warns, the
+  person picks it and the gateway cannot read it back, or the token does not
+  expire and how to end it); "Tick all of them" for the permissions. The
+  how-to of a sign-in or a key pair is open by default.
 - **The guided services ask for fewer visits.** Notion asks to share the
   pages before the paste, so the first discovery finds them; CalDAV has one
   step per server (iCloud, Fastmail, Nextcloud) with its page and the server

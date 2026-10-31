@@ -111,6 +111,9 @@ test('GitHub: a fine-grained token, its permissions listed, a classic token refu
   await signIn(page);
   await page.goto('/accounts/new/github');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a GitHub account$/);
+  // How wide to grant, and why, above the steps: the mission narrows it.
+  await expect(page.getByTestId('token-reach')).toContainText('All repositories');
+  await expect(page.getByTestId('token-permissions')).toContainText('Tick all of them');
   await expect(page.getByTestId('token-permissions')).toContainText('Contents');
   await expect(page.getByTestId('token-permissions')).toContainText('Workflows');
   // One way of connecting: nothing else is offered.
