@@ -238,6 +238,7 @@ describe('imapflowTransport', () => {
         from: [{ name: 'A', address: 'a@x.com' }],
         to: [],
         cc: [],
+        bcc: [],
         body: { type: 'text/plain', content: 'Hello wo', truncated: true },
         attachments: [],
       },

@@ -47,8 +47,8 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
   test('the loaded catalog has the expected shape', () => {
     expect(parsedCatalog.provider).toBe('gmail');
     expect(Array.isArray(parsedCatalog.risks)).toBe(true);
-    // Expect 16 named risks + 1 fallback = 17 (catalog 5 added gmail.label-create).
-    expect(parsedCatalog.risks.length).toBe(17);
+    // Expect 20 named risks + 1 fallback = 21 (5 added gmail.label-create, 8 the four sends).
+    expect(parsedCatalog.risks.length).toBe(21);
   });
 
   test('every entry declares the required fields', () => {

@@ -36,7 +36,7 @@ import {
   normalizeAppPassword,
   readMailboxMetadata,
 } from '../../src/index.ts';
-import { fakeGmail } from './fake-imap.ts';
+import { fakeGmail, fakeSmtp } from './fake-imap.ts';
 
 const MAILBOX = 'me@myorg.com';
 const THREAD = '18c2a9f0e1d2b3a4';
@@ -114,6 +114,24 @@ const SAMPLES: ToolSamples = {
       expectDenied: true,
     },
   ],
+  gmail__send_message: [
+    { args: { to: [MAILBOX], subject: 's', body: 'b' } },
+    { args: { to: ['colleague@myorg.com'], subject: 's', body: 'b' } },
+    { args: { to: ['partner@vendor.com'], bcc: [MAILBOX], subject: 's', body: 'b' } },
+    // Unlike a draft, a send to an external recipient is a risk a mission may accept.
+    { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' } },
+    { args: { subject: 's', body: 'b' }, expectDenied: true },
+    {
+      args: { to: ['evil@evil.example, colleague@myorg.com'], subject: 's', body: 'b' },
+      expectDenied: true,
+    },
+  ],
+  gmail__send_draft: [
+    { args: { id: MESSAGE, to: ['colleague@myorg.com'] } },
+    { args: { id: MESSAGE, to: ['stranger@evil.example'] } },
+    { args: { to: ['colleague@myorg.com'] }, expectDenied: true },
+    { args: { id: MESSAGE }, expectDenied: true },
+  ],
   gmail__list_labels: [{ args: {} }],
   gmail__create_label: [
     { args: { name: 'Clients 2026' } },
@@ -141,17 +159,20 @@ describe('gmail plugin — SDK kit', () => {
     assertNoWildcard(gmailPlugin);
   });
 
-  test('is at 1.0, no longer says experimental, and exposes its twelve tools', () => {
-    expect(gmailPlugin.version).toMatch(/^1\.0\.\d+$/);
+  test('is at 1.1.0, no longer says experimental, and exposes its fourteen tools', () => {
+    expect(gmailPlugin.version).toBe('1.1.0');
     expect(gmailPlugin.description).not.toMatch(/experimental/i);
     expect(gmailPlugin.summary).not.toMatch(/experimental/i);
-    expect(gmailPlugin.description).toMatch(/never sends/i);
+    expect(gmailPlugin.description).toMatch(/send messages and drafts over SMTP/);
     const names = gmailPlugin.tools.map((t) => t.name);
     expect(names).toEqual([...GMAIL_CLASSIFIED_TOOLS]);
     expect(gmailPlugin.tools).toBe(gmailClassifiedToolDeclarations);
-    expect(names).toHaveLength(12);
-    // No tool sends: IMAP cannot, and no SMTP client is shipped.
-    expect(names.some((n) => /send/.test(n))).toBe(false);
+    expect(names).toHaveLength(14);
+    // The two sends, over SMTP ; no other tool sends.
+    expect(names.filter((n) => /send/.test(n))).toEqual([
+      'gmail__send_message',
+      'gmail__send_draft',
+    ]);
     for (const t of gmailPlugin.tools) {
       expect(t.name.startsWith('gmail__')).toBe(true);
       expect(t.inputSchema.type).toBe('object');
@@ -160,7 +181,7 @@ describe('gmail plugin — SDK kit', () => {
 
   test('every tool maps to slices the catalog covers', () => {
     const report = assertCatalogCoverage(gmailPlugin, SAMPLES, { resources: [mailbox] });
-    expect(report.toolsChecked).toBe(12);
+    expect(report.toolsChecked).toBe(14);
     // Untouched on purpose : the classifier refuses a draft to an external
     // recipient, and no modelled tool emits a bulk write. Every write of
     // these samples is covered by a specific entry, so the fallback is never
@@ -186,18 +207,25 @@ describe('gmail plugin — SDK kit', () => {
     expect(report.fallbackHits).toHaveLength(1);
   });
 
-  test('a hostile identifier is refused by classify and reaches no IMAP command', async () => {
+  test('a hostile identifier is refused by classify and reaches no IMAP or SMTP command', async () => {
     const transport = fakeGmail();
-    const report = await assertIdentifiersRefused(createGmailPlugin({ transport }), SAMPLES, {
+    const smtp = fakeSmtp();
+    const report = await assertIdentifiersRefused(createGmailPlugin({ transport, smtp }), SAMPLES, {
       resources: [mailbox],
       context: (_fetch, resources) => execCtx(resources),
       elsewhere: {
-        reset: () => transport.calls.splice(0),
-        sent: () => transport.calls.map((c) => ({ method: 'IMAP', url: `imap:${c.op}` })),
+        reset: () => {
+          transport.calls.splice(0);
+          smtp.sent.splice(0);
+        },
+        sent: () => [
+          ...transport.calls.map((c) => ({ method: 'IMAP', url: `imap:${c.op}` })),
+          ...smtp.sent.map(() => ({ method: 'SMTP', url: 'smtp:send' })),
+        ],
       },
       pathIdentifiers: { none: 'the upstream is IMAP, not an HTTP request' },
     });
-    expect(report.toolsChecked).toBe(12);
+    expect(report.toolsChecked).toBe(14);
     expect(report.pathIdentifiers).toEqual([]);
     expect(report.refusedByClassify).toBeGreaterThan(0);
     expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
@@ -234,8 +262,8 @@ describe('gmail classify — mailbox selection', () => {
   });
 
   test('unknown tool is denied even with a mailbox', () => {
-    expect(gmailPlugin.classify('gmail__send_message', {}, [mailbox])).toEqual({
-      denied: "unknown gmail tool 'gmail__send_message'.",
+    expect(gmailPlugin.classify('gmail__delete_message', {}, [mailbox])).toEqual({
+      denied: "unknown gmail tool 'gmail__delete_message'.",
     });
   });
 
@@ -435,13 +463,14 @@ describe('gmail macro-actions', () => {
   const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
     Object.fromEntries(policyFromMacroActions(gmailPlugin, crans).map((l) => [l.risk_id, l.gate]));
 
-  test('ships search, draft and tidy', () => {
+  test('ships search, draft, send and tidy', () => {
     expect(gmailPlugin.catalog.macro_actions?.map((a) => a.id)).toEqual([
       'search',
       'draft',
+      'send',
       'tidy',
     ]);
-    expect(gmailPlugin.catalog.catalog_version).toBe(7);
+    expect(gmailPlugin.catalog.catalog_version).toBe(8);
   });
 
   test('search at Prudent : reads only, every sender zone freely ; bulk and sensitive reads ask first', () => {

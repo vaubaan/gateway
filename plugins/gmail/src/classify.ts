@@ -37,6 +37,10 @@
  *      `sensitive-label[l].W`.
  *   7. One mission, one mailbox : zero gmail resources is denied, two or more
  *      is denied as ambiguous (no argument selects a mailbox today).
+ *   8. A send is zoned like a draft — the worst recipient — but every zone is
+ *      a risk a mission may accept, the external one included. `send_draft`
+ *      is priced on the recipients its arguments declare ; `execute` reads
+ *      the draft and refuses it, unsent, when it holds any other.
  */
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
@@ -208,6 +212,9 @@ function sensitiveLabelSlice(action: 'R' | 'W', label: string | null): Slice {
 export const MAX_GMAIL_ID_LENGTH = 16;
 /** Longest label accepted (Gmail caps a label name at 225 characters). */
 export const MAX_LABEL_LENGTH = 225;
+
+/** Most recipients of one send, To, Cc and Bcc together (Gmail's own limit over SMTP). */
+export const MAX_SEND_RECIPIENTS = 100;
 
 /** Longest MIME part number accepted (`1.2.3`), in characters. */
 export const MAX_PART_LENGTH = 32;
@@ -524,6 +531,26 @@ export function classifyGmail(
           slice('W', [name('mailbox'), name('to-zone'), ident(zone)]),
         ],
       };
+    }
+
+    // Irreversible : a sent message cannot be called back. One slice, the recipient zone ;
+    // removing the sent draft from Drafts is part of the send, not a draft write.
+    case 'gmail__send_message':
+    case 'gmail__send_draft': {
+      if (tool === 'gmail__send_draft') {
+        const id = requireArg(args, 'id', gmailId);
+        if (typeof id !== 'string') return id;
+      }
+      const collected = collectRecipients(args);
+      if ('denied' in collected) return collected;
+      if (collected.recipients.length === 0) {
+        return { denied: 'a send needs at least one recipient in to, cc or bcc.' };
+      }
+      if (collected.recipients.length > MAX_SEND_RECIPIENTS) {
+        return { denied: `a send has at most ${MAX_SEND_RECIPIENTS} recipients.` };
+      }
+      const zone = worstToZone(collected.recipients, md);
+      return { slices: [slice('W', [name('mailbox'), name('send-zone'), ident(zone)])] };
     }
 
     case 'gmail__list_labels':
