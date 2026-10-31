@@ -14,8 +14,7 @@ import type { RiskId } from '@vaubaan/shared';
 
 import { answeredWords, WaitingList } from './parts';
 import { RequestView } from './request-view';
-
-const DAY_MS = 86_400_000;
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export interface InboxData {
   readonly items: readonly WaitingItem[];
@@ -28,7 +27,7 @@ export async function loadInbox(root: GatewayRoot, user: UserRecord): Promise<In
   const { service } = root.requests;
   return {
     items: await service.waiting(user),
-    answered: await service.answered(user, new Date(now.getTime() - DAY_MS)),
+    answered: await service.answered(user, new Date(now.getTime() - MS_PER_DAY)),
     now,
   };
 }

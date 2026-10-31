@@ -42,6 +42,7 @@ import { MANAGEMENT_SCOPE, SUPPORTED_GRANT_TYPES, SUPPORTED_RESPONSE_TYPES } fro
 import { OAuthProtocolError } from './errors';
 import { checkRedirectUri, isLoopbackOnly } from './redirect-uri';
 import { digestOf, mintClientId, mintClientSecret } from './secrets';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** `approved`: may ask users for a delegation. `pending`: waits for an operator. */
 export type ClientStatus = 'approved' | 'pending' | 'disabled';
@@ -76,13 +77,13 @@ export interface ClientRegistryDeps {
 export const MAX_REDIRECT_URIS = 10;
 export const UNNAMED_CLIENT = 'Unnamed client';
 /** An undecided client that nobody ever consented to is forgotten after this long. */
-export const UNUSED_CLIENT_RETENTION_MS = 30 * 86_400_000;
+export const UNUSED_CLIENT_RETENTION_MS = 30 * MS_PER_DAY;
 /**
  * A dynamic registration that waits for an operator is forgotten after this long
  * (security review 2026-10-15, external M2): the operator's page is not a list an
  * anonymous caller can grow for ever.
  */
-export const PENDING_REGISTRATION_TTL_MS = 86_400_000;
+export const PENDING_REGISTRATION_TTL_MS = MS_PER_DAY;
 /** Dynamic registrations waiting for an operator at once; one more is refused. */
 export const MAX_PENDING_REGISTRATIONS = 50;
 /** Metadata documents one user may make the instance fetch, per window. */

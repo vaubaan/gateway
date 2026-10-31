@@ -10,10 +10,10 @@ import type { Gate, RateLimit } from '@vaubaan/shared';
 
 import { count, listed, MISSION_STATES, possessive, TERMS, type StateWord } from '@/lib/vocabulary';
 import type { MissionState } from '@/server/budget';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** Above this share of a limit, the mission page draws the meter (the design system's own threshold). */
 const NEAR_LIMIT_SHARE = 0.6;
-const SECONDS_PER_MINUTE = 60;
 /** How many permissions a summary line names before it counts the rest. */
 const NAMED_IN_A_LINE = 3;
 

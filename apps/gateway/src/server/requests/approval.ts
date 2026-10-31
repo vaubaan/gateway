@@ -22,6 +22,7 @@
 import type { Gate, Iso8601, RiskId } from '@vaubaan/shared';
 
 import { formatUtc, orphanedProblem, type ClaimMissionState } from './claim';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 export const APPROVAL_RESOLUTIONS = ['grant', 'open-gate', 'refuse'] as const;
 export type ApprovalResolution = (typeof APPROVAL_RESOLUTIONS)[number];
@@ -83,7 +84,6 @@ const LABELS: Readonly<Record<ApprovalResolution, string>> = {
   refuse: 'Refuse',
 };
 
-const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;
 
 function plural(count: number, unit: string): string {

@@ -9,6 +9,7 @@
 import type { AuditDecision } from '@vaubaan/gateway-core';
 
 import type { AuditCursor } from '../store';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export const AUDIT_PARAMS = {
   mission: 'mission',
@@ -65,7 +66,6 @@ export type RawQuery =
   URLSearchParams | Readonly<Record<string, string | readonly string[] | undefined>>;
 
 const MAX_VALUE_LENGTH = 200;
-const MS_PER_DAY = 86_400_000;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 

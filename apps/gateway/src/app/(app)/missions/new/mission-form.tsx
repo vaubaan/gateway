@@ -123,6 +123,7 @@ import {
 import { changeLines, editDraftOf, initialEditState, type EditSource } from './edit-state';
 import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
 import { MacroActionPanel } from './macro-action-panel';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export interface InitialDraft {
   readonly name: string;
@@ -891,7 +892,7 @@ export function MissionForm({
                         ? `${x.label} · ${expiresOn(state.keptExpiry ?? null, now)}`
                         : x.days === null
                           ? x.label
-                          : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * 86_400_000), now)}`}
+                          : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * MS_PER_DAY), now)}`}
                     </option>
                   ))}
                 </Select>
