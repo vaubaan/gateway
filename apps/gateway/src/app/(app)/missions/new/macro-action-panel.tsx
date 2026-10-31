@@ -16,10 +16,9 @@
  * stores the explicit list; the trust levels only redraw this panel.
  */
 import { Checkbox, ChoiceChip, ChoiceRow, GateMark, TabList, TabPanel } from '@/components/ui';
+import { TRUST_LEVEL_HINTS, TRUST_LEVEL_LABELS } from '@/lib/vocabulary';
 import {
   TRUST_LEVEL_BUDGET_FACTOR,
-  TRUST_LEVEL_HINTS,
-  TRUST_LEVEL_LABELS,
   DEFAULT_TRUST_LEVEL,
   TRUST_LEVELS,
   type TrustLevel,

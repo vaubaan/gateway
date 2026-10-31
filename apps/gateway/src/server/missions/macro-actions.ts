@@ -32,21 +32,6 @@ import type { CatalogRisk, IssuanceConnection, IssuanceResource, LeftOutEntry } 
 /** The trust level of each ticked macro-action of one connection, by macro-action id. */
 export type MacroActionTrustLevels = Readonly<Record<string, TrustLevel>>;
 
-export const TRUST_LEVEL_LABELS: Readonly<Record<TrustLevel, string>> = {
-  careful: 'Careful',
-  trusting: 'Trusting',
-  autonomous: 'Autonomous',
-};
-
-/** What each trust level does, in one line, wherever its chip shows a tooltip. */
-export const TRUST_LEVEL_HINTS: Readonly<Record<TrustLevel, string>> = {
-  careful:
-    'Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.',
-  trusting:
-    'Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.',
-  autonomous: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
-};
-
 /**
  * The catalog's macro-actions, then "Anything else" with the catalog's
  * fallback entries when it has any. What `IssuanceConnection.macro_actions`
