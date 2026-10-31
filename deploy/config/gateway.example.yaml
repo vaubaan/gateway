@@ -316,6 +316,14 @@
 # mcp:
 #   rate_limit_per_minute: 600
 
+# The deadline of one tool call on the execution door, in seconds (integer
+# >= 1). A provider that has not answered by then is left: the call is
+# stopped, recorded in the audit as an upstream error ending in "(timeout)",
+# and the agent is told so. It was counted against the mission.
+# env: VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS
+# execution:
+#   call_timeout_seconds: 120
+
 # The git remote (https://<public_url>/git/<owner>/<repo>.git, spec §4.1 ter).
 # max_pack_mb: the largest push accepted, in MiB (1 to 4096); a larger push is
 #   refused, and git prints why.

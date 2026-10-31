@@ -62,7 +62,7 @@ import type {
   UserRecord,
 } from '../store/types';
 import { serializeSecret } from './credential-codec';
-import type { CredentialBroker } from './credentials';
+import type { CredentialBroker, ResolvedCredential } from './credentials';
 import { canWithdraw } from './credentials';
 import { ConnectError } from './errors';
 import { providerFailureReason } from './failure-reason';
@@ -1159,7 +1159,7 @@ export class ConnectionService {
       let resolved = await this.deps.broker.resolve(connection.id);
       let resources: readonly Resource[];
       try {
-        resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
+        resources = await this.discoverWith(resolved.plugin, this.discoveryContextOf(resolved));
       } catch (err) {
         if (!(err instanceof UpstreamAuthError)) throw err;
         try {
@@ -1172,7 +1172,7 @@ export class ConnectionService {
             err.upstreamStatus,
           );
         }
-        resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
+        resources = await this.discoverWith(resolved.plugin, this.discoveryContextOf(resolved));
       }
       return await this.storeDiscovery(connection, resolved.plugin, resources, afterCall, returned);
     } catch (err) {
@@ -1573,14 +1573,16 @@ export class ConnectionService {
     }
   }
 
+  /** A discovery's context: the stored credential, under the discovery's deadline. */
+  private discoveryContextOf(resolved: ResolvedCredential): ConnectionContext {
+    return this.deps.broker.contextOf(resolved, AbortSignal.timeout(DISCOVERY_TIMEOUT_MS));
+  }
+
   private async discoverWith(
     plugin: ProviderPlugin,
     ctx: ConnectionContext,
   ): Promise<readonly Resource[]> {
-    return plugin.discoverResources({
-      ...ctx,
-      signal: ctx.signal ?? AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-    });
+    return plugin.discoverResources(ctx);
   }
 
   private async storeDiscovery(

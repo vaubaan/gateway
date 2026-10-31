@@ -40,7 +40,13 @@ import { createUpstreamStage } from './upstream-stage';
 export interface ExecutionModuleDeps {
   readonly config: Pick<
     InstanceConfig,
-    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources' | 'requests'
+    | 'publicUrl'
+    | 'trustedProxies'
+    | 'clientIpHeader'
+    | 'mcp'
+    | 'execution'
+    | 'selfResources'
+    | 'requests'
   >;
   readonly store: Store;
   readonly registry: PluginRegistry;
@@ -112,6 +118,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
       credentialCache,
       logger,
       telemetry: deps.telemetry,
+      callTimeoutSeconds: deps.config.execution.callTimeoutSeconds,
     }),
     audit: deps.telemetry
       ? withDecisionTelemetry(deps.store.auditWriter, deps.telemetry, (error) =>

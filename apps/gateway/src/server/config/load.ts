@@ -468,6 +468,7 @@ function validate(
   const requestExpiry = r.duration(keySpec('requests.expiry'));
   const approvalExpiry = r.duration(keySpec('approvals.expiry'));
   const mcpRateLimit = r.int(keySpec('mcp.rate_limit_per_minute'));
+  const callTimeoutSeconds = r.int(keySpec('execution.call_timeout_seconds'));
   const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
   const gitRequestTimeout = r.duration(keySpec('git.request_timeout'));
   const oauth = readOAuth(r);
@@ -505,6 +506,7 @@ function validate(
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
     mcp: { rateLimitPerMinute: mcpRateLimit },
+    execution: { callTimeoutSeconds },
     git: {
       maxPackBytes: gitMaxPackMb * BYTES_PER_MEGABYTE,
       requestTimeoutSeconds: gitRequestTimeout,

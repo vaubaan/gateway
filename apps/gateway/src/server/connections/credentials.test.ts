@@ -80,7 +80,7 @@ describe('resolve', () => {
     expect(resolved.plugin.id).toBe('oauthco');
     expect(h.fetch.calls).toHaveLength(0);
 
-    const ctx = h.broker.contextOf(resolved);
+    const ctx = h.broker.contextOf(resolved, new AbortController().signal);
     expect(JSON.stringify(ctx)).not.toContain('csecret');
   });
 
