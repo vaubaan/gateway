@@ -44,7 +44,7 @@ import { auditActorId, type Authenticator, type Principal } from './authenticato
 import { BOOTSTRAP_MAX_MISSES, type BootstrapService } from './bootstrap';
 import { IdpSettingsError, LOGIN_ERROR_MESSAGES, LoginError, type LoginErrorCode } from './errors';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
-import { splitList } from '../http/form';
+import { notAFormResponse, readForm, splitList, stringField } from '../http/form';
 import type { LoginDeps } from './login';
 import type { FinishSignIn } from './local-handlers';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
@@ -115,7 +115,6 @@ export const AUTH_LIMITS = {
   forgotPerInstance: { limit: 30, windowMs: 10 * MINUTE_MS },
 } as const;
 const SEE_OTHER = 303;
-const BAD_REQUEST = 400;
 
 export interface AuthHandlerDeps {
   readonly publicUrl: URL;
@@ -814,31 +813,6 @@ export async function adminSignInPage(auth: {
     auth.providers.views(),
   ]);
   return bootstrap.status === 'active' && providers.length === 0 ? BOOTSTRAP_PAGE : LOGIN_PAGE;
-}
-
-/** The form body of a mutation, or `null` when the body is not a form. */
-export async function readForm(request: Request): Promise<FormData | null> {
-  try {
-    return await request.formData();
-  } catch {
-    return null;
-  }
-}
-
-/** 400: a mutation that takes a form received something else. */
-export function notAFormResponse(): Response {
-  return new Response(
-    JSON.stringify({ error: 'invalid-request', reason: 'a form body is required' }),
-    {
-      status: BAD_REQUEST,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    },
-  );
-}
-
-function stringField(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === 'string' ? value.trim() : '';
 }
 
 export function statusResponse(status: number, reason: string): Response {

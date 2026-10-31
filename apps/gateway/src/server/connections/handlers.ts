@@ -32,7 +32,7 @@ import {
   refusalResponse,
   type RefusalWording,
 } from '../auth/guard';
-import { notAFormResponse, readForm } from '../auth/handlers';
+import { notAFormResponse, readForm, stringField } from '../http/form';
 import { resolveReturnTo } from '../http/return-to';
 import { errorFields, type Logger } from '../logging';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
@@ -436,11 +436,6 @@ function discoveryNotice(outcome: DiscoveryRecord): Notice {
 
 function countLabel(count: number): string {
   return count === 1 ? '1 resource' : `${count} resources`;
-}
-
-function stringField(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === 'string' ? value.trim() : '';
 }
 
 function prefixedFields(form: FormData, prefix: string): Record<string, string> {

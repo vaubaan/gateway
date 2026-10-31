@@ -19,7 +19,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { unlinkSync } from 'node:fs';
 
 import { BOOTSTRAP_MAX_MISSES } from '../auth/bootstrap';
-import { AUTH_LIMITS, notAFormResponse, readForm } from '../auth/handlers';
+import { AUTH_LIMITS } from '../auth/handlers';
+import { notAFormResponse, readForm } from '../http/form';
 import { forbiddenOriginResponse, isSameOrigin } from '../auth/origin';
 import { errorMessage } from '../config';
 import { parseMasterKeyText, writeGeneratedMasterKeyFile } from '../crypto/master-key-file';
