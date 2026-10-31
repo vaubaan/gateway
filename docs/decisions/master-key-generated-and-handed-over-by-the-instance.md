@@ -56,8 +56,8 @@ The "Consequences" line "key and store share the volume" is withdrawn as a defau
 security audit, M4): a volume snapshot, a platform backup or a stolen disk then held the store and
 the key that opens it, and encryption at rest was a format.
 
-- The reference deployment (`deploy/compose.yaml`) mounts the key on a volume of its own,
-  `gateway-key` at `/keys` (`VAUBAAN_MASTER_KEY_FILE=/keys/master.key`); the image creates `/keys`
+- The reference deployment (`deploy/compose.yaml`) mounts a volume of its own for the key,
+  `gateway-key` at `/keys`, and the example `.env` names `/keys/master.key`; the image creates `/keys`
   (uid 10001, mode 0700) and the entrypoint gives it back to that user when started as root.
   Generation, the setup handover and setup mode are unchanged: the key directory is writable, so
   a Docker secret (read-only) stays the way to bring a key of one's own, never the generated one.
@@ -67,9 +67,10 @@ the key that opens it, and encryption at rest was a format.
   the volume's copies apart from the key — for a platform with one volume per service (Railway),
   where giving the key as a variable is the better answer. A warning, not a refusal: an existing
   instance keeps starting, and a single-volume host is a legitimate choice once stated.
-- Upgrading a Compose instance whose key is `/data/master.key`: copy it to `/keys` before the first
-  start of the new compose file (a missing key on a store with data is still exit 78), then remove
-  the old copy (`deploy/README.md`).
+- A Compose instance whose `.env` still names `/data/master.key` keeps starting, with the warning;
+  moving the key is copying it to `/keys`, naming it in `.env`, then removing the old copy
+  (`deploy/README.md`). The compose file does not set the variable itself: an operator who gives
+  the key by value (`VAUBAAN_MASTER_KEY`) would otherwise meet "set either …, not both".
 
 Rejected: a Docker secret as the default (the generated key cannot be written to it, and the quick
 start would need Node.js again); refusing to boot (it would stop every Railway instance on upgrade).

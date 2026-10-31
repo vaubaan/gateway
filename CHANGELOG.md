@@ -30,11 +30,12 @@ Read these before starting the new image on a running instance:
    (`172.30.253.0/29`): if your `.env` sets `VAUBAAN_TRUSTED_PROXIES=172.16.0.0/12`,
    remove it. Railway: set `VAUBAAN_CLIENT_IP_HEADER=x-real-ip` once verified
    (`deploy/railway.md`), `VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS=1` until then.
-3. **The master key leaves the data volume (Compose).** `compose.yaml` reads
-   it from `/keys/master.key` on the new `gateway-key` volume: copy
-   `/data/master.key` there before the first start of the new file, then remove
-   the old copy (`deploy/README.md`, "Upgrading an instance whose key is on the
-   data volume"). A key missing on a store with data is still exit 78.
+3. **The master key leaves the data volume (Compose).** `compose.yaml` mounts
+   a new `gateway-key` volume at `/keys` and the example `.env` names
+   `/keys/master.key`. An instance whose `.env` still names `/data/master.key`
+   keeps starting, with a boot warning: copy the key there, name it in `.env`,
+   then remove the old copy (`deploy/README.md`, "Upgrading an instance whose
+   key is on the data volume").
 4. **Mission tokens issued before 2.0.0-alpha.1 and never used since** are
    revoked by migration 0027 (they were still stored as argon2id) and must be
    re-issued: rotate the member's key, or replace the named key. Tokens used
