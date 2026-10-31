@@ -55,8 +55,8 @@ last_reviewed: 2026-10-27
   match.
 - `isFallbackEntry` also recognises `<provider>.uncategorized-` by id (dash included); the SDK
   loader requires the explicit flag and the catch-all write.
-- `token_denied_risks` is a legacy input that v5 never fills; removing it touches gateway-core's
-  `evaluateCallForToken` and `plugins/railway/tests/unit/policy.test.ts`.
+- `evaluateCall` reads the mission's `accepted_risks` and nothing else: there is no explicit deny
+  (spec §4.1); a risk is refused because it is not accepted.
 
 ## Debug
 

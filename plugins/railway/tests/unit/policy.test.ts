@@ -1,6 +1,6 @@
 /**
  * Tests — Railway calls decided end to end : the real classifier, the real
- * catalog and the gateway decision core (`evaluateCallForToken`), with the
+ * catalog and the gateway decision core (`evaluateCallForMission`), with the
  * accepted risks of the missions a creator composes from macro-actions.
  *
  * Spec     : docs/spec/gateway-risk-model.md §4.6 (macro-actions), §8
@@ -17,7 +17,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { evaluateCallForToken, type CallVerdict } from '@vaubaan/gateway-core';
+import { evaluateCallForMission, type CallVerdict } from '@vaubaan/gateway-core';
 import { PluginRegistry, type Resource } from '@vaubaan/plugin-sdk';
 import { policyFromMacroActions } from '@vaubaan/plugin-sdk/testing';
 
@@ -85,11 +85,11 @@ function decide(
   resources: readonly Resource[],
   accepted: readonly string[],
 ): CallVerdict {
-  return evaluateCallForToken({
+  return evaluateCallForMission({
     tool,
     args,
     resources,
-    token: { id: 'mission-under-test', accepted_risks: accepted, denied_risks: [] },
+    mission: { id: 'mission-under-test', accepted_risks: accepted },
     adapter: railwayPlugin,
     catalog,
   });

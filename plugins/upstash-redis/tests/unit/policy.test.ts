@@ -68,7 +68,7 @@ function gateIn(id: keyof typeof MISSIONS, riskId: string): string | undefined {
   return MISSIONS[id].find((e) => e.risk_id === riskId)?.gate;
 }
 
-/** Classify, then decide — the two steps of `evaluateCallForToken`. */
+/** Classify, then decide — the two steps of `evaluateCallForMission`. */
 function decide(
   accepted: ReadonlySet<string>,
   resource: Resource,
@@ -80,7 +80,7 @@ function decide(
   if ('denied' in outcome) throw new Error(`classifier denied: ${outcome.denied}`);
   return evaluateCall({
     executed_slices: outcome.slices,
-    token_accepted_risks: accepted,
+    accepted_risks: accepted,
     catalog: indexed,
     envResolver: envResolverFor(resources, plugin.envOf?.bind(plugin)),
   });

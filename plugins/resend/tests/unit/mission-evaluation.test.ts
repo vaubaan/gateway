@@ -2,7 +2,7 @@
  * The whole decision, not the classifier alone : real catalog, real
  * classifier, and the engine's `evaluateCall` with the resolver the gateway
  * builds (`envResolverFor(mission resources, plugin.envOf)` — the exact
- * composition of `evaluateCallForToken` in `@vaubaan/gateway-core`).
+ * composition of `evaluateCallForMission` in `@vaubaan/gateway-core`).
  *
  * Pins two things the per-slice tests cannot see :
  *   - a send to an external-unbounded recipient is refused on a domain
@@ -77,7 +77,7 @@ function evaluate(
   if ('denied' in outcome) return { kind: 'classify-denied', reason: outcome.denied };
   const decision = evaluateCall({
     executed_slices: outcome.slices,
-    token_accepted_risks: new Set(accepted),
+    accepted_risks: new Set(accepted),
     catalog: indexed,
     envResolver: envResolverFor(resources, plugin.envOf?.bind(plugin)),
   });

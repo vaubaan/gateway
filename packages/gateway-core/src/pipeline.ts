@@ -292,7 +292,7 @@ export interface ResourceStage {
 
 /**
  * Classify and decide on risks. The default implementation wraps
- * `evaluateCallForToken` (risk-gateway.ts) with the plugin classifier and
+ * `evaluateCallForMission` (risk-gateway.ts) with the plugin classifier and
  * the provider catalog (the application wires the plugin registry).
  */
 export interface RiskStage {
