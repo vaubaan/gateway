@@ -52,8 +52,37 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
 | Created resources       | `resourceCreatingTools` requires `createdResources`; its answer is untrusted: every ref goes through the discovery grammar.                                                                                                                                                                                                                                                        |
 | Catalog                 | Exactly one fallback `<provider>.uncategorized-*` matching `<provider>.**.W`, in no macro-action; every other live entry in exactly one macro-action (`macroActionIssues`); every key known; a `presets` key refused (retired). A rule for TS catalogs goes in `semanticIssues`.                                                                                                   |
 | `envOf`                 | A label, `undefined` (use the resource label) or `NO_SINGLE_ENV` for a wildcard or list: then the label is not consulted and env-scoped risks are refused.                                                                                                                                                                                                                         |
-| Versions                | Semver; below `1.0.0` while young. A stricter classification is a major (minor before 1.0). A wording-only catalog change bumps `catalog_version`, not the plugin version.                                                                                                                                                                                                         |
+| Plugin versions         | Semver; below `1.0.0` while young. A stricter classification is a major (minor before 1.0). A wording-only catalog change bumps `catalog_version`, not the plugin version.                                                                                                                                                                                                         |
 | Shipping                | No hidden plugin state: a plugin not ready is not in `SHIPPED_PLUGINS`. At most one plugin declares `gitRemote`.                                                                                                                                                                                                                                                                   |
+
+## Versions of the SDK
+
+`@vaubaan/plugin-sdk` has its own semver, in `packages/plugin-sdk/package.json`; **the SDK moves
+when the contract moves**: a change of `packages/plugin-sdk/src/` that a plugin can observe bumps it
+in the same pull request, with its line under `### Plugin SDK` in `CHANGELOG.md`.
+
+| Change                                                                                                                                                                                                                                                                                     | From `1.0.0` | Before `1.0.0` |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | -------------- |
+| Breaking: an export, a subpath, a `ProviderPlugin` member or a field of an exported type removed or renamed; an optional member made required; a rule of `definePlugin`, the loader or the kit that refuses what it accepted; a helper that throws or returns otherwise for the same input | major        | minor          |
+| A new export, a new optional member, a new kit assertion a plugin may call                                                                                                                                                                                                                 | minor        | patch          |
+| A fix that makes a check do what its documentation says, wording of a message                                                                                                                                                                                                              | patch        | patch          |
+
+## Publication
+
+The package is publishable, not published. `npm pack --workspace @vaubaan/plugin-sdk` builds
+`dist/` (`tsconfig.build.json`: JavaScript and declarations, `.ts` imports rewritten) and packs
+`dist/`, `README.md` and `package.json` only. Inside the repository `exports` point at `src/*.ts`;
+`prepack` swaps in the published manifest (`publishConfig.exports` → `dist/`,
+`scripts/publish-manifest.ts`) and `postpack` restores it — npm does not apply `publishConfig.exports`
+itself. A stray `package.repo.json` means a pack died between the two: `node
+scripts/publish-manifest.ts restore`.
+
+Its dependencies `@vaubaan/shared` and `@vaubaan/policy-engine` are workspace packages with
+`exports` on TypeScript sources and version `0.0.0`: published as they are, the SDK cannot be
+installed. Either publish both too, or inline them. **Recommended: inline them** (bundle the
+JavaScript the SDK uses and roll up its declarations at build): `@vaubaan/shared` carries `argon2`, a
+native module no plugin needs, and publishing both would make two more APIs public contracts with
+versions of their own, while plugin authors only ever write against the SDK.
 
 ## Traps
 

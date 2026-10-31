@@ -137,6 +137,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `consent_incomplete`, `flow_mismatch`, `provider_not_served`,
   `provider_refused`, `provider_unavailable` or `no_refresh_token`. Never
   provider text.
+- **Plugins call their provider through the SDK's transport.** The template
+  (`@vaubaan/plugin-template` 0.2.0) uses `httpJson`, `refusalResult` and
+  `jsonResult`; a workspace list it cannot read is a provider failure
+  (`UpstreamProtocolError`), no longer a plain error. Miro
+  (`@vaubaan/plugin-miro` 0.5.0) drops its own JSON-RPC client for the SDK's:
+  a JSON-RPC error frame, or a refused board search, is now recorded as the
+  provider's failure (HTTP 502) instead of a fault of the plugin. GitHub
+  (`@vaubaan/plugin-github` 4.0.6) imports the git wire code from
+  `@vaubaan/plugin-sdk/git`. A plugin, its tests included, may import nothing
+  of the gateway but the SDK (lint rule).
 
 ### Removed
 
@@ -191,6 +201,40 @@ Fixes from the pre-publication security audit of 2026-10-31.
 - Mission-token symbols are drawn without modulo bias; the attested OAuth
   broker's key pinning is held by a structural test and a Semgrep rule;
   every CI checkout keeps no token.
+
+### Plugin SDK
+
+`@vaubaan/plugin-sdk` is versioned on its own, by the rule of the
+[plugin SDK handbook](docs/handbook/plugin-sdk.md) (Versions): below `1.0.0` a
+minor version may break a plugin, and every breaking change is listed here.
+The package is now publishable (`dist/` with declarations, three entry points)
+but not published.
+
+- **0.3.0** — the contract slimmed, one way to call a provider (ADR
+  plugin-contract-and-credential-spec, amendment of 2026-10-31). Breaking:
+  - `ProviderPlugin.normalizeForCaps` and `ProviderPlugin.normalizeArgs` are
+    removed, with `flags.ts` (`PluginHostFlags`, `DEFAULT_HOST_FLAGS`,
+    `normalizeArgsIfEnabled`): no host called them.
+  - The git wire code and `GitRemoteCapability` with its types leave the main
+    entry for `@vaubaan/plugin-sdk/git`.
+  - No longer exported from the main entry: `ScopeCaps`,
+    `CREDENTIAL_SENTENCE_MAX_LENGTH`, `structuralIssues`, `isCompleteVector`.
+  - Added: `httpJson`, `upstreamFailure`, `readBounded`, `readBoundedText`,
+    `readPrefixText`, `readShape`, `anyJson`, `UpstreamProtocolError` (502),
+    `UpstreamAnswerTooLarge`, the upstream MCP client (`mcpRequest`,
+    `callUpstreamTool`, `firstJsonRpcFrame`, `upstreamToolResult`),
+    `textResult`, `jsonResult`, `isRecord`, `isList`, `slicePathIssue`,
+    `catalogPathIssues`; in `/testing`, `assertSlicesOnDataModel`,
+    `decideCall` and the policy-engine functions plugin tests use
+    (`risksTouchedBy`, `evaluateCall`, `envResolverFor`, `indexCatalog`,
+    `qualifyRiskId`, `palierOf`, `matches`…).
+- **0.2.0** — the token guide is structured (entry under Changed). Breaking:
+  `TokenGuide.steps` are `GuideStep { do, url?, code? }`;
+  `recommendedExpiryDays` is replaced by `expiry`; `reach` and `docsUrl` are
+  required; an `api-key` way without `label`, `createUrl`, `guide` or `verify`
+  is refused by `definePlugin`. Since 0.1.0 also: catalog presets are retired
+  (`presetsOf`, `assertPresetsValid`, the `Preset` types removed; a catalog
+  with `presets` does not load).
 
 ## [2.0.0-alpha.11] - 2026-10-29
 
