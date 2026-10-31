@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { ConfigError } from './errors';
 import { loadInstanceConfig, loadInstanceConfigOrSetup } from './load';
 import { CONFIG_FILE_ENV } from './sources';
-import { TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
+import { TEST_MASTER_KEY, fakeFiles, validEnv } from '../../../tests/support/config/testing';
 
 const KEY_FILE = '/data/master.key';
 

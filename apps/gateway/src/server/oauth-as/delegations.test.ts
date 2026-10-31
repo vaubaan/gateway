@@ -12,7 +12,7 @@ import {
   openOAuthRig,
   WEB_REDIRECT,
   type OAuthRig,
-} from './testing';
+} from '../../../tests/support/oauth-as/testing';
 import { DelegatedTokenVerifier } from './verifier';
 
 describe('DelegationService', () => {

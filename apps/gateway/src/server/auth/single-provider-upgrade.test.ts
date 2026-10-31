@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { openTestStore, type TestStore } from '../store/testing';
+import { openTestStore, type TestStore } from '../../../tests/support/store/testing';
 import { SignInProvidersService } from './sign-in-providers';
 import { SINGLE_PROVIDER_KEYS, upgradeSingleProviderSettings } from './single-provider-upgrade';
 

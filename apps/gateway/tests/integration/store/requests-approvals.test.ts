@@ -17,7 +17,7 @@ import {
   heldArguments,
   refuseRequest,
   type TestStore,
-} from '../../../src/server/store/testing.ts';
+} from '../../support/store/testing.ts';
 
 const MERGE = 'github.merge-protected';
 

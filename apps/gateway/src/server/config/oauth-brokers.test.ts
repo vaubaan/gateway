@@ -10,7 +10,7 @@ import { ConfigError } from './errors';
 import { loadInstanceConfig } from './load';
 import { brokerFor, parseBrokerUrl } from './oauth-brokers';
 import { envNamesFor, isSecretKeyPath, secretEnvVariables } from './sources';
-import { fakeFiles, validEnv } from './testing';
+import { fakeFiles, validEnv } from '../../../tests/support/config/testing';
 import { secretValues, type OAuthBrokerConfig } from './types';
 
 const KEY = 'broker-key-PLAINTEXT-0123456789';

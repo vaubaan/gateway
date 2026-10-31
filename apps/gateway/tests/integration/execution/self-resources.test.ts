@@ -21,7 +21,7 @@ import {
   line,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const SELF = 'app-prod';
 

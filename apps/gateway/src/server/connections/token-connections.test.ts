@@ -11,7 +11,11 @@ import { CredentialRefusal, UpstreamAuthError } from '@vaubaan/shared';
 
 import { serializeSecret } from './credential-codec';
 import { ConnectError, type ConnectErrorCode } from './errors';
-import { connectionsHarness, fixturePlugin, type ConnectionsHarness } from './testing';
+import {
+  connectionsHarness,
+  fixturePlugin,
+  type ConnectionsHarness,
+} from '../../../tests/support/connections/testing';
 
 const TOKEN = 'pat_secret_0123456789';
 const BY_HAND = 'Delete the token on the tokens page.';

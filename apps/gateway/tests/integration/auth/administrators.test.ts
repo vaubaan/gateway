@@ -6,7 +6,7 @@
  * its person at the first sign-in, and no act leaves the instance without an
  * administrator who has a way in.
  */
-import { switchOnForTests } from '../../../src/server/auth/testing';
+import { switchOnForTests } from '../../support/auth/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIGURATION_ACTOR_ID } from '@vaubaan/gateway-core';
 
@@ -14,10 +14,10 @@ import { SESSION_COOKIE } from '../../../src/server/auth';
 import { completeLogin } from '../../../src/server/auth/login';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { silentLogger } from '../../../src/server/logging';
 import { openMemoryStore, type Store } from '../../../src/server/store';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const IDP = 'https://idp.example.com';

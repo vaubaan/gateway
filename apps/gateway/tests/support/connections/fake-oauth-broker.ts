@@ -57,14 +57,14 @@ import type { AddressInfo } from 'node:net';
 
 import { jwtVerify, SignJWT } from 'jose';
 
-import type { OAuthBrokerConfig } from '../config/types';
+import type { OAuthBrokerConfig } from '../../../src/server/config/types';
 import {
   AttestationRefused,
   BROKER_ATTESTATION_AUDIENCE,
   spkiHashOf,
   type AttestationPlatform,
   type BrokerAttestationKit,
-} from './broker-attestation';
+} from '../../../src/server/connections/broker-attestation';
 import { fakeTlsCertificate } from './fake-tls-certificate';
 
 /** How long a one-time grant may wait for its redeem (contract: "minutes-long"). */

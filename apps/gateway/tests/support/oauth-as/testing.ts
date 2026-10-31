@@ -10,22 +10,22 @@ import { randomBytes } from 'node:crypto';
 
 import { MemoryAuditWriter } from '@vaubaan/gateway-core';
 
-import { MemoryRateLimiter, MemorySessionStore } from '../compose/memory';
-import type { OAuthConfig } from '../config/types';
-import { silentLogger } from '../logging';
-import type { Store } from '../store';
-import type { ManualClock } from '../store/clock';
+import { MemoryRateLimiter, MemorySessionStore } from '../../../src/server/compose/memory';
+import type { OAuthConfig } from '../../../src/server/config/types';
+import { silentLogger } from '../../../src/server/logging';
+import type { Store } from '../../../src/server/store';
+import type { ManualClock } from '../../../src/server/store/clock';
 import { openTestStore } from '../store/testing';
-import type { OAuthClientRecord, UserRecord } from '../store/types';
-import { AuthorizationService } from './authorization';
-import type { ClientDocumentFetcher } from './client-metadata-document';
-import { ClientRegistry } from './clients';
-import { delegationLifetime } from './delegation-lifetime';
-import { DelegationService } from './delegations';
-import { oauthEndpoints, type OAuthEndpoints } from './endpoints';
-import { challengeOf } from './pkce';
-import { TokenService, type TokenResponse } from './token-service';
-import { DelegatedTokenVerifier } from './verifier';
+import type { OAuthClientRecord, UserRecord } from '../../../src/server/store/types';
+import { AuthorizationService } from '../../../src/server/oauth-as/authorization';
+import type { ClientDocumentFetcher } from '../../../src/server/oauth-as/client-metadata-document';
+import { ClientRegistry } from '../../../src/server/oauth-as/clients';
+import { delegationLifetime } from '../../../src/server/oauth-as/delegation-lifetime';
+import { DelegationService } from '../../../src/server/oauth-as/delegations';
+import { oauthEndpoints, type OAuthEndpoints } from '../../../src/server/oauth-as/endpoints';
+import { challengeOf } from '../../../src/server/oauth-as/pkce';
+import { TokenService, type TokenResponse } from '../../../src/server/oauth-as/token-service';
+import { DelegatedTokenVerifier } from '../../../src/server/oauth-as/verifier';
 
 export const TEST_PUBLIC_URL = 'https://gateway.example.com';
 export const LOOPBACK_REDIRECT = 'http://127.0.0.1:43210/callback';

@@ -8,7 +8,7 @@ import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
 import { silentLogger } from '../logging';
-import { openTestStore } from '../store/testing';
+import { openTestStore } from '../../../tests/support/store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError } from './errors';
 import { providerFailureReason } from './failure-reason';
@@ -25,7 +25,7 @@ import {
   PUBLIC_URL,
   REGISTERED_OAUTH_SPEC,
   stateOf,
-} from './testing';
+} from '../../../tests/support/connections/testing';
 
 const SPEC = REGISTERED_OAUTH_SPEC;
 const REGISTER_URL = 'https://mcp.provider.example.com/register';

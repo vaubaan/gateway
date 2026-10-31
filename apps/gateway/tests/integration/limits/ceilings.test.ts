@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { completeLogin } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { fakePlugin } from '../../../src/server/compose/testing';
+import { fakePlugin } from '../../support/compose/testing';
 import { isConnectError } from '../../../src/server/connections';
 import type { MissionDraft } from '../../../src/server/missions';
 import { silentLogger } from '../../../src/server/logging/logger';

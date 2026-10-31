@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { NotFoundError, UnknownRiskIdError, type Store } from '../../../src/server/store/index.ts';
-import { makeUnowned, openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { makeUnowned, openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 describe('connections repository', () => {
   let t: TestStore;

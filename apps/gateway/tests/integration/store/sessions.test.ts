@@ -22,7 +22,7 @@ import {
   StubEncryptor,
   TEST_RISK_IDS,
   type TestStore,
-} from '../../../src/server/store/testing.ts';
+} from '../../support/store/testing.ts';
 
 const READ = 'github.code-read';
 const WRITE = 'github.write-feature-branch';

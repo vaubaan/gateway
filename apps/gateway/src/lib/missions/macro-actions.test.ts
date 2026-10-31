@@ -11,7 +11,11 @@ import {
   prefillOfTrustLevels,
   unknownMacroActions,
 } from './macro-actions';
-import { ACME_CATALOG, ACME_RESOURCES, acmeConnection } from '../../server/missions/testing';
+import {
+  ACME_CATALOG,
+  ACME_RESOURCES,
+  acmeConnection,
+} from '../../../tests/support/missions/testing';
 
 const acme = acmeConnection();
 

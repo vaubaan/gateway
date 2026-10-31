@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
 import { ConfigError } from '../config/errors';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { clientIpResolver, UNKNOWN_CLIENT } from './client-ip';
 
 describe('trusted-edge mode (client_ip_header)', () => {

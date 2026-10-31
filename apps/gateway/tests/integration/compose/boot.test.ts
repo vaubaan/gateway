@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { bootOrExit, EXIT_BOOT_ERROR } from '../../../src/server/compose/boot';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { healthResponse } from '../../../src/server/http/healthz';
 import { UnknownRiskIdError } from '../../../src/server/store';
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';

@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openEmbeddedStore } from '../../../src/server/compose/store';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { ConfigError, loadInstanceConfig, secretValues } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { createEncryptor } from '../../../src/server/crypto';
 import { RestoreError, restoreStore } from '../../../src/server/restore/restore';
 import { openStore, SetCatalogIndex } from '../../../src/server/store';

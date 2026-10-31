@@ -24,7 +24,7 @@ import {
   type ExecutionInstance,
   type IssuedMission,
   type RpcBody,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 
 const READ = 'depot.read';

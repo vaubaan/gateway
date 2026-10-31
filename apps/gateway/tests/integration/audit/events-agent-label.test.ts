@@ -11,7 +11,7 @@ import {
   agentLabelColumn,
   CALL_EVENT_KINDS,
 } from '../../../src/server/store/repositories/sessions.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const AT = '2026-10-13T08:00:00.000Z';
 

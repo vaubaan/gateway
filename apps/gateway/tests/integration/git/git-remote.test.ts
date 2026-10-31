@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { budgetMissionOf } from '../../../src/server/budget';
 import type { AuditCallRecord } from '../../../src/server/store';
-import { line, type IssuedMission } from '../../../src/server/execution/testing';
+import { line, type IssuedMission } from '../../support/execution/testing';
 import {
   CONNECTION_TOKEN,
   DEVELOPER_TRUST_LEVELS,

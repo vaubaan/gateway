@@ -15,7 +15,7 @@ import {
 
 import { unavailableReason } from '../execution/resource-stage';
 import { serializeSecret } from './credential-codec';
-import { connectionsHarness } from './testing';
+import { connectionsHarness } from '../../../tests/support/connections/testing';
 
 /** Signs in as anyone, lists the two folders the plugin checks, records each session. */
 function fakeImap(): GmailTransport & { sessions: string[] } {

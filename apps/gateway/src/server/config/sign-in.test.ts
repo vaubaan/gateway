@@ -17,7 +17,7 @@ import {
   entraTenantOf,
 } from './sign-in';
 import { parseSignInEnvName } from './sources';
-import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from './testing';
+import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../tests/support/config/testing';
 
 /** The company's directory, as the provider `idp` (what the single-provider keys described). */
 const IDP_ENV = {

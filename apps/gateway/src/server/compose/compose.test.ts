@@ -2,14 +2,14 @@ import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { RegistryCatalogIndex } from './registry';
 import { buildRoot, getRoot, NO_TRUSTED_PROXY_WARNING, resetRoot, type RootDeps } from './root';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
-import { fakePlugin, memoryStoreDeps } from './testing';
+import { fakePlugin, memoryStoreDeps } from '../../../tests/support/compose/testing';
 
 const quiet: RootDeps = {
   loadConfig: () => loadInstanceConfig({ env: validEnv() }),

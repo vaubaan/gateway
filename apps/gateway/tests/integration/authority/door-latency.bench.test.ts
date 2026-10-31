@@ -11,7 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { line, type IssuedMission } from '../../../src/server/execution/testing';
+import { line, type IssuedMission } from '../../support/execution/testing';
 import { authorityRig, READ, type AuthorityRig } from './support';
 
 const SETTLE_ITERATIONS = 20_000;

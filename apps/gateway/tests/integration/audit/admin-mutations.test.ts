@@ -11,7 +11,7 @@
  * until it is classified; a mutation is then driven on an ephemeral instance
  * and must leave the administrative entry named next to it.
  */
-import { switchOnForTests } from '../../../src/server/auth/testing';
+import { switchOnForTests } from '../../support/auth/testing';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +25,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { generateEd25519KeyPair, type Actor } from '../../../src/server/connections';
 import {
   API_KEY_SPEC,
@@ -36,14 +36,14 @@ import {
   OAUTH_SPEC,
   seedRegisteredClient,
   stateOf,
-} from '../../../src/server/connections/testing';
+} from '../../support/connections/testing';
 import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import type { LocalAccountRecord } from '../../../src/server/store';
 import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
-import { pkcePair } from '../../../src/server/oauth-as/testing';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { pkcePair } from '../../support/oauth-as/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
   ConnectionRecord,
@@ -381,8 +381,6 @@ type Rule =
 const READ: Rule = { kind: 'read' };
 const exempt = (why: string): Rule => ({ kind: 'exempt', why });
 
-const FAKE_BROKER =
-  'the fake OAuth broker of the contract test kit (fake-oauth-broker.ts): a test double the composition root never builds';
 const SESSION_STATE =
   'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
 const SYSTEM_REFRESH =
@@ -635,21 +633,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   'FetchChannel.send': exempt(
     'carries a broker call to a broker declared attestation: none; nothing is written in the store; the act it carries is classified on OAuthBrokerClient',
   ),
-  'FakeOAuthBroker.attestWith': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.attestationKit': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.rotateTlsKey': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.trustingFetch': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.holdAttest': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.redirecting': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.approve': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.configFor': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.deny': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.down': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.recordReturnUrl': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.refusingCode': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.refusingProvider': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.stop': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.up': exempt(FAKE_BROKER),
   'PendingConnectStore.create': exempt(SESSION_STATE),
   'PendingConnectStore.take': exempt(SESSION_STATE),
   'NoticeStore.put': exempt(SESSION_STATE),

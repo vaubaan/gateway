@@ -16,7 +16,11 @@ import {
 } from './mission-edit';
 import type { DraftConnection, MissionDraft } from './model';
 import { previewDraft } from './preview';
-import { ACME_RESOURCES, ACME_STALE, acmeConnection } from '../../server/missions/testing';
+import {
+  ACME_RESOURCES,
+  ACME_STALE,
+  acmeConnection,
+} from '../../../tests/support/missions/testing';
 
 const NOW = new Date('2026-10-24T09:00:00.000Z');
 

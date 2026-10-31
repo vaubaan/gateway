@@ -13,7 +13,7 @@ import {
   ACME_RESOURCES,
   ACME_STALE,
   acmeConnection,
-} from '../../server/missions/testing';
+} from '../../../tests/support/missions/testing';
 
 /** The explicit ids a resolved line carries; `undefined` for a whole-connection line. */
 function idsOf(line: ResolvedDraftConnection | undefined): readonly string[] | undefined {

@@ -20,7 +20,7 @@ import {
   DEPRECATED_NOTE,
   vectorBadges,
 } from './catalog-view';
-import { ACME_CATALOG } from '../../server/missions/testing';
+import { ACME_CATALOG } from '../../../tests/support/missions/testing';
 
 describe('enumerateCatalog', () => {
   const rows = enumerateCatalog(ACME_CATALOG);

@@ -5,14 +5,14 @@
  * network, no mail: the links are taken from the service as an administrator
  * would copy them from People.
  */
-import { throughSecondFactor } from '../../../src/server/auth/testing';
+import { throughSecondFactor } from '../../support/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { AUTH_LIMITS, LOCAL_LOCKOUT, LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { openMemoryStore } from '../../../src/server/store';
 import { ManualClock } from '../../../src/server/store/clock';
 

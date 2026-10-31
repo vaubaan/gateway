@@ -13,12 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireOperator } from '@/lib/auth/session';
 import { SESSION_COOKIE } from '@/server/auth';
 import { getRoot, resetRoot, type GatewayRoot } from '@/server/compose';
-import { memoryStoreDeps } from '@/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '@/server/config';
-import { validEnv } from '@/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 
 import { appDir, outcomeOf, renderPage, surfaceFiles } from './guard-harness';
-import { saveTestOidcProvider } from '../../../src/server/auth/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 vi.mock('next/headers', () => ({ headers: async () => request.headers }));

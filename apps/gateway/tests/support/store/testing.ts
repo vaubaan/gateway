@@ -5,19 +5,19 @@
  */
 
 import { createHash } from 'node:crypto';
-import { SetCatalogIndex } from './catalog-index.ts';
-import { ManualClock } from './clock.ts';
-import type { EncryptedBlob, Encryptor } from './encryptor.ts';
-import { InvariantError } from './errors.ts';
-import { openMemoryStore, type Store } from './index.ts';
-import type { TokenToIssue } from './repositories/delegations.ts';
+import { SetCatalogIndex } from '../../../src/server/store/catalog-index.ts';
+import { ManualClock } from '../../../src/server/store/clock.ts';
+import type { EncryptedBlob, Encryptor } from '../../../src/server/store/encryptor.ts';
+import { InvariantError } from '../../../src/server/store/errors.ts';
+import { openMemoryStore, type Store } from '../../../src/server/store/index.ts';
+import type { TokenToIssue } from '../../../src/server/store/repositories/delegations.ts';
 import type {
   ApprovalRecord,
   GroupRecord,
   RefreshTokenRecord,
   RequestRecord,
   RiskId,
-} from './types.ts';
+} from '../../../src/server/store/types.ts';
 
 const TAG_BYTES = 8;
 

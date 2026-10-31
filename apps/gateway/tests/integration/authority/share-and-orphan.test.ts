@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { formatUtc } from '../../../src/server/requests';
 import { ShareError } from '../../../src/server/shares';
-import { line, type RpcBody } from '../../../src/server/execution/testing';
+import { line, type RpcBody } from '../../support/execution/testing';
 import { NO_FILTER } from '../audit/support';
 import {
   authorityRig,

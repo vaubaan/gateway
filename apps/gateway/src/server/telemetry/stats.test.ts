@@ -2,7 +2,7 @@ import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import { createRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it, vi } from 'vitest';
 
-import { fakePlugin } from '../compose/testing';
+import { fakePlugin } from '../../../tests/support/compose/testing';
 import { silentLogger } from '../logging';
 import {
   FAILURE_TTL_SECONDS,

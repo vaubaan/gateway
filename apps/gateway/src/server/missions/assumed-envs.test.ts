@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { withAssumedEnvs } from './mission-service';
-import { acmeConnection } from './testing';
+import { acmeConnection } from '../../../tests/support/missions/testing';
 
 describe('withAssumedEnvs', () => {
   it('reads the named resources under the assumed label and leaves the rest as stored', () => {

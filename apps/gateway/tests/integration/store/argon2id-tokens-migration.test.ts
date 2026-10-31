@@ -10,7 +10,7 @@ import { expect, it } from 'vitest';
 
 import { openStore, SetCatalogIndex } from '../../../src/server/store';
 import { DEFAULT_MIGRATIONS_DIR } from '../../../src/server/store/migrate';
-import { StubEncryptor, TEST_RISK_IDS } from '../../../src/server/store/testing';
+import { StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing';
 
 const MIGRATION = 27;
 

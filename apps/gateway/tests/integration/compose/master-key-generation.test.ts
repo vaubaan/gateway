@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { bootOrExit, EXIT_CONFIG_ERROR } from '../../../src/server/compose/boot';
 import { loadBootConfig } from '../../../src/server/compose/boot-config';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { MASTER_KEY_GENERATED_KEY } from '../../../src/server/master-key';
 
 describe('master key generated at the first start', () => {

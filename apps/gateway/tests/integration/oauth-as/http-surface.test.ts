@@ -15,7 +15,7 @@ import {
   TOKEN_REQUESTS_PER_CLIENT,
   TOKEN_REQUESTS_PER_WINDOW,
 } from '../../../src/server/oauth-as';
-import { pkcePair } from '../../../src/server/oauth-as/testing';
+import { pkcePair } from '../../support/oauth-as/testing';
 import type { FetchedDocument } from '../../../src/server/oauth-as';
 import {
   ADA,

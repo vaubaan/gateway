@@ -9,7 +9,7 @@ import {
   issueFirstRefreshToken,
   openTestStore,
   type TestStore,
-} from '../../../src/server/store/testing.ts';
+} from '../../support/store/testing.ts';
 
 describe('delegations repository', () => {
   let t: TestStore;

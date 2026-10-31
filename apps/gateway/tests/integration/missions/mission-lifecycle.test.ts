@@ -18,9 +18,9 @@ import {
   TRUST_LEVELS,
   type MissionDraft,
 } from '../../../src/server/missions';
-import { catalogEnvs, seedConnection } from '../../../src/server/missions/testing';
+import { catalogEnvs, seedConnection } from '../../support/missions/testing';
 import { ManualClock } from '../../../src/server/store/clock';
-import { agePastStaleGrace } from '../../../src/server/store/testing';
+import { agePastStaleGrace } from '../../support/store/testing';
 import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;

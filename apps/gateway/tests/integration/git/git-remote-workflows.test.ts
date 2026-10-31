@@ -16,7 +16,7 @@ import { concatBytes, encodeCommandList } from '@vaubaan/plugin-sdk';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AuditCallRecord } from '../../../src/server/store';
-import { line, type IssuedMission } from '../../../src/server/execution/testing';
+import { line, type IssuedMission } from '../../support/execution/testing';
 import { openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
 
 const PUSH = 'github__git_push';

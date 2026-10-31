@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { SignInProvider } from '../config/sign-in';
 import type { AdminRule } from '../config/types';
-import { openTestStore, type TestStore } from '../store/testing';
+import { openTestStore, type TestStore } from '../../../tests/support/store/testing';
 import {
   setUpElsewhere,
   SignInProvidersService,

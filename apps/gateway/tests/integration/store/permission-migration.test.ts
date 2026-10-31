@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openStore, SetCatalogIndex } from '../../../src/server/store';
 import { DEFAULT_MIGRATIONS_DIR } from '../../../src/server/store/migrate';
-import { heldArguments, StubEncryptor, TEST_RISK_IDS } from '../../../src/server/store/testing';
+import { heldArguments, StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing';
 
 it('upgrades existing requests and approvals without losing encrypted arguments or grants', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'permission-migration-'));

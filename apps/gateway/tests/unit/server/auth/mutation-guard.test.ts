@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../../src/server/auth';
 import type { GatewayRoot } from '../../../../src/server/compose/root';
-import { TEST_BOOTSTRAP_TOKEN } from '../../../../src/server/config/testing';
+import { TEST_BOOTSTRAP_TOKEN } from '../../../support/config/testing';
 import type { MissionRecord, UserRecord } from '../../../../src/server/store/types';
 import {
   auditRigOn,

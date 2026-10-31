@@ -15,9 +15,9 @@ import { NeedsUser } from '@/components/auth/NeedsUser';
 import { currentUser, requirePrincipal } from '@/lib/auth/session';
 import { currentActor } from '@/lib/connections/session';
 import { getRoot, resetRoot, type GatewayRoot } from '@/server/compose';
-import { memoryStoreDeps } from '@/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '@/server/config';
-import { validEnv } from '@/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 
 import { appDir, outcomeOf, renderPage, surfaceFiles, type Outcome } from './guard-harness';
 

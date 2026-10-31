@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ConfigError, loadInstanceConfig } from '../config';
-import { TEST_MASTER_KEY, fakeFiles, validEnv } from '../config/testing';
+import { TEST_MASTER_KEY, fakeFiles, validEnv } from '../../../tests/support/config/testing';
 import { generateMasterKeyText } from '../crypto/master-key-file';
 import { loadBootConfig, loadBootConfigOrSetup, type BootConfigDeps } from './boot-config';
 

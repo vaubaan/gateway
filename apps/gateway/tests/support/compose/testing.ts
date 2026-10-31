@@ -11,8 +11,8 @@ import { definePlugin, type ProviderPlugin } from '@vaubaan/plugin-sdk';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { RiskCatalog } from '@vaubaan/shared';
 
-import { openMemoryStore } from '../store';
-import type { RootDeps } from './root';
+import { openMemoryStore } from '../../../src/server/store';
+import type { RootDeps } from '../../../src/server/compose/root';
 
 /** `RootDeps` slice that opens the store in memory instead of on disk. */
 export const memoryStoreDeps: Pick<RootDeps, 'openStore'> = {

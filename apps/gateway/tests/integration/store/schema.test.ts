@@ -15,7 +15,7 @@ import {
   SetCatalogIndex,
   type Store,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, StubEncryptor, TEST_RISK_IDS } from '../../../src/server/store/testing.ts';
+import { openTestStore, StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing.ts';
 
 const EXPECTED_TABLES = [
   'administrators',

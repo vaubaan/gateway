@@ -8,7 +8,7 @@ import type { ConnectionContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
-import { makeUnowned } from '../store/testing';
+import { makeUnowned } from '../../../tests/support/store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError, type ConnectErrorCode } from './errors';
 import { codeChallengeS256 } from './oauth2';
@@ -22,7 +22,7 @@ import {
   SSH_KEY_SPEC,
   stateOf,
   type ConnectionsHarness,
-} from './testing';
+} from '../../../tests/support/connections/testing';
 
 const TOKEN_OK: MockRoute = {
   method: 'POST',

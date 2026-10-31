@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -14,7 +14,7 @@ import {
   type MountFacts,
 } from './key-placement';
 import { buildRoot, resetRoot } from './root';
-import { memoryStoreDeps } from './testing';
+import { memoryStoreDeps } from '../../../tests/support/compose/testing';
 
 /** Two Docker volumes on one host disk: two mounts, one device. */
 const MOUNTINFO = [

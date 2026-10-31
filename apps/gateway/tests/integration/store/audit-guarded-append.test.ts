@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AdminAuditEntry, CallAuditEntry } from '@vaubaan/gateway-core';
 import type { Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const GROUNDS = ['mission-orphaned', 'mission-restored'] as const;
 const T0 = '2026-10-13T09:00:00.000Z';

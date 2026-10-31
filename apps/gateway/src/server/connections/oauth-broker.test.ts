@@ -29,7 +29,7 @@ import {
   FAKE_BROKER_MEASUREMENT,
   FAKE_GRANT_TTL_MS,
   FakeOAuthBroker,
-} from './fake-oauth-broker';
+} from '../../../tests/support/connections/fake-oauth-broker';
 import {
   challengeOf,
   OAuthBrokerClient,
@@ -38,7 +38,11 @@ import {
 } from './oauth-broker';
 import { AttestedChannel, FetchChannel, MAX_ANSWER_BYTES } from './broker-channel';
 import { REFRESH_SKEW_MS } from './credentials';
-import { connectionsHarness, fixturePlugin, type ConnectionsHarness } from './testing';
+import {
+  connectionsHarness,
+  fixturePlugin,
+  type ConnectionsHarness,
+} from '../../../tests/support/connections/testing';
 
 const KEY = 'broker-key-of-instance-a-PLAINTEXT';
 const OTHER_KEY = 'broker-key-of-instance-b';

@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AuditCallRecord } from '../../../src/server/store';
-import type { IssuedMission } from '../../../src/server/execution/testing';
+import type { IssuedMission } from '../../support/execution/testing';
 import {
   DEVELOPER_TRUST_LEVELS,
   openGitRig,

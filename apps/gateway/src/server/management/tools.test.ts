@@ -17,7 +17,7 @@ import type { MissionDetail, MissionDraft, MissionOverview, MissionPreview } fro
 import { explainOrphan } from '../missions/orphan-reason';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
 import { previewDraft } from '../../lib/missions/preview';
-import { ACME_CATALOG, acmeConnection } from '../missions/testing';
+import { ACME_CATALOG, acmeConnection } from '../../../tests/support/missions/testing';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { MANAGEMENT_INSTRUCTIONS, MANAGEMENT_TOOLS } from './definitions';
 import { toolResultOf } from './door';

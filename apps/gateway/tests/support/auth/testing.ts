@@ -1,12 +1,12 @@
 /**
  * Test helpers of the authentication module. Not for production.
  */
-import { base32Decode, totpCode, totpStepOf } from '../crypto/totp';
-import type { Store } from '../store';
-import type { ConfigRepo } from '../store/repositories/config';
-import { ENROL_PAGE, SECOND_FACTOR_PAGE } from './local-handlers';
-import type { SessionService } from './session-service';
-import { storedProviderWrites } from './sign-in-providers';
+import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
+import type { Store } from '../../../src/server/store';
+import type { ConfigRepo } from '../../../src/server/store/repositories/config';
+import { ENROL_PAGE, SECOND_FACTOR_PAGE } from '../../../src/server/auth/local-handlers';
+import type { SessionService } from '../../../src/server/auth/session-service';
+import { storedProviderWrites } from '../../../src/server/auth/sign-in-providers';
 
 /**
  * Switches a provider saved in Settings on without a test beside the session: the

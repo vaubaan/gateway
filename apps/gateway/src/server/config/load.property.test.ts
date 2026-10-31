@@ -16,7 +16,7 @@ import { propertyRuns } from '@vaubaan/plugin-sdk/testing';
 import { parseDuration } from './duration';
 import { ConfigError } from './errors';
 import { loadInstanceConfig, loadInstanceConfigOrSetup } from './load';
-import { fakeFiles, validEnv } from './testing';
+import { fakeFiles, validEnv } from '../../../tests/support/config/testing';
 
 const FILE = '/config/gateway.yaml';
 

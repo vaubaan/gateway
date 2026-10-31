@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig, type LoadedConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { createEncryptor, type EncryptedBlob, type Encryptor } from '../crypto';
 import { openMemoryStore, SetCatalogIndex, type Store } from '../store';
 import {

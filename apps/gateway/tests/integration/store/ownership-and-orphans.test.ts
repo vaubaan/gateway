@@ -12,7 +12,7 @@ import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
 import type { Store } from '../../../src/server/store/index.ts';
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { STORED_MISSION_STATUSES } from '../../../src/server/store/repositories/enums.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 import type { ConnectionRecord, Principal } from '../../../src/server/store/types.ts';
 
 describe('ownership and orphan states in the store', () => {

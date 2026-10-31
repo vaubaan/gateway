@@ -15,7 +15,7 @@ import {
   type ExecutionInstance,
   type ExecutionInstanceOptions,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import type { IssueResult } from '../../../src/server/missions';
 import type { MissionStatus, UserRecord } from '../../../src/server/store/types';
 
