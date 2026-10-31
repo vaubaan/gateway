@@ -153,21 +153,21 @@ export interface ApiKeyCredentialSpec {
   readonly kind: 'api-key';
   readonly fields: readonly CredentialField[];
   /** URL of the provider page where the user creates the key: the token page itself, not a dashboard. */
-  readonly createUrl?: string;
+  readonly createUrl: string;
   /**
    * What the person creates, in the provider's words, lower case
    * ("fine-grained personal access token"). Shown on the connect page.
    */
-  readonly label?: string;
+  readonly label: string;
   /** How to create it by hand ; the connect page renders it. */
-  readonly guide?: TokenGuide;
+  readonly guide: TokenGuide;
   /**
    * Ask the provider about the pasted values before anything is stored. A
    * cause the plugin can name throws `CredentialRefusal` with its own
    * sentence ; a rejection otherwise throws `UpstreamAuthError` (nothing is
    * stored) ; an expiry in the past is refused by the host.
    */
-  verify?(ctx: ConnectionContext): Promise<CredentialCheck>;
+  verify(ctx: ConnectionContext): Promise<CredentialCheck>;
 }
 
 export type OAuth2ClientAuthMethod = 'client_secret_basic' | 'client_secret_post' | 'none';

@@ -8,6 +8,7 @@
  * real plugins.
  */
 import { definePlugin, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import { apiKeyCredentialFixture } from '@vaubaan/plugin-sdk/testing';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { RiskCatalog } from '@vaubaan/shared';
 
@@ -123,7 +124,7 @@ export function fakePlugin(): ProviderPlugin {
       ],
     },
     catalog: FAKE_CATALOG,
-    credential: { kind: 'api-key', fields: [{ name: 'api_key', label: 'API key', secret: true }] },
+    credential: apiKeyCredentialFixture([{ name: 'api_key', label: 'API key', secret: true }]),
     classify(_tool, args, resources) {
       const space =
         typeof args.space === 'string'

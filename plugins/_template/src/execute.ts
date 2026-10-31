@@ -111,7 +111,8 @@ function isWorkspaceDto(x: unknown): x is WorkspaceDto {
   return 'id' in x && typeof x.id === 'string' && 'name' in x && typeof x.name === 'string';
 }
 
-async function request(
+/** One call to the provider with the connection's key ; a failure is thrown, typed. */
+export async function request(
   ctx: ConnectionContext,
   method: string,
   path: string,

@@ -467,7 +467,7 @@ The rules the template already applies and a plugin must keep:
   tool declares, and writes again or drops before the call leaves — the
   project or the team a mission pins. Nothing else belongs there.
 
-## Step 5 — Credential (`credential` in `src/index.ts`)
+## Step 5 — Credential (`src/credential.ts`)
 
 You declare **how** a connection is obtained; the gateway runs the flow,
 stores the result encrypted and hands the decrypted secret to `execute` for
@@ -481,31 +481,38 @@ of one of three kinds:
 
 | Kind      | When                                         | You declare                                                                                                                                      | `execute` receives                                           |
 | --------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `createUrl?`                                                                                             | `{ fields, metadata }`                                       |
+| `api-key` | The user pastes a key or token.              | `fields` (at least one `secret: true`), `label`, `createUrl`, `guide`, `verify` — in `src/credential.ts`                                         | `{ fields, metadata }`                                       |
 | `oauth2`  | The user consents on the provider's page.    | `authorizationUrl`, `tokenUrl`, `clientRegistration`, `scopes`, `pkce`, `clientAuthMethod`, `refreshable`… — or `broker: { provider }`, `scopes` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }` |
 | `ssh-key` | The gateway generates a key pair for a host. | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                              | `{ privateKeyPem, publicKey, fields, metadata }`             |
 
-**`api-key`** (the template):
+**`api-key`: the guide is part of the contract.** `definePlugin` refuses an
+`api-key` way without these parts, and the structural test
+`apps/gateway/tests/unit/structural/token-guides.test.ts` holds every shipped
+one to them (ADR
+[one-place-to-authorize-services-token-first](../docs/decisions/one-place-to-authorize-services-token-first.md),
+amended 2026-10-31). The template's
+[`src/credential.ts`](./_template/src/credential.ts) has each part, commented:
 
-```ts
-credential: {
-  kind: 'api-key',
-  createUrl: 'https://acme.example/settings/api-keys', // where the user creates the key
-  fields: [
-    {
-      name: API_KEY_FIELD, // read back in execute.ts through the same constant
-      label: 'API key',
-      secret: true, // masked in the form, never logged
-      required: true,
-      pattern: '^[A-Za-z0-9_-]{8,}$', // checked by the gateway before any call
-      help: 'Create a key limited to the workspaces the agent may touch.',
-    },
-  ],
-},
-```
+| Part                | What it says                                                                                                                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`             | What the person creates, in the provider's words, lower case (`fine-grained personal access token`).                                                                                                     |
+| `createUrl`         | The token page itself, not the dashboard: one visit.                                                                                                                                                     |
+| `guide.steps`       | `GuideStep { do, url?, code? }`: one imperative sentence each, in order, the last one at the paste. A page to open goes in `url`, a command to type in `code` (the page renders it copyable).            |
+| `guide.reach`       | `{ what, grant, why }`: what the token reaches, in the provider's words; the **widest** grant there (`All repositories`, `All zones`, `Full access`); why that is safe: each mission narrows it.         |
+| `guide.permissions` | The permissions to tick, as the provider's page names them, each with the tools it serves (every tool served by one); empty when the token carries no choice, and `reach` says what it opens.            |
+| `guide.expiry`      | `provider-reports` (`verify` reads it), `person-types` with `recommendedDays` (the provider never says it back), or `none` with a `reason` (how the person ends the token).                              |
+| `guide.docsUrl`     | The provider's documentation of this kind of token.                                                                                                                                                      |
+| `verify(ctx)`       | Asked before anything is stored: who the token acts as and, when the provider says it, its expiry. A cause you can name is a `CredentialRefusal` in your words; a rejected token an `UpstreamAuthError`. |
 
-In `help`, tell the user the narrowest key that works. The gateway restricts
-what an agent does with the key; it cannot restrict the key itself.
+Ask for the widest grant the provider offers for what the account connects,
+and say why: the person grants once, and the gateway narrows what each
+mission may do, call by call. A guide that asks for the narrowest key sends
+the person back to the provider each time a mission needs a little more.
+Never ask the person to create an integration, an OAuth app or a service
+account when a key pasted once does the job. Write the guide from the
+provider's documentation (Context7), never from memory. The worked example is
+[`plugins/github/src/credential.ts`](./github/src/credential.ts), with its
+permissions in [`permissions.ts`](./github/src/permissions.ts).
 
 **`oauth2`.** Only for a provider that offers no key a person can make,
 **and** that accepts dynamic client registration (RFC 7591): declare its
@@ -527,16 +534,6 @@ protocol a person can open with a key (Gmail: IMAP with an app password,
 gateway performs the standard `refresh_token` grant itself. Write
 `refresh()` on the plugin only when the provider's refresh is not the
 standard one.
-
-**A token with a guide** (`api-key`). Give the connect page what it shows:
-`label` (what the person creates, in the provider's words), `createUrl`,
-`guide` — the steps at the provider, the `permissions` to tick with the
-tools each serves (every tool of the plugin must be served by one;
-`definePlugin` checks), the expiry to choose — and `verify(ctx)`, asked
-before anything is stored: who the token acts as and when it expires, an
-`UpstreamAuthError` for a rejected token. The worked example is
-[`plugins/github/src/credential.ts`](./github/src/credential.ts) with its
-permissions in [`permissions.ts`](./github/src/permissions.ts).
 
 ## Step 6 — Resources (`discoverResources` in `src/execute.ts`)
 
@@ -661,7 +658,7 @@ export const acmePlugin = definePlugin({
   tools: acmeTools,
   dataModel: acmeDataModel,
   catalog: acmeCatalog.catalog,
-  credential: { … },
+  credential: acmeCredential, // src/credential.ts, step 5
   classify: classifyAcme,
   execute: executeAcme,
   discoverResources: discoverAcmeResources,

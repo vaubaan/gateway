@@ -124,7 +124,17 @@ describe('the token guide of an api-key credential', () => {
     );
   });
 
-  test('label, createUrl and verify are checked when present', () => {
+  test('a token way without its guide, label, token page or check at paste is refused', () => {
+    const bare = { kind: 'api-key', fields: TOKEN.fields } as unknown as ApiKeyCredentialSpec;
+    expect(pluginIssues(withCredential(bare))).toEqual([
+      "credential.label: expected what the person creates, in the provider's words",
+      'credential.verify: expected the check at paste, a function',
+      'credential.createUrl: expected the https URL of the token page',
+      'credential.guide: expected { steps, reach, permissions, expiry, docsUrl }',
+    ]);
+  });
+
+  test('label, createUrl and verify are checked for their shape', () => {
     const issues = pluginIssues(
       withCredential({
         ...TOKEN,
@@ -133,12 +143,10 @@ describe('the token guide of an api-key credential', () => {
         verify: 'yes',
       } as unknown as ApiKeyCredentialSpec),
     );
-    expect(issues).toEqual(
-      expect.arrayContaining([
-        'credential.label: expected a short name when present',
-        'credential.createUrl: expected an https URL when present',
-        'credential.verify: expected a function when present',
-      ]),
-    );
+    expect(issues).toEqual([
+      "credential.label: expected what the person creates, in the provider's words",
+      'credential.verify: expected the check at paste, a function',
+      'credential.createUrl: expected the https URL of the token page',
+    ]);
   });
 });

@@ -83,8 +83,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `reach { what, grant, why }` and `expiry` (`provider-reports`,
   `person-types` with `recommendedDays`, or `none` with a `reason`) in place
   of `recommendedExpiryDays`; `docsUrl` is required. `CredentialCheck` may
-  carry `granted`, the permissions the provider confirmed. The test kit
-  gains `guideText`. The GitHub, Supabase, Notion, CalDAV, Fly, Context7,
+  carry `granted`, the permissions the provider confirmed. An `api-key`
+  way without `label`, `createUrl`, `guide` or `verify` is refused by
+  `definePlugin`: the guide is part of the plugin contract, the template
+  (`@vaubaan/plugin-template` 0.1.4) ships a complete one and
+  `plugins/README.md` step 5 says what each part holds. The test kit gains
+  `guideText` and `apiKeyCredentialFixture`. The GitHub, Supabase, Notion, CalDAV, Fly, Context7,
   Railway and Gmail guides move to the new shape (`@vaubaan/plugin-github`
   4.0.5, `-supabase` 5.0.5, `-notion` 0.1.5, `-caldav` 0.1.3, `-fly` 0.3.4,
   `-context7` 0.1.5, `-railway` 5.1.4, `-gmail` 1.1.1).

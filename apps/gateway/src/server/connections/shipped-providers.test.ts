@@ -71,28 +71,26 @@ describe('shipped plugins through the generic connect driver', () => {
     for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
-  it('every shipped token way guides the person, checks the token and names what it is', () => {
-    // The guided token way (ADR one-place-to-authorize-services-token-first) : a label in
-    // the service's words, where to create it, the steps, a check at paste.
-    const guided = SHIPPED_PLUGINS.filter(
-      (plugin) => plugin.credential.kind === 'api-key' && plugin.credential.guide !== undefined,
-    );
-    expect(guided.map((plugin) => plugin.id)).toEqual(
-      expect.arrayContaining(['github', 'gmail', 'railway', 'supabase']),
-    );
-    for (const plugin of guided) {
-      const spec = plugin.credential;
-      if (spec.kind !== 'api-key') continue;
-      expect(spec.label, plugin.id).toBeTruthy();
-      expect(spec.createUrl, plugin.id).toMatch(/^https:\/\//);
-      expect(spec.guide?.steps.length, plugin.id).toBeGreaterThan(0);
-      expect(typeof spec.verify, plugin.id).toBe('function');
-      // A secret is never shown back: the token field is secret.
-      expect(
-        spec.fields.some((field) => field.secret),
-        plugin.id,
-      ).toBe(true);
-    }
+  it('every shipped token way is one of these, each held to a complete guide', () => {
+    // The guided token way (ADR one-place-to-authorize-services-token-first, amended
+    // 2026-10-31): `definePlugin` refuses an api-key way without its guide and check at
+    // paste, and `tests/unit/structural/token-guides.test.ts` holds each of these to it.
+    const tokenWays = SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind === 'api-key');
+    expect(tokenWays.map((plugin) => plugin.id).sort()).toEqual([
+      'caldav',
+      'cloudflare-dns',
+      'context7',
+      'fly',
+      'github',
+      'gmail',
+      'notion',
+      'railway',
+      'resend',
+      'stripe',
+      'supabase',
+      'upstash-redis',
+      'vercel',
+    ]);
   });
 
   it('ships one way per service: a key at once, OAuth only where no key exists', async () => {

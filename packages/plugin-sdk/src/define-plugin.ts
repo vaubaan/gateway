@@ -449,19 +449,19 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
   // The git remote's tools need permissions on a token too.
   const tools = declaredToolNames(plugin);
+  // The instructions are part of the contract (ADR
+  // one-place-to-authorize-services-token-first, amended 2026-10-31).
   if (spec.kind === 'api-key') {
-    if (spec.label !== undefined && !isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
-      issues.push(`${at}.label: expected a short name when present`);
+    if (!isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${at}.label: expected what the person creates, in the provider's words`);
     }
-    if (spec.verify !== undefined && typeof spec.verify !== 'function') {
-      issues.push(`${at}.verify: expected a function when present`);
+    if (typeof spec.verify !== 'function') {
+      issues.push(`${at}.verify: expected the check at paste, a function`);
     }
-    if (spec.createUrl !== undefined && !isHttpsUrl(spec.createUrl)) {
-      issues.push(`${at}.createUrl: expected an https URL when present`);
+    if (!isHttpsUrl(spec.createUrl)) {
+      issues.push(`${at}.createUrl: expected the https URL of the token page`);
     }
-    if (spec.guide !== undefined) {
-      issues.push(...guideIssues(spec.guide, tools, `${at}.guide`));
-    }
+    issues.push(...guideIssues(spec.guide, tools, `${at}.guide`));
   }
   return issues;
 }

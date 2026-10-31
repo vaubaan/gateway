@@ -14,10 +14,11 @@
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyTemplate } from './classify.ts';
+import { templateCredential } from './credential.ts';
 import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
 import { _TEMPLATE_ICON, _TEMPLATE_ICON_COLOR } from './icon.ts';
-import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
+import { PROVIDER_ID } from './identity.ts';
 import { templateTools, templateToolTitles } from './tools.ts';
 
 // `catalogPathNextTo` builds a filesystem path from `import.meta.url` ; never
@@ -32,7 +33,7 @@ export const templatePlugin = definePlugin({
   icon: _TEMPLATE_ICON,
   iconColor: _TEMPLATE_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.1.3',
+  version: '0.1.4',
   description: 'Scaffold plugin. Copy it to start a real one.',
   // The paragraph of the provider reference (`/providers/<id>`), in plain words: what one
   // connection is, what one resource is, where the environment of a call comes from.
@@ -52,24 +53,8 @@ export const templatePlugin = definePlugin({
   // form with one secret field) ; the plugin writes no route and never reads
   // the environment. The other kinds — `oauth2` (only where the provider has
   // no token a person can make), `ssh-key` — are in plugins/README.md, step 5.
-  credential: {
-    kind: 'api-key',
-    // Where the user creates the key ; shown as a link next to the form.
-    createUrl: 'https://example.com/settings/api-keys',
-    fields: [
-      {
-        name: API_KEY_FIELD,
-        label: 'API key',
-        secret: true,
-        required: true,
-        placeholder: 'Template API key',
-        // Checked by the host before any call : a value that cannot be a key
-        // of this provider is refused at the form.
-        pattern: '^[A-Za-z0-9_-]{8,}$',
-        help: 'Create a key with read and write access to the workspaces you want to connect.',
-      },
-    ],
-  },
+  // An `api-key` way carries its guide and its check at paste (`credential.ts`).
+  credential: templateCredential,
   classify: classifyTemplate,
   // The environment of a `template` call is the owner's label on the
   // workspace resource, so no `envOf` hook is needed. A provider whose data
@@ -85,5 +70,11 @@ export default templatePlugin;
 
 export { classifyTemplate, templateDataModel, templateTools };
 export { MALFORMED_WIDGET_ID, PATH_IDENT, pathIdent, resolveWorkspace } from './classify.ts';
+export {
+  TEMPLATE_KEYS_PAGE,
+  TEMPLATE_KEY_PERMISSIONS,
+  templateCredential,
+  verifyTemplateKey,
+} from './credential.ts';
 export { TEMPLATE_API_BASE, discoverTemplateResources, executeTemplate } from './execute.ts';
 export { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
