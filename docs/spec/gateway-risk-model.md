@@ -124,7 +124,7 @@ Six axes, each a closed scale from mildest to most severe:
 - `visibility`: `internal` · `team` · `public`
 - `persistence`: `stateless` · `session` · `posture`
 
-The vector **explains** and **orders** risks, and gives each entry its **palier** (§4.6), which only
+The vector **explains** and **orders** risks, and gives each entry its **tier** (§4.6), which only
 pre-fills a gate in the creation form. No runtime decision is derived from it.
 
 ### 4.3 The fallback entry
@@ -166,21 +166,21 @@ What a creator ticks per connection, in the connector's words
   that is neither the fallback nor deprecated belongs to **exactly one**, listed unqualified with its
   **base budget** (quota, rate limit; no gate). The gateway adds `anything-else`, holding the
   fallback. A catalog breaking this does not load.
-- **Palier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
+- **Tier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
   reversible but `pii` or `secret` data, `bulk` or `account` blast, or `unbounded` cost → 2, else 1.
 - **Trust level**, one per ticked macro-action, `prudent` by default:
 
-  | Palier | Prudent      | Confiant | Autonome |
-  | ------ | ------------ | -------- | -------- |
-  | 1      | auto         | auto     | auto     |
-  | 2      | approval     | auto     | auto     |
-  | 3      | approval     | approval | auto     |
-  | 4      | not accepted | approval | approval |
+  | Tier | Prudent      | Confiant | Autonome |
+  | ---- | ------------ | -------- | -------- |
+  | 1    | auto         | auto     | auto     |
+  | 2    | approval     | auto     | auto     |
+  | 3    | approval     | approval | auto     |
+  | 4    | not accepted | approval | approval |
 
 - The trust level multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
   ceiling (§4bis).
 - A risk whose tool hands the agent a provider token that can write is pre-filled `approval` at
-  every trust level, whatever its palier.
+  every trust level, whatever its tier.
 - A catalog ships no presets: a `presets` key does not load.
 - The result is explicit lines (§5), shown before issuance and editable one by one; the mission
   keeps the trust level per macro-action only to redraw the form.

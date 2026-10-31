@@ -4,7 +4,7 @@ import {
   trustLevelsOf,
   defaultLineOf,
   expandMacroAction,
-  highestPalier,
+  highestTier,
   knownTrustLevels,
   linesOfTrustLevels,
   macroActionsOf,
@@ -41,7 +41,7 @@ describe('macro-actions of a connection', () => {
   it('expands per environment, and sets apart what the selection or the authority cannot give', () => {
     const prodOnly = ACME_RESOURCES.filter((r) => r.env === 'prod');
     const change = expandMacroAction(acme, action('change'), 'confiant', prodOnly);
-    expect(change.lines.map((l) => [l.risk_id, l.gate, l.palier, l.quota])).toEqual([
+    expect(change.lines.map((l) => [l.risk_id, l.gate, l.tier, l.quota])).toEqual([
       ['acme[prod].write', 'approval', 3, 300],
     ]);
     expect(change.unavailable.map((r) => r.risk_id)).toEqual([
@@ -84,10 +84,10 @@ describe('macro-actions of a connection', () => {
     expect(knownTrustLevels(acme, undefined)).toEqual({});
   });
 
-  it('names the highest palier', () => {
-    expect(highestPalier(acme.risks.filter((r) => r.risk_id === 'acme.read'))).toBe(1);
-    expect(highestPalier(acme.risks)).toBe(4);
-    expect(highestPalier([])).toBeNull();
+  it('names the highest tier', () => {
+    expect(highestTier(acme.risks.filter((r) => r.risk_id === 'acme.read'))).toBe(1);
+    expect(highestTier(acme.risks)).toBe(4);
+    expect(highestTier([])).toBeNull();
   });
 
   it('says what the trust levels leave out, and why', () => {

@@ -622,7 +622,7 @@ describe('missions: issue, rotate, revoke', () => {
         provider,
       ).toBe(true);
     }
-    // Prudent on Read: the global search, of palier 2, asks first.
+    // Prudent on Read: the global search, of tier 2, asks first.
     expect(result.preview.connections[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.read-meta', 'auto'],
@@ -679,7 +679,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(fromTrustLevels.ok).toBe(true);
     const leftOut = fromTrustLevels.connections[0]?.left_out ?? [];
     expect(leftOut.length).toBeGreaterThan(0);
-    // At Confiant no palier is left out: only the environments no project carries.
+    // At Confiant no tier is left out: only the environments no project carries.
     expect(leftOut.every((s) => s.reason === 'unresolvable-env' && s.env !== 'prod')).toBe(true);
     expect(leftOut.map((s) => s.risk_id)).toContain('supabase[staging].bulk-row-write');
     expect(fromTrustLevels.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);

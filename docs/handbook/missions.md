@@ -49,7 +49,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 - **One connection per provider** because `mission_policy` is keyed `(mission, risk_id)` and a `RiskId` starts with its provider: two GitHub connections would share one budget. Lifting it needs the connection in the policy and counter keys.
 - **The environment label is the effective one** — the resource's own, else the connection's `default_env` — applied by the repository on read; changing a default relabels every resource inheriting it.
 - **A base id of an env-scoped risk** is valid in a macro-action (expanded per environment the selection resolves) but `unknown-risk` in an explicit policy.
-- **A write-token risk asks first at every trust level** (`write_token_risks`, from the SDK's `writeHandoutRiskIds`): `expandAtTrustLevel` overrides its palier's gate.
+- **A write-token risk asks first at every trust level** (`write_token_risks`, from the SDK's `writeHandoutRiskIds`): `expandAtTrustLevel` overrides its tier's gate.
 - **Severity orders, never decides.** `SEVERITY_RANKS` restates `RISK_VECTOR_AXES` because the shared barrel is server-only; a test asserts they agree.
 - **`setGate` is single-process.** It reads the gate opening and writes the gate in two store calls; with a second process, move the decision into `MissionsRepo.setGate`'s transaction. It looks for the opening in the period running now even on an expired mission, else extending the expiry would revive it.
 - **Wiring order.** The root builds missions before the `SessionService`, so `budget` defaults to `missionUsageReader(store.sessions)` — the same function, not a copy.

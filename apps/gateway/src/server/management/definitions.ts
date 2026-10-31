@@ -144,7 +144,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     title: 'Get a provider’s risk catalog',
     kind: 'read',
     description: [
-      'Returns the risk catalog of one provider as explicit RiskIds — label, reason, severity level, palier, environment, macro-action —, its `macro_actions` with every risk and its base budget, and `trust_levels`: per trust level, the gate each palier gets (`null`: left out) and the factor on the base budget.',
+      'Returns the risk catalog of one provider as explicit RiskIds — label, reason, severity level, tier, environment, macro-action —, its `macro_actions` with every risk and its base budget, and `trust_levels`: per trust level, the gate each tier gets (`null`: left out) and the factor on the base budget.',
       'A policy accepts ids from this list only, written exactly as shown; an id qualified with an environment (`provider[staging].x`) is a different id from the same risk in another environment.',
       'Pass `connection_id` to have each id flagged `in_my_authority` for that connection.',
       'With `connection_id`, `everything_i_hold` is the built-in expansion written out for that connection, entry by entry.',

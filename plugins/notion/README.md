@@ -27,7 +27,7 @@ root[<root id>]                  the resource: a top-level page or database shar
 ```
 
 No entity is `envScopable`: Notion has no environments, and no risk is
-env-scoped. Destructive operations are gated by their palier instead.
+env-scoped. Destructive operations are gated by their tier instead.
 
 ## Credential and resources
 

@@ -130,9 +130,9 @@ export {
   expandMacroAction,
   macroActionOfRisk,
   macroActionsOf,
-  palierOf,
+  tierOf,
   TRUST_TRUST_LEVELS,
-  type Palier,
+  type Tier,
   type TrustLevel,
 } from './macro-actions';
 export { createMissionHandlers, type MissionHandlers } from './handlers';

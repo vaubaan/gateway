@@ -47,7 +47,7 @@ const trustLevelYield = z.looseObject({
   left_out: z.number(),
 });
 
-/** Per palier `1`…`4`: `auto`, `approval`, or `null` (left out); and the factor on the base budget. */
+/** Per tier `1`…`4`: `auto`, `approval`, or `null` (left out); and the factor on the base budget. */
 const trustLevelRule = z.looseObject({
   gates: z.looseObject({
     '1': z.string().nullable(),
@@ -147,7 +147,7 @@ const catalogAnswer = z.looseObject({
       label: z.string(),
       reason: z.string(),
       level: z.string().describe('`low`, `medium`, `high` or `critical`.'),
-      palier: z.number().describe('1 mild to 4 irreversible: what a trust level maps to a gate.'),
+      tier: z.number().describe('1 mild to 4 irreversible: what a trust level maps to a gate.'),
       macro_action: z
         .string()
         .nullable()
@@ -168,7 +168,7 @@ const catalogAnswer = z.looseObject({
   ),
   trust_levels: z
     .looseObject({ prudent: trustLevelRule, confiant: trustLevelRule, autonome: trustLevelRule })
-    .describe('Per trust level: the gate of each palier and the factor on the base budget.'),
+    .describe('Per trust level: the gate of each tier and the factor on the base budget.'),
   everything_i_hold: z
     .looseObject({ label: z.string(), entries: z.array(policyLine) })
     .optional()

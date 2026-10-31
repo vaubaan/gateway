@@ -9,7 +9,7 @@ import {
   applyTrustLevels,
   applyEverything,
   availableCount,
-  chosenPalier,
+  chosenTier,
   clearAll,
   defaultEntryFor,
   describeEverything,
@@ -145,9 +145,9 @@ describe('creation form — macro-actions at a trust level', () => {
   it('fills the lines of each ticked macro-action from its trust level, and the draft is issuable', () => {
     const cs = included(WORKING);
     expect(cs.entries).toEqual({
-      // Palier 1 at Confiant: runs freely, base budget ×3.
+      // Tier 1 at Confiant: runs freely, base budget ×3.
       'acme.read': { quota: '300', rateMax: '180', rateWindow: '60', gate: 'auto' },
-      // Palier 3 (costly) at Prudent: asks first, base budget.
+      // Tier 3 (costly) at Prudent: asks first, base budget.
       'acme[staging].write': { quota: '100', rateMax: '60', rateWindow: '60', gate: 'approval' },
       'acme[prod].write': { quota: '100', rateMax: '60', rateWindow: '60', gate: 'approval' },
     });
@@ -221,11 +221,11 @@ describe('creation form — macro-actions at a trust level', () => {
     expect(none.connections[0]).not.toHaveProperty('trust_levels');
   });
 
-  it('counts the policy and names its highest palier', () => {
+  it('counts the policy and names its highest tier', () => {
     expect(policyCounts(acme, included(WORKING))).toEqual({ free: 1, asks: 2, notIncluded: 2 });
-    expect(chosenPalier(acme, included(WORKING))).toBe(3);
-    expect(chosenPalier(acme, included({ read: 'prudent' }))).toBe(1);
-    expect(chosenPalier(acme, included())).toBeNull();
+    expect(chosenTier(acme, included(WORKING))).toBe(3);
+    expect(chosenTier(acme, included({ read: 'prudent' }))).toBe(1);
+    expect(chosenTier(acme, included())).toBeNull();
   });
 });
 

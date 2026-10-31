@@ -710,7 +710,7 @@ expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave
 **Test a mission the way a creator composes it.** `policyFromMacroActions`
 writes the explicit lines of ticked macro-actions at their trust levels, for the
 environments given, with the policy engine's own rules (gate from the
-palier, budget scaled by the trust level, a write-token handout asked first):
+tier, budget scaled by the trust level, a write-token handout asked first):
 
 ```ts
 const policy = policyFromMacroActions(

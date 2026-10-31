@@ -306,7 +306,7 @@ export interface UnresolvableEntry {
 /**
  * A risk the trust levels or `everything-i-hold` would have written that the policy
  * leaves out: outside the creator's authority, no selected resource in its
- * environment, or (`trust level`) a palier the trust level does not accept.
+ * environment, or (`trust-level`) a tier the trust level does not accept.
  */
 export interface LeftOutEntry {
   readonly risk_id: RiskId;

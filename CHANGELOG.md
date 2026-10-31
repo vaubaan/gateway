@@ -28,7 +28,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   model §4.6). Per account, the Simple view lists the service's
   macro-actions, "Anything else" included; each ticked at Prudent, Confiant
   or Autonome says what it writes here (runs freely, asks first, left out,
-  not available to you) and the account says its highest palier. The
+  not available to you) and the account says its highest tier. The
   Advanced view is the permission-by-permission editor; "Everything I hold
   on this account" stays. The mission still stores the explicit list; the
   trust levels are kept (migration 0025, `mission_connections.crans_json`) only to
@@ -39,9 +39,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   On the management door a draft connection gives `trust_levels` (macro-action →
   trust level) and the preview writes its policy, reporting what the trust levels leave
   out in `left_out` (outside the authority, no resource in the environment,
-  or a palier the trust level does not accept). `list_my_connections` says what
+  or a tier the trust level does not accept). `list_my_connections` says what
   each macro-action yields at each trust level (`at_trust_level`) and `get_catalog` gives
-  each risk's palier and macro-action, the macro-actions with their base
+  each risk's tier and macro-action, the macro-actions with their base
   budgets and the trust level table. "Give access" ticks a macro-action's
   permissions in one click; the Reference compares every permission across
   the three trust levels. A risk whose tool hands the agent a token that can write
@@ -94,7 +94,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Ship, Administer…), each risk listed once with a base budget. A catalog
   without them, or with a live risk in none or in two, no longer loads. The
   policy engine gains the trust levels (Prudent, Confiant, Autonome) that turn
-  a macro-action into explicit lines: the gate follows the risk's palier, read
+  a macro-action into explicit lines: the gate follows the risk's tier, read
   from its vector, and the budget is multiplied ×1, ×3 or ×10. Every shipped
   plugin gains a patch version and a `catalog_version`.
 - **The OAuth broker logs why a redeem was refused** (`@vaubaan/oauth-broker`

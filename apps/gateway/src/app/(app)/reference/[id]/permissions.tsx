@@ -2,7 +2,7 @@
  * The permissions of a service against the trust levels: first the
  * macro-actions a mission ticks, then one row per catalog entry — what it
  * allows in words, its id in mono, its macro-action, one line on why it
- * matters, its severity and palier — and one column per trust level with the gate
+ * matters, its severity and tier — and one column per trust level with the gate
  * and limit that trust level writes, or "left out". The difference between two trust levels
  * is read along a row; "why?" unfolds the entry: the whole reason, the six
  * words behind the severity, what it covers, its tools, and its line at each
@@ -21,7 +21,7 @@ import {
   formatNumber,
   gateWordOf,
   GATE_WORDS,
-  palierWord,
+  tierWord,
   PERMISSION_KINDS,
   REFERENCE_WORDS,
   SEVERITY_LABEL,
@@ -355,7 +355,7 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
               {entry.macro_action.label}
               <ul className={styles.patterns}>
                 {TRUST_TRUST_LEVELS.flatMap((trustLevel) =>
-                  entry.at_trust_level[trustLevel].map(({ risk, palier, line }) => (
+                  entry.at_trust_level[trustLevel].map(({ risk, tier, line }) => (
                     <li key={`${trustLevel}:${risk.risk_id}`}>
                       {TRUST_LEVEL_LABELS[trustLevel]}
                       {risk.env && (
@@ -364,7 +364,7 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
                           <EnvTag env={risk.env} />
                         </>
                       )}{' '}
-                      ({palierWord(palier)}):{' '}
+                      ({tierWord(tier)}):{' '}
                       {line === null
                         ? REFERENCE_WORDS.leftOut
                         : `${formatNumber(line.quota)} per period, ${formatRate(line.rate_limit)}, ${

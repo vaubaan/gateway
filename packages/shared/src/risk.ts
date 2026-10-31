@@ -153,7 +153,7 @@ export interface RiskEntry {
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
   /** 6D vector explaining the risk's profile. Drives UI ordering, audit
-   *  explainability and the palier a trust level pre-fills a gate from
+   *  explainability and the tier a trust level pre-fills a gate from
    *  (ADR macro-actions-and-trust-levels-prefill-the-policy) ; the runtime
    *  derives no decision from it.
    *  When `vector_overrides` is present this is the default (non-prod)

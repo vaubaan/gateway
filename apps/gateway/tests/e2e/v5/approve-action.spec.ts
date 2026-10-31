@@ -4,7 +4,7 @@
  * §4.2 "Request inbox").
  *
  * The mission is composed from the GitHub plugin's macro-actions as they ship:
- * Administer at Prudent gates writing a workflow file (palier 3) `approval`, at
+ * Administer at Prudent gates writing a workflow file (tier 3) `approval`, at
  * its base budget of 50; Propose at Confiant runs the feature-branch write
  * freely, at three times its base budget of 500. The
  * executor is an MCP client holding the mission token; its calls go over HTTP

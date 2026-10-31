@@ -7,7 +7,7 @@
 # under `board[<ref>]`, the mission resource ; a new board (`board.W`) and
 # Miro's format guides (`format-guide.R`) name none. No risk is env-scoped :
 # a Miro board has no environment (product owner, 2026-10-16) ; deletions are
-# held by the gate the trust level gives their palier instead.
+# held by the gate the trust level gives their tier instead.
 #
 # Writes are layered. `content-write` matches every write under a board (the
 # `[**]` patterns are recursive) ; a deletion also touches `item-delete` or

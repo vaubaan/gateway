@@ -176,9 +176,9 @@ describe('the reference of the shipped plugins', () => {
             if (cell.line) expect(cell.line.quota).toBeGreaterThan(0);
           }
         }
-        // Prudent leaves out palier 4 and nothing else.
+        // Prudent leaves out tier 4 and nothing else.
         for (const cell of entry.at_trust_level.prudent) {
-          expect(cell.line === null).toBe(cell.palier === 4);
+          expect(cell.line === null).toBe(cell.tier === 4);
         }
       }
       // The fallback is in "Anything else", last.
@@ -252,7 +252,7 @@ describe('the reference of the shipped plugins', () => {
       declared_tools: [],
       macro_action: null,
     });
-    // Force-push is costly (palier 3): it asks first until Autonome.
+    // Force-push is costly (tier 3): it asks first until Autonome.
     expect(
       Object.values(byId.get('github.force-push')?.at_trust_level ?? {}).map(
         (cells) => cells[0]?.line?.gate,

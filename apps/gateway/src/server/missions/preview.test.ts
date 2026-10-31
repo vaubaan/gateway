@@ -490,7 +490,7 @@ describe('previewDraft — budget is mandatory', () => {
 });
 
 describe('previewDraft — macro-actions at a trust level', () => {
-  it('writes the explicit lines of the ticked macro-actions, gate from the palier, budget from the trust level', () => {
+  it('writes the explicit lines of the ticked macro-actions, gate from the tier, budget from the trust level', () => {
     const p = preview([
       { connection_id: 'conn-acme', trust_levels: { read: 'prudent', change: 'confiant' } },
     ]);

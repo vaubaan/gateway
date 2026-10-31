@@ -144,7 +144,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   const digest = page.getByTestId('policy-digest-github');
   await expect(digest).toContainText('run freely');
   await expect(digest).toContainText('ask you first');
-  await expect(digest).toContainText(/highest palier P[1-4]/);
+  await expect(digest).toContainText(/highest tier [1-4]/);
 
   // Compact by default: the Simple view, no permission listed one by one, about a screen
   // per account, and the one action in view without scrolling.
@@ -589,7 +589,7 @@ test('the reference explains each service: permissions against the trust levels,
     'Autonome',
   ]);
   await expect(page.getByTestId('trust-level-prudent')).toHaveAttribute('title', /left out/);
-  // A costly write (palier 3): asks first until Autonome, its limit ×1, ×3, ×10.
+  // A costly write (tier 3): asks first until Autonome, its limit ×1, ×3, ×10.
   const bulkCell = (trustLevel: string) =>
     page.getByTestId(`cell-${trustLevel}-supabase.bulk-row-write`);
   await expect(bulkCell('prudent')).toContainText('staging');
@@ -598,7 +598,7 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(bulkCell('confiant')).toContainText('150');
   await expect(bulkCell('autonome')).toContainText('500');
   await expect(bulkCell('autonome')).not.toContainText('asks first');
-  // An irreversible one (palier 4): left out at Prudent, asks first above.
+  // An irreversible one (tier 4): left out at Prudent, asks first above.
   await expect(page.getByTestId('cell-prudent-supabase.storage.bulk-object-write')).toContainText(
     'left out',
   );
@@ -680,7 +680,7 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(unfolded).toContainText('Change data');
   await expect(unfolded).toContainText('Prudent');
   await expect(unfolded).toContainText('Autonome');
-  await expect(unfolded).toContainText('Palier 3');
+  await expect(unfolded).toContainText('Tier 3');
   await expect(unfolded).toContainText(/\d+\/min/);
   // The reader was on `auth`, which does not show this entry: its own part was opened.
   await expect(planes.getByRole('button', { name: 'db' })).toHaveAttribute('aria-pressed', 'true');

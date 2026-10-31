@@ -62,7 +62,7 @@ describe('policyFromMacroActions', () => {
     );
   });
 
-  test('a write-token handout asks first at every trust level ; a read-only one follows its palier', () => {
+  test('a write-token handout asks first at every trust level ; a read-only one follows its tier', () => {
     const [tool] = acmePlugin.tools;
     const handing = (
       readOnlyRiskIds?: string[],

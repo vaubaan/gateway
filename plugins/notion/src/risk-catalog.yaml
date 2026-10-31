@@ -3,7 +3,7 @@
 # Handbook : docs/handbook/providers/notion.md.
 #
 # No risk is env-scoped (product owner, 2026-10-16) : the destructive
-# operations are gated by their palier instead. Write patterns do not
+# operations are gated by their tier instead. Write patterns do not
 # overlap : each write slice touches exactly one named risk, except the
 # trash of the root page itself, which emits two slices (`page-trash` and
 # `root-trash`).

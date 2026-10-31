@@ -11,7 +11,7 @@
  * - **Advanced**: every permission with its own limit and gate (the caller's
  *   `advanced` element, `CustomEditor`).
  *
- * Under both, the policy as it stands, counted, with its highest palier, and
+ * Under both, the policy as it stands, counted, with its highest tier, and
  * "Everything I hold on this account". Whatever is chosen, the mission
  * stores the explicit list; the trust levels only redraw this panel.
  */
@@ -28,7 +28,7 @@ import type { IssuanceConnection } from '@/server/missions/model';
 
 import styles from '../missions.module.css';
 import {
-  chosenPalier,
+  chosenTier,
   describeEverything,
   explainEverything,
   macroActionRows,
@@ -68,7 +68,7 @@ export function MacroActionPanel({
   const base = `view-${connection.id}`;
   const counts = policyCounts(connection, state);
   const total = counts.free + counts.asks;
-  const palier = chosenPalier(connection, state);
+  const tier = chosenTier(connection, state);
   const everything = state.everything
     ? describeEverything(connection, explainEverything(connection, state))
     : null;
@@ -129,13 +129,13 @@ export function MacroActionPanel({
         <GateMark gate={counts.asks === 0 ? 'off' : 'ask'}>
           {counts.asks} {counts.asks === 1 ? 'asks' : 'ask'} you first
         </GateMark>
-        {palier !== null && (
+        {tier !== null && (
           <span
-            className={styles.palier}
-            data-palier={palier}
-            title="Highest palier: 1 mild, 4 irreversible"
+            className={styles.tier}
+            data-tier={tier}
+            title="Highest tier: 1 mild, 4 irreversible"
           >
-            highest palier P{palier}
+            highest tier {tier}
           </span>
         )}
         {state.everything ? null : (

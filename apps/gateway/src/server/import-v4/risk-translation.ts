@@ -21,7 +21,7 @@
  *
  * Each kept id takes its budget and gate from its macro-action at the trust level
  * Confiant (`IMPORT_TRUST_LEVEL`; the interface's rule for a hand-ticked risk,
- * `defaultLineOf`): base budget ×3, gate from its palier. An id in no
+ * `defaultLineOf`): base budget ×3, gate from its tier. An id in no
  * macro-action has no budget to take: dropped and reported, since a quota is
  * never invented — unless the
  * operator asks for it with `carryUnbudgeted` (`--carry-unbudgeted <quota>`,
@@ -231,7 +231,7 @@ function targetsOf(
   return { risks: reachable, expanded: true };
 }
 
-/** The line of a risk: its macro-action's base budget at `IMPORT_TRUST_LEVEL`, gate from its palier. */
+/** The line of a risk: its macro-action's base budget at `IMPORT_TRUST_LEVEL`, gate from its tier. */
 function importLineFor(
   connection: TranslatableConnection,
   risk: CatalogRisk,

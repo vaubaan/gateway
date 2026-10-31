@@ -642,9 +642,9 @@ export const ENVIRONMENT_WORDS = {
   none: 'none: every permission is held once',
 } as const;
 
-/** "Palier 3" — the palier of a permission, 1 mild to 4 irreversible. */
-export function palierWord(palier: number): string {
-  return `Palier ${palier}`;
+/** "Tier 3" — the tier of a permission, 1 mild to 4 irreversible. */
+export function tierWord(tier: number): string {
+  return `Tier ${tier}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

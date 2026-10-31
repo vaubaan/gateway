@@ -17,11 +17,11 @@ import {
   expandAtTrustLevel,
   isFallbackEntry,
   isTrustLevel,
-  palierOf,
+  tierOf,
   TRUST_TRUST_LEVELS,
   type TrustLevelCandidate,
   type TrustLevelLine,
-  type Palier,
+  type Tier,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
 import type { Gate, MacroAction, RiskCatalog, RiskId } from '@vaubaan/shared';
@@ -70,8 +70,8 @@ export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {
 /** One macro-action at one trust level, on this connection with these resources. */
 export interface MacroActionExpansion {
   readonly lines: readonly TrustLevelLine[];
-  /** Risks the trust level leaves out (palier 4 at Prudent). */
-  readonly left_out: readonly { readonly risk_id: RiskId; readonly palier: Palier }[];
+  /** Risks the trust level leaves out (tier 4 at Prudent). */
+  readonly left_out: readonly { readonly risk_id: RiskId; readonly tier: Tier }[];
   /** Rows of the macro-action this creator cannot get here: outside the authority, or no resource carries the environment. */
   readonly unavailable: readonly CatalogRisk[];
 }
@@ -183,7 +183,7 @@ export function macroActionOfRisk(
 /**
  * The line a risk ticked by hand starts with: its macro-action's base budget
  * at the trust level that macro-action has (Prudent when it is not ticked), and the
- * gate that trust level gives its palier; a risk the trust level leaves out asks first.
+ * gate that trust level gives its tier; a risk the trust level leaves out asks first.
  * `null` for a risk in no macro-action.
  */
 export function defaultLineOf(
@@ -236,12 +236,12 @@ export function trustLevelsOf(
   );
 }
 
-/** The highest palier among lines, or `null` for none. */
-export function highestPalier(lines: readonly Pick<CatalogRisk, 'vector'>[]): Palier | null {
-  let highest: Palier | null = null;
+/** The highest tier among lines, or `null` for none. */
+export function highestTier(lines: readonly Pick<CatalogRisk, 'vector'>[]): Tier | null {
+  let highest: Tier | null = null;
   for (const line of lines) {
-    const palier = palierOf(line.vector);
-    if (highest === null || palier > highest) highest = palier;
+    const tier = tierOf(line.vector);
+    if (highest === null || tier > highest) highest = tier;
   }
   return highest;
 }
@@ -250,7 +250,7 @@ export {
   TRUST_LEVEL_BUDGET_FACTOR,
   TRUST_LEVEL_GATES,
   DEFAULT_TRUST_LEVEL,
-  palierOf,
+  tierOf,
   TRUST_TRUST_LEVELS,
 };
-export type { Palier, TrustLevel };
+export type { Tier, TrustLevel };

@@ -8,20 +8,20 @@
  *
  * The vector pre-fills, it never decides : the lines this module writes are
  * shown, editable, and stored as the explicit list ; the runtime never reads
- * a palier or a trust level.
+ * a tier or a trust level.
  */
 
 import type { Budget, Gate, RateLimit, RiskId, RiskVector } from '@vaubaan/shared';
 
-/** The four paliers, from the mildest. */
-export type Palier = 1 | 2 | 3 | 4;
+/** The four tiers, from the mildest. */
+export type Tier = 1 | 2 | 3 | 4;
 
 /**
  * "Consequence and sensitivity" : irreversible → 4, costly → 3, reversible
  * but touching pii or secrets, reaching a whole account or many items, or of
  * unbounded cost → 2, else 1.
  */
-export function palierOf(vector: RiskVector): Palier {
+export function tierOf(vector: RiskVector): Tier {
   if (vector.reversibility === 'irreversible') return 4;
   if (vector.reversibility === 'costly') return 3;
   if (
@@ -46,14 +46,13 @@ export function isTrustLevel(raw: unknown): raw is TrustLevel {
   return typeof raw === 'string' && (TRUST_TRUST_LEVELS as readonly string[]).includes(raw);
 }
 
-/** Per trust level and palier : the gate of the line, or `null` when the risk is not accepted. */
-export const TRUST_LEVEL_GATES: Readonly<
-  Record<TrustLevel, Readonly<Record<Palier, Gate | null>>>
-> = {
-  prudent: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
-  confiant: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
-  autonome: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
-};
+/** Per trust level and tier : the gate of the line, or `null` when the risk is not accepted. */
+export const TRUST_LEVEL_GATES: Readonly<Record<TrustLevel, Readonly<Record<Tier, Gate | null>>>> =
+  {
+    prudent: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
+    confiant: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
+    autonome: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
+  };
 
 /** What the trust level multiplies the base budget by (quota and rate). */
 export const TRUST_LEVEL_BUDGET_FACTOR: Readonly<Record<TrustLevel, number>> = {
@@ -109,17 +108,17 @@ export interface TrustLevelCandidate {
   readonly hands_write_token?: boolean;
 }
 
-/** A policy line a trust level wrote, with the palier that chose its gate. */
+/** A policy line a trust level wrote, with the tier that chose its gate. */
 export interface TrustLevelLine extends Budget {
   readonly risk_id: RiskId;
   readonly gate: Gate;
-  readonly palier: Palier;
+  readonly tier: Tier;
 }
 
 /** What a macro-action at a trust level yields : the lines, and the risks it leaves out. */
 export interface TrustLevelExpansion {
   readonly lines: readonly TrustLevelLine[];
-  readonly left_out: readonly { readonly risk_id: RiskId; readonly palier: Palier }[];
+  readonly left_out: readonly { readonly risk_id: RiskId; readonly tier: Tier }[];
 }
 
 /** The explicit lines of one macro-action at one trust level. */
@@ -128,18 +127,18 @@ export function expandAtTrustLevel(
   trustLevel: TrustLevel,
 ): TrustLevelExpansion {
   const lines: TrustLevelLine[] = [];
-  const leftOut: { risk_id: RiskId; palier: Palier }[] = [];
+  const leftOut: { risk_id: RiskId; tier: Tier }[] = [];
   for (const candidate of candidates) {
-    const palier = palierOf(candidate.vector);
-    const gate = TRUST_LEVEL_GATES[trustLevel][palier];
+    const tier = tierOf(candidate.vector);
+    const gate = TRUST_LEVEL_GATES[trustLevel][tier];
     if (gate === null) {
-      leftOut.push({ risk_id: candidate.risk_id, palier });
+      leftOut.push({ risk_id: candidate.risk_id, tier });
       continue;
     }
     lines.push({
       risk_id: candidate.risk_id,
       gate: candidate.hands_write_token === true ? 'approval' : gate,
-      palier,
+      tier,
       ...budgetAtTrustLevel(candidate.base, trustLevel, candidate.rate_ceiling_per_minute),
     });
   }
