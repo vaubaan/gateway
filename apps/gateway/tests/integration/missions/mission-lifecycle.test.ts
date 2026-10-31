@@ -15,7 +15,7 @@ import { loadMissionContext } from '../../../src/server/execution/mission-contex
 import {
   macroActionsOf,
   MissionService,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type MissionDraft,
 } from '../../../src/server/missions';
 import { catalogEnvs, seedConnection } from '../../../src/server/missions/testing';
@@ -1030,7 +1030,7 @@ describe('missions: issuance context', () => {
       );
       const known = new Set(issuance?.risks.map((r) => r.risk_id));
       for (const action of issuance?.macro_actions ?? []) {
-        for (const trustLevel of TRUST_TRUST_LEVELS) {
+        for (const trustLevel of TRUST_LEVELS) {
           const where = `${provider}/${action.id}@${trustLevel}`;
           const preview = await service.preview(seeded.bob, {
             name: where,

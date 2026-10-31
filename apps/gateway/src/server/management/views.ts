@@ -31,7 +31,7 @@ import {
   isResolvable,
   macroActionOfRisk,
   tierOf,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type DraftPeriod,
   type IssuanceConnection,
   type MissionDetail,
@@ -285,7 +285,7 @@ function trustLevelRules(): Record<TrustLevel, TrustLevelRuleView> {
     budget_factor: TRUST_LEVEL_BUDGET_FACTOR[trustLevel],
   });
   return Object.fromEntries(
-    TRUST_TRUST_LEVELS.map((trustLevel) => [trustLevel, rule(trustLevel)]),
+    TRUST_LEVELS.map((trustLevel) => [trustLevel, rule(trustLevel)]),
   ) as Record<TrustLevel, TrustLevelRuleView>;
 }
 

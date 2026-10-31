@@ -18,7 +18,7 @@ import {
   isFallbackEntry,
   isTrustLevel,
   tierOf,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type TrustLevelCandidate,
   type TrustLevelLine,
   type Tier,
@@ -246,11 +246,5 @@ export function highestTier(lines: readonly Pick<CatalogRisk, 'vector'>[]): Tier
   return highest;
 }
 
-export {
-  TRUST_LEVEL_BUDGET_FACTOR,
-  TRUST_LEVEL_GATES,
-  DEFAULT_TRUST_LEVEL,
-  tierOf,
-  TRUST_TRUST_LEVELS,
-};
+export { TRUST_LEVEL_BUDGET_FACTOR, TRUST_LEVEL_GATES, DEFAULT_TRUST_LEVEL, tierOf, TRUST_LEVELS };
 export type { Tier, TrustLevel };
