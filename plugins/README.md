@@ -134,8 +134,10 @@ dependencies; ignore it, and do not run `npm audit fix`, which would rewrite
 the lockfile.
 
 In the code, never write the provider id or a tool name as a string literal
-outside `identity.ts` and the YAML: every other file imports `PROVIDER_ID`
-and `TOOL`. (The id also appears, later, in your two documents and in the
+outside `identity.ts`, `tools.ts` and the YAML: every other file imports
+`PROVIDER_ID` and `TOOL`, and keys its tables with `[TOOL.x]`
+(`plugin-names-declared-once.test.ts` refuses such a literal, with its file
+and line). (The id also appears, later, in your two documents and in the
 registration of step 10.)
 
 ## Step 2 — Data model (`src/data-model.ts`)

@@ -217,6 +217,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugin-names-declared-once',
+    statement:
+      'A plugin writes its provider id and its tool names once, in src/identity.ts (and declares its tools in src/tools.ts); no other source file writes a tool name or the provider id as a literal.',
+    source: 'plugins/README.md step 1 and step 4',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-names-declared-once.test.ts`,
+        tests: [
+          'writes no tool name and no provider id outside identity.ts and tools.ts',
+          'every literal of another meaning is still in its file',
+        ],
+      },
+    ],
+  },
+  {
     id: 'catalogs-on-their-data-model',
     statement:
       "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only. Known gaps are pinned and only shrink.",
