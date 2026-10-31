@@ -4,29 +4,22 @@
  * pattern of every shipped catalog walks the plugin's own data model
  * (`catalogPathIssues`). A pattern off the model matches nothing, silently.
  *
- * The gaps found when the check was written are pinned below, exactly: they
- * are modelling decisions for their plugin, not typos. A new gap fails, and
- * so does a pinned one that was closed, so the table only shrinks; once it is
- * empty, the check moves into `definePlugin`.
+ * No shipped catalog has a gap any more (GitHub's `search.*` patterns walk
+ * the `search` plane it now declares). The check is meant to move into
+ * `definePlugin`; one test fixture of the gateway (`depot`, in
+ * `src/server/execution/testing.ts`) still names an `account` entity its
+ * model does not declare, so it is held here until that fixture is fixed.
  */
 import { catalogPathIssues } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
 
-/** Plugin id → the issues its catalog has today. */
-const KNOWN_GAPS: Readonly<Record<string, readonly string[]>> = {};
-
 describe('shipped catalogs name only paths of their data model', () => {
   it.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(
-    '%s: every live pattern walks its data model, known gaps aside',
-    (id, plugin) => {
-      expect(catalogPathIssues(plugin)).toEqual(KNOWN_GAPS[id] ?? []);
+    '%s: every live pattern walks its data model',
+    (_id, plugin) => {
+      expect(catalogPathIssues(plugin)).toEqual([]);
     },
   );
-
-  it('every plugin with a known gap is shipped', () => {
-    const shipped = new Set(SHIPPED_PLUGINS.map((plugin) => plugin.id));
-    expect(Object.keys(KNOWN_GAPS).filter((id) => !shipped.has(id))).toEqual([]);
-  });
 });

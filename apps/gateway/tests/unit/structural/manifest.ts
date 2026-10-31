@@ -250,16 +250,13 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'catalogs-on-their-data-model',
     statement:
-      "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only. Known gaps are pinned and only shrink.",
+      "Every live pattern of a shipped catalog, and every slice a plugin test samples, is a path of the plugin's own data model: rooted at a declared entity, each name a child of the one before, a virtual leaf last only.",
     source:
       'risk-model spec §2, §3; ADR plugin-contract-and-credential-spec (amendment of 2026-10-31)',
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-data-model-paths.test.ts`,
-        tests: [
-          'every live pattern walks its data model, known gaps aside',
-          'every plugin with a known gap is shipped',
-        ],
+        tests: ['every live pattern walks its data model'],
       },
       {
         file: 'packages/plugin-sdk/tests/unit/data-model-paths.test.ts',
