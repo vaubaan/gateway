@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-context7",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for Context7 — rewrap of mcp.context7.com (library documentation), API key",

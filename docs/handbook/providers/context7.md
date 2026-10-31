@@ -46,7 +46,7 @@ plugin: [providers README](README.md).
   reached. A paid plan past its included requests is billed overage, not blocked.
 - The server is stateless: no `initialize`, the key is a header on each request, the answer is an
   SSE frame. If it ever becomes stateful or changes auth, fall back to REST alone.
-- The JSON-RPC client copies Railway's (a plugin imports only the SDK).
+- The MCP client is the SDK's (`CONTEXT7_MCP_SERVER`, `session: 'never'`: the server is stateless).
 - Left out on purpose: adding libraries (sends company content) and `PATCH /v2/policies` (changes
   what every key of the teamspace reaches).
 
