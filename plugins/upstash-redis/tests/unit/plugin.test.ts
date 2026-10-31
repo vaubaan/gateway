@@ -23,6 +23,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
   resourceEnvResolver,
@@ -210,6 +211,11 @@ describe('upstash-redis plugin — structural kit', () => {
   test('every tool classifies to slices the catalog covers, every named risk is reached', () => {
     const report = assertCatalogCoverage(upstashRedisPlugin, SAMPLES, {
       resources: [cache, foreign],
+    });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(upstashRedisPlugin, SAMPLES, {
+      resources: [cache, foreign],
+      cardinalities: false,
     });
     expect(report.toolsChecked).toBe(21);
     // Every named risk is reached by at least one tool ; no sample lands on

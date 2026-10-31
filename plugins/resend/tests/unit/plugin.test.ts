@@ -19,6 +19,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
   refusalText,
@@ -179,6 +180,8 @@ describe('resend plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(resendPlugin, SAMPLES, { resources: mission });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(resendPlugin, SAMPLES, { resources: mission, cardinalities: false });
     expect(report.toolsChecked).toBe(27);
     // No documented call reaches the fallback : every write slice has a named risk.
     expect(report.fallbackHits).toEqual([]);

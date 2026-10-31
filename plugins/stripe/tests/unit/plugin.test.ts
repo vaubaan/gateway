@@ -20,6 +20,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
   refusalText,
@@ -111,6 +112,8 @@ describe('stripe plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(stripePlugin, SAMPLES, { resources: [liveRes] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(stripePlugin, SAMPLES, { resources: [liveRes], cardinalities: false });
     expect(report.toolsChecked).toBe(27);
     // Every named risk is reached ; the fallback is reachable by design only
     // and left out of `risksUntouched` ; no sample lands on it.

@@ -22,6 +22,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   guideText,
   mockFetch,
   policyFromMacroActions,
@@ -182,6 +183,8 @@ describe('gmail plugin — SDK kit', () => {
 
   test('every tool maps to slices the catalog covers', () => {
     const report = assertCatalogCoverage(gmailPlugin, SAMPLES, { resources: [mailbox] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(gmailPlugin, SAMPLES, { resources: [mailbox], cardinalities: false });
     expect(report.toolsChecked).toBe(14);
     // Untouched on purpose : the classifier refuses a draft to an external
     // recipient, and no modelled tool emits a bulk write. Every write of

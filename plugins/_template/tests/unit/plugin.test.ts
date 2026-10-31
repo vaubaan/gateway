@@ -9,6 +9,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   UpstreamProtocolError,
+  catalogPathIssues,
   catalogPathNextTo,
   parseSlice,
   serializeSlice,
@@ -21,6 +22,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
   risksTouchedBy,
@@ -67,6 +69,9 @@ describe('template plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(templatePlugin, SAMPLES, { resources: [staging] });
+    // What the classifier emits and what the catalog matches are paths of the data model.
+    assertSlicesOnDataModel(templatePlugin, SAMPLES, { resources: [staging] });
+    expect(catalogPathIssues(templatePlugin)).toEqual([]);
     // A categorized write touches its entry alone ; the fallback is reachable
     // by design and left out of `risksUntouched` (ADR fallback-risk-only-when-uncategorized).
     // Expectations are derived from the catalog : every named risk is touched.

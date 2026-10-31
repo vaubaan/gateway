@@ -24,6 +24,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   evaluateCall,
   indexCatalog,
   type MacroActionCranChoice,
@@ -161,6 +162,7 @@ describe('ssh plugin — structural kit', () => {
 
   test('the single tool classifies to slices every catalog risk covers', () => {
     const report = assertCatalogCoverage(sshPlugin, SAMPLES, { resources: [staging] });
+    assertSlicesOnDataModel(sshPlugin, SAMPLES, { resources: [staging] });
     expect(report.toolsChecked).toBe(1);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);

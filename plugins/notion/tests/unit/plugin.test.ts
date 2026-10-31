@@ -14,6 +14,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -30,6 +31,7 @@ describe('notion plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers, none by the fallback', () => {
     const report = assertCatalogCoverage(notionPlugin, SAMPLES, { resources: [pageRoot] });
+    assertSlicesOnDataModel(notionPlugin, SAMPLES, { resources: [pageRoot] });
     const named = notionCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(report.risksTouched).toEqual(named);
     expect(report.risksTouched).toHaveLength(14);

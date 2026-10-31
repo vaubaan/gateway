@@ -20,6 +20,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   mockFetch,
   policyFromMacroActions,
   refusalText,
@@ -186,6 +187,8 @@ describe('railway plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(railwayPlugin, SAMPLES, { resources: [staging] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(railwayPlugin, SAMPLES, { resources: [staging], cardinalities: false });
     expect(report.toolsChecked).toBe(14);
     // A categorized write touches its entry alone (ADR
     // fallback-risk-only-when-uncategorized) : the nine specific risks, no fallback.

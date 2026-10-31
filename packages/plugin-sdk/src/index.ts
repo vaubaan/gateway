@@ -31,6 +31,7 @@ export * from './guards.ts';
 export * from './transport/index.ts';
 export * from './env-of.ts';
 export * from './define-plugin.ts';
+export * from './data-model-paths.ts';
 export * from './registry.ts';
 export * from './streaming.ts';
 export * from './created-resources.ts';

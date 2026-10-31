@@ -11,6 +11,7 @@ import {
   assertCatalogCoverage,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   guideText,
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
@@ -28,6 +29,8 @@ describe('SDK kit', () => {
 
   test('every tool is covered by named risks ; the fallback is never hit', () => {
     const report = assertCatalogCoverage(caldavPlugin, SAMPLES, { resources: [work] });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(caldavPlugin, SAMPLES, { resources: [work], cardinalities: false });
     expect(report.fallbackHits).toEqual([]);
     expect(report.risksUntouched).toEqual([]);
   });

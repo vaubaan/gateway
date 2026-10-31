@@ -15,6 +15,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  assertSlicesOnDataModel,
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -38,6 +39,11 @@ describe('google-calendar plugin — structural kit', () => {
   test('every tool classifies to slices the catalog covers, none to the fallback', () => {
     const report = assertCatalogCoverage(googleCalendarPlugin, SAMPLES, {
       resources: [primary, team],
+    });
+    // Paths only : this model's cardinalities count instances, not how a slice names them.
+    assertSlicesOnDataModel(googleCalendarPlugin, SAMPLES, {
+      resources: [primary, team],
+      cardinalities: false,
     });
     const named = googleCalendarCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect([...report.risksTouched].sort()).toEqual([...named].sort());
