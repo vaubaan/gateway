@@ -10,9 +10,7 @@ import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it, vi } from 'vitest';
 
 import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
-import type { LegacyHashGate, MissionService, TokenVerification, VerifiedToken } from '../missions';
-import { UNKNOWN_CLIENT } from '../http/client-ip';
-import { SlidingWindowRateLimiter } from '../rate-limit';
+import type { MissionService, TokenVerification, VerifiedToken } from '../missions';
 import type { MissionRecord } from '../store/types';
 import { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
 import {
@@ -25,7 +23,7 @@ import {
 } from './request-meta';
 import { citedRefs, createResourceStage, toolUnavailableOn } from './resource-stage';
 import { depotPlugin } from './testing';
-import { TokenVerifier, VERIFY_ATTEMPTS_PER_WINDOW, verifyThrottleKey } from './token-verifier';
+import { TokenVerifier } from './token-verifier';
 import { callableProviders, callableTools } from './tools';
 
 describe('agent label', () => {
@@ -281,33 +279,16 @@ describe('token verifier', () => {
 
   type Verify = MissionService['verifyToken'];
 
-  /**
-   * A mission service whose token row is stored as `stored`. Like the real one, it
-   * asks the gate only for a legacy row, before it would compute the slow hash.
-   * `standing` is what the store says of the token at this instant.
-   */
-  function setup(stored: 'sha256' | 'argon2id', answer: (bearer: string) => TokenVerification) {
-    const slowChecks = vi.fn();
-    const verifyToken = vi.fn(async (bearer: string, gate?: LegacyHashGate) => {
-      if (stored === 'argon2id' && gate) {
-        const decision = await gate();
-        if (!decision.allowed) {
-          return { outcome: 'throttled' as const, retryAfterMs: decision.retryAfterMs };
-        }
-        slowChecks();
-      }
-      return answer(bearer);
-    });
-    const verifier = new TokenVerifier({
-      missions: { verifyToken: verifyToken as unknown as Verify },
-      rateLimiter: new SlidingWindowRateLimiter(),
-    });
-    return { verifier, verifyToken, slowChecks };
+  /** A mission service that answers `answer` for every Bearer it is asked about. */
+  function setup(answer: (bearer: string) => TokenVerification) {
+    const verifyToken = vi.fn<Verify>(async (bearer: string) => answer(bearer));
+    const verifier = new TokenVerifier({ missions: { verifyToken } });
+    return { verifier, verifyToken };
   }
 
   it('remembers nothing: every call asks what the token is worth now', async () => {
     let standing: TokenVerification = verified;
-    const { verifier, verifyToken } = setup('sha256', () => standing);
+    const { verifier, verifyToken } = setup(() => standing);
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
 
@@ -329,52 +310,8 @@ describe('token verifier', () => {
     expect(verifyToken).toHaveBeenCalledTimes(6);
   });
 
-  it('never throttles a token stored as a sha256 digest, however many wrong secrets are replayed', async () => {
-    const { verifier, verifyToken } = setup('sha256', () => ({ outcome: 'unknown' }));
-    for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW * 3; i++) {
-      expect((await verifier.verify(BEARER, '203.0.113.7')).outcome).toBe('unknown');
-    }
-    expect(verifyToken).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW * 3);
-  });
-
-  it('throttles the argon2id check of a legacy token: past the window, nothing is computed', async () => {
-    const { verifier, slowChecks } = setup('argon2id', () => ({ outcome: 'unknown' }));
-    for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
-      expect((await verifier.verify(BEARER)).outcome).toBe('unknown');
-    }
-    expect(slowChecks).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
-    const throttled = await verifier.verify(BEARER);
-    expect(throttled.outcome).toBe('throttled');
-    expect(throttled.outcome === 'throttled' && throttled.retryAfterMs).toBeGreaterThan(0);
-    expect(slowChecks).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
-  });
-
-  it('throttles per prefix AND client address: a flood of wrong secrets locks out only its sender', async () => {
-    const { verifier } = setup('argon2id', (bearer) =>
-      bearer === BEARER ? verified : { outcome: 'unknown' },
-    );
-    const wrong = (i: number) => `vbn_live_AbCd1234_${String(i).padStart(32, 'x')}`;
-    const ATTACKER = '203.0.113.7';
-    for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
-      expect((await verifier.verify(wrong(i), ATTACKER)).outcome).toBe('unknown');
-    }
-    expect((await verifier.verify(wrong(99), ATTACKER)).outcome).toBe('throttled');
-
-    // The real agent, another address: verified, not 429.
-    expect((await verifier.verify(BEARER, '198.51.100.9')).outcome).toBe('verified');
-    // From the flooding address itself the window is still closed...
-    expect((await verifier.verify(wrong(100), ATTACKER)).outcome).toBe('throttled');
-    // ...and callers whose address cannot be resolved share one window of their own.
-    expect((await verifier.verify(wrong(101))).outcome).toBe('unknown');
-    expect((await verifier.verify(wrong(102), UNKNOWN_CLIENT)).outcome).toBe('unknown');
-    // Another legacy prefix has a window of its own.
-    expect(verifyThrottleKey('AbCd1234', ATTACKER)).not.toBe(
-      verifyThrottleKey('ZyXw9876', ATTACKER),
-    );
-  });
-
   it('does not look anything up for a bearer that is not a mission token', async () => {
-    const { verifier, verifyToken } = setup('sha256', () => verified);
+    const { verifier, verifyToken } = setup(() => verified);
     expect(await verifier.verify('some-session-id')).toEqual({ outcome: 'unknown' });
     expect(verifyToken).not.toHaveBeenCalled();
   });

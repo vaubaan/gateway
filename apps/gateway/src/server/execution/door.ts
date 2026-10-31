@@ -240,7 +240,6 @@ export class ExecutionDoor {
           HTTP_FORBIDDEN,
           rpcError(null, -32600, 'cross-origin requests are not accepted on this endpoint.'),
         );
-      case 'verification-throttled':
       case 'rate-limited':
         return tooManyRequests(outcome.retryAfterMs);
       case 'unauthenticated': {

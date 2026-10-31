@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import {
-  apiKeyMatchesDigest,
-  digestApiKey,
-  generateApiKey,
-  hashApiKeyArgon2id,
-  parseApiKey,
-  verifyApiKeyArgon2id,
-} from './api-key.ts';
+import { apiKeyMatchesDigest, digestApiKey, generateApiKey, parseApiKey } from './api-key.ts';
 
 describe('api-key', () => {
   test('generateApiKey("live") produces a vbn_live_ prefixed key', () => {
@@ -68,13 +61,6 @@ describe('api-key', () => {
     }
   });
 
-  test('argon2id hash + verify roundtrip still works (tokens of an earlier build)', async () => {
-    const { apiKey } = generateApiKey('live');
-    const hash = await hashApiKeyArgon2id(apiKey);
-    expect(await verifyApiKeyArgon2id(hash, apiKey)).toBe(true);
-    expect(await verifyApiKeyArgon2id(hash, apiKey + 'X')).toBe(false);
-  });
-
   test('parseApiKey rejects wrong lengths', () => {
     const secret = 'z'.repeat(32);
     expect(parseApiKey(`vbn_live_abcdefgh_${secret}`)?.prefix).toBe('abcdefgh');
@@ -92,13 +78,6 @@ describe('api-key', () => {
     expect(parseApiKey(`vbn_live_abcdefgh_${'!'.repeat(32)}`)).toBeNull();
     expect(parseApiKey(`vbn_test_abcdefgh_${'z'.repeat(31)}_`)).toBeNull();
     expect(parseApiKey(`vbn_test_abcdefgh_${'z'.repeat(31)}\n`)).toBeNull();
-  });
-
-  test('verifyApiKeyArgon2id answers false on a hash it cannot read', async () => {
-    const { apiKey } = generateApiKey('live');
-    expect(await verifyApiKeyArgon2id('not-an-argon2-hash', apiKey)).toBe(false);
-    expect(await verifyApiKeyArgon2id('', apiKey)).toBe(false);
-    expect(await verifyApiKeyArgon2id(digestApiKey(apiKey), apiKey)).toBe(false);
   });
 
   test('parseApiKey rejects unknown prefix', () => {

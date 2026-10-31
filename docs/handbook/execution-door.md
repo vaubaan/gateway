@@ -35,7 +35,7 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 - **Git tools only through git.** The resource stage decides a plugin's `gitRemote` fetch/push tools for `channel: 'git'` only, every other tool for `mcp` only, so a push's arguments are always the host's review, never an agent's claim.
 - **The plugin sees what the door allows.** `ctx.resources` is the very array the resource stage checks against; `classify` gets the connection's public fields only (`classifyConnectionOf`), never the credential.
 - **The agent label is attribution only.** No stage reads it, it reserves no budget; a bad value is dropped and logged (`agent label dropped`, never the value), never refused or repaired. Its shape constants live in `missions/bootstrap-kit.ts`, which prints them to agents.
-- **One client-address rule** (`clientIpOf`: right-most `X-Forwarded-For` hop not in `trusted_proxies`, else `unknown`) for the audit's `client_ip`, the legacy-token throttle and the request page's rate limit.
+- **One client-address rule** (`clientIpOf`: right-most `X-Forwarded-For` hop not in `trusted_proxies`, else `unknown`) for the audit's `client_ip` and the request page's rate limit.
 - **Provider text stays with the agent.** `UpstreamFailureError.detail` goes to the agent only; the audit's `upstream_error` is a summary from provider id, status and class name.
 - **Streaming decides first.** State, resource, risk and the budget transaction commit before `execute` runs; parts leave as `notifications/progress` to a caller that sent a `progressToken`; one audit entry when the stream ends; no refresh-and-retry once a part left (it would deliver the start twice).
 - **No cap stage.** Catalog `caps` are applied nowhere; the one enforced catalog limit is `infra_limits.calls_per_minute_max`, at preview. `catalog-caps-enforced.test.ts` fails a shipped catalog declaring a limit the gateway does not apply ([scope-caps-amplification-axis](../decisions/scope-caps-amplification-axis.md)).
@@ -44,7 +44,6 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 
 - **The surface rate limit is per mission on purpose**: a per-token window would multiply the ceiling by the token count. One holder can exhaust it for the others (threat model, A26); the audit names the holder.
 - **A stopped key is a 401, not a refusal.** `token-rotated`, `token-revoked`, `holder-removed`, `holder-deactivated` (`AUTH_FAILURE_REASONS`) are given only when the secret was proven, before the pipeline: no credit, no call entry. `mission-inactive` would be false, the mission may serve other holders.
-- **Legacy argon2id tokens** are the only throttled verification (`mcp-verify:<prefix>:<client address>`, 30 per minute; the prefix is public, so the address is in the key). Without `trusted_proxies` every caller is `unknown` and shares one window per prefix (boot `warn`). The first matching call rehashes the row to its digest.
 - **`last_used_at`** is the door's only write outside the pipeline, at most once per token per 60 s; a failure is logged, never refuses.
 - **`connection-unavailable` after the allow** (rejected refresh) keeps the entry `allowed`, credit consumed. `isError: true` is the executor declining the call itself: `allowed`, no `upstream_error`, handed back untouched.
 - **The upstream credential cache** keys on the connection's `updated_at`, so a reconnect or refresh orphans old entries; `drop` deletes only what this process wrote. No shipped plugin uses it yet.
@@ -59,13 +58,13 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 
 - **Manual smoke** (`tests/manual/seed-demo.ts`): seeds a user, a GitHub connection and a `read-only` mission, prints the kit; exercise `/healthz`, `initialize`, `tools/list`, a refused `tools/call`, `/mcp/catalog`, the 401 and the protected-resource document with `curl` and the official client in both eras; check the secret never appears in the log. Not done yet: Claude Code against a TLS-terminated instance with a real connection.
 - **Streaming check** (`tests/manual/streaming-check.ts serve`, then `probe <url> <token>`): exits non-zero when frames arrive buffered. Done directly and behind Caddy; not done with a real provider or another proxy.
-- **Retiring legacy tokens**: `SELECT COUNT(*) FROM mission_tokens WHERE hash_alg = 'argon2id' AND status = 'active'`; at zero, the throttle and the `argon2` dependency can go.
 
 ## Debug
 
 - **401 with a fresh token** → `error.data.reason` is set only when the secret is right; no reason: truncated bearer or another instance. No `Authorization` reaching the instance: the TLS terminator strips it.
 - **403 `wrong-credential-kind`** → a session cookie or a delegated token instead of a mission key. **403 on everything from a browser client** → it sends `Origin`; there is no CORS.
-- **429 `-32002`** → the mission's surface limit, or, for an unused legacy token, the verification throttle: declare `trusted_proxies` or let the agent succeed once.
+- **429 `-32002`** → the mission's surface limit (`mcp.rate_limit_per_minute`, per mission).
+- **401 for a token issued before the SHA-256 digest and never used since** → migration 0027 revoked it (`hash_alg = 'argon2id'`): issue or rotate a token.
 - **`-32602` `Vaubaan rejected the call`** → unknown tool, no connection of that provider, the classifier could not place the arguments, or `could not decide this call: the <stage> stage failed` (see the `error` log line).
 - **`resource-not-in-mission` on a selected resource** → it went stale; Refresh on the account page. **Listed then `risk-not-accepted`** → expected, the list is per provider.
 - **`connection-unavailable` after working calls** → 401 then rejected refresh; log `credential refresh rejected`.

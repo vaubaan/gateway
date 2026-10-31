@@ -309,8 +309,8 @@ function logConfigurationSummary(
  * that proxy: with `trusted_proxies` empty no client address is believed, and every
  * limit keyed on the address is one window shared by all callers. Nothing is bypassed
  * (a forged `X-Forwarded-For` is ignored), but one caller can then hold the others at
- * 429: anybody on the request page, and — knowing a token prefix, which is not a
- * secret — an agent whose token is not verified yet. Said once at boot, naming the key.
+ * 429: anybody signed out on the request page, sign-in, the authorization server.
+ * Said once at boot, naming the key.
  */
 export const NO_TRUSTED_PROXY_WARNING =
   'trusted_proxies is empty: no client address is resolved, so the address-keyed limits are shared by all callers';
@@ -336,7 +336,6 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     env: 'VAUBAAN_TRUSTED_PROXIES',
     affected: [
       'request page: one per-IP window for everybody',
-      'execution door, tokens issued by an earlier build only: one argon2id verification window per token prefix (a flood of wrong secrets on such a prefix holds its agent at 429 until the token has been used once)',
       'authorization server: one registration window and one token window for everybody (one caller can hold every delegated client at 429 when it renews its token)',
       'audit: client_ip is not recorded',
     ],

@@ -662,7 +662,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionService.preview': READ,
   'MissionService.draftFrom': READ,
   'MissionService.verifyToken': exempt(
-    'authentication of a call, not an administrative act; its one write replaces the stored hash of a token an earlier build stored as argon2id by the sha256 digest of the same secret (same row, same holder, same status), and is logged',
+    'authentication of a call, not an administrative act: it reads the token, its mission and its holder, and writes nothing',
   ),
   'MissionService.list': READ,
   'MissionService.get': READ,

@@ -38,7 +38,6 @@ import { SESSION_COOKIE, type SessionService as WebSessionService } from '../aut
 import type { MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
-import { UNKNOWN_CLIENT } from '../http/client-ip';
 import type { Logger } from '../logging';
 import { prefixOfBearer, type TokenRetirement } from '../missions';
 import type { MissionTokenKey, Store } from '../store';
@@ -99,8 +98,6 @@ export interface Admitted {
 
 export type AdmissionDenial =
   | { readonly denial: 'cross-origin' }
-  /** Too many failed verifications from this address on this token. */
-  | { readonly denial: 'verification-throttled'; readonly retryAfterMs: number }
   /** No key, an unknown key, or a key that stopped working (`error.reason`). */
   | { readonly denial: 'unauthenticated'; readonly error: AuthError }
   /** A credential of another kind (`wrong-credential-kind`). */
@@ -110,12 +107,6 @@ export type AdmissionDenial =
 
 export function isDenial(outcome: Admitted | AdmissionDenial): outcome is AdmissionDenial {
   return 'denial' in outcome;
-}
-
-class VerificationThrottled extends Error {
-  constructor(readonly retryAfterMs: number) {
-    super('too many token verifications');
-  }
 }
 
 export class MissionAdmission {
@@ -145,16 +136,12 @@ export class MissionAdmission {
     if (origin !== null && origin !== this.deps.config.publicUrl.origin) {
       return { denial: 'cross-origin' };
     }
-    // Resolved once per request: the audit entry and the verification throttle
-    // must name the same address.
+    // Resolved once per request: the audit entry names it.
     const client = this.clientOf(request);
     let ctx: MissionContext | Refusal;
     try {
-      ctx = await this.authenticate(request.headers, authorization, client.ip ?? UNKNOWN_CLIENT);
+      ctx = await this.authenticate(request.headers, authorization);
     } catch (err) {
-      if (err instanceof VerificationThrottled) {
-        return { denial: 'verification-throttled', retryAfterMs: err.retryAfterMs };
-      }
       if (err instanceof AuthError) return { denial: 'unauthenticated', error: err };
       throw err;
     }
@@ -198,7 +185,6 @@ export class MissionAdmission {
   private async authenticate(
     headers: Headers,
     authorization: string | null,
-    clientIp: string,
   ): Promise<MissionContext | Refusal> {
     if (!authorization && (await this.deps.webSessions.read(headers))) {
       // A browser session presented where a mission token is expected.
@@ -208,18 +194,13 @@ export class MissionAdmission {
         expected: 'mission-token',
       });
     }
-    return new DoorAuthenticator(this.credentialResolver(clientIp)).authenticateMission(
-      authorization,
-    );
+    return new DoorAuthenticator(this.credentialResolver()).authenticateMission(authorization);
   }
 
-  /** One resolver per request: the verification throttle is keyed on the caller's address. */
-  private credentialResolver(clientIp: string): CredentialResolver {
+  private credentialResolver(): CredentialResolver {
     return {
       resolve: async (bearer): Promise<ResolvedCredential | null> => {
-        const verified = await this.deps.tokens.verify(bearer, clientIp);
-        if (verified.outcome === 'throttled')
-          throw new VerificationThrottled(verified.retryAfterMs);
+        const verified = await this.deps.tokens.verify(bearer);
         if (verified.outcome !== 'unknown') {
           if (verified.outcome === 'retired') {
             // A token retired by the revocation of its MISSION still identifies that

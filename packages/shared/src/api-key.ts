@@ -13,17 +13,12 @@
  * clear next to the digest so the gateway can look a token up before
  * comparing.
  *
- * argon2id stays for one purpose : checking a token that was issued while
- * tokens were stored that way (`verifyApiKeyArgon2id`). Nothing is written
- * with it any more outside tests.
- *
  * Spec : docs/spec/vaubaan-gateway.md §4.1, §6.
  * ADR  : docs/decisions/mission-token-sha256-digest.md (SHA-256 replaced
  *        the v4 argon2id hash; the format is unchanged).
  */
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import argon2 from 'argon2';
 
 const PREFIX_LIVE = 'vbn_live_';
 const PREFIX_TEST = 'vbn_test_';
@@ -41,13 +36,6 @@ export const API_KEY_PATTERN = new RegExp(
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 /** A whole string in the token alphabet (no `$` : it would accept a trailing newline). */
 const BASE62_ONLY = /^[A-Za-z0-9]+(?![\s\S])/;
-
-const ARGON2_OPTS = {
-  type: argon2.argon2id,
-  memoryCost: 19_456,
-  timeCost: 2,
-  parallelism: 1,
-} as const;
 
 /**
  * Bytes at or above the largest multiple of 62 a byte holds (4 × 62 = 248) are drawn
@@ -137,21 +125,4 @@ const SHA256_HEX = /^[0-9a-f]{64}(?![\s\S])/;
 
 function sha256(text: string): Buffer {
   return createHash('sha256').update(text, 'utf8').digest();
-}
-
-/**
- * The argon2id hash tokens were stored as before the SHA-256 digest. Kept so
- * that tests can build such a row ; the gateway no longer writes one.
- */
-export async function hashApiKeyArgon2id(apiKey: string): Promise<string> {
-  return argon2.hash(apiKey, ARGON2_OPTS);
-}
-
-/** Checks a token against an argon2id hash stored by an earlier build. */
-export async function verifyApiKeyArgon2id(hash: string, apiKey: string): Promise<boolean> {
-  try {
-    return await argon2.verify(hash, apiKey);
-  } catch {
-    return false;
-  }
 }

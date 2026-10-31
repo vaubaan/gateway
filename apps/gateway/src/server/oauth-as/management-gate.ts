@@ -36,19 +36,14 @@ import { SESSION_COOKIE, type SessionService as WebSessionService } from '../aut
 import type { InstanceConfig } from '../config';
 import type { TokenVerifier } from '../execution/token-verifier';
 import { clientOriginOf, trustedProxyList } from '../execution/request-meta';
-import { UNKNOWN_CLIENT } from '../http/client-ip';
 import type { Logger } from '../logging';
 import { prefixOfBearer } from '../missions/token';
 import { carriesManagementScope, MANAGEMENT_SCOPE, type OAuthEndpoints } from './endpoints';
 import type { DelegatedTokenVerifier } from './verifier';
 
 const HTTP_FORBIDDEN = 403;
-const HTTP_TOO_MANY_REQUESTS = 429;
-const MS_PER_SECOND = 1000;
 const REALM = 'vaubaan-gateway';
 const SESSION_ID_SHAPE = /^[A-Za-z0-9_-]{16,}$/;
-/** JSON-RPC code of a throttled verification (the execution door's surface code). */
-const RATE_LIMITED_RPC_CODE = -32002;
 
 /** A request the management door serves: who delegated, to which client. */
 export interface AdmittedDelegation {
@@ -118,8 +113,7 @@ export class ManagementGate {
     }
 
     if (prefixOfBearer(bearer)) {
-      const verified = await this.deps.missionTokens.verify(bearer, client.ip ?? UNKNOWN_CLIENT);
-      if (verified.outcome === 'throttled') return tooManyRequests(verified.retryAfterMs);
+      const verified = await this.deps.missionTokens.verify(bearer);
       if (verified.outcome !== 'unknown') return this.wrongKind('mission-token');
     } else if (SESSION_ID_SHAPE.test(bearer)) {
       const asCookie = new Headers({ cookie: `${SESSION_COOKIE}=${bearer}` });
@@ -160,15 +154,4 @@ export class ManagementGate {
       { 'WWW-Authenticate': `Bearer ${parts.join(', ')}` },
     );
   }
-}
-
-function tooManyRequests(retryAfterMs: number): Response {
-  const seconds = Math.max(1, Math.ceil(retryAfterMs / MS_PER_SECOND));
-  return json(
-    HTTP_TOO_MANY_REQUESTS,
-    rpcError(null, RATE_LIMITED_RPC_CODE, `Too many attempts; retry in ${seconds} s.`, {
-      retry_after_seconds: seconds,
-    }),
-    { 'Retry-After': String(seconds) },
-  );
 }

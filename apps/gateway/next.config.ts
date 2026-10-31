@@ -157,15 +157,13 @@ const nextConfig: NextConfig = {
   // One image, one process: the standalone server.js (ADR docker-image-and-config-format).
   output: 'standalone',
   outputFileTracingRoot: resolve(__dirname, '../../'),
-  // Native addons must not be bundled. argon2 and better-sqlite3 are in Next's
-  // default external list; ssh2 is not. Both load a prebuilt N-API binary
-  // shipped in their package through a path computed at run time, which nft
-  // does not follow: argon2's `prebuilds/<platform>-<arch>/` (node-gyp-build)
-  // and better-sqlite3's `prebuilds/<platform>-<arch>.node` (since 13) are
-  // traced explicitly, the latter for the building platform (the image builds
-  // on each architecture). nft itself, reading better-sqlite3's loader, adds
-  // the binaries of the other systems for the same architecture (about 6 MB
-  // never loaded, as argon2's `prebuilds/**` already ships).
+  // Native addons must not be bundled. better-sqlite3 is in Next's default
+  // external list; ssh2 is not. better-sqlite3 loads a prebuilt N-API binary
+  // shipped in its package through a path computed at run time, which nft
+  // does not follow: its `prebuilds/<platform>-<arch>.node` (since 13) is
+  // traced explicitly, for the building platform (the image builds on each
+  // architecture). nft itself, reading its loader, adds the binaries of the
+  // other systems for the same architecture (about 6 MB never loaded).
   // better-sqlite3's package.json and lib/ stay listed as the guarantee of its
   // loader, whatever the route graph becomes.
   // imapflow (the Gmail plugin's IMAP client) is not an addon, but it loads
@@ -174,7 +172,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['ssh2', 'imapflow'],
   outputFileTracingIncludes: {
     '/*': [
-      '../../node_modules/argon2/prebuilds/**',
       '../../node_modules/better-sqlite3/package.json',
       '../../node_modules/better-sqlite3/lib/**',
       `../../node_modules/better-sqlite3/prebuilds/${process.platform}*-${process.arch}.node`,

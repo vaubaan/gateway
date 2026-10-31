@@ -219,31 +219,6 @@ describe('missions repository', () => {
     });
   }
 
-  it('replaces the stored proof of a token only while the row still holds the proof it was read with', async () => {
-    const m = await create();
-    const { token } = await issue(m.id, 'vbn_live_rehash', member(creator));
-    const other = await issue(m.id, 'vbn_live_other', named('CI'));
-
-    const change = { fromHash: token.hash, hash: 'digest-1', hashAlg: 'sha256' };
-    expect(await store.missions.rehashToken(token.id, change)).toBe(true);
-    expect(await store.missions.getToken({ missionId: m.id, tokenId: token.id })).toEqual({
-      ...token,
-      hash: 'digest-1',
-      hashAlg: 'sha256',
-    });
-    // A second writer that read the old proof writes nothing.
-    expect(await store.missions.rehashToken(token.id, { ...change, hash: 'digest-2' })).toBe(false);
-    expect((await store.missions.getToken({ missionId: m.id, tokenId: token.id }))?.hash).toBe(
-      'digest-1',
-    );
-    // Unknown row, or the proof of another row: nothing is written anywhere.
-    expect(await store.missions.rehashToken('missing', change)).toBe(false);
-    expect(await store.missions.rehashToken(other.token.id, change)).toBe(false);
-    expect(await store.missions.getToken({ missionId: m.id, tokenId: other.token.id })).toEqual(
-      other.token,
-    );
-  });
-
   it('issues one active token per member; a member rotating retires their own token only', async () => {
     const m = await create();
     const bob = (

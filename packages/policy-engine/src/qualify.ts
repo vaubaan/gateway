@@ -20,7 +20,7 @@
 
 import type { Resource, RiskEntry, RiskId, RiskVector, Slice } from '@vaubaan/shared';
 // Value imports come from the browser-safe subpath : the barrel pulls in
-// `api-key.ts` (argon2, node:crypto), which the issuance UI cannot bundle.
+// `api-key.ts` (node:crypto), which the issuance UI cannot bundle.
 import { formatRiskId, parseRiskId } from '@vaubaan/shared/risk-id';
 
 /** The narrow shape `qualifyRiskId` actually consumes — just the env list.

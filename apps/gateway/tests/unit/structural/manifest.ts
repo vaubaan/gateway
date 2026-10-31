@@ -620,8 +620,7 @@ export const INVARIANTS: readonly Invariant[] = [
         file: `${INTEGRATION}/execution/door-http.test.ts`,
         tests: [
           'applies the surface rate limit per mission, not per agent',
-          'throttles the argon2id check of wrong secrets on a legacy prefix',
-          'does not lock the agent of a legacy token out when another address floods its prefix, and the move ends the throttle',
+          'answers 401 to every wrong secret on a real prefix, never 429, and the agent is never held',
         ],
       },
       {
@@ -632,6 +631,7 @@ export const INVARIANTS: readonly Invariant[] = [
         file: `${INTEGRATION}/requests/request-handlers.test.ts`,
         tests: [
           'answers 429 with Retry-After once the window is spent, before looking at anything',
+          'keys a signed-in creator on their session: an anonymous flood never holds them out',
         ],
       },
       {
