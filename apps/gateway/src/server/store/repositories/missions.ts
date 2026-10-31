@@ -11,7 +11,7 @@ import {
   USER_STATUSES,
   type Gate,
   type Iso,
-  type MissionConnection,
+  type MissionConnectionRecord,
   type MissionIssuerRecord,
   type MissionMemberRecord,
   type MissionPolicyEntry,
@@ -37,7 +37,7 @@ export interface CreateMissionInput {
   readonly periodSeconds: number | null;
   readonly expiresAt?: Iso | null;
   readonly delegationId?: string | null;
-  readonly connections: readonly MissionConnection[];
+  readonly connections: readonly MissionConnectionRecord[];
   /** One entry per accepted risk, each with its budget. Every id must be in the catalog. */
   readonly policy: readonly MissionPolicyEntry[];
 }
@@ -284,7 +284,7 @@ export interface MissionEditInput {
   readonly name: string;
   readonly expiresAt: Iso | null;
   /** Every connection of the mission after the edit, with its selection. */
-  readonly connections: readonly MissionConnection[];
+  readonly connections: readonly MissionConnectionRecord[];
   /** The whole policy after the edit. */
   readonly policy: readonly MissionPolicyEntry[];
   /** The session's summary event of the edit, given how many requests it closed. */
@@ -455,7 +455,7 @@ function policyToRecord(row: PolicyRow): MissionPolicyEntry {
 function connectionToRecord(
   row: ConnectionRow,
   selected: readonly SelectedRow[],
-): MissionConnection {
+): MissionConnectionRecord {
   const sources: Record<string, MissionResourceSource> = {};
   for (const r of selected) {
     const source = parseEnum(MISSION_RESOURCE_SOURCES, r.source, 'mission_resources.source');
@@ -493,7 +493,7 @@ function trustLevelsOf(json: string): Record<string, string> {
 }
 
 /** What `trust_levels_json` stores: NULL for no trust level, so an empty record reads back absent. */
-function trustLevelsJsonOf(c: Pick<MissionConnection, 'trustLevels'>): string | null {
+function trustLevelsJsonOf(c: Pick<MissionConnectionRecord, 'trustLevels'>): string | null {
   return c.trustLevels && Object.keys(c.trustLevels).length > 0
     ? JSON.stringify(c.trustLevels)
     : null;
@@ -505,7 +505,7 @@ function trustLevelsJsonOf(c: Pick<MissionConnection, 'trustLevels'>): string | 
  */
 function assertConnectionSelections(
   ctx: RepoContext,
-  connections: readonly MissionConnection[],
+  connections: readonly MissionConnectionRecord[],
 ): void {
   if (connections.length === 0) {
     throw new InvariantError('a mission carries at least one connection');
@@ -816,8 +816,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   /** The rows of one connection that move, and nothing else. In-transaction. */
   function writeSelection(
     missionId: string,
-    old: MissionConnection | undefined,
-    c: MissionConnection,
+    old: MissionConnectionRecord | undefined,
+    c: MissionConnectionRecord,
   ): void {
     if (!old) {
       insertConnection.run(missionId, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));

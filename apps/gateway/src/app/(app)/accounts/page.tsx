@@ -120,13 +120,13 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       header: ACCOUNT_WORDS.account,
       cell: ({ view, ownership: owns }) => (
         <span className={styles.named}>
-          <ServiceMark name={view.providerLabel} icon={view.providerIcon} />
+          <ServiceMark name={view.provider_label} icon={view.provider_icon} />
           <span className={styles.namedText}>
             <Link href={connectionPath(view.connection.id)} className={styles.name}>
               {view.connection.displayName}
             </Link>
             <span className={styles.sub}>
-              {view.providerLabel} · {owns}
+              {view.provider_label} · {owns}
             </span>
           </span>
         </span>

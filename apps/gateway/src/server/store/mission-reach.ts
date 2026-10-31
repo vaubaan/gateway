@@ -17,13 +17,13 @@
  * the bootstrap kit — so the agent is never told it may touch what the door refuses,
  * and a change of the rule cannot be made in one of them and forgotten in another.
  */
-import type { ConnectionResourceRecord, MissionConnection } from './types.ts';
+import type { ConnectionResourceRecord, MissionConnectionRecord } from './types.ts';
 
 type Reachable = Pick<ConnectionResourceRecord, 'id' | 'hidden' | 'staleSince'>;
 
 /** True when the selection reaches resources discovered after issuance. */
 export function reachesLaterResources(
-  selection: Pick<MissionConnection, 'resourceScope'>,
+  selection: Pick<MissionConnectionRecord, 'resourceScope'>,
 ): boolean {
   return selection.resourceScope === 'connection';
 }
@@ -33,7 +33,7 @@ export function reachesLaterResources(
  * them) that the selection reaches now, in the connection's own order.
  */
 export function reachedResources<R extends Reachable>(
-  selection: Pick<MissionConnection, 'resourceScope' | 'resourceIds'>,
+  selection: Pick<MissionConnectionRecord, 'resourceScope' | 'resourceIds'>,
   discovered: readonly R[],
   isSelf: (resource: R) => boolean,
 ): R[] {

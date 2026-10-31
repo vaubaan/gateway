@@ -92,10 +92,10 @@ describe('a service connected with a pasted token', () => {
     });
     expect(done.discovery).toMatchObject({ ok: true, count: 1 });
     const view = await h.service.get(alice, done.connection.id);
-    expect(view.credentialKind).toBe('api-key');
-    expect(view.tokenAccount).toBe('bot-account');
-    expect(view.tokenExpiresAt).toBe(IN_A_YEAR);
-    expect(view.providerGrant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
+    expect(view.credential_kind).toBe('api-key');
+    expect(view.token_account).toBe('bot-account');
+    expect(view.token_expires_at).toBe(IN_A_YEAR);
+    expect(view.provider_grant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
     expect(JSON.stringify(view)).not.toContain(TOKEN);
   });
 
@@ -165,10 +165,10 @@ describe('a service connected with a pasted token', () => {
       metadata: { credential_kind: 'oauth2', installation_id: 'stale-fact' },
     });
     const before = await h.service.get(alice, existing.id);
-    expect(before.credentialKind).toBe('oauth2');
-    expect(before.tokenAccount).toBeNull();
+    expect(before.credential_kind).toBe('oauth2');
+    expect(before.token_account).toBeNull();
     // The gateway withdraws nothing for a way it no longer runs: the person does, by hand.
-    expect(before.providerGrant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
+    expect(before.provider_grant).toEqual({ withdrawnByGateway: false, byHand: BY_HAND });
 
     const again = await h.service.start(alice, 'dual', {
       reconnectId: existing.id,
@@ -216,7 +216,7 @@ describe('a service connected with a pasted token', () => {
       metadata: { credential_kind: 'oauth2' },
     });
     const view = await h.service.get(alice, existing.id);
-    expect(view).toMatchObject({ credentialKind: 'oauth2', wayRetired: true });
+    expect(view).toMatchObject({ credential_kind: 'oauth2', way_retired: true });
 
     const reason =
       'this account was connected a way Dual no longer offers on this gateway (oauth2); its owner reconnects it from Accounts.';
@@ -236,7 +236,7 @@ describe('a service connected with a pasted token', () => {
     // An account made the plugin's way is not retired.
     const done = await h.service.start(alice, 'dual', { fields: { token: TOKEN } });
     if (done.kind !== 'connected') throw new Error('expected a connection');
-    expect((await h.service.get(alice, done.connection.id)).wayRetired).toBe(false);
+    expect((await h.service.get(alice, done.connection.id)).way_retired).toBe(false);
   });
 
   it('an `app-install` account (the GitHub App of earlier builds) is reconnected with a token, its stored blob never read', async () => {
@@ -252,7 +252,7 @@ describe('a service connected with a pasted token', () => {
       credentialExpiresAt: null,
       metadata: { credential_kind: 'app-install', installation_id: '1' },
     });
-    expect((await h.service.get(alice, existing.id)).credentialKind).toBe('app-install');
+    expect((await h.service.get(alice, existing.id)).credential_kind).toBe('app-install');
 
     const again = await h.service.start(alice, 'dual', {
       reconnectId: existing.id,

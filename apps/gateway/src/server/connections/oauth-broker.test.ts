@@ -180,8 +180,8 @@ describe('a plugin whose client is an OAuth broker', () => {
     expect(JSON.stringify(seenByPlugin[0])).not.toContain(refreshToken ?? 'none');
     expect(JSON.stringify(seenByPlugin[0])).not.toContain('brokerGrant');
     const view = (await h.service.listFor(await h.actor('alice@example.com')))[0];
-    expect(view?.tokenAccount).toBe('alice@acme.example');
-    expect(view?.oauthBroker).toEqual({ name: 'main', attested: true });
+    expect(view?.token_account).toBe('alice@acme.example');
+    expect(view?.oauth_broker).toEqual({ name: 'main', attested: true });
   });
 
   it('checks the state as for any flow: replayed or opened by another user, it is refused', async () => {
@@ -539,7 +539,7 @@ describe('a broker declared attestation: none', () => {
     expect(callsTo('/attest')).toEqual([]);
     expect(callsTo('/grants/redeem')[0]?.status).toBe(200);
     expect(
-      (await h.service.get(await h.actor('alice@example.com'), connection.id)).oauthBroker,
+      (await h.service.get(await h.actor('alice@example.com'), connection.id)).oauth_broker,
     ).toEqual({
       name: 'main',
       attested: false,

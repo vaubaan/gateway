@@ -502,7 +502,7 @@ export function missionView(
     session: serving
       ? { period_start: serving.period.start, period_end: serving.period.end }
       : null,
-    issued_via: issuedViaView(overview.issuedVia, viewer),
+    issued_via: issuedViaView(overview.issued_via, viewer),
     token_prefix: overview.token ? maskToken(overview.token.prefix) : null,
     connection_ids: mission.connections.map((c) => c.connectionId),
     resource_scopes: mission.connections.map((c) => ({
