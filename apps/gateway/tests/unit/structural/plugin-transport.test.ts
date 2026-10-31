@@ -24,12 +24,7 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 const PLUGINS = join(REPO, 'plugins');
 
 /** The plugins still on their own reads, until the migration wave moves them to the transport. */
-const NOT_YET_ON_THE_TRANSPORT: readonly string[] = [
-  'github',
-  'supabase',
-  'upstash-redis',
-  'vercel',
-];
+const NOT_YET_ON_THE_TRANSPORT: readonly string[] = ['github', 'upstash-redis', 'vercel'];
 
 const BODY_READS = new Set(['json', 'text']);
 

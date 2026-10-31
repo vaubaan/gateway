@@ -17,6 +17,7 @@ import { supabaseCredential } from './credential.ts';
 import { supabaseDataModel } from './data-model.ts';
 import { discoverSupabaseResources, executeSupabase } from './execute.ts';
 import { SUPABASE_ICON, SUPABASE_ICON_COLOR } from './icon.ts';
+import { PROVIDER_ID } from './identity.ts';
 import { supabaseToolTitles } from './tool-titles.ts';
 import { supabaseTools } from './tools.ts';
 
@@ -25,11 +26,11 @@ import { supabaseTools } from './tools.ts';
 export const supabaseCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const supabasePlugin = definePlugin({
-  id: 'supabase',
+  id: PROVIDER_ID,
   displayName: 'Supabase',
   icon: SUPABASE_ICON,
   iconColor: SUPABASE_ICON_COLOR,
-  version: '5.0.5',
+  version: '6.0.0',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
   summary:
@@ -58,7 +59,8 @@ export {
   SUPABASE_TOOL_PLANES,
 };
 export type { SupabasePlane } from './classify.ts';
-export { MAX_DISCOVERED_PROJECTS, SUPABASE_API_BASE, projectUrl } from './execute.ts';
+export { MAX_DISCOVERED_PROJECTS } from './execute.ts';
+export { PROVIDER_ID, SUPABASE_API_BASE, TOOL, projectUrl } from './identity.ts';
 export {
   AUTH_CONFIG_PUBLIC_FIELDS,
   FUNCTION_SECRET_PUBLIC_FIELDS,

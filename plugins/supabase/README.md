@@ -12,19 +12,23 @@ Contract : `@vaubaan/plugin-sdk` (`definePlugin`, see
 ```
 plugins/supabase/
   src/
+    identity.ts           the provider id, the 44 tool names (`TOOL`), the API addresses
     risk-catalog.yaml     24 risks + 1 deprecated + fallback, 5 macro-actions (loaded at boot)
     data-model.ts         4 planes : db, storage, auth, functions ; the managed schemas
     tools.ts              44 MCP tools, prefix `supabase__`
     classify.ts           (tool, args, resources) → slices ; security-critical
+    identifiers.ts        one grammar per identifier kind, shared by classify and execute
     migration-sql.ts      allow-list reading of the SQL of apply_migration
     query-sql.ts          allow-list reading of the SQL of execute_sql
     sql-tokens.ts         the tokeniser both readers share
     execute.ts            Management API + data plane ; discoverResources
+    redact.ts             the secret values of the auth config and function secrets
     credential.ts         api-key spec : the token form, the guide, the check at paste
     index.ts              definePlugin() — default export `supabasePlugin`
   tests/unit/             plugin.test.ts (kit), classify, execute, risk-catalog,
                           mission-evaluation (engine decisions, macro-actions),
-                          identifier-injection (hostile identifiers, both sides), data-model
+                          identifier-injection (hostile identifiers, both sides),
+                          transport (typed failures and refusals), data-model
 ```
 
 ## Data model
@@ -227,5 +231,8 @@ resolution and the body built from declared arguments only ;
 `mission-evaluation.test.ts` runs the engine's `evaluateCall` on the real
 catalog (unlabelled project, bulk writes on prod, missions from macro-actions) ;
 `identifier-injection.test.ts` feeds hostile values to every identifier
-position of `classify` and `execute`. 1755 tests ; none ever reaches
+position of `classify` and `execute` ; `transport.test.ts` pins what comes
+back : a failure thrown typed (`UpstreamAuthError`, `UpstreamHttpError`,
+`UpstreamProtocolError` for an answer that is not what the plugin reads), a
+refusal returned as an `isError` result. 1779 tests ; none ever reaches
 Supabase.

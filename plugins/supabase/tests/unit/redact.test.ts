@@ -19,6 +19,7 @@ import {
   redactFunctionSecrets,
   supabasePlugin,
 } from '../../src/index.ts';
+import { resultText } from './support.ts';
 
 const REF = 'tlqgxnezmthbpzhdwxgi';
 const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
@@ -34,8 +35,6 @@ const execCtx = (fetch: typeof globalThis.fetch): ExecuteContext => ({
   fetch,
   resources: [project],
 });
-const textOf = (result: { content: readonly unknown[] }) =>
-  (result.content[0] as { text: string }).text;
 
 /** An auth config answer as Supabase sends it, secrets in clear. */
 const AUTH_CONFIG = {
@@ -153,7 +152,7 @@ describe('executeSupabase — no read returns a secret value', () => {
     const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__list_function_secrets', {
       project_ref: REF,
     });
-    const text = textOf(result);
+    const text = resultText(result);
     expect(text).toContain('SUPABASE_SERVICE_ROLE_KEY');
     expect(text).not.toContain('eyJ.service_role.secret');
     expect(text).not.toContain('db-password');
@@ -168,7 +167,7 @@ describe('executeSupabase — no read returns a secret value', () => {
       project_ref: REF,
       ...args,
     });
-    const text = textOf(result);
+    const text = resultText(result);
     expect(text).toContain('google-client-id');
     for (const secret of SECRET_VALUES) expect(text).not.toContain(secret);
   });

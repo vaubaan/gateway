@@ -5,13 +5,16 @@
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins).
  * Handbook : docs/handbook/providers/supabase.md.
  *
- * Naming : `supabase__<verb>_<noun>`. Every tool takes the project ref
+ * Naming : `supabase__<verb>_<noun>`, each name written once in
+ * `identity.ts` (`TOOL`). Every tool takes the project ref
  * explicitly as `project_ref` (the resource ref the mission catalog lists) ;
  * the classifier falls back to the mission's single Supabase project when
  * the argument is absent.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
+
+import { TOOL, type SupabaseToolName } from './identity.ts';
 
 const projectArg = {
   project_ref: {
@@ -23,18 +26,18 @@ const projectArg = {
 export const supabaseTools: readonly McpToolDeclaration[] = [
   // ─── db plane ──────────────────────────────────────────────────────────────
   {
-    name: 'supabase__get_project',
+    name: TOOL.getProject,
     description: 'Get project metadata (region, status, database version).',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__get_anon_key',
+    name: TOOL.getAnonKey,
     description:
       'Get the project API URL (https://{ref}.supabase.co) and the anonymous (public) API key — the values client-side env vars need (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). The anon key is meant to ship in browser code ; service_role is never returned.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__list_tables',
+    name: TOOL.listTables,
     description: 'List tables in the public schema (and optional extra schemas).',
     inputSchema: {
       type: 'object',
@@ -46,12 +49,12 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__list_migrations',
+    name: TOOL.listMigrations,
     description: 'List applied migrations (supabase_migrations.schema_migrations ledger).',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__execute_sql',
+    name: TOOL.executeSql,
     description:
       'Run a read-only SQL query against the project database. Executed through the Management API read-only endpoint (POST /v1/projects/{ref}/database/query/read-only) : Postgres refuses any INSERT/UPDATE/DELETE/DDL. Use apply_migration for schema changes.',
     inputSchema: {
@@ -61,7 +64,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__get_advisors',
+    name: TOOL.getAdvisors,
     description: 'Get the project advisors (security or performance recommendations).',
     inputSchema: {
       type: 'object',
@@ -73,7 +76,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__apply_migration',
+    name: TOOL.applyMigration,
     description:
       'Apply a database migration. Backed by POST /v1/projects/{ref}/database/migrations. Every migration is a schema write ; statements that write rows or drop a table or a column, change RLS, privileges or extensions each add the matching risk, and SQL the gateway cannot read statement by statement (DO blocks, function, trigger or view definitions, CTEs, SET, COPY, bare SELECT) requires all of them. Migrations that write or destroy rows are refused on prod-labelled projects : keep prod migrations to plain DDL and RLS statements.',
     inputSchema: {
@@ -89,19 +92,19 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
 
   // ─── storage plane — reads and configuration ───────────────────────────────
   {
-    name: 'supabase__list_buckets',
+    name: TOOL.listBuckets,
     description:
       'List storage buckets of the project. Backed by GET /v1/projects/{ref}/storage/buckets.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__get_storage_config',
+    name: TOOL.getStorageConfig,
     description:
       'Get the project-wide storage config (file size limit, allowed MIME types). Backed by GET /v1/projects/{ref}/config/storage.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__update_storage_config',
+    name: TOOL.updateStorageConfig,
     description:
       'Update the project-wide storage config (fileSizeLimit, features.s3Protocol.enabled, features.imageTransformation.enabled). Backed by PATCH /v1/projects/{ref}/config/storage.',
     inputSchema: {
@@ -120,13 +123,13 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
 
   // ─── auth plane — configuration and identity providers ─────────────────────
   {
-    name: 'supabase__get_auth_config',
+    name: TOOL.getAuthConfig,
     description:
       'Get the project auth config (JWT expiry, SMTP, password policy, external providers). Secret values (OAuth client secrets, SMTP password, hook secrets, SMS provider tokens) are never returned : the gateway replaces each by a fixed marker. Backed by GET /v1/projects/{ref}/config/auth.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__update_auth_config',
+    name: TOOL.updateAuthConfig,
     description:
       'Update the project auth config (site URL, redirect allow-list, JWT/OTP expiry, password policy, mailer subjects, external OAuth toggles and client ids/secrets). Backed by PATCH /v1/projects/{ref}/config/auth. Only the fields sent are mutated.',
     inputSchema: {
@@ -143,13 +146,13 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__list_sso_providers',
+    name: TOOL.listSsoProviders,
     description:
       'List SAML SSO providers configured on the project. Backed by GET /v1/projects/{ref}/config/auth/sso/providers.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__get_sso_provider',
+    name: TOOL.getSsoProvider,
     description:
       'Get one SAML SSO provider by id. Backed by GET /v1/projects/{ref}/config/auth/sso/providers/{provider_id}.',
     inputSchema: {
@@ -162,7 +165,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__create_sso_provider',
+    name: TOOL.createSsoProvider,
     description:
       'Register a SAML SSO provider (enterprise SSO). Backed by POST /v1/projects/{ref}/config/auth/sso/providers. Pass metadata_url or metadata_xml.',
     inputSchema: {
@@ -189,7 +192,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__update_sso_provider',
+    name: TOOL.updateSsoProvider,
     description:
       'Update a SAML SSO provider by id. Backed by PUT /v1/projects/{ref}/config/auth/sso/providers/{provider_id} (partial : only the fields sent are mutated).',
     inputSchema: {
@@ -206,7 +209,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_sso_provider',
+    name: TOOL.deleteSsoProvider,
     description:
       'Delete a SAML SSO provider by id. Backed by DELETE /v1/projects/{ref}/config/auth/sso/providers/{provider_id}.',
     inputSchema: {
@@ -219,13 +222,13 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__list_third_party_auth',
+    name: TOOL.listThirdPartyAuth,
     description:
       'List third-party JWT auth providers (Firebase, Auth0, Cognito, generic OIDC issuers). Backed by GET /v1/projects/{ref}/config/auth/third-party-auth.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__get_third_party_auth',
+    name: TOOL.getThirdPartyAuth,
     description:
       'Get one third-party JWT auth provider by id. Backed by GET /v1/projects/{ref}/config/auth/third-party-auth/{tpa_id}.',
     inputSchema: {
@@ -238,7 +241,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__create_third_party_auth',
+    name: TOOL.createThirdPartyAuth,
     description:
       'Register a third-party JWT auth provider (federated JWT issuer). Backed by POST /v1/projects/{ref}/config/auth/third-party-auth.',
     inputSchema: {
@@ -257,7 +260,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_third_party_auth',
+    name: TOOL.deleteThirdPartyAuth,
     description:
       'Delete a third-party JWT auth provider by id. Backed by DELETE /v1/projects/{ref}/config/auth/third-party-auth/{tpa_id}.',
     inputSchema: {
@@ -272,12 +275,12 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
 
   // ─── functions plane ───────────────────────────────────────────────────────
   {
-    name: 'supabase__list_functions',
+    name: TOOL.listFunctions,
     description: 'List edge functions of the project. Backed by GET /v1/projects/{ref}/functions.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__get_function',
+    name: TOOL.getFunction,
     description:
       'Get edge function metadata (verify_jwt, status, version). Backed by GET /v1/projects/{ref}/functions/{slug}.',
     inputSchema: {
@@ -290,7 +293,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__get_function_body',
+    name: TOOL.getFunctionBody,
     description:
       'Get the source of the currently deployed edge function. Backed by GET /v1/projects/{ref}/functions/{slug}/body.',
     inputSchema: {
@@ -303,7 +306,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__create_function',
+    name: TOOL.createFunction,
     description:
       'Create an edge function (metadata and initial body). Backed by POST /v1/projects/{ref}/functions. Prefer deploy_function for multi-file bundles.',
     inputSchema: {
@@ -322,7 +325,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__update_function',
+    name: TOOL.updateFunction,
     description:
       'Update edge function metadata or source (PATCH semantics). Backed by PATCH /v1/projects/{ref}/functions/{slug}.',
     inputSchema: {
@@ -338,7 +341,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_function',
+    name: TOOL.deleteFunction,
     description:
       'Delete an edge function. Backed by DELETE /v1/projects/{ref}/functions/{slug}. Irreversible unless the source is in git.',
     inputSchema: {
@@ -351,7 +354,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__deploy_function',
+    name: TOOL.deployFunction,
     description:
       'Deploy an edge function from a multi-file bundle (entrypoint and assets). Backed by POST /v1/projects/{ref}/functions/deploy?slug={slug}. `files` is an array of `{ name, content }`.',
     inputSchema: {
@@ -382,13 +385,13 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__list_function_secrets',
+    name: TOOL.listFunctionSecrets,
     description:
       'List the project secret names available to edge functions, with their update date. Values are never returned : the gateway replaces each by a fixed marker. Backed by GET /v1/projects/{ref}/secrets.',
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
-    name: 'supabase__create_function_secrets',
+    name: TOOL.createFunctionSecrets,
     description:
       'Set or overwrite project secrets exposed to edge functions. Backed by POST /v1/projects/{ref}/secrets with a `[{ name, value }]` body.',
     inputSchema: {
@@ -409,7 +412,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_function_secrets',
+    name: TOOL.deleteFunctionSecrets,
     description:
       'Delete project secrets by name. Backed by DELETE /v1/projects/{ref}/secrets with the names in the JSON body.',
     inputSchema: {
@@ -424,7 +427,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
 
   // ─── auth plane — users (data plane, service_role fetched gateway-side) ────
   {
-    name: 'supabase__list_users',
+    name: TOOL.listUsers,
     description:
       'List project users (GoTrue admin). The gateway fetches service_role server-side ; the key never leaves it. Backed by GET {ref}.supabase.co/auth/v1/admin/users.',
     inputSchema: {
@@ -438,7 +441,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__get_user',
+    name: TOOL.getUser,
     description:
       'Get one project user by id. Backed by GET {ref}.supabase.co/auth/v1/admin/users/{user_id}.',
     inputSchema: {
@@ -451,7 +454,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__create_user',
+    name: TOOL.createUser,
     description:
       'Create a project user. Backed by POST {ref}.supabase.co/auth/v1/admin/users. Fields : email, password, email_confirm, phone, phone_confirm, user_metadata, app_metadata, ban_duration.',
     inputSchema: {
@@ -471,7 +474,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__update_user',
+    name: TOOL.updateUser,
     description:
       'Update a project user (fields sent overwrite). Backed by PUT {ref}.supabase.co/auth/v1/admin/users/{user_id}.',
     inputSchema: {
@@ -492,7 +495,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_user',
+    name: TOOL.deleteUser,
     description:
       'Delete a project user by id. Backed by DELETE {ref}.supabase.co/auth/v1/admin/users/{user_id}. Irreversible ; cascades on owned rows.',
     inputSchema: {
@@ -505,7 +508,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__generate_link',
+    name: TOOL.generateLink,
     description:
       'Generate a one-time auth link (signup, invite, magiclink, recovery, email_change_current, email_change_new). Backed by POST {ref}.supabase.co/auth/v1/admin/generate_link. The response carries `action_link`.',
     inputSchema: {
@@ -539,7 +542,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
 
   // ─── storage plane — buckets and objects (data plane) ──────────────────────
   {
-    name: 'supabase__create_bucket',
+    name: TOOL.createBucket,
     description:
       'Create a storage bucket. Backed by POST {ref}.supabase.co/storage/v1/bucket. `public: true` serves objects by URL ; otherwise readers need a signed URL.',
     inputSchema: {
@@ -560,7 +563,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__update_bucket',
+    name: TOOL.updateBucket,
     description:
       'Update a storage bucket (public flag, size limit, MIME list). Backed by PUT {ref}.supabase.co/storage/v1/bucket/{id}.',
     inputSchema: {
@@ -576,7 +579,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_bucket',
+    name: TOOL.deleteBucket,
     description:
       'Delete a storage bucket. Backed by DELETE {ref}.supabase.co/storage/v1/bucket/{id}. The bucket must be empty.',
     inputSchema: {
@@ -586,7 +589,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__list_objects',
+    name: TOOL.listObjects,
     description:
       'List objects of a bucket (prefix filter and pagination). Backed by POST {ref}.supabase.co/storage/v1/object/list/{bucket}.',
     inputSchema: {
@@ -606,7 +609,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__upload_object',
+    name: TOOL.uploadObject,
     description:
       'Upload an object to a bucket. The body is sent base64-encoded and decoded gateway-side. Backed by POST {ref}.supabase.co/storage/v1/object/{bucket}/{path}.',
     inputSchema: {
@@ -629,7 +632,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__delete_object',
+    name: TOOL.deleteObject,
     description:
       'Delete one object. Backed by DELETE {ref}.supabase.co/storage/v1/object/{bucket}/{path}.',
     inputSchema: {
@@ -639,7 +642,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'supabase__create_signed_url',
+    name: TOOL.createSignedUrl,
     description:
       'Issue a signed URL granting time-limited read access to a private object. Backed by POST {ref}.supabase.co/storage/v1/object/sign/{bucket}/{path}. The response carries `signedURL`.',
     inputSchema: {
@@ -657,3 +660,25 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
 
 /** Declared tool names, for O(1) membership checks in `execute`. */
 export const SUPABASE_TOOL_NAMES: ReadonlySet<string> = new Set(supabaseTools.map((t) => t.name));
+
+/**
+ * The tools that reach a project's data plane (`{ref}.supabase.co`, GoTrue
+ * admin and Storage) with its `service_role` key, read through the Management
+ * API for the call : `execute` routes them there, and the credential guide
+ * asks for the `API Keys` and `API Key Secrets` permissions on their behalf.
+ */
+export const SUPABASE_DATA_PLANE_TOOLS: readonly SupabaseToolName[] = [
+  TOOL.listUsers,
+  TOOL.getUser,
+  TOOL.createUser,
+  TOOL.updateUser,
+  TOOL.deleteUser,
+  TOOL.generateLink,
+  TOOL.createBucket,
+  TOOL.updateBucket,
+  TOOL.deleteBucket,
+  TOOL.listObjects,
+  TOOL.uploadObject,
+  TOOL.deleteObject,
+  TOOL.createSignedUrl,
+];

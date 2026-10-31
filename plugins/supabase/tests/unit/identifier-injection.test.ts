@@ -19,6 +19,7 @@ import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import { classifySupabase } from '../../src/classify.ts';
 import { supabasePlugin, SUPABASE_API_BASE } from '../../src/index.ts';
+import { resultText, sentQuery } from './support.ts';
 
 const REF = 'tlqgxnezmthbpzhdwxgi';
 const MGMT = `${SUPABASE_API_BASE}/projects/${REF}`;
@@ -224,7 +225,7 @@ describe('supabase identifiers — a value that could leave its position is refu
     async ({ tool, args }) => {
       const fetch = mockFetch(upstream);
       const result = await supabasePlugin.execute(execCtx(fetch), tool, args);
-      expect((result.content[0] as { text: string }).text).toBe(denialOf(tool, args));
+      expect(resultText(result)).toBe(denialOf(tool, args));
     },
   );
 });
@@ -427,11 +428,11 @@ describe('supabase identifiers — query strings and SQL text built by the plugi
 
   test('list_tables interpolates schema identifiers only', async () => {
     const call = await sent('supabase__list_tables', { schemas: ['public', 'app_v2', '_private'] });
-    expect((call.json as { query: string }).query).toContain("in ('public','app_v2','_private')");
+    expect(sentQuery(call)).toContain("in ('public','app_v2','_private')");
     // Absent or empty : the `public` schema, as before.
     for (const args of [{}, { schemas: [] }]) {
       const fallback = await sent('supabase__list_tables', args);
-      expect((fallback.json as { query: string }).query).toContain("in ('public')");
+      expect(sentQuery(fallback)).toContain("in ('public')");
     }
   });
 

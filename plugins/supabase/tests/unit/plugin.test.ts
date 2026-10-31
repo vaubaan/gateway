@@ -28,6 +28,7 @@ import {
   SUPABASE_CLASSIFIED_TOOLS,
   supabasePlugin,
 } from '../../src/index.ts';
+import { resultJson, sentQuery } from './support.ts';
 
 const STAGING_REF = 'tlqgxnezmthbpzhdwxgi';
 const PROD_REF = 'prodxxxxxxxxxxxxxxxx';
@@ -63,9 +64,6 @@ const connCtx = (
 
 const execCtx = (fetch: typeof globalThis.fetch, resources: readonly Resource[] = [staging]) =>
   ({ ...connCtx(fetch), resources }) satisfies ExecuteContext;
-
-const textOf = (result: { content: readonly unknown[] }) =>
-  JSON.parse((result.content[0] as { text: string }).text) as unknown;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Structural kit
@@ -368,7 +366,7 @@ describe('executeSupabase with mockFetch', () => {
       project_ref: STAGING_REF,
     });
     expect(result.isError).toBeUndefined();
-    expect(textOf(result)).toEqual({ name: 'app' });
+    expect(resultJson(result)).toEqual({ name: 'app' });
     expect(fetch.calls[0]!.headers.authorization).toBe('Bearer sbp_access');
   });
 
@@ -377,7 +375,7 @@ describe('executeSupabase with mockFetch', () => {
       {
         method: 'POST',
         url: `${SUPABASE_API_BASE}/projects/${STAGING_REF}/database/query/read-only`,
-        respond: (c) => [{ echoed: (c.json as { query: string }).query }],
+        respond: (c) => [{ echoed: sentQuery(c) }],
       },
     ]);
     const ctx = execCtx(fetch);
@@ -391,9 +389,9 @@ describe('executeSupabase with mockFetch', () => {
     });
     await supabasePlugin.execute(ctx, 'supabase__list_migrations', { project_ref: STAGING_REF });
     expect(fetch.calls).toHaveLength(3);
-    expect((fetch.calls[0]!.json as { query: string }).query).toBe('select 1');
-    expect((fetch.calls[1]!.json as { query: string }).query).toContain("in ('public','app_v2')");
-    expect((fetch.calls[2]!.json as { query: string }).query).toContain('schema_migrations');
+    expect(sentQuery(fetch.calls[0]!)).toBe('select 1');
+    expect(sentQuery(fetch.calls[1]!)).toContain("in ('public','app_v2')");
+    expect(sentQuery(fetch.calls[2]!)).toContain('schema_migrations');
 
     // A schema name that is not an identifier is refused, not quoted into the SQL text.
     const quoted = await supabasePlugin.execute(ctx, 'supabase__list_tables', {
@@ -418,7 +416,7 @@ describe('executeSupabase with mockFetch', () => {
       query: 'create index ix on t(x);',
     });
     expect(fetch.calls[0]!.json).toEqual({ name: 'add_index', query: 'create index ix on t(x);' });
-    expect(textOf(result)).toEqual({ ok: true });
+    expect(resultJson(result)).toEqual({ ok: true });
   });
 
   test('get_anon_key returns the project URL and the anon key only', async () => {
@@ -434,7 +432,7 @@ describe('executeSupabase with mockFetch', () => {
     const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_anon_key', {
       project_ref: STAGING_REF,
     });
-    expect(textOf(result)).toEqual({
+    expect(resultJson(result)).toEqual({
       url: `https://${STAGING_REF}.supabase.co`,
       anon_key: 'anon.jwt',
     });
@@ -471,7 +469,7 @@ describe('executeSupabase with mockFetch', () => {
     expect(upload.headers['content-type']).toBe('image/png');
     expect(upload.headers['x-upsert']).toBe('true');
     expect(upload.body).toBe('hello');
-    expect(textOf(result)).toEqual({ Key: 'avatars/dir/a-b.png' });
+    expect(resultJson(result)).toEqual({ Key: 'avatars/dir/a-b.png' });
     expect(fetch.pending()).toEqual([]);
   });
 
