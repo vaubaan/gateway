@@ -1151,8 +1151,6 @@ export const MISSION_ACTIONS = {
   savedKey: 'I saved the key',
   startFrom: 'Start from a mission…',
   pasteProposal: 'Paste an agent’s proposal',
-  editOneByOne: 'Edit the permissions one by one',
-  hideEditor: 'Hide the permissions',
   change: 'Change',
   changeLimits: 'Change limits',
   editMission: 'Edit mission',
@@ -1185,7 +1183,8 @@ export const MISSION_WORDS = {
   kitWithoutKey: 'Three snippets and a check. The key itself was shown once.',
   noKeyWorks: 'No key works on this mission now.',
   notServing: 'No key can be made now: the mission does not serve calls.',
-  explicitList: 'Only the accounts you can use. A preset fills an explicit list.',
+  explicitList:
+    'Only the accounts you can use. Each macro-action, at its cran, writes explicit permissions.',
   /** An account a mission was given whole (resource scope `connection`). */
   wholeAccount: 'the whole account, including resources found later',
   /** After a resource the mission created itself (ADR created-resources-join-the-mission). */

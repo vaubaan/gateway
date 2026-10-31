@@ -10,17 +10,18 @@ tracks:
   - apps/gateway/src/app/(app)/missions/
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Missions — handbook
 
-How a mission is previewed, issued, edited, shared with teammates and handed to an agent. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §0, §3.1–3.3 bis, §4.2, §4.4, §7.4–7.9 bis; who may delegate what: [authority](authority.md). ADRs: [preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md), [mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md), [created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md), [mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md), [mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md), [permission-request-asked-by-the-agent](../decisions/permission-request-asked-by-the-agent.md), [mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md).
+How a mission is previewed, issued, edited, shared with teammates and handed to an agent. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §0, §3.1–3.3 bis, §4.2, §4.4, §7.4–7.9 bis; who may delegate what: [authority](authority.md). ADRs: [macro-actions-and-trust-crans-prefill-the-policy](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md), [preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md), [mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md), [created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md), [mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md), [mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md), [permission-request-asked-by-the-agent](../decisions/permission-request-asked-by-the-agent.md), [mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md).
 
 ## Start here
 
 - [`mission-service.ts`](../../apps/gateway/src/server/missions/mission-service.ts) — every act on a mission: issue, preview, edit, gate, limits, rotate, revoke, `verifyToken`, `access`.
 - [`preview.ts`](../../apps/gateway/src/server/missions/preview.ts) — `previewDraft`, the pure decision behind the form, the management door's `preview_policy`, `issue` and `edit`.
+- [`macro-actions.ts`](../../apps/gateway/src/server/missions/macro-actions.ts) — the connection's macro-actions ("Anything else" added for the fallback) and the lines a cran writes (risk model §4.7); the form's Simple view is `missions/new/macro-action-panel.tsx`.
 - [`everything-i-hold.ts`](../../apps/gateway/src/server/missions/everything-i-hold.ts) — the built-in preset and its one budget rule (spec §3.2; `RATE_BY_LEVEL`, `QUOTA_BY_LEVEL`).
 - [`team-service.ts`](../../apps/gateway/src/server/missions/team-service.ts) — teammates and keys (member and named tokens).
 - [`mission-reach.ts`](../../apps/gateway/src/server/store/mission-reach.ts) — what a mission reaches on a connection.
@@ -28,8 +29,9 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 
 ## Invariants
 
-- **One decision, run in the browser too.** `preview.ts`, `model.ts`, `catalog-view.ts`, `summary.ts`, `everything-i-hold.ts`, `mission-edit.ts` are browser-safe: the forms import them and show the server's own verdict. The `index.ts` barrel is server-only (`node:crypto`, argon2); never import it from those files.
+- **One decision, run in the browser too.** `preview.ts`, `model.ts`, `catalog-view.ts`, `macro-actions.ts`, `summary.ts`, `everything-i-hold.ts`, `mission-edit.ts` are browser-safe: the forms import them and show the server's own verdict. The `index.ts` barrel is server-only (`node:crypto`, argon2); never import it from those files.
 - **The persisted policy is the enumeration.** `issue` recomputes any preset, `everything-i-hold` included, server-side and stores explicit lines only: the row, the token, the `mission-issued` entry and the kit never name a preset, so a later catalog or authority change cannot widen a mission.
+- **Crans redraw, never decide.** The form sends the crans with the explicit lines; `knownCrans` keeps those of the connection's macro-actions and `mission_connections.crans_json` stores them. Nothing reads them but the form: a mission loads in the Simple view only when its crans write exactly its lines (`loadResolved`), else in the Advanced view. A cran change alone is no edit (`hasChanges` ignores it).
 - **One reach rule, three readers.** `reachedResources` is read at every request by the execution door (`loadMissionContext`), the mission detail and the kit, never cached, so the agent is never told it may touch what the door refuses.
 - **`all` is a frozen list.** It is stored as the explicit ids known at issuance (an empty one reaches nothing); only `{ scope: 'connection' }` reaches resources found later, and nothing converts one into the other. A resource the mission's own creating call made joins its list (`CreatedResources.record`, after the call, before the answer).
 - **Creator-only mutations.** Every mutation goes through `ownMission`, which knows only the creator; `access` gives read to the creator and current members. "Not found" and "not yours" are one answer everywhere.

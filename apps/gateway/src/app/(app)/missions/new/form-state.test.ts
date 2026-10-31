@@ -1,23 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import { everythingIHold } from '@/server/missions/everything-i-hold';
+import type { MacroActionCrans } from '@/server/missions/macro-actions';
 import { previewDraft } from '@/server/missions/preview';
 import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from '@/server/missions/testing';
 
 import {
-  applyPreset,
+  applyCrans,
+  applyEverything,
   availableCount,
-  backToPreset,
+  chosenPalier,
   clearAll,
   defaultEntryFor,
   describeEverything,
-  describeSkipped,
   discardsEdits,
   draftOf,
   draftResourcesOf,
   dropUnresolvable,
   editorRows,
-  enterCustom,
   expiryOf,
   explainPreset,
   filterRows,
@@ -25,19 +25,18 @@ import {
   initialFormState,
   issueSentence,
   loadResolved,
-  policyCounts,
-  presetUnavailable,
-  presetWidth,
-  startEmpty,
-  startFromPreset,
+  macroActionRows,
   periodChoiceOf,
   periodOf,
-  presetSkipped,
+  policyCounts,
+  resetEdits,
   RESOURCE_CHOICES,
   selectAll,
   setIncluded,
+  setMacroAction,
   setResourceScope,
   setResources,
+  setView,
   toggleRisk,
   updateEntry,
   type ConnectionState,
@@ -47,6 +46,9 @@ import {
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 const acme = acmeConnection();
 const context = [acme];
+
+/** Reads at Confiant, changes at Prudent: the usual start of a working mission. */
+const WORKING: MacroActionCrans = { read: 'confiant', change: 'prudent' };
 
 function riskOf(id: string) {
   const risk = acme.risks.find((r) => r.risk_id === id);
@@ -64,9 +66,9 @@ function withConnection(state: FormState, cs: ConnectionState): FormState {
   return { ...state, connections: { ...state.connections, [acme.id]: cs } };
 }
 
-function included(presetId = ''): ConnectionState {
+function included(crans: MacroActionCrans = {}, connection = acme): ConnectionState {
   const cs = setIncluded(connectionOf(initialFormState(context)), true);
-  return presetId ? applyPreset(acme, cs, presetId) : cs;
+  return Object.keys(crans).length > 0 ? applyCrans(connection, { ...cs, crans }) : cs;
 }
 
 function previewOf(cs: ConnectionState, name = 'Mission') {
@@ -79,9 +81,10 @@ describe('creation form — initial state', () => {
     const state = initialFormState(context);
     expect(connectionOf(state)).toEqual({
       included: false,
-      mode: 'preset',
+      view: 'simple',
       resourceScope: 'all',
       resourceIds: ['res-app-staging', 'res-app-prod', 'res-scratch'],
+      crans: {},
       presetId: '',
       entries: {},
       edited: false,
@@ -105,13 +108,14 @@ describe('creation form — curated resources', () => {
 
   it('issues with a hidden resource the creator ticked', () => {
     const start = initialFormState([curated]);
-    const cs = applyPreset(
+    const cs = setMacroAction(
       curated,
       setResources(curated, setIncluded(start.connections[curated.id]!, true), [
         'res-app-prod',
         'res-archive',
       ]),
-      'reader',
+      'read',
+      'prudent',
     );
     const state = { ...start, name: 'm', connections: { [curated.id]: cs } };
     const preview = previewDraft(
@@ -123,102 +127,185 @@ describe('creation form — curated resources', () => {
   });
 });
 
-describe('creation form — presets', () => {
-  it('fills the policy from the preset in one step, and the draft is issuable', () => {
-    const cs = included('developer');
-    expect(Object.keys(cs.entries)).toEqual([
-      'acme.read',
-      'acme[staging].write',
-      'acme[staging].bulk-delete',
+describe('creation form — macro-actions at a cran', () => {
+  it('lists the catalog\'s macro-actions, then "Anything else" holding the fallback', () => {
+    expect(acme.macro_actions.map((a) => a.id)).toEqual([
+      'read',
+      'change',
+      'administer',
+      'anything-else',
     ]);
-    expect(cs.entries['acme[staging].bulk-delete']).toEqual({
-      quota: '5',
-      rateMax: '1',
-      rateWindow: '60',
-      gate: 'approval',
+    expect(acme.macro_actions.at(-1)?.entries.map((e) => e.risk_id)).toEqual([
+      'acme.uncategorized-write',
+    ]);
+  });
+
+  it('fills the lines of each ticked macro-action from its cran, and the draft is issuable', () => {
+    const cs = included(WORKING);
+    expect(cs.entries).toEqual({
+      // Palier 1 at Confiant: runs freely, base budget ×3.
+      'acme.read': { quota: '300', rateMax: '180', rateWindow: '60', gate: 'auto' },
+      // Palier 3 (costly) at Prudent: asks first, base budget.
+      'acme[staging].write': { quota: '100', rateMax: '60', rateWindow: '60', gate: 'approval' },
+      'acme[prod].write': { quota: '100', rateMax: '60', rateWindow: '60', gate: 'approval' },
     });
     expect(cs.edited).toBe(false);
     expect(previewOf(cs).ok).toBe(true);
   });
 
-  it('sends the explicit enumeration, never the preset reference', () => {
-    const draft = draftOf(
-      context,
-      withConnection(initialFormState(context), included('reader')),
-      NOW,
+  it('leaves out an irreversible permission at Prudent and asks first above it', () => {
+    const prudent = macroActionRows(acme, included({ change: 'prudent' })).find(
+      (row) => row.id === 'change',
     );
-    expect(draft.connections).toEqual([
-      {
-        connection_id: 'conn-acme',
-        resources: {
-          scope: 'selected',
-          resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
-        },
-        preset: null,
-        policy: [
-          {
-            risk_id: 'acme.read',
-            quota: 100,
-            rate_limit: { max: 60, window_seconds: 60 },
-            gate: 'auto',
-          },
-        ],
-      },
-    ]);
+    expect(prudent).toMatchObject({ cran: 'prudent', free: 0, asks: 2, leftOut: 1, total: 3 });
+    const autonome = setMacroAction(acme, included(), 'change', 'autonome');
+    expect(autonome.entries['acme[staging].write']?.gate).toBe('auto');
+    expect(autonome.entries['acme[staging].bulk-delete']).toEqual({
+      quota: '50',
+      rateMax: '10',
+      rateWindow: '60',
+      gate: 'approval',
+    });
   });
 
-  it('follows the resource selection while untouched, and says what the preset left out', () => {
-    const prodOnly = setResources(acme, included('developer'), ['res-app-prod']);
-    expect(Object.keys(prodOnly.entries)).toEqual(['acme.read']);
-    expect(describeSkipped(presetSkipped(acme, prodOnly))).toBe(
-      '2 permissions of the preset left out here: 2 need a selected resource labelled "staging".',
-    );
-    const back = setResources(acme, prodOnly, ['res-app-prod', 'res-app-staging']);
-    expect(Object.keys(back.entries)).toHaveLength(3);
-    expect(describeSkipped(presetSkipped(acme, back))).toBeNull();
+  it('keeps the rate under the catalog ceiling whatever the cran multiplies', () => {
+    const cs = included({ administer: 'autonome' });
+    expect(cs.entries['acme.admin']).toMatchObject({ quota: '50', rateMax: '10' });
   });
 
-  it('keeps the creator’s entries once edited, and flags the ones that no longer resolve', () => {
-    const edited = updateEntry(included('developer'), 'acme.read', { quota: '7' });
-    const prodOnly = setResources(acme, edited, ['res-app-prod']);
-    expect(Object.keys(prodOnly.entries)).toHaveLength(3);
-    expect(prodOnly.entries['acme.read']?.quota).toBe('7');
-    const preview = previewOf(prodOnly);
-    expect(preview.issues.map((i) => i.code)).toEqual(['unresolvable-env']);
-    const cleaned = dropUnresolvable(acme, prodOnly);
-    expect(Object.keys(cleaned.entries)).toEqual(['acme.read']);
+  it('unticks a macro-action, and says what a row cannot give here', () => {
+    const cs = setMacroAction(acme, included(WORKING), 'change', null);
+    expect(Object.keys(cs.entries)).toEqual(['acme.read']);
+    const narrow = acmeConnection({ authority: ['acme.read'] });
+    const rows = macroActionRows(narrow, included({}, narrow));
+    expect(rows.find((r) => r.id === 'change')).toMatchObject({ unavailable: 3, empty: true });
+    expect(rows.find((r) => r.id === 'read')).toMatchObject({ unavailable: 0, empty: false });
+  });
+
+  it('follows the resource selection while untouched, and keeps edits once made', () => {
+    const prodOnly = setResources(acme, included(WORKING), ['res-app-prod']);
+    expect(Object.keys(prodOnly.entries)).toEqual(['acme.read', 'acme[prod].write']);
+    const edited = updateEntry(included(WORKING), 'acme.read', { quota: '7' });
+    const kept = setResources(acme, edited, ['res-app-prod']);
+    expect(Object.keys(kept.entries)).toHaveLength(3);
+    expect(kept.entries['acme.read']?.quota).toBe('7');
+    expect(previewOf(kept).issues.map((i) => i.code)).toEqual(['unresolvable-env']);
+    const cleaned = dropUnresolvable(acme, kept);
+    expect(Object.keys(cleaned.entries)).toEqual(['acme.read', 'acme[prod].write']);
     expect(previewOf(cleaned).ok).toBe(true);
   });
 
-  it('expands a base-id preset entry per selected environment', () => {
-    expect(Object.keys(included('writer').entries)).toEqual([
+  it('sends the explicit lines and the crans, never a preset', () => {
+    const draft = draftOf(
+      context,
+      withConnection(initialFormState(context), included(WORKING)),
+      NOW,
+    );
+    expect(draft.connections[0]).toMatchObject({ preset: null, crans: WORKING });
+    expect(draft.connections[0]?.policy?.map((e) => e.risk_id)).toEqual([
+      'acme.read',
       'acme[staging].write',
       'acme[prod].write',
     ]);
-    const unlabelled = setResources(acme, included('writer'), ['res-scratch']);
-    expect(unlabelled.entries).toEqual({});
-    expect(describeSkipped(presetSkipped(acme, unlabelled))).toBe(
-      '1 permission of the preset left out here: 1 needs a selected resource with an environment label.',
+    // No macro-action ticked: no crans sent.
+    const bare = toggleRisk(acme, included(), riskOf('acme.read'));
+    const none = draftOf(context, withConnection(initialFormState(context), bare), NOW);
+    expect(none.connections[0]).not.toHaveProperty('crans');
+  });
+
+  it('counts the policy and names its highest palier', () => {
+    expect(policyCounts(acme, included(WORKING))).toEqual({ free: 1, asks: 2, notIncluded: 2 });
+    expect(chosenPalier(acme, included(WORKING))).toBe(3);
+    expect(chosenPalier(acme, included({ read: 'prudent' }))).toBe(1);
+    expect(chosenPalier(acme, included())).toBeNull();
+  });
+});
+
+describe('creation form — Simple and Advanced', () => {
+  it('switches the view without touching the policy', () => {
+    const cs = included(WORKING);
+    const advanced = setView(cs, 'advanced');
+    expect(advanced.entries).toEqual(cs.entries);
+    expect(discardsEdits(advanced)).toBe(false);
+    const draftIn = (state: ConnectionState) =>
+      draftOf(context, withConnection({ ...initialFormState(context), name: 'm' }, state), NOW);
+    expect(draftIn(advanced)).toEqual(draftIn(cs));
+    expect(JSON.stringify(draftIn(advanced))).not.toMatch(/simple|advanced|view/);
+  });
+
+  it('warns before the crans rewrite edits, and resets to what the crans write', () => {
+    const edited = updateEntry(setView(included(WORKING), 'advanced'), 'acme.read', {
+      quota: '7',
+    });
+    expect(discardsEdits(edited)).toBe(true);
+    const back = resetEdits(acme, edited);
+    expect(back).toMatchObject({ edited: false, crans: WORKING });
+    expect(back.entries['acme.read']?.quota).toBe('300');
+  });
+
+  it("gives a hand-ticked risk its macro-action's base budget at that cran, else none", () => {
+    expect(defaultEntryFor(acme, {}, riskOf('acme.read'))).toEqual({
+      quota: '100',
+      rateMax: '60',
+      rateWindow: '60',
+      gate: 'auto',
+    });
+    expect(defaultEntryFor(acme, { read: 'autonome' }, riskOf('acme.read')).quota).toBe('1000');
+    // Left out at Prudent: ticked by hand, it asks first at the base budget.
+    expect(defaultEntryFor(acme, {}, riskOf('acme[staging].bulk-delete'))).toEqual({
+      quota: '5',
+      rateMax: '1',
+      rateWindow: '60',
+      gate: 'approval',
+    });
+    // The fallback belongs to "Anything else".
+    expect(defaultEntryFor(acme, {}, riskOf('acme.uncategorized-write')).gate).toBe('approval');
+    // A deprecated entry is in no macro-action.
+    expect(defaultEntryFor(acme, {}, riskOf('acme.legacy-export'))).toEqual({
+      quota: '',
+      rateMax: '',
+      rateWindow: '',
+      gate: 'auto',
+    });
+  });
+
+  it('redraws a loaded mission in the simple view when its crans write its lines', () => {
+    const source = previewOf(included(WORKING));
+    const loaded = connectionOf(loadResolved(context, initialFormState(context), source.resolved));
+    expect(loaded).toMatchObject({ view: 'simple', edited: false, crans: WORKING, included: true });
+  });
+
+  it('opens a loaded mission in the advanced view when its lines differ from its crans', () => {
+    const adjusted = previewOf(updateEntry(included(WORKING), 'acme.read', { quota: '9' }));
+    const loaded = connectionOf(
+      loadResolved(context, initialFormState(context), adjusted.resolved),
+    );
+    expect(loaded).toMatchObject({ view: 'advanced', edited: true, crans: WORKING });
+    expect(loaded.entries['acme.read']?.quota).toBe('9');
+    expect(previewOf(loaded).policy).toEqual(adjusted.policy);
+    // No crans recorded (an older mission, a proposal): the advanced view too.
+    const bare = previewOf(toggleRisk(acme, included(), riskOf('acme.read')));
+    expect(connectionOf(loadResolved(context, initialFormState(context), bare.resolved)).view).toBe(
+      'advanced',
     );
   });
 
-  it('reports preset entries outside the authority', () => {
-    const narrow = acmeConnection({ authority: ['acme.read'] });
-    const cs = applyPreset(narrow, included(), 'developer');
-    expect(Object.keys(cs.entries)).toEqual(['acme.read']);
-    expect(describeSkipped(presetSkipped(narrow, cs))).toBe(
-      '2 permissions of the preset left out here: 2 outside what you may allow.',
+  it('drops the crans of a macro-action the connection does not have', () => {
+    const source = previewOf(included(WORKING));
+    const [line] = source.resolved;
+    if (!line) throw new Error('no resolved line');
+    const loaded = connectionOf(
+      loadResolved(context, initialFormState(context), [
+        { ...line, crans: { ...line.crans, nonsense: 'autonome' } },
+      ]),
     );
-  });
-
-  it('empties the policy when the preset is cleared', () => {
-    expect(applyPreset(acme, included('developer'), '').entries).toEqual({});
+    expect(loaded.crans).toEqual(WORKING);
   });
 });
 
 describe('creation form — per-risk detail', () => {
-  it('overrides one risk of a preset and issues the adjusted values', () => {
-    let cs = included('developer');
+  it('overrides one line the crans wrote and issues the adjusted values', () => {
+    let cs = included(WORKING);
     cs = updateEntry(cs, 'acme.read', { quota: '25', rateMax: '3', rateWindow: '10' });
     cs = updateEntry(cs, 'acme[staging].write', { gate: 'approval' });
     expect(cs.edited).toBe(true);
@@ -228,36 +315,16 @@ describe('creation form — per-risk detail', () => {
       { risk_id: 'acme.read', quota: 25, rate_limit: { max: 3, window_seconds: 10 }, gate: 'auto' },
       {
         risk_id: 'acme[staging].write',
-        quota: 200,
-        rate_limit: { max: 30, window_seconds: 60 },
+        quota: 100,
+        rate_limit: { max: 60, window_seconds: 60 },
         gate: 'approval',
       },
     ]);
   });
 
-  it('gives a hand-ticked risk the chosen preset’s budget, else another preset’s, else none', () => {
-    const selected = acme.resources;
-    expect(defaultEntryFor(acme, 'reader', riskOf('acme.read'), selected).quota).toBe('100');
-    expect(defaultEntryFor(acme, 'developer', riskOf('acme.read'), selected).quota).toBe('1000');
-    // Not in `reader`: the first preset that carries it lends its values.
-    expect(defaultEntryFor(acme, 'reader', riskOf('acme[staging].bulk-delete'), selected)).toEqual({
-      quota: '5',
-      rateMax: '1',
-      rateWindow: '60',
-      gate: 'approval',
-    });
-    // Carried by `writer` under its base id.
-    expect(defaultEntryFor(acme, 'reader', riskOf('acme[prod].write'), selected).quota).toBe('50');
-    expect(defaultEntryFor(acme, 'reader', riskOf('acme.admin'), selected)).toEqual({
-      quota: '',
-      rateMax: '',
-      rateWindow: '',
-      gate: 'auto',
-    });
-  });
-
   it('blocks issuance while a ticked risk has no budget, until the creator types one', () => {
-    let cs = toggleRisk(acme, included('reader'), riskOf('acme.admin'));
+    let cs = toggleRisk(acme, included({ read: 'prudent' }), riskOf('acme.admin'));
+    cs = updateEntry(cs, 'acme.admin', { quota: '' });
     expect(previewOf(cs).issues.map((i) => i.code)).toEqual(['missing-budget']);
     cs = updateEntry(cs, 'acme.admin', { quota: '2', rateMax: '1', rateWindow: '60' });
     expect(previewOf(cs).ok).toBe(true);
@@ -266,12 +333,12 @@ describe('creation form — per-risk detail', () => {
   });
 
   it('unticks a risk', () => {
-    const cs = toggleRisk(acme, included('developer'), riskOf('acme.read'));
-    expect(Object.keys(cs.entries)).toEqual(['acme[staging].write', 'acme[staging].bulk-delete']);
+    const cs = toggleRisk(acme, included(WORKING), riskOf('acme.read'));
+    expect(Object.keys(cs.entries)).toEqual(['acme[staging].write', 'acme[prod].write']);
   });
 
   it('"select all" yields an enumerated list: every held, resolvable risk, one id each', () => {
-    const cs = selectAll(acme, included('developer'));
+    const cs = selectAll(acme, included(WORKING));
     expect(Object.keys(cs.entries).sort()).toEqual(
       [
         'acme.read',
@@ -285,8 +352,8 @@ describe('creation form — per-risk detail', () => {
     // Neither the fallback nor a deprecated entry is part of "all".
     expect(cs.entries['acme.uncategorized-write']).toBeUndefined();
     expect(cs.entries['acme.legacy-export']).toBeUndefined();
-    // The preset's values are kept for what it already carried.
-    expect(cs.entries['acme.read']?.quota).toBe('1000');
+    // The crans' values are kept for what they already wrote.
+    expect(cs.entries['acme.read']?.quota).toBe('300');
     const draft = draftOf(context, withConnection(initialFormState(context), cs), NOW);
     expect(draft.connections[0]?.policy?.map((e) => e.risk_id)).toEqual([
       'acme.read',
@@ -335,8 +402,8 @@ describe('creation form — period, expiry, loading a draft', () => {
     expect(expiryOf({ expiry: 'custom', expiryCustom: '' }, NOW)).toBe('unset');
   });
 
-  it('loads a resolved draft: included, ticked with its values, protected from presets', () => {
-    const source = previewOf(updateEntry(included('developer'), 'acme.read', { quota: '9' }));
+  it('loads a resolved draft: included, ticked with its values, protected from the crans', () => {
+    const source = previewOf(updateEntry(included(WORKING), 'acme.read', { quota: '9' }));
     const loaded = loadResolved(context, initialFormState(context), source.resolved);
     const cs = connectionOf(loaded);
     expect(cs.included).toBe(true);
@@ -346,156 +413,10 @@ describe('creation form — period, expiry, loading a draft', () => {
   });
 });
 
-describe('creation form — a preset explains itself', () => {
-  function explained(cs: ConnectionState, presetId: string, connection = acme) {
-    const explanation = explainPreset(connection, cs, presetId);
-    if (!explanation) throw new Error(`preset ${presetId} not explained`);
-    return explanation;
-  }
-
-  it('says what passes, what waits for an approval and what is left out, with each budget', () => {
-    const developer = explained(included(), 'developer');
-    expect(
-      developer.auto.map((l) => [l.risk.label, l.risk.env, l.quota, l.rate_limit.max]),
-    ).toEqual([
-      ['Read things', null, 1000, 120],
-      ['Write a thing', 'staging', 200, 30],
-    ]);
-    expect(developer.approval.map((l) => l.risk.risk_id)).toEqual(['acme[staging].bulk-delete']);
-    expect(developer.leftOut.map((f) => [f.base_id, f.variants.map((v) => v.env)])).toEqual([
-      ['acme.write', ['prod']],
-      ['acme.admin', [null]],
-      ['acme.legacy-export', [null]],
-      ['acme.uncategorized-write', [null]],
-    ]);
-    expect(developer.skipped).toEqual([]);
-    expect(presetWidth(developer)).toBe(3);
-    expect(presetUnavailable(developer)).toBeNull();
-    // The counts under the choice are the policy as it stands in the form: the fallback
-    // and the deprecated entry are never counted as something the preset "left out".
-    expect(policyCounts(acme, included('developer'))).toEqual({ free: 2, asks: 1, notIncluded: 2 });
-  });
-
-  it('is the policy the preset fills: the card and the entries cannot disagree', () => {
-    for (const preset of acme.presets) {
-      const cs = included(preset.id);
-      const explanation = explained(cs, preset.id);
-      expect(
-        [...explanation.auto, ...explanation.approval].map((l) => l.risk.risk_id).sort(),
-      ).toEqual(Object.keys(cs.entries).sort());
-    }
-  });
-
-  it('names the entries a selection cannot resolve, with the label a resource would need', () => {
-    const prodOnly = setResources(acme, included(), ['res-app-prod']);
-    const developer = explained(prodOnly, 'developer');
-    expect(developer.auto.map((l) => l.risk.risk_id)).toEqual(['acme.read']);
-    expect(developer.skipped.map((f) => [f.label, f.why])).toEqual([
-      ['Write a thing', 'needs a selected resource labelled "staging"'],
-      ['Delete things in bulk', 'needs a selected resource labelled "staging"'],
-    ]);
-    // What cannot be accepted here is not offered as "not included".
-    expect(developer.leftOut.flatMap((f) => f.variants.map((v) => v.risk_id))).toEqual([
-      'acme[prod].write',
-      'acme.admin',
-      'acme.legacy-export',
-      'acme.uncategorized-write',
-    ]);
-    expect(presetWidth(developer)).toBe(1);
-    // A base-id entry no selected resource can resolve names every environment it could use.
-    const unlabelled = setResources(acme, included(), ['res-scratch']);
-    expect(explained(unlabelled, 'writer').skipped.map((f) => f.why)).toEqual([
-      'needs a selected resource labelled "staging" or "prod"',
-    ]);
-  });
-
-  it('names the entries outside the authority', () => {
-    const narrow = acmeConnection({ authority: ['acme.read'] });
-    const developer = explained(included(), 'developer', narrow);
-    expect(developer.skipped.map((f) => f.why)).toEqual([
-      'outside what you may allow',
-      'outside what you may allow',
-    ]);
-    expect(developer.leftOut).toEqual([]);
-    expect(presetWidth(developer)).toBe(1);
-  });
-
-  it('says why a preset would allow nothing, instead of offering an empty mission', () => {
-    // No selected resource carries an environment: every entry of "writer" needs one.
-    const unlabelled = setResources(acme, included(), ['res-scratch']);
-    const writer = explained(unlabelled, 'writer');
-    expect(presetWidth(writer)).toBe(0);
-    expect(presetUnavailable(writer)).toBe(
-      'needs a selected resource labelled "staging" or "prod": none selected',
-    );
-    // Nothing of the preset is within what the reader may allow.
-    const none = acmeConnection({ authority: [] });
-    expect(presetUnavailable(explained(included(), 'developer', none))).toBe(
-      'outside what you may allow',
-    );
-  });
-
-  it('answers null for an id that is not a preset of the plugin', () => {
-    expect(explainPreset(acme, included(), 'no-such-preset')).toBeNull();
-  });
-});
-
-describe('creation form — Preset or Custom', () => {
-  it('opens the editor on the preset values, with nothing to lose yet', () => {
-    const preset = included('developer');
-    const custom = enterCustom(preset);
-    expect(custom.mode).toBe('custom');
-    expect(custom.entries).toEqual(preset.entries);
-    expect(custom.presetId).toBe('developer');
-    expect(discardsEdits(custom)).toBe(false);
-    // Untouched, the policy still follows the resource selection.
-    expect(Object.keys(setResources(acme, custom, ['res-app-prod']).entries)).toEqual([
-      'acme.read',
-    ]);
-  });
-
-  it('warns before going back once something was edited, then restores the preset as it is', () => {
-    const edited = updateEntry(enterCustom(included('developer')), 'acme.read', { quota: '7' });
-    expect(discardsEdits(edited)).toBe(true);
-    const back = backToPreset(acme, edited);
-    expect(back).toMatchObject({ mode: 'preset', presetId: 'developer', edited: false });
-    expect(back.entries['acme.read']?.quota).toBe('1000');
-    expect(discardsEdits(back)).toBe(false);
-  });
-
-  it('never warns in Preset mode, and goes back to an empty policy when no preset was picked', () => {
-    expect(discardsEdits(included('developer'))).toBe(false);
-    const fromScratch = toggleRisk(acme, enterCustom(included()), riskOf('acme.read'));
-    expect(discardsEdits(fromScratch)).toBe(true);
-    expect(backToPreset(acme, fromScratch)).toMatchObject({ mode: 'preset', entries: {} });
-  });
-
-  it('"start from preset" pre-fills the editor and keeps it open', () => {
-    const custom = startFromPreset(acme, enterCustom(included()), 'reader');
-    expect(custom).toMatchObject({ mode: 'custom', presetId: 'reader', edited: false });
-    expect(Object.keys(custom.entries)).toEqual(['acme.read']);
-    expect(custom.entries['acme.read']?.quota).toBe('100');
-  });
-
-  it('sends the same explicit draft in both modes: the mode is not part of the mission', () => {
-    const preset = included('developer');
-    const draftIn = (cs: ConnectionState) =>
-      draftOf(context, withConnection({ ...initialFormState(context), name: 'm' }, cs), NOW);
-    expect(draftIn(enterCustom(preset))).toEqual(draftIn(preset));
-    expect(JSON.stringify(draftIn(enterCustom(preset)))).not.toMatch(/developer|custom|mode/);
-  });
-
-  it('loads a duplicated mission or a proposal as a custom policy', () => {
-    const source = previewOf(included('developer'));
-    const loaded = connectionOf(loadResolved(context, initialFormState(context), source.resolved));
-    expect(loaded).toMatchObject({ mode: 'custom', edited: true, included: true });
-  });
-});
-
-describe('creation form — the Custom editor', () => {
+describe('creation form — the advanced view', () => {
   it('lists every explicit id of the catalog, and says why one cannot be ticked', () => {
     const narrow = acmeConnection({ authority: ['acme.read', 'acme[staging].write'] });
-    const cs = setResources(narrow, enterCustom(included()), ['res-app-prod']);
+    const cs = setResources(narrow, setView(included(), 'advanced'), ['res-app-prod']);
     const rows = editorRows(narrow, toggleRisk(narrow, cs, riskOf('acme.read')));
     expect(rows.map((r) => r.risk.risk_id)).toEqual(narrow.risks.map((r) => r.risk_id));
     const status = Object.fromEntries(rows.map((r) => [r.risk.risk_id, r.unavailable]));
@@ -506,7 +427,7 @@ describe('creation form — the Custom editor', () => {
   });
 
   it('searches the label, the id, the reason, the environment, the kind and the level', () => {
-    const rows = editorRows(acme, enterCustom(included('developer')));
+    const rows = editorRows(acme, setView(included(WORKING), 'advanced'));
     const ids = (query: string, filter: Parameters<typeof filterRows>[2] = 'all') =>
       filterRows(rows, query, filter).map((r) => r.risk.risk_id);
     expect(ids('')).toHaveLength(rows.length);
@@ -521,7 +442,12 @@ describe('creation form — the Custom editor', () => {
     const narrow = acmeConnection({
       authority: ['acme.read', 'acme[staging].write', 'acme[prod].write'],
     });
-    const rows = editorRows(narrow, enterCustom(applyPreset(narrow, included(), 'developer')));
+    const picked = toggleRisk(
+      narrow,
+      included({ read: 'prudent' }, narrow),
+      riskOf('acme[staging].write'),
+    );
+    const rows = editorRows(narrow, picked);
     const ids = (filter: Parameters<typeof filterRows>[2]) =>
       filterRows(rows, '', filter).map((r) => r.risk.risk_id);
     expect(ids('accepted')).toEqual(['acme.read', 'acme[staging].write']);
@@ -539,21 +465,12 @@ describe('creation form — the Custom editor', () => {
   });
 });
 
-describe('creation form — Custom, start empty', () => {
-  it('empties the list and ties it to no preset, with nothing to lose', () => {
-    const empty = startEmpty(included('developer'));
-    expect(empty).toMatchObject({ mode: 'custom', presetId: '', entries: {}, edited: false });
-    expect(discardsEdits(empty)).toBe(false);
-    expect(policyCounts(acme, empty)).toEqual({ free: 0, asks: 0, notIncluded: 5 });
-  });
-});
-
 describe('creation form — what stands in the way, in the words of the interface', () => {
   it('says each blocking reason without a protocol word, and names the account', () => {
     const blank = previewOf(included());
     const sentences = blank.issues.map((issue) => issueSentence(issue, context));
     expect(sentences).toContain(
-      `${acme.provider_label} · ${acme.display_name} allows nothing yet: pick a preset or a permission, or leave the account out.`,
+      `${acme.provider_label} · ${acme.display_name} allows nothing yet: tick a macro-action or a permission, or leave the account out.`,
     );
     expect(issueSentence({ code: 'name-missing', message: 'x' }, context)).toBe(
       'Give the mission a name.',
@@ -611,15 +528,22 @@ describe('creation form — how far the mission reaches on an account', () => {
   it('loads a whole-connection proposal as such', () => {
     const state = initialFormState(context);
     const loaded = loadResolved(context, state, [
-      { connection_id: 'conn-acme', resources: { scope: 'connection' }, preset: null, policy: [] },
+      {
+        connection_id: 'conn-acme',
+        resources: { scope: 'connection' },
+        preset: null,
+        policy: [],
+        crans: {},
+      },
     ]);
     expect(loaded.connections['conn-acme']?.resourceScope).toBe('connection');
   });
 });
 
 describe('creation form — "Everything I hold on this account"', () => {
-  it('is a choice of every account, after the plugin presets, and fills the explicit list', () => {
-    const cs = included('everything-i-hold');
+  it('is offered on every account, and fills the explicit list in place of the crans', () => {
+    const cs = applyEverything(acme, included(WORKING));
+    expect(cs.crans).toEqual({});
     const expected = everythingIHold(acme, ACME_RESOURCES).entries;
     expect(Object.keys(cs.entries)).toEqual(expected.map((e) => e.risk_id));
     expect(cs.entries['acme.admin']).toEqual({
@@ -637,7 +561,7 @@ describe('creation form — "Everything I hold on this account"', () => {
   });
 
   it('follows the resource selection while untouched', () => {
-    const cs = setResources(acme, included('everything-i-hold'), ['res-scratch']);
+    const cs = setResources(acme, applyEverything(acme, included()), ['res-scratch']);
     expect(Object.keys(cs.entries)).toEqual([
       'acme.read',
       'acme.admin',
@@ -649,7 +573,7 @@ describe('creation form — "Everything I hold on this account"', () => {
     const explanation = explainPreset(acme, included(), 'everything-i-hold');
     expect(explanation).not.toBeNull();
     if (!explanation) return;
-    expect(presetWidth(explanation)).toBe(6);
+    expect(explanation.auto.length + explanation.approval.length).toBe(6);
     const sentences = describeEverything(acme, explanation) ?? [];
     expect(sentences[0]).toContain('Written out as 6 permissions');
     expect(sentences).toContain('Most severe: Delete things in bulk (high).');
@@ -658,7 +582,7 @@ describe('creation form — "Everything I hold on this account"', () => {
     for (const sentence of sentences) {
       expect(sentence).not.toMatch(/\b(risk|quota|budget|connection|authority)\b/i);
     }
-    // Any other preset has no such paragraph.
+    // A plugin preset has no such paragraph.
     const developer = explainPreset(acme, included(), 'developer');
     expect(developer && describeEverything(acme, developer)).toBeNull();
   });

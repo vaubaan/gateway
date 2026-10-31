@@ -9,6 +9,7 @@
  * an agent reads when it composes a draft, so they state the rules of
  * issuance, not only the types.
  */
+import { TRUST_CRANS } from '@vaubaan/policy-engine';
 import { GATES } from '@vaubaan/shared';
 import { z } from 'zod';
 
@@ -101,6 +102,12 @@ const connectionSchema = z
       .max(MAX_ENTRIES)
       .optional()
       .describe('Exactly the risks the mission accepts on this connection, each with its budget.'),
+    crans: z
+      .record(z.string().max(64), z.enum(TRUST_CRANS))
+      .optional()
+      .describe(
+        'Optional. The trust cran (`prudent`, `confiant`, `autonome`) of each macro-action of `get_catalog` the policy was composed from, by macro-action id. Kept only to redraw the creation form: it never changes the policy, which is `policy` or `preset`.',
+      ),
   })
   .strict();
 

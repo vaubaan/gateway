@@ -18,6 +18,7 @@ import {
   type MissionSnapshot,
   type StoredResourceScope,
 } from '@/server/missions/mission-edit';
+import { cransOf } from '@/server/missions/macro-actions';
 
 import {
   draftOf,
@@ -52,6 +53,7 @@ export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConn
         : { scope: 'selected', resource_ids: [...c.resource_ids] },
     preset: null,
     policy: c.policy,
+    crans: cransOf(c.crans),
   }));
 }
 

@@ -16,6 +16,7 @@ import { fullCatalogRiskIds } from '../authority';
 import type { Store } from '../store';
 import type { ConnectionRecord, ConnectionResourceRecord } from '../store/types';
 import { enumerateCatalog } from './catalog-view';
+import { macroActionsOf } from './macro-actions';
 import type { IssuanceConnection, IssuanceResource } from './model';
 
 const READ_VECTOR = {
@@ -222,6 +223,7 @@ export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): Iss
     risks: enumerateCatalog(ACME_CATALOG),
     authority: fullCatalogRiskIds(ACME_CATALOG),
     presets: ACME_CATALOG.presets ?? [],
+    macro_actions: macroActionsOf(ACME_CATALOG),
     ...overrides,
   };
 }

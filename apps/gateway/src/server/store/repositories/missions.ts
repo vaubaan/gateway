@@ -359,6 +359,7 @@ interface PolicyRow {
 interface ConnectionRow {
   connection_id: string;
   resource_scope: string;
+  crans_json: string | null;
 }
 
 interface SelectedRow {
@@ -469,7 +470,29 @@ function connectionToRecord(
     ),
     resourceIds: selected.map((r) => r.resource_id),
     ...(Object.keys(sources).length > 0 ? { resourceSources: sources } : {}),
+    ...(row.crans_json === null ? {} : { crans: cransOf(row.crans_json) }),
   };
+}
+
+/** `crans_json` as stored: an object of strings; anything else is corrupt. */
+function cransOf(json: string): Record<string, string> {
+  const parsed: unknown = JSON.parse(json);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new InvariantError('mission_connections.crans_json is not an object');
+  }
+  const crans: Record<string, string> = {};
+  for (const [id, cran] of Object.entries(parsed)) {
+    if (typeof cran !== 'string') {
+      throw new InvariantError(`mission_connections.crans_json: '${id}' is not a string`);
+    }
+    crans[id] = cran;
+  }
+  return crans;
+}
+
+/** What `crans_json` stores: NULL for no cran, so an empty record reads back absent. */
+function cransJsonOf(c: Pick<MissionConnection, 'crans'>): string | null {
+  return c.crans && Object.keys(c.crans).length > 0 ? JSON.stringify(c.crans) : null;
 }
 
 /**
@@ -553,8 +576,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
        expires_at, delegation_id, created_at, updated_at)
      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
   );
-  const insertConnection = db.prepare<[string, string, string]>(
-    'INSERT INTO mission_connections (mission_id, connection_id, resource_scope) VALUES (?, ?, ?)',
+  const insertConnection = db.prepare<[string, string, string, string | null]>(
+    `INSERT INTO mission_connections (mission_id, connection_id, resource_scope, crans_json)
+     VALUES (?, ?, ?, ?)`,
   );
   const insertResource = db.prepare<[string, string, string]>(
     'INSERT INTO mission_resources (mission_id, connection_id, resource_id) VALUES (?, ?, ?)',
@@ -569,7 +593,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
      WHERE mission_id = ? ORDER BY risk_id`,
   );
   const connectionsOf = db.prepare<[string], ConnectionRow>(
-    'SELECT connection_id, resource_scope FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
+    'SELECT connection_id, resource_scope, crans_json FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
   );
   const resourcesOf = db.prepare<[string, string], SelectedRow>(
     'SELECT resource_id, source FROM mission_resources WHERE mission_id = ? AND connection_id = ? ORDER BY resource_id',
@@ -741,6 +765,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const rescopeStmt = db.prepare<[string, string, string]>(
     'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
   );
+  const recranStmt = db.prepare<[string | null, string, string]>(
+    'UPDATE mission_connections SET crans_json = ? WHERE mission_id = ? AND connection_id = ?',
+  );
   const deleteConnectionStmt = db.prepare<[string, string]>(
     'DELETE FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
   );
@@ -789,7 +816,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     c: MissionConnection,
   ): void {
     if (!old) {
-      insertConnection.run(missionId, c.connectionId, c.resourceScope);
+      insertConnection.run(missionId, c.connectionId, c.resourceScope, cransJsonOf(c));
       for (const resourceId of c.resourceIds)
         insertEditedResource.run(missionId, c.connectionId, resourceId);
       return;
@@ -797,6 +824,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     if (old.resourceScope !== c.resourceScope) {
       rescopeStmt.run(c.resourceScope, missionId, c.connectionId);
     }
+    const crans = cransJsonOf(c);
+    if (crans !== cransJsonOf(old)) recranStmt.run(crans, missionId, c.connectionId);
     const had = new Set(old.resourceIds);
     const has = new Set(c.resourceIds);
     for (const resourceId of old.resourceIds) {
@@ -990,7 +1019,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           now,
         );
         for (const c of input.connections) {
-          insertConnection.run(id, c.connectionId, c.resourceScope);
+          insertConnection.run(id, c.connectionId, c.resourceScope, cransJsonOf(c));
           for (const resourceId of c.resourceIds)
             insertResource.run(id, c.connectionId, resourceId);
         }
