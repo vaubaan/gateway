@@ -203,13 +203,13 @@ describe('creation form — macro-actions at a trust level', () => {
     expect(previewOf(cleaned).ok).toBe(true);
   });
 
-  it('sends the explicit lines and the trust levels, never a preset', () => {
+  it('sends the explicit lines and the trust levels, never "everything I hold"', () => {
     const draft = draftOf(
       context,
       withConnection(initialFormState(context), included(WORKING)),
       NOW,
     );
-    expect(draft.connections[0]).toMatchObject({ preset: null, trust_levels: WORKING });
+    expect(draft.connections[0]).toMatchObject({ everything_i_hold: false, trust_levels: WORKING });
     expect(draft.connections[0]?.policy?.map((e) => e.risk_id)).toEqual([
       'acme.read',
       'acme[staging].write',
@@ -544,7 +544,7 @@ describe('creation form — how far the mission reaches on an account', () => {
       {
         connection_id: 'conn-acme',
         resources: { scope: 'connection' },
-        preset: null,
+        everything_i_hold: false,
         policy: [],
         trust_levels: {},
       },
@@ -565,12 +565,12 @@ describe('creation form — "Everything I hold on this account"', () => {
       rateWindow: '60',
       gate: 'auto',
     });
-    // What is sent is the explicit list, with no preset reference; the server accepts it.
+    // What is sent is the explicit list, not "everything I hold"; the server accepts it.
     const preview = previewOf(cs);
     expect(preview.ok).toBe(true);
     expect(preview.policy.map((l) => l.risk_id)).toEqual(expected.map((e) => e.risk_id));
     const state = withConnection(initialFormState(context), cs);
-    expect(draftOf(context, state, NOW).connections[0]?.preset).toBeNull();
+    expect(draftOf(context, state, NOW).connections[0]?.everything_i_hold).toBe(false);
   });
 
   it('follows the resource selection while untouched', () => {

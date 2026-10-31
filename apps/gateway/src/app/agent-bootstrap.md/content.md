@@ -202,7 +202,7 @@ the list of permissions and confirms **Create mission**.
   "connections": [
     {
       "provider": "github",
-      "preset": "developer",
+      "trust_levels": { "read": "careful", "propose": "trusting" },
       "resources": { "scope": "selected", "resource_refs": ["acme/app"] }
     },
     {
@@ -228,9 +228,13 @@ Rules of a draft (the field names are the protocol's):
 - an account is named by `provider` (when the human can use exactly one
   account of that service) or by `connection_id`;
 - `resources` is `{ "scope": "all" }` or a selection by `resource_refs`;
-- `preset` alone takes the service's preset as is; `policy` holds exactly
-  the permissions it lists, and one whose `quota` or `rate_limit` is omitted
-  takes the preset's values for it;
+- `trust_levels` ticks the service's macro-actions (its `get_catalog` names
+  them), each at a trust level: `careful`, `trusting` or `autonomous`. Alone,
+  they write the permissions, with their limits and whether each asks first;
+  `policy` instead holds exactly the permissions it lists, each with its
+  limits, and the trust levels beside it only redraw the form;
+- `everything_i_hold: true`, only when the human asks for all they may allow
+  on an account, writes every one of those permissions out;
 - every permission needs a `quota` and a `rate_limit`: there is no unlimited
   permission, and no wildcard — a permission is always named by its explicit
   id (`risk_id`);
@@ -258,24 +262,25 @@ then `/mcp` → `vaubaan-manage` → Authenticate.
 
 Its tools, always within what the person who consented may allow:
 
-| Tool                   | What it does                                                                            |
-| ---------------------- | --------------------------------------------------------------------------------------- |
-| `list_my_connections`  | the accounts the person owns or was given access to: permission ids, resources, presets |
-| `get_catalog`          | one service's permissions as explicit ids, and its presets entry by entry               |
-| `list_my_missions`     | the person's missions: state, permissions, what is left of each limit                   |
-| `preview_policy`       | checks a draft (the format of §6) and lists what the person may not allow               |
-| `issue_mission`        | creates the mission; returns its key once, and the setup kit                            |
-| `rotate_mission_token` | replaces the key of a running mission; the previous key stops working at once           |
-| `revoke_mission`       | stops a mission for good                                                                |
+| Tool                   | What it does                                                                                  |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `list_my_connections`  | the accounts the person owns or was given access to: permission ids, resources, macro-actions |
+| `get_catalog`          | one service's permissions as explicit ids, its macro-actions and its trust levels             |
+| `list_my_missions`     | the person's missions: state, permissions, what is left of each limit                         |
+| `preview_policy`       | checks a draft (the format of §6) and lists what the person may not allow                     |
+| `issue_mission`        | creates the mission; returns its key once, and the setup kit                                  |
+| `rotate_mission_token` | replaces the key of a running mission; the previous key stops working at once                 |
+| `revoke_mission`       | stops a mission for good                                                                      |
 
 How to compose a draft that passes the first time:
 
 1. `list_my_connections`, then `get_catalog` for each service the task
    needs.
-2. Start from **one preset per account** and trim it to the task. Name every
-   permission by its explicit id; there is no wildcard.
-3. Give every permission a `quota` and a `rate_limit` (the preset supplies
-   them).
+2. Tick, per account, **the macro-actions the task needs**, each at the
+   lowest trust level that lets it run; add or trim single permissions with
+   `policy`, naming each by its explicit id: there is no wildcard.
+3. Give every permission in `policy` a `quota` and a `rate_limit` (the trust
+   levels supply them for what they write).
 4. Take an id held per environment (`supabase[prod].…`) only when a selected
    resource carries that label.
 5. `preview_policy` until it answers `ok: true`, then `issue_mission` with

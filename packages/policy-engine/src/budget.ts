@@ -5,11 +5,11 @@
  *        unbounded" : a quota and a rate limit per accepted risk, a gate
  *        from the closed set).
  *
- * A preset entry and a mission policy entry carry the same three fields
- * (`quota`, `rate_limit`, `gate`). Whether they are acceptable is decided
- * here and nowhere else : the SDK's YAML loader, `presetIssues` (the path of
- * a catalog written in TypeScript : `definePlugin`, the registry, the test
- * kit) and the application's issuance preview all call `budgetIssues`.
+ * A macro-action's base budget and a mission policy entry carry the same
+ * fields (`quota`, `rate_limit`, and `gate` for a policy entry). Whether they
+ * are acceptable is decided here and nowhere else : the SDK's catalog loader
+ * (the base budget of every macro-action entry, YAML or TypeScript) and the
+ * application's issuance preview both call `budgetIssues`.
  *
  * Browser-safe : the gate set comes from `@vaubaan/shared/domain`, never
  * from the server-only barrel.
@@ -38,7 +38,7 @@ export type BudgetField =
 
 export interface BudgetIssue {
   readonly field: BudgetField;
-  /** What was expected, without the path : callers prefix their own (`presets[0].entries[2].quota: …`). */
+  /** What was expected, without the path : callers prefix their own (`macro_actions[0].entries[2].quota: …`). */
   readonly message: string;
 }
 

@@ -275,7 +275,7 @@ const previewAnswer = z.looseObject({
       display_name: z.string(),
       resource_scope: resourceScope,
       resources: z.array(resourceRef),
-      preset: z.looseObject({ id: z.string(), label: z.string() }).nullable(),
+      everything_i_hold: z.boolean(),
       passes: z.array(policyLine),
       exceeds: riskIds,
       unknown: riskIds,

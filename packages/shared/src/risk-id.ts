@@ -81,7 +81,7 @@ export function baseRiskId(id: RiskId): RiskId {
 
 /**
  * Characters that would turn an id into a pattern. No persisted restriction,
- * `accepted_risks`, preset entry or share may contain one (spec §10).
+ * `accepted_risks`, macro-action entry or share may contain one (spec §10).
  */
 export const WILDCARD_CHARS = /[*?]/;
 

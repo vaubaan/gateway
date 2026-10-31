@@ -20,12 +20,7 @@ import { GATES } from '@vaubaan/shared/domain';
 // The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
 import { uncoveredRisks } from '../authority/catalog-authority';
 import { isResolvable } from './catalog-view';
-import {
-  EVERYTHING_I_HOLD,
-  EVERYTHING_I_HOLD_LABEL,
-  everythingIHold,
-  expansionDigest,
-} from './everything-i-hold';
+import { EVERYTHING_I_HOLD, everythingIHold, expansionDigest } from './everything-i-hold';
 import {
   knownTrustLevels,
   prefillOfTrustLevels,
@@ -253,16 +248,9 @@ function resolvePrefill(
 ): Prefill {
   const trustLevels = knownTrustLevels(connection, draft.trust_levels);
   const issues: PreviewIssue[] = [];
-  if (draft.preset && draft.preset !== EVERYTHING_I_HOLD) {
-    issues.push({
-      code: 'unknown-preset',
-      message: `"${draft.preset}" is not a preset: catalogs ship none. Name "${EVERYTHING_I_HOLD}" for everything you hold on "${connection.display_name}", or give its macro-actions a trust level ("trust_levels").`,
-      ...where,
-    });
-  }
   // The built-in `everything-i-hold` is computed here, against this selection (ADR
   // preset-everything-i-hold-expands-explicitly).
-  if (draft.preset === EVERYTHING_I_HOLD) {
+  if (draft.everything_i_hold === true) {
     const lines = everythingIHold(connection, selected).entries;
     return { everything: true, lines, left_out: [], trustLevels, issues };
   }
@@ -645,7 +633,7 @@ export function previewConnection(
       resources: resources.selected,
       reaches_later: reachesLater,
       resources_total: resourcesTotal(connection, resources.selected),
-      preset: prefill.everything ? { id: EVERYTHING_I_HOLD, label: EVERYTHING_I_HOLD_LABEL } : null,
+      everything_i_hold: prefill.everything,
       passes: buckets.passes,
       exceeds: buckets.exceeds,
       unknown: buckets.unknown,
@@ -814,7 +802,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
     resources: p.reaches_later
       ? { scope: 'connection' }
       : { scope: 'selected', resource_ids: p.resources.map((r) => r.id) },
-    preset: p.preset?.id ?? null,
+    everything_i_hold: p.everything_i_hold,
     policy: p.passes,
     trust_levels: p.trust_levels,
   }));

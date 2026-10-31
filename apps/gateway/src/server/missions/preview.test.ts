@@ -495,7 +495,7 @@ describe('previewDraft — macro-actions at a trust level', () => {
       { connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
     ]);
     expect(p.ok).toBe(true);
-    expect(p.connections[0]?.preset).toBeNull();
+    expect(p.connections[0]?.everything_i_hold).toBe(false);
     expect(p.connections[0]?.trust_levels).toEqual({ read: 'careful', change: 'trusting' });
     expect(p.policy).toEqual([
       {
@@ -601,11 +601,7 @@ describe('previewDraft — macro-actions at a trust level', () => {
     expect(p.connections[0]?.trust_levels).toEqual({ read: 'careful', change: 'trusting' });
   });
 
-  it('refuses a preset, an unknown macro-action, a repeated risk and a connection that accepts nothing', () => {
-    expect(codes(preview([{ connection_id: 'conn-acme', preset: 'developer' }]))).toEqual([
-      'unknown-preset',
-      'no-accepted-risk',
-    ]);
+  it('refuses an unknown macro-action, a repeated risk and a connection that accepts nothing', () => {
     expect(
       codes(preview([{ connection_id: 'conn-acme', trust_levels: { deploy: 'careful' } }])),
     ).toEqual(['unknown-macro-action', 'no-accepted-risk']);

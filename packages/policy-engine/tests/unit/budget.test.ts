@@ -1,6 +1,6 @@
 /**
  * The budget rule (spec §3.2 : "always numbers, never unbounded") — the one
- * function the YAML loader, `presetIssues` and the issuance preview share.
+ * function the catalog loader and the issuance preview share.
  */
 import { describe, expect, test } from 'vitest';
 

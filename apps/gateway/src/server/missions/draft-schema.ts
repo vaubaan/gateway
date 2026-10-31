@@ -38,7 +38,7 @@ const entrySchema = z
       .number()
       .optional()
       .describe(
-        'Actions allowed per period on this risk. Mandatory unless the connection names `everything-i-hold`, which then supplies it.',
+        'Actions allowed per period on this risk. Mandatory unless the connection gives `everything_i_hold: true`, which then supplies it.',
       ),
     rate_limit: rateLimitSchema.optional(),
     gate: z
@@ -91,11 +91,11 @@ const connectionSchema = z
       .describe(
         'The resources the mission may touch on this connection. Default: `all` (every resource known now). `connection` also reaches resources discovered later.',
       ),
-    preset: text
-      .nullable()
+    everything_i_hold: z
+      .boolean()
       .optional()
       .describe(
-        'Only `everything-i-hold` (catalogs ship no presets): every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
+        '`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
       ),
     policy: z
       .array(entrySchema)

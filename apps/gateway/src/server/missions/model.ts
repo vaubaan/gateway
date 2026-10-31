@@ -80,10 +80,10 @@ export interface DraftConnection {
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
   /**
-   * Only the built-in `everything-i-hold`, expanded against the selection
-   * (ADR preset-everything-i-hold-expands-explicitly); catalogs ship no presets.
+   * True for the built-in "everything I hold", expanded against the selection
+   * (ADR preset-everything-i-hold-expands-explicitly). Absent: false.
    */
-  readonly preset?: string | null;
+  readonly everything_i_hold?: boolean;
   readonly policy?: readonly DraftPolicyEntry[];
   /**
    * The trust level of each ticked macro-action (risk model §4.6). Without
@@ -228,7 +228,6 @@ export const PREVIEW_ISSUE_CODES = [
   'resource-stale',
   'resource-self',
   'no-resource-selected',
-  'unknown-preset',
   'unknown-macro-action',
   'unknown-risk',
   'duplicate-risk',
@@ -328,7 +327,8 @@ export interface ConnectionPreview {
   readonly reaches_later: boolean;
   /** Size of "all resources" on this connection, plus the hidden ones selected explicitly. */
   readonly resources_total: number;
-  readonly preset: { readonly id: string; readonly label: string } | null;
+  /** The built-in "everything I hold" wrote (or budgets) this connection's lines. */
+  readonly everything_i_hold: boolean;
   /** Accepted, inside the authority, resolvable, with a resolved budget. */
   readonly passes: readonly MissionPolicyEntry[];
   /** Accepted but outside the creator's authority — the uncovered list. */
@@ -363,7 +363,7 @@ export interface ResolvedDraftConnection {
   readonly resources:
     | { readonly scope: 'selected'; readonly resource_ids: readonly string[] }
     | { readonly scope: 'connection' };
-  readonly preset: string | null;
+  readonly everything_i_hold: boolean;
   readonly policy: readonly MissionPolicyEntry[];
   /** The draft's trust levels that name a macro-action of the connection. */
   readonly trust_levels: Readonly<Record<string, TrustLevel>>;

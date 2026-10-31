@@ -888,7 +888,7 @@ export class MissionService {
           c.resourceScope === 'selected'
             ? { scope: 'selected', resource_ids: await this.survivingResources(c, provider) }
             : { scope: c.resourceScope },
-        preset: null,
+        everything_i_hold: false,
         policy: mission.policy
           .map(policyEntryOf)
           .filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
