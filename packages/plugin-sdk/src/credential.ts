@@ -91,6 +91,13 @@ export interface CredentialCheck {
   readonly account: string | null;
   /** ISO-8601 ; `null` when the credential does not expire or the provider does not say. */
   readonly expiresAt: string | null;
+  /**
+   * The permissions the provider confirmed this credential holds, named as in
+   * `guide.permissions[].name` ; absent when the provider cannot list them
+   * (a GitHub fine-grained token, a Cloudflare token). The host stores it and
+   * the account page says which permission of the guide the token lacks.
+   */
+  readonly granted?: readonly string[];
 }
 
 /** The user pastes one or more values (API token, account id). */

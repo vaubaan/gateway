@@ -45,3 +45,16 @@ The agent would lose the reason a call failed, and every future plugin would hav
 ### A "safe message" flag on `UpstreamAuthError`
 
 A class is what a reviewer greps and a test asserts; a flag is set by habit.
+
+## Amendment 2026-10-31 — the connect page keeps the plugin's sentence of a rejection
+
+Owner decision (pre-publication audit, connection UX M1): "Gmail: the provider rejected the
+credential (HTTP 401)" threw away the plugin's sentence that names the fix ("the app password is
+wrong or was revoked, app passwords are turned off, or IMAP is off"). While a person connects, the
+`UpstreamAuthError` of `verify` or of the first discovery is now shown with its sentence:
+one line, at most 300 characters, the HTTP status added, and every value of the credential being
+connected masked (as typed and URL-encoded). It reaches only the connect page of that person — who
+holds the credential anyway — through a notice readable once; nothing stores, logs or audits it.
+Every other path (refresh, a later discovery, a discovery failure recorded on the account, logs)
+keeps the status alone. The rejected "per-call redactor" stays rejected for those: a partial or
+encoded echo is acceptable only in front of the person who typed the value.
