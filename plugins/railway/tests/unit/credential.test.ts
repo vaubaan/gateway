@@ -163,7 +163,7 @@ describe('railway token — verify at paste', () => {
     const fetch = mockFetch([
       graphqlRoute({ ...WORKSPACE_TOKEN_API, vaubaanTokenWorkspace: NOT_AUTHORIZED }),
     ]);
-    expect(await probeRailwayToken(fetch, TOKEN)).toEqual({
+    expect(await probeRailwayToken({ fetch }, TOKEN)).toEqual({
       kind: 'workspace',
       account: 'the workspace of gateway',
     });
@@ -190,7 +190,7 @@ describe('railway token — verify at paste', () => {
   test('Railway not answering is not a rejection', async () => {
     const down = mockFetch([{ method: 'POST', url: RAILWAY_GRAPHQL_URL, status: 502, body: '' }]);
     const failure = await verifyRailwayToken(ctx(down)).catch((err: unknown) => err);
-    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toMatchObject({ name: 'UpstreamHttpError', status: 502 });
     expect(failure).not.toBeInstanceOf(UpstreamAuthError);
   });
 });
@@ -278,6 +278,6 @@ describe('railway token — execution', () => {
     ]);
     const failure = await failureOf(fetch, 'railway__list-projects');
     expect(failure.upstreamStatus).toBe(401);
-    expect(failure.message).toMatch(/^Railway MCP upstream 401/);
+    expect(failure.message).toMatch(/^Railway MCP server, tools\/call failed with HTTP 401/);
   });
 });

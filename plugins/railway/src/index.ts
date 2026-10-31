@@ -15,29 +15,32 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 
 import { classifyRailway, environmentsOf, isProjectScopedTool } from './classify.ts';
 import { railwayDataModel } from './data-model.ts';
-import {
-  RAILWAY_AGENT_HINT,
-  RAILWAY_GRAPHQL_URL,
-  RAILWAY_MCP_URL,
-  discoverRailwayResources,
-  executeRailway,
-} from './execute.ts';
+import { RAILWAY_AGENT_HINT, discoverRailwayResources, executeRailway } from './execute.ts';
 import { createdRailwayResources } from './created.ts';
 import { railwayCredential } from './credential.ts';
 import { RAILWAY_ICON, RAILWAY_ICON_COLOR } from './icon.ts';
+import {
+  PROVIDER_ID,
+  RAILWAY_GRAPHQL_URL,
+  RAILWAY_MCP_SERVER,
+  RAILWAY_MCP_URL,
+  TOOL,
+  TOOL_PREFIX,
+} from './identity.ts';
 import { railwayToolTitles } from './tool-titles.ts';
-import { RAILWAY_TOOL_PREFIX, railwayTools, toUpstreamName } from './tools.ts';
+import { railwayTools, toUpstreamName } from './tools.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const railwayPlugin = definePlugin({
-  id: 'railway',
+  id: PROVIDER_ID,
   displayName: 'Railway',
   icon: RAILWAY_ICON,
   iconColor: RAILWAY_ICON_COLOR,
-  version: '5.1.4',
+  // Always equal to `version` in this plugin's package.json (a test checks it).
+  version: '6.0.0',
   description:
     'Deploy, redeploy, read logs and manage variables of Railway projects through the official Railway MCP server and GraphQL API.',
   summary:
@@ -49,7 +52,7 @@ export const railwayPlugin = definePlugin({
   toolTitles: railwayToolTitles,
   // A project is what a Railway connection lists : a created project is
   // discovered at once (ADR created-resources-join-the-mission).
-  resourceCreatingTools: ['railway__create-project'],
+  resourceCreatingTools: [TOOL.createProject],
   // Read from the call's answer: the mission that created it reaches it at once
   // (ADR created-resources-join-the-mission).
   createdResources: createdRailwayResources,
@@ -60,7 +63,7 @@ export const railwayPlugin = definePlugin({
   // credential: no resource check can keep it off the project hosting the
   // gateway (SEC 2026-10-15 re-check M-1).
   unboundTools: {
-    'railway__railway-agent':
+    [TOOL.railwayAgent]:
       "Railway's agent acts on a free-text request with the whole credential, so it cannot be kept away from the project that hosts this gateway.",
   },
   classify: classifyRailway,
@@ -71,10 +74,13 @@ export const railwayPlugin = definePlugin({
 export default railwayPlugin;
 
 export {
+  PROVIDER_ID,
   RAILWAY_AGENT_HINT,
   RAILWAY_GRAPHQL_URL,
+  RAILWAY_MCP_SERVER,
   RAILWAY_MCP_URL,
-  RAILWAY_TOOL_PREFIX,
+  TOOL,
+  TOOL_PREFIX,
   classifyRailway,
   discoverRailwayResources,
   environmentsOf,

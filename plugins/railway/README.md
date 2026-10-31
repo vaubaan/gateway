@@ -84,7 +84,8 @@ What `execute` declines — an unknown tool, an undeclared argument, a target
 the mission cannot resolve, a malformed id or variable name — is an
 `isError` result returned before any request. What Railway fails is thrown:
 `UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed
-status, an `Error` for a JSON-RPC error frame or GraphQL `errors`.
+status, an `UpstreamProtocolError` for a JSON-RPC error frame, GraphQL
+`errors` (named by the operation) or an answer of the wrong shape.
 
 ## Catalog and macro-actions
 
@@ -153,7 +154,7 @@ settings → Tokens. ADR
 ## Development
 
 ```
-npx vitest run plugins/railway     # 421 tests, no network
+npx vitest run plugins/railway     # 427 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 

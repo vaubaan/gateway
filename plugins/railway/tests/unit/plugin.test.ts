@@ -8,6 +8,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  UpstreamProtocolError,
   parseSlice,
   serializeSlice,
   type ConnectionContext,
@@ -456,7 +457,7 @@ describe('executeRailway with mockFetch', () => {
     ]);
   });
 
-  test('surfaces upstream JSON-RPC errors and parses a bare JSON body too', async () => {
+  test('a JSON-RPC error frame, in a bare JSON body too, is an UpstreamProtocolError', async () => {
     const fetch = mockFetch([
       {
         url: RAILWAY_MCP_URL,
@@ -467,9 +468,26 @@ describe('executeRailway with mockFetch', () => {
         }),
       },
     ]);
+    const run = railwayPlugin.execute(execCtx(fetch), 'railway__get-status', {
+      projectId: PROJECT_STG,
+    });
+    await expect(run).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(run).rejects.toThrow(/-32602: invalid args/);
+  });
+
+  test('an MCP answer that is not a tool result is an UpstreamProtocolError', async () => {
+    const fetch = mockFetch([{ url: RAILWAY_MCP_URL, respond: (c) => sseFrame(c, { rows: [] }) }]);
     await expect(
-      railwayPlugin.execute(execCtx(fetch), 'railway__get-status', { projectId: PROJECT_STG }),
-    ).rejects.toThrow(/invalid args/);
+      railwayPlugin.execute(execCtx(fetch), 'railway__whoami', {}),
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
+  });
+
+  test('the MCP server is stateless : a 400 is thrown as it is, no session is opened', async () => {
+    const fetch = mockFetch([{ url: RAILWAY_MCP_URL, status: 400, body: 'bad request' }]);
+    await expect(
+      railwayPlugin.execute(execCtx(fetch), 'railway__whoami', {}),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 400 });
+    expect(fetch.calls).toHaveLength(1);
   });
 
   test('401 from the MCP server becomes UpstreamAuthError', async () => {
@@ -559,7 +577,7 @@ describe('executeRailway with mockFetch', () => {
     ]);
     await expect(
       railwayPlugin.execute(execCtx(fetch), 'railway__get-status', { projectId: PROJECT_STG }),
-    ).rejects.toThrow(/invalid args/);
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('bulk upsert and delete send the whole input, undefined fields stripped', async () => {
@@ -605,23 +623,43 @@ describe('executeRailway with mockFetch', () => {
     });
   });
 
-  test('GraphQL errors and 401 surface clearly', async () => {
+  test('GraphQL errors are an UpstreamProtocolError naming the operation ; a 401 an UpstreamAuthError', async () => {
     const errors = mockFetch([
       { url: RAILWAY_GRAPHQL_URL, body: { errors: [{ message: 'project not found' }] } },
     ]);
-    await expect(
-      railwayPlugin.execute(execCtx(errors), 'railway__list-variables', { environmentId: ENV_STG }),
-    ).rejects.toThrow(/project not found/);
+    const failed = railwayPlugin.execute(execCtx(errors), 'railway__list-variables', {
+      environmentId: ENV_STG,
+    });
+    await expect(failed).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(failed).rejects.toThrow('Railway GraphQL variables: project not found');
     const denied = mockFetch([{ url: RAILWAY_GRAPHQL_URL, status: 401, body: 'Unauthorized' }]);
     await expect(
       railwayPlugin.execute(execCtx(denied), 'railway__list-variables', { environmentId: ENV_STG }),
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 401 });
   });
 
+  test('a GraphQL answer without data, or of the wrong shape, is an UpstreamProtocolError', async () => {
+    const list = { environmentId: ENV_STG };
+    const write = { environmentId: ENV_STG, name: 'API_KEY', value: 'k1' };
+    for (const [tool, args, body] of [
+      ['railway__list-variables', list, { data: null }],
+      ['railway__list-variables', list, { data: { variables: 'DATABASE_URL=pg://' } }],
+      ['railway__upsert-variable', write, { data: { variableUpsert: 'yes' } }],
+      ['railway__list-variables', list, 'not json'],
+    ] as const) {
+      const fetch = mockFetch([{ url: RAILWAY_GRAPHQL_URL, body }]);
+      await expect(
+        railwayPlugin.execute(execCtx(fetch), tool, args),
+        `${tool} ${JSON.stringify(body)}`,
+      ).rejects.toBeInstanceOf(UpstreamProtocolError);
+    }
+  });
+
   test('unknown tool → isError result ; wrong credential kind → CredentialKindMismatch', async () => {
     const never = mockFetch([]);
-    const result = await railwayPlugin.execute(execCtx(never), 'railway__nope', {});
-    expect(result.isError).toBe(true);
+    expect(await refusalText(railwayPlugin.execute(execCtx(never), 'railway__nope', {}))).toBe(
+      "unknown tool 'railway__nope'",
+    );
     await expect(
       railwayPlugin.execute(
         {
@@ -759,5 +797,19 @@ describe('discoverRailwayResources', () => {
       name: 'UpstreamAuthError',
       upstreamStatus: 401,
     });
+  });
+
+  test('a page of the wrong shape, or a project id outside the grammar, is an UpstreamProtocolError', async () => {
+    for (const body of [
+      { data: { projects: { edges: [{ node: { id: PROJECT_STG } }] } } },
+      { data: { projects: { edges: 'none' } } },
+      page([{ id: 'not/an/id', name: 'p', envs: [] }], null),
+    ]) {
+      const fetch = mockFetch([{ url: RAILWAY_GRAPHQL_URL, body }]);
+      await expect(
+        railwayPlugin.discoverResources(connCtx(fetch)),
+        JSON.stringify(body),
+      ).rejects.toBeInstanceOf(UpstreamProtocolError);
+    }
   });
 });

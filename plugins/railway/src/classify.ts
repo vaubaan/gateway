@@ -70,9 +70,8 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
+import { PROVIDER_ID, TOOL } from './identity.ts';
 import { railwayTools, UNBOUND_ARGUMENTS } from './tools.ts';
-
-export const PROVIDER = 'railway';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Identifier grammars — one per kind, shared with `execute`
@@ -131,23 +130,21 @@ type ProjectKind =
 
 type Kind = AccountKind | ProjectKind;
 
-const ACCEPT_DEPLOY = 'railway__accept-deploy';
-
 const TOOL_KIND: Readonly<Record<string, Kind>> = {
-  railway__whoami: 'read-account-bare',
-  'railway__list-projects': 'read-account-projects',
-  'railway__create-project': 'write-create-project',
-  'railway__list-services': 'read-runtime-services',
-  'railway__list-deployments': 'read-runtime-deployments',
-  'railway__get-status': 'read-runtime-status',
-  'railway__get-logs': 'read-runtime-logs',
-  railway__redeploy: 'write-deploy',
-  [ACCEPT_DEPLOY]: 'write-deploy',
-  'railway__railway-agent': 'write-agent',
-  'railway__list-variables': 'read-variables',
-  'railway__upsert-variable': 'write-variable',
-  'railway__delete-variable': 'write-variable',
-  'railway__upsert-variables': 'write-variables-bulk',
+  [TOOL.whoami]: 'read-account-bare',
+  [TOOL.listProjects]: 'read-account-projects',
+  [TOOL.createProject]: 'write-create-project',
+  [TOOL.listServices]: 'read-runtime-services',
+  [TOOL.listDeployments]: 'read-runtime-deployments',
+  [TOOL.getStatus]: 'read-runtime-status',
+  [TOOL.getLogs]: 'read-runtime-logs',
+  [TOOL.redeploy]: 'write-deploy',
+  [TOOL.acceptDeploy]: 'write-deploy',
+  [TOOL.railwayAgent]: 'write-agent',
+  [TOOL.listVariables]: 'read-variables',
+  [TOOL.upsertVariable]: 'write-variable',
+  [TOOL.deleteVariable]: 'write-variable',
+  [TOOL.upsertVariables]: 'write-variables-bulk',
 };
 
 const ACCOUNT_ONLY: ReadonlySet<Kind> = new Set<Kind>([
@@ -164,7 +161,7 @@ function isAccountKind(kind: Kind): kind is AccountKind {
  * Tools whose upstream schema has no `projectId` : `environmentId` is the
  * only argument that designates their target, so it is mandatory.
  */
-const TOOLS_ADDRESSED_BY_ENVIRONMENT: ReadonlySet<string> = new Set([ACCEPT_DEPLOY]);
+const TOOLS_ADDRESSED_BY_ENVIRONMENT: ReadonlySet<string> = new Set([TOOL.acceptDeploy]);
 
 /** True when the tool needs a Railway project resource to be classified. */
 export function isProjectScopedTool(tool: string): boolean {
@@ -388,7 +385,7 @@ function locateProject(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): Resource | Denial {
-  const own = resources.filter((r) => r.provider === PROVIDER);
+  const own = resources.filter((r) => r.provider === PROVIDER_ID);
 
   if (args.projectId !== undefined) {
     const explicit = railwayId(args.projectId);
@@ -672,5 +669,5 @@ function wildOne(): SliceSegment {
 }
 
 function slice(path: SliceSegment[], action: Slice['action']): Slice {
-  return { provider: PROVIDER, path, action };
+  return { provider: PROVIDER_ID, path, action };
 }

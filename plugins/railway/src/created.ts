@@ -14,11 +14,17 @@
  * `{ id, name }` lists, empty when the answer does not carry them.
  */
 
-import { jsonValuesOf, type McpToolResult, type Resource } from '@vaubaan/plugin-sdk';
+import {
+  isList,
+  isRecord,
+  jsonValuesOf,
+  type McpToolResult,
+  type Resource,
+} from '@vaubaan/plugin-sdk';
 
-import { PROVIDER, railwayId } from './classify.ts';
-
-const CREATE_PROJECT = 'railway__create-project';
+import { railwayId } from './classify.ts';
+import { nodesOf } from './graphql.ts';
+import { PROVIDER_ID, TOOL } from './identity.ts';
 /** How deep the answer is searched for the project. */
 const MAX_DEPTH = 6;
 
@@ -33,19 +39,19 @@ export function createdRailwayResources(
   args: Readonly<Record<string, unknown>>,
   result: McpToolResult,
 ): readonly Resource[] {
-  if (tool !== CREATE_PROJECT || typeof args.name !== 'string' || args.name === '') return [];
+  if (tool !== TOOL.createProject || typeof args.name !== 'string' || args.name === '') return [];
   const wanted = args.name;
   const found = new Map<string, Record<string, unknown>>();
   const visit = (value: unknown, depth: number): void => {
-    if (depth > MAX_DEPTH || typeof value !== 'object' || value === null) return;
-    if (Array.isArray(value)) {
+    if (depth > MAX_DEPTH) return;
+    if (isList(value)) {
       value.forEach((v) => visit(v, depth + 1));
       return;
     }
-    const o = value as Record<string, unknown>;
-    const id = railwayId(o.id);
-    if (id !== null && o.name === wanted && !found.has(id)) found.set(id, o);
-    Object.values(o).forEach((v) => visit(v, depth + 1));
+    if (!isRecord(value)) return;
+    const id = railwayId(value.id);
+    if (id !== null && value.name === wanted && !found.has(id)) found.set(id, value);
+    Object.values(value).forEach((v) => visit(v, depth + 1));
   };
   jsonValuesOf(result).forEach((v) => visit(v, 0));
   if (found.size !== 1) return [];
@@ -53,7 +59,7 @@ export function createdRailwayResources(
   if (id === undefined || project === undefined) return [];
   return [
     {
-      provider: PROVIDER,
+      provider: PROVIDER_ID,
       ref: id,
       displayName: wanted,
       metadata: {
@@ -66,19 +72,8 @@ export function createdRailwayResources(
 
 /** A `{ id, name }` list from an array or a GraphQL connection (`{ edges: [{ node }] }`). */
 function namedList(value: unknown): Named[] {
-  const edges: unknown =
-    typeof value === 'object' && value !== null ? (value as { edges?: unknown }).edges : undefined;
-  const items: readonly unknown[] = Array.isArray(value)
-    ? value
-    : Array.isArray(edges)
-      ? edges.map((e: unknown) =>
-          typeof e === 'object' && e !== null ? (e as { node?: unknown }).node : undefined,
-        )
-      : [];
   const out: Named[] = [];
-  for (const item of items) {
-    if (typeof item !== 'object' || item === null) continue;
-    const { id, name } = item as { id?: unknown; name?: unknown };
+  for (const { id, name } of nodesOf(value)) {
     const checked = railwayId(id);
     if (checked !== null && typeof name === 'string') out.push({ id: checked, name });
   }
