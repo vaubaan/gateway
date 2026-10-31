@@ -189,6 +189,8 @@ They are checked in review, and several by tests:
   `feat(plugin-github): …`, `fix(policy-engine): …`, `docs: …`, `test: …`,
   `chore: …`. Pull requests are squash merged, so the pull request title
   follows the same form.
+- **Every commit is signed off** (`git commit -s`): see
+  [Licence and sign-off](#licence-and-sign-off).
 - Add an entry to [`CHANGELOG.md`](CHANGELOG.md) under `## [Unreleased]` when
   the change is visible to a user, an operator or a plugin author.
 - Rebase on the target branch before asking for review; `npm run ci` green.
@@ -209,6 +211,7 @@ list; every line is either done or explained.
 - [ ] **No hard-coded configuration**, no second list of providers, no
       wildcard in a risk list.
 - [ ] **`npm run ci` is green** locally.
+- [ ] **Every commit signed off** (`git commit -s`).
 - [ ] **CHANGELOG** entry when the change is user-visible.
 - [ ] For a plugin or a catalog: the extra lines of the template (test kit,
       versions, handbook, documentation the classifier was written from).
@@ -256,10 +259,24 @@ GitHub's security advisories: the "Security" tab of the repository, "Report a
 vulnerability". What is in scope, what to include and what to expect is in
 [`SECURITY.md`](SECURITY.md).
 
-## Licence
+## Licence and sign-off
 
 The project is licensed under [Apache-2.0](LICENSE). As that licence states
 (section 5), a contribution you submit for inclusion is provided under the
-same licence. The project has not yet stated whether it will also ask for a
-contributor licence agreement or a sign-off on commits; until this page says
-so, neither is required.
+same licence.
+
+Every commit carries a sign-off: a `Signed-off-by:` line with your name and
+address, by which you certify the
+[Developer Certificate of Origin](https://developercertificate.org/) (you
+wrote the change, or have the right to submit it under the project's
+licence). Git adds the line for you:
+
+```bash
+git commit -s -m "fix(policy-engine): …"
+git rebase --signoff origin/main   # signs the commits of a branch already written
+```
+
+The CI job `audit` refuses a pull request with an unsigned commit
+(`scripts/dco-check.mjs`). The project asks for a sign-off and not a
+contributor licence agreement: the sign-off records where a change comes from
+without asking anyone to sign a separate contract or assign rights.

@@ -23,6 +23,7 @@ Tick what is done; explain under "Notes for the reviewer" what is not or does no
 - [ ] **English** — every new or modified file, comment and message.
 - [ ] **No hard-coded configuration** — no instance URL, secret, project or account identifier; no second list of providers; no wildcard in a list of risks.
 - [ ] **Local gate** — `npm run ci` is green (type-check, lint, format check, build, tests).
+- [ ] **Sign-off** — every commit carries a `Signed-off-by:` line (`git commit -s`, see CONTRIBUTING.md).
 - [ ] **CHANGELOG** — an entry under `## [Unreleased]` when the change is visible to a user, an operator or a plugin author.
 
 ### For a provider plugin or a risk catalog

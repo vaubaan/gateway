@@ -48,6 +48,7 @@ jobs:
   #
   #   scope        scripts/ci-scope.sh: `code=false` when only docs/** or *.md
   #                changed; a schedule, a manual run or a release checks all
+  #   sign-off     scripts/dco-check.mjs: every commit of a pull request signed off
   #   supply chain audit-gate (npm audit --omit=dev against the reviewed
   #                allowlist), lockfile-gate, actionlint on the workflows
   #   secrets      gitleaks over the whole history (scripts/secret-scan.sh)
@@ -91,6 +92,13 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '26'
+      # Every commit of a pull request carries a `Signed-off-by:` line, the
+      # Developer Certificate of Origin (CONTRIBUTING.md). Merges are skipped.
+      - name: Commits are signed off
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/dco-check.mjs "$BASE" HEAD
       - run: node scripts/audit-gate.mjs
       # Every lockfile entry downloads from the npm registry, with a sha512
       # integrity, the package it names (scripts/lockfile-gate.mjs).
