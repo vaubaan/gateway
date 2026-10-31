@@ -350,26 +350,31 @@ apps/gateway/restore.mjs …`.
 
 ## Community telemetry (optional)
 
-Off at installation, and the only SaaS dependency of the product. When an
-operator opts in, the instance reports, per call a plugin executed, six
-fields: plugin, plugin version, gateway version, tool, outcome, error class.
-Never arguments or their hash, resource refs, mission or user identifiers,
-an instance identifier or an address. Settings → Administration → Telemetry
-shows the
-exact payload before anything is enabled.
+Off at installation, and the only outbound dependency of the product. When
+an operator opts in, the instance reports what `telemetry.level` selects:
+`plugin-health`, one report per call a plugin executed (plugin, plugin
+version, gateway version, tool, outcome, error class, duration bucket), or
+`usage-stats` (the default), which adds each call's decision with its base
+risk ids and one instance profile a day with bucketed counts. Every field
+comes from a closed vocabulary or a bucket. Never arguments or their hash,
+resource refs, mission or user identifiers, an instance identifier or an
+address. Settings → Administration → Telemetry shows the exact payload
+before anything is enabled; the body is documented in
+[`deploy/collector/README.md`](collector/README.md).
 
 - **Decide from the interface**: leave `telemetry.enabled` unset; an
   administrator toggles it on Settings → Administration → Telemetry (stored in
   the database, audited).
 - **Decide from the configuration**: set `telemetry.enabled` to `true` or
   `false`; the page becomes read-only. `false` guarantees nothing is sent.
-- **The collector URL**: the built-in default is a **placeholder** — the
-  project's collector is not published yet — and the gateway sends nothing
-  while the URL is that default, whatever the toggle says. To contribute to
-  a collector that exists, set `telemetry.collector_url`
-  (`VAUBAAN_TELEMETRY_COLLECTOR_URL`) to its reports endpoint, https, with its
-  public key as the `apikey` query parameter when it needs one.
-- **Outbound traffic**: only then, `POST` batches to that URL (at most every
+- **The collector URL**: the built-in default is the project's collector
+  (the one default URL of the code base, `telemetry-default.ts`; the other
+  end is described in [`deploy/collector/README.md`](collector/README.md));
+  an enabled instance sends there unless `telemetry.collector_url`
+  (`VAUBAAN_TELEMETRY_COLLECTOR_URL`) names another one: its reports
+  endpoint, https, with its public key as the `apikey` query parameter when
+  it needs one.
+- **Outbound traffic**: once enabled, `POST` batches to that URL (at most every
   60 seconds) and one `GET` of the public statistics every six hours, which
   feeds the "validated by the community" tag on the page of an account and in
   Reference. A firewall that blocks them costs nothing but the reports and

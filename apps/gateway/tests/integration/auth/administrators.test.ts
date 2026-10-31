@@ -104,7 +104,7 @@ describe('administrators live in the instance', () => {
     expect(seeded).toMatchObject({ user_id: CONFIGURATION_ACTOR_ID });
   });
 
-  it('an upgraded instance on admin.group keeps every member of the group administrator (the Fiabilis shape)', async () => {
+  it('an upgraded instance on admin.group keeps every member of the group administrator (the shape of an instance upgraded from the group-only rule)', async () => {
     const volume: Volume = { store: null };
     let memberId = '';
     const root = await boot(

@@ -5,7 +5,7 @@ title: Guide for coding agents
 # Guide for coding agents
 
 How to work in this repository as a coding agent, or as a person working the way the maintainers'
-agents do. The maintainers' `AGENTS.md` / `CLAUDE.md` are generated locally and ignored by git;
+agents do. The maintainers' `AGENTS.md` / `CLAUDE.md` are generated from `docs/` and committed;
 point an agent that looks for `AGENTS.md` here.
 
 ## Documentation first

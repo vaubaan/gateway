@@ -1622,7 +1622,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     target: (root) => root.instance.name,
     drive: async (rig) =>
       rig.root.instance.handlers.setName(
-        await rig.operatorPost('/api/admin/instance-name', { name: 'Dalae prod' }),
+        await rig.operatorPost('/api/admin/instance-name', { name: 'Acme prod' }),
       ),
     writes: {
       act: 'config-changed',

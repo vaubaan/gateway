@@ -38,7 +38,7 @@ body:
       options:
         - Sign-in, sessions, administration
         - Connections, resources, shares, groups
-        - Missions, budgets, presets
+        - Missions, budgets, macro-actions
         - Execution door (`/mcp`), refusals
         - Requests, claims, approvals
         - Management door (`/mcp/manage`), OAuth delegation
@@ -57,7 +57,7 @@ body:
       label: Steps to reproduce
       description: The smallest sequence that shows the problem. For a tool call, give the tool name and the arguments with secrets removed.
       placeholder: |
-        1. Issue a mission with the preset … on the connection …
+        1. Issue a mission with the macro-action … at … on the connection …
         2. Call the tool … with the arguments …
         3. …
     validations:

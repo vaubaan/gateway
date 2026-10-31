@@ -40,15 +40,15 @@ describe('InstanceNameService: who names the instance', () => {
 
   it('shows the name an administrator saved, trimmed, with the host beside it', async () => {
     const { service, values } = rig();
-    const change = await service.setName('  Dalae prod  ');
-    expect(values.get(INSTANCE_NAME_KEY)).toBe('Dalae prod');
+    const change = await service.setName('  Acme prod  ');
+    expect(values.get(INSTANCE_NAME_KEY)).toBe('Acme prod');
     expect(change).toEqual({
       before: { name: null, source: 'default' },
-      after: { name: 'Dalae prod', source: 'admin' },
+      after: { name: 'Acme prod', source: 'admin' },
     });
     expect(await service.identity()).toEqual({
-      label: 'Dalae prod',
-      name: 'Dalae prod',
+      label: 'Acme prod',
+      name: 'Acme prod',
       host: HOST,
       source: 'admin',
     });
@@ -56,7 +56,7 @@ describe('InstanceNameService: who names the instance', () => {
 
   it('clears the name on a blank value: the host is shown again', async () => {
     const { service, values } = rig();
-    await service.setName('Dalae prod');
+    await service.setName('Acme prod');
     const change = await service.setName('   ');
     expect(values.has(INSTANCE_NAME_KEY)).toBe(false);
     expect(change.after).toEqual({ name: null, source: 'default' });
@@ -64,10 +64,10 @@ describe('InstanceNameService: who names the instance', () => {
   });
 
   it('the configuration wins over a stored name, and the change is refused', async () => {
-    const { service, values, store } = rig('Fiabilis AI');
+    const { service, values, store } = rig('Acme AI');
     values.set(INSTANCE_NAME_KEY, 'stored by hand');
     expect(service.isLocked()).toBe(true);
-    expect(await service.identity()).toMatchObject({ label: 'Fiabilis AI', source: 'config' });
+    expect(await service.identity()).toMatchObject({ label: 'Acme AI', source: 'config' });
     await expect(service.setName('other')).rejects.toBeInstanceOf(InstanceNameLockedError);
     await expect(service.setName('')).rejects.toBeInstanceOf(InstanceNameLockedError);
     expect(store.set).not.toHaveBeenCalled();

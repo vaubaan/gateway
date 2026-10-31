@@ -2,7 +2,7 @@
 
 Provider plugin for [Supabase](https://supabase.com) : Postgres, Storage,
 Auth (GoTrue) and Edge Functions of the company's projects, reached through
-the Supabase **Management API** with the OAuth app the company registered.
+the Supabase **Management API** with a personal access token pasted once.
 
 Contract : `@vaubaan/plugin-sdk` (`definePlugin`, see
 [`plugins/README.md`](../README.md) and the
@@ -20,7 +20,7 @@ plugins/supabase/
     query-sql.ts          allow-list reading of the SQL of execute_sql
     sql-tokens.ts         the tokeniser both readers share
     execute.ts            Management API + data plane ; discoverResources
-    credential.ts         oauth2 spec (the host runs the flow and the refresh)
+    credential.ts         api-key spec : the token form, the guide, the check at paste
     index.ts              definePlugin() — default export `supabasePlugin`
   tests/unit/             plugin.test.ts (kit), classify, execute, risk-catalog,
                           mission-evaluation (engine decisions, macro-actions),
@@ -180,42 +180,26 @@ selected projects carry, and the stored policy is that list.
 from these macro-actions allow and refuse on staging, prod and unlabelled
 projects.
 
-## Credential — the company's Supabase OAuth app
+## Credential — a personal access token
 
-`credential.kind: 'oauth2'`, `refreshable: true` :
+`credential.kind: 'api-key'` (`supabaseCredential`, `src/credential.ts`), the
+one way of connecting (ADR
+[`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md)).
+The person creates a **personal access token** at
+https://supabase.com/dashboard/account/tokens, as the account the agents
+will act as (a shared service account is fine), with the permissions the
+connect page lists (`guide.permissions`, each mapped to the tools it
+unlocks) and an expiry, and pastes it once. Every tool sends it as
+`Authorization: Bearer` to the Management API; the data-plane tools read the
+project's `service_role` key through that API, which is why they need the
+`API Keys` and `API Key Secrets` permissions.
 
-| Field              | Value                                                |
-| ------------------ | ---------------------------------------------------- |
-| `authorizationUrl` | `https://api.supabase.com/v1/oauth/authorize`        |
-| `tokenUrl`         | `https://api.supabase.com/v1/oauth/token`            |
-| `scopes`           | `['all']` (the app's scopes are set at registration) |
-| `pkce`             | `true` (S256)                                        |
-| `clientAuthMethod` | `client_secret_basic`                                |
-
-### Registering the app (once per company)
-
-1. In the Supabase dashboard, open your organization → **OAuth Apps**
-   (`https://supabase.com/dashboard/org/<slug>/apps`) and create an app.
-2. Set the redirect URL to the callback the instance shows in
-   Settings → Administration → Company apps (it is derived from the
-   instance `public_url`).
-3. Pick the scopes the company is ready to grant the gateway. The plugin
-   needs `database:read` for the read-only tools, `database:write` for
-   migrations, `secrets:read` for the data-plane tools (it reads the
-   project `service_role` key through the Management API), and the
-   `auth`, `storage`, `edge_functions`, `environment`, `organizations` and
-   `projects` scopes for the corresponding tools and for discovery.
-4. Enter the **client id** and **client secret** in the instance
-   configuration (Settings → Administration → Company apps). The host uses them for the
-   authorization-code flow and for refresh ; the plugin reads neither, and
-   nothing from the environment.
-
-Connecting is then one click : the host runs the authorization-code flow
-from the spec above and stores the token pair encrypted. Access tokens live
-one hour ; the host refreshes them with the standard `refresh_token` grant
-and HTTP Basic client authentication (the refresh token rotates), and owns
-the refresh timing. A 401/403 upstream throws `UpstreamAuthError`, which
-also triggers a refresh in the host.
+**Check at paste** (`verifySupabaseToken`): `GET /v1/organizations` names the
+organisations the token reaches, shown as the account; a 401 or 403 is a
+rejected token. Supabase exposes no expiry for these tokens, so the account
+page cannot show one; it exposes no deletion endpoint either, so removing
+the account tells the person to delete the token under Account preferences →
+Access tokens.
 
 ### Resource discovery
 
@@ -225,20 +209,6 @@ returns one `Resource` per project : `ref` = project ref, `displayName` =
 The Management API returns the whole list (no paging) ; the plugin caps it
 at `MAX_DISCOVERED_PROJECTS` (200) and warns through the logger. The owner
 labels each project's `env` on the account's page (Accounts).
-
-## Credential, the other way: a personal access token
-
-Without a company OAuth app — or beside it — an account is connected with a
-**personal access token** pasted by hand (`supabaseTokenCredential`,
-`src/token.ts`). Create it at https://supabase.com/dashboard/account/tokens,
-as the account the agents will act as (a shared service account is fine),
-**scoped** to the organisation and projects the missions need, with the
-permissions the connect page lists (`guide.permissions`) and an expiry. Every
-tool runs with it. The gateway checks it with `GET /v1/organizations` and
-seals it; Supabase exposes no expiry and no deletion endpoint for these
-tokens, so removing the account tells the person to delete it under Account
-preferences → Access tokens. ADR
-[`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md).
 
 ## Tests
 

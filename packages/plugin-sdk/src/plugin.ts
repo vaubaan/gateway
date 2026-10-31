@@ -109,7 +109,7 @@ export interface ExecuteContext extends ConnectionContext {
 
 /** One tool that hands a provider token to the agent, and the risks that gate it. */
 export interface TokenHandout {
-  /** A tool of this plugin (`github__mint_install_token`). */
+  /** A tool of this plugin (`acme__mint_deploy_token`). */
   readonly tool: string;
   /** Unqualified ids of this plugin's catalog ; at least one. */
   readonly riskIds: readonly string[];

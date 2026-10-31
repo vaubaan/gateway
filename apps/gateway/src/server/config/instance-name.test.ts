@@ -4,7 +4,7 @@ import { checkInstanceName, INSTANCE_NAME_MAX_LENGTH } from './instance-name';
 
 describe('checkInstanceName', () => {
   it('trims the spaces around the name', () => {
-    expect(checkInstanceName('  Dalae prod \t')).toEqual({ ok: true, name: 'Dalae prod' });
+    expect(checkInstanceName('  Acme prod \t')).toEqual({ ok: true, name: 'Acme prod' });
   });
 
   it('refuses a name that is empty once trimmed', () => {

@@ -70,7 +70,7 @@ export default function Home() {
           </Link>
         </div>
         <p className="meta">
-          Pre-release: no version is tagged and no image is published yet.{' '}
+          Pre-release: 2.0.0-alpha versions are tagged; expect breaking changes until v2.0.0.{' '}
           <Link href="/trust" prefetch={false}>
             What protects your credentials
           </Link>{' '}

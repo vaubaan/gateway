@@ -108,12 +108,12 @@ describe('instance name', () => {
 
   it('stores the name an administrator saves, audited once, then clears it on a blank value', async () => {
     const r = await open();
-    const saved = await save(r, '  Dalae prod  ');
+    const saved = await save(r, '  Acme prod  ');
     expect(saved.status).toBe(303);
     expect(saved.headers.get('location')).toBe('/admin#instance-name');
-    expect(await r.store.config.get(INSTANCE_NAME_KEY)).toBe('Dalae prod');
+    expect(await r.store.config.get(INSTANCE_NAME_KEY)).toBe('Acme prod');
     expect(await r.instance.name.identity()).toMatchObject({
-      label: 'Dalae prod',
+      label: 'Acme prod',
       host: HOST,
       source: 'admin',
     });
@@ -124,11 +124,11 @@ describe('instance name', () => {
       act: 'config-changed',
       object: { type: 'instance-config', id: INSTANCE_NAME_OBJECT_ID },
       before: { name: null, source: 'default' },
-      after: { name: 'Dalae prod', source: 'admin' },
+      after: { name: 'Acme prod', source: 'admin' },
     });
 
     // The same name again changes nothing and writes nothing.
-    await save(r, 'Dalae prod');
+    await save(r, 'Acme prod');
     expect(await nameAudit(r)).toHaveLength(1);
 
     await save(r, '   ');
@@ -137,7 +137,7 @@ describe('instance name', () => {
     const cleared = await nameAudit(r);
     expect(cleared).toHaveLength(2);
     expect(cleared.map((e) => (e.kind === 'admin' ? [e.before, e.after] : null))).toContainEqual([
-      { name: 'Dalae prod', source: 'admin' },
+      { name: 'Acme prod', source: 'admin' },
       { name: null, source: 'default' },
     ]);
   });
@@ -168,11 +168,11 @@ describe('instance name', () => {
   });
 
   it('a name set by the configuration wins over a stored one, and the field is read-only', async () => {
-    const r = await open({ VAUBAAN_INSTANCE_NAME: 'Fiabilis AI' });
+    const r = await open({ VAUBAAN_INSTANCE_NAME: 'Acme AI' });
     await r.store.config.set(INSTANCE_NAME_KEY, 'stored earlier');
     expect(r.instance.name.isLocked()).toBe(true);
     expect(await r.instance.name.identity()).toMatchObject({
-      label: 'Fiabilis AI',
+      label: 'Acme AI',
       source: 'config',
     });
 

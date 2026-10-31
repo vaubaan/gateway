@@ -63,7 +63,7 @@ export function trustMarkdown({ acceptedRisks, outOfScope, thresholds }: TrustIn
 
 Vaubaan Gateway is pre-release software that holds your cloud credentials so that coding agents never do; this page says what protects them, what does not, and what leaves an instance, each claim linked to the document or the code that backs it.
 
-**Status, plainly.** No version is tagged and no image is published yet; the software has not been run in production ([README](${gh('README.md')}#status), [known limitations](/docs/known-limitations)). There has been no third-party security audit and there is no certification. The threat model and the controls below are the project's own work, reviewed in its repository.
+**Status, plainly.** Pre-release: 2.0.0-alpha versions are tagged and published as images, a handful of early instances run it, and breaking changes are expected until v2.0.0 ([README](${gh('README.md')}#status), [known limitations](/docs/known-limitations)). There has been no third-party security audit and there is no certification. The threat model and the controls below are the project's own work, reviewed in its repository.
 
 ## The trust proposition
 

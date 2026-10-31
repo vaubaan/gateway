@@ -7,15 +7,14 @@ handled privately and take priority over other work.
 
 ## Supported versions
 
-| Version                           | Security fixes                                     |
-| --------------------------------- | -------------------------------------------------- |
-| 2.x, pre-release (`v5` branch)    | Yes, on the `v5` branch. No release is tagged yet. |
-| v4 SaaS (tag `v4-final`) or older | No. Historical; not maintained.                    |
+| Version                                            | Security fixes                                                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 2.0.0 pre-releases (`v2.0.0-alpha.*`, from `main`) | Yes. A fix lands on `main` and ships in the next pre-release; nothing is backported to an earlier one. |
+| v4 SaaS (tag `v4-final`) or older                  | No. Historical; not maintained.                                                                        |
 
-Until the first `v2.0.0` release there is one supported line: the head of the
-`v5` integration branch. A fix lands there and reaches `main` with it; nothing
-is backported. Once releases exist, this table will name the release lines
-that receive fixes.
+Until `v2.0.0`, the supported line is the latest pre-release, cut from `main`:
+update to it to receive a fix. From `v2.0.0` on, this table will name the
+release lines that receive fixes.
 
 ## Reporting a vulnerability
 
@@ -103,11 +102,11 @@ project's own supply chain is checked on every change. What runs, when,
 and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md#security-checks).
 
 - **Secrets**: the whole git history is scanned (gitleaks) on every push of
-  every branch. A secret that was committed is revoked at its issuer; the
-  history is not rewritten.
+  a work branch and on every pull request. A secret that was committed is
+  revoked at its issuer; the history is not rewritten.
 - **Code**: static analysis (Semgrep, community security rules at a pinned
-  commit plus rules of this codebase) on every pull request and every push
-  to the integration branches; property-based tests on the parsers that
+  commit plus rules of this codebase) on every pull request and weekly on
+  the default branch; property-based tests on the parsers that
   read what an agent or a client sends (SQL, shell, headers, the git wire,
   the configuration).
 - **Dependencies**: `npm audit` against a reviewed allowlist, registry
@@ -115,9 +114,9 @@ and how a finding is triaged: [`docs/workflow/coding-workflow.md`](docs/workflow
   downloads from the npm registry with an integrity hash, and weekly
   updates that wait a cooldown of several days before a new version is
   adopted.
-- **Image**: scanned with Trivy before every merge and before every release
-  (a known vulnerability with a fix fails it), no package manager shipped,
-  base image pinned by digest.
+- **Image**: scanned with Trivy on every release, weekly on the default
+  branch and on demand (a known vulnerability with a fix fails it), no
+  package manager shipped, base image pinned by digest.
 - **Release**: the image carries an SBOM and a signed build-provenance
   attestation that the release pipeline verifies before it publishes;
   verify it yourself before you run it:
@@ -135,10 +134,10 @@ findings without a demonstrated impact are out of scope).
    process. The gateway does not defend against its own operator.
 2. **An agent never holds a connection's stored credential.** It holds a
    mission token; the gateway decrypts the credential for the duration of one
-   call and returns only the result. One deliberate exception: a tool whose
-   purpose is to hand out a short-lived, repository-scoped token for `git`
-   (`github__mint_install_token`) — a risk of its own that a mission must
-   accept, counted and audited like any call.
+   call and returns only the result. No shipped tool hands a provider token
+   to the agent; a plugin that declared one would make it a risk of its own,
+   which a mission must accept, counted and audited like any call, and which
+   asks first at every trust level.
 3. **The gateway decides from the plugin's classification.** A call is
    allowed when every risk it touches was accepted by the mission, within its
    budget and gate. A wrong classification is therefore a vulnerability.

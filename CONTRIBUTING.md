@@ -179,9 +179,8 @@ They are checked in review, and several by tests:
 
 - Fork the repository and create a branch from the branch you target:
   `feat/<short-name>` for a feature, `fix/<short-name>` for a fix.
-- **Target branch.** Until the first `v2.0.0` release, the work is integrated
-  on the `v5` branch: open your pull request against `v5`. After that release
-  the target is `main`. `main` is protected; nothing is pushed to it directly.
+- **Target branch.** `main` is the trunk: open your pull request against
+  `main`. Nothing is pushed to it directly; a release is a tag on it.
 - **One feature or one fix per pull request.** A refactoring that is not
   needed by the change goes in its own pull request.
 - **Commit messages** follow

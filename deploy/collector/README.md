@@ -26,16 +26,15 @@ publishes, per plugin version, whether its users found it to work. Two parts:
   anyone may insert into and nobody may read, and public views of aggregates.
   This directory holds its whole definition, `schema.sql`.
 
-Decisions and rationale: ADRs
-[telemetry-two-levels-behind-a-vercel-collector](../../docs/decisions/telemetry-two-levels-behind-a-vercel-collector.md)
-and
+Decisions and rationale: ADR
 [telemetry-two-levels-behind-a-vercel-collector](../../docs/decisions/telemetry-two-levels-behind-a-vercel-collector.md);
 the receiving side is specified in [website](../../docs/spec/website.md) §3;
 the gateway side: handbook [telemetry](../../docs/handbook/telemetry.md).
 
-You do not need any of this to run a gateway. Telemetry is off by default, and
-**until the collector's URL is published as the default, instances send
-nothing**: the gateway's client refuses to send to the placeholder.
+You do not need any of this to run a gateway. Telemetry is off by default. An
+instance whose administrator turns it on sends to this collector, the
+gateway's built-in default, unless its configuration names another one
+(`telemetry.collector_url`).
 
 ## What an instance sends
 
@@ -211,10 +210,9 @@ deploy/collector/schema.sql` (the connection string in your shell, never in
    Then delete the test rows (`delete from public.plugin_reports where plugin
 = 'collector-selftest'`).
 
-Publishing the collector to every instance is a change of the single default
-URL in the gateway's code (`apps/gateway/src/server/config/telemetry-default.ts`,
-already `https://telemetry.vaubaan.com/v1/reports`) and of the placeholder
-gate, in a release.
+This collector is the single default URL of the gateway's code
+(`apps/gateway/src/server/config/telemetry-default.ts`); moving every
+instance to another one is a change of that file, in a release.
 
 ## What is refused, and how
 
