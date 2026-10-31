@@ -18,27 +18,7 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
-export const GMAIL_TOOL_PREFIX = 'gmail__';
-
-/** The fourteen tools the classifier knows. Any other name is `denied`. */
-export const GMAIL_CLASSIFIED_TOOLS = [
-  'gmail__describe_zones',
-  'gmail__search_threads',
-  'gmail__get_thread',
-  'gmail__get_attachment',
-  'gmail__list_drafts',
-  'gmail__create_draft',
-  'gmail__send_message',
-  'gmail__send_draft',
-  'gmail__list_labels',
-  'gmail__create_label',
-  'gmail__label_message',
-  'gmail__unlabel_message',
-  'gmail__label_thread',
-  'gmail__unlabel_thread',
-] as const;
-
-export type GmailClassifiedTool = (typeof GMAIL_CLASSIFIED_TOOLS)[number];
+import { TOOL } from './identity.ts';
 
 const threadIdArg = {
   thread_id: {
@@ -66,16 +46,16 @@ const recipients = {
     'Addresses, one per element, as `addr@example.com` or `Name <addr@example.com>`. An element that is not exactly one address refuses the call.',
 };
 
-/** Declarations of the fourteen tools, in `GMAIL_CLASSIFIED_TOOLS` order. */
+/** Declarations of the fourteen tools, in `TOOL` order. */
 export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
-    name: 'gmail__describe_zones',
+    name: TOOL.describeZones,
     description:
       'Return the zoning configuration of the mailbox (internal domains, allowlists, sensitive labels) so the agent knows which risks a read or draft will trigger. Synthetic Vaubaan tool ; no upstream call.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'gmail__search_threads',
+    name: TOOL.searchThreads,
     description:
       'Search threads with a Gmail query (`from:`, `to:`, `label:`, `newer_than:`…). Only a plain conjunction holding a `from:<full address>` clause is a bounded read ; an `OR`, a grouping, a quoted phrase or a query without such a clause is a bulk read from unknown senders.',
     inputSchema: {
@@ -91,7 +71,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__get_thread',
+    name: TOOL.getThread,
     description:
       'Read a thread: the headers, labels, text body (capped; an HTML-only message is converted to text, links kept) and the list of attachments of its newest 50 messages. Classified as a read from an unknown sender, and of a sensitive label when the mailbox declares some (sender and labels are only known after the fetch).',
     inputSchema: {
@@ -106,7 +86,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__get_attachment',
+    name: TOOL.getAttachment,
     description:
       'Download one attachment of a message, base64-encoded, at most 5 MiB (a larger one is refused). The part comes from the attachments get_thread lists. Classified like get_thread: a read from an unknown sender, and of a sensitive label when the mailbox declares some.',
     inputSchema: {
@@ -124,12 +104,12 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__list_drafts',
+    name: TOOL.listDrafts,
     description: 'List the drafts of the mailbox, with their recipients (Bcc included).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'gmail__create_draft',
+    name: TOOL.createDraft,
     description:
       'Create a plain-text draft in the Drafts folder; it is never sent. The risk depends on the recipients : self, internal or allowlisted. A recipient outside the internal domains and the allowlists refuses the draft.',
     inputSchema: {
@@ -145,7 +125,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__send_message',
+    name: TOOL.sendMessage,
     description:
       'Send a plain-text message over SMTP, from the mailbox; it cannot be called back. The risk depends on the recipients : self, internal, allowlisted or external (the worst recipient wins). 1 to 100 recipients. Gmail files the copy in Sent.',
     inputSchema: {
@@ -161,7 +141,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__send_draft',
+    name: TOOL.sendDraft,
     description:
       'Send an existing draft as it is (attachments and formatting kept), then remove it from Drafts; it cannot be called back. Give its id and its recipients exactly as list_drafts shows them : the risk is priced on them, and the call is refused, unsent, when the draft holds others. Gmail files the copy in Sent.',
     inputSchema: {
@@ -179,12 +159,12 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__list_labels',
+    name: TOOL.listLabels,
     description: 'List the system and user labels of the mailbox.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'gmail__create_label',
+    name: TOOL.createLabel,
     description:
       'Create a user label, nested with "/" (Clients/2026). Refused when it exists, when it names a system label or folder, or when it is under [Gmail]/. Deletes nothing and moves no message.',
     inputSchema: {
@@ -200,7 +180,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__label_message',
+    name: TOOL.labelMessage,
     description: 'Add a label to one message.',
     inputSchema: {
       type: 'object',
@@ -209,7 +189,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__unlabel_message',
+    name: TOOL.unlabelMessage,
     description: 'Remove a label from one message.',
     inputSchema: {
       type: 'object',
@@ -218,7 +198,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__label_thread',
+    name: TOOL.labelThread,
     description: 'Add a label to every message of a thread.',
     inputSchema: {
       type: 'object',
@@ -227,7 +207,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     },
   },
   {
-    name: 'gmail__unlabel_thread',
+    name: TOOL.unlabelThread,
     description: 'Remove a label from every message of a thread.',
     inputSchema: {
       type: 'object',
@@ -239,3 +219,8 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
 
 /** What the gateway lists to MCP clients : every classified tool. */
 export const gmailTools: readonly McpToolDeclaration[] = gmailClassifiedToolDeclarations;
+
+/** The fourteen tools the classifier knows, in `tools/list` order. Any other name is `denied`. */
+export const GMAIL_CLASSIFIED_TOOLS: readonly string[] = gmailClassifiedToolDeclarations.map(
+  (t) => t.name,
+);

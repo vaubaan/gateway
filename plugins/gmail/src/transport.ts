@@ -28,7 +28,7 @@ import {
   type MessageStructureObject,
 } from 'imapflow';
 
-import { UpstreamAuthError, type PluginLogger } from '@vaubaan/plugin-sdk';
+import { ExecutorRefusal, UpstreamAuthError, type PluginLogger } from '@vaubaan/plugin-sdk';
 
 import { GMAIL_IMAP_HOST, GMAIL_IMAP_PORT, type GmailAccount } from './credential.ts';
 
@@ -552,7 +552,14 @@ export function createImapflowTransport(
         ]);
       } catch (err) {
         client.close();
-        if (err instanceof UpstreamAuthError || err instanceof GmailSessionStopped) throw err;
+        // A refusal of the work is the executor's own words : never read as a network failure.
+        if (
+          err instanceof UpstreamAuthError ||
+          err instanceof GmailSessionStopped ||
+          err instanceof ExecutorRefusal
+        ) {
+          throw err;
+        }
         throw humanize(err, account);
       } finally {
         clearTimeout(timer);

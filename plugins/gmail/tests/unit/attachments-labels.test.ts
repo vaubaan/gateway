@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  jsonObjectsOf,
   serializeSlice,
   type ExecuteContext,
   type McpToolResult,
@@ -73,7 +74,8 @@ const ctx = (): ExecuteContext => ({
 const run = (t: FakeGmail, tool: string, args: Record<string, unknown>): Promise<McpToolResult> =>
   createGmailPlugin({ transport: t }).execute(ctx(), tool, args);
 
-const body = (r: McpToolResult) => r.structuredContent as unknown as Record<string, unknown>;
+/** The JSON a result's text carries : the answer, or a refusal's code and words. */
+const body = (r: McpToolResult) => jsonObjectsOf(r)[0] ?? {};
 const messagesOf = (r: McpToolResult) => body(r).messages as readonly Record<string, unknown>[];
 
 describe('HTML bodies', () => {

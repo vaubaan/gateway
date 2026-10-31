@@ -161,8 +161,7 @@ describe('gmail plugin — SDK kit', () => {
     assertNoWildcard(gmailPlugin);
   });
 
-  test('is at 1.1.1, no longer says experimental, and exposes its fourteen tools', () => {
-    expect(gmailPlugin.version).toBe('1.1.1');
+  test('no longer says experimental, and exposes its fourteen tools', () => {
     expect(gmailPlugin.description).not.toMatch(/experimental/i);
     expect(gmailPlugin.summary).not.toMatch(/experimental/i);
     expect(gmailPlugin.description).toMatch(/send messages and drafts over SMTP/);

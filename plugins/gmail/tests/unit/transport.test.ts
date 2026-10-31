@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { ImapFlow, ImapFlowOptions } from 'imapflow';
 
-import { UpstreamAuthError } from '@vaubaan/plugin-sdk';
+import { ExecutorRefusal, UpstreamAuthError } from '@vaubaan/plugin-sdk';
 
 import { createImapflowTransport } from '../../src/transport.ts';
 
@@ -137,6 +137,15 @@ describe('imapflowTransport', () => {
     expect((err as Error).message).toContain('me@gmail.com');
     expect((err as Error).message).toContain('Invalid credentials (Failure)');
     expect((err as Error).message).not.toContain('abcdefghijklmnop');
+    expect(clients[0]!.close).toHaveBeenCalled();
+  });
+
+  test('a refusal of the work comes back as it is, even in words that read like a network failure', async () => {
+    const refusal = new ExecutorRefusal("no user label 'timeout' (list_labels gives the names).");
+    const attempt = imapflowTransport.session(account, { timeoutMs: 60_000 }, async () => {
+      throw refusal;
+    });
+    await expect(attempt).rejects.toBe(refusal);
     expect(clients[0]!.close).toHaveBeenCalled();
   });
 

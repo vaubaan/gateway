@@ -51,7 +51,6 @@ import {
 import { gmailDataModel } from './data-model.ts';
 import { buildDraft, encodeHeaderValue, withoutBccHeader } from './draft.ts';
 import {
-  GMAIL_PLUGIN_ID,
   createGmailRuntime,
   hexToImapId,
   imapIdToHex,
@@ -60,12 +59,8 @@ import {
   type GmailRuntimeOptions,
 } from './execute.ts';
 import { GMAIL_ICON, GMAIL_ICON_COLOR } from './icon.ts';
-import {
-  GMAIL_CLASSIFIED_TOOLS,
-  GMAIL_TOOL_PREFIX,
-  gmailClassifiedToolDeclarations,
-  gmailTools,
-} from './tools.ts';
+import { PROVIDER_ID } from './identity.ts';
+import { GMAIL_CLASSIFIED_TOOLS, gmailClassifiedToolDeclarations, gmailTools } from './tools.ts';
 import { gmailToolTitles } from './tool-titles.ts';
 import {
   GMAIL_SMTP_HOST,
@@ -88,12 +83,12 @@ import {
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
 export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-export const GMAIL_PLUGIN_VERSION = '1.1.1';
+export const GMAIL_PLUGIN_VERSION = '2.0.0';
 
 export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPlugin {
   const runtime = createGmailRuntime(options);
   return definePlugin({
-    id: GMAIL_PLUGIN_ID,
+    id: PROVIDER_ID,
     displayName: 'Gmail',
     icon: GMAIL_ICON,
     iconColor: GMAIL_ICON_COLOR,
@@ -135,10 +130,8 @@ export {
   GMAIL_IMAP_HOST,
   GMAIL_IMAP_PORT,
   GMAIL_METADATA_KEYS,
-  GMAIL_PLUGIN_ID,
   GMAIL_SMTP_HOST,
   GMAIL_SMTP_PORT,
-  GMAIL_TOOL_PREFIX,
   GmailSmtpError,
   buildDraft,
   classifyFromAddress,
@@ -174,7 +167,8 @@ export {
 export type { FromZone, GmailMailboxMetadata, ToZone } from './classify.ts';
 export type { GmailAccount };
 export type { GmailRuntime, GmailRuntimeOptions } from './execute.ts';
-export type { GmailClassifiedTool } from './tools.ts';
+export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export type { GmailTool } from './identity.ts';
 export type {
   GmailSmtpErrorCode,
   GmailSmtpTransport,
