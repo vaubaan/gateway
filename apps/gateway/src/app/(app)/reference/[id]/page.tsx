@@ -1,7 +1,7 @@
 /**
  * `/reference/<id>` — the reference of one service (spec §4.2 "Providers"):
  * what it is in the plugin's own words, then its permissions compared across
- * the trust crans, its tools, and how it is modelled, behind tabs
+ * the trust levels, its tools, and how it is modelled, behind tabs
  * (`service-view.tsx`).
  *
  * Generated from the plugin registry (`server/providers/reference.ts`): no

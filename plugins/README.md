@@ -39,13 +39,13 @@ you are about to write are what those pages show.
 
 Five words used on every line below:
 
-| Word             | Meaning                                                                                                                                                                                                                                         |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Resource**     | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                               |
-| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                     |
-| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.              |
-| **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust cran (Prudent, Confiant, Autonome), which writes the explicit lines; the mission stores those lines. |
-| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                |
+| Word             | Meaning                                                                                                                                                                                                                                          |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Resource**     | One thing a connection reaches at the provider and a mission can be limited to: a repository, a DNS zone, a project. Its owner labels it with an environment (`staging`, `prod`).                                                                |
+| **Slice**        | What one call touches, as a path on the data model plus `R` (read) or `W` (write): `acme.workspace[ws-1].widget[w-7].W`. Emitted by your classifier, never shown to a user.                                                                      |
+| **Risk**         | A named reason a call may be dangerous, with an id that never changes: `acme.widget-write`. It lists the slice patterns it covers (`matches`). When it depends on the environment, its id is qualified: `acme[prod].widget-write`.               |
+| **Macro-action** | One thing to do with the provider, in its words ("Read", "Ship"): a group of risks, each with a base budget. A creator ticks it at a trust level (Prudent, Confiant, Autonome), which writes the explicit lines; the mission stores those lines. |
+| **Mission**      | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                                 |
 
 The interface shows these to people under other words: a provider is a
 **service**, a connection an **account**, a risk a **permission**, a gate
@@ -271,7 +271,7 @@ macro_actions:
     description: One line shown under the macro-action in New mission.
     entries:
       - risk_id: acme.read-widgets # unqualified, never the fallback
-        quota: 500 # the base budget a cran multiplies (×1, ×3, ×10)
+        quota: 500 # the base budget a trust level multiplies (×1, ×3, ×10)
         rate_limit: { max: 60, window_seconds: 60 }
   - id: change
     label: Change widgets
@@ -319,15 +319,15 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
 - **Macro-actions.** 3 to 6, named in the provider's words ("Read", "Ship",
   "Move money out"), independent of each other: every entry but the fallback
   and deprecated ones belongs to **exactly one**, unqualified, with a base
-  budget and no gate. A creator ticks them at a trust cran; the gate follows
+  budget and no gate. A creator ticks them at a trust level; the gate follows
   the entry's vector (irreversible asks or stays out, costly asks, a
-  sensitive read asks at the lowest cran), so the vector must be right. The
+  sensitive read asks at the lowest trust level), so the vector must be right. The
   gateway adds "Anything else" for the fallback
   ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 - **No presets.** Presets were retired: a catalog with a `presets` key does
   not load ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
   A risk whose tool hands the agent a token that can write
-  (`tokenHandouts`) asks first at every cran.
+  (`tokenHandouts`) asks first at every trust level.
 - **Limits.** The only limit the gateway enforces is
   `infra_limits.calls_per_minute_max` on a risk: the ceiling of the rate
   limit a mission can be issued with. Do not declare `caps` or another
@@ -708,9 +708,9 @@ expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave
 ```
 
 **Test a mission the way a creator composes it.** `policyFromMacroActions`
-writes the explicit lines of ticked macro-actions at their crans, for the
+writes the explicit lines of ticked macro-actions at their trust levels, for the
 environments given, with the policy engine's own rules (gate from the
-palier, budget scaled by the cran, a write-token handout asked first):
+palier, budget scaled by the trust level, a write-token handout asked first):
 
 ```ts
 const policy = policyFromMacroActions(
@@ -957,7 +957,7 @@ change yourself:
 - **A risk must go**: never delete or rename it. `deprecated: true`, with
   `replaced_by` when a successor exists; remove it from its macro-action.
 - **Base budgets** of the macro-actions are a starting point chosen by the
-  plugin's author; the gate follows the vector and the cran. Propose a change with the usage that motivates it.
+  plugin's author; the gate follows the vector and the trust level. Propose a change with the usage that motivates it.
 
 ## When something fails
 

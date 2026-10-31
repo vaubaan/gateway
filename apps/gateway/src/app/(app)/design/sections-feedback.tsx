@@ -118,7 +118,7 @@ export function StateSections() {
                 <Row
                   lead={<StepMark n={2} state="next" />}
                   title="Give an agent a mission"
-                  description="Name it, pick the repositories, tick what it may do at a trust cran, read the three-line summary, create."
+                  description="Name it, pick the repositories, tick what it may do at a trust level, read the three-line summary, create."
                   end={
                     <ButtonLink href="#empty" size="sm" variant="primary">
                       {ACTIONS.newMission}
@@ -550,7 +550,12 @@ export function FormSections() {
                 aria-label="Per day"
                 style={{ width: 84 }}
               />
-              <Select size="sm" aria-label="Cran" defaultValue="confiant" style={{ width: 160 }}>
+              <Select
+                size="sm"
+                aria-label="TrustLevel"
+                defaultValue="confiant"
+                style={{ width: 160 }}
+              >
                 <option value="prudent">Prudent · ×1</option>
                 <option value="confiant">Confiant · ×3</option>
               </Select>

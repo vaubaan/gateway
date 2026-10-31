@@ -79,7 +79,7 @@ test.afterEach(async () => {
   agent = null;
 });
 
-test('a gated action of the developer crans: refused, approved by its creator only, replayed once', async ({
+test('a gated action of the developer trust levels: refused, approved by its creator only, replayed once', async ({
   browser,
   request,
 }) => {

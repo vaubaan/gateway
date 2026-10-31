@@ -52,7 +52,7 @@ test('the creator adds a requested permission, then removes it directly, with th
     outcome: 'allowed',
   });
   // Taking it back is "Edit mission": the creation screen prefilled; a mission issued line by
-  // line, with no crans, opens on its list in the advanced view.
+  // line, with no trust levels, opens on its list in the advanced view.
   await page.goto(`/missions/${issued.mission_id}`);
   await page.getByTestId('edit-mission').click();
   await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}/edit$`));

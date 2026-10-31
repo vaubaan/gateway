@@ -21,7 +21,7 @@ function summaryOf(
 describe('summarize — the three lines of the creation screen', () => {
   it('says what the mission can do, per connection, with its most severe risk', () => {
     const s = summaryOf([
-      { connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } },
+      { connection_id: 'conn-acme', trust_levels: { read: 'prudent', change: 'confiant' } },
     ]);
     expect(s.can).toBe(
       'Acme "Acme main": 4 risks on 3 of 3 resources, up to "Delete things in bulk" (high).',
@@ -32,7 +32,7 @@ describe('summarize — the three lines of the creation screen', () => {
     const s = summaryOf([
       {
         connection_id: 'conn-acme',
-        crans: { read: 'prudent' },
+        trust_levels: { read: 'prudent' },
         resources: { scope: 'selected', resource_refs: ['app-prod'] },
       },
     ]);
@@ -43,7 +43,7 @@ describe('summarize — the three lines of the creation screen', () => {
 
   it('says in what quantities: widest quota, fastest rate, approvals, reload, expiry', () => {
     const s = summaryOf(
-      [{ connection_id: 'conn-acme', crans: { read: 'prudent', change: 'confiant' } }],
+      [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent', change: 'confiant' } }],
       { kind: 'recurring', length_seconds: 86_400 },
       '2026-11-01T00:00:00.000Z',
     );
@@ -53,7 +53,7 @@ describe('summarize — the three lines of the creation screen', () => {
   });
 
   it('speaks of a total for a one-off mission that never expires', () => {
-    const s = summaryOf([{ connection_id: 'conn-acme', crans: { read: 'prudent' } }], {
+    const s = summaryOf([{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }], {
       kind: 'one-off',
     });
     expect(s.quantities).toContain('At most 100 actions in total');

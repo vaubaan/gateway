@@ -1,7 +1,7 @@
 /**
  * The provider reference of the web interface (spec §4.2 "Providers"): what
  * each shipped plugin connects to, its data model, its risk catalog, its
- * tools and its macro-actions, each risk with what every trust cran gives it.
+ * tools and its macro-actions, each risk with what every trust level gives it.
  *
  * Everything here is a read-only projection of the plugin registry — the
  * single provider list. Nothing is written per provider: a plugin added to
@@ -43,9 +43,9 @@ import {
   expandMacroAction,
   macroActionsOf,
   palierOf,
-  TRUST_CRANS,
+  TRUST_TRUST_LEVELS,
   type Palier,
-  type TrustCran,
+  type TrustLevel,
 } from '../missions/macro-actions';
 import { RISK_KINDS, type CatalogRisk, type RiskKind } from '../missions/model';
 import { macroActionAnchor, riskAnchor } from './links';
@@ -295,7 +295,7 @@ export interface RiskReference extends RiskFamily {
   /**
    * What the handed token can do at the provider: `read-only` when the plugin declares
    * it so (`readOnlyRiskIds`), `write` otherwise; `null` when the risk hands no token.
-   * A cran pre-fills a `write` one `approval` (spec §2.4).
+   * A trust level pre-fills a `write` one `approval` (spec §2.4).
    */
   readonly token_access: TokenAccess | null;
   /** The tools the plugin declares as touching this risk (`tokenHandouts`); usually none. */
@@ -304,8 +304,8 @@ export interface RiskReference extends RiskFamily {
   readonly planes: readonly string[];
   /** The macro-action it belongs to; `null` for a retired entry, in none. */
   readonly macro_action: MacroActionTag | null;
-  /** Per cran, what each variant gets there, variant order. */
-  readonly at_cran: Readonly<Record<TrustCran, readonly CranCell[]>>;
+  /** Per trust level, what each variant gets there, variant order. */
+  readonly at_trust_level: Readonly<Record<TrustLevel, readonly TrustLevelCell[]>>;
 }
 
 /** A macro-action as a risk names it: enough to print its tag and link to it. */
@@ -315,8 +315,8 @@ export interface MacroActionTag {
   readonly anchor: string;
 }
 
-/** What one variant of a risk gets at one cran: its line, or `null` when the cran leaves it out. */
-export interface CranCell {
+/** What one variant of a risk gets at one trust level: its line, or `null` when the trust level leaves it out. */
+export interface TrustLevelCell {
   readonly risk: CatalogRisk;
   readonly palier: Palier;
   readonly line: {
@@ -338,8 +338,8 @@ interface CatalogContext {
   readonly model: DataModel;
   readonly handouts: readonly TokenHandout[];
   readonly macroActions: readonly MacroActionReference[];
-  /** Per explicit id, per cran: its line, `null` when left out. */
-  readonly cells: ReadonlyMap<RiskId, Readonly<Record<TrustCran, CranCell['line']>>>;
+  /** Per explicit id, per trust level: its line, `null` when left out. */
+  readonly cells: ReadonlyMap<RiskId, Readonly<Record<TrustLevel, TrustLevelCell['line']>>>;
 }
 
 function worstKind(variants: readonly CatalogRisk[]): RiskKind {
@@ -367,16 +367,16 @@ function riskReferenceOf(
       );
       return action ? { id: action.id, label: action.label, anchor: action.anchor } : null;
     })(),
-    at_cran: Object.fromEntries(
-      TRUST_CRANS.map((cran) => [
-        cran,
+    at_trust_level: Object.fromEntries(
+      TRUST_TRUST_LEVELS.map((trustLevel) => [
+        trustLevel,
         family.variants.map((risk) => ({
           risk,
           palier: palierOf(risk.vector),
-          line: context.cells.get(risk.risk_id)?.[cran] ?? null,
+          line: context.cells.get(risk.risk_id)?.[trustLevel] ?? null,
         })),
       ]),
-    ) as Record<TrustCran, CranCell[]>,
+    ) as Record<TrustLevel, TrustLevelCell[]>,
     ...family,
     anchor: riskAnchor(entry.id),
     kind: worstKind(family.variants),
@@ -412,7 +412,7 @@ function riskGroupsOf(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Macro-actions, at every cran
+// Macro-actions, at every trust level
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface MacroActionReference {
@@ -433,28 +433,28 @@ function writeTokenRisks(handouts: readonly TokenHandout[]): RiskId[] {
 
 /**
  * Every macro-action against the whole catalog, every environment reached and
- * every risk held: what each cran writes for each explicit id. What a mission
+ * every risk held: what each trust level writes for each explicit id. What a mission
  * gets is this bounded by the creator's authority and by the resources
  * selected.
  */
-function cranCellsOf(
+function trustLevelCellsOf(
   actions: readonly MacroAction[],
   risks: readonly CatalogRisk[],
   handouts: readonly TokenHandout[],
-): Map<RiskId, Record<TrustCran, CranCell['line']>> {
+): Map<RiskId, Record<TrustLevel, TrustLevelCell['line']>> {
   const whole = {
     risks,
     authority: risks.map((risk) => risk.risk_id),
     derives_env: true,
     write_token_risks: writeTokenRisks(handouts),
   };
-  const cells = new Map<RiskId, Record<TrustCran, CranCell['line']>>();
+  const cells = new Map<RiskId, Record<TrustLevel, TrustLevelCell['line']>>();
   for (const action of actions) {
-    for (const cran of TRUST_CRANS) {
-      const { lines, left_out } = expandMacroAction(whole, action, cran, []);
+    for (const trustLevel of TRUST_TRUST_LEVELS) {
+      const { lines, left_out } = expandMacroAction(whole, action, trustLevel, []);
       for (const line of lines) {
         const row = cells.get(line.risk_id) ?? { prudent: null, confiant: null, autonome: null };
-        row[cran] = { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
+        row[trustLevel] = { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
         cells.set(line.risk_id, row);
       }
       for (const out of left_out) {
@@ -529,7 +529,7 @@ export const TOOL_RISKS_NOTE =
 
 /** What the mark "hands a token to the agent" means (spec §2.4). */
 export const TOKEN_HANDOUT_NOTE =
-  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. At every trust cran, a token that can write is handed only after the creator approves the call; a read-only token follows its palier. The long-lived credential never leaves the gateway.';
+  'Hands a token to the agent: the one deliberate exception to "the agent never sees a credential of the service". The tool returns a short-lived, narrowly scoped token of the service, because the work cannot go through the gateway (git clone, git push). What the agent then does with that token is outside the gateway: it is not classified, not counted and not recorded. The call that obtains the token is: it is a permission of its own, never included by default, counted against its limit and recorded. At every trust level, a token that can write is handed only after the creator approves the call; a read-only token follows its palier. The long-lived credential never leaves the gateway.';
 
 /** What a handed token can do at the provider. */
 export type TokenAccess = 'read-only' | 'write';
@@ -603,7 +603,7 @@ export function providerReferenceOf(registered: RegisteredPlugin): ProviderRefer
   const model = plugin.dataModel;
   const actions = macroActionsOf(plugin.catalog);
   const macroActions = actions.map(macroActionReferenceOf);
-  const cells = cranCellsOf(actions, risks, handouts);
+  const cells = trustLevelCellsOf(actions, risks, handouts);
   const riskGroups = riskGroupsOf(plugin.catalog.risks, risks, {
     model,
     handouts,

@@ -470,29 +470,31 @@ function connectionToRecord(
     ),
     resourceIds: selected.map((r) => r.resource_id),
     ...(Object.keys(sources).length > 0 ? { resourceSources: sources } : {}),
-    ...(row.crans_json === null ? {} : { crans: cransOf(row.crans_json) }),
+    ...(row.crans_json === null ? {} : { trustLevels: trustLevelsOf(row.crans_json) }),
   };
 }
 
 /** `crans_json` as stored: an object of strings; anything else is corrupt. */
-function cransOf(json: string): Record<string, string> {
+function trustLevelsOf(json: string): Record<string, string> {
   const parsed: unknown = JSON.parse(json);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new InvariantError('mission_connections.crans_json is not an object');
   }
-  const crans: Record<string, string> = {};
-  for (const [id, cran] of Object.entries(parsed)) {
-    if (typeof cran !== 'string') {
+  const trustLevels: Record<string, string> = {};
+  for (const [id, trustLevel] of Object.entries(parsed)) {
+    if (typeof trustLevel !== 'string') {
       throw new InvariantError(`mission_connections.crans_json: '${id}' is not a string`);
     }
-    crans[id] = cran;
+    trustLevels[id] = trustLevel;
   }
-  return crans;
+  return trustLevels;
 }
 
-/** What `crans_json` stores: NULL for no cran, so an empty record reads back absent. */
-function cransJsonOf(c: Pick<MissionConnection, 'crans'>): string | null {
-  return c.crans && Object.keys(c.crans).length > 0 ? JSON.stringify(c.crans) : null;
+/** What `crans_json` stores: NULL for no trust level, so an empty record reads back absent. */
+function trustLevelsJsonOf(c: Pick<MissionConnection, 'trustLevels'>): string | null {
+  return c.trustLevels && Object.keys(c.trustLevels).length > 0
+    ? JSON.stringify(c.trustLevels)
+    : null;
 }
 
 /**
@@ -765,7 +767,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const rescopeStmt = db.prepare<[string, string, string]>(
     'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
   );
-  const recranStmt = db.prepare<[string | null, string, string]>(
+  const rewriteTrustLevelsStmt = db.prepare<[string | null, string, string]>(
     'UPDATE mission_connections SET crans_json = ? WHERE mission_id = ? AND connection_id = ?',
   );
   const deleteConnectionStmt = db.prepare<[string, string]>(
@@ -816,7 +818,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     c: MissionConnection,
   ): void {
     if (!old) {
-      insertConnection.run(missionId, c.connectionId, c.resourceScope, cransJsonOf(c));
+      insertConnection.run(missionId, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));
       for (const resourceId of c.resourceIds)
         insertEditedResource.run(missionId, c.connectionId, resourceId);
       return;
@@ -824,8 +826,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     if (old.resourceScope !== c.resourceScope) {
       rescopeStmt.run(c.resourceScope, missionId, c.connectionId);
     }
-    const crans = cransJsonOf(c);
-    if (crans !== cransJsonOf(old)) recranStmt.run(crans, missionId, c.connectionId);
+    const trustLevels = trustLevelsJsonOf(c);
+    if (trustLevels !== trustLevelsJsonOf(old))
+      rewriteTrustLevelsStmt.run(trustLevels, missionId, c.connectionId);
     const had = new Set(old.resourceIds);
     const has = new Set(c.resourceIds);
     for (const resourceId of old.resourceIds) {
@@ -1019,7 +1022,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           now,
         );
         for (const c of input.connections) {
-          insertConnection.run(id, c.connectionId, c.resourceScope, cransJsonOf(c));
+          insertConnection.run(id, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));
           for (const resourceId of c.resourceIds)
             insertResource.run(id, c.connectionId, resourceId);
         }

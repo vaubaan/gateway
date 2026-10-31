@@ -53,8 +53,8 @@ describe('cloudflare-dns risk-catalog — shape', () => {
   test('no macro-action lists the fallback ; the zone deletion never runs freely', () => {
     const listed = (catalog.macro_actions ?? []).flatMap((a) => a.entries.map((e) => e.risk_id));
     expect(listed).not.toContain('cloudflare-dns.uncategorized-write');
-    const gateOf = (cran: 'prudent' | 'confiant' | 'autonome') =>
-      policyFromMacroActions(cloudflareDnsPlugin, { 'rule-zone': cran }).find(
+    const gateOf = (trustLevel: 'prudent' | 'confiant' | 'autonome') =>
+      policyFromMacroActions(cloudflareDnsPlugin, { 'rule-zone': trustLevel }).find(
         (l) => l.risk_id === 'cloudflare-dns.zone-delete',
       )?.gate;
     expect(gateOf('prudent')).toBeUndefined();

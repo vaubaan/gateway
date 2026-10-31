@@ -94,8 +94,8 @@ tools.
 
 ## Risks and macro-actions
 
-A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
-Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions, each at a trust level (Prudent / Confiant /
+Autonome, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
 | Macro-action | What it covers                                                         | Its risks                                                                                           |

@@ -311,7 +311,7 @@ describe('definePlugin', () => {
   });
 
   // Spec §2.4: a token-handing risk that grants write is asked first at every
-  // trust cran (`policyFromMacroActions` tests it); undeclared means write.
+  // trust level (`policyFromMacroActions` tests it); undeclared means write.
   describe('the token-handing risks', () => {
     const [tool] = acmePlugin.tools;
     const handing = (riskIds: string[], readOnlyRiskIds?: unknown): ProviderPlugin =>
@@ -320,7 +320,7 @@ describe('definePlugin', () => {
         tokenHandouts: [{ tool: tool!.name, riskIds, readOnlyRiskIds }],
       }) as ProviderPlugin;
 
-    test('a write handout is well-formed: the cran, not the definition, gates it', () => {
+    test('a write handout is well-formed: the trust level, not the definition, gates it', () => {
       expect(pluginIssues(handing(['acme.thing-write']))).toEqual([]);
     });
 

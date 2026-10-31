@@ -118,8 +118,8 @@ describe('management door — tools of a delegated agent', () => {
       expect(gh.macro_actions.every((a) => a.unavailable.length === 0)).toBe(true);
       // Ship holds delete-release (irreversible, palier 4): Prudent leaves it out.
       const ship = gh.macro_actions.find((a) => a.id === 'ship');
-      expect(ship?.at_cran.prudent).toEqual({ auto: 0, approval: 3, left_out: 1 });
-      expect(ship?.at_cran.confiant).toEqual({ auto: 0, approval: 4, left_out: 0 });
+      expect(ship?.at_trust_level.prudent).toEqual({ auto: 0, approval: 3, left_out: 1 });
+      expect(ship?.at_trust_level.confiant).toEqual({ auto: 0, approval: 4, left_out: 0 });
       expect(gh).not.toHaveProperty('presets');
       // Everything held but the deprecated entries, as `get_catalog` writes it out.
       const catalog = await agent.call<CatalogView>('get_catalog', {
@@ -226,11 +226,15 @@ describe('management door — tools of a delegated agent', () => {
       const actions = Object.fromEntries((gh?.macro_actions ?? []).map((a) => [a.id, a]));
       // Read: the two reads shared, the global search not.
       expect(actions.read?.unavailable).toEqual(['github.search-global']);
-      expect(actions.read?.at_cran.confiant).toEqual({ auto: 2, approval: 0, left_out: 0 });
+      expect(actions.read?.at_trust_level.confiant).toEqual({ auto: 2, approval: 0, left_out: 0 });
       // Propose: only the pull request is shared.
       expect(actions.propose?.unavailable).toContain(NOT_SHARED);
-      expect(actions.propose?.at_cran.prudent).toEqual({ auto: 1, approval: 0, left_out: 0 });
-      expect(actions.ship?.at_cran.autonome).toEqual({ auto: 0, approval: 0, left_out: 0 });
+      expect(actions.propose?.at_trust_level.prudent).toEqual({
+        auto: 1,
+        approval: 0,
+        left_out: 0,
+      });
+      expect(actions.ship?.at_trust_level.autonome).toEqual({ auto: 0, approval: 0, left_out: 0 });
       expect(gh?.everything_i_hold.risks).toBe(SHARED.length);
       await agent.close();
     });
@@ -243,7 +247,7 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
-    it('get_catalog returns explicit ids with the macro-actions and crans, flagged against the authority on a connection', async () => {
+    it('get_catalog returns explicit ids with the macro-actions and trust levels, flagged against the authority on a connection', async () => {
       await shareWithBob();
       const agent = await rig.agentOf(BOB);
       const plain = await agent.call<CatalogView>('get_catalog', { provider: 'github' });
@@ -266,11 +270,11 @@ describe('management door — tools of a delegated agent', () => {
         palier: 3,
         macro_action: 'propose',
       });
-      expect(plain.data.crans.prudent).toEqual({
+      expect(plain.data.trust_levels.prudent).toEqual({
         gates: { '1': 'auto', '2': 'approval', '3': 'approval', '4': null },
         budget_factor: 1,
       });
-      expect(plain.data.crans.autonome.budget_factor).toBe(10);
+      expect(plain.data.trust_levels.autonome.budget_factor).toBe(10);
       expect(plain.data).not.toHaveProperty('everything_i_hold');
       expect(plain.data).not.toHaveProperty('presets');
 
@@ -341,31 +345,31 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
-    it('crans alone are bounded by the authority; an env-qualified id with no labelled resource is refused', async () => {
+    it('trust levels alone are bounded by the authority; an env-qualified id with no labelled resource is refused', async () => {
       await shareWithBob();
       const bob = await rig.agentOf(BOB);
-      const crans = { read: 'confiant', propose: 'confiant' };
-      const fromCrans = await bob.call<PreviewView>('preview_policy', {
+      const trustLevels = { read: 'confiant', propose: 'confiant' };
+      const fromTrustLevels = await bob.call<PreviewView>('preview_policy', {
         name: 'Review',
-        connections: [{ provider: 'github', crans }],
+        connections: [{ provider: 'github', trust_levels: trustLevels }],
         period: { kind: 'one-off' },
         expires_at: null,
       });
-      expect(fromCrans.data.ok).toBe(true);
-      expect(fromCrans.data.policy.map((entry) => entry.risk_id).sort()).toEqual(
+      expect(fromTrustLevels.data.ok).toBe(true);
+      expect(fromTrustLevels.data.policy.map((entry) => entry.risk_id).sort()).toEqual(
         [...SHARED].sort(),
       );
-      expect(fromCrans.data.connections[0]?.left_out).toContainEqual({
+      expect(fromTrustLevels.data.connections[0]?.left_out).toContainEqual({
         risk_id: NOT_SHARED,
         reason: 'outside-authority',
         env: null,
       });
-      expect(fromCrans.data.connections[0]?.crans).toEqual(crans);
+      expect(fromTrustLevels.data.connections[0]?.trust_levels).toEqual(trustLevels);
 
       // A macro-action the catalog does not have is named.
       const unknown = await bob.call<PreviewView>('preview_policy', {
         name: 'Review',
-        connections: [{ provider: 'github', crans: { review: 'confiant' } }],
+        connections: [{ provider: 'github', trust_levels: { review: 'confiant' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       });
@@ -637,7 +641,7 @@ describe('management door — tools of a delegated agent', () => {
       for (const connection of [{ connection_id: github }, { provider: 'github' }]) {
         const answer = await agent.call<Refused>('issue_mission', {
           name: 'Not mine',
-          connections: [{ ...connection, crans: { read: 'prudent' } }],
+          connections: [{ ...connection, trust_levels: { read: 'prudent' } }],
           period: { kind: 'one-off' },
           expires_at: null,
         });

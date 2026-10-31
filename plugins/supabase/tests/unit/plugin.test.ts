@@ -286,7 +286,7 @@ describe('supabase macro-actions', () => {
     }
   });
 
-  test('query, at any cran and in any environment, accepts no write', () => {
+  test('query, at any trust level and in any environment, accepts no write', () => {
     const lines = policyFromMacroActions(
       supabasePlugin,
       { query: 'autonome' },
@@ -306,16 +306,16 @@ describe('supabase macro-actions', () => {
     expect(policyFromMacroActions(supabasePlugin, ALL).some((l) => isWrite(l.risk_id))).toBe(false);
   });
 
-  test('a prod migration asks first at Prudent and Confiant ; no cran writes bulk rows on prod', () => {
-    for (const cran of ['prudent', 'confiant'] as const) {
+  test('a prod migration asks first at Prudent and Confiant ; no trust level writes bulk rows on prod', () => {
+    for (const trustLevel of ['prudent', 'confiant'] as const) {
       const lines = policyFromMacroActions(
         supabasePlugin,
-        { 'change-schema': cran },
+        { 'change-schema': trustLevel },
         { envs: ['prod'] },
       );
       const gate = (id: string) => lines.find((l) => l.risk_id === id)?.gate;
-      expect(gate('supabase[prod].migration-write'), cran).toBe('approval');
-      expect(gate('supabase[prod].policy-write'), cran).toBe('approval');
+      expect(gate('supabase[prod].migration-write'), trustLevel).toBe('approval');
+      expect(gate('supabase[prod].policy-write'), trustLevel).toBe('approval');
     }
     const lines = policyFromMacroActions(supabasePlugin, ALL, { envs: ['prod'] });
     expect(lines.map((l) => l.risk_id).filter((id) => /bulk/.test(id))).toEqual([]);

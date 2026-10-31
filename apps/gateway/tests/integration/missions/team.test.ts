@@ -72,7 +72,7 @@ describe('missions: members and per-holder tokens', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          crans: { read: 'confiant', propose: 'confiant' },
+          trust_levels: { read: 'confiant', propose: 'confiant' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },

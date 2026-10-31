@@ -47,6 +47,6 @@ Spreads OAuth security details (PKCE, state, redirect validation) across code by
 
 Two sources of truth for the security artefact under review.
 
-### Persist a macro-action or cran reference on the mission
+### Persist a macro-action or trust level reference on the mission
 
 A macro-action changed in a later plugin version would silently alter running missions.

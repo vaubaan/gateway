@@ -1,5 +1,5 @@
 /**
- * Paliers, crans and the expansion of a macro-action
+ * Paliers, trust levels and the expansion of a macro-action
  * (ADR macro-actions-and-trust-levels-prefill-the-policy).
  */
 import { describe, expect, test } from 'vitest';
@@ -7,13 +7,13 @@ import { describe, expect, test } from 'vitest';
 import type { RiskVector } from '@vaubaan/shared';
 
 import {
-  budgetAtCran,
-  CRAN_GATES,
-  expandAtCran,
+  budgetAtTrustLevel,
+  TRUST_LEVEL_GATES,
+  expandAtTrustLevel,
   palierOf,
-  TRUST_CRANS,
-  type CranCandidate,
-} from '../../src/trust-cran.ts';
+  TRUST_TRUST_LEVELS,
+  type TrustLevelCandidate,
+} from '../../src/trust-level.ts';
 
 const mild: RiskVector = {
   reversibility: 'reversible',
@@ -46,50 +46,53 @@ describe('palierOf — consequence and sensitivity', () => {
   });
 });
 
-describe('the crans', () => {
-  test('a higher cran never asks more nor accepts less', () => {
+describe('the trust levels', () => {
+  test('a higher trust level never asks more nor accepts less', () => {
     const rank = (g: string | null) => (g === null ? 0 : g === 'approval' ? 1 : 2);
     for (const palier of [1, 2, 3, 4] as const) {
-      const ranks = TRUST_CRANS.map((c) => rank(CRAN_GATES[c][palier]));
+      const ranks = TRUST_TRUST_LEVELS.map((c) => rank(TRUST_LEVEL_GATES[c][palier]));
       expect([...ranks].sort()).toEqual(ranks);
     }
   });
 
   test('palier 1 always runs freely ; palier 4 never does', () => {
-    for (const cran of TRUST_CRANS) {
-      expect(CRAN_GATES[cran][1]).toBe('auto');
-      expect(CRAN_GATES[cran][4]).not.toBe('auto');
+    for (const trustLevel of TRUST_TRUST_LEVELS) {
+      expect(TRUST_LEVEL_GATES[trustLevel][1]).toBe('auto');
+      expect(TRUST_LEVEL_GATES[trustLevel][4]).not.toBe('auto');
     }
   });
 });
 
-describe('budgetAtCran', () => {
+describe('budgetAtTrustLevel', () => {
   const base = { quota: 100, rate_limit: { max: 20, window_seconds: 60 } };
 
   test('×1, ×3, ×10', () => {
-    expect(budgetAtCran(base, 'prudent', null)).toEqual(base);
-    expect(budgetAtCran(base, 'confiant', null)).toEqual({
+    expect(budgetAtTrustLevel(base, 'prudent', null)).toEqual(base);
+    expect(budgetAtTrustLevel(base, 'confiant', null)).toEqual({
       quota: 300,
       rate_limit: { max: 60, window_seconds: 60 },
     });
-    expect(budgetAtCran(base, 'autonome', null).quota).toBe(1000);
+    expect(budgetAtTrustLevel(base, 'autonome', null).quota).toBe(1000);
   });
 
   test('the rate stays under the catalog ceiling, per its own window', () => {
-    expect(budgetAtCran(base, 'autonome', 50).rate_limit).toEqual({ max: 50, window_seconds: 60 });
+    expect(budgetAtTrustLevel(base, 'autonome', 50).rate_limit).toEqual({
+      max: 50,
+      window_seconds: 60,
+    });
     const hourly = { quota: 10, rate_limit: { max: 2, window_seconds: 3600 } };
-    expect(budgetAtCran(hourly, 'autonome', 1).rate_limit).toEqual({
+    expect(budgetAtTrustLevel(hourly, 'autonome', 1).rate_limit).toEqual({
       max: 20,
       window_seconds: 3600,
     });
     expect(
-      budgetAtCran({ ...base, rate_limit: { max: 1, window_seconds: 10 } }, 'prudent', 1),
+      budgetAtTrustLevel({ ...base, rate_limit: { max: 1, window_seconds: 10 } }, 'prudent', 1),
     ).toEqual({ quota: 100, rate_limit: { max: 1, window_seconds: 10 } });
   });
 });
 
-describe('expandAtCran', () => {
-  const candidate = (risk_id: string, vector: RiskVector): CranCandidate => ({
+describe('expandAtTrustLevel', () => {
+  const candidate = (risk_id: string, vector: RiskVector): TrustLevelCandidate => ({
     risk_id,
     vector,
     base: { quota: 10, rate_limit: { max: 5, window_seconds: 60 } },
@@ -103,7 +106,7 @@ describe('expandAtCran', () => {
   ];
 
   test('Prudent leaves the irreversible out and asks for the rest but palier 1', () => {
-    const { lines, left_out } = expandAtCran(candidates, 'prudent');
+    const { lines, left_out } = expandAtTrustLevel(candidates, 'prudent');
     expect(lines.map((l) => [l.risk_id, l.gate, l.palier])).toEqual([
       ['acme.read', 'auto', 1],
       ['acme.export', 'approval', 2],
@@ -113,15 +116,15 @@ describe('expandAtCran', () => {
   });
 
   test('Autonome accepts everything, asking only before the irreversible', () => {
-    const { lines, left_out } = expandAtCran(candidates, 'autonome');
+    const { lines, left_out } = expandAtTrustLevel(candidates, 'autonome');
     expect(left_out).toEqual([]);
     expect(lines.map((l) => l.gate)).toEqual(['auto', 'auto', 'auto', 'approval']);
     expect(lines[0]).toMatchObject({ quota: 100, rate_limit: { max: 50, window_seconds: 60 } });
   });
 
-  test('a risk handing the agent a token that can write asks first at every cran', () => {
+  test('a risk handing the agent a token that can write asks first at every trust level', () => {
     const minted = { ...candidate('acme.mint-token', mild), hands_write_token: true };
-    expect(expandAtCran([minted], 'autonome').lines.map((l) => [l.gate, l.palier])).toEqual([
+    expect(expandAtTrustLevel([minted], 'autonome').lines.map((l) => [l.gate, l.palier])).toEqual([
       ['approval', 1],
     ]);
   });

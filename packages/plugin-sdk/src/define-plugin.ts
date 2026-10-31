@@ -180,8 +180,8 @@ function tokenHandoutIssues(plugin: ProviderPlugin): string[] {
 /**
  * The risks whose call hands the agent a token that can write at the provider :
  * every handout risk the plugin did not declare read-only. Unqualified ids.
- * Spec §2.4 : a trust cran never runs one freely, its line asks first
- * (`CranCandidate.hands_write_token`).
+ * Spec §2.4 : a trust level never runs one freely, its line asks first
+ * (`TrustLevelCandidate.hands_write_token`).
  */
 export function writeHandoutRiskIds(plugin: Pick<ProviderPlugin, 'tokenHandouts'>): Set<string> {
   const write = new Set<string>();

@@ -9,7 +9,7 @@
  *     labelled outside `acceptable_in_envs`, refuses the call whatever the
  *     mission accepted (listing users on an unlabelled project, bulk row
  *     writes of a migration on prod) ;
- *   - what a mission written from macro-actions at trust crans allows and
+ *   - what a mission written from macro-actions at trust levels allows and
  *     refuses, call by call, on a correctly labelled project — none needs the
  *     fallback to do what its macro-actions say.
  */

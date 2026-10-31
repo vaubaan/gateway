@@ -32,7 +32,7 @@ describe('policyFromMacroActions', () => {
     );
   });
 
-  test('the cran multiplies the budget and lifts the gate, catalog order kept', () => {
+  test('the trust level multiplies the budget and lifts the gate, catalog order kept', () => {
     expect(
       policyFromMacroActions(
         acmePlugin,
@@ -62,7 +62,7 @@ describe('policyFromMacroActions', () => {
     );
   });
 
-  test('a write-token handout asks first at every cran ; a read-only one follows its palier', () => {
+  test('a write-token handout asks first at every trust level ; a read-only one follows its palier', () => {
     const [tool] = acmePlugin.tools;
     const handing = (
       readOnlyRiskIds?: string[],

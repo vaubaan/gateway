@@ -27,7 +27,7 @@ and Claude Code (written for the v4 move, now gone). Installing:
 3. Connect each account; each ends "Connected" with its resources.
 4. Label environments (`staging`, `prod`) and hide what no mission should see **before** issuing missions: an env-qualified permission is only issued when a selected resource carries that label.
 5. One mission per code project, from the GitHub macro-actions Read and Propose at Confiant; copy the kit (the key is shown once), export `VAUBAAN_MISSION_TOKEN` where Claude Code runs, add the kit's `.mcp.json` entry and instructions, run its `curl`.
-6. Work a day on every project. **Log each refusal**: code, field to copy, expected or unexpected (Debug below). Zero unexpected refusal passes the run; each unexpected one goes back to a cran, a catalog or a fix.
+6. Work a day on every project. **Log each refusal**: code, field to copy, expected or unexpected (Debug below). Zero unexpected refusal passes the run; each unexpected one goes back to a trust level, a catalog or a fix.
 
 ## Traps
 
@@ -38,10 +38,10 @@ and Claude Code (written for the v4 move, now gone). Installing:
 
 Read the agent's error (`code`, `hint`) or Activity filtered by mission and "refused".
 
-- `budget-exhausted` (`risk_id`, `claim_url`) — unexpected when an ordinary day overruns the cran's quota.
-- `rate-limited` (`retry_after_seconds`) — unexpected when ordinary work trips it repeatedly (the cran's rate).
-- `approval-required` (`approval_url`) — unexpected when the identical replay asks again (bug) or an ordinary action asks all day (the palier's gate at that cran).
-- `risk-not-accepted` (`missing_risks`) — unexpected for an ordinary action (a macro-action not ticked, or left out by its cran), or `…uncategorized-write` (catalog hole).
+- `budget-exhausted` (`risk_id`, `claim_url`) — unexpected when an ordinary day overruns the trust level's quota.
+- `rate-limited` (`retry_after_seconds`) — unexpected when ordinary work trips it repeatedly (the trust level's rate).
+- `approval-required` (`approval_url`) — unexpected when the identical replay asks again (bug) or an ordinary action asks all day (the palier's gate at that trust level).
+- `risk-not-accepted` (`missing_risks`) — unexpected for an ordinary action (a macro-action not ticked, or left out by its trust level), or `…uncategorized-write` (catalog hole).
 - `resource-not-in-mission` (`cited_ref`) — unexpected for a resource the project needs, or one gone `stale` after a discovery refresh.
 - `connection-unavailable` — unexpected on a healthy connection: credential refresh, read the server log.
 - `wrong-credential-kind` — always unexpected: the token went to the wrong door, or a browser cookie rode along.

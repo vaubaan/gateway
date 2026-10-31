@@ -8,7 +8,7 @@
  * (spec §4.1 bis). Types only: this file is safe to import from a
  * client component.
  */
-import type { TrustCran } from '@vaubaan/policy-engine';
+import type { TrustLevel } from '@vaubaan/policy-engine';
 import type {
   Gate,
   MacroAction,
@@ -67,11 +67,11 @@ export type DraftResources =
  * The connection is named by id, or by `provider` when the creator holds
  * exactly one usable connection of that provider (an agent's proposal).
  *
- * `crans` + no `policy`   → what the macro-actions write at their crans,
+ * `trust levels` + no `policy`   → what the macro-actions write at their trust levels,
  *                           bounded by the authority and the selection.
  * `everything-i-hold`     → every risk held there that the selection reaches.
  * `policy`                → exactly these risks, each with its budget (or
- *                           `everything-i-hold`'s); crans beside it only
+ *                           `everything-i-hold`'s); trust levels beside it only
  *                           redraw the form.
  */
 export interface DraftConnection {
@@ -86,11 +86,11 @@ export interface DraftConnection {
   readonly preset?: string | null;
   readonly policy?: readonly DraftPolicyEntry[];
   /**
-   * The trust cran of each ticked macro-action (risk model §4.6). Without
+   * The trust level of each ticked macro-action (risk model §4.6). Without
    * `policy`, they write it; with one, they decide nothing. Either way they are
    * kept with the mission only to redraw the form.
    */
-  readonly crans?: Readonly<Record<string, string>>;
+  readonly trust_levels?: Readonly<Record<string, string>>;
 }
 
 export type DraftPeriod =
@@ -192,7 +192,7 @@ export interface IssuanceConnection {
   readonly authority: readonly RiskId[];
   /**
    * Base ids whose tool hands the agent a provider token that can write (spec
-   * §2.4): a cran pre-fills them `approval`.
+   * §2.4): a trust level pre-fills them `approval`.
    */
   readonly write_token_risks: readonly RiskId[];
   /** The catalog's macro-actions, then "Anything else" holding the fallback (`macroActionsOf`). */
@@ -304,13 +304,13 @@ export interface UnresolvableEntry {
 }
 
 /**
- * A risk the crans or `everything-i-hold` would have written that the policy
+ * A risk the trust levels or `everything-i-hold` would have written that the policy
  * leaves out: outside the creator's authority, no selected resource in its
- * environment, or (`cran`) a palier the cran does not accept.
+ * environment, or (`trust level`) a palier the trust level does not accept.
  */
 export interface LeftOutEntry {
   readonly risk_id: RiskId;
-  readonly reason: 'outside-authority' | 'unresolvable-env' | 'cran';
+  readonly reason: 'outside-authority' | 'unresolvable-env' | 'trust-level';
   readonly env: string | null;
 }
 
@@ -339,12 +339,12 @@ export interface ConnectionPreview {
   readonly unresolvable: readonly UnresolvableEntry[];
   readonly missing_budget: readonly RiskId[];
   /**
-   * What the crans or `everything-i-hold` left out when they write the policy
+   * What the trust levels or `everything-i-hold` left out when they write the policy
    * (no explicit `policy`): they inform, they do not block.
    */
   readonly left_out: readonly LeftOutEntry[];
-  /** The draft's crans that name a macro-action of the connection (`knownCrans`). */
-  readonly crans: Readonly<Record<string, TrustCran>>;
+  /** The draft's trust levels that name a macro-action of the connection (`knownTrustLevels`). */
+  readonly trust_levels: Readonly<Record<string, TrustLevel>>;
 }
 
 /** The three lines of spec §4.2: what the mission can do, cannot do, in what quantity. */
@@ -365,8 +365,8 @@ export interface ResolvedDraftConnection {
     | { readonly scope: 'connection' };
   readonly preset: string | null;
   readonly policy: readonly MissionPolicyEntry[];
-  /** The draft's crans that name a macro-action of the connection. */
-  readonly crans: Readonly<Record<string, TrustCran>>;
+  /** The draft's trust levels that name a macro-action of the connection. */
+  readonly trust_levels: Readonly<Record<string, TrustLevel>>;
 }
 
 export interface MissionPreview {

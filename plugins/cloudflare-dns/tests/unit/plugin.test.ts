@@ -963,15 +963,15 @@ describe('credential spec and macro-actions', () => {
       'change-domain',
       'rule-zone',
     ]);
-    const all = (cran: 'prudent' | 'confiant' | 'autonome') =>
+    const all = (trustLevel: 'prudent' | 'confiant' | 'autonome') =>
       policyFromMacroActions(cloudflareDnsPlugin, {
-        'look-up': cran,
-        point: cran,
-        'change-domain': cran,
-        'rule-zone': cran,
+        'look-up': trustLevel,
+        point: trustLevel,
+        'change-domain': trustLevel,
+        'rule-zone': trustLevel,
       });
-    const withGate = (cran: 'prudent' | 'confiant' | 'autonome', gate: string) =>
-      all(cran)
+    const withGate = (trustLevel: 'prudent' | 'confiant' | 'autonome', gate: string) =>
+      all(trustLevel)
         .filter((l) => l.gate === gate)
         .map((l) => l.risk_id);
 
@@ -992,8 +992,10 @@ describe('credential spec and macro-actions', () => {
     expect(withGate('autonome', 'approval')).toEqual(['cloudflare-dns.zone-delete']);
     // Prudent leaves the zone deletion out ; the fallback is ticked on its own.
     expect(all('prudent').map((l) => l.risk_id)).not.toContain('cloudflare-dns.zone-delete');
-    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
-      expect(all(cran).map((l) => l.risk_id)).not.toContain('cloudflare-dns.uncategorized-write');
+    for (const trustLevel of ['prudent', 'confiant', 'autonome'] as const) {
+      expect(all(trustLevel).map((l) => l.risk_id)).not.toContain(
+        'cloudflare-dns.uncategorized-write',
+      );
     }
   });
 });

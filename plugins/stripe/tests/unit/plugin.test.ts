@@ -535,16 +535,16 @@ describe('credential spec', () => {
       { envs: ['live'] },
     );
     expect(prudent).toEqual([]);
-    for (const cran of ['confiant', 'autonome'] as const) {
+    for (const trustLevel of ['confiant', 'autonome'] as const) {
       const lines = policyFromMacroActions(
         stripePlugin,
-        { 'money-out': cran, cancel: cran },
+        { 'money-out': trustLevel, cancel: trustLevel },
         { envs: ['live'] },
       );
-      expect(lines.map((e) => e.risk_id).sort(), cran).toEqual(irreversible);
+      expect(lines.map((e) => e.risk_id).sort(), trustLevel).toEqual(irreversible);
       expect(
         lines.every((e) => e.gate === 'approval'),
-        cran,
+        trustLevel,
       ).toBe(true);
     }
     // One mode given, one mode written.

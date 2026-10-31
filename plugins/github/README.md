@@ -4,7 +4,7 @@ GitHub provider plugin for Vaubaan Gateway, written against
 [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk). One connection is one
 **fine-grained personal access token**; one resource is one repository the
 token reaches (`owner/repo`); a mission picks repositories and macro-actions at
-a trust cran, which write the risks it accepts.
+a trust level, which write the risks it accepts.
 
 Handbook: [`docs/handbook/providers/github.md`](../../docs/handbook/providers/github.md).
 Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
@@ -61,8 +61,8 @@ refactor/*` it touches `feature-branch-write`; any other branch name falls
 - `mint-install-token-clone` / `-push` are deprecated (they belonged to the
   removed GitHub App); no call touches them.
 
-A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
-Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions, each at a trust level (Prudent / Confiant /
+Autonome, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
 | Macro-action | What it covers                                   | Its risks                                                                                                          |
@@ -171,7 +171,7 @@ npx vitest run plugins/github
 ```
 
 - `plugin.test.ts` — SDK kit (well-formed, no wildcard, catalog coverage
-  with samples per tool, `fallbackHits` empty), the macro-actions at each cran.
+  with samples per tool, `fallbackHits` empty), the macro-actions at each trust level.
 - `risk-catalog.test.ts` — the table `[tool, arguments, risks touched]`: add
   a row whenever a tool, a classifier branch or a catalog pattern changes.
 - `classify.test.ts` — the classifier's security suite: exact slices or

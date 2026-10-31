@@ -1,5 +1,5 @@
 /**
- * Trust crans — how a macro-action ticked at a cran becomes explicit policy
+ * Trust levels — how a macro-action ticked at a trust level becomes explicit policy
  * lines. Pure and browser-safe : the creation form, the preview and the
  * management door call the same functions.
  *
@@ -8,7 +8,7 @@
  *
  * The vector pre-fills, it never decides : the lines this module writes are
  * shown, editable, and stored as the explicit list ; the runtime never reads
- * a palier or a cran.
+ * a palier or a trust level.
  */
 
 import type { Budget, Gate, RateLimit, RiskId, RiskVector } from '@vaubaan/shared';
@@ -36,25 +36,27 @@ export function palierOf(vector: RiskVector): Palier {
   return 1;
 }
 
-export const TRUST_CRANS = ['prudent', 'confiant', 'autonome'] as const;
-export type TrustCran = (typeof TRUST_CRANS)[number];
+export const TRUST_TRUST_LEVELS = ['prudent', 'confiant', 'autonome'] as const;
+export type TrustLevel = (typeof TRUST_TRUST_LEVELS)[number];
 
-/** The lowest cran : where a new macro-action starts. */
-export const DEFAULT_CRAN: TrustCran = 'prudent';
+/** The lowest trust level : where a new macro-action starts. */
+export const DEFAULT_TRUST_LEVEL: TrustLevel = 'prudent';
 
-export function isTrustCran(raw: unknown): raw is TrustCran {
-  return typeof raw === 'string' && (TRUST_CRANS as readonly string[]).includes(raw);
+export function isTrustLevel(raw: unknown): raw is TrustLevel {
+  return typeof raw === 'string' && (TRUST_TRUST_LEVELS as readonly string[]).includes(raw);
 }
 
-/** Per cran and palier : the gate of the line, or `null` when the risk is not accepted. */
-export const CRAN_GATES: Readonly<Record<TrustCran, Readonly<Record<Palier, Gate | null>>>> = {
+/** Per trust level and palier : the gate of the line, or `null` when the risk is not accepted. */
+export const TRUST_LEVEL_GATES: Readonly<
+  Record<TrustLevel, Readonly<Record<Palier, Gate | null>>>
+> = {
   prudent: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
   confiant: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
   autonome: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
 };
 
-/** What the cran multiplies the base budget by (quota and rate). */
-export const CRAN_BUDGET_FACTOR: Readonly<Record<TrustCran, number>> = {
+/** What the trust level multiplies the base budget by (quota and rate). */
+export const TRUST_LEVEL_BUDGET_FACTOR: Readonly<Record<TrustLevel, number>> = {
   prudent: 1,
   confiant: 3,
   autonome: 10,
@@ -72,16 +74,16 @@ export const ANYTHING_ELSE_BASE_BUDGET: Budget = {
 };
 
 /**
- * The base budget at a cran : quota and rate multiplied, the rate then held
+ * The base budget at a trust level : quota and rate multiplied, the rate then held
  * under the catalog's per-minute ceiling when the entry declares one (never
  * below one call per window).
  */
-export function budgetAtCran(
+export function budgetAtTrustLevel(
   base: Budget,
-  cran: TrustCran,
+  trustLevel: TrustLevel,
   rateCeilingPerMinute: number | null,
 ): Budget {
-  const factor = CRAN_BUDGET_FACTOR[cran];
+  const factor = TRUST_LEVEL_BUDGET_FACTOR[trustLevel];
   const window = base.rate_limit.window_seconds;
   let max = base.rate_limit.max * factor;
   if (rateCeilingPerMinute !== null) {
@@ -93,7 +95,7 @@ export function budgetAtCran(
 }
 
 /** One risk a macro-action offers, as the caller resolved it for the mission's resources. */
-export interface CranCandidate {
+export interface TrustLevelCandidate {
   /** Unqualified, or qualified with one environment the mission reaches. */
   readonly risk_id: RiskId;
   /** The vector in that environment (`resolveVector`). */
@@ -102,31 +104,34 @@ export interface CranCandidate {
   readonly rate_ceiling_per_minute: number | null;
   /**
    * True for a risk whose tool hands the agent a provider token that can write
-   * (spec §2.4) : a cran never runs it freely, its line asks first.
+   * (spec §2.4) : a trust level never runs it freely, its line asks first.
    */
   readonly hands_write_token?: boolean;
 }
 
-/** A policy line a cran wrote, with the palier that chose its gate. */
-export interface CranLine extends Budget {
+/** A policy line a trust level wrote, with the palier that chose its gate. */
+export interface TrustLevelLine extends Budget {
   readonly risk_id: RiskId;
   readonly gate: Gate;
   readonly palier: Palier;
 }
 
-/** What a macro-action at a cran yields : the lines, and the risks it leaves out. */
-export interface CranExpansion {
-  readonly lines: readonly CranLine[];
+/** What a macro-action at a trust level yields : the lines, and the risks it leaves out. */
+export interface TrustLevelExpansion {
+  readonly lines: readonly TrustLevelLine[];
   readonly left_out: readonly { readonly risk_id: RiskId; readonly palier: Palier }[];
 }
 
-/** The explicit lines of one macro-action at one cran. */
-export function expandAtCran(candidates: readonly CranCandidate[], cran: TrustCran): CranExpansion {
-  const lines: CranLine[] = [];
+/** The explicit lines of one macro-action at one trust level. */
+export function expandAtTrustLevel(
+  candidates: readonly TrustLevelCandidate[],
+  trustLevel: TrustLevel,
+): TrustLevelExpansion {
+  const lines: TrustLevelLine[] = [];
   const leftOut: { risk_id: RiskId; palier: Palier }[] = [];
   for (const candidate of candidates) {
     const palier = palierOf(candidate.vector);
-    const gate = CRAN_GATES[cran][palier];
+    const gate = TRUST_LEVEL_GATES[trustLevel][palier];
     if (gate === null) {
       leftOut.push({ risk_id: candidate.risk_id, palier });
       continue;
@@ -135,7 +140,7 @@ export function expandAtCran(candidates: readonly CranCandidate[], cran: TrustCr
       risk_id: candidate.risk_id,
       gate: candidate.hands_write_token === true ? 'approval' : gate,
       palier,
-      ...budgetAtCran(candidate.base, cran, candidate.rate_ceiling_per_minute),
+      ...budgetAtTrustLevel(candidate.base, trustLevel, candidate.rate_ceiling_per_minute),
     });
   }
   return { lines, left_out: leftOut };

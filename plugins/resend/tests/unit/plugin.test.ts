@@ -1103,8 +1103,8 @@ describe('credential spec and macro-actions', () => {
   test('macro-actions : at Confiant, bulk sends, segment writes and domain mutations ask first', () => {
     const actions = resendPlugin.catalog.macro_actions ?? [];
     expect(actions.map((a) => a.id)).toEqual(['check', 'send', 'campaign', 'domains']);
-    const crans = Object.fromEntries(actions.map((a) => [a.id, 'confiant' as const]));
-    const approvals = policyFromMacroActions(resendPlugin, crans)
+    const trustLevels = Object.fromEntries(actions.map((a) => [a.id, 'confiant' as const]));
+    const approvals = policyFromMacroActions(resendPlugin, trustLevels)
       .filter((e) => e.gate === 'approval')
       .map((e) => e.risk_id);
     expect(approvals).toEqual(

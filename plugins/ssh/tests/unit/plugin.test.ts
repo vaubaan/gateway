@@ -1,7 +1,7 @@
 /**
  * Mandatory suite of the SSH plugin : the SDK kit, the v5 classifier (host
  * resolution, read / write, command classes, opaque lines), missions written
- * from macro-actions at trust crans evaluated through the policy engine, the command-line splitter, the
+ * from macro-actions at trust levels evaluated through the policy engine, the command-line splitter, the
  * credential spec and the pin helpers, `execute` and `discoverResources` over
  * a fake transport. No socket is opened here : the real `ssh2` transport is
  * replaced through `createSshPlugin({ transport })` ; it is exercised, host
@@ -25,7 +25,7 @@ import {
   assertNoWildcard,
   assertPluginWellFormed,
   policyFromMacroActions,
-  type MacroActionCranChoice,
+  type MacroActionTrustLevelChoice,
   type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
@@ -485,8 +485,8 @@ describe('missions from macro-actions — evaluated through the policy engine, n
   const ENVS = ['dev', 'staging', 'prod'];
 
   /** A mission holding exactly these lines. */
-  const linesOf = (crans: MacroActionCranChoice): MissionPolicyEntry[] =>
-    policyFromMacroActions(sshPlugin, crans, { envs: ENVS });
+  const linesOf = (trustLevels: MacroActionTrustLevelChoice): MissionPolicyEntry[] =>
+    policyFromMacroActions(sshPlugin, trustLevels, { envs: ENVS });
   /** Only the plain read : the narrowest mission. */
   const READ_ONLY: MissionPolicyEntry[] = [
     {
@@ -548,16 +548,19 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     '/bin/ls',
   ];
 
-  test.each(INSPECTION)('look, at any cran, runs the inspection %j freely on every host', (cmd) => {
-    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
-      for (const host of HOSTS) {
-        expect(
-          verdict(linesOf({ look: cran }), cmd, host),
-          `${cran} on ${host.env ?? 'unlabelled'}`,
-        ).toBe('auto');
+  test.each(INSPECTION)(
+    'look, at any trust level, runs the inspection %j freely on every host',
+    (cmd) => {
+      for (const trustLevel of ['prudent', 'confiant', 'autonome'] as const) {
+        for (const host of HOSTS) {
+          expect(
+            verdict(linesOf({ look: trustLevel }), cmd, host),
+            `${trustLevel} on ${host.env ?? 'unlabelled'}`,
+          ).toBe('auto');
+        }
       }
-    }
-  });
+    },
+  );
 
   test.each(NEVER_A_READ)(
     'the plain read refuses %j on every host ; look at Prudent never runs it freely',
@@ -631,7 +634,7 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     const policy = linesOf({ look: 'prudent', fix: 'autonome', install: 'autonome' });
     const table: ReadonlyArray<readonly [string, Verdict, Verdict, Verdict]> = [
       ['touch /tmp/x', 'auto', 'auto', 'approval'],
-      // Irreversible : asked first at every cran.
+      // Irreversible : asked first at every trust level.
       ['rm -rf /srv/old', 'approval', 'approval', 'approval'],
       ['/bin/rm -rf /srv/old', 'approval', 'approval', 'approval'],
       ['apt-get --yes install nginx', 'auto', 'auto', 'approval'],

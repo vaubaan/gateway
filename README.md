@@ -208,7 +208,7 @@ domain — keeps the names it had. The same things, under both:
 | teammate, team                     | mission member, group                                 |
 | administrator                      | operator                                              |
 | service, OAuth client, Reference   | provider, provider app, the provider pages            |
-| mission, macro-action, trust level | mission, macro-action, trust cran                     |
+| mission, macro-action, trust level | mission, macro-action, trust level                    |
 
 ## Documentation
 

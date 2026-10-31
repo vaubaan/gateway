@@ -22,7 +22,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AuditCallRecord } from '../../../src/server/store';
 import type { IssuedMission } from '../../../src/server/execution/testing';
-import { DEVELOPER_CRANS, openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
+import {
+  DEVELOPER_TRUST_LEVELS,
+  openGitRig,
+  REPOSITORY,
+  type GitResult,
+  type GitRig,
+} from './support';
 
 const PUSH = 'github__git_push';
 
@@ -31,7 +37,7 @@ let developer: IssuedMission;
 
 beforeAll(async () => {
   rig = await openGitRig();
-  developer = await rig.mission({ crans: DEVELOPER_CRANS });
+  developer = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
 }, 60_000);
 
 afterAll(async () => {

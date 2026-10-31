@@ -43,8 +43,8 @@ export interface MissionSnapshotConnection {
   readonly resource_scope: StoredResourceScope;
   readonly resource_ids: readonly string[];
   readonly policy: readonly MissionPolicyEntry[];
-  /** The crans the form recorded (risk model §4.6): they redraw it, they are no change. */
-  readonly crans?: Readonly<Record<string, string>>;
+  /** The trust levels the form recorded (risk model §4.6): they redraw it, they are no change. */
+  readonly trust_levels?: Readonly<Record<string, string>>;
 }
 
 /** Everything an edit may move, and the period it may not. */
@@ -150,7 +150,7 @@ export function draftConnectionOf(c: MissionSnapshotConnection): DraftConnection
       rate_limit: { ...p.rate_limit },
       gate: p.gate,
     })),
-    ...(c.crans ? { crans: { ...c.crans } } : {}),
+    ...(c.trust_levels ? { trust_levels: { ...c.trust_levels } } : {}),
   };
 }
 

@@ -68,11 +68,11 @@ Events go in and out as JSON fields; the plugin builds the iCalendar itself.
 | `schedule`   | Create, change and delete events.            | `event-create`, `event-change`, `event-delete`                      |
 | `invite`     | Invite, update or cancel attendees.          | `attendees-internal`, `attendees-allowlisted`, `attendees-external` |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The mission stores the explicit list. Deleting an event and
 reaching allowlisted or outside attendees are irreversible: left out at
-Prudent, they ask first at the other crans.
+Prudent, they ask first at the other trust levels.
 
 ## Tests
 

@@ -1,7 +1,7 @@
 /**
  * Mandatory structural suite of the github plugin (spec §10) : the SDK kit,
  * catalog coverage of every declared tool, the fallback lint, the
- * macro-actions at their trust crans and the credential spec. The classifier branches are pinned in
+ * macro-actions at their trust levels and the credential spec. The classifier branches are pinned in
  * `classify.test.ts`, the risks each tool touches in `risk-catalog.test.ts`,
  * upstream calls in `execute.test.ts`.
  */
@@ -227,9 +227,11 @@ describe('github plugin — structural kit', () => {
   });
 });
 
-describe('github catalog — macro-actions at a trust cran', () => {
-  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-    Object.fromEntries(policyFromMacroActions(githubPlugin, crans).map((l) => [l.risk_id, l.gate]));
+describe('github catalog — macro-actions at a trust level', () => {
+  const gates = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(
+      policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
+    );
 
   test('read, propose, ship, administer ; catalog version 11', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
@@ -286,8 +288,8 @@ describe('github catalog — macro-actions at a trust cran', () => {
   });
 
   test('administer : branch protection and workflow files ask first below Autonome', () => {
-    for (const cran of ['prudent', 'confiant'] as const) {
-      expect(gates({ administer: cran })).toEqual({
+    for (const trustLevel of ['prudent', 'confiant'] as const) {
+      expect(gates({ administer: trustLevel })).toEqual({
         'github.branch-protection-write': 'approval',
         'github.workflow-write-via-file': 'approval',
       });

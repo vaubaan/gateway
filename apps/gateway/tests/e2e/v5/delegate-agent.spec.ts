@@ -136,7 +136,7 @@ interface ListedConnection {
   readonly resources: readonly { readonly ref: string }[];
   readonly macro_actions: readonly {
     readonly id: string;
-    readonly at_cran: Readonly<
+    readonly at_trust_level: Readonly<
       Record<string, { readonly auto: number; readonly approval: number }>
     >;
     readonly unavailable: readonly string[];
@@ -151,7 +151,7 @@ interface Catalog {
     readonly macro_action: string | null;
   }[];
   readonly macro_actions: readonly { readonly id: string; readonly entries: readonly unknown[] }[];
-  readonly crans: Readonly<Record<string, { readonly budget_factor: number }>>;
+  readonly trust_levels: Readonly<Record<string, { readonly budget_factor: number }>>;
 }
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
@@ -239,7 +239,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   expect(github.resources.map((resource) => resource.ref)).toContain('acme/app');
   const readAction = github.macro_actions.find((action) => action.id === 'read');
   expect(readAction?.unavailable).toEqual([]);
-  expect(readAction?.at_cran.prudent?.auto).toBeGreaterThan(0);
+  expect(readAction?.at_trust_level.prudent?.auto).toBeGreaterThan(0);
   expect(github.everything_i_hold.risks).toBeGreaterThan(0);
   const catalog = await manage<Catalog>(manager, 'get_catalog', {
     provider: 'github',
@@ -250,15 +250,15 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
     macro_action: 'read',
   });
   expect(catalog.macro_actions.map((action) => action.id)).toContain('read');
-  expect(catalog.crans.confiant?.budget_factor).toBe(3);
+  expect(catalog.trust_levels.confiant?.budget_factor).toBe(3);
 
-  // ── It ticks a macro-action at a cran, previews it, issues the mission ─────
+  // ── It ticks a macro-action at a trust level, previews it, issues the mission ─────
   const draft = {
     name: MISSION_NAME,
     connections: [
       {
         connection_id: github.connection_id,
-        crans: { read: 'prudent' },
+        trust_levels: { read: 'prudent' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
       },
     ],
@@ -269,14 +269,14 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
     ok: boolean;
     uncovered: unknown[];
     policy: { risk_id: string; gate: string }[];
-    connections: { crans: Record<string, string>; left_out: unknown[] }[];
+    connections: { trust_levels: Record<string, string>; left_out: unknown[] }[];
   }>(manager, 'preview_policy', draft);
   expect(preview).toMatchObject({ ok: true, uncovered: [] });
   expect(preview.policy.map((entry) => [entry.risk_id, entry.gate])).toContainEqual([
     'github.read-code',
     'auto',
   ]);
-  expect(preview.connections[0]).toMatchObject({ crans: { read: 'prudent' }, left_out: [] });
+  expect(preview.connections[0]).toMatchObject({ trust_levels: { read: 'prudent' }, left_out: [] });
 
   const issued = await manage<{
     mission: { mission_id: string; issued_via_client_id: string };

@@ -10,7 +10,7 @@
  * so the entities below `command` are **classification markers**, not things
  * that exist on the host : the classifier emits `command.destructive.W`
  * next to `command.W` when the line contains a recursive delete, so the
- * catalog can price that class apart and a trust cran can gate it.
+ * catalog can price that class apart and a trust level can gate it.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';

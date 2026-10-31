@@ -51,7 +51,7 @@ async function main(): Promise<void> {
         {
           connection_id: connection.id,
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
-          crans: { read: 'prudent' },
+          trust_levels: { read: 'prudent' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },

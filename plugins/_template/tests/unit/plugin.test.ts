@@ -132,7 +132,7 @@ describe('template plugin — structural kit', () => {
     expect(manifest).toMatchObject({ version: templatePlugin.version });
   });
 
-  // A mission is composed by ticking macro-actions at a trust cran (ADR
+  // A mission is composed by ticking macro-actions at a trust level (ADR
   // macro-actions-and-trust-levels-prefill-the-policy) ; `policyFromMacroActions`
   // writes the explicit lines the creation form would.
   test('macro-actions : read runs freely ; at Prudent, prod writes ask first', () => {

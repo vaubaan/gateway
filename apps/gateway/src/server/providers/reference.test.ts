@@ -160,7 +160,7 @@ describe('the reference of the shipped plugins', () => {
     }
   });
 
-  it('gives every live entry one macro-action and a line or "left out" at each cran', () => {
+  it('gives every live entry one macro-action and a line or "left out" at each trust level', () => {
     for (const reference of references) {
       expect(new Set(reference.macro_actions.map((action) => action.anchor)).size).toBe(
         reference.macro_actions.length,
@@ -168,7 +168,7 @@ describe('the reference of the shipped plugins', () => {
       for (const entry of reference.risk_groups.flatMap((group) => group.entries)) {
         if (entry.deprecated) continue;
         expect(entry.macro_action, `${reference.id}/${entry.base_id}`).not.toBeNull();
-        for (const cells of Object.values(entry.at_cran)) {
+        for (const cells of Object.values(entry.at_trust_level)) {
           expect(cells.map((cell) => cell.risk.risk_id)).toEqual(
             entry.variants.map((risk) => risk.risk_id),
           );
@@ -177,7 +177,7 @@ describe('the reference of the shipped plugins', () => {
           }
         }
         // Prudent leaves out palier 4 and nothing else.
-        for (const cell of entry.at_cran.prudent) {
+        for (const cell of entry.at_trust_level.prudent) {
           expect(cell.line === null).toBe(cell.palier === 4);
         }
       }
@@ -254,7 +254,7 @@ describe('the reference of the shipped plugins', () => {
     });
     // Force-push is costly (palier 3): it asks first until Autonome.
     expect(
-      Object.values(byId.get('github.force-push')?.at_cran ?? {}).map(
+      Object.values(byId.get('github.force-push')?.at_trust_level ?? {}).map(
         (cells) => cells[0]?.line?.gate,
       ),
     ).toEqual(['approval', 'approval', 'auto']);

@@ -28,7 +28,7 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
   definition (all issues in one `PluginDefinitionError`).
 - [`catalog-loader.ts`](../../packages/plugin-sdk/src/catalog-loader.ts) — the YAML catalog rules.
 - [`testing/`](../../packages/plugin-sdk/src/testing/index.ts) — the assertions every plugin runs, and
-  `policyFromMacroActions`, a mission's lines from macro-actions at crans.
+  `policyFromMacroActions`, a mission's lines from macro-actions at trust levels.
 - [`plugins/_template`](../../plugins/_template/src/index.ts) — a complete plugin to copy.
 
 ## The contract
@@ -75,8 +75,8 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
 - Every plugin test runs `assertPluginWellFormed`, `assertNoWildcard`,
   `assertCatalogCoverage` (one sample per tool, `risksUntouched` `[]`, `fallbackHits` empty) and
   `assertIdentifiersRefused` (`plugin-identifier-tests.test.ts` fails a plugin without it).
-- A test of what a mission allows builds it with `policyFromMacroActions(plugin, { <id>: <cran> },
-{ envs })`, not by hand: it runs the policy engine's cran rules (`expandAtCran`) and asks first
+- A test of what a mission allows builds it with `policyFromMacroActions(plugin, { <id>: <trust level> },
+{ envs })`, not by hand: it runs the policy engine's trust-level rules (`expandAtTrustLevel`) and asks first
   for a write-token handout (`writeHandoutRiskIds`), as the creation form does. It does not model
   the creator's authority.
 - `npx vitest run packages/plugin-sdk plugins/_template`; the standalone test after `next build`.

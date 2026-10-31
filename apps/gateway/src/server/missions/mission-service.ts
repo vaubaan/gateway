@@ -8,7 +8,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * the `AuthorityService` what the creator may accept, and leaves the decision
  * to the pure `previewDraft`. A mission is persisted as an explicit
  * enumeration: explicit resource ids (even for "all"), explicit policy
- * entries (never a macro-action or cran), and the creator's own token, whose
+ * entries (never a macro-action or trust level), and the creator's own token, whose
  * secret is returned once. Members and the other tokens of a mission are the
  * `MissionTeamService`'s (`team-service.ts`); this service says who may read a
  * mission (`access`) and what a presented token is worth (`verifyToken`).
@@ -86,7 +86,7 @@ import {
 } from './bootstrap-kit';
 import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from './catalog-view';
-import { knownCrans, macroActionsOf, type MacroActionCrans } from './macro-actions';
+import { knownTrustLevels, macroActionsOf, type MacroActionTrustLevels } from './macro-actions';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -650,13 +650,14 @@ function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): Issuanc
  * non-empty list for `selected`. Readers treat that row as "none".
  */
 function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnectionRecord {
-  const crans = Object.keys(resolved.crans).length > 0 ? { crans: resolved.crans } : {};
+  const trustLevels =
+    Object.keys(resolved.trust_levels).length > 0 ? { trustLevels: resolved.trust_levels } : {};
   if (resolved.resources.scope === 'connection') {
     return {
       connectionId: resolved.connection_id,
       resourceScope: 'connection',
       resourceIds: [],
-      ...crans,
+      ...trustLevels,
     };
   }
   const resourceIds = resolved.resources.resource_ids;
@@ -664,23 +665,23 @@ function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnection
     connectionId: resolved.connection_id,
     resourceScope: resourceIds.length > 0 ? 'selected' : 'all',
     resourceIds,
-    ...crans,
+    ...trustLevels,
   };
 }
 
-/** The crans an edited draft records per connection, kept to the macro-actions each connection has. */
-function cransOfDraft(
+/** The trust levels an edited draft records per connection, kept to the macro-actions each connection has. */
+function trustLevelsOfDraft(
   context: readonly IssuanceConnection[],
   draft: MissionDraft,
-): Map<string, MacroActionCrans> {
-  const crans = new Map<string, MacroActionCrans>();
+): Map<string, MacroActionTrustLevels> {
+  const trustLevels = new Map<string, MacroActionTrustLevels>();
   for (const line of draft.connections) {
     const connection = context.find(
       (c) => c.id === line.connection_id || (!line.connection_id && c.provider === line.provider),
     );
-    if (connection) crans.set(connection.id, knownCrans(connection, line.crans));
+    if (connection) trustLevels.set(connection.id, knownTrustLevels(connection, line.trust_levels));
   }
-  return crans;
+  return trustLevels;
 }
 
 /**
@@ -894,7 +895,7 @@ export class MissionService {
         policy: mission.policy
           .map(policyEntryOf)
           .filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
-        ...(c.crans ? { crans: c.crans } : {}),
+        ...(c.trustLevels ? { trust_levels: c.trustLevels } : {}),
       });
     }
     return {
@@ -1469,7 +1470,7 @@ export class MissionService {
         resource_scope: c.resourceScope,
         resource_ids: [...c.resourceIds],
         policy: policy.filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
-        ...(c.crans ? { crans: c.crans } : {}),
+        ...(c.trustLevels ? { trust_levels: c.trustLevels } : {}),
       });
     }
     return {
@@ -1529,7 +1530,7 @@ export class MissionService {
       mission,
       snapshot,
       judgement,
-      crans: cransOfDraft(connections, body.draft),
+      trustLevels: trustLevelsOfDraft(connections, body.draft),
       asked: body.revision,
       revision: revisionOfRecord(mission),
     };
@@ -1573,7 +1574,7 @@ export class MissionService {
   async edit(user: AuthoritySubject, missionId: string, raw: unknown): Promise<EditResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
-    const { mission, snapshot, judgement, revision, crans } = judged;
+    const { mission, snapshot, judgement, revision, trustLevels } = judged;
     if (judged.asked !== revision) return { ok: false, reason: 'conflict' };
     if (!judgement.ok) {
       return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
@@ -1591,12 +1592,12 @@ export class MissionService {
       name: after.name,
       expiresAt: after.expires_at,
       connections: after.connections.map((c) => {
-        const recorded = crans.get(c.connection_id);
+        const recorded = trustLevels.get(c.connection_id);
         return {
           connectionId: c.connection_id,
           resourceScope: c.resource_scope,
           resourceIds: c.resource_scope === 'connection' ? [] : [...c.resource_ids],
-          ...(recorded && Object.keys(recorded).length > 0 ? { crans: recorded } : {}),
+          ...(recorded && Object.keys(recorded).length > 0 ? { trustLevels: recorded } : {}),
         };
       }),
       policy: after.connections.flatMap((c) => c.policy.map(policyEntryRecordOf)),

@@ -7,13 +7,13 @@
  *   1. Name — or start from one of your missions, or paste an agent's proposal.
  *   2. Accounts and permissions — per account: its resources (all by default,
  *      "Change" opens the list), then its macro-actions, each ticked at a
- *      trust cran and saying what it yields here; the permissions one by one
+ *      trust level and saying what it yields here; the permissions one by one
  *      are the Advanced view (`MacroActionPanel`, `CustomEditor`).
  *   3. Limits and lifetime — how often the limits reset, when the mission
  *      ends. People are added once it exists.
  *
  * "Create mission" asks once: the dialog lists **every permission with its
- * limit**, by account, and that list is what is created — the crans are
+ * limit**, by account, and that list is what is created — the trust levels are
  * kept only to redraw this form. The decision shown is `previewDraft`, the function the server runs
  * again at creation; the browser's copy only saves a round trip.
  *
@@ -88,7 +88,7 @@ import type {
 } from '@/server/missions/model';
 import { hasChanges, judgeEdit } from '@/server/missions/mission-edit';
 import { defaultResources, previewDraft } from '@/server/missions/preview';
-import type { TrustCran } from '@/server/missions/macro-actions';
+import type { TrustLevel } from '@/server/missions/macro-actions';
 import type { RiskPlanes } from '@/server/providers/planes';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
@@ -96,7 +96,7 @@ import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
 import { CustomEditor } from './custom-editor';
 import {
-  applyCrans,
+  applyTrustLevels,
   applyEverything,
   discardsEdits,
   draftOf,
@@ -173,10 +173,10 @@ function startState(
 type PendingDiscard =
   | { readonly kind: 'reset'; readonly connectionId: string }
   | {
-      readonly kind: 'cran';
+      readonly kind: 'trust-level';
       readonly connectionId: string;
       readonly actionId: string;
-      readonly cran: TrustCran | null;
+      readonly trustLevel: TrustLevel | null;
     }
   | { readonly kind: 'everything'; readonly connectionId: string };
 
@@ -185,7 +185,7 @@ const EMPTY: ConnectionState = {
   view: 'simple',
   resourceScope: 'all',
   resourceIds: [],
-  crans: {},
+  trustLevels: {},
   everything: false,
   entries: {},
   edited: false,
@@ -274,17 +274,17 @@ export function MissionForm({
   const toggleResources = toggle(setOpenResources);
 
   /** A macro-action ticked, moved or unticked. Over edits it asks first; nothing is dropped silently. */
-  function pickCran(
+  function pickTrustLevel(
     connection: IssuanceConnection,
     cs: ConnectionState,
     actionId: string,
-    cran: TrustCran | null,
+    trustLevel: TrustLevel | null,
   ) {
     if (discardsEdits(cs)) {
-      setPending({ kind: 'cran', connectionId: connection.id, actionId, cran });
+      setPending({ kind: 'trust-level', connectionId: connection.id, actionId, trustLevel });
       return;
     }
-    patchConnection(connection.id, setMacroAction(connection, cs, actionId, cran));
+    patchConnection(connection.id, setMacroAction(connection, cs, actionId, trustLevel));
   }
   function pickEverything(connection: IssuanceConnection, cs: ConnectionState) {
     if (discardsEdits(cs)) {
@@ -300,10 +300,10 @@ export function MissionForm({
     setPending(null);
     if (!connection || !cs) return;
     if (pending.kind === 'reset') patchConnection(connection.id, resetEdits(connection, cs));
-    if (pending.kind === 'cran') {
+    if (pending.kind === 'trust-level') {
       patchConnection(
         connection.id,
-        setMacroAction(connection, cs, pending.actionId, pending.cran),
+        setMacroAction(connection, cs, pending.actionId, pending.trustLevel),
       );
     }
     if (pending.kind === 'everything') {
@@ -601,7 +601,7 @@ export function MissionForm({
                     value={proposalText}
                     onChange={(e) => setProposalText(e.target.value)}
                     aria-label="Agent proposal (JSON)"
-                    placeholder='{"connections":[{"provider":"github","crans":{"read":"prudent","propose":"confiant"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                    placeholder='{"connections":[{"provider":"github","trust_levels":{"read":"prudent","propose":"confiant"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
                     spellCheck={false}
                   />
                 </Field>
@@ -802,12 +802,14 @@ export function MissionForm({
                         connection={connection}
                         state={cs}
                         onView={(view) => patchConnection(connection.id, setView(cs, view))}
-                        onCran={(actionId, cran) => pickCran(connection, cs, actionId, cran)}
+                        onTrustLevel={(actionId, trustLevel) =>
+                          pickTrustLevel(connection, cs, actionId, trustLevel)
+                        }
                         onEverything={() => pickEverything(connection, cs)}
                         onLeaveEverything={() =>
                           patchConnection(
                             connection.id,
-                            applyCrans(connection, { ...cs, crans: {} }),
+                            applyTrustLevels(connection, { ...cs, trustLevels: {} }),
                           )
                         }
                         advanced={
@@ -818,7 +820,7 @@ export function MissionForm({
                             limitLabel={limitColumn(periodSeconds)}
                             onChange={(next) => patchConnection(connection.id, next)}
                             onReset={
-                              cs.edited && (cs.everything || Object.keys(cs.crans).length > 0)
+                              cs.edited && (cs.everything || Object.keys(cs.trustLevels).length > 0)
                                 ? () => setPending({ kind: 'reset', connectionId: connection.id })
                                 : null
                             }
@@ -1006,10 +1008,10 @@ export function MissionForm({
         title="Discard what you changed?"
         consequence={
           pending?.kind === 'reset'
-            ? 'The permissions, limits and "ask me first" you changed on this account go back to what the crans write.'
+            ? 'The permissions, limits and "ask me first" you changed on this account go back to what the trust levels write.'
             : pending?.kind === 'everything'
               ? 'Everything you hold on this account replaces the permissions, limits and "ask me first" you changed there.'
-              : 'The crans write this account\'s list again: the permissions, limits and "ask me first" you changed there are dropped.'
+              : 'The trust levels write this account\'s list again: the permissions, limits and "ask me first" you changed there are dropped.'
         }
         confirmLabel="Discard my changes"
         tone="danger"
