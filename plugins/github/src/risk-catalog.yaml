@@ -430,8 +430,8 @@ risks:
       persistence: session
 
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
-# mission creator ticks, each at a trust cran. Every entry but the fallback
-# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# mission creator ticks, each at a trust level. Every entry but the fallback
+# belongs to exactly one, with its base budget (the trust level multiplies it ×1,
 # ×3, ×10). The gateway adds "Anything else", holding the fallback.
 macro_actions:
   - id: read

@@ -6,7 +6,7 @@
  * the touched risks with the environment label of the database
  * (`envResolverFor(resources, plugin.envOf)`, the resolver the gateway
  * builds) and checks them against the accepted risks of a mission written
- * from macro-actions at trust crans (`policyFromMacroActions`).
+ * from macro-actions at trust levels (`policyFromMacroActions`).
  *
  * Two rules are pinned here :
  *   - an env-scoped risk touched on a database with no label, or with a

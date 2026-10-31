@@ -115,7 +115,7 @@ export interface TokenHandout {
   /**
    * The risks among `riskIds` whose token cannot write at the provider
    * (`contents:read` for a clone). Spec §2.4 : a token-handing risk that
-   * grants write is asked first at every trust cran ; a read-only one follows
+   * grants write is asked first at every trust level ; a read-only one follows
    * its palier. A risk that is not listed here is taken as write — absent,
    * every handout risk of the tool is (`writeHandoutRiskIds`).
    */

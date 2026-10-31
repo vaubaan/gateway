@@ -601,18 +601,18 @@ export const PART_LOSS_WORDS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reference (the pages under `/reference`). Protocol names: provider, plugin,
-// risk, macro-action, cran, tool, plane, slice pattern.
+// risk, macro-action, trust level, tool, plane, slice pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const REFERENCE_WORDS = {
   services: 'Services',
   tabs: { permissions: 'Permissions', tools: 'Tools', model: 'How it is modelled' },
   permission: 'Permission',
-  comparison: 'Permissions, and what each trust cran gives them',
+  comparison: 'Permissions, and what each trust level gives them',
   comparisonNote:
-    'A macro-action at a cran is a starting point; a mission always stores the explicit list. Figures are calls per period.',
+    'A macro-action at a trust level is a starting point; a mission always stores the explicit list. Figures are calls per period.',
   macroActions: 'Macro-actions',
-  macroActionsNote: 'What a mission ticks on this service, each at a trust cran.',
+  macroActionsNote: 'What a mission ticks on this service, each at a trust level.',
   notIncluded: 'not included',
   leftOut: 'left out',
   asksFirst: 'asks first',
@@ -1090,7 +1090,7 @@ export const FIRST_RUN = {
     },
     mission: {
       title: 'Give an agent a mission',
-      text: 'Name it, pick the resources, tick what the agent may do at a trust cran, read the three-line summary, create. You get the key.',
+      text: 'Name it, pick the resources, tick what the agent may do at a trust level, read the three-line summary, create. You get the key.',
     },
     kit: {
       title: 'Paste the kit into your agent',
@@ -1202,7 +1202,7 @@ export const MISSION_WORDS = {
   noKeyWorks: 'No key works on this mission now.',
   notServing: 'No key can be made now: the mission does not serve calls.',
   explicitList:
-    'Only the accounts you can use. Each macro-action, at its cran, writes explicit permissions.',
+    'Only the accounts you can use. Each macro-action, at its trust level, writes explicit permissions.',
   /** An account a mission was given whole (resource scope `connection`). */
   wholeAccount: 'the whole account, including resources found later',
   /** After a resource the mission created itself (ADR created-resources-join-the-mission). */

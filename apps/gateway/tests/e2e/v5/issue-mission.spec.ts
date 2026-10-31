@@ -5,7 +5,7 @@
  * The signed-in person owns a GitHub, a Supabase, a Vercel and a Gmail
  * account. The first test creates a three-account mission and
  * checks the screen is the one the redesign asks for — macro-actions first,
- * each at a trust cran saying what it yields; the summary and the one action
+ * each at a trust level saying what it yields; the summary and the one action
  * in a rail that stays in view; the permissions one by one in the Advanced
  * view; a confirmation that lists
  * every permission with its limit — then follows the key through its
@@ -21,12 +21,12 @@ import { E2E_USER } from './instance';
 import {
   confirmByTyping,
   createMission,
-  cranChoice,
-  includeWithCrans,
+  trustLevelChoice,
+  includeWithTrustLevels,
   missionMenu,
   openCreatedMission,
   permissionRow,
-  pickCran,
+  pickTrustLevel,
   resourcesButton,
   revealedKey,
   savedKey,
@@ -98,15 +98,15 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('issues')).toContainText(
     'GitHub · acme-org allows nothing yet: tick a macro-action or a permission, or leave the account out.',
   );
-  // A cran ticks its macro-action: reads at Confiant, proposing and shipping at Prudent.
-  await pickCran(page, 'GitHub acme-org', 'Read', 'Confiant');
-  await pickCran(page, 'GitHub acme-org', 'Propose', 'Prudent');
-  await pickCran(page, 'GitHub acme-org', 'Ship', 'Prudent');
-  await includeWithCrans(page, 'Supabase Acme Supabase', {
+  // A trust level ticks its macro-action: reads at Confiant, proposing and shipping at Prudent.
+  await pickTrustLevel(page, 'GitHub acme-org', 'Read', 'Confiant');
+  await pickTrustLevel(page, 'GitHub acme-org', 'Propose', 'Prudent');
+  await pickTrustLevel(page, 'GitHub acme-org', 'Ship', 'Prudent');
+  await includeWithTrustLevels(page, 'Supabase Acme Supabase', {
     Query: 'Confiant',
     'Change data': 'Prudent',
   });
-  await includeWithCrans(page, 'Vercel Acme Vercel', {
+  await includeWithTrustLevels(page, 'Vercel Acme Vercel', {
     Watch: 'Prudent',
     'Deploy and review': 'Prudent',
   });
@@ -131,14 +131,16 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(rail).not.toContainText(/\b(risk|quota|budget|gate)\b/i);
   await expect(create).toBeEnabled();
 
-  // Each macro-action says, in the service's words, what its cran yields here.
+  // Each macro-action says, in the service's words, what its trust level yields here.
   const ship = page.getByTestId('macro-github-ship');
   await expect(ship).toContainText('ask first');
   await expect(ship).toContainText('left out at Prudent');
   await expect(page.getByTestId('macro-github-read')).toContainText('limits ×3');
-  // Administer is not ticked: no cran is chosen for it.
+  // Administer is not ticked: no trust level is chosen for it.
   await expect(page.getByLabel('Administer on GitHub acme-org')).not.toBeChecked();
-  await expect(cranChoice(page, 'GitHub acme-org', 'Administer', 'Prudent')).not.toBeChecked();
+  await expect(
+    trustLevelChoice(page, 'GitHub acme-org', 'Administer', 'Prudent'),
+  ).not.toBeChecked();
   const digest = page.getByTestId('policy-digest-github');
   await expect(digest).toContainText('run freely');
   await expect(digest).toContainText('ask you first');
@@ -169,7 +171,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await page.getByLabel('Resource stgprojectref').check();
   await expect(changeData).toHaveText(withStaging);
 
-  // The permissions one by one are the Advanced view, on the lines the crans wrote.
+  // The permissions one by one are the Advanced view, on the lines the trust levels wrote.
   await showView(page, 'GitHub acme-org', 'Advanced');
   const editor = page.getByTestId('risks-github');
   await expect(editor).toBeVisible();
@@ -207,14 +209,14 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(digest).not.toHaveText(counted);
   await showView(page, 'GitHub acme-org', 'Simple');
   await expect(page.getByTestId('adjusted-github')).toBeVisible();
-  // A cran would write the list again over those edits: the screen asks first, and says why.
+  // A trust level would write the list again over those edits: the screen asks first, and says why.
   // (a click, not a check: the choice does not move until the person confirms)
-  await cranChoice(page, 'GitHub acme-org', 'Ship', 'Confiant').click();
+  await trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Confiant').click();
   const discard = page.getByTestId('discard-dialog');
   await expect(discard).toContainText('Discard what you changed?');
-  await expect(discard).toContainText('The crans write this account');
+  await expect(discard).toContainText('The trust levels write this account');
   await discard.getByRole('button', { name: 'Cancel' }).click();
-  await expect(cranChoice(page, 'GitHub acme-org', 'Ship', 'Prudent')).toBeChecked();
+  await expect(trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Prudent')).toBeChecked();
   await showView(page, 'GitHub acme-org', 'Advanced');
   await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('42');
   await snap(page, 'creation-editor');
@@ -247,7 +249,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await snap(page, 'creation-editor-plane');
   await plane.selectOption('all');
   expect(await supabase.locator('[data-permission]').count()).toBe(all);
-  // Untouched, the Supabase list is still what the crans wrote: nothing says "adjusted".
+  // Untouched, the Supabase list is still what the trust levels wrote: nothing says "adjusted".
   await showView(page, 'Supabase Acme Supabase', 'Simple');
   await expect(page.getByTestId('adjusted-supabase')).toHaveCount(0);
   // GitHub has one plane: no plane filter there.
@@ -473,7 +475,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   await expect(page.getByLabel('Mission name')).toHaveValue('Review the pricing PR');
   await expect(page.getByLabel('Include GitHub acme-org')).toBeChecked();
   await expect(resourcesButton(page, 'GitHub acme-org', '1 of 3')).toBeVisible();
-  // A loaded list carries no crans: it opens in the Advanced view, the honest view of it.
+  // A loaded list carries no trust levels: it opens in the Advanced view, the honest view of it.
   await expect(page.getByTestId('policy-digest-github')).toContainText('run freely');
   await expect(page.getByTestId('risks-github')).toBeVisible();
   await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
@@ -503,7 +505,7 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   expect(await checkToken(request, second)).toMatchObject({ outcome: 'verified' });
 });
 
-test('the reference explains each service: permissions against the trust crans, tools, model', async ({
+test('the reference explains each service: permissions against the trust levels, tools, model', async ({
   page,
 }) => {
   await signIn(page);
@@ -572,13 +574,13 @@ test('the reference explains each service: permissions against the trust crans, 
   await page.getByRole('button', { name: 'Hide how to read this page' }).click();
   await expect(help).toBeHidden();
 
-  // The macro-actions first, then the permissions against the trust crans: a column per cran.
+  // The macro-actions first, then the permissions against the trust levels: a column per trust level.
   const actions = page.getByTestId('macro-action-list');
   await expect(actions.locator('li')).toHaveCount(6);
   await expect(page.getByTestId('macro-change-data')).toContainText('Change data');
   await expect(page.getByTestId('macro-change-data')).toContainText(/\d+ permissions/);
   await expect(page.getByTestId('macro-anything-else')).toContainText('Anything else');
-  const matrix = page.getByTestId('cran-matrix');
+  const matrix = page.getByTestId('trust-level-matrix');
   await expect(matrix.getByRole('columnheader')).toHaveText([
     'Permission',
     'Risk',
@@ -586,9 +588,10 @@ test('the reference explains each service: permissions against the trust crans, 
     'Confiant',
     'Autonome',
   ]);
-  await expect(page.getByTestId('cran-prudent')).toHaveAttribute('title', /left out/);
+  await expect(page.getByTestId('trust-level-prudent')).toHaveAttribute('title', /left out/);
   // A costly write (palier 3): asks first until Autonome, its limit ×1, ×3, ×10.
-  const bulkCell = (cran: string) => page.getByTestId(`cell-${cran}-supabase.bulk-row-write`);
+  const bulkCell = (trustLevel: string) =>
+    page.getByTestId(`cell-${trustLevel}-supabase.bulk-row-write`);
   await expect(bulkCell('prudent')).toContainText('staging');
   await expect(bulkCell('prudent')).toContainText('asks first');
   await expect(bulkCell('prudent')).toContainText('50');
@@ -670,7 +673,7 @@ test('the reference explains each service: permissions against the trust crans, 
   const unfolded = page.locator('[id="risk-supabase.bulk-row-write-detail"]');
   await expect(unfolded).toContainText('once per environment');
   await expect(unfolded).toContainText('supabase[staging].bulk-row-write');
-  // The six words behind the severity, what it covers, and its line at each cran.
+  // The six words behind the severity, what it covers, and its line at each trust level.
   await expect(unfolded.getByText('Blast radius').first()).toBeVisible();
   await expect(unfolded).toContainText('Write: project');
   await expect(unfolded).toContainText('supabase.project');
@@ -714,7 +717,9 @@ test('the reference explains each service: permissions against the trust crans, 
   await page.goto('/reference/github#macro-administer');
   await expect(page.getByTestId('macro-administer')).toBeInViewport();
   await expect(page.getByTestId('plane-control')).toHaveCount(0);
-  await expect(page.getByTestId('cran-matrix')).toContainText('Modify a GitHub Actions workflow');
+  await expect(page.getByTestId('trust-level-matrix')).toContainText(
+    'Modify a GitHub Actions workflow',
+  );
   await expect(page.getByTestId('cell-prudent-github.workflow-write-via-file')).toContainText(
     'asks first',
   );

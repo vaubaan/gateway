@@ -463,8 +463,10 @@ describe('gmail verify and discoverResources', () => {
 describe('gmail macro-actions', () => {
   const riskOf = (riskId: string) => gmailPlugin.catalog.risks.find((r) => r.id === riskId)!;
   const isWrite = (riskId: string) => String(riskOf(riskId).matches).endsWith('.W');
-  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-    Object.fromEntries(policyFromMacroActions(gmailPlugin, crans).map((l) => [l.risk_id, l.gate]));
+  const gates = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(
+      policyFromMacroActions(gmailPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
+    );
 
   test('ships search, draft, send and tidy', () => {
     expect(gmailPlugin.catalog.macro_actions?.map((a) => a.id)).toEqual([

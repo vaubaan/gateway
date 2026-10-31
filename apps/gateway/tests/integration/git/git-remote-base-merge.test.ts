@@ -15,7 +15,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { AuditCallRecord } from '../../../src/server/store';
 import type { IssuedMission } from '../../../src/server/execution/testing';
-import { DEVELOPER_CRANS, openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
+import {
+  DEVELOPER_TRUST_LEVELS,
+  openGitRig,
+  REPOSITORY,
+  type GitResult,
+  type GitRig,
+} from './support';
 
 const PUSH = 'github__git_push';
 /** The merge brings more files than a commit may list to be reviewed (300). */
@@ -47,7 +53,7 @@ const up = (args: string[]) => rig.git(upstreamWork, args, null);
 
 beforeAll(async () => {
   rig = await openGitRig();
-  developer = await rig.mission({ crans: DEVELOPER_CRANS });
+  developer = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
   const dir = rig.workdir();
   ok(await rig.git(dir, ['clone', '-q', rig.host.bare(REPOSITORY), 'up'], null));
   upstreamWork = join(dir, 'up');

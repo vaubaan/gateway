@@ -5,24 +5,24 @@
  * macro-actions-and-trust-levels-prefill-the-policy), in two views:
  *
  * - **Simple**: the service's macro-actions, each a row the creator ticks and
- *   sets to a trust cran (Prudent, Confiant, Autonome). Each row says what its
- *   cran yields here: how many run freely, ask first, are left out, and what
+ *   sets to a trust level (Prudent, Confiant, Autonome). Each row says what its
+ *   trust level yields here: how many run freely, ask first, are left out, and what
  *   the creator may not allow on this account.
  * - **Advanced**: every permission with its own limit and gate (the caller's
  *   `advanced` element, `CustomEditor`).
  *
  * Under both, the policy as it stands, counted, with its highest palier, and
  * "Everything I hold on this account". Whatever is chosen, the mission
- * stores the explicit list; the crans only redraw this panel.
+ * stores the explicit list; the trust levels only redraw this panel.
  */
 import { Checkbox, ChoiceChip, ChoiceRow, GateMark, TabList, TabPanel } from '@/components/ui';
 import {
-  CRAN_BUDGET_FACTOR,
-  CRAN_HINTS,
-  CRAN_LABELS,
-  DEFAULT_CRAN,
-  TRUST_CRANS,
-  type TrustCran,
+  TRUST_LEVEL_BUDGET_FACTOR,
+  TRUST_LEVEL_HINTS,
+  TRUST_LEVEL_LABELS,
+  DEFAULT_TRUST_LEVEL,
+  TRUST_TRUST_LEVELS,
+  type TrustLevel,
 } from '@/server/missions/macro-actions';
 import type { IssuanceConnection } from '@/server/missions/model';
 
@@ -48,7 +48,7 @@ export function MacroActionPanel({
   state,
   advanced,
   onView,
-  onCran,
+  onTrustLevel,
   onEverything,
   onLeaveEverything,
 }: {
@@ -57,8 +57,8 @@ export function MacroActionPanel({
   /** The advanced view's content: the permissions one by one. */
   advanced: React.ReactNode;
   onView: (view: PolicyView) => void;
-  /** Ticks a macro-action at a cran, moves it, or (`null`) unticks it. */
-  onCran: (actionId: string, cran: TrustCran | null) => void;
+  /** Ticks a macro-action at a trust level, moves it, or (`null`) unticks it. */
+  onTrustLevel: (actionId: string, trustLevel: TrustLevel | null) => void;
   /** "Everything I hold on this account". */
   onEverything: () => void;
   /** Back from "Everything I hold" to the macro-actions, none ticked. */
@@ -102,8 +102,8 @@ export function MacroActionPanel({
           <>
             {adjusted && (
               <p className={styles.skipped} data-testid={`adjusted-${connection.provider}`}>
-                Adjusted in the advanced view: the list no longer matches the crans. Changing a
-                macro-action here writes it again from the crans.
+                Adjusted in the advanced view: the list no longer matches the trust levels. Changing
+                a macro-action here writes it again from the trust levels.
               </p>
             )}
             <div className={styles.macroActions}>
@@ -112,7 +112,7 @@ export function MacroActionPanel({
                   key={row.id}
                   connection={connection}
                   row={row}
-                  onCran={(cran) => onCran(row.id, cran)}
+                  onTrustLevel={(trustLevel) => onTrustLevel(row.id, trustLevel)}
                 />
               ))}
             </div>
@@ -151,16 +151,17 @@ export function MacroActionPanel({
 function MacroActionLine({
   connection,
   row,
-  onCran,
+  onTrustLevel,
 }: {
   connection: IssuanceConnection;
   row: MacroActionRow;
-  onCran: (cran: TrustCran | null) => void;
+  onTrustLevel: (trustLevel: TrustLevel | null) => void;
 }) {
-  const ticked = row.cran !== null;
+  const ticked = row.trustLevel !== null;
   const id = `macro-${connection.id}-${row.id}`;
   const facts: string[] = [];
-  if (row.leftOut > 0) facts.push(`${row.leftOut} left out at ${CRAN_LABELS[row.shownCran]}`);
+  if (row.leftOut > 0)
+    facts.push(`${row.leftOut} left out at ${TRUST_LEVEL_LABELS[row.shownTrustLevel]}`);
   if (row.unavailable > 0) facts.push(`${row.unavailable} not available to you here`);
   return (
     <div
@@ -172,14 +173,14 @@ function MacroActionLine({
         checked={ticked}
         disabled={row.empty}
         aria-label={`${row.label} on ${connection.provider_label} ${connection.display_name}`}
-        onChange={(event) => onCran(event.target.checked ? DEFAULT_CRAN : null)}
+        onChange={(event) => onTrustLevel(event.target.checked ? DEFAULT_TRUST_LEVEL : null)}
       />
       <div className={styles.macroActionText}>
         <label htmlFor={id} className={styles.macroActionName}>
           {row.label}
         </label>
         <p className={styles.quietText}>{row.description}</p>
-        {/* What a cran yields is read once the row is ticked; an empty row says why at once. */}
+        {/* What a trust level yields is read once the row is ticked; an empty row says why at once. */}
         {(ticked || row.empty) && (
           <p className={styles.macroActionCounts}>
             {row.total} {row.total === 1 ? 'permission' : 'permissions'}
@@ -191,24 +192,24 @@ function MacroActionLine({
                 <GateMark gate="free">{row.free} run freely</GateMark>{' '}
                 <GateMark gate={row.asks > 0 ? 'ask' : 'off'}>{row.asks} ask first</GateMark>
                 {facts.length > 0 && ` · ${facts.join(' · ')}`}
-                {` · limits ×${CRAN_BUDGET_FACTOR[row.shownCran]}`}
+                {` · limits ×${TRUST_LEVEL_BUDGET_FACTOR[row.shownTrustLevel]}`}
               </>
             )}
           </p>
         )}
       </div>
       <ChoiceRow
-        legend={`Cran of ${row.label} on ${connection.provider_label} ${connection.display_name}`}
+        legend={`Trust level of ${row.label} on ${connection.provider_label} ${connection.display_name}`}
       >
-        {TRUST_CRANS.map((cran) => (
+        {TRUST_TRUST_LEVELS.map((trustLevel) => (
           <ChoiceChip
-            key={cran}
-            name={`cran-${connection.id}-${row.id}`}
-            value={cran}
-            checked={row.cran === cran}
-            onChange={() => onCran(cran)}
-            label={CRAN_LABELS[cran]}
-            title={CRAN_HINTS[cran]}
+            key={trustLevel}
+            name={`trust-level-${connection.id}-${row.id}`}
+            value={trustLevel}
+            checked={row.trustLevel === trustLevel}
+            onChange={() => onTrustLevel(trustLevel)}
+            label={TRUST_LEVEL_LABELS[trustLevel]}
+            title={TRUST_LEVEL_HINTS[trustLevel]}
             unavailable={row.empty ? 'none you may allow here' : null}
           />
         ))}

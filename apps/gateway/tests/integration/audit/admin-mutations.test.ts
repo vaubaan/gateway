@@ -239,7 +239,7 @@ async function openRig(): Promise<Rig> {
       const connection = await rig.connectByKey();
       const result = await root.missions.service.issue(alice.user, {
         name: 'Read the things',
-        connections: [{ connection_id: connection.id, crans: { read: 'prudent' } }],
+        connections: [{ connection_id: connection.id, trust_levels: { read: 'prudent' } }],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,
       });
@@ -678,7 +678,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     drive: (rig, connection: ConnectionRecord) =>
       rig.root.missions.service.issue(rig.alice.user, {
         name: 'Read the things',
-        connections: [{ connection_id: connection.id, crans: { read: 'prudent' } }],
+        connections: [{ connection_id: connection.id, trust_levels: { read: 'prudent' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       }),
@@ -1733,7 +1733,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     drive: (rig, prepared: { connection: ConnectionRecord; actor: ManagementActor }) =>
       rig.root.management.tools.issueMission(prepared.actor, {
         name: 'Read the things',
-        connections: [{ connection_id: prepared.connection.id, crans: { read: 'prudent' } }],
+        connections: [{ connection_id: prepared.connection.id, trust_levels: { read: 'prudent' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       }),
@@ -1748,7 +1748,7 @@ const RULES: Readonly<Record<string, Rule>> = {
       const actor = await delegatedActor(rig);
       const issued = await rig.root.management.tools.issueMission(actor, {
         name: 'Read the things',
-        connections: [{ connection_id: connection.id, crans: { read: 'prudent' } }],
+        connections: [{ connection_id: connection.id, trust_levels: { read: 'prudent' } }],
         period: { kind: 'one-off' },
         expires_at: null,
       });

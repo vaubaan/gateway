@@ -11,7 +11,7 @@
  *
  * Pure and browser-safe: the creation form runs it as the server does.
  */
-import { budgetAtCran } from '@vaubaan/policy-engine';
+import { budgetAtTrustLevel } from '@vaubaan/policy-engine';
 import type { MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
@@ -55,7 +55,7 @@ export interface EverythingIHold {
 
 /**
  * The budget of a line: its macro-action's base budget at Autonome (the
- * widest cran), the rate then the catalog ceiling per minute when the entry
+ * widest trust level), the rate then the catalog ceiling per minute when the entry
  * sets one; by level for a risk in no macro-action.
  */
 export function budgetFor(
@@ -75,7 +75,7 @@ export function budgetFor(
       rate_limit: ceiling ?? { max: RATE_BY_LEVEL[risk.level], window_seconds: SECONDS_PER_MINUTE },
     };
   }
-  const widest = budgetAtCran(entry, 'autonome', risk.rate_ceiling_per_minute);
+  const widest = budgetAtTrustLevel(entry, 'autonome', risk.rate_ceiling_per_minute);
   return { quota: widest.quota, rate_limit: ceiling ?? widest.rate_limit };
 }
 

@@ -109,7 +109,7 @@ test('an agent with a mission key and nothing else clones, pushes, is refused, a
   scratch.push(home, work);
   const git = agentGit(home, issued.token);
   transcript.push(
-    `# Mission "${MISSION}" (developer crans). VAUBAAN_MISSION_TOKEN is set; git has the kit's credential helper.`,
+    `# Mission "${MISSION}" (developer trust levels). VAUBAAN_MISSION_TOKEN is set; git has the kit's credential helper.`,
     '',
   );
 

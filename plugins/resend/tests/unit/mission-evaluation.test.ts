@@ -177,9 +177,9 @@ describe('resend — an external-unbounded send outside staging / dev is refused
 });
 
 describe('resend — what a mission composed from macro-actions allows and refuses', () => {
-  type Crans = Parameters<typeof policyFromMacroActions>[1];
-  /** The missions of the table : macro-actions ticked at a cran, no environment given. */
-  const MISSIONS: Readonly<Record<string, Crans>> = {
+  type TrustLevels = Parameters<typeof policyFromMacroActions>[1];
+  /** The missions of the table : macro-actions ticked at a trust level, no environment given. */
+  const MISSIONS: Readonly<Record<string, TrustLevels>> = {
     check: { check: 'prudent' },
     'check and send': { check: 'prudent', send: 'prudent' },
     campaign: { check: 'confiant', send: 'confiant', campaign: 'confiant' },
@@ -249,7 +249,9 @@ describe('resend — what a mission composed from macro-actions allows and refus
   };
 
   test('the table covers every macro-action of the catalog', () => {
-    const ticked = new Set(Object.values(MISSIONS).flatMap((crans) => Object.keys(crans)));
+    const ticked = new Set(
+      Object.values(MISSIONS).flatMap((trustLevels) => Object.keys(trustLevels)),
+    );
     expect([...ticked].sort()).toEqual((catalog.macro_actions ?? []).map((a) => a.id).sort());
   });
 

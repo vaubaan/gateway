@@ -181,13 +181,13 @@ the catalog's `acceptable_in_envs` decides.
 | `campaign`   | Contacts, segments and broadcasts.                | `contact-write`, `segment-write`, `broadcast-draft`, `broadcast-send`, `broadcast-delete`    |
 | `domains`    | Verify and change sending domains.                | `domain-verify`, `domain-write`                                                              |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran turns each risk's vector into a gate and scales its
+A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+risk model §4.6); the trust level turns each risk's vector into a gate and scales its
 base budget. The persisted policy is the explicit list.
 `send-email-external-unbounded` is env-scoped: it is only written qualified
 with `staging` or `dev` (`resend[staging].…`), from Confiant up, and always
 asks first. Bulk sends (`send-batch`, `broadcast-send`) never run freely at any
-cran. No mission needs the fallback to do its job
+trust level. No mission needs the fallback to do its job
 (`tests/unit/mission-evaluation.test.ts` evaluates them call by call).
 
 ## Tests

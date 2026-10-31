@@ -73,7 +73,7 @@ export function CustomEditor({
   /** The head of the limit column: "Per day", "Per week", "In total". */
   limitLabel: string;
   onChange: (next: ConnectionState) => void;
-  /** "Reset to the crans": the screen asks first, then drops the edits. `null`: nothing to reset. */
+  /** "Reset to the trust levels": the screen asks first, then drops the edits. `null`: nothing to reset. */
   onReset: (() => void) | null;
 }) {
   const [query, setQuery] = useState('');
@@ -157,7 +157,7 @@ export function CustomEditor({
         )}
         {onReset && (
           <button type="button" className={styles.link} onClick={onReset}>
-            Reset to the crans
+            Reset to the trust levels
           </button>
         )}
         <span className={styles.editorShown} aria-live="polite">

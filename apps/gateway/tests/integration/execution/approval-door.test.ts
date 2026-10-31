@@ -74,11 +74,11 @@ async function openRig(): Promise<Rig> {
   ]);
   const issued = await missions.service.issue(instance.ada, {
     name: 'Develop acme/app',
-    // The macro-actions as the plugin ships them, at a cran: nothing adjusted.
+    // The macro-actions as the plugin ships them, at a trust level: nothing adjusted.
     connections: [
       {
         connection_id: github.id,
-        crans: { read: 'confiant', propose: 'confiant', administer: 'confiant' },
+        trust_levels: { read: 'confiant', propose: 'confiant', administer: 'confiant' },
       },
     ],
     period: { kind: 'recurring', length_seconds: 86_400 },
@@ -118,7 +118,7 @@ describe('approve an action through the execution door (GitHub macro-actions at 
     return url.slice(url.lastIndexOf('/') + 1);
   }
 
-  /** The quota the cran wrote: the macro-action's base budget ×3 at Confiant. */
+  /** The quota the trust level wrote: the macro-action's base budget ×3 at Confiant. */
   const quota = (riskId: string): number => {
     const entry = rig.mission.mission.policy.find((e) => e.riskId === riskId);
     if (!entry) throw new Error(`${riskId} is not in the mission`);

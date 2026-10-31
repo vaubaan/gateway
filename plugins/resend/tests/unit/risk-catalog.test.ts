@@ -79,10 +79,10 @@ describe('resend risk-catalog — shape', () => {
         expect(deprecated.has(entry.risk_id), `${action.id}: ${entry.risk_id}`).toBe(false);
       }
     }
-    const crans = Object.fromEntries(
+    const trustLevels = Object.fromEntries(
       (catalog.macro_actions ?? []).map((a) => [a.id, 'autonome' as const]),
     );
-    const ids = policyFromMacroActions(resendPlugin, crans, {
+    const ids = policyFromMacroActions(resendPlugin, trustLevels, {
       envs: ['prod', 'staging', 'dev'],
     }).map((e) => e.risk_id);
     expect(ids).not.toContain('resend.send-email-external-unbounded');

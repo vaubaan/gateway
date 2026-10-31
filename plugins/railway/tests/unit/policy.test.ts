@@ -68,8 +68,8 @@ const MISSIONS: Readonly<Record<string, readonly string[]>> = {
   }).filter((id) => id !== 'railway.agent-action'),
 };
 
-function risksOf(crans: Parameters<typeof policyFromMacroActions>[1]): string[] {
-  return policyFromMacroActions(railwayPlugin, crans, { envs: ENVS }).map((e) => e.risk_id);
+function risksOf(trustLevels: Parameters<typeof policyFromMacroActions>[1]): string[] {
+  return policyFromMacroActions(railwayPlugin, trustLevels, { envs: ENVS }).map((e) => e.risk_id);
 }
 
 function missionRisks(id: string): readonly string[] {
@@ -270,11 +270,11 @@ describe('railway missions — decision per call', () => {
   });
 
   test('the agent meta-tool asks first below Autonome ; the fallback is in no macro-action', () => {
-    for (const cran of ['prudent', 'confiant'] as const) {
-      const line = policyFromMacroActions(railwayPlugin, { create: cran }).find(
+    for (const trustLevel of ['prudent', 'confiant'] as const) {
+      const line = policyFromMacroActions(railwayPlugin, { create: trustLevel }).find(
         (e) => e.risk_id === 'railway.agent-action',
       );
-      expect(line?.gate, cran).toBe('approval');
+      expect(line?.gate, trustLevel).toBe('approval');
     }
     const listed = (railwayPlugin.catalog.macro_actions ?? []).flatMap((a) =>
       a.entries.map((e) => e.risk_id),

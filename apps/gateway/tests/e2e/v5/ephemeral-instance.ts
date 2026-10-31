@@ -27,8 +27,8 @@
  *     signs in next, a token check
  *     through `MissionService.verifyToken`, `small-mission` (a mission of Ada
  *     with a two-action quota and its token), `developer-mission` (a mission
- *     composed from the GitHub plugin's macro-actions at their crans
- *     (`DEVELOPER_CRANS`), for a user of their own, and its token), `share-scenario` (an owner with a
+ *     composed from the GitHub plugin's macro-actions at their trust levels
+ *     (`DEVELOPER_TRUST_LEVELS`), for a user of their own, and its token), `share-scenario` (an owner with a
  *     GitHub connection of their own, a beneficiary and the operator, for
  *     the share spec), `upstream` (what the mocked provider
  *     received) and `seed-day` — the one fixture written below the door: a
@@ -318,11 +318,15 @@ async function issueSmallMission(
  * asks first, limits ×3), Administer at Prudent (a workflow file write asks
  * first, at its base budget of 50).
  */
-const DEVELOPER_CRANS = { read: 'confiant', propose: 'confiant', administer: 'prudent' } as const;
+const DEVELOPER_TRUST_LEVELS = {
+  read: 'confiant',
+  propose: 'confiant',
+  administer: 'prudent',
+} as const;
 
 /**
  * A mission of the approver on a GitHub connection of their own, composed from
- * the plugin's macro-actions as shipped at `DEVELOPER_CRANS`: its gated entries
+ * the plugin's macro-actions as shipped at `DEVELOPER_TRUST_LEVELS`: its gated entries
  * are what the "approve an action" scenario is about. The connection holds a token of the
  * mocked GitHub, so an approved call goes all the way to the provider.
  */
@@ -349,16 +353,17 @@ async function issueDeveloperMission(
   );
   const issued = await root.missions.service.issue(user, {
     name,
-    connections: [{ connection_id: seeded.connection.id, crans: DEVELOPER_CRANS }],
+    connections: [{ connection_id: seeded.connection.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   });
-  if (!issued.ok) throw new Error(`mission "${name}" was not issued from the developer crans`);
+  if (!issued.ok)
+    throw new Error(`mission "${name}" was not issued from the developer trust levels`);
   return { mission_id: issued.mission.id, token: issued.token.secret };
 }
 
 /**
- * A mission of the approver at `DEVELOPER_CRANS`, on a token whose repository
+ * A mission of the approver at `DEVELOPER_TRUST_LEVELS`, on a token whose repository
  * is real git (`E2E_GIT`), and its token.
  */
 async function issueGitMission(
@@ -383,7 +388,7 @@ async function issueGitMission(
   );
   const issued = await root.missions.service.issue(user, {
     name,
-    connections: [{ connection_id: seeded.connection.id, crans: DEVELOPER_CRANS }],
+    connections: [{ connection_id: seeded.connection.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   });
@@ -688,7 +693,7 @@ async function main(): Promise<void> {
         const issued = await root.missions.service.issue(owner, {
           name: `Both accounts of ${name}`,
           connections: [
-            { connection_id: github.id, crans: { read: 'prudent' } },
+            { connection_id: github.id, trust_levels: { read: 'prudent' } },
             {
               connection_id: supabase.id,
               resources: { scope: 'all' },

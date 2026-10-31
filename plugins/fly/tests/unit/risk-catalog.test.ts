@@ -1,6 +1,6 @@
 /**
  * The catalog's decisions that the kit does not check : which gates ask
- * first, what each macro-action holds at a trust cran, and the data model the
+ * first, what each macro-action holds at a trust level, and the data model the
  * slices use.
  */
 import { describe, expect, test } from 'vitest';
@@ -12,22 +12,22 @@ import { flyCatalog, flyDataModel, flyPlugin } from '../../src/index.ts';
 
 const ENVS = { envs: ['staging', 'prod'] } as const;
 const macroActions = flyCatalog.catalog.macro_actions;
-const gatesAt = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-  new Map(policyFromMacroActions(flyPlugin, crans, ENVS).map((l) => [l.risk_id, l.gate]));
-const everyMacroAction = (cran: 'prudent' | 'confiant' | 'autonome') =>
-  Object.fromEntries(macroActions.map((a) => [a.id, cran]));
+const gatesAt = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+  new Map(policyFromMacroActions(flyPlugin, trustLevels, ENVS).map((l) => [l.risk_id, l.gate]));
+const everyMacroAction = (trustLevel: 'prudent' | 'confiant' | 'autonome') =>
+  Object.fromEntries(macroActions.map((a) => [a.id, trustLevel]));
 
 describe('fly catalog', () => {
   test('destroying apps and volumes and running commands never run freely ; secrets ask first below Autonome', () => {
     const neverFree = /\.(app-destroy|volume-destroy|machine-exec)$/;
-    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
-      const gates = gatesAt(everyMacroAction(cran));
+    for (const trustLevel of ['prudent', 'confiant', 'autonome'] as const) {
+      const gates = gatesAt(everyMacroAction(trustLevel));
       for (const [riskId, gate] of gates) {
-        if (neverFree.test(riskId)) expect(gate, `${riskId} at ${cran}`).toBe('approval');
+        if (neverFree.test(riskId)) expect(gate, `${riskId} at ${trustLevel}`).toBe('approval');
       }
     }
-    for (const cran of ['prudent', 'confiant'] as const) {
-      expect(gatesAt({ secrets: cran }).get('fly[prod].secret-write')).toBe('approval');
+    for (const trustLevel of ['prudent', 'confiant'] as const) {
+      expect(gatesAt({ secrets: trustLevel }).get('fly[prod].secret-write')).toBe('approval');
     }
   });
 

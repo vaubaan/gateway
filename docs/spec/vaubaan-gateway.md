@@ -135,7 +135,7 @@ callback registered at a provider).
 - **Macro-action** — what an agent may do on one account, in the connector's own words ("Read",
   "Change", "Administer"): a group of `RiskId`s of one catalog, each with a base budget
   ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every connection also offers "Anything else"
-  (the fallback). A creator ticks macro-actions and sets each to a **trust cran** (Prudent, Confiant,
+  (the fallback). A creator ticks macro-actions and sets each to a **trust level** (Prudent, Confiant,
   Autonome), which pre-fills the gate and budget of each of its risks from the risk's palier. It
   grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
   the token. Every connection also offers the built-in expansion **"Everything I hold on this
@@ -195,7 +195,7 @@ without ever holding a credential, within a declared objective.
 - **No general-purpose secret management**, and no cloud resource provisioning by the instance
   itself.
 - **No policy composed by the instance from a natural-language task**: that is the client's job;
-  macro-actions and their crans are the instance-side help.
+  macro-actions and their trust levels are the instance-side help.
 - **No call held waiting.** The gateway always answers at once; a human steps in outside the call
   (structured refusal, decision in the inbox, replay). No `pending` state, no polling, no mandatory
   notification ([unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)).
@@ -286,8 +286,8 @@ permissions and executes nothing.
   presents the provider's credential upstream, neither crosses.
 - **One deliberate exception:** a tool whose purpose is to hand the agent a short-lived, narrowly
   scoped provider token. It is its own catalog risk, never accepted by default, counted and audited;
-  the long-lived credential never leaves. A trust cran never runs a token-handing risk that grants
-  write freely: its pre-filled gate is `approval` at every cran; a read-only one follows its palier.
+  the long-lived credential never leaves. A trust level never runs a token-handing risk that grants
+  write freely: its pre-filled gate is `approval` at every trust level; a read-only one follows its palier.
   An undeclared one is write.
 - An exfiltrated mission token grants the mission's rights within its budget until revoked; the
   audit names its holder, and revoking it leaves other holders working.
@@ -353,13 +353,13 @@ a mission whose accepted risk has no resolved budget.
   `exhausted` until the next period or a granted claim.
 - **Rate limit.** The mission-level value of the catalog's speed cap
   ([gateway-risk-model](./gateway-risk-model.md) §4bis), bounded by the catalog.
-- **Macro-actions and crans**
+- **Macro-actions and trust levels**
   ([macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
-  At issuance the creator ticks macro-actions per connection, each at a cran (or duplicates a
+  At issuance the creator ticks macro-actions per connection, each at a trust level (or duplicates a
   mission); the policy is pre-filled with their risks, gates and budgets, intersected with the
   creator's authority, then adjusted risk by risk. The persisted policy never references a
-  macro-action or a cran, so a changed catalog alters no mission; the crans are recorded with the
-  mission only to redraw the form. The interface shows what each macro-action yields at its cran
+  macro-action or a trust level, so a changed catalog alters no mission; the trust levels are recorded with the
+  mission only to redraw the form. The interface shows what each macro-action yields at its trust level
   (how many run freely, ask first, are left out) and the account's highest palier.
 - **`everything-i-hold`**
   ([preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md)).
@@ -500,10 +500,10 @@ providers to identify the user at consent
 ([management-door-authorization-server](../decisions/management-door-authorization-server.md)).
 
 - **Read**: my connections and those shared with me, with the exact restriction; each provider's
-  catalog with its macro-actions, each risk's palier and the cran table; my missions, policy,
+  catalog with its macro-actions, each risk's palier and the trust level table; my missions, policy,
   session and remaining budget.
 - **Preview** a draft `RiskId → (budget, gate)` on some connections: what passes, what exceeds the
-  authority, what the mission could call; issues nothing. A draft connection may give crans per
+  authority, what the mission could call; issues nothing. A draft connection may give trust levels per
   macro-action, which write its policy when it gives none and the missing budgets when it does, or
   name `everything-i-hold`; the preview answers with the explicit lines.
 - **Issue** a mission. The creator is the **delegating user**, never the agent. The answer holds the
@@ -580,11 +580,11 @@ stands in without one.
 - **Missions** — mine and those I am a teammate of; a row says when it waits for my answer and names
   the connected app that prepared it. **Creating**, on one screen: a name (or a copy of a mission,
   or a pasted agent proposal); the accounts and their resources (every resource known now, the whole
-  account including later ones, or a pick); per account its macro-actions, each ticked at a trust cran
+  account including later ones, or a pick); per account its macro-actions, each ticked at a trust level
   and saying what it yields within what I may allow ([risk model](gateway-risk-model.md) §4.6), or
   `everything-i-hold`, which says how many permissions it writes out, the most severe, which critical
   ones run freely and that it includes uncategorized writes; the permissions one by one in an
-  Advanced view; the view is never sent, the crans only to redraw the screen; the period and the end; a
+  Advanced view; the view is never sent, the trust levels only to redraw the screen; the period and the end; a
   summary (can do, asks first, cannot). **Creating confirms the explicit list** (every permission by
   account, with limits and gate), which is what is sent and checked again; then the key, shown once,
   with the setup kit. **On a mission**: its state, a waiting request (the way to answer for the
@@ -607,7 +607,7 @@ stands in without one.
   Ownerless accounts are the last region for an administrator, who names a new owner there.
 - **Reference** — generated for every registered plugin, read-only, for any signed-in user:
   **Permissions** (permissions by macro-action, each with its palier, base budget and its gate at each
-  cran; a permission
+  trust level; a permission
   unfolds its reason, the six dimensions behind its severity and its tools), **Tools** ("depends on
   the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
   permission shown elsewhere links here.
@@ -871,7 +871,7 @@ confirmed their list.
 
 ### 7.4 Create a mission
 
-Accounts, resources, macro-actions at a cran per account, adjustments, period (default daily) and end (default
+Accounts, resources, macro-actions at a trust level per account, adjustments, period (default daily) and end (default
 never), confirmation of the explicit list; the key is revealed once with the setup kit.
 
 ### 7.4 bis Edit a mission

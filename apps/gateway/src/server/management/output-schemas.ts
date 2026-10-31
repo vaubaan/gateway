@@ -40,11 +40,15 @@ const period = z
 /** A policy line as the mission service resolves it: the id, and its budget next to it. */
 const policyLine = z.looseObject({ risk_id: riskId });
 
-/** What one macro-action at one cran writes: lines running freely, asking first, left out. */
-const cranYield = z.looseObject({ auto: z.number(), approval: z.number(), left_out: z.number() });
+/** What one macro-action at one trust level writes: lines running freely, asking first, left out. */
+const trustLevelYield = z.looseObject({
+  auto: z.number(),
+  approval: z.number(),
+  left_out: z.number(),
+});
 
 /** Per palier `1`…`4`: `auto`, `approval`, or `null` (left out); and the factor on the base budget. */
-const cranRule = z.looseObject({
+const trustLevelRule = z.looseObject({
   gates: z.looseObject({
     '1': z.string().nullable(),
     '2': z.string().nullable(),
@@ -108,10 +112,14 @@ const connectionsAnswer = z.looseObject({
           id: z.string(),
           label: z.string(),
           description: z.string(),
-          at_cran: z
-            .looseObject({ prudent: cranYield, confiant: cranYield, autonome: cranYield })
+          at_trust_level: z
+            .looseObject({
+              prudent: trustLevelYield,
+              confiant: trustLevelYield,
+              autonome: trustLevelYield,
+            })
             .describe(
-              'Per cran (`prudent`, `confiant`, `autonome`): what `crans: { [id]: cran }` writes here with every resource known now.',
+              'Per trust level (`prudent`, `confiant`, `autonome`): what `trust_levels: { [id]: trust_level }` writes here with every resource known now.',
             ),
           unavailable: riskIds.describe(
             'Risks of the macro-action outside the authority here, or that no resource can reach.',
@@ -139,7 +147,7 @@ const catalogAnswer = z.looseObject({
       label: z.string(),
       reason: z.string(),
       level: z.string().describe('`low`, `medium`, `high` or `critical`.'),
-      palier: z.number().describe('1 mild to 4 irreversible: what a cran maps to a gate.'),
+      palier: z.number().describe('1 mild to 4 irreversible: what a trust level maps to a gate.'),
       macro_action: z
         .string()
         .nullable()
@@ -158,9 +166,9 @@ const catalogAnswer = z.looseObject({
       entries: z.array(policyLine).describe('Each risk with its base budget (×1 at Prudent).'),
     }),
   ),
-  crans: z
-    .looseObject({ prudent: cranRule, confiant: cranRule, autonome: cranRule })
-    .describe('Per cran: the gate of each palier and the factor on the base budget.'),
+  trust_levels: z
+    .looseObject({ prudent: trustLevelRule, confiant: trustLevelRule, autonome: trustLevelRule })
+    .describe('Per trust level: the gate of each palier and the factor on the base budget.'),
   everything_i_hold: z
     .looseObject({ label: z.string(), entries: z.array(policyLine) })
     .optional()
@@ -276,12 +284,12 @@ const previewAnswer = z.looseObject({
       left_out: z
         .array(policyLine)
         .describe(
-          'What the crans or `everything-i-hold` would have written that is left out: `reason` `outside-authority`, `unresolvable-env` or `cran`.',
+          'What the trust levels or `everything-i-hold` would have written that is left out: `reason` `outside-authority`, `unresolvable-env` or `trust-level`.',
         ),
-      crans: z
+      trust_levels: z
         .looseObject({})
         .describe(
-          'The crans kept with the mission, by macro-action id; they only redraw the form.',
+          'The trust levels kept with the mission, by macro-action id; they only redraw the form.',
         ),
     }),
   ),

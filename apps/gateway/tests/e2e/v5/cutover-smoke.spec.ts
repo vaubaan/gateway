@@ -4,7 +4,7 @@
  * an ephemeral instance, with the simulated IdP and a mocked GitHub.
  *
  *   sign in through the IdP → connect GitHub through the company's App →
- *   issue a mission from the plugin's macro-actions at a cran → an MCP client lists
+ *   issue a mission from the plugin's macro-actions at a trust level → an MCP client lists
  *   the tools and calls one over HTTP on `/mcp` with the mission token → a
  *   quota runs out → the refusal's claim URL → the creator grants → the replay
  *   passes → the calls show on the Audit page and on the mission's session.
@@ -20,7 +20,7 @@ import { E2E_CUTOVER_USER, MOCK_GITHUB, PUBLIC_URL } from './instance';
 import {
   createMission,
   openCreatedMission,
-  pickCran,
+  pickTrustLevel,
   resourcesButton,
   showView,
 } from './mission-pages';
@@ -109,8 +109,8 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await page.goto('/missions/new');
   await page.getByLabel('Mission name').fill(MISSION);
   await page.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  await pickCran(page, `GitHub ${CONNECTION}`, 'Read', 'Confiant');
-  await pickCran(page, `GitHub ${CONNECTION}`, 'Propose', 'Prudent');
+  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Read', 'Confiant');
+  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Propose', 'Prudent');
   await expect(page.getByTestId('summary-github')).toContainText('permissions.');
   // One code project, one repository: the other one is left out of the mission.
   await resourcesButton(page, `GitHub ${CONNECTION}`, '2 of 2').click();
@@ -119,7 +119,7 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await expect(page.getByTestId('summary-github')).toContainText('Nor the other 1 resource.');
   await expect(page.getByTestId('summary-carries')).toContainText('never expires');
   // The one adjustment: a limit small enough to be reached in this test.
-  // The advanced view opens on the lines the crans wrote.
+  // The advanced view opens on the lines the trust levels wrote.
   await showView(page, `GitHub ${CONNECTION}`, 'Advanced');
   await page.getByLabel(`Limit for ${READ_CODE}`).fill(String(QUOTA));
 

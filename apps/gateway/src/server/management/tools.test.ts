@@ -146,7 +146,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     const { tools, calls } = rig();
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }],
     };
     await tools.issueMission(ACTOR, within);
     const issue = calls.find((call) => call.method === 'issue');
@@ -187,7 +187,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
 
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }],
     };
     await tools.issueMission(ACTOR, within);
     const second = await tools.issueMission(ACTOR, within);
@@ -344,7 +344,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
   describe('the mission service decides last: its answer after the door’s own check stands', () => {
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'prudent' } }],
     };
     /** A mission of the user that serves calls, as `get` returns it. */
     const active = {
@@ -507,11 +507,11 @@ describe('views', () => {
     expect(actions.administer?.unavailable).toEqual(['acme.admin']);
   });
 
-  it('a macro-action says what each cran writes, with the mission module’s own expansion', () => {
+  it('a macro-action says what each trust level writes, with the mission module’s own expansion', () => {
     const owner = connectionView(acmeConnection());
     const change = owner.macro_actions.find((action) => action.id === 'change');
     // Writes are costly (palier 3), bulk deletes irreversible (palier 4).
-    expect(change?.at_cran).toEqual({
+    expect(change?.at_trust_level).toEqual({
       prudent: { auto: 0, approval: 2, left_out: 1 },
       confiant: { auto: 0, approval: 3, left_out: 0 },
       autonome: { auto: 2, approval: 1, left_out: 0 },
@@ -680,7 +680,7 @@ describe('views', () => {
     expect(
       flagged.risks.filter((risk) => risk.in_my_authority).map((risk) => risk.risk_id),
     ).toEqual(SHARED);
-    // Each risk says its palier and macro-action; the crans say what a palier gets.
+    // Each risk says its palier and macro-action; the trust levels say what a palier gets.
     expect(plain.risks.find((risk) => risk.risk_id === 'acme[staging].bulk-delete')).toMatchObject({
       palier: 4,
       macro_action: 'change',
@@ -689,7 +689,7 @@ describe('views', () => {
       null,
     );
     expect(plain.macro_actions.map((action) => action.id)).toContain('anything-else');
-    expect(plain.crans.prudent).toEqual({
+    expect(plain.trust_levels.prudent).toEqual({
       gates: { '1': 'auto', '2': 'approval', '3': 'approval', '4': null },
       budget_factor: 1,
     });

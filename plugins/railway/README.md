@@ -101,8 +101,8 @@ risks (`deploy`, `upsert-variable`, `read-variables`) accept `staging`,
 | `configure`  | Read and write variables.              | `read-variables`, `upsert-variable`, `bulk-variables-replace` |
 | `create`     | Projects and Railway's agent.          | `create-project`, `agent-action`                              |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran turns each risk's vector into a gate and scales its
+A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome,
+risk model §4.6); the trust level turns each risk's vector into a gate and scales its
 base budget. The persisted policy is the explicit list.
 `prod` deploys and variable writes ask first below Autonome;
 `bulk-variables-replace` is left out at Prudent and always asks first;

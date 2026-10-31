@@ -168,8 +168,8 @@ should stay the exception.
 
 ## Macro-actions
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome),
-risk model §4.6; the cran writes the explicit lines, one per environment the
+A creator ticks macro-actions at a trust level (Prudent / Confiant / Autonome),
+risk model §4.6; the trust level writes the explicit lines, one per environment the
 selected projects carry, and the stored policy is that list.
 
 | Macro-action     | What it covers                                            | Its risks                                                                                                                                      |

@@ -10,7 +10,7 @@
  * server-side: the browser's copy decides nothing.
  *
  * Spec §3.1 (monotonicity, enumeration, partition per connection, resource
- * selection), §3.2 (mandatory budget, macro-actions and crans), §0 "Resource" (env-qualified
+ * selection), §3.2 (mandatory budget, macro-actions and trust levels), §0 "Resource" (env-qualified
  * ids resolve against the selected resources). Browser-safe: no IO.
  */
 import { budgetIssues, exceedsRateCeiling, type BudgetField } from '@vaubaan/policy-engine';
@@ -27,10 +27,10 @@ import {
   expansionDigest,
 } from './everything-i-hold';
 import {
-  knownCrans,
-  prefillOfCrans,
+  knownTrustLevels,
+  prefillOfTrustLevels,
   unknownMacroActions,
-  type MacroActionCrans,
+  type MacroActionTrustLevels,
 } from './macro-actions';
 import type {
   CatalogRisk,
@@ -93,7 +93,7 @@ export function budgetProblem(
 
 /**
  * What a draft line leaves out, filled in: the prefill's line for that id,
- * else the risk's macro-action at its cran.
+ * else the risk's macro-action at its trust level.
  */
 type LineDefaults = Omit<MissionPolicyEntry, 'risk_id'> | null;
 
@@ -230,7 +230,7 @@ function list(ids: readonly string[]): string {
 
 /**
  * What writes a connection's policy when the draft gives no explicit lines:
- * `everything-i-hold`, or the crans of its macro-actions.
+ * `everything-i-hold`, or the trust levels of its macro-actions.
  */
 interface Prefill {
   /** Set when the draft names `everything-i-hold`. */
@@ -239,8 +239,8 @@ interface Prefill {
   readonly lines: readonly MissionPolicyEntry[];
   /** What it left out, reported when it writes the policy. */
   readonly left_out: readonly LeftOutEntry[];
-  /** The crans of the draft that name a macro-action here. */
-  readonly crans: MacroActionCrans;
+  /** The trust levels of the draft that name a macro-action here. */
+  readonly trustLevels: MacroActionTrustLevels;
   readonly issues: PreviewIssue[];
 }
 
@@ -251,12 +251,12 @@ function resolvePrefill(
   selected: readonly IssuanceResource[],
   where: Where,
 ): Prefill {
-  const crans = knownCrans(connection, draft.crans);
+  const trustLevels = knownTrustLevels(connection, draft.trust_levels);
   const issues: PreviewIssue[] = [];
   if (draft.preset && draft.preset !== EVERYTHING_I_HOLD) {
     issues.push({
       code: 'unknown-preset',
-      message: `"${draft.preset}" is not a preset: catalogs ship none. Name "${EVERYTHING_I_HOLD}" for everything you hold on "${connection.display_name}", or give its macro-actions a cran (crans).`,
+      message: `"${draft.preset}" is not a preset: catalogs ship none. Name "${EVERYTHING_I_HOLD}" for everything you hold on "${connection.display_name}", or give its macro-actions a trust level ("trust_levels").`,
       ...where,
     });
   }
@@ -264,11 +264,11 @@ function resolvePrefill(
   // preset-everything-i-hold-expands-explicitly).
   if (draft.preset === EVERYTHING_I_HOLD) {
     const lines = everythingIHold(connection, selected).entries;
-    return { everything: true, lines, left_out: [], crans, issues };
+    return { everything: true, lines, left_out: [], trustLevels, issues };
   }
-  // Crans naming nothing here: dropped beside explicit lines (they then only
+  // Trust levels naming nothing here: dropped beside explicit lines (they then only
   // redraw the form), refused when they are what writes the policy.
-  const unknown = unknownMacroActions(connection, draft.crans);
+  const unknown = unknownMacroActions(connection, draft.trust_levels);
   if ((draft.policy ?? []).length === 0 && unknown.length > 0) {
     issues.push({
       code: 'unknown-macro-action',
@@ -278,14 +278,14 @@ function resolvePrefill(
       ...where,
     });
   }
-  const written = prefillOfCrans(connection, crans, selected);
+  const written = prefillOfTrustLevels(connection, trustLevels, selected);
   const lines = written.lines.map(({ risk_id, quota, rate_limit, gate }): MissionPolicyEntry => ({
     risk_id,
     quota,
     rate_limit,
     gate,
   }));
-  return { everything: false, lines, left_out: written.left_out, crans, issues };
+  return { everything: false, lines, left_out: written.left_out, trustLevels, issues };
 }
 
 /** Where each line of a connection's policy ends up. */
@@ -611,13 +611,13 @@ export function previewConnection(
   const prefill = resolvePrefill(connection, draft, resources.selected, where);
 
   // A draft with explicit lines accepts exactly those; a draft without writes
-  // its policy from `everything-i-hold` or its crans, bounded by what the
+  // its policy from `everything-i-hold` or its trust levels, bounded by what the
   // creator holds and by what the selected resources can resolve.
   const explicit = draft.policy ?? [];
   const prefillOnly = explicit.length === 0 && (prefill.everything || prefill.lines.length > 0);
   const lines: readonly DraftPolicyEntry[] = prefillOnly ? prefill.lines : explicit;
   // Beside explicit lines, only `everything-i-hold` fills a budget a line omits;
-  // crans then only redraw the form, and a line without a budget is missing one.
+  // trust levels then only redraw the form, and a line without a budget is missing one.
   const fills = new Map(
     (prefillOnly || prefill.everything ? prefill.lines : []).map((line) => [line.risk_id, line]),
   );
@@ -652,7 +652,7 @@ export function previewConnection(
       unresolvable: buckets.unresolvable,
       missing_budget: buckets.missingBudget,
       left_out: prefillOnly ? [...prefill.left_out, ...buckets.leftOut] : [],
-      crans: prefill.crans,
+      trust_levels: prefill.trustLevels,
     },
     issues,
     notices: [
@@ -816,7 +816,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
       : { scope: 'selected', resource_ids: p.resources.map((r) => r.id) },
     preset: p.preset?.id ?? null,
     policy: p.passes,
-    crans: p.crans,
+    trust_levels: p.trust_levels,
   }));
 
   return {

@@ -2,7 +2,7 @@
 
 /**
  * The body of a service's reference: one section in view at a time, behind
- * tabs — the permissions compared across the trust crans (what a person reads
+ * tabs — the permissions compared across the trust levels (what a person reads
  * before giving any), the tools, then how the service is modelled. A text
  * filter narrows the list in view; a service whose model has several planes
  * gets a plane filter that slices every tab at once.
@@ -259,7 +259,7 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
         <p>
           A <strong>macro-action</strong> groups the permissions of one thing an agent does on the
           service, in its own words. A mission ticks macro-actions, each at a{' '}
-          <strong>trust cran</strong>: Prudent, Confiant or Autonome sets, from each permission’s
+          <strong>trust level</strong>: Prudent, Confiant or Autonome sets, from each permission’s
           palier (1 mild to 4 irreversible), whether it runs freely, asks first or is left out, and
           multiplies its limits ×1, ×3 or ×10. Ticking never gives more than you hold on the
           account, and a catalog that changes in a later version does not change a mission that

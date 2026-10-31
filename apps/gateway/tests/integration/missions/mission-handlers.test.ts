@@ -39,7 +39,7 @@ describe('missions: HTTP handlers', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          crans: { read: 'confiant', propose: 'confiant' },
+          trust_levels: { read: 'confiant', propose: 'confiant' },
         },
       ],
       period: { kind: 'recurring', length_seconds: 86_400 },
@@ -145,8 +145,8 @@ describe('missions: HTTP handlers', () => {
           connections: [
             {
               provider: 'github',
-              // Crans beside a policy decide nothing: they only redraw the form.
-              crans: { read: 'confiant', propose: 'confiant' },
+              // Trust levels beside a policy decide nothing: they only redraw the form.
+              trust_levels: { read: 'confiant', propose: 'confiant' },
               resources: { scope: 'selected', resource_refs: ['acme/app'] },
               policy: [
                 {
@@ -172,7 +172,7 @@ describe('missions: HTTP handlers', () => {
     expect(preview.resolved[0]?.connection_id).toBe(seeded.github.connection.id);
     expect(preview.resolved[0]?.resources).toMatchObject({ scope: 'selected' });
     expect(preview.resolved[0]?.resources).toHaveProperty('resource_ids', [expect.any(String)]);
-    expect(preview.resolved[0]?.crans).toEqual({ read: 'confiant', propose: 'confiant' });
+    expect(preview.resolved[0]?.trust_levels).toEqual({ read: 'confiant', propose: 'confiant' });
     expect(preview.policy.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.merge-protected', 'approval'],

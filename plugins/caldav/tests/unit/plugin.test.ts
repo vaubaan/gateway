@@ -46,8 +46,12 @@ describe('SDK kit', () => {
 });
 
 describe('macro-actions', () => {
-  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]): Record<string, string> =>
-    Object.fromEntries(policyFromMacroActions(caldavPlugin, crans).map((l) => [l.risk_id, l.gate]));
+  const gates = (
+    trustLevels: Parameters<typeof policyFromMacroActions>[1],
+  ): Record<string, string> =>
+    Object.fromEntries(
+      policyFromMacroActions(caldavPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
+    );
 
   test('reading at Prudent reads freely, writes nothing ; a wide range asks first', () => {
     expect(gates({ read: 'prudent' })).toEqual({

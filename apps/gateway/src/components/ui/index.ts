@@ -133,7 +133,7 @@ export {
   type Fact,
   type FeedTone,
 } from './Request.tsx';
-// Added with the mission pages: the rest behind "···", a choice among trust crans, a key shown
+// Added with the mission pages: the rest behind "···", a choice among trust levels, a key shown
 // once, a form with its rail
 export { MoreMenu, MenuItem } from './Menu.tsx';
 export { ChoiceRow, ChoiceChip } from './Choice.tsx';

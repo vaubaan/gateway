@@ -15,7 +15,7 @@ import { loadMissionContext } from '../../../src/server/execution/mission-contex
 import {
   macroActionsOf,
   MissionService,
-  TRUST_CRANS,
+  TRUST_TRUST_LEVELS,
   type MissionDraft,
 } from '../../../src/server/missions';
 import { catalogEnvs, seedConnection } from '../../../src/server/missions/testing';
@@ -28,16 +28,16 @@ const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
  * Read and propose at Confiant: reads, pushes and pull requests run freely,
  * a force-push or a branch delete asks first.
  */
-const DEVELOPER_CRANS = { read: 'confiant', propose: 'confiant' } as const;
+const DEVELOPER_TRUST_LEVELS = { read: 'confiant', propose: 'confiant' } as const;
 /** What the former Supabase `staging-developer` preset stood for: query, change data, schema and functions. */
-const SUPABASE_STAGING_CRANS = {
+const SUPABASE_STAGING_TRUST_LEVELS = {
   query: 'confiant',
   'change-data': 'confiant',
   'change-schema': 'confiant',
   'ship-functions': 'confiant',
 } as const;
 /** Watch and deploy on Vercel at Confiant. */
-const VERCEL_DEVELOPER_CRANS = { watch: 'confiant', deploy: 'confiant' } as const;
+const VERCEL_DEVELOPER_TRUST_LEVELS = { watch: 'confiant', deploy: 'confiant' } as const;
 
 describe('missions: issue, rotate, revoke', () => {
   let root: GatewayRoot;
@@ -56,7 +56,9 @@ describe('missions: issue, rotate, revoke', () => {
   function githubDraft(overrides: Partial<MissionDraft> = {}): MissionDraft {
     return {
       name: 'Ship the billing page',
-      connections: [{ connection_id: seeded.github.connection.id, crans: DEVELOPER_CRANS }],
+      connections: [
+        { connection_id: seeded.github.connection.id, trust_levels: DEVELOPER_TRUST_LEVELS },
+      ],
       period: DAILY,
       expires_at: null,
       ...overrides,
@@ -141,12 +143,12 @@ describe('missions: issue, rotate, revoke', () => {
         resourceScope: 'selected',
         resourceIds: seeded.github.resources.map((r) => r.id).sort(),
         // Kept only to redraw the form: the policy below is what decides.
-        crans: DEVELOPER_CRANS,
+        trustLevels: DEVELOPER_TRUST_LEVELS,
       },
     ]);
     // Every row of the two macro-actions: at Confiant, none is left out.
     expect(mission.policy.map((e) => e.riskId).sort()).toEqual(
-      githubActionRows(Object.keys(DEVELOPER_CRANS)).sort(),
+      githubActionRows(Object.keys(DEVELOPER_TRUST_LEVELS)).sort(),
     );
     expect(mission.policy.map((e) => e.riskId).sort()).toEqual(
       preview.policy.map((e) => e.risk_id).sort(),
@@ -182,7 +184,7 @@ describe('missions: issue, rotate, revoke', () => {
     const { mission, token } = await issued(
       {
         name: 'Nothing to touch yet',
-        connections: [{ connection_id: empty.connection.id, crans: { read: 'prudent' } }],
+        connections: [{ connection_id: empty.connection.id, trust_levels: { read: 'prudent' } }],
         period: DAILY,
         expires_at: null,
       },
@@ -193,7 +195,7 @@ describe('missions: issue, rotate, revoke', () => {
         connectionId: empty.connection.id,
         resourceScope: 'all',
         resourceIds: [],
-        crans: { read: 'prudent' },
+        trustLevels: { read: 'prudent' },
       },
     ]);
 
@@ -286,7 +288,7 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: connectionId,
-            crans: DEVELOPER_CRANS,
+            trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/infra'] },
           },
         ],
@@ -302,7 +304,7 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: connectionId,
-            crans: DEVELOPER_CRANS,
+            trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
           },
         ],
@@ -321,14 +323,19 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: connectionId,
-            crans: DEVELOPER_CRANS,
+            trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'connection' },
           },
         ],
       }),
     );
     expect(mission.connections).toEqual([
-      { connectionId, resourceScope: 'connection', resourceIds: [], crans: DEVELOPER_CRANS },
+      {
+        connectionId,
+        resourceScope: 'connection',
+        resourceIds: [],
+        trustLevels: DEVELOPER_TRUST_LEVELS,
+      },
     ]);
     expect(kit.agent_instructions).toContain(
       'the whole account, including resources discovered later (known now:',
@@ -531,7 +538,9 @@ describe('missions: issue, rotate, revoke', () => {
       expires_at: null,
       token_prefix: token.prefix,
     });
-    expect(mission.policy).toHaveLength(githubActionRows(Object.keys(DEVELOPER_CRANS)).length);
+    expect(mission.policy).toHaveLength(
+      githubActionRows(Object.keys(DEVELOPER_TRUST_LEVELS)).length,
+    );
     expect(JSON.stringify(entry)).not.toMatch(/connectionId|resourceScope|resourceIds|riskId/);
     const secretPart = token.secret.slice(-32);
     expect(JSON.stringify(audit)).not.toContain(secretPart);
@@ -587,11 +596,14 @@ describe('missions: issue, rotate, revoke', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          crans: { read: 'prudent' },
+          trust_levels: { read: 'prudent' },
           resources: { scope: 'selected', resource_refs: ['acme/app'] },
         },
-        { connection_id: seeded.supabase.connection.id, crans: SUPABASE_STAGING_CRANS },
-        { connection_id: seeded.vercel.connection.id, crans: VERCEL_DEVELOPER_CRANS },
+        {
+          connection_id: seeded.supabase.connection.id,
+          trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
+        },
+        { connection_id: seeded.vercel.connection.id, trust_levels: VERCEL_DEVELOPER_TRUST_LEVELS },
       ],
       period: DAILY,
       expires_at: null,
@@ -622,7 +634,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(result.kit.agent_instructions).not.toContain('`acme/web`');
   });
 
-  it('refuses env-qualified entries no selected resource carries, and leaves them out of the crans', async () => {
+  it('refuses env-qualified entries no selected resource carries, and leaves them out of the trust levels', async () => {
     const prodOnly = { scope: 'selected', resource_refs: ['prdprojectref'] } as const;
     const explicit = await missions.preview(seeded.ada, {
       name: 'Prod only',
@@ -652,26 +664,28 @@ describe('missions: issue, rotate, revoke', () => {
       { risk_id: 'supabase[staging].bulk-row-write', env: 'staging' },
     ]);
 
-    const fromCrans = await missions.preview(seeded.ada, {
+    const fromTrustLevels = await missions.preview(seeded.ada, {
       name: 'Prod only',
       connections: [
         {
           connection_id: seeded.supabase.connection.id,
           resources: prodOnly,
-          crans: SUPABASE_STAGING_CRANS,
+          trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
         },
       ],
       period: DAILY,
       expires_at: null,
     });
-    expect(fromCrans.ok).toBe(true);
-    const leftOut = fromCrans.connections[0]?.left_out ?? [];
+    expect(fromTrustLevels.ok).toBe(true);
+    const leftOut = fromTrustLevels.connections[0]?.left_out ?? [];
     expect(leftOut.length).toBeGreaterThan(0);
     // At Confiant no palier is left out: only the environments no project carries.
     expect(leftOut.every((s) => s.reason === 'unresolvable-env' && s.env !== 'prod')).toBe(true);
     expect(leftOut.map((s) => s.risk_id)).toContain('supabase[staging].bulk-row-write');
-    expect(fromCrans.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);
-    expect(fromCrans.policy.map((e) => e.risk_id)).toContain('supabase[prod].migration-write');
+    expect(fromTrustLevels.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);
+    expect(fromTrustLevels.policy.map((e) => e.risk_id)).toContain(
+      'supabase[prod].migration-write',
+    );
   });
 
   it('duplicates a mission: same policy, its own token and budget, source untouched', async () => {
@@ -680,9 +694,9 @@ describe('missions: issue, rotate, revoke', () => {
         connections: [
           {
             connection_id: seeded.github.connection.id,
-            crans: DEVELOPER_CRANS,
+            trust_levels: DEVELOPER_TRUST_LEVELS,
             resources: { scope: 'selected', resource_refs: ['acme/app', 'acme/web'] },
-            // Beside a policy the crans decide nothing: each line carries its budget.
+            // Beside a policy the trust levels decide nothing: each line carries its budget.
             policy: [
               { risk_id: 'github.read-code', quota: 7, rate_limit: { max: 5, window_seconds: 60 } },
               { risk_id: 'github.create-pr', quota: 3, rate_limit: { max: 1, window_seconds: 60 } },
@@ -905,7 +919,9 @@ describe('missions: issuance context', () => {
     expect(context.find((c) => c.provider === 'github')?.status).toBe('expired');
     const preview = await service.preview(seeded.ada, {
       name: 'On an expired connection',
-      connections: [{ connection_id: seeded.github.connection.id, crans: { read: 'prudent' } }],
+      connections: [
+        { connection_id: seeded.github.connection.id, trust_levels: { read: 'prudent' } },
+      ],
       period: DAILY,
       expires_at: null,
     });
@@ -923,7 +939,7 @@ describe('missions: issuance context', () => {
     });
     const preview = await service.preview(seeded.bob, {
       name: 'One project without a label',
-      connections: [{ connection_id: connection.id, crans: SUPABASE_STAGING_CRANS }],
+      connections: [{ connection_id: connection.id, trust_levels: SUPABASE_STAGING_TRUST_LEVELS }],
       period: DAILY,
       expires_at: null,
     });
@@ -939,7 +955,9 @@ describe('missions: issuance context', () => {
     // Vercel derives the environment from the call: nothing to say.
     const vercel = await root.missions.service.preview(seeded.ada, {
       name: 'Vercel',
-      connections: [{ connection_id: seeded.vercel.connection.id, crans: VERCEL_DEVELOPER_CRANS }],
+      connections: [
+        { connection_id: seeded.vercel.connection.id, trust_levels: VERCEL_DEVELOPER_TRUST_LEVELS },
+      ],
       period: DAILY,
       expires_at: null,
     });
@@ -968,7 +986,7 @@ describe('missions: issuance context', () => {
             scope: 'selected' as const,
             resource_refs: ['created-yesterday', 'created-today'],
           },
-          crans: SUPABASE_STAGING_CRANS,
+          trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
         },
       ],
       period: DAILY,
@@ -995,7 +1013,7 @@ describe('missions: issuance context', () => {
     expect(issued.ok).toBe(true);
   });
 
-  it('issues every macro-action of every registered plugin at every cran cleanly for an owner with labelled resources', async () => {
+  it('issues every macro-action of every registered plugin at every trust level cleanly for an owner with labelled resources', async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
     let composed = 0;
@@ -1012,19 +1030,21 @@ describe('missions: issuance context', () => {
       );
       const known = new Set(issuance?.risks.map((r) => r.risk_id));
       for (const action of issuance?.macro_actions ?? []) {
-        for (const cran of TRUST_CRANS) {
-          const where = `${provider}/${action.id}@${cran}`;
+        for (const trustLevel of TRUST_TRUST_LEVELS) {
+          const where = `${provider}/${action.id}@${trustLevel}`;
           const preview = await service.preview(seeded.bob, {
             name: where,
-            connections: [{ connection_id: connection.id, crans: { [action.id]: cran } }],
+            connections: [
+              { connection_id: connection.id, trust_levels: { [action.id]: trustLevel } },
+            ],
             period: DAILY,
             expires_at: null,
           });
           const leftOut = preview.connections[0]?.left_out ?? [];
           // The owner holds the whole catalog and every environment is labelled:
-          // only the cran itself leaves a risk out.
+          // only the trust level itself leaves a risk out.
           expect(
-            leftOut.every((s) => s.reason === 'cran'),
+            leftOut.every((s) => s.reason === 'trust-level'),
             where,
           ).toBe(true);
           if (preview.policy.length === 0) {

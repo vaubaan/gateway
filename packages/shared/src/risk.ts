@@ -153,7 +153,7 @@ export interface RiskEntry {
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
   /** 6D vector explaining the risk's profile. Drives UI ordering, audit
-   *  explainability and the palier a trust cran pre-fills a gate from
+   *  explainability and the palier a trust level pre-fills a gate from
    *  (ADR macro-actions-and-trust-levels-prefill-the-policy) ; the runtime
    *  derives no decision from it.
    *  When `vector_overrides` is present this is the default (non-prod)
@@ -249,7 +249,7 @@ export interface MacroActionEntry extends Budget {
 /**
  * What a mission creator ticks on a connection, in the connector's own words
  * (ADR macro-actions-and-trust-levels-prefill-the-policy). Every entry but the
- * fallback belongs to exactly one macro-action ; a trust cran turns its
+ * fallback belongs to exactly one macro-action ; a trust level turns its
  * entries into explicit policy lines. Never a grant by itself.
  */
 export interface MacroAction {

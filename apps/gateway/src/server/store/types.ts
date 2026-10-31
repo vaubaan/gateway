@@ -224,10 +224,10 @@ export interface MissionConnection {
    */
   readonly resourceSources?: Readonly<Record<string, MissionResourceSource>>;
   /**
-   * The trust cran of each ticked macro-action, by macro-action id (`crans_json`, migration
+   * The trust level of each ticked macro-action, by macro-action id (`crans_json`, migration
    * 0025): display only, it redraws the form; absent when none was recorded.
    */
-  readonly crans?: Readonly<Record<string, string>>;
+  readonly trustLevels?: Readonly<Record<string, string>>;
 }
 
 export interface MissionRecord {

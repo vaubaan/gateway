@@ -12,7 +12,7 @@
  * from the creator's current authority at every read (spec §2.3), with the
  * reason in `MissionOverview.orphan`. Nothing here reads a stored status.
  *
- * **No mission rule is restated here.** What a macro-action yields at a cran
+ * **No mission rule is restated here.** What a macro-action yields at a trust level
  * on a connection is `expandMacroAction`, what the built-in `everything-i-hold`
  * writes out is `everythingIHold`, whether an env-qualified id can be reached is
  * `isResolvable`, whether an orphaned mission can serve again is
@@ -22,8 +22,8 @@
 import type { Budget, Gate, MissionPolicyEntry, RiskId } from '@vaubaan/shared';
 
 import {
-  CRAN_BUDGET_FACTOR,
-  CRAN_GATES,
+  TRUST_LEVEL_BUDGET_FACTOR,
+  TRUST_LEVEL_GATES,
   defaultResources,
   everythingIHold,
   expandMacroAction,
@@ -31,7 +31,7 @@ import {
   isResolvable,
   macroActionOfRisk,
   palierOf,
-  TRUST_CRANS,
+  TRUST_TRUST_LEVELS,
   type DraftPeriod,
   type IssuanceConnection,
   type MissionDetail,
@@ -40,7 +40,7 @@ import {
   type MissionPreview,
   type Palier,
   reachesLaterResources,
-  type TrustCran,
+  type TrustLevel,
 } from '../missions';
 import type { ProviderCatalog } from './ports';
 
@@ -78,13 +78,13 @@ export interface EnvUsabilityView {
   readonly unusable_risk_ids: readonly RiskId[];
 }
 
-/** What one macro-action at one cran writes on this connection, with the resources known now. */
-export interface CranYieldView {
+/** What one macro-action at one trust level writes on this connection, with the resources known now. */
+export interface TrustLevelYieldView {
   /** Lines that run freely. */
   readonly auto: number;
   /** Lines that ask the creator first. */
   readonly approval: number;
-  /** Risks the cran does not accept (palier 4 at Prudent). */
+  /** Risks the trust level does not accept (palier 4 at Prudent). */
   readonly left_out: number;
 }
 
@@ -93,11 +93,11 @@ export interface MacroActionSummaryView {
   readonly label: string;
   readonly description: string;
   /**
-   * What `crans: { [id]: cran }` writes here at each cran, over the resources
+   * What `trust levels: { [id]: trust level }` writes here at each trust level, over the resources
    * known now (the draft's default `all`). A narrower selection yields fewer
    * lines; `preview_policy` says which.
    */
-  readonly at_cran: Readonly<Record<TrustCran, CranYieldView>>;
+  readonly at_trust_level: Readonly<Record<TrustLevel, TrustLevelYieldView>>;
   /** Risks of the macro-action outside the user's authority here, or that no resource can reach. */
   readonly unavailable: readonly RiskId[];
 }
@@ -143,8 +143,8 @@ function macroActionSummary(
   action: IssuanceConnection['macro_actions'][number],
 ): MacroActionSummaryView {
   const resources = defaultResources(connection);
-  const at = (cran: TrustCran): CranYieldView => {
-    const { lines, left_out } = expandMacroAction(connection, action, cran, resources);
+  const at = (trustLevel: TrustLevel): TrustLevelYieldView => {
+    const { lines, left_out } = expandMacroAction(connection, action, trustLevel, resources);
     const approval = lines.filter((line) => line.gate === 'approval').length;
     return { auto: lines.length - approval, approval, left_out: left_out.length };
   };
@@ -153,7 +153,7 @@ function macroActionSummary(
     id: action.id,
     label: action.label,
     description: action.description,
-    at_cran: { prudent: at('prudent'), confiant: at('confiant'), autonome: at('autonome') },
+    at_trust_level: { prudent: at('prudent'), confiant: at('confiant'), autonome: at('autonome') },
     unavailable: unavailable.map((risk) => risk.risk_id),
   };
 }
@@ -226,7 +226,7 @@ export interface CatalogRiskView {
   readonly label: string;
   readonly reason: string;
   readonly level: string;
-  /** 1 mild to 4 irreversible, read from the vector: what a cran maps to a gate. */
+  /** 1 mild to 4 irreversible, read from the vector: what a trust level maps to a gate. */
   readonly palier: Palier;
   /** The macro-action the risk belongs to; `anything-else` for the fallback, `null` when deprecated. */
   readonly macro_action: string | null;
@@ -248,8 +248,8 @@ export interface CatalogView {
   readonly risks: readonly CatalogRiskView[];
   /** The macro-actions, each risk with its base budget (unqualified ids: one line per environment reached). */
   readonly macro_actions: readonly CatalogMacroActionView[];
-  /** Per cran: the gate of each palier (`null`: not accepted) and the factor on the base budget. */
-  readonly crans: Readonly<Record<TrustCran, CranRuleView>>;
+  /** Per trust level: the gate of each palier (`null`: not accepted) and the factor on the base budget. */
+  readonly trust_levels: Readonly<Record<TrustLevel, TrustLevelRuleView>>;
   /** With a connection: the built-in `everything-i-hold` written out for it, entry by entry. */
   readonly everything_i_hold?: {
     readonly label: string;
@@ -265,25 +265,24 @@ export interface CatalogMacroActionView {
   readonly entries: readonly ({ readonly risk_id: RiskId } & Budget)[];
 }
 
-export interface CranRuleView {
+export interface TrustLevelRuleView {
   readonly gates: Readonly<Record<`${Palier}`, Gate | null>>;
   readonly budget_factor: number;
 }
 
-function cranRules(): Record<TrustCran, CranRuleView> {
-  const rule = (cran: TrustCran): CranRuleView => ({
+function trustLevelRules(): Record<TrustLevel, TrustLevelRuleView> {
+  const rule = (trustLevel: TrustLevel): TrustLevelRuleView => ({
     gates: {
-      '1': CRAN_GATES[cran][1],
-      '2': CRAN_GATES[cran][2],
-      '3': CRAN_GATES[cran][3],
-      '4': CRAN_GATES[cran][4],
+      '1': TRUST_LEVEL_GATES[trustLevel][1],
+      '2': TRUST_LEVEL_GATES[trustLevel][2],
+      '3': TRUST_LEVEL_GATES[trustLevel][3],
+      '4': TRUST_LEVEL_GATES[trustLevel][4],
     },
-    budget_factor: CRAN_BUDGET_FACTOR[cran],
+    budget_factor: TRUST_LEVEL_BUDGET_FACTOR[trustLevel],
   });
-  return Object.fromEntries(TRUST_CRANS.map((cran) => [cran, rule(cran)])) as Record<
-    TrustCran,
-    CranRuleView
-  >;
+  return Object.fromEntries(
+    TRUST_TRUST_LEVELS.map((trustLevel) => [trustLevel, rule(trustLevel)]),
+  ) as Record<TrustLevel, TrustLevelRuleView>;
 }
 
 export function catalogView(
@@ -319,7 +318,7 @@ export function catalogView(
         rate_limit: entry.rate_limit,
       })),
     })),
-    crans: cranRules(),
+    trust_levels: trustLevelRules(),
     ...(connection
       ? (() => {
           const everything = everythingOf(connection);
@@ -605,8 +604,8 @@ export interface PreviewView {
     readonly unresolvable: MissionPreview['connections'][number]['unresolvable'];
     readonly missing_budget: readonly RiskId[];
     readonly left_out: MissionPreview['connections'][number]['left_out'];
-    /** The crans kept with the mission: the ones naming a macro-action of the connection. */
-    readonly crans: MissionPreview['connections'][number]['crans'];
+    /** The trust levels kept with the mission: the ones naming a macro-action of the connection. */
+    readonly trust_levels: MissionPreview['connections'][number]['trust_levels'];
   }[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
@@ -635,7 +634,7 @@ export function previewView(preview: MissionPreview): PreviewView {
       unresolvable: c.unresolvable,
       missing_budget: c.missing_budget,
       left_out: c.left_out,
-      crans: c.crans,
+      trust_levels: c.trust_levels,
     })),
     period: preview.period,
     expires_at: preview.expires_at,

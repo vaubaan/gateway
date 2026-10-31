@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { everythingIHold } from '@/server/missions/everything-i-hold';
-import type { MacroActionCrans } from '@/server/missions/macro-actions';
+import type { MacroActionTrustLevels } from '@/server/missions/macro-actions';
 import { previewDraft } from '@/server/missions/preview';
 import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from '@/server/missions/testing';
 
 import {
-  applyCrans,
+  applyTrustLevels,
   applyEverything,
   availableCount,
   chosenPalier,
@@ -48,7 +48,7 @@ const acme = acmeConnection();
 const context = [acme];
 
 /** Reads at Confiant, changes at Prudent: the usual start of a working mission. */
-const WORKING: MacroActionCrans = { read: 'confiant', change: 'prudent' };
+const WORKING: MacroActionTrustLevels = { read: 'confiant', change: 'prudent' };
 
 function riskOf(id: string) {
   const risk = acme.risks.find((r) => r.risk_id === id);
@@ -66,9 +66,11 @@ function withConnection(state: FormState, cs: ConnectionState): FormState {
   return { ...state, connections: { ...state.connections, [acme.id]: cs } };
 }
 
-function included(crans: MacroActionCrans = {}, connection = acme): ConnectionState {
+function included(trustLevels: MacroActionTrustLevels = {}, connection = acme): ConnectionState {
   const cs = setIncluded(connectionOf(initialFormState(context)), true);
-  return Object.keys(crans).length > 0 ? applyCrans(connection, { ...cs, crans }) : cs;
+  return Object.keys(trustLevels).length > 0
+    ? applyTrustLevels(connection, { ...cs, trustLevels })
+    : cs;
 }
 
 function previewOf(cs: ConnectionState, name = 'Mission') {
@@ -84,7 +86,7 @@ describe('creation form — initial state', () => {
       view: 'simple',
       resourceScope: 'all',
       resourceIds: ['res-app-staging', 'res-app-prod', 'res-scratch'],
-      crans: {},
+      trustLevels: {},
       everything: false,
       entries: {},
       edited: false,
@@ -127,7 +129,7 @@ describe('creation form — curated resources', () => {
   });
 });
 
-describe('creation form — macro-actions at a cran', () => {
+describe('creation form — macro-actions at a trust level', () => {
   it('lists the catalog\'s macro-actions, then "Anything else" holding the fallback', () => {
     expect(acme.macro_actions.map((a) => a.id)).toEqual([
       'read',
@@ -140,7 +142,7 @@ describe('creation form — macro-actions at a cran', () => {
     ]);
   });
 
-  it('fills the lines of each ticked macro-action from its cran, and the draft is issuable', () => {
+  it('fills the lines of each ticked macro-action from its trust level, and the draft is issuable', () => {
     const cs = included(WORKING);
     expect(cs.entries).toEqual({
       // Palier 1 at Confiant: runs freely, base budget ×3.
@@ -157,7 +159,13 @@ describe('creation form — macro-actions at a cran', () => {
     const prudent = macroActionRows(acme, included({ change: 'prudent' })).find(
       (row) => row.id === 'change',
     );
-    expect(prudent).toMatchObject({ cran: 'prudent', free: 0, asks: 2, leftOut: 1, total: 3 });
+    expect(prudent).toMatchObject({
+      trustLevel: 'prudent',
+      free: 0,
+      asks: 2,
+      leftOut: 1,
+      total: 3,
+    });
     const autonome = setMacroAction(acme, included(), 'change', 'autonome');
     expect(autonome.entries['acme[staging].write']?.gate).toBe('auto');
     expect(autonome.entries['acme[staging].bulk-delete']).toEqual({
@@ -168,7 +176,7 @@ describe('creation form — macro-actions at a cran', () => {
     });
   });
 
-  it('keeps the rate under the catalog ceiling whatever the cran multiplies', () => {
+  it('keeps the rate under the catalog ceiling whatever the trust level multiplies', () => {
     const cs = included({ administer: 'autonome' });
     expect(cs.entries['acme.admin']).toMatchObject({ quota: '50', rateMax: '10' });
   });
@@ -195,22 +203,22 @@ describe('creation form — macro-actions at a cran', () => {
     expect(previewOf(cleaned).ok).toBe(true);
   });
 
-  it('sends the explicit lines and the crans, never a preset', () => {
+  it('sends the explicit lines and the trust levels, never a preset', () => {
     const draft = draftOf(
       context,
       withConnection(initialFormState(context), included(WORKING)),
       NOW,
     );
-    expect(draft.connections[0]).toMatchObject({ preset: null, crans: WORKING });
+    expect(draft.connections[0]).toMatchObject({ preset: null, trust_levels: WORKING });
     expect(draft.connections[0]?.policy?.map((e) => e.risk_id)).toEqual([
       'acme.read',
       'acme[staging].write',
       'acme[prod].write',
     ]);
-    // No macro-action ticked: no crans sent.
+    // No macro-action ticked: no trust levels sent.
     const bare = toggleRisk(acme, included(), riskOf('acme.read'));
     const none = draftOf(context, withConnection(initialFormState(context), bare), NOW);
-    expect(none.connections[0]).not.toHaveProperty('crans');
+    expect(none.connections[0]).not.toHaveProperty('trust_levels');
   });
 
   it('counts the policy and names its highest palier', () => {
@@ -233,17 +241,17 @@ describe('creation form — Simple and Advanced', () => {
     expect(JSON.stringify(draftIn(advanced))).not.toMatch(/simple|advanced|view/);
   });
 
-  it('warns before the crans rewrite edits, and resets to what the crans write', () => {
+  it('warns before the trust levels rewrite edits, and resets to what the trust levels write', () => {
     const edited = updateEntry(setView(included(WORKING), 'advanced'), 'acme.read', {
       quota: '7',
     });
     expect(discardsEdits(edited)).toBe(true);
     const back = resetEdits(acme, edited);
-    expect(back).toMatchObject({ edited: false, crans: WORKING });
+    expect(back).toMatchObject({ edited: false, trustLevels: WORKING });
     expect(back.entries['acme.read']?.quota).toBe('300');
   });
 
-  it("gives a hand-ticked risk its macro-action's base budget at that cran, else none", () => {
+  it("gives a hand-ticked risk its macro-action's base budget at that trust level, else none", () => {
     expect(defaultEntryFor(acme, {}, riskOf('acme.read'))).toEqual({
       quota: '100',
       rateMax: '60',
@@ -269,42 +277,47 @@ describe('creation form — Simple and Advanced', () => {
     });
   });
 
-  it('redraws a loaded mission in the simple view when its crans write its lines', () => {
+  it('redraws a loaded mission in the simple view when its trust levels write its lines', () => {
     const source = previewOf(included(WORKING));
     const loaded = connectionOf(loadResolved(context, initialFormState(context), source.resolved));
-    expect(loaded).toMatchObject({ view: 'simple', edited: false, crans: WORKING, included: true });
+    expect(loaded).toMatchObject({
+      view: 'simple',
+      edited: false,
+      trustLevels: WORKING,
+      included: true,
+    });
   });
 
-  it('opens a loaded mission in the advanced view when its lines differ from its crans', () => {
+  it('opens a loaded mission in the advanced view when its lines differ from its trust levels', () => {
     const adjusted = previewOf(updateEntry(included(WORKING), 'acme.read', { quota: '9' }));
     const loaded = connectionOf(
       loadResolved(context, initialFormState(context), adjusted.resolved),
     );
-    expect(loaded).toMatchObject({ view: 'advanced', edited: true, crans: WORKING });
+    expect(loaded).toMatchObject({ view: 'advanced', edited: true, trustLevels: WORKING });
     expect(loaded.entries['acme.read']?.quota).toBe('9');
     expect(previewOf(loaded).policy).toEqual(adjusted.policy);
-    // No crans recorded (an older mission, a proposal): the advanced view too.
+    // No trust levels recorded (an older mission, a proposal): the advanced view too.
     const bare = previewOf(toggleRisk(acme, included(), riskOf('acme.read')));
     expect(connectionOf(loadResolved(context, initialFormState(context), bare.resolved)).view).toBe(
       'advanced',
     );
   });
 
-  it('drops the crans of a macro-action the connection does not have', () => {
+  it('drops the trust levels of a macro-action the connection does not have', () => {
     const source = previewOf(included(WORKING));
     const [line] = source.resolved;
     if (!line) throw new Error('no resolved line');
     const loaded = connectionOf(
       loadResolved(context, initialFormState(context), [
-        { ...line, crans: { ...line.crans, nonsense: 'autonome' } },
+        { ...line, trust_levels: { ...line.trust_levels, nonsense: 'autonome' } },
       ]),
     );
-    expect(loaded.crans).toEqual(WORKING);
+    expect(loaded.trustLevels).toEqual(WORKING);
   });
 });
 
 describe('creation form — per-risk detail', () => {
-  it('overrides one line the crans wrote and issues the adjusted values', () => {
+  it('overrides one line the trust levels wrote and issues the adjusted values', () => {
     let cs = included(WORKING);
     cs = updateEntry(cs, 'acme.read', { quota: '25', rateMax: '3', rateWindow: '10' });
     cs = updateEntry(cs, 'acme[staging].write', { gate: 'approval' });
@@ -352,7 +365,7 @@ describe('creation form — per-risk detail', () => {
     // Neither the fallback nor a deprecated entry is part of "all".
     expect(cs.entries['acme.uncategorized-write']).toBeUndefined();
     expect(cs.entries['acme.legacy-export']).toBeUndefined();
-    // The crans' values are kept for what they already wrote.
+    // The trust levels' values are kept for what they already wrote.
     expect(cs.entries['acme.read']?.quota).toBe('300');
     const draft = draftOf(context, withConnection(initialFormState(context), cs), NOW);
     expect(draft.connections[0]?.policy?.map((e) => e.risk_id)).toEqual([
@@ -402,7 +415,7 @@ describe('creation form — period, expiry, loading a draft', () => {
     expect(expiryOf({ expiry: 'custom', expiryCustom: '' }, NOW)).toBe('unset');
   });
 
-  it('loads a resolved draft: included, ticked with its values, protected from the crans', () => {
+  it('loads a resolved draft: included, ticked with its values, protected from the trust levels', () => {
     const source = previewOf(updateEntry(included(WORKING), 'acme.read', { quota: '9' }));
     const loaded = loadResolved(context, initialFormState(context), source.resolved);
     const cs = connectionOf(loaded);
@@ -533,7 +546,7 @@ describe('creation form — how far the mission reaches on an account', () => {
         resources: { scope: 'connection' },
         preset: null,
         policy: [],
-        crans: {},
+        trust_levels: {},
       },
     ]);
     expect(loaded.connections['conn-acme']?.resourceScope).toBe('connection');
@@ -541,9 +554,9 @@ describe('creation form — how far the mission reaches on an account', () => {
 });
 
 describe('creation form — "Everything I hold on this account"', () => {
-  it('is offered on every account, and fills the explicit list in place of the crans', () => {
+  it('is offered on every account, and fills the explicit list in place of the trust levels', () => {
     const cs = applyEverything(acme, included(WORKING));
-    expect(cs.crans).toEqual({});
+    expect(cs.trustLevels).toEqual({});
     const expected = everythingIHold(acme, ACME_RESOURCES).entries;
     expect(Object.keys(cs.entries)).toEqual(expected.map((e) => e.risk_id));
     expect(cs.entries['acme.admin']).toEqual({
