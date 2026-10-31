@@ -9,7 +9,7 @@
  * an agent reads when it composes a draft, so they state the rules of
  * issuance, not only the types.
  */
-import { TRUST_TRUST_LEVELS } from '@vaubaan/policy-engine';
+import { TRUST_LEVELS } from '@vaubaan/policy-engine';
 import { GATES } from '@vaubaan/shared';
 import { z } from 'zod';
 
@@ -103,7 +103,7 @@ const connectionSchema = z
       .optional()
       .describe('Exactly the risks the mission accepts on this connection, each with its budget.'),
     trust_levels: z
-      .record(z.string().max(64), z.enum(TRUST_TRUST_LEVELS))
+      .record(z.string().max(64), z.enum(TRUST_LEVELS))
       .optional()
       .describe(
         'The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s tier, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.',

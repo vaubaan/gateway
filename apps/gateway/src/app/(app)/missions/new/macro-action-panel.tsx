@@ -21,7 +21,7 @@ import {
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
   DEFAULT_TRUST_LEVEL,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type TrustLevel,
 } from '@/server/missions/macro-actions';
 import type { IssuanceConnection } from '@/server/missions/model';
@@ -201,7 +201,7 @@ function MacroActionLine({
       <ChoiceRow
         legend={`Trust level of ${row.label} on ${connection.provider_label} ${connection.display_name}`}
       >
-        {TRUST_TRUST_LEVELS.map((trustLevel) => (
+        {TRUST_LEVELS.map((trustLevel) => (
           <ChoiceChip
             key={trustLevel}
             name={`trust-level-${connection.id}-${row.id}`}

@@ -131,7 +131,7 @@ export {
   macroActionOfRisk,
   macroActionsOf,
   tierOf,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type Tier,
   type TrustLevel,
 } from './macro-actions';

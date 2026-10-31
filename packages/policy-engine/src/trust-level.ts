@@ -36,14 +36,14 @@ export function tierOf(vector: RiskVector): Tier {
   return 1;
 }
 
-export const TRUST_TRUST_LEVELS = ['careful', 'trusting', 'autonomous'] as const;
-export type TrustLevel = (typeof TRUST_TRUST_LEVELS)[number];
+export const TRUST_LEVELS = ['careful', 'trusting', 'autonomous'] as const;
+export type TrustLevel = (typeof TRUST_LEVELS)[number];
 
 /** The lowest trust level : where a new macro-action starts. */
 export const DEFAULT_TRUST_LEVEL: TrustLevel = 'careful';
 
 export function isTrustLevel(raw: unknown): raw is TrustLevel {
-  return typeof raw === 'string' && (TRUST_TRUST_LEVELS as readonly string[]).includes(raw);
+  return typeof raw === 'string' && (TRUST_LEVELS as readonly string[]).includes(raw);
 }
 
 /** Per trust level and tier : the gate of the line, or `null` when the risk is not accepted. */

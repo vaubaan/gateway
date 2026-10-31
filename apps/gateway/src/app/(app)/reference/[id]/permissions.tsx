@@ -36,7 +36,7 @@ import {
 import {
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
 } from '@/server/missions/macro-actions';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
@@ -96,7 +96,7 @@ export function PermissionComparison({
   /** A filter is on: an empty list then means "nothing matches", not "no permission". */
   filtered: boolean;
 }) {
-  const span = TRUST_TRUST_LEVELS.length + 2;
+  const span = TRUST_LEVELS.length + 2;
   const ids = groups.flatMap((group) => group.entries.map((entry) => entry.base_id));
   const allOpen = ids.length > 0 && ids.every((id) => expanded.has(id));
 
@@ -158,7 +158,7 @@ export function PermissionComparison({
               <th scope="col" className={styles.severityHead}>
                 {SEVERITY_LABEL}
               </th>
-              {TRUST_TRUST_LEVELS.map((trustLevel) => (
+              {TRUST_LEVELS.map((trustLevel) => (
                 <th
                   key={trustLevel}
                   scope="col"
@@ -243,7 +243,7 @@ export function PermissionComparison({
                       <td className={styles.severityCell}>
                         {shown && <SeverityChip level={shown.level} />}
                       </td>
-                      {TRUST_TRUST_LEVELS.map((trustLevel) => (
+                      {TRUST_LEVELS.map((trustLevel) => (
                         <td
                           key={trustLevel}
                           className={styles.trustLevelCell}
@@ -354,7 +354,7 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
             <>
               {entry.macro_action.label}
               <ul className={styles.patterns}>
-                {TRUST_TRUST_LEVELS.flatMap((trustLevel) =>
+                {TRUST_LEVELS.flatMap((trustLevel) =>
                   entry.at_trust_level[trustLevel].map(({ risk, tier, line }) => (
                     <li key={`${trustLevel}:${risk.risk_id}`}>
                       {TRUST_LEVEL_LABELS[trustLevel]}

@@ -11,7 +11,7 @@ import {
   TRUST_LEVEL_GATES,
   expandAtTrustLevel,
   tierOf,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type TrustLevelCandidate,
 } from '../../src/trust-level.ts';
 
@@ -48,13 +48,13 @@ describe('the trust levels', () => {
   test('a higher trust level never asks more nor accepts less', () => {
     const rank = (g: string | null) => (g === null ? 0 : g === 'approval' ? 1 : 2);
     for (const tier of [1, 2, 3, 4] as const) {
-      const ranks = TRUST_TRUST_LEVELS.map((c) => rank(TRUST_LEVEL_GATES[c][tier]));
+      const ranks = TRUST_LEVELS.map((c) => rank(TRUST_LEVEL_GATES[c][tier]));
       expect([...ranks].sort()).toEqual(ranks);
     }
   });
 
   test('tier 1 always runs freely ; tier 4 never does', () => {
-    for (const trustLevel of TRUST_TRUST_LEVELS) {
+    for (const trustLevel of TRUST_LEVELS) {
       expect(TRUST_LEVEL_GATES[trustLevel][1]).toBe('auto');
       expect(TRUST_LEVEL_GATES[trustLevel][4]).not.toBe('auto');
     }

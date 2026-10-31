@@ -43,7 +43,7 @@ import {
   expandMacroAction,
   macroActionsOf,
   tierOf,
-  TRUST_TRUST_LEVELS,
+  TRUST_LEVELS,
   type Tier,
   type TrustLevel,
 } from '../missions/macro-actions';
@@ -368,7 +368,7 @@ function riskReferenceOf(
       return action ? { id: action.id, label: action.label, anchor: action.anchor } : null;
     })(),
     at_trust_level: Object.fromEntries(
-      TRUST_TRUST_LEVELS.map((trustLevel) => [
+      TRUST_LEVELS.map((trustLevel) => [
         trustLevel,
         family.variants.map((risk) => ({
           risk,
@@ -450,7 +450,7 @@ function trustLevelCellsOf(
   };
   const cells = new Map<RiskId, Record<TrustLevel, TrustLevelCell['line']>>();
   for (const action of actions) {
-    for (const trustLevel of TRUST_TRUST_LEVELS) {
+    for (const trustLevel of TRUST_LEVELS) {
       const { lines, left_out } = expandMacroAction(whole, action, trustLevel, []);
       for (const line of lines) {
         const row = cells.get(line.risk_id) ?? { careful: null, trusting: null, autonomous: null };
