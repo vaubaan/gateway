@@ -69,6 +69,12 @@ export interface ConnectionsRepo {
   create(input: CreateConnectionInput): Promise<ConnectionRecord>;
   getById(id: string): Promise<ConnectionRecord | null>;
   list(filter?: ConnectionFilter): Promise<ConnectionRecord[]>;
+  /**
+   * Connections not revoked, every owner together, by provider (an expired or
+   * ownerless one included): the count of the `limits.connections` ceiling and of
+   * the counters (spec §4.3 bis). A provider with none is absent.
+   */
+  countByProvider(): Promise<Record<string, number>>;
   /** Connections owned by any of the principals (a user and the groups they belong to). */
   listOwnedBy(principals: readonly Principal[]): Promise<ConnectionRecord[]>;
   /** Decrypts the credential in memory; the caller releases it after the upstream call. */
@@ -323,6 +329,10 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
        status, credential_blob, key_version, credential_expires_at, metadata_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
+  const countByProviderStmt = db.prepare<[], { readonly provider: string; readonly n: number }>(
+    `SELECT provider, COUNT(*) AS n FROM connections WHERE status <> 'revoked'
+     GROUP BY provider ORDER BY provider`,
+  );
   const credentialStmt = db.prepare<
     [string],
     { credential_blob: Buffer | null; key_version: number | null }
@@ -515,6 +525,11 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     async getById(id) {
       const row = byId.get(id);
       return row ? toRecord(row) : null;
+    },
+    async countByProvider() {
+      const counts: Record<string, number> = {};
+      for (const row of countByProviderStmt.all()) counts[row.provider] = row.n;
+      return counts;
     },
     async list(filter = {}) {
       const where: string[] = [];

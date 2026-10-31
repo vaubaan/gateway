@@ -25,6 +25,7 @@ export const LOGIN_ERROR_CODES = [
   'password-refused',
   'second-factor-refused',
   'second-factor-required',
+  'user-limit-reached',
 ] as const;
 export type LoginErrorCode = (typeof LOGIN_ERROR_CODES)[number];
 
@@ -67,6 +68,8 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
     'The code was not accepted. Enter the current code of your authenticator app, or a recovery code.',
   'second-factor-required':
     'This account administers the gateway and needs a second factor: the sign-in continues with its enrolment.',
+  'user-limit-reached':
+    'This gateway already holds as many people as its ceiling allows, so it admits nobody new. Ask an administrator to make room or to raise the ceiling, then sign in again.',
 };
 
 export class LoginError extends Error {

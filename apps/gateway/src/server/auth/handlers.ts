@@ -27,6 +27,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { RateLimiter } from '../compose/ports';
 import { entraIssuer, LEGACY_PROVIDER_ID } from '../config/sign-in';
 import { resolveReturnTo } from '../http/return-to';
+import { LimitReachedError } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
@@ -566,6 +567,15 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
             'no passed test of this provider in this session',
           );
         }
+        // Naming somebody who is not a user yet adds one (spec §4.3 bis).
+        const known = await deps.store.users.getByIdentity(
+          test.identity.issuer,
+          test.identity.subject,
+        );
+        if (!known) {
+          const reached = await deps.login.ceilings?.refusal('users');
+          if (reached) throw new LimitReachedError(reached);
+        }
         const user = await deps.store.users.ensureIdentity({
           issuer: test.identity.issuer,
           subject: test.identity.subject,
@@ -652,6 +662,7 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
   function problemRedirect(err: unknown, page: string): Response {
     let problems: readonly string[];
     if (err instanceof IdpSettingsError) problems = err.problems;
+    else if (err instanceof LimitReachedError) problems = [err.message];
     else if (err instanceof AdministratorsError) {
       problems = [ADMINISTRATORS_ERROR_MESSAGES[err.code]];
     } else throw err;

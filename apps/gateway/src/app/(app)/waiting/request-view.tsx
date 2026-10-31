@@ -111,6 +111,8 @@ const PROBLEM_SENTENCES: Readonly<Record<string, string>> = {
   'risk-not-in-policy': 'The mission no longer includes this permission.',
   'nothing-consumed': 'Nothing was used on this permission since the last reset.',
   'no-expiry': 'The mission has no end date; there is nothing to extend.',
+  'limit-reached':
+    'This gateway already holds as many active missions as its ceiling allows: a new end would add one. End another mission first, or ask an administrator to raise the ceiling.',
   'gate-not-closed': 'This permission already runs freely: calls pass without asking you.',
   'no-period-end':
     'The limits of this mission never reset, so there is no “until the reset”. Set the permission to run freely on the mission instead.',

@@ -14,6 +14,7 @@ import type { Authenticator } from '../auth';
 import type { MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -51,6 +52,8 @@ export interface RequestsModuleDeps {
   readonly clock?: Clock;
   /** Period of the expiry sweeper; defaults to `REQUEST_SWEEP_INTERVAL_MS`. */
   readonly sweepIntervalMs?: number;
+  /** The `limits.active_missions` ceiling (`root.limits`); absent, none. */
+  readonly ceilings?: CeilingCheck;
 }
 
 export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
@@ -64,6 +67,7 @@ export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
     approvalValiditySeconds: deps.config.approvals.expirySeconds,
     clock: deps.clock ?? systemClock,
     logger,
+    ceilings: deps.ceilings,
   });
   const handlers = createRequestHandlers({
     publicUrl: deps.config.publicUrl,

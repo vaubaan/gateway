@@ -63,6 +63,8 @@ export const CLAIM_PROBLEM_CODES = [
   'risk-not-in-policy',
   'nothing-consumed',
   'no-expiry',
+  // A new end for an ended mission would pass the ceiling of active missions (spec §4.3 bis).
+  'limit-reached',
 ] as const;
 export type ClaimProblemCode = (typeof CLAIM_PROBLEM_CODES)[number];
 

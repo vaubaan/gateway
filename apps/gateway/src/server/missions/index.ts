@@ -18,6 +18,7 @@ import {
 } from '../authority';
 import type { SessionService } from '../budget';
 import type { InstanceConfig } from '../config';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -50,6 +51,8 @@ export interface MissionsModuleDeps {
   readonly mint?: TokenMinter;
   /** The budget's state read; defaults to the same read over `store.sessions`. */
   readonly budget?: Pick<SessionService, 'stateOf'>;
+  /** The `limits.active_missions` ceiling (`root.limits`); absent, none. */
+  readonly ceilings?: CeilingCheck;
 }
 
 export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
@@ -73,6 +76,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     logger: deps.logger.child({ component: 'missions' }),
     mint: deps.mint,
     budget: deps.budget,
+    ceilings: deps.ceilings,
   });
   const team = new MissionTeamService({
     store: deps.store,
@@ -138,6 +142,7 @@ export {
   type IssueOptions,
   type IssueResult,
   type LegacyHashGate,
+  type LimitReachedResult,
   type LimitChangeView,
   type LimitEdit,
   type LegacyHashThrottled,

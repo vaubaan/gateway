@@ -865,6 +865,24 @@ export const CONFIG_WORDS = {
   fileReadOnly: 'Set in the mounted configuration: change it there and restart.',
 } as const;
 
+/**
+ * The ceilings of the instance in the settings (spec §4.3 bis), keyed by the ceiling's
+ * name in the code (`server/limits`): each count against its ceiling.
+ */
+export const CEILING_WORDS = {
+  labels: {
+    users: capitalize(TERMS.user.many),
+    connections: capitalize(TERMS.connection.many),
+    'active-missions': `Active ${TERMS.mission.many}`,
+  },
+  /** "3 of 10", "10 of 10 · full: nothing new is added", "3 (unlimited)". */
+  usage(count: number, limit: number | null): string {
+    if (limit === null) return `${formatNumber(count)} (unlimited)`;
+    const usage = `${formatNumber(count)} of ${formatNumber(limit)}`;
+    return count >= limit ? `${usage} · full: nothing new is added` : usage;
+  },
+} as const;
+
 /** The state of a connected app (a delegation). Keyed by `DelegationState`. */
 export const APP_STATES = {
   active: { label: 'connected', tone: null },

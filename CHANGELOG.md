@@ -11,6 +11,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Ceilings and counters** (spec §4.3 bis). `limits.users`,
+  `limits.connections` and `limits.active_missions` (`VAUBAAN_LIMITS_*`, each a
+  whole number >= 1, absent unlimited) cap what the instance holds: only an
+  addition is refused at the ceiling — a first sign-in, an invitation, a
+  reactivation; a new connected account (never a reconnection); an issuance,
+  a duplicate, a v4 import, or a new end for an ended mission — with the count
+  and the ceiling in the refusal (`instance-limit-reached` on the management
+  door). Nothing existing is cut. Settings → "This gateway" shows each count
+  against its ceiling. `GET /ops/stats`, opened by the bearer `ops.token`
+  (`VAUBAAN_OPS_TOKEN`, at least 32 characters; absent: 404), answers counts
+  only: users, connections by provider, active missions, the day's calls, the
+  store's size, the sealed values per key version, the ceilings.
 - **New mission and Edit mission compose a policy from macro-actions at a
   trust cran** (ADR macro-actions-and-trust-crans-prefill-the-policy, risk
   model §4.6). Per account, the Simple view lists the service's

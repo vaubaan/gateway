@@ -11,6 +11,7 @@ import type { Authenticator } from '../auth/authenticator';
 import type { MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -36,6 +37,8 @@ export interface ConnectionsModuleDeps {
   /** Outbound HTTP of the connect flows and of the plugins' discovery (tests inject a mock). */
   readonly fetch?: typeof fetch;
   readonly clock?: Clock;
+  /** The `limits.connections` ceiling (`root.limits`); absent, none. */
+  readonly ceilings?: CeilingCheck;
 }
 
 export interface ConnectionsModule {
@@ -90,6 +93,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     fetch: outbound,
     clock,
     logger,
+    ceilings: deps.ceilings,
   });
   const notices = new NoticeStore(deps.sessions);
   const handlers = createConnectionHandlers({

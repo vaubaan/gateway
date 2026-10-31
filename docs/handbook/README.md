@@ -16,6 +16,7 @@ what and why are in [`docs/spec/`](../spec/), the choices in
 
 - [configuration](configuration.md) — configuration keys, crypto, the composition root.
 - [store](store.md) — the embedded SQLite store, migrations, backups.
+- [limits-and-counters](limits-and-counters.md) — ceilings on users, connections, active missions; `GET /ops/stats`.
 - [oauth-broker-contract](oauth-broker-contract.md) — the calls between an instance and an OAuth broker.
 - [oauth-broker](oauth-broker.md) — the OAuth broker of `apps/oauth-broker`: running it in Confidential Space, releasing and verifying its image.
 - [cutover-from-v4](cutover-from-v4.md) — the acceptance run of a first installation, and reading a refusal.

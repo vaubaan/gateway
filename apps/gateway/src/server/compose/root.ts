@@ -39,7 +39,9 @@ import {
 import { createGitModule, type GitModule } from '../git';
 import { createGroupsModule, type GroupsModule } from '../groups';
 import { createInstanceModule, type InstanceModule } from '../instance';
+import { collectOpsStats, createInstanceLimits, type InstanceLimits } from '../limits';
 import { createMasterKeyModule, type MasterKeyModule } from '../master-key';
+import type { OpsStatsDeps } from '../http/ops-stats';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { createMissionsModule, type MissionsModule } from '../missions';
@@ -108,6 +110,10 @@ export interface GatewayRoot {
   readonly users: UsersModule;
   /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools. */
   readonly management: ManagementDoorModule;
+  /** The ceilings of the configuration over the counts of the store (spec §4.3 bis). */
+  readonly limits: InstanceLimits;
+  /** What `GET /ops/stats` answers with: the token that opens it and its counts. */
+  readonly opsStats: OpsStatsDeps;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -257,6 +263,8 @@ function logConfigurationSummary(
   config: InstanceConfig,
   configFile: string | null,
 ): void {
+  const opsStats =
+    config.ops.token === null ? 'off (no ops.token)' : 'open to the bearer of ops.token';
   logger.info('configuration loaded', {
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
@@ -277,6 +285,12 @@ function logConfigurationSummary(
     key_version: config.encryption.keyVersion,
     trusted_proxies: config.trustedProxies.length,
     client_ip_header: config.clientIpHeader ?? 'not set',
+    limits: {
+      users: config.limits.users ?? 'unlimited',
+      connections: config.limits.connections ?? 'unlimited',
+      active_missions: config.limits.activeMissions ?? 'unlimited',
+    },
+    ops_stats: opsStats,
   });
   warnWithoutTrustedProxies(logger, config);
 }
@@ -360,6 +374,8 @@ type RootModules = Pick<
   | 'oauth'
   | 'users'
   | 'management'
+  | 'limits'
+  | 'opsStats'
 >;
 
 /**
@@ -374,6 +390,8 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // `web_sessions`) so they survive a restart and are revocable; a hosted
   // deployment injects a shared `SessionStore` instead.
   const sessions: SessionStore = deps.sessions ?? store.webSessions;
+  // One count per item, read by the ceilings, the settings, `/ops/stats` and telemetry.
+  const limits = createInstanceLimits(config.limits, store);
   // Authority reads the store only, so it is built first: the sign-in settles what a
   // changed membership did, and every module below checks, derives or watches through it.
   const authority = createAuthorityModule({ store, registry, logger });
@@ -400,6 +418,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     oidc: deps.oidc,
     rateLimiter,
+    ceilings: limits,
     // The user themselves is the human behind a sign-in that changes their groups.
     membershipsChanging: async (user) => {
       const watch = await authority.membership.watch(user.id);
@@ -417,6 +436,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authority: authority.service,
     grounds: authority.grounds,
     logger,
+    ceilings: limits,
   });
 
   const cache = deps.cache ?? new MemoryCacheClient();
@@ -430,6 +450,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     grounds: authority.grounds,
     logger,
     fetch: deps.providerFetch,
+    ceilings: limits,
   });
   const shares = createSharesModule({
     config,
@@ -460,6 +481,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     authenticator: auth.authenticator,
     rateLimiter,
     logger,
+    ceilings: limits,
   });
   opened.push(() => requests.sweeper.stop());
 
@@ -489,15 +511,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     build,
     fetch: deps.telemetryFetch,
     profileSource: {
-      users: async () => (await store.users.list()).filter((u) => u.status === 'active').length,
-      activeMissions: (now) => store.missions.countActive(now.toISOString()),
-      accountsByProvider: async () => {
-        const counts: Record<string, number> = {};
-        for (const c of await store.connections.list()) {
-          if (c.status !== 'revoked') counts[c.provider] = (counts[c.provider] ?? 0) + 1;
-        }
-        return counts;
-      },
+      users: () => limits.counts.users(),
+      activeMissions: (now) => limits.counts.activeMissions(now),
+      accountsByProvider: async () => ({ ...(await limits.counts.connections()).byProvider }),
     },
   });
   opened.push(() => telemetry.stop());
@@ -566,6 +582,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     providers: auth.providers,
     mailer,
     logger,
+    ceilings: limits,
   });
   const execution = createExecutionModule({
     config,
@@ -628,6 +645,21 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     oauth,
     users,
     management,
+    limits,
+    opsStats: {
+      token: config.ops.token,
+      logger,
+      collect: () =>
+        collectOpsStats({
+          counts: limits.counts,
+          limits: config.limits,
+          calls: store.audit,
+          store,
+          sealed: store.sealedBlobs,
+          currentKeyVersion: config.encryption.keyVersion,
+          now: new Date(),
+        }),
+    },
   };
 }
 

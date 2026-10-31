@@ -53,7 +53,7 @@ import {
   RESET_PASSWORD_PAGE,
   type LocalAccountsService,
 } from './local-accounts';
-import { completeLogin, type LoginDeps } from './login';
+import { completeLogin, refuseNewUserAtCeiling, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import type { PendingLocalStep, SessionService } from './session-service';
 import type { SignInProvidersService } from './sign-in-providers';
@@ -471,6 +471,13 @@ export function createLocalAuthHandlers(
       const password = stringField(form, 'password');
       if (password !== stringField(form, 'password_again')) {
         return refused(CREATE_ACCOUNT_PAGE, token, 'password-mismatch');
+      }
+      // The account would be a new person: refused at the ceiling of users before the
+      // link is spent, so it works once a place is free (spec §4.3 bis).
+      try {
+        await refuseNewUserAtCeiling(deps.login);
+      } catch (err) {
+        return failLogin(err);
       }
       let account: LocalAccountRecord;
       try {

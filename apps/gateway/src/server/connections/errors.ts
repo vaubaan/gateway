@@ -30,6 +30,7 @@ export const CONNECT_ERROR_CODES = [
   'not-ownerless',
   'owner-unknown',
   'owner-group-empty',
+  'connection-limit-reached',
 ] as const;
 
 export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
@@ -65,6 +66,8 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
     'Nobody active has this email. A person is known to the gateway once they have signed in.',
   'owner-group-empty':
     'This team does not exist or has no member: the account would still have no owner.',
+  'connection-limit-reached':
+    'This gateway holds as many connected accounts as its ceiling allows: nothing was connected. An account disconnected for good frees a place; an administrator can raise the ceiling.',
 };
 
 const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
@@ -89,6 +92,7 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'not-ownerless': 409,
   'owner-unknown': 400,
   'owner-group-empty': 400,
+  'connection-limit-reached': 409,
 };
 
 const MAX_DETAIL_CHARS = 300;

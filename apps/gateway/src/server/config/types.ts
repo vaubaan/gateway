@@ -278,6 +278,26 @@ export interface OAuthBrokerConfig {
 /** `oauth_brokers.<name>.attestation`. No value widens the allowlist shipped with the release. */
 export type BrokerAttestationMode = 'required' | 'none';
 
+/**
+ * The ceilings of the instance (`limits.*`, spec §4.3 bis): `null` is unlimited, the
+ * default. Each is enforced where an item would be added, never by cutting
+ * (`server/limits`).
+ */
+export interface LimitsConfig {
+  /** People not removed (`users.status = 'active'`). */
+  readonly users: number | null;
+  /** Connected accounts not revoked, every owner together. */
+  readonly connections: number | null;
+  /** Missions neither revoked nor past their end, orphaned ones included. */
+  readonly activeMissions: number | null;
+}
+
+/** The operator's counters endpoint (`ops.*`, spec §4.3 bis). */
+export interface OpsConfig {
+  /** The bearer of `GET /ops/stats`; `null`: the endpoint does not exist (404). */
+  readonly token: string | null;
+}
+
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
@@ -337,6 +357,10 @@ export interface InstanceConfig {
    * how long one git request may last, in seconds. Both fail closed.
    */
   readonly git: { readonly maxPackBytes: number; readonly requestTimeoutSeconds: number };
+  /** Ceilings on users, connections and active missions; each `null` when unlimited. */
+  readonly limits: LimitsConfig;
+  /** The counters endpoint for the operator's monitoring. */
+  readonly ops: OpsConfig;
   /** Authorization server of the management door: token lifetimes, who may register. */
   readonly oauth: OAuthConfig;
   /**
@@ -358,6 +382,7 @@ export function secretValues(config: InstanceConfig | SetupConfig): string[] {
     if (provider.kind !== 'local') out.push(provider.clientSecret);
   }
   if (config.bootstrapToken) out.push(config.bootstrapToken);
+  if (config.ops.token) out.push(config.ops.token);
   if ('mail' in config && config.mail?.smtpPassword) out.push(config.mail.smtpPassword);
   if (config.backup) out.push(config.backup.s3.secretAccessKey);
   for (const broker of config.oauthBrokers) out.push(broker.key);

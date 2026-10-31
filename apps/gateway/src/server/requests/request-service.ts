@@ -50,6 +50,7 @@ import {
   type SessionService,
 } from '../budget';
 import type { MissionGrounds } from '../authority';
+import { revivesEndedMission, type CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
 import type { Store } from '../store';
@@ -120,6 +121,11 @@ export interface RequestServiceDeps {
    * the `SessionService` exists.
    */
   readonly budget?: Pick<SessionService, 'usageOf'>;
+  /**
+   * The `limits.active_missions` ceiling (spec §4.3 bis): a new end granted to an
+   * ended mission adds an active one. Absent: no ceiling.
+   */
+  readonly ceilings?: CeilingCheck;
 }
 
 export interface RequestSummary {
@@ -711,6 +717,19 @@ export class RequestService {
     }
     const now = this.deps.clock.now();
     const period = currentPeriod(budgetMissionOf(mission).period, now);
+    if (
+      decision.resolution === 'extend-expiry' &&
+      revivesEndedMission(mission, decision.expires_at, now)
+    ) {
+      const reached = await this.deps.ceilings?.refusal('active-missions');
+      if (reached) {
+        return {
+          ok: false,
+          reason: 'invalid',
+          problem: { code: 'limit-reached', message: reached.message },
+        };
+      }
+    }
 
     let result;
     try {

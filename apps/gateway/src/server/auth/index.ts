@@ -7,6 +7,7 @@
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import { clientIpResolver } from '../http/client-ip';
 import type { InstanceConfig } from '../config/types';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -54,6 +55,8 @@ export interface AuthModuleDeps {
   readonly rateLimiter: RateLimiter;
   /** Sends the mails of the local accounts' links; absent when the instance sends no mail. */
   readonly mailer?: LinkMailer;
+  /** The `limits.users` ceiling (`root.limits`); absent, none. */
+  readonly ceilings?: CeilingCheck;
 }
 
 export interface AuthModule {
@@ -155,6 +158,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
       logger,
       clock,
       membershipsChanging: deps.membershipsChanging,
+      ceilings: deps.ceilings,
     },
     store: deps.store,
     administrators,
@@ -180,6 +184,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
       logger,
       clock,
       membershipsChanging: deps.membershipsChanging,
+      ceilings: deps.ceilings,
     },
     audit: deps.store.auditWriter,
     logger,

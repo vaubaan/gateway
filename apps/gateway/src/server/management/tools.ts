@@ -18,7 +18,13 @@
  * There is no method for anything else, and the ports this class is built
  * from could not do anything else (`ports.ts`).
  */
-import { MISSION_TOKEN_ENV, maskedToken, type BootstrapKit, type MissionDraft } from '../missions';
+import {
+  MISSION_TOKEN_ENV,
+  maskedToken,
+  type BootstrapKit,
+  type LimitReachedResult,
+  type MissionDraft,
+} from '../missions';
 import type { Logger } from '../logging';
 import type {
   ManagementActor,
@@ -58,6 +64,7 @@ export const MANAGEMENT_REFUSAL_CODES = [
   'unknown-provider',
   'unknown-connection',
   'rate-limited',
+  'instance-limit-reached',
 ] as const;
 export type ManagementRefusalCode = (typeof MANAGEMENT_REFUSAL_CODES)[number];
 
@@ -160,6 +167,20 @@ function tokenView(token: { secret: string; prefix: string }): RevealedTokenView
 }
 
 /** The refusal of a draft: its preview, whose uncovered list is the one it shows. */
+/** The instance's ceiling of active missions refuses the issuance (spec §4.3 bis). */
+function instanceLimitRefusal(
+  message: string,
+  limit: LimitReachedResult['limit'],
+): ManagementRefusal {
+  return {
+    code: 'instance-limit-reached',
+    message: `${message} Nothing was issued.`,
+    hint: 'The draft is fine: the gateway holds as many active missions as its operator allows. Ask the user to revoke a mission they no longer need, or the operator of the gateway to raise the ceiling, then issue again.',
+    count: limit.count,
+    ceiling: limit.limit,
+  };
+}
+
 function draftRefusal(preview: PreviewView): ManagementRefusal {
   const { uncovered } = preview;
   const beyond = uncovered.length > 0;
@@ -318,6 +339,10 @@ export class ManagementTools {
       delegation: { id: actor.delegationId, clientId: actor.clientId },
     });
     if (!result.ok) {
+      if (result.reason === 'limit-reached') {
+        this.log('issue_mission', actor, 'instance-limit-reached');
+        return refused(instanceLimitRefusal(result.message, result.limit));
+      }
       // The authority changed between the two reads: `issue` decides.
       if (result.reason !== 'refused') {
         throw new Error(`management door: unexpected issuance outcome "${result.reason}"`);

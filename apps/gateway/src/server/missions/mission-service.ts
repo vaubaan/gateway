@@ -62,6 +62,7 @@ import {
 } from '../budget';
 import { isSelfResource, type SelfResource } from '../config';
 import { connectionSummaryOf } from '../connections/mapping';
+import { revivesEndedMission, type CeilingCheck, type LimitReached } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { TokenNotIssuableError } from '../store/errors';
@@ -156,6 +157,11 @@ export interface MissionServiceDeps {
    * the `SessionService` exists.
    */
   readonly budget?: Pick<SessionService, 'stateOf'>;
+  /**
+   * The `limits.active_missions` ceiling (spec §4.3 bis): asked before a mission is
+   * added and before an ended one is given a new end. Absent: no ceiling.
+   */
+  readonly ceilings?: CeilingCheck;
 }
 
 export interface PreviewOptions {
@@ -207,7 +213,18 @@ export type IssueResult =
       readonly preview: MissionPreview;
     }
   | { readonly ok: false; readonly reason: 'refused'; readonly preview: MissionPreview }
-  | { readonly ok: false; readonly reason: 'not-found' };
+  | { readonly ok: false; readonly reason: 'not-found' }
+  /** The instance holds as many active missions as its ceiling: nothing was issued. */
+  | LimitReachedResult;
+
+/** An addition refused by the `limits.active_missions` ceiling (spec §4.3 bis). */
+export interface LimitReachedResult {
+  readonly ok: false;
+  readonly reason: 'limit-reached';
+  /** "This gateway holds 3 active missions; its ceiling is 3." */
+  readonly message: string;
+  readonly limit: LimitReached;
+}
 
 export type RotateResult =
   | {
@@ -392,7 +409,9 @@ export type EditResult =
       readonly reason: 'refused';
       readonly issues: readonly PreviewIssue[];
       readonly changes: MissionChanges;
-    };
+    }
+  /** A new end for an ended mission would add an active one past the ceiling. */
+  | LimitReachedResult;
 
 /** The body of an edit: the edited draft and the revision it was made from. */
 function parseEditBody(
@@ -802,6 +821,8 @@ export class MissionService {
     const context = await this.issuanceContext(user);
     const preview = previewDraft({ connections: context, now: this.deps.clock.now() }, draft);
     if (!preview.ok) return { ok: false, reason: 'refused', preview };
+    const ceiling = await this.activeMissionCeiling();
+    if (ceiling) return ceiling;
 
     const mission = await this.deps.store.missions.create({
       name: preview.name,
@@ -900,6 +921,17 @@ export class MissionService {
   /** True when the resource is one of this instance's own (`selfResources`). */
   private isSelf(provider: string, resource: Pick<ConnectionResourceRecord, 'ref'>): boolean {
     return isSelfResource(this.deps.selfResources, provider, resource.ref);
+  }
+
+  /** The refusal of one more active mission, or `null` while one more fits. */
+  private async activeMissionCeiling(): Promise<LimitReachedResult | null> {
+    const reached = await this.deps.ceilings?.refusal('active-missions');
+    if (!reached) return null;
+    this.deps.logger.warn('mission refused at the ceiling of active missions', {
+      count: reached.count,
+      ceiling: reached.limit,
+    });
+    return { ok: false, reason: 'limit-reached', message: reached.message, limit: reached };
   }
 
   /**
@@ -1548,6 +1580,10 @@ export class MissionService {
     }
     const { after, changes } = judgement;
     if (!hasChanges(changes)) return { ok: true, mission, changes, requests_closed: [] };
+    if (revivesEndedMission(mission, after.expires_at, this.deps.clock.now())) {
+      const ceiling = await this.activeMissionCeiling();
+      if (ceiling) return ceiling;
+    }
 
     const written = await this.deps.store.missions.edit(mission.id, {
       actorUserId: user.id,
