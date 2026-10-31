@@ -190,13 +190,11 @@ describe('loadInstanceConfig — instance name', () => {
   });
 
   it('is read from the environment and trimmed', () => {
-    expect(name({ VAUBAAN_INSTANCE_NAME: '  Dalae · prod  ' })).toBe('Dalae · prod');
+    expect(name({ VAUBAAN_INSTANCE_NAME: '  Acme · prod  ' })).toBe('Acme · prod');
   });
 
   it('is read from the mounted file, which wins over the environment', () => {
-    expect(name({ VAUBAAN_INSTANCE_NAME: 'from env' }, 'instance_name: Fiabilis AI\n')).toBe(
-      'Fiabilis AI',
-    );
+    expect(name({ VAUBAAN_INSTANCE_NAME: 'from env' }, 'instance_name: Acme AI\n')).toBe('Acme AI');
   });
 
   it('refuses a name too long or with a control character, naming the key and its variable', () => {

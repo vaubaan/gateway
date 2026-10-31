@@ -108,36 +108,15 @@ base budget. The persisted policy is the explicit list.
 `bulk-variables-replace` is left out at Prudent and always asks first;
 `railway.agent-action` asks first below Autonome.
 
-## Credential — how the company registers its app
+## Credential — a workspace token
 
-1. Railway → Workspace → **Developer → Auth apps → New app**
-   (`https://railway.com/workspace/developer/apps/new`). Name it after your
-   gateway instance. Leave **Device Flow off**.
-2. Redirect URI: the instance callback the gateway shows in
-   Settings → Administration → Company apps (Railway requires `https://`; for loopback use `https://127.0.0.1`,
-   never `localhost`).
-3. Copy `client_id` and `client_secret` into the instance configuration
-   under the Railway provider app (Settings → Administration → Company apps, or the
-   mounted config file). The host uses them for the authorization-code flow and
-   for refresh; the plugin reads neither.
-
-The gateway then runs the authorization-code flow declared by
-`railwayCredentialSpec`: scopes `openid offline_access workspace:member`,
-PKCE S256, `prompt=consent` (needed for a refresh token) and the RFC 8707
-resource indicator `https://mcp.railway.com` on both the authorization and
-token requests — the MCP server refuses tokens minted without it. Access
-tokens last one hour; the host refreshes them with the standard
-`refresh_token` grant declared by the spec (`refreshable: true`), including
-after an `UpstreamAuthError`.
-
-## Credential, the other way: a workspace token
-
-Without a company OAuth app — or beside it — an account is connected with a
-Railway token pasted by hand (`railwayTokenCredential`, `src/token.ts`),
-created under railway.com/account/tokens. Every tool runs with it: discovery
-and the four variable tools on the GraphQL API, the ten tools of Railway's MCP
-server with the token sent as `Authorization: Bearer` to
-`https://mcp.railway.com/`.
+`credential.kind: 'api-key'` (`railwayCredential`, `src/credential.ts`), the
+one way of connecting (ADR
+[`one-place-to-authorize-services-token-first`](../../docs/decisions/one-place-to-authorize-services-token-first.md)).
+An account is connected with a Railway token pasted once, created under
+railway.com/account/tokens. Every tool runs with it: discovery and the four
+variable tools on the GraphQL API, the ten tools of Railway's MCP server with
+the token sent as `Authorization: Bearer` to `https://mcp.railway.com/`.
 
 | Token                                  | Reach                          | Offered                     | MCP server                                                |
 | -------------------------------------- | ------------------------------ | --------------------------- | --------------------------------------------------------- |

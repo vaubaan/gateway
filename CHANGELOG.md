@@ -65,6 +65,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The documents say what the repository does.** `SECURITY.md` names the
+  supported line (the latest `2.0.0-alpha` pre-release, cut from `main`) and
+  when each scanner runs; `README.md` and `CONTRIBUTING.md` target `main` and
+  Node 26; the deploy README, the example configuration and the collector
+  README say that the built-in collector URL is the project's live collector,
+  which an enabled instance sends to, and what each telemetry level carries;
+  the Supabase and Railway plugin READMEs describe the pasted token their
+  code declares instead of a retired OAuth app; the website's status copy
+  names the published pre-releases; the pull-request and issue templates ask
+  for macro-actions, not presets, and offer the three credential kinds that
+  exist. Test fixtures name an imaginary company.
 - **Every risk catalog groups its risks into macro-actions** (ADR
   macro-actions-and-trust-crans-prefill-the-policy), 3 to 5 per connector in
   its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,

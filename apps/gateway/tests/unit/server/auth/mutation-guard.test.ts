@@ -431,7 +431,7 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
   ),
   'instance.handlers.setName': form('operator', 303, (rig, headers) =>
     rig.root.instance.handlers.setName(
-      post('/api/admin/instance-name', headers, { name: 'Dalae prod' }),
+      post('/api/admin/instance-name', headers, { name: 'Acme prod' }),
     ),
   ),
   // The rightful caller's session was just created: fresh, so the file is handed over.

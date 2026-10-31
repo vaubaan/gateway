@@ -26,7 +26,7 @@ const clock = { now: () => new Date('2026-10-20T10:00:00.000Z') };
 
 const SOURCE_SIGN_IN = {
   VAUBAAN_SIGN_IN_ENTRA_KIND: 'oidc',
-  VAUBAAN_SIGN_IN_ENTRA_NAME: 'Fiabilis',
+  VAUBAAN_SIGN_IN_ENTRA_NAME: 'Acme',
   VAUBAAN_SIGN_IN_ENTRA_ISSUER: ENTRA,
   VAUBAAN_SIGN_IN_ENTRA_CLIENT_ID: 'entra-client',
   VAUBAAN_SIGN_IN_ENTRA_CLIENT_SECRET: ENTRA_SECRET,
@@ -35,7 +35,7 @@ const SOURCE_SIGN_IN = {
   VAUBAAN_SIGN_IN_ENTRA_REQUIRE_VERIFIED_EMAIL: 'true',
   VAUBAAN_SIGN_IN_LOCAL_KIND: 'local',
   VAUBAAN_ADMIN_GROUP: 'entra:admins',
-  VAUBAAN_ADMIN_EMAILS: 'boss@fiabilis.example',
+  VAUBAAN_ADMIN_EMAILS: 'boss@acme.example',
 };
 
 /** The new host: its own provider and its own admin rule, none of the source's. */
@@ -140,7 +140,7 @@ describe('a backup carries the sign-in configuration', () => {
       expect(entra?.source).toBe('store');
       if (entra?.provider.kind !== 'oidc') throw new Error('not oidc');
       expect(entra.provider.clientSecret).toBe(ENTRA_SECRET);
-      expect(entra.provider.name).toBe('Fiabilis');
+      expect(entra.provider.name).toBe('Acme');
       expect(entra.provider.requireVerifiedEmail).toBe(true);
       expect(entra.provider.claims.emailVerified).toBe('xms_edov');
       expect(entra.provider.invitationOnly).toBe(true);
@@ -154,7 +154,7 @@ describe('a backup carries the sign-in configuration', () => {
         {
           id: 'entra',
           kind: 'oidc',
-          name: 'Fiabilis SSO',
+          name: 'Acme SSO',
           issuer: ENTRA,
           clientId: 'entra-client',
           clientSecret: null,
@@ -165,7 +165,7 @@ describe('a backup carries the sign-in configuration', () => {
       );
       const edited = await service.resolve('entra');
       if (edited?.provider.kind !== 'oidc') throw new Error('not oidc');
-      expect(edited.provider.name).toBe('Fiabilis SSO');
+      expect(edited.provider.name).toBe('Acme SSO');
       expect(edited.provider.requireVerifiedEmail).toBe(true);
       expect(edited.provider.claims.emailVerified).toBe('xms_edov');
       expect(edited.provider.clientSecret).toBe(ENTRA_SECRET);

@@ -89,7 +89,7 @@ export function landingFaq(serviceNames: readonly string[]): Faq[] {
     {
       question: 'Is it ready for production?',
       answer:
-        'Not yet. It is pre-release: no version is tagged, no image is published, and the software has not been run in production. It has had no third-party security audit. The known limitations are listed in the docs.',
+        'Not yet. It is pre-release: 2.0.0-alpha versions are tagged and published as images, a handful of early instances run it, and breaking changes are expected until v2.0.0. It has had no third-party security audit. The known limitations are listed in the docs.',
     },
     {
       question: 'Does it send anything to the project?',
@@ -110,7 +110,7 @@ export function landingMarkdown(serviceNames: readonly string[]): string {
     '',
     LANDING_LEDE,
     '',
-    '**Pre-release.** No version is tagged and no image is published yet.',
+    '**Pre-release.** 2.0.0-alpha versions are tagged and published; expect breaking changes until v2.0.0.',
     '',
     '## The problem',
     '',

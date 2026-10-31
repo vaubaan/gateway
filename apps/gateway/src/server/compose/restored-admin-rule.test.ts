@@ -18,7 +18,7 @@ import { openStore, SetCatalogIndex } from '../store';
 import { buildRoot } from './root';
 
 const KEY = randomBytes(32).toString('base64');
-const CARRIED = JSON.stringify({ group: 'entra:admins', emails: ['boss@fiabilis.example'] });
+const CARRIED = JSON.stringify({ group: 'entra:admins', emails: ['boss@acme.example'] });
 
 describe('the admin rule a restored backup carried', () => {
   let dir: string;
@@ -63,11 +63,11 @@ describe('the admin rule a restored backup carried', () => {
         designations.map((d) =>
           d.kind === 'email' ? d.email : d.kind === 'group' ? d.groupName : d.userId,
         ),
-      ).toEqual(['ops@example.com', 'boss@fiabilis.example', 'entra:admins']);
+      ).toEqual(['ops@example.com', 'boss@acme.example', 'entra:admins']);
       expect(await root.store.config.get(RESTORED_ADMIN_RULE_KEY)).toBeNull();
       // The configuration's own rule is what was applied: no drift on the next boot.
       expect(await root.auth.administrators.configurationDrift()).toBeNull();
-      expect(lines.join('\n')).not.toContain('boss@fiabilis.example');
+      expect(lines.join('\n')).not.toContain('boss@acme.example');
     } finally {
       await root.close();
     }

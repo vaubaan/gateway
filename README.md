@@ -61,7 +61,7 @@ intercepted), and not highly available: one process, one embedded database.
 
 ### A quick look
 
-Needs Node.js 20 or later and npm 10. Nothing to register, nothing leaves
+Needs Node.js 26 or later and npm 11. Nothing to register, nothing leaves
 your machine: the identity provider and the cloud services are simulated.
 
 ```bash
@@ -243,8 +243,8 @@ docs/                    spec, decisions, handbook, tests, workflow
 ```
 
 For development: `npm ci`, then `npm run ci` (type-check, lint, format
-check, build, tests). Contributions target the `v5` branch until the first
-release; the process is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+check, build, tests). Contributions target `main` through a pull request;
+the process is in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Licence
 
