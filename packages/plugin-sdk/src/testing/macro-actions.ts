@@ -3,7 +3,7 @@
  * macro-actions at trust crans, for plugin tests.
  *
  * Spec : docs/spec/gateway-risk-model.md §4.6 (macro-actions).
- * ADR  : docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md.
+ * ADR  : docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md.
  *
  * It runs the policy engine's own rules (`expandAtCran`, `budgetAtCran`,
  * `qualifyRiskId`, `resolveVector`) the way the creation form does : one line

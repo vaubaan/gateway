@@ -304,7 +304,7 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
       expect(issuesOf(() => validateCatalog(doc({ presets })))).toEqual([RETIRED_PRESETS_ISSUE]);
     }
     expect(RETIRED_PRESETS_ISSUE).toMatch(
-      /presets were retired \(ADR macro-actions-and-trust-crans-prefill-the-policy\) ; group the risks in macro_actions/,
+      /presets were retired \(ADR macro-actions-and-trust-levels-prefill-the-policy\) ; group the risks in macro_actions/,
     );
     // A catalog built in code is held to it too (`definePlugin`, the registry).
     const built = { ...validateCatalog(doc()).catalog, presets: [] } as RiskCatalog;
@@ -543,7 +543,7 @@ describe('macro-actions', () => {
   test('none declared is an error, unless disabled', () => {
     const d = doc({ macro_actions: [] });
     expect(issuesOf(() => validateCatalog(d))).toEqual([
-      'macro_actions: every catalog groups its risks into macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy)',
+      'macro_actions: every catalog groups its risks into macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy)',
     ]);
     expect(() => validateCatalog(d, { requireMacroActions: false })).not.toThrow();
   });

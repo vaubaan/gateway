@@ -30,7 +30,7 @@
 # No entry declares `caps` or `infra_limits` (ADR scope-caps-amplification-axis) :
 # the plugin itself caps a read at 366 days and 200 events.
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
-# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# budget (ADR macro-actions-and-trust-levels-prefill-the-policy). No risk,
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
@@ -207,7 +207,7 @@ risks:
       visibility: public
       persistence: posture
 
-# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
+# Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust cran. Every entry but the fallback
 # belongs to exactly one, with its base budget (the cran multiplies it ×1,
 # ×3, ×10). The gateway adds "Anything else", holding the fallback.

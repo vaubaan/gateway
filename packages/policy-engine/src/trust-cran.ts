@@ -3,7 +3,7 @@
  * lines. Pure and browser-safe : the creation form, the preview and the
  * management door call the same functions.
  *
- * ADR  : docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md.
+ * ADR  : docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md.
  * Spec : docs/spec/gateway-risk-model.md §4.6 (macro-actions), §9 (preview).
  *
  * The vector pre-fills, it never decides : the lines this module writes are

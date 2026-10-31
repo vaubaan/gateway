@@ -154,7 +154,7 @@ export interface RiskEntry {
   readonly matches: string | readonly string[];
   /** 6D vector explaining the risk's profile. Drives UI ordering, audit
    *  explainability and the palier a trust cran pre-fills a gate from
-   *  (ADR macro-actions-and-trust-crans-prefill-the-policy) ; the runtime
+   *  (ADR macro-actions-and-trust-levels-prefill-the-policy) ; the runtime
    *  derives no decision from it.
    *  When `vector_overrides` is present this is the default (non-prod)
    *  profile ; per-env overrides replace individual axes. */
@@ -248,7 +248,7 @@ export interface MacroActionEntry extends Budget {
 
 /**
  * What a mission creator ticks on a connection, in the connector's own words
- * (ADR macro-actions-and-trust-crans-prefill-the-policy). Every entry but the
+ * (ADR macro-actions-and-trust-levels-prefill-the-policy). Every entry but the
  * fallback belongs to exactly one macro-action ; a trust cran turns its
  * entries into explicit policy lines. Never a grant by itself.
  */
@@ -269,7 +269,7 @@ export interface MacroAction {
 export interface RiskCatalog {
   readonly provider: string;
   readonly risks: readonly RiskEntry[];
-  /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+  /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-levels-prefill-the-policy). */
   readonly macro_actions?: readonly MacroAction[];
   /** Monotonic integer bumped on every reviewed change of the YAML. */
   readonly catalog_version?: number;

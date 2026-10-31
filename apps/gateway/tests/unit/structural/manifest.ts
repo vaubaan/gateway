@@ -271,7 +271,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'macro-actions-group-the-catalog',
     statement:
       'Every shipped catalog groups each of its live risks but the fallback in exactly one macro-action of its own explicit risks, never a wildcard; no catalog ships presets or declares a macro-action named "anything-else" or "everything-i-hold".',
-    source: 'spec §10, §3.2; ADR macro-actions-and-trust-crans-prefill-the-policy',
+    source: 'spec §10, §3.2; ADR macro-actions-and-trust-levels-prefill-the-policy',
     specBullet:
       'every catalog groups each of its risks but the fallback in exactly one macro-action, and no catalog ships presets',
     proofs: [

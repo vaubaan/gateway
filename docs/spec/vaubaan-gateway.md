@@ -354,7 +354,7 @@ a mission whose accepted risk has no resolved budget.
 - **Rate limit.** The mission-level value of the catalog's speed cap
   ([gateway-risk-model](./gateway-risk-model.md) §4bis), bounded by the catalog.
 - **Macro-actions and crans**
-  ([macro-actions-and-trust-crans-prefill-the-policy](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
+  ([macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
   At issuance the creator ticks macro-actions per connection, each at a cran (or duplicates a
   mission); the policy is pre-filled with their risks, gates and budgets, intersected with the
   creator's authority, then adjusted risk by risk. The persisted policy never references a

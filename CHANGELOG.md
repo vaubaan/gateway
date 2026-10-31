@@ -34,7 +34,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   only: users, connections by provider, active missions, the day's calls, the
   store's size, the sealed values per key version, the ceilings.
 - **New mission and Edit mission compose a policy from macro-actions at a
-  trust cran** (ADR macro-actions-and-trust-crans-prefill-the-policy, risk
+  trust cran** (ADR macro-actions-and-trust-levels-prefill-the-policy, risk
   model §4.6). Per account, the Simple view lists the service's
   macro-actions, "Anything else" included; each ticked at Prudent, Confiant
   or Autonome says what it writes here (runs freely, asks first, left out,
@@ -150,7 +150,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   open the team and a Resend Sending access key are refused with what to
   change. Stripe asks for the secret key instead of a restricted one.
 - **Every risk catalog groups its risks into macro-actions** (ADR
-  macro-actions-and-trust-crans-prefill-the-policy), 3 to 5 per connector in
+  macro-actions-and-trust-levels-prefill-the-policy), 3 to 5 per connector in
   its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,
   Ship, Administer…), each risk listed once with a base budget. A catalog
   without them, or with a live risk in none or in two, no longer loads. The

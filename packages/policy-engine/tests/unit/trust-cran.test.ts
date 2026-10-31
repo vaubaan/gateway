@@ -1,6 +1,6 @@
 /**
  * Paliers, crans and the expansion of a macro-action
- * (ADR macro-actions-and-trust-crans-prefill-the-policy).
+ * (ADR macro-actions-and-trust-levels-prefill-the-policy).
  */
 import { describe, expect, test } from 'vitest';
 

@@ -137,7 +137,7 @@ describe('template plugin — structural kit', () => {
   });
 
   // A mission is composed by ticking macro-actions at a trust cran (ADR
-  // macro-actions-and-trust-crans-prefill-the-policy) ; `policyFromMacroActions`
+  // macro-actions-and-trust-levels-prefill-the-policy) ; `policyFromMacroActions`
   // writes the explicit lines the creation form would.
   test('macro-actions : read runs freely ; at Prudent, prod writes ask first', () => {
     const policy = policyFromMacroActions(

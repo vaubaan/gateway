@@ -2,7 +2,7 @@
  * Structural test (spec §10): "every catalog groups each of its risks but the
  * fallback in exactly one macro-action, and no catalog ships presets" — and
  * no macro-action takes a name the gateway keeps for itself (ADR
- * macro-actions-and-trust-crans-prefill-the-policy).
+ * macro-actions-and-trust-levels-prefill-the-policy).
  *
  * Read from the plugins the image ships (`compose/shipped-plugins.ts`), not
  * from a list kept here: a plugin added tomorrow is held to the rule the day

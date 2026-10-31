@@ -53,7 +53,7 @@ export interface MacroActionEntryInfo {
   readonly rateWindowSeconds: number;
 }
 
-/** A macro-action of the catalog (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+/** A macro-action of the catalog (ADR macro-actions-and-trust-levels-prefill-the-policy). */
 export interface MacroActionInfo {
   readonly id: string;
   readonly label: string;
