@@ -18,16 +18,18 @@
 
 import {
   CredentialRefusal,
-  UpstreamAuthError,
-  UpstreamHttpError,
+  anyJson,
   expectCredentialKind,
+  httpJson,
+  isList,
+  isRecord,
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 
-import { imagePrefixesOf, isRecord, slug } from './identifiers.ts';
+import { imagePrefixesOf, slug } from './identifiers.ts';
 import {
   API_TOKEN_FIELD,
   DEFAULT_IMAGE_PREFIXES,
@@ -138,12 +140,6 @@ export function imagePrefixesOfCredential(credential: CredentialSecret): readonl
   );
 }
 
-interface TokenInfo {
-  readonly org_slug?: unknown;
-  readonly organization?: unknown;
-  readonly apps?: unknown;
-}
-
 /**
  * Asks Fly about the pasted token (`GET /tokens/current`) : it must answer,
  * and every macaroon it carries must be for the organization the form
@@ -157,29 +153,24 @@ export async function verifyFlyToken(ctx: ConnectionContext): Promise<Credential
       401,
     );
   }
-  const res = await ctx.fetch(`${FLY_API_BASE}/tokens/current`, {
-    redirect: 'error',
-    method: 'GET',
-    headers: { authorization: authorizationOf(ctx.credential), accept: 'application/json' },
-    ...(ctx.signal ? { signal: ctx.signal } : {}),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw new UpstreamAuthError(`Fly refused the token (HTTP ${res.status})`, res.status);
-  }
-  if (!res.ok)
-    throw new UpstreamHttpError(
-      `Fly GET /tokens/current failed with HTTP ${res.status}`,
-      res.status,
-    );
-  const body: unknown = await res.json();
-  const tokens = isRecord(body) && Array.isArray(body.tokens) ? (body.tokens as unknown[]) : null;
+  // Read leniently (`anyJson`) : an answer without a token list is the
+  // person's mistake (a token of another kind), told in the plugin's words.
+  const body = await httpJson(
+    ctx,
+    {
+      url: `${FLY_API_BASE}/tokens/current`,
+      headers: { authorization: authorizationOf(ctx.credential) },
+    },
+    anyJson,
+  );
+  const tokens = isRecord(body) && isList(body.tokens) ? body.tokens : null;
   if (!tokens || tokens.length === 0) {
     throw new CredentialRefusal(
       'Fly did not describe the token: is it a token of fly tokens create?',
       401,
     );
   }
-  const infos = tokens.filter(isRecord) as TokenInfo[];
+  const infos = tokens.filter(isRecord);
   const orgs = new Set(infos.map((info) => info.org_slug));
   if (infos.length !== tokens.length || orgs.size !== 1 || !orgs.has(org)) {
     throw new CredentialRefusal(

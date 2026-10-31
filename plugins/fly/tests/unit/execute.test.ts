@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { Resource } from '@vaubaan/plugin-sdk';
+import { UpstreamProtocolError, type Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch, refusalText, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import { TOOL } from '../../src/identity.ts';
@@ -158,6 +158,31 @@ describe('requests', () => {
       name: 'UpstreamHttpError',
       status: 503,
     });
+  });
+
+  test('an answer that is not JSON, or not the shape the executor reads, is an UpstreamProtocolError', async () => {
+    await expect(
+      run([{ url: `${API}/apps/acme-gw`, body: 'not json' }], TOOL.getApp, {}).result,
+    ).rejects.toBeInstanceOf(UpstreamProtocolError);
+    // The machine a config change starts from, and the lease it is written under.
+    await expect(
+      run(
+        [appIdentityRoute(), { method: 'GET', url: `${API}/apps/acme-gw/machines/m1`, body: {} }],
+        TOOL.deployImage,
+        { app: 'acme-gw', machine_id: 'm1', image: IMAGE },
+      ).result,
+    ).rejects.toThrow(/a machine with a config: unexpected answer/);
+    await expect(
+      run(
+        [
+          appIdentityRoute(),
+          machineRoute(config(OLD_IMAGE)),
+          { method: 'POST', url: (u) => u.endsWith('/lease'), body: { nonce: '' } },
+        ],
+        TOOL.deployImage,
+        { app: 'acme-gw', machine_id: 'm1', image: IMAGE },
+      ).result,
+    ).rejects.toThrow(/a lease with a nonce: unexpected answer/);
   });
 
   test('a success without content becomes a confirmation', async () => {
@@ -578,9 +603,9 @@ describe('discoverResources', () => {
   test('refuses an unexpected payload, a name no call could use, an app of another organization', async () => {
     const answer = (body: unknown) =>
       mockFetch([{ url: (u) => u.startsWith(`${API}/apps?`), body }]);
-    await expect(flyPlugin.discoverResources(context(answer([{ id: 'x' }]), []))).rejects.toThrow(
-      /unexpected app list/,
-    );
+    const unexpected = flyPlugin.discoverResources(context(answer([{ id: 'x' }]), []));
+    await expect(unexpected).rejects.toBeInstanceOf(UpstreamProtocolError);
+    await expect(unexpected).rejects.toThrow(/GET \/apps: .* unexpected answer/);
     await expect(
       flyPlugin.discoverResources(context(answer({ apps: [{ id: 'x', name: 'A/..' }] }), [])),
     ).rejects.toThrow(/not a Fly app name/);
@@ -629,6 +654,7 @@ describe('the token check at paste', () => {
       upstreamStatus: 401,
     });
     await expect(verify({}, 500)).rejects.toMatchObject({ name: 'UpstreamHttpError' });
+    await expect(verify('not json')).rejects.toBeInstanceOf(UpstreamProtocolError);
   });
 
   test('malformed image prefixes are refused before asking Fly', async () => {

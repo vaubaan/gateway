@@ -8,6 +8,7 @@
 
 import {
   declaredArgumentsOf,
+  isRecord,
   undeclaredArgumentDenial,
   type ClassifyConnection,
   type Resource,
@@ -20,7 +21,6 @@ import {
   imagePrefixesOf,
   imageRefusal,
   ipAddress,
-  isRecord,
   pathIdent,
   region,
   secretName,

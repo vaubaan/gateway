@@ -27,7 +27,6 @@ const PLUGINS = join(REPO, 'plugins');
 const NOT_YET_ON_THE_TRANSPORT: readonly string[] = [
   'cloudflare-dns',
   'context7',
-  'fly',
   'github',
   'google-calendar',
   'notion',
