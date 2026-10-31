@@ -26,8 +26,8 @@ import { AUTH_FAILURE_REASONS, type AuthFailureReason } from '@vaubaan/gateway-c
 import { REFUSAL_CODES, type MissionPolicyEntry, type RefusalCode } from '@vaubaan/shared';
 
 import { MANAGEMENT_DOOR_PATH } from '../oauth-as/endpoints';
-import type { DraftPeriod } from './model';
-import { expiryPhrase, periodPhrase } from './summary';
+import type { DraftPeriod } from '../../lib/missions/model';
+import { expiryPhrase, periodPhrase } from '../../lib/missions/summary';
 import { maskedToken } from './token';
 
 /** The variable every snippet refers to. */

@@ -2,7 +2,7 @@ import { createRegistry } from '@vaubaan/plugin-sdk';
 import type { DataModel } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
-import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
+import { SHIPPED_PLUGINS } from '../../server/compose/shipped-plugins';
 import {
   hasSeveralPlanes,
   OTHER_PLANE,

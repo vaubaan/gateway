@@ -13,7 +13,7 @@ import { TRUST_LEVELS } from '@vaubaan/policy-engine';
 import { GATES } from '@vaubaan/shared';
 import { z } from 'zod';
 
-import type { MissionDraft } from './model';
+import type { MissionDraft } from '../../lib/missions/model';
 
 const MAX_CONNECTIONS = 32;
 const MAX_ENTRIES = 2000;

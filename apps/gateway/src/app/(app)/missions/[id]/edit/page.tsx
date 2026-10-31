@@ -11,7 +11,7 @@ import { NeedsUser } from '@/components/auth/NeedsUser';
 import { ButtonLink, Callout, PageHeader } from '@/components/ui';
 import { MISSION_ACTIONS, ROUTES } from '@/lib/vocabulary';
 import { currentUser } from '@/lib/auth/session';
-import { riskPlanesOf, type RiskPlanes } from '@/server/providers/planes';
+import { riskPlanesOf, type RiskPlanes } from '@/lib/providers/planes';
 
 import { MissionForm } from '../../new/mission-form';
 

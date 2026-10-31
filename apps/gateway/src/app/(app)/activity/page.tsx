@@ -76,9 +76,9 @@ import {
   type AuditEntryView,
   type ParsedAuditQuery,
 } from '@/server/audit';
-import type { CatalogRisk } from '@/server/missions/model';
-import { riskReferencePath } from '@/server/providers/links';
-import { riskExplainer } from '@/server/providers/reference';
+import type { CatalogRisk } from '@/lib/missions/model';
+import { riskReferencePath } from '@/lib/providers/links';
+import { riskExplainer } from '@/lib/providers/reference';
 
 import styles from './activity.module.css';
 import { changeLines, type ChangeNames } from './change-lines';

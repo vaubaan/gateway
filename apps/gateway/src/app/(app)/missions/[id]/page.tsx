@@ -69,11 +69,11 @@ import {
   waitingFor,
   WAITING,
 } from '@/lib/vocabulary';
-import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
+import { enumerateCatalog, groupVariants } from '@/lib/missions/catalog-view';
 import { missionGitView } from '@/server/missions/git-view';
 import { shortId } from '@/server/missions/short-id';
 import { explainLost, explainOrphan } from '@/server/missions/orphan-reason';
-import { riskExplainer } from '@/server/providers/reference';
+import { riskExplainer } from '@/lib/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
 import type { RequestCall } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';

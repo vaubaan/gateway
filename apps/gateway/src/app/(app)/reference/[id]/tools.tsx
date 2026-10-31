@@ -6,9 +6,9 @@
  */
 import { DataTable, Mono, Tag, type Column } from '@/components/ui';
 import { REFERENCE_WORDS } from '@/lib/vocabulary';
-import { REFERENCE_SECTIONS } from '@/server/providers/links';
-import { OTHER_PLANE } from '@/server/providers/planes';
-import { TOOL_RISKS_NOTE, type ToolReference } from '@/server/providers/reference';
+import { REFERENCE_SECTIONS } from '@/lib/providers/links';
+import { OTHER_PLANE } from '@/lib/providers/planes';
+import { TOOL_RISKS_NOTE, type ToolReference } from '@/lib/providers/reference';
 
 import styles from '../reference.module.css';
 

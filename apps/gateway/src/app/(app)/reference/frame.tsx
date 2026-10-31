@@ -5,8 +5,8 @@
  */
 import { PageHeader, ServiceMark, SubNav, SubNavFrame } from '@/components/ui';
 import { count, PAGES, REFERENCE_WORDS, ROUTES, TERMS } from '@/lib/vocabulary';
-import { providerPath } from '@/server/providers/links';
-import type { ProviderCard } from '@/server/providers/reference';
+import { providerPath } from '@/lib/providers/links';
+import type { ProviderCard } from '@/lib/providers/reference';
 
 /** "15 permissions · 4 macro-actions · 26 tools" */
 export function catalogSize(card: Pick<ProviderCard, 'counts'>): string {

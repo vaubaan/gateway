@@ -52,7 +52,7 @@ import {
 import type { MissionGrounds, Subject } from '../authority';
 import { revivesEndedMission, type CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
-import { enumerateCatalog } from '../missions/catalog-view';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import { InvariantError, NotFoundError } from '../store/errors';

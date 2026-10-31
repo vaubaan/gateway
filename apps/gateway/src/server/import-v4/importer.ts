@@ -41,8 +41,8 @@ import type {
   IssuanceResource,
   MissionDraft,
   PreviewIssue,
-} from '../missions/model';
-import { MISSION_NAME_MAX_LENGTH } from '../missions/preview';
+} from '../../lib/missions/model';
+import { MISSION_NAME_MAX_LENGTH } from '../../lib/missions/preview';
 import { withoutControlCharacters } from './control-characters';
 import type { Store } from '../store';
 import type { ConnectionRecord, ConnectionResourceRecord } from '../store/types';

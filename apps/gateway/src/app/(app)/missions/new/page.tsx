@@ -6,7 +6,7 @@
  */
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { currentUser } from '@/lib/auth/session';
-import { riskPlanesOf, type RiskPlanes } from '@/server/providers/planes';
+import { riskPlanesOf, type RiskPlanes } from '@/lib/providers/planes';
 
 import { MissionForm, type InitialDraft } from './mission-form';
 

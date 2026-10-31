@@ -55,8 +55,8 @@ import {
 import type { GatewayRoot } from '@/server/compose';
 import { connectionPath, type Actor, type ConnectionView } from '@/server/connections';
 import type { MissionOnConnection } from '@/server/missions/mission-service';
-import { PROVIDERS_PATH } from '@/server/providers/links';
-import { providerCards } from '@/server/providers/reference';
+import { PROVIDERS_PATH } from '@/lib/providers/links';
+import { providerCards } from '@/lib/providers/reference';
 import type { ReceivedRisk, ReceivedShare } from '@/server/shares';
 
 export const dynamic = 'force-dynamic';

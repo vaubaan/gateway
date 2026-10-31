@@ -9,8 +9,8 @@ import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import { Hint, Row, Rows, Section, ServiceMark } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
 import { REFERENCE_WORDS } from '@/lib/vocabulary';
-import { providerPath } from '@/server/providers/links';
-import { providerCards } from '@/server/providers/reference';
+import { providerPath } from '@/lib/providers/links';
+import { providerCards } from '@/lib/providers/reference';
 
 import { catalogSize, ReferenceFrame } from './frame';
 import styles from './reference.module.css';

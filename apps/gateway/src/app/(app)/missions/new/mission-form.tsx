@@ -85,11 +85,11 @@ import type {
   PreviewIssue,
   PreviewNotice,
   ResolvedDraftConnection,
-} from '@/server/missions/model';
-import { hasChanges, judgeEdit } from '@/server/missions/mission-edit';
-import { defaultResources, previewDraft } from '@/server/missions/preview';
-import type { TrustLevel } from '@/server/missions/macro-actions';
-import type { RiskPlanes } from '@/server/providers/planes';
+} from '@/lib/missions/model';
+import { hasChanges, judgeEdit } from '@/lib/missions/mission-edit';
+import { defaultResources, previewDraft } from '@/lib/missions/preview';
+import type { TrustLevel } from '@/lib/missions/macro-actions';
+import type { RiskPlanes } from '@/lib/providers/planes';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
 import { messageOf } from '../message-of';

@@ -26,7 +26,7 @@ import {
 import { requirePrincipal } from '@/lib/auth/session';
 import { ENVIRONMENT_WORDS } from '@/lib/vocabulary';
 import { gitRemoteBase } from '@/server/git/paths';
-import { providerCards, providerReference } from '@/server/providers/reference';
+import { providerCards, providerReference } from '@/lib/providers/reference';
 
 import { catalogSize, ReferenceFrame } from '../frame';
 import styles from '../reference.module.css';

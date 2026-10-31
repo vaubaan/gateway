@@ -85,8 +85,12 @@ import {
   type KitPolicyLine,
 } from './bootstrap-kit';
 import { gitRemoteBase } from '../git/paths';
-import { enumerateCatalog } from './catalog-view';
-import { knownTrustLevels, macroActionsOf, type MacroActionTrustLevels } from './macro-actions';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
+import {
+  knownTrustLevels,
+  macroActionsOf,
+  type MacroActionTrustLevels,
+} from '../../lib/missions/macro-actions';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -100,7 +104,7 @@ import type {
   PreviewNotice,
   ResolvedDraftConnection,
   SeverityLevel,
-} from './model';
+} from '../../lib/missions/model';
 import { parseMissionDraft } from './draft-schema';
 import {
   auditOfChanges,
@@ -112,8 +116,8 @@ import {
   type MissionChanges,
   type MissionSnapshot,
   type MissionSnapshotConnection,
-} from './mission-edit';
-import { checkPolicyLines, previewDraft } from './preview';
+} from '../../lib/missions/mission-edit';
+import { checkPolicyLines, previewDraft } from '../../lib/missions/preview';
 import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';

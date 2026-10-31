@@ -22,8 +22,8 @@ import {
   DEFAULT_TRUST_LEVEL,
   TRUST_LEVELS,
   type TrustLevel,
-} from '@/server/missions/macro-actions';
-import type { IssuanceConnection } from '@/server/missions/model';
+} from '@/lib/missions/macro-actions';
+import type { IssuanceConnection } from '@/lib/missions/model';
 
 import styles from '../missions.module.css';
 import {

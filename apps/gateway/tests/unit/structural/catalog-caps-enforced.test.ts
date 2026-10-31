@@ -15,7 +15,7 @@ import {
   ENFORCED_INFRA_LIMIT_KEYS,
   unenforcedLimitsOf,
 } from '../../../src/server/execution/scope-caps';
-import { budgetProblem } from '../../../src/server/missions/preview';
+import { budgetProblem } from '../../../src/lib/missions/preview';
 
 describe('shipped catalogs declare only the limits the door enforces', () => {
   it.each(SHIPPED_PLUGINS.map((plugin) => [plugin.id, plugin] as const))(

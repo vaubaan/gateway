@@ -53,7 +53,7 @@ import type { MissionAccess, MissionRole, MissionService, RevealedToken } from '
 import { mintMissionToken, type TokenMinter } from './token';
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
-import { parseTokenName } from './token-name';
+import { parseTokenName } from '../../lib/missions/token-name';
 
 export interface MissionTeamDeps {
   readonly store: Pick<Store, 'missions' | 'users' | 'sessions' | 'auditWriter'>;

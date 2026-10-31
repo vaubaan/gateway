@@ -25,7 +25,7 @@ import {
   type RotationEventDetails,
 } from '@vaubaan/shared';
 
-import { describeMissionChange } from '../missions/change-words';
+import { describeMissionChange } from '../../lib/missions/change-words';
 
 export interface SessionEventLike {
   readonly id: string;

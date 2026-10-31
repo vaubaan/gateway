@@ -34,15 +34,15 @@ import {
   Tag,
 } from '@/components/ui';
 import { ACTIONS, formatNumber, giveAccessLabel } from '@/lib/vocabulary';
-import { groupByKind } from '@/server/missions/catalog-view';
-import type { CatalogRisk } from '@/server/missions/model';
-import { riskReferencePath } from '@/server/providers/links';
+import { groupByKind } from '@/lib/missions/catalog-view';
+import type { CatalogRisk } from '@/lib/missions/model';
+import { riskReferencePath } from '@/lib/providers/links';
 import {
   envNotes,
   selectAllIds,
   summarizeRestriction,
   type EnvLabelling,
-} from '@/server/shares/restriction';
+} from '@/lib/shares/restriction';
 
 import styles from '../../accounts.module.css';
 

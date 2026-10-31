@@ -6,7 +6,7 @@
 import { EmptyState, InboxFrame, PageHeader, SummaryLine } from '@/components/ui';
 import { PAGES, REQUEST_WORDS, ROUTES } from '@/lib/vocabulary';
 import type { GatewayRoot } from '@/server/compose';
-import { riskExplainer } from '@/server/providers/reference';
+import { riskExplainer } from '@/lib/providers/reference';
 import type { RequestSummary, RequestView as View, WaitingItem } from '@/server/requests';
 import type { UserRecord } from '@/server/store/types';
 import type { SeverityWord } from '@/lib/vocabulary';
