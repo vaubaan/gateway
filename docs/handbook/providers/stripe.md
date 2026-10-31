@@ -53,8 +53,9 @@ discovery writes one resource per mode (`acct_…/test`, `acct_…/live`).
 
 ## Outside the repo
 
-- Paste a test key (`sk_test_…` / `rk_test_…`) and/or a live key in their own fields; a restricted
-  key limits what Stripe itself will answer.
+- Paste the secret key of the sandbox (`sk_test_…`) and/or of live mode in their own fields; the
+  guide asks for secret keys (a restricted key fails tool by tool). Checked at paste with
+  `GET /v1/account` per key; a restricted key that may not read its account is refused.
 
 ## Debug
 

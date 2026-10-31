@@ -2,9 +2,9 @@
  * Form controls, and the field that labels them.
  *
  * A field **says the shape it expects before the person types**, in its label
- * ("Restricted key · starts with `rk_test_` or `rk_live_`, 32 characters or
+ * ("Secret key · starts with `sk_test_` or `sk_live_`, 32 characters or
  * more"), and says it again in the error, beside the control, with what to do
- * ("This is a secret key. Create a restricted key at…"). A required field is
+ * ("This is a restricted key. Reveal the secret key at…"). A required field is
  * visibly required; an optional one says "optional". An input has no success
  * state: the absence of an error is enough.
  *

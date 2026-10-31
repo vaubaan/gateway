@@ -2,8 +2,9 @@
  * `/accounts/new/<provider>` — connect an account of one service: the one
  * place to authorize it (ADR one-place-to-authorize-services-token-first).
  * The form is rendered from the plugin's `CredentialSpec`: the guide and the
- * declared fields for `api-key` (`TokenGuide`: where to create the token, the
- * permissions to tick, the expiry), a button that leads to the service for
+ * declared fields for `api-key` (`TokenGuide`: how wide to grant and why, the
+ * steps, the token page, the permissions to tick, the expiry, the service's
+ * documentation), a button that leads to the service for
  * `oauth2`, the fields for `ssh-key`. `?connection=<id>` turns it into
  * "reconnect" for an existing account.
  *
@@ -13,7 +14,7 @@
  * gmail-over-imap-with-an-app-password).
  *
  * A field says the shape it expects before the person types (its placeholder
- * and the line under it are the plugin's); the how-to is folded by default.
+ * and the line under it are the plugin's); the how-to is open by default.
  * A form the server refused comes back as it was typed — the name and the
  * non-secret values, never a key — with the field in error marked and the
  * shape said again under it (`Notice.form`).
@@ -82,7 +83,10 @@ function ledeOf(provider: ConnectableProvider): string {
   }
 }
 
-/** What the folded how-to says, per way of connecting. */
+/**
+ * What the how-to says for a way without a token guide (`oauth2`, `ssh-key`);
+ * a token way shows its guide instead.
+ */
 function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconnect: boolean }) {
   const name = provider.displayName;
   return (
@@ -107,23 +111,6 @@ function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconne
           This gateway’s OAuth broker is <strong>not attested</strong>: an administrator declared it
           with <code>attestation: none</code>, so the gateway does not check which code the broker
           runs before it sends it your authorization.
-        </p>
-      )}
-      {provider.kind === 'api-key' && (
-        <p>
-          Create the key at {name}
-          {provider.createUrl && (
-            <>
-              {' '}
-              (
-              <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">
-                open its page
-              </a>
-              )
-            </>
-          )}
-          , give it only what your agents will need, and paste it here. It is checked against {name}
-          , then stored encrypted; it is never shown again.
         </p>
       )}
       {provider.kind === 'ssh-key' && (
@@ -307,6 +294,7 @@ export default async function ConnectOneAccountPage({
             ) : (
               <Disclosure
                 id={`account-connect:${provider.kind}`}
+                defaultOpen
                 show={redirectFlow ? `What happens at ${name}` : 'How to get what this form asks'}
                 hide="Hide the how-to"
                 testId="connect-how-to"

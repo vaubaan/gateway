@@ -22,6 +22,7 @@ import {
   assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
+  guideText,
   mockFetch,
   policyFromMacroActions,
   type ToolSamples,
@@ -159,8 +160,8 @@ describe('gmail plugin — SDK kit', () => {
     assertNoWildcard(gmailPlugin);
   });
 
-  test('is at 1.1.0, no longer says experimental, and exposes its fourteen tools', () => {
-    expect(gmailPlugin.version).toBe('1.1.0');
+  test('is at 1.1.1, no longer says experimental, and exposes its fourteen tools', () => {
+    expect(gmailPlugin.version).toBe('1.1.1');
     expect(gmailPlugin.description).not.toMatch(/experimental/i);
     expect(gmailPlugin.summary).not.toMatch(/experimental/i);
     expect(gmailPlugin.description).toMatch(/send messages and drafts over SMTP/);
@@ -330,7 +331,7 @@ describe('gmail credential spec — an app password over IMAP', () => {
 
   test('the guide : 2-Step Verification, the app passwords page, the name, Workspace and IMAP caveats ; no permission, no expiry', () => {
     if (spec.kind !== 'api-key' || !spec.guide) throw new Error('guide expected');
-    const text = spec.guide.steps.join(' ');
+    const text = guideText(spec.guide);
     expect(text).toMatch(/2-Step Verification/);
     expect(text).toContain('https://myaccount.google.com/apppasswords');
     expect(text).toContain('"Vaubaan Gateway"');
@@ -338,7 +339,7 @@ describe('gmail credential spec — an app password over IMAP', () => {
     expect(text).toMatch(/IMAP is on/);
     expect(text).toMatch(/no scopes/);
     expect(spec.guide.permissions).toEqual([]);
-    expect(spec.guide.recommendedExpiryDays).toBeNull();
+    expect(spec.guide.expiry.kind).toBe('none');
   });
 
   test('the field patterns accept the password with or without Google’s spaces', () => {

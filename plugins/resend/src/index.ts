@@ -6,7 +6,8 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/providers/resend.md ; guide : plugins/resend/README.md.
  *
- * Credential : `api-key`, one secret field (`api_key`, `re_…`). Resources :
+ * Credential : `api-key`, one secret field (`api_key`, `re_…`), Full access
+ * (`credential.ts`). Resources :
  * the account's sending domains (ref = domain name, recipient-zone lists in
  * the metadata) and segments (ref = segment id). The YAML catalog is loaded
  * here, once, at import (that is, at gateway boot).
@@ -16,6 +17,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 
 import { classifyResend } from './classify.ts';
 import { createdResendResources } from './created.ts';
+import { resendCredential } from './credential.ts';
 import { resendDataModel } from './data-model.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
 import { RESEND_ICON, RESEND_ICON_COLOR } from './icon.ts';
@@ -31,7 +33,7 @@ export const resendPlugin = definePlugin({
   displayName: 'Resend',
   icon: RESEND_ICON,
   iconColor: RESEND_ICON_COLOR,
-  version: '0.5.3',
+  version: '0.5.4',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',
@@ -49,23 +51,7 @@ export const resendPlugin = definePlugin({
   createdResources: createdResendResources,
   dataModel: resendDataModel,
   catalog: resendCatalog.catalog,
-  credential: {
-    kind: 'api-key',
-    createUrl: 'https://resend.com/api-keys',
-    fields: [
-      {
-        name: 'api_key',
-        label: 'API key',
-        secret: true,
-        placeholder: 're_…',
-        pattern: '^re_[A-Za-z0-9_-]+$',
-        help:
-          'A key with "Full access" : resource discovery lists the domains and segments, which a ' +
-          '"Sending access" key cannot read. Recipient zones are configured per domain resource ' +
-          'after connection.',
-      },
-    ],
-  },
+  credential: resendCredential,
   classify: classifyResend,
   execute: executeResend,
   discoverResources: discoverResendResources,
@@ -75,6 +61,7 @@ export default resendPlugin;
 
 export { classifyResend, resendDataModel, resendTools };
 export { BATCH_MAX_EMAILS } from './classify.ts';
+export { RESEND_API_KEYS_PAGE, resendCredential, verifyResendKey } from './credential.ts';
 export {
   DISCOVERY_PAGE_SIZE,
   MAX_DISCOVERED_PER_KIND,

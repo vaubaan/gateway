@@ -29,11 +29,11 @@ export const supabasePlugin = definePlugin({
   displayName: 'Supabase',
   icon: SUPABASE_ICON,
   iconColor: SUPABASE_ICON_COLOR,
-  version: '5.0.4',
+  version: '5.0.5',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
   summary:
-    'One account is one personal access token of the Management API, scoped to the organisation and the projects the missions need; one resource is one project (database, storage, auth and edge functions). Supabase runs one project per environment, so the owner of the account labels each project (staging, prod, …) and the permissions tied to an environment apply to the projects carrying that label.',
+    'One account is one personal access token of the Management API, scoped to the whole organization; one resource is one project (database, storage, auth and edge functions). Supabase runs one project per environment, so the owner of the account labels each project (staging, prod, …) and the permissions tied to an environment apply to the projects carrying that label.',
   manualRevocation:
     'Delete the token in Supabase, signed in as the account that created it: Account preferences, Access tokens.',
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/supabase.md',

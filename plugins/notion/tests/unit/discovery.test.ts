@@ -143,7 +143,7 @@ describe('discoverResources', () => {
 });
 
 describe('verify : internal connection tokens only', () => {
-  const verify = notionCredential.verify!;
+  const verify = notionCredential.verify;
   const me = (body: unknown) =>
     mockFetch([{ method: 'GET', url: `${NOTION_API_BASE}/users/me`, body }]);
 
@@ -185,5 +185,16 @@ describe('verify : internal connection tokens only', () => {
     expect(pattern.test('secret_0123456789abcdefghij')).toBe(true);
     expect(pattern.test('ntn_0123 456789abcdefghij')).toBe(false);
     expect(pattern.test('short')).toBe(false);
+  });
+});
+
+describe('the guide : pages are shared before the paste', () => {
+  test('the share step comes before the copy, so the first discovery finds the pages', () => {
+    const steps = notionCredential.guide.steps.map((step) => step.do);
+    const share = steps.findIndex((step) => step.startsWith('Share every top-level page'));
+    expect(share).toBeGreaterThan(-1);
+    expect(share).toBeLessThan(steps.length - 1);
+    expect(steps.at(-1)).toMatch(/paste it here/);
+    expect(notionCredential.guide.expiry.kind).toBe('none');
   });
 });

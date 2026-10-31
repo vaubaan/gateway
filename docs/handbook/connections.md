@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/components/connections/
   - apps/gateway/tests/integration/connections/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-10-31
 ---
 
 # Connections — handbook
@@ -32,6 +32,7 @@ discovering and curating its resources. Spec:
 ## Invariants
 
 - **Connect state** (`pending.ts`): 32 random bytes, consumed once whoever presents it, returned only to the session of the user who started it, for that provider only; anything else is `state-invalid`. The redirect URI is built from `public_url`, never the request host; a foreign `return_to` is refused (`return-url-refused`), never defaulted.
+- **A token way is guided entirely by its plugin** (`TokenGuideView` in `service.ts`, rendered by `components/connections/TokenGuide.tsx`): how wide to grant and why, the steps, the token page, the permissions, the expiry kind, the documentation. The page writes nothing about a service; `definePlugin` refuses a token way without its guide or `verify`, and `tests/unit/structural/token-guides.test.ts` holds the shipped ones to it (ADR one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide, narrowed by each mission).
 - **A token is checked before it is stored**: a rejected one stores nothing. A failed first discovery refuses an `api-key` connection, is recorded for `oauth2` (the code is spent), is not attempted for `ssh-key`.
 - **No message in a URL**: outcomes travel as an opaque `?notice=<id>`, readable once, only by the web session it was written for. A refused form is echoed back, **never a `secret` field**.
 - **A provider's error text is never shown, logged or stored** at connect or refresh (it can echo the credential): only its status in the gateway's words. The agent still gets it on a tool call (ADR [provider-error-text-stays-with-the-agent](../decisions/provider-error-text-stays-with-the-agent.md)). A plugin-worded `CredentialRefusal` is kept.
@@ -43,6 +44,8 @@ discovering and curating its resources. Spec:
 
 ## Traps
 
+- `expiry: person-types` (Supabase, Fly, Upstash): the person picked a date the service never says back, so the account page reads "no expiry known" and cannot warn; only `provider-reports` ways (GitHub, Cloudflare, Vercel) get the 14-day notice. `CredentialCheck.granted` is not stored yet.
+- A `verify` failure the plugin did not word as a `CredentialRefusal` reaches the person as "the provider rejected the credential (HTTP 401)" (`failure-reason.ts`): a plugin names every cause it can.
 - `reassign` decides "ownerless now, new owner group has a member" **inside** the write transaction (`assignOwnerlessTo`); the service's earlier reads only choose which refusal is named.
 - `revoke`, `transfer` and `reassign` write `mission-orphaned` / `mission-restored` in a `finally`, even if the act's own audit entry fails: the act is committed and the audit must say why missions stopped.
 - An account made a way the plugin no longer offers (`isRetiredWay`) keeps id, resources and missions but nothing reads its secret: calls are refused before the budget, its tools leave `tools/list`. Reconnecting keeps the id.
@@ -56,7 +59,7 @@ discovering and curating its resources. Spec:
 
 - **Add a provider**: the plugin, a `SHIPPED_PLUGINS` entry, the dependency in `apps/gateway/package.json` (`next.config.ts` derives `transpilePackages` from it). A new credential kind changes the plugin contract: ADR first.
 - **Hosted, several processes**: replace the two `// single-process only` guards (`PendingConnectStore`, `CredentialBroker` refresh) with an atomic get-and-delete and a shared lock.
-- No test connects a real account: after changing a token way, connect one real account by hand and check its resources.
+- No test connects a real account: after changing a token way, connect one real account by hand, following the guide as written, and check its resources; the demo (`tests/demo/providers.ts`) and the v4 import test answer each plugin's `verify` and need a route when a check at paste changes.
 
 ## Debug
 

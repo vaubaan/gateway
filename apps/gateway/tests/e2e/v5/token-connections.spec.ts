@@ -111,6 +111,9 @@ test('GitHub: a fine-grained token, its permissions listed, a classic token refu
   await signIn(page);
   await page.goto('/accounts/new/github');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a GitHub account$/);
+  // How wide to grant, and why, above the steps: the mission narrows it.
+  await expect(page.getByTestId('token-reach')).toContainText('All repositories');
+  await expect(page.getByTestId('token-permissions')).toContainText('Tick all of them');
   await expect(page.getByTestId('token-permissions')).toContainText('Contents');
   await expect(page.getByTestId('token-permissions')).toContainText('Workflows');
   // One way of connecting: nothing else is offered.
@@ -140,7 +143,7 @@ test('Railway: a workspace token, checked, named by its workspace', async ({ pag
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a Railway account$/);
   const guide = page.getByTestId('token-guide');
   await expect(guide).toContainText('a workspace token reaches that workspace only');
-  await expect(guide).toContainText('An account token, created with No workspace selected');
+  await expect(guide).toContainText('Choose No workspace instead only for an account token');
   await expect(guide).toContainText('A project token is not accepted');
   await captureAll(page, 'connect-railway-token');
 

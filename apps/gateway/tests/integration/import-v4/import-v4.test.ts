@@ -207,6 +207,11 @@ describe('import of a v4 organization', () => {
   const fakeFetch: typeof fetch = async (input) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     calls.push(`${url.hostname}${url.pathname}`);
+    if (url.hostname === 'api.cloudflare.com' && url.pathname.endsWith('/user/tokens/verify')) {
+      if (cloudflareRejects)
+        return json({ success: false, errors: [{ message: 'Invalid API Token' }] }, 401);
+      return json({ success: true, result: { id: 'tok_web', status: 'active' } });
+    }
     if (url.hostname === 'api.cloudflare.com' && url.pathname.endsWith('/zones')) {
       if (cloudflareRejects)
         return json({ success: false, errors: [{ message: 'Invalid API Token' }] }, 403);
@@ -215,6 +220,9 @@ describe('import of a v4 organization', () => {
         result: [{ id: 'zone_web', name: 'acme.example', account: { id: 'cfacc', name: 'Acme' } }],
         result_info: { total_pages: 1 },
       });
+    }
+    if (url.hostname === 'api.vercel.com' && url.pathname === '/v5/user/tokens/current') {
+      return json({ token: { id: 'tk_web', name: 'v4 import' } });
     }
     if (url.hostname === 'api.vercel.com' && url.pathname === '/v2/teams/team_acme01') {
       return json({ id: 'team_acme01', slug: 'acme', name: 'Acme' });

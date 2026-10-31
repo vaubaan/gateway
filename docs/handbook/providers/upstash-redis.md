@@ -58,8 +58,9 @@ plane, the database as resource, its owner label as environment. No upstream MCP
 
 ## Outside the repo
 
-- Credential: the account `email` and a Management API key (Upstash console → Account → Management
-  API). No refresh.
+- Credential: the account `email` and a Read/Write Developer API key (Upstash console → Account →
+  Developer API), with an expiry Upstash does not say back. Checked at paste with `GET /v2/teams`.
+  No refresh. Accounts made through Vercel or Fly have no Developer API.
 
 ## Procedures
 

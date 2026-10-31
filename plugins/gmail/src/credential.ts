@@ -43,14 +43,31 @@ const APP_PASSWORD_LENGTH = 16;
 
 export const gmailGuide: TokenGuide = {
   steps: [
-    'Sign in to the Google Account of the mailbox and turn on 2-Step Verification under Security, if it is not on yet: Google offers app passwords only then.',
-    `Open ${GMAIL_APP_PASSWORDS_URL}, create an app password named "Vaubaan Gateway" and copy the 16 letters Google shows.`,
-    'Paste the address of the mailbox and the app password below; the spaces between the groups of letters do not matter.',
-    'An app password has no scopes to choose: it opens the whole mailbox over IMAP, and what an agent may do is decided by the missions of this gateway.',
-    'If Google says app passwords are not available, the Google Workspace administrator of the account has turned them off; if the connection is refused, check that IMAP is on in Gmail, under Settings, Forwarding and POP/IMAP.',
+    {
+      do: 'Sign in to the Google Account of the mailbox and turn on 2-Step Verification under Security, if it is not on yet: Google offers app passwords only then.',
+    },
+    {
+      do: 'Open the App passwords page, create an app password named "Vaubaan Gateway" and copy the 16 letters Google shows; if Google says app passwords are not available, the Google Workspace administrator of the account has turned them off.',
+      url: GMAIL_APP_PASSWORDS_URL,
+    },
+    {
+      do: 'Check that IMAP is on in Gmail, under Settings, Forwarding and POP/IMAP.',
+    },
+    {
+      do: 'Paste the address of the mailbox and the app password here; the spaces between the groups of letters do not matter.',
+    },
   ],
   permissions: [],
-  recommendedExpiryDays: null,
+  reach: {
+    what: 'App password',
+    grant: 'The whole mailbox over IMAP: an app password has no scopes to choose',
+    why: 'What an agent may do is decided by the missions of this gateway, call by call.',
+  },
+  expiry: {
+    kind: 'none',
+    reason:
+      'App passwords do not expire: revoke it on the App passwords page of the Google Account to end this account.',
+  },
   docsUrl: GMAIL_APP_PASSWORDS_HELP_URL,
 };
 

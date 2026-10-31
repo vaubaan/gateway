@@ -11,6 +11,7 @@ import {
   assertCatalogCoverage,
   assertNoWildcard,
   assertPluginWellFormed,
+  guideText,
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -34,7 +35,7 @@ describe('SDK kit', () => {
   test('identity : id, name, icon, version', () => {
     expect(caldavPlugin.id).toBe('caldav');
     expect(caldavPlugin.displayName).toBe('CalDAV Calendar');
-    expect(caldavPlugin.version).toBe('0.1.2');
+    expect(caldavPlugin.version).toBe('0.1.3');
     expect(caldavPlugin.icon).toMatch(/^M/);
     expect(Object.keys(caldavPlugin.toolTitles ?? {}).sort()).toEqual(
       caldavPlugin.tools.map((t) => t.name).sort(),
@@ -92,8 +93,8 @@ describe('credential', () => {
       ['app_password', true],
     ]);
     expect(spec.guide?.permissions).toEqual([]);
-    expect(spec.guide?.steps.join(' ')).toMatch(/caldav\.icloud\.com/);
-    expect(spec.guide?.steps.join(' ')).toMatch(/Google refuses app passwords/);
+    expect(guideText(spec.guide)).toMatch(/caldav\.icloud\.com/);
+    expect(guideText(spec.guide)).toMatch(/Google refuses app passwords/);
     expect(typeof spec.verify).toBe('function');
   });
 
@@ -123,8 +124,7 @@ describe('verify and discovery', () => {
   test('a plain server : the principal at /.well-known/caldav, the account its address', async () => {
     const server = plainServer();
     await expect(
-      caldavPlugin.credential.kind === 'api-key' &&
-        caldavPlugin.credential.verify!(connCtx(server)),
+      caldavPlugin.credential.kind === 'api-key' && caldavPlugin.credential.verify(connCtx(server)),
     ).resolves.toEqual({
       account: USER,
       expiresAt: null,

@@ -1,14 +1,20 @@
 /**
  * How to create a token by hand at a service, read from the plugin's
- * declaration (`ConnectableProvider.guide`): where to go and the expiry to
- * choose (step 1), the permissions to tick with the tools each one serves
- * (step 2). The connect page adds step 3, the form.
- * Nothing about a service is written here; the frame's words are
+ * declaration (`ConnectableProvider.guide`): how wide to grant and why, the
+ * steps with their pages and commands, the token page, who knows the expiry
+ * and the service's documentation (step 1); the permissions to tick with the
+ * tools each one serves (step 2). The connect page adds the last step, the
+ * form. Nothing about a service is written here; the frame's words are
  * `TOKEN_CONNECT`.
  */
-import { FormStep, Hint, Row, Rows } from '@/components/ui';
+import { Callout, CodeBlock, FormStep, Hint, Row, Rows } from '@/components/ui';
 import { listed, TOKEN_CONNECT } from '@/lib/vocabulary';
-import type { ConnectableProvider, TokenPermissionView, ToolLabel } from '@/server/connections';
+import type {
+  ConnectableProvider,
+  TokenGuideView,
+  TokenPermissionView,
+  ToolLabel,
+} from '@/server/connections';
 
 import styles from './TokenGuide.module.css';
 
@@ -35,7 +41,48 @@ export function permissionLines(permissions: readonly TokenPermissionView[]): Pe
   return [...lines].map(([name, line]) => ({ name, ...line }));
 }
 
-/** Steps 1 and 2 of the connect page for a way that has a guide. */
+/** What the page says about the token's lifetime, by who knows it. */
+export function expiryWords(service: string, expiry: TokenGuideView['expiry']): string {
+  switch (expiry.kind) {
+    case 'provider-reports':
+      return TOKEN_CONNECT.expiryReported(service);
+    case 'person-types':
+      return TOKEN_CONNECT.expiryTyped(service, expiry.recommendedDays);
+    case 'none':
+      return expiry.reason;
+  }
+}
+
+function Steps({ steps }: { steps: TokenGuideView['steps'] }) {
+  return (
+    <ol className={styles.steps}>
+      {steps.map((step) => (
+        <li key={step.do}>
+          {step.do}
+          {step.url && (
+            <>
+              {' '}
+              (
+              <a href={step.url} target="_blank" rel="noreferrer noopener">
+                {TOKEN_CONNECT.openStepPage}
+              </a>
+              )
+            </>
+          )}
+          {step.code && (
+            <div className={styles.code}>
+              <CodeBlock label={TOKEN_CONNECT.stepCommand} wrap>
+                {step.code}
+              </CodeBlock>
+            </div>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Steps 1 and 2 of the connect page for a token way. */
 export function TokenGuide({
   service,
   provider,
@@ -49,11 +96,14 @@ export function TokenGuide({
   return (
     <div className={styles.guide} data-testid="token-guide">
       <FormStep n={1} title={TOKEN_CONNECT.stepsTitle(service)}>
-        <ol className={styles.steps}>
-          {guide.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
+        <Callout
+          tone="info"
+          title={TOKEN_CONNECT.reachTitle(guide.reach.what, guide.reach.grant)}
+          testId="token-reach"
+        >
+          {guide.reach.why}
+        </Callout>
+        <Steps steps={guide.steps} />
         {provider.createUrl && (
           <p className={styles.link}>
             <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">
@@ -62,9 +112,10 @@ export function TokenGuide({
           </p>
         )}
         <Hint>
-          {guide.recommendedExpiryDays === null
-            ? TOKEN_CONNECT.noExpiry(service)
-            : TOKEN_CONNECT.expiry(guide.recommendedExpiryDays)}
+          <span data-testid="token-expiry">{expiryWords(service, guide.expiry)}</span>{' '}
+          <a href={guide.docsUrl} target="_blank" rel="noreferrer noopener">
+            {TOKEN_CONNECT.docsLink(service)}
+          </a>
         </Hint>
       </FormStep>
 
@@ -72,30 +123,28 @@ export function TokenGuide({
         <FormStep
           n={2}
           title={TOKEN_CONNECT.permissionsTitle}
-          hint={lines.length > 0 ? TOKEN_CONNECT.permissionsNote : undefined}
+          hint={TOKEN_CONNECT.permissionsNote}
           testId="token-permissions"
         >
-          {lines.length > 0 && (
-            <Rows label={TOKEN_CONNECT.permissionsTitle}>
-              {lines.map((line) => (
-                <Row
-                  key={line.name}
-                  title={line.name}
-                  aside={
-                    <span className={styles.access}>
-                      {line.write ? TOKEN_CONNECT.writeAccess : TOKEN_CONNECT.readAccess}
-                    </span>
-                  }
-                  description={TOKEN_CONNECT.usedBy(
-                    listed(
-                      line.tools.map((tool) => tool.title),
-                      TOOLS_NAMED,
-                    ),
-                  )}
-                />
-              ))}
-            </Rows>
-          )}
+          <Rows label={TOKEN_CONNECT.permissionsTitle}>
+            {lines.map((line) => (
+              <Row
+                key={line.name}
+                title={line.name}
+                aside={
+                  <span className={styles.access}>
+                    {line.write ? TOKEN_CONNECT.writeAccess : TOKEN_CONNECT.readAccess}
+                  </span>
+                }
+                description={TOKEN_CONNECT.usedBy(
+                  listed(
+                    line.tools.map((tool) => tool.title),
+                    TOOLS_NAMED,
+                  ),
+                )}
+              />
+            ))}
+          </Rows>
         </FormStep>
       )}
     </div>

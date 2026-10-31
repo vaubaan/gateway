@@ -11,6 +11,7 @@ import { DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled } from '../../src/flags.ts';
 import { PluginRegistry, PluginRegistryError } from '../../src/registry.ts';
 import { RETIRED_PRESETS_ISSUE } from '../../src/catalog-loader.ts';
 import { PluginAssertionError, assertPluginWellFormed } from '../../src/testing/assertions.ts';
+import { apiKeyCredentialFixture } from '../../src/testing/guide.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 describe('definePlugin', () => {
@@ -444,10 +445,7 @@ describe('definePlugin', () => {
   test('credential spec rules per kind', () => {
     const noSecret: ProviderPlugin = {
       ...acmePlugin,
-      credential: {
-        kind: 'api-key',
-        fields: [{ name: 'account', label: 'Account', secret: false }],
-      },
+      credential: apiKeyCredentialFixture([{ name: 'account', label: 'Account', secret: false }]),
     };
     expect(pluginIssues(noSecret)).toEqual([expect.stringMatching(/at least one secret field/)]);
 

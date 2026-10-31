@@ -20,7 +20,12 @@ import {
   type Resource,
   type SshKeyCredentialSpec,
 } from '@vaubaan/plugin-sdk';
-import { mockFetch, type MockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
+import {
+  apiKeyCredentialFixture,
+  mockFetch,
+  type MockFetch,
+  type MockRoute,
+} from '@vaubaan/plugin-sdk/testing';
 import { parseSlice } from '@vaubaan/policy-engine';
 import { MemoryAuditWriter } from '@vaubaan/gateway-core';
 
@@ -69,15 +74,14 @@ export const REGISTERED_OAUTH_SPEC: OAuth2RegisteredClientSpec = {
   refreshable: true,
 };
 
-export const API_KEY_SPEC: ApiKeyCredentialSpec = {
-  kind: 'api-key',
-  createUrl: 'https://keys.example.com/tokens',
-  fields: [
+export const API_KEY_SPEC: ApiKeyCredentialSpec = apiKeyCredentialFixture(
+  [
     { name: 'token', label: 'Access token', secret: true },
     { name: 'team_id', label: 'Team ID', secret: false, pattern: '^team_[a-z0-9]+$' },
     { name: 'note', label: 'Note', secret: false, required: false },
   ],
-};
+  { createUrl: 'https://keys.example.com/tokens' },
+);
 
 export const SSH_KEY_SPEC: SshKeyCredentialSpec = {
   kind: 'ssh-key',

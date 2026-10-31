@@ -505,7 +505,7 @@ export const THEME_WORDS = {
 export const ACCOUNT_PAGES = {
   connect: {
     title: 'Connect an account',
-    lede: 'Through the service’s own flow where it has one; with a key otherwise. The credential never leaves this gateway.',
+    lede: 'With a key you create once at the service, granted wide: each mission narrows it. A sign-in at the service only where it has no key. The credential never leaves this gateway.',
   },
   yours:
     'You own these, alone or with a team: all permissions, and you decide who else may use them.',
@@ -1282,9 +1282,10 @@ export function agoSentence(from: Date | string, now: Date = new Date()): string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Connecting with a token pasted by hand, beside the company app (ADR
-// one-place-to-authorize-services-token-first). The steps and permissions
-// themselves come from the plugin; only the frame is written here.
+// Connecting with a token pasted by hand (ADR
+// one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide
+// once, narrowed by each mission). The steps and permissions themselves come
+// from the plugin; only the frame is written here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const TOKEN_CONNECT = {
@@ -1292,14 +1293,18 @@ export const TOKEN_CONNECT = {
   openTokenPage: (service: string) => `Open the token page at ${service}`,
   permissionsTitle: 'Permissions to tick',
   permissionsNote:
-    'Tick these and nothing else; a permission left out makes the tools that need it fail.',
+    'Tick all of them: each mission narrows what an agent may do, and a permission left out means a new token.',
   readAccess: 'read',
   writeAccess: 'read and write',
   usedBy: (titles: string) => `for ${titles}`,
-  expiry: (days: number) =>
-    `Choose an expiry of about ${days} days. The account page shows the date, and you reconnect with a new token before it.`,
-  noExpiry: (service: string) =>
-    `${service} gives these tokens no expiry: delete the token there when you no longer need it.`,
+  reachTitle: (what: string, grant: string) => `${what}: ${grant}`,
+  openStepPage: 'open the page',
+  stepCommand: 'Command to copy',
+  docsLink: (service: string) => `${service}’s documentation of this token`,
+  expiryReported: (service: string) =>
+    `Choose the expiry you want at ${service}: it tells this gateway the date, and the account page warns you ${TOKEN_EXPIRY_NOTICE_DAYS} days before.`,
+  expiryTyped: (service: string, days: number) =>
+    `Choose an expiry of about ${days} days at ${service}. ${service} does not tell this gateway the date: note it, the account page cannot warn you.`,
   sharedAccount:
     'A shared service account is fine: agents act through missions, and Activity records which person and which mission made each call.',
   whatWeDo: (service: string) =>

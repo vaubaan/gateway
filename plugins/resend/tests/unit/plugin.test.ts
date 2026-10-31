@@ -1094,7 +1094,7 @@ describe('credential spec and macro-actions', () => {
     if (spec.kind !== 'api-key') return;
     expect(spec.createUrl).toBe('https://resend.com/api-keys');
     expect(spec.fields.map((f) => [f.name, f.secret])).toEqual([['api_key', true]]);
-    const pattern = new RegExp(spec.fields[0]!.pattern);
+    const pattern = new RegExp(spec.fields[0]!.pattern!);
     expect(pattern.test('re_123456789_AbCdEf')).toBe(true);
     expect(pattern.test('sk_live_abc')).toBe(false);
     expect(pattern.test('re_a b')).toBe(false);

@@ -20,6 +20,7 @@ import {
   type ProviderPlugin,
   type Resource,
 } from '@vaubaan/plugin-sdk';
+import { apiKeyCredentialFixture } from '@vaubaan/plugin-sdk/testing';
 import { parseSlice } from '@vaubaan/policy-engine';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 
@@ -201,7 +202,7 @@ export function depotPlugin(): DepotPlugin {
         },
       ],
     },
-    credential: { kind: 'api-key', fields: [{ name: 'token', label: 'Token', secret: true }] },
+    credential: apiKeyCredentialFixture([{ name: 'token', label: 'Token', secret: true }]),
     classify(name, args, resources) {
       if (classifierFault) throw classifierFault(name, args);
       if (name === `${DEPOT}__whoami`)

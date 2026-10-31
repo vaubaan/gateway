@@ -11,8 +11,9 @@ import {
   type CredentialSecret,
 } from '@vaubaan/plugin-sdk';
 import {
-  mockFetch,
+  guideText,
   type MockFetch,
+  mockFetch,
   type MockRoute,
   type RecordedCall,
 } from '@vaubaan/plugin-sdk/testing';
@@ -141,7 +142,7 @@ describe('railway token — the declaration', () => {
   });
 
   test('the guide offers the account token second and says why not a project token', () => {
-    const steps = railwayCredential.guide?.steps.join(' ') ?? '';
+    const steps = guideText(railwayCredential.guide);
     expect(steps.indexOf('workspace token')).toBeGreaterThan(-1);
     expect(steps.indexOf('workspace token')).toBeLessThan(steps.indexOf('account token'));
     expect(steps).toMatch(/project token is not accepted: it reaches one environment/);

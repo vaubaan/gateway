@@ -35,6 +35,8 @@ import {
   upstashRedisCredential,
   UPSTASH_API_KEYS_URL,
   UPSTASH_EMAIL_PATTERN,
+  UPSTASH_MANAGEMENT_API,
+  verifyUpstashKey,
   type UpstashAuth,
 } from './credential.ts';
 import { createdUpstashRedisResources } from './created.ts';
@@ -46,7 +48,6 @@ import {
   MAX_DISCOVERED_DATABASES,
   redactDatabases,
   REDACTED_DATABASE_FIELDS,
-  UPSTASH_MANAGEMENT_API,
   UPSTASH_REST_HOST_SUFFIX,
 } from './execute.ts';
 import { UPSTASH_REDIS_ICON, UPSTASH_REDIS_ICON_COLOR } from './icon.ts';
@@ -64,7 +65,7 @@ export const upstashRedisPlugin = definePlugin({
   displayName: 'Upstash Redis',
   icon: UPSTASH_REDIS_ICON,
   iconColor: UPSTASH_REDIS_ICON_COLOR,
-  version: '3.2.3',
+  version: '3.2.4',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:
@@ -121,5 +122,6 @@ export {
   UPSTASH_API_KEYS_URL,
   UPSTASH_EMAIL_PATTERN,
   UPSTASH_MANAGEMENT_API,
+  verifyUpstashKey,
   type UpstashAuth,
 };

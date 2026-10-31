@@ -21,6 +21,7 @@ import { semanticIssues } from './catalog-loader.ts';
 import {
   BROKER_PROVIDER_PATTERN,
   OAUTH2_REVOCATION_FORMATS,
+  TOKEN_EXPIRY_KINDS,
   TOKEN_PERMISSION_ACCESS,
   type CredentialSpec,
   type OAuth2CredentialSpec,
@@ -438,7 +439,7 @@ function hookIssues(plugin: ProviderPlugin): string[] {
   return issues;
 }
 
-/** Upper bound of one guide step. */
+/** Upper bound of one guide sentence: a step, a command, a reach line, a reason. */
 export const CREDENTIAL_SENTENCE_MAX_LENGTH = 300;
 
 function credentialSpecIssues(plugin: ProviderPlugin): string[] {
@@ -448,19 +449,19 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
   if (!isRecord(spec) || typeof spec.kind !== 'string') return issues;
   // The git remote's tools need permissions on a token too.
   const tools = declaredToolNames(plugin);
+  // The instructions are part of the contract (ADR
+  // one-place-to-authorize-services-token-first, amended 2026-10-31).
   if (spec.kind === 'api-key') {
-    if (spec.label !== undefined && !isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
-      issues.push(`${at}.label: expected a short name when present`);
+    if (!isSentence(spec.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${at}.label: expected what the person creates, in the provider's words`);
     }
-    if (spec.verify !== undefined && typeof spec.verify !== 'function') {
-      issues.push(`${at}.verify: expected a function when present`);
+    if (typeof spec.verify !== 'function') {
+      issues.push(`${at}.verify: expected the check at paste, a function`);
     }
-    if (spec.createUrl !== undefined && !isHttpsUrl(spec.createUrl)) {
-      issues.push(`${at}.createUrl: expected an https URL when present`);
+    if (!isHttpsUrl(spec.createUrl)) {
+      issues.push(`${at}.createUrl: expected the https URL of the token page`);
     }
-    if (spec.guide !== undefined) {
-      issues.push(...guideIssues(spec.guide, tools, `${at}.guide`));
-    }
+    issues.push(...guideIssues(spec.guide, tools, `${at}.guide`));
   }
   return issues;
 }
@@ -480,36 +481,81 @@ function toolReasonIssues(reasons: unknown, tools: ReadonlySet<unknown>, label: 
 }
 
 /**
- * A guide lists real tools, in the closed access set, and covers every tool
- * this way of connecting can run: the page derives the permissions to tick
+ * A guide says where to click (`steps`), how wide to grant (`reach`), when the
+ * token stops working (`expiry`) and where the provider documents it; its
+ * permissions name real tools, in the closed access set, and cover every tool
+ * this way of connecting can run: the page derives the permissions to grant
  * from it, so a tool nobody asked a permission for would fail at the provider.
  */
 function guideIssues(guide: unknown, tools: ReadonlySet<unknown>, at: string): string[] {
-  if (!isRecord(guide)) return [`${at}: expected { steps, permissions, recommendedExpiryDays }`];
+  if (!isRecord(guide)) {
+    return [`${at}: expected { steps, reach, permissions, expiry, docsUrl }`];
+  }
+  return [
+    ...stepIssues(guide.steps, `${at}.steps`),
+    ...reachIssues(guide.reach, `${at}.reach`),
+    ...expiryIssues(guide.expiry, `${at}.expiry`),
+    ...(isHttpsUrl(guide.docsUrl) ? [] : [`${at}.docsUrl: expected an https URL`]),
+    ...permissionIssues(guide.permissions, tools, `${at}.permissions`),
+  ];
+}
+
+/** Every step is one sentence to act on, with an https page and a command to copy when it has them. */
+function stepIssues(steps: unknown, at: string): string[] {
+  if (!isList(steps) || steps.length === 0) return [`${at}: expected at least one step`];
   const issues: string[] = [];
-  if (!isList(guide.steps) || guide.steps.length === 0) {
-    issues.push(`${at}.steps: expected at least one step`);
-  } else if (!guide.steps.every((step) => isSentence(step, CREDENTIAL_SENTENCE_MAX_LENGTH))) {
-    issues.push(`${at}.steps: every step is one plain sentence`);
+  steps.forEach((step, i) => {
+    const where = `${at}[${i}]`;
+    if (!isRecord(step)) {
+      issues.push(`${where}: expected { do, url?, code? }`);
+      return;
+    }
+    if (!isSentence(step.do, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${where}.do: expected one plain sentence`);
+    }
+    if (step.url !== undefined && !isHttpsUrl(step.url)) {
+      issues.push(`${where}.url: expected an https URL when present`);
+    }
+    if (step.code !== undefined && !isSentence(step.code, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${where}.code: expected a non-empty command when present`);
+    }
+  });
+  return issues;
+}
+
+function reachIssues(reach: unknown, at: string): string[] {
+  if (!isRecord(reach)) return [`${at}: expected { what, grant, why }`];
+  return (['what', 'grant', 'why'] as const)
+    .filter((key) => !isSentence(reach[key], CREDENTIAL_SENTENCE_MAX_LENGTH))
+    .map((key) => `${at}.${key}: expected one plain sentence`);
+}
+
+function expiryIssues(expiry: unknown, at: string): string[] {
+  if (!isRecord(expiry) || !(TOKEN_EXPIRY_KINDS as readonly unknown[]).includes(expiry.kind)) {
+    return [`${at}.kind: expected one of ${TOKEN_EXPIRY_KINDS.join(' | ')}`];
   }
-  const days = guide.recommendedExpiryDays;
-  if (days !== null && (typeof days !== 'number' || !Number.isInteger(days) || days < 1)) {
-    issues.push(`${at}.recommendedExpiryDays: expected a positive number of days or null`);
+  if (expiry.kind === 'person-types') {
+    const days = expiry.recommendedDays;
+    if (typeof days !== 'number' || !Number.isInteger(days) || days < 1) {
+      return [`${at}.recommendedDays: expected a positive number of days`];
+    }
   }
-  if (guide.docsUrl !== undefined && !isHttpsUrl(guide.docsUrl)) {
-    issues.push(`${at}.docsUrl: expected an https URL when present`);
+  if (expiry.kind === 'none' && !isSentence(expiry.reason, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+    return [`${at}.reason: expected one sentence saying how the token is ended`];
   }
-  if (!isList(guide.permissions)) {
-    return [
-      ...issues,
-      `${at}.permissions: expected a list (empty when the token carries no choice)`,
-    ];
+  return [];
+}
+
+function permissionIssues(permissions: unknown, tools: ReadonlySet<unknown>, at: string): string[] {
+  if (!isList(permissions)) {
+    return [`${at}: expected a list (empty when the token carries no choice)`];
   }
   // A provider whose tokens carry no permission choice (Railway) lists none.
-  if (guide.permissions.length === 0) return issues;
+  if (permissions.length === 0) return [];
+  const issues: string[] = [];
   const served = new Set<unknown>();
-  guide.permissions.forEach((permission, i) => {
-    const where = `${at}.permissions[${i}]`;
+  permissions.forEach((permission, i) => {
+    const where = `${at}[${i}]`;
     if (!isRecord(permission)) {
       issues.push(`${where}: expected { name, access, tools }`);
       return;
@@ -530,7 +576,7 @@ function guideIssues(guide: unknown, tools: ReadonlySet<unknown>, at: string): s
   });
   for (const tool of tools) {
     if (typeof tool === 'string' && !served.has(tool)) {
-      issues.push(`${at}.permissions: no permission serves '${tool}'`);
+      issues.push(`${at}: no permission serves '${tool}'`);
     }
   }
   return issues;

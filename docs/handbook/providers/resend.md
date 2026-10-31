@@ -60,7 +60,8 @@ and the catalog rationale are product rules: spec [`resend.md`](../../spec/resen
 
 ## Outside the repo
 
-- A **full-access** API key: a `sending_access` key fails discovery with a 403.
+- A **Full access** API key, checked at paste with `GET /domains` (the domains name the account); a
+  Sending access key answers `401 restricted_api_key` and is refused with the permission to choose.
 - The owner labels each sending domain and fills its zone lists in the gateway; nothing in Resend
   holds them.
 

@@ -145,11 +145,12 @@ Activity says who made it.
 
 1. At GitHub, signed in as the account the agents will act as: Settings →
    Developer settings → Personal access tokens → Fine-grained tokens →
-   Generate new token. Resource owner: the organisation; only the
-   repositories the missions need; an expiry (90 days recommended); the
-   permissions the connect page lists, built from `GITHUB_TOKEN_PERMISSIONS`
-   (Contents, Pull requests, Issues, Actions, Administration, Workflows;
-   GitHub adds Metadata read).
+   Generate new token. Resource owner: the organization; All repositories;
+   an expiry; every permission the connect page lists, built from
+   `GITHUB_TOKEN_PERMISSIONS` (Contents, Pull requests, Issues, Actions,
+   Administration, Workflows; GitHub adds Metadata read). Grant this wide
+   once: each mission narrows it to its repositories and permissions, and a
+   token that lacks one means a new token.
 2. Paste it on "Connect a GitHub account". A classic token (`ghp_`) is
    refused by the field's pattern: it reaches every repository of its
    account.

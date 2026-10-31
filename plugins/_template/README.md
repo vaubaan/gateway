@@ -16,17 +16,18 @@ SDK handbook: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md)
 
 ## Files
 
-| File                        | What goes in it                                                                                                                      |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency.                  |
-| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.                    |
-| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                                   |
-| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and the macro-actions.                             |
-| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.                               |
-| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.                         |
-| `src/execute.ts`            | The calls to the provider with the credential the gateway hands over, and `discoverResources`.                                       |
-| `src/index.ts`              | `definePlugin({...})`: the wiring, the `CredentialSpec`, the default export the gateway registers.                                   |
-| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, no wildcard), a mission from macro-actions, the classifier cases, `execute` against `mockFetch`. |
+| File                        | What goes in it                                                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency.                       |
+| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.                         |
+| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                                        |
+| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and the macro-actions.                                  |
+| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.                                    |
+| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.                              |
+| `src/credential.ts`         | The `CredentialSpec`: the token page, the guide (steps, how wide to grant and why, permissions, expiry) and `verify`, the check at paste. |
+| `src/execute.ts`            | The calls to the provider with the credential the gateway hands over, and `discoverResources`.                                            |
+| `src/index.ts`              | `definePlugin({...})`: the wiring, the default export the gateway registers.                                                              |
+| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, no wildcard), a mission from macro-actions, the classifier cases, `execute` against `mockFetch`.      |
 
 ## Data model
 
@@ -42,9 +43,14 @@ workspace[<workspace id>]      the resource; labelled staging / prod by its owne
 
 Kind `api-key`, one required secret field:
 
-| Field     | Pattern               | Purpose                                              |
-| --------- | --------------------- | ---------------------------------------------------- |
-| `api_key` | `^[A-Za-z0-9_-]{8,}$` | An API key with read and write access to workspaces. |
+| Field     | Pattern               | Purpose                                                |
+| --------- | --------------------- | ------------------------------------------------------ |
+| `api_key` | `^[A-Za-z0-9_-]{8,}$` | An API key over all workspaces, with every permission. |
+
+The connect page shows the guide of `src/credential.ts`: the key page, the
+steps, the grant (all workspaces, every permission: each mission narrows it)
+and the permissions with the tools they serve. `verify` asks `GET /me` who the
+key acts as before anything is stored.
 
 `discoverResources` calls `GET /workspaces` and returns **one resource per
 workspace**: `ref` is the workspace id every tool takes as `workspace`,

@@ -26,3 +26,6 @@
   font-size: var(--text-xs);
   white-space: nowrap;
 }
+.code {
+  margin-top: var(--space-2);
+}

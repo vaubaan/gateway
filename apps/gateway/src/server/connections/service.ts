@@ -30,6 +30,7 @@ import {
   type CredentialCheck,
   type CredentialField,
   type CredentialSecret,
+  type GuideStep,
   isBrokeredSpec,
   type OAuth2BrokeredSpec,
   type OAuth2RegisteredClientSpec,
@@ -38,7 +39,9 @@ import {
   type Resource,
   type ServiceIcon,
   type SshKeyCredentialSpec,
+  type TokenExpiry,
   type TokenPermissionAccess,
+  type TokenReach,
   serviceIconOf,
 } from '@vaubaan/plugin-sdk';
 import type { AuditWriter } from '@vaubaan/gateway-core';
@@ -140,10 +143,11 @@ export interface TokenPermissionView {
 
 /** How to create the token by hand, read from the plugin's declaration. */
 export interface TokenGuideView {
-  readonly steps: readonly string[];
+  readonly steps: readonly GuideStep[];
+  readonly reach: TokenReach;
   readonly permissions: readonly TokenPermissionView[];
-  readonly recommendedExpiryDays: number | null;
-  readonly docsUrl: string | null;
+  readonly expiry: TokenExpiry;
+  readonly docsUrl: string;
 }
 
 /**
@@ -455,13 +459,14 @@ export class ConnectionService {
       guide: guide
         ? {
             steps: guide.steps,
+            reach: guide.reach,
             permissions: guide.permissions.map((p) => ({
               name: p.name,
               access: p.access,
               tools: p.tools.map((tool) => toolLabel(plugin, tool)),
             })),
-            recommendedExpiryDays: guide.recommendedExpiryDays,
-            docsUrl: guide.docsUrl ?? null,
+            expiry: guide.expiry,
+            docsUrl: guide.docsUrl,
           }
         : null,
       unavailable: this.unavailableReason(plugin),

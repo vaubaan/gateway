@@ -63,9 +63,12 @@ environment is the owner's label, never parsed from the name. Rules common to ev
 
 ## Outside the repo
 
-- Fly's OAuth serves extension partners only: use an organization token,
-  `fly tokens create org --org <slug> --expiry 2160h`, attenuated with `NoAdminFeatures`
-  (`fly tokens attenuate`), never `fly auth token`. The paste check (`GET /v1/tokens/current`) requires every macaroon to name the
+- Fly's OAuth serves extension partners only: use an organization token, from the dashboard's
+  Tokens page (`https://fly.io/tokens`, Create Organization token) or
+  `fly tokens create org --org <slug> --expiry 2160h`, never `fly auth token`. No caveat is asked:
+  the token reaches the whole organization and the missions narrow it (ADR
+  one-place-to-authorize-services-token-first, amended 2026-10-31); no tool needs the admin
+  features a `NoAdminFeatures` caveat would remove, so a person may still attenuate the token. The paste check (`GET /v1/tokens/current`) requires every macaroon to name the
   organization. Revoke in the dashboard or `fly tokens revoke`.
 - **The Fly organization that hosts a gateway is never connected to that gateway**: an org token
   reaches every app and org-level calls are bound to no resource. Any other app to keep out of reach

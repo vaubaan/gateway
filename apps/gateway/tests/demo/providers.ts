@@ -15,9 +15,9 @@
  *     files, pull requests, issues, …);
  *   - Stripe — `GET /v1/account` per key (test and live as two resources),
  *     the list endpoints and the writes of the plugin's tools;
- *   - Cloudflare DNS — two zones and their records;
+ *   - Cloudflare DNS — the check at paste, two zones and their records;
  *   - Resend — two sending domains, one segment, emails;
- *   - Upstash Redis — two databases through the Management API, and a few
+ *   - Upstash Redis — the check at paste, two databases through the Management API, and a few
  *     Redis commands on their REST endpoints;
  *   - Vercel — one team and two projects, each with a production and a
  *     preview deployment and two environment variables: discovery, the
@@ -433,6 +433,12 @@ function cloudflareRoutes(): MockRoute[] {
     return DEMO_ZONES.find((z) => z.id === id)?.name ?? DEMO_ZONES[0].name;
   };
   return [
+    // The check at paste: the token is active and has no TTL.
+    {
+      method: 'GET',
+      url: `${CLOUDFLARE_API_BASE}/user/tokens/verify`,
+      body: cloudflareEnvelope({ id: 'demo-token', status: 'active' }),
+    },
     {
       method: 'GET',
       url: new RegExp(`^${api}/zones(\\?|$)`),
@@ -607,6 +613,8 @@ function upstashRoutes(): MockRoute[] {
     DEMO_REDIS_DATABASES.find((d) => d.database_id === new URL(url).pathname.split('/').pop()) ??
     DEMO_REDIS_DATABASES[0];
   return [
+    // The check at paste.
+    { method: 'GET', url: `${UPSTASH_MANAGEMENT_API}/teams`, body: [] },
     {
       method: 'GET',
       url: `${UPSTASH_MANAGEMENT_API}/redis/databases`,
@@ -721,6 +729,12 @@ function vercelRoutes(): MockRoute[] {
     DEMO_VERCEL_PROJECTS[0];
   const deployments = DEMO_VERCEL_PROJECTS.flatMap(vercelDeployments);
   return [
+    // The check at paste: the token, without an expiration.
+    {
+      method: 'GET',
+      url: `${VERCEL_API_BASE}/v5/user/tokens/current`,
+      body: { token: { id: 'demo-token', name: 'demo' } },
+    },
     {
       method: 'GET',
       url: new RegExp(`^${api}/v2/teams/[^/?]+$`),

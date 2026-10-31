@@ -46,7 +46,11 @@ zone the token reaches; no environment. Rules common to every plugin: [providers
 
 ## Outside the repo
 
-- A zone-scoped **API token**; a Global API Key is refused by the field pattern (it rejects `|`).
+- A custom **API token** over Include, All zones, with Zone · Zone, DNS, Zone Settings: Edit and
+  Cache Purge: Purge (`src/credential.ts`); a Global API Key is refused by the field pattern (it
+  rejects `|`). Checked at paste with `GET /user/tokens/verify` (status, `expires_on`) and the first
+  page of zones (account names); an account-owned token (Manage Account → API Tokens) is not
+  verifiable there and is refused.
 
 ## Debug
 

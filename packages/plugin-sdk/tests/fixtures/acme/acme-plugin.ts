@@ -16,6 +16,7 @@ import { expectCredentialKind } from '../../../src/credential.ts';
 import { definePlugin } from '../../../src/define-plugin.ts';
 import { loadCatalogFile } from '../../../src/catalog-loader.ts';
 import { catalogPathNextTo } from '../../../src/catalog-path.ts';
+import { apiKeyCredentialFixture } from '../../../src/testing/guide.ts';
 import type {
   ClassifyOutcome,
   ConnectionContext,
@@ -128,10 +129,7 @@ export const acmePlugin: ProviderPlugin = definePlugin({
   tools: acmeTools,
   dataModel: acmeDataModel,
   catalog: acmeCatalog.catalog,
-  credential: {
-    kind: 'api-key',
-    fields: [{ name: 'api_key', label: 'API key', secret: true }],
-  },
+  credential: apiKeyCredentialFixture([{ name: 'api_key', label: 'API key', secret: true }]),
   classify: classifyAcme,
   async execute(ctx: ExecuteContext, tool, args): Promise<McpToolResult> {
     const space = String(args.space);

@@ -81,14 +81,17 @@ add a row to `tests/unit/command-table.test.ts`.
 
 `api-key` with two fields, collected by the host's generic form:
 
-| Field     | Secret | Value                                                                                   |
-| --------- | ------ | --------------------------------------------------------------------------------------- |
-| `email`   | no     | The email of the Upstash account (or team member) owning the key. Basic auth user name. |
-| `api_key` | yes    | A Management API key (Upstash console → Account → Management API). Basic auth password. |
+| Field     | Secret | Value                                                                                             |
+| --------- | ------ | ------------------------------------------------------------------------------------------------- |
+| `email`   | no     | The email of the Upstash account (or team member) owning the key. Basic auth user name.           |
+| `api_key` | yes    | A Developer API key (Upstash console → Account → Developer API), Read/Write. Basic auth password. |
 
 There is no OAuth app to register: the Upstash Developer API is reached with
-HTTP Basic auth (`email:api_key`). The key does not expire (`refresh` is absent); revoke it in
-the console to end the connection.
+HTTP Basic auth (`email:api_key`). The guide asks for a Read/Write key (a Read
+Only key cannot run the write tools; the missions narrow what an agent may
+do) and an expiration the person picks; Upstash does not say it back, so the
+account page cannot warn before it. The check at paste (`verifyUpstashKey`)
+asks `GET /v2/teams`. Revoke the key in the console to end the connection.
 
 The per-database REST tokens (Data API) are **not** part of the credential:
 `execute` reads them from `GET /v2/redis/database/{id}` at call time and

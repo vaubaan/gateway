@@ -76,6 +76,52 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   names the published pre-releases; the pull-request and issue templates ask
   for macro-actions, not presets, and offer the three credential kinds that
   exist. Test fixtures name an imaginary company.
+- **Plugin SDK 0.2.0: the token guide is structured, and says how wide to
+  grant** (ADR one-place-to-authorize-services-token-first, amended
+  2026-10-31). Breaking for plugin authors: `TokenGuide.steps` are
+  `GuideStep { do, url?, code? }` instead of strings; a guide declares
+  `reach { what, grant, why }` and `expiry` (`provider-reports`,
+  `person-types` with `recommendedDays`, or `none` with a `reason`) in place
+  of `recommendedExpiryDays`; `docsUrl` is required. `CredentialCheck` may
+  carry `granted`, the permissions the provider confirmed. An `api-key`
+  way without `label`, `createUrl`, `guide` or `verify` is refused by
+  `definePlugin`: the guide is part of the plugin contract, the template
+  (`@vaubaan/plugin-template` 0.1.4) ships a complete one and
+  `plugins/README.md` step 5 says what each part holds. The test kit gains
+  `guideText` and `apiKeyCredentialFixture`. The GitHub, Supabase, Notion, CalDAV, Fly, Context7,
+  Railway and Gmail guides move to the new shape (`@vaubaan/plugin-github`
+  4.0.5, `-supabase` 5.0.5, `-notion` 0.1.5, `-caldav` 0.1.3, `-fly` 0.3.4,
+  `-context7` 0.1.5, `-railway` 5.1.4, `-gmail` 1.1.1).
+- **The connect page shows the whole guide, open.** How wide to grant and
+  why sits above the steps; a step links its page and shows its command as
+  code to copy; the service's documentation is linked; the expiry is worded
+  by who knows it (the service reports it and the account page warns, the
+  person picks it and the gateway cannot read it back, or the token does not
+  expire and how to end it); "Tick all of them" for the permissions. The
+  how-to of a sign-in or a key pair is open by default.
+- **The guided services ask for fewer visits.** Notion asks to share the
+  pages before the paste, so the first discovery finds them; CalDAV has one
+  step per server (iCloud, Fastmail, Nextcloud) with its page and the server
+  URL to copy; Fly links its dashboard's Tokens page and offers the
+  `fly tokens create org` command to copy, with no caveat file to write;
+  Gmail checks IMAP before the paste; every step is an action, the notes
+  moved into how wide to grant. Supabase and Fly say the expiry is chosen
+  at the service and not read back. A structural test holds every shipped
+  token way to the complete guide.
+- **Cloudflare DNS, Stripe, Vercel, Upstash Redis and Resend guide the
+  connection and check the token at paste** (`@vaubaan/plugin-cloudflare-dns`
+  3.0.5, `-stripe` 0.4.5, `-vercel` 3.0.5, `-upstash-redis` 3.2.4, `-resend`
+  0.5.4). Each connect page now has the exact token page, numbered steps,
+  how wide to grant and why, the permissions mapped to the tools they unlock
+  (Cloudflare's four permission rows, Upstash Read/Write, Resend Full access)
+  and the expiry; "Check and connect" asks the service first: Cloudflare
+  reads the token's status and expiry and names the accounts of its zones,
+  Stripe names the account each secret key opens, Vercel checks the token
+  opens the team and reads its expiry, Upstash checks the key, Resend names
+  the account by its domains. A Cloudflare token without zones, a Stripe
+  restricted key that cannot read its account, a Vercel token that cannot
+  open the team and a Resend Sending access key are refused with what to
+  change. Stripe asks for the secret key instead of a restricted one.
 - **Every risk catalog groups its risks into macro-actions** (ADR
   macro-actions-and-trust-crans-prefill-the-policy), 3 to 5 per connector in
   its own words (Gmail: Search the mail, Draft, Tidy; GitHub: Read, Propose,

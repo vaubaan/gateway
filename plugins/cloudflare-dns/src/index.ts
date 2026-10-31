@@ -5,8 +5,8 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
  * Handbook : docs/handbook/providers/cloudflare-dns.md ; guide : plugins/cloudflare-dns/README.md.
  *
- * Credential : `api-key` with one secret field, a Cloudflare API token scoped
- * to the zones the agent may touch. Discovery yields one resource per zone
+ * Credential : `api-key` with one secret field, a Cloudflare API token over
+ * all zones (`credential.ts`). Discovery yields one resource per zone
  * the token reaches (`ref` = zone id). The YAML catalog is loaded here, once,
  * at import (that is, at gateway boot).
  */
@@ -14,12 +14,9 @@
 import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyCloudflareDns } from './classify.ts';
+import { cloudflareDnsCredential } from './credential.ts';
 import { cloudflareDnsDataModel } from './data-model.ts';
-import {
-  API_TOKEN_FIELD,
-  discoverCloudflareDnsResources,
-  executeCloudflareDns,
-} from './execute.ts';
+import { discoverCloudflareDnsResources, executeCloudflareDns } from './execute.ts';
 import { CLOUDFLARE_DNS_ICON, CLOUDFLARE_DNS_ICON_COLOR } from './icon.ts';
 import { cloudflareDnsToolTitles } from './tool-titles.ts';
 import { cloudflareDnsTools } from './tools.ts';
@@ -33,7 +30,7 @@ export const cloudflareDnsPlugin = definePlugin({
   displayName: 'Cloudflare DNS',
   icon: CLOUDFLARE_DNS_ICON,
   iconColor: CLOUDFLARE_DNS_ICON_COLOR,
-  version: '3.0.4',
+  version: '3.0.5',
   description:
     'DNS zones and records on Cloudflare : records, BIND import / export, zone settings, ' +
     'DNSSEC and cache purge — one resource per zone.',
@@ -46,26 +43,7 @@ export const cloudflareDnsPlugin = definePlugin({
   toolTitles: cloudflareDnsToolTitles,
   dataModel: cloudflareDnsDataModel,
   catalog: cloudflareDnsCatalog.catalog,
-  credential: {
-    kind: 'api-key',
-    createUrl: 'https://dash.cloudflare.com/profile/api-tokens',
-    fields: [
-      {
-        name: API_TOKEN_FIELD,
-        label: 'API token',
-        secret: true,
-        required: true,
-        placeholder: 'Cloudflare API token',
-        // Tokens are URL-safe base64-ish strings ; a Global API Key pasted as
-        // `email|key` is refused by construction.
-        pattern: '^[A-Za-z0-9_-]{20,}$',
-        help:
-          'Create a token scoped to the zones the agent may touch, with Zone:Read, DNS:Edit and, ' +
-          'as needed, Zone Settings:Edit, Cache Purge:Purge and Zone:Edit (zone deletion). Never ' +
-          'a Global API Key.',
-      },
-    ],
-  },
+  credential: cloudflareDnsCredential,
   classify: classifyCloudflareDns,
   execute: executeCloudflareDns,
   discoverResources: discoverCloudflareDnsResources,
@@ -74,6 +52,12 @@ export const cloudflareDnsPlugin = definePlugin({
 export default cloudflareDnsPlugin;
 
 export { classifyCloudflareDns, cloudflareDnsDataModel, cloudflareDnsTools };
+export {
+  CLOUDFLARE_TOKENS_PAGE,
+  CLOUDFLARE_TOKEN_PERMISSIONS,
+  cloudflareDnsCredential,
+  verifyCloudflareToken,
+} from './credential.ts';
 export {
   API_TOKEN_FIELD,
   CLOUDFLARE_API_BASE,

@@ -53,11 +53,13 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { PROVIDER, databaseArg, redisCommandOf, resolveDatabase } from './classify.ts';
-import { basicAuthHeader, upstashAuth, type UpstashAuth } from './credential.ts';
+import {
+  UPSTASH_MANAGEMENT_API,
+  basicAuthHeader,
+  upstashAuth,
+  type UpstashAuth,
+} from './credential.ts';
 import { ACCOUNT_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
-
-/** The Upstash Developer (Management) API. A fact about the provider. */
-export const UPSTASH_MANAGEMENT_API = 'https://api.upstash.com/v2';
 
 /** Databases kept by `discoverResources` (the list endpoint is unpaged upstream). */
 export const MAX_DISCOVERED_DATABASES = 200;

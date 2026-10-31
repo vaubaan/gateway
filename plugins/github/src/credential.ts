@@ -5,8 +5,10 @@
  * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2 ; ADR
  *        one-place-to-authorize-services-token-first.
  *
- * A person creates a token at GitHub — often on a shared service account,
- * with Vaubaan deciding who may do what — and pastes it. The token is the
+ * A person creates a token at GitHub — often on a shared service account —
+ * over all the repositories of the organization, with every permission the
+ * tools use, and pastes it : this gateway decides, mission by mission, what
+ * an agent may do with it. The token is the
  * connection's secret ; every API tool and the git remote send it as the
  * bearer. GitHub enforces what it may do : the permissions its owner ticked.
  *
@@ -62,14 +64,26 @@ export const githubCredential: ApiKeyCredentialSpec = {
   createUrl: GITHUB_TOKENS_PAGE,
   guide: {
     steps: [
-      'Sign in to GitHub as the account the agents will act as.',
-      'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
-      'Choose the organisation as resource owner, and only the repositories the missions need.',
-      'Tick the permissions below; GitHub adds Metadata (read) by itself.',
-      'Generate the token, copy it, and paste it here. GitHub shows it once.',
+      { do: 'Sign in to GitHub as the account the agents will act as.' },
+      {
+        do: 'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
+        url: GITHUB_TOKENS_PAGE,
+      },
+      {
+        do: 'Choose the organization as Resource owner, then All repositories.',
+      },
+      {
+        do: 'Tick every permission below at the access shown; GitHub adds Metadata (read) by itself.',
+      },
+      { do: 'Generate the token, copy it, and paste it here. GitHub shows it once.' },
     ],
     permissions: GITHUB_TOKEN_PERMISSIONS,
-    recommendedExpiryDays: 90,
+    reach: {
+      what: 'Repository access',
+      grant: 'All repositories of the resource owner, with every permission below',
+      why: 'GitHub is the ceiling and each mission the narrowing: this gateway gives an agent only the repositories and permissions its mission names, and a token that lacks one means a new token.',
+    },
+    expiry: { kind: 'provider-reports' },
     docsUrl:
       'https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens',
   },

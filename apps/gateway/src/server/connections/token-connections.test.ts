@@ -16,22 +16,27 @@ import { connectionsHarness, fixturePlugin, type ConnectionsHarness } from './te
 const TOKEN = 'pat_secret_0123456789';
 const BY_HAND = 'Delete the token on the tokens page.';
 
-function tokenSpec(verify?: () => Promise<CredentialCheck>): ApiKeyCredentialSpec {
+const NO_ACCOUNT_SAID = (): Promise<CredentialCheck> =>
+  Promise.resolve({ account: null, expiresAt: null });
+
+function tokenSpec(verify = NO_ACCOUNT_SAID): ApiKeyCredentialSpec {
   return {
     kind: 'api-key',
     label: 'personal access token',
     createUrl: 'https://provider.example.com/tokens',
     fields: [{ name: 'token', label: 'Personal access token', secret: true }],
     guide: {
-      steps: ['Create a token.'],
+      steps: [{ do: 'Create a token.' }],
+      reach: { what: 'Things', grant: 'All things', why: 'Each mission narrows it.' },
       permissions: [{ name: 'Things', access: 'read', tools: ['dual__list_things'] }],
-      recommendedExpiryDays: 90,
+      expiry: { kind: 'person-types', recommendedDays: 90 },
+      docsUrl: 'https://provider.example.com/docs/tokens',
     },
-    ...(verify ? { verify } : {}),
+    verify,
   };
 }
 
-function dualHarness(verify?: () => Promise<CredentialCheck>): ConnectionsHarness {
+function dualHarness(verify = NO_ACCOUNT_SAID): ConnectionsHarness {
   return connectionsHarness({
     plugins: [
       fixturePlugin({
