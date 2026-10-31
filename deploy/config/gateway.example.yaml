@@ -94,6 +94,12 @@
 #   # administrator. Refused once the store holds data, and with restore.from.
 #   # env: VAUBAAN_MASTER_KEY_GENERATE
 #   generate_master_key: false
+#   # The boot warns when the key file sits on the same mount as the store (a
+#   # copy of that volume opens every credential; compose.yaml mounts the key
+#   # on a volume of its own). Set it only where the platform offers one
+#   # volume and its snapshots are kept apart from the key.
+#   # env: VAUBAAN_ACCEPT_KEY_BESIDE_STORE
+#   accept_key_beside_store: false
 #   # Version stamped on new blobs (integer >= 1). Increase it when you rotate the key.
 #   # env: VAUBAAN_MASTER_KEY_VERSION
 #   key_version: 1

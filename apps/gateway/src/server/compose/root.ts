@@ -55,6 +55,12 @@ import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkSelfResources, RegistryCatalogIndex } from './registry';
+import {
+  KEY_BESIDE_STORE_WARNING,
+  keyBesideStore,
+  PROCESS_MOUNT_FACTS,
+  type MountFacts,
+} from './key-placement';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
@@ -153,6 +159,8 @@ export interface RootDeps {
   readonly backupTimers?: BackupTimers;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
+  /** Where the key file and the store sit (tests inject mounts of their own). */
+  readonly mountFacts?: MountFacts;
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
@@ -172,6 +180,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       key_version: config.encryption.keyVersion,
     });
   }
+  warnKeyBesideStore(logger, config, deps.mountFacts);
   // The proxy sends HSTS when the public URL is https (`server/http/security-headers.ts`).
   publishHttps(config.publicUrl.protocol === 'https:');
 
@@ -333,6 +342,30 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     ],
     remedy:
       'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md), or, behind an edge that overwrites a client-address header (Railway: X-Real-IP), set client_ip_header',
+  });
+}
+
+/**
+ * The key file on the store's mount: one copy of the volume opens every credential
+ * (ADR master-key-generated-and-handed-over-by-the-instance, amendment 2026-10-31).
+ * Said once at boot, unless the operator accepted it; nothing is said when the key is
+ * given by value or the placement cannot be told.
+ */
+function warnKeyBesideStore(
+  logger: Logger,
+  config: InstanceConfig,
+  facts: MountFacts = PROCESS_MOUNT_FACTS,
+): void {
+  const keyFile = config.encryption.masterKeyFile;
+  if (keyFile === null || config.encryption.acceptKeyBesideStore) return;
+  if (keyBesideStore(keyFile, config.store.path, facts) !== true) return;
+  logger.warn(KEY_BESIDE_STORE_WARNING, {
+    key_file: keyFile,
+    store_path: config.store.path,
+    remedy:
+      'mount the key on a volume of its own (deploy/compose.yaml mounts gateway-key at /keys), or give it as a secret (VAUBAAN_MASTER_KEY_FILE=/run/secrets/…); keep a copy off the host',
+    accept:
+      'VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1 when the volume’s snapshots are kept apart from the key',
   });
 }
 

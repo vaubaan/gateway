@@ -53,19 +53,38 @@ docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --buil
 curl -s https://<your domain>/healthz
 ```
 
-The encryption key is generated on the data volume at the first start: the
-example `.env` sets `VAUBAAN_MASTER_KEY_FILE=/data/master.key` and
-`VAUBAAN_MASTER_KEY_GENERATE=1`, the gateway writes the file (32 random
-bytes, base64, mode 0600) and the setup page hands it to you — download it
-and keep it outside the host; a backup of the store opens with it only.
-Nothing is generated once the store holds data: a key missing on an existing
-store stops the container with exit code 78. To provide the key yourself
-instead, `npm run gen-master-key` (needs Node.js) into `VAUBAAN_MASTER_KEY`
-or a secret file named by `VAUBAAN_MASTER_KEY_FILE`, and leave the generate
-variable unset. An administrator can download the key again later from
-Administration → Encryption, after a fresh sign-in; every download is
-recorded in the activity (handbook
+The encryption key is generated at the first start on a volume of its own,
+never on the store's: `compose.yaml` sets
+`VAUBAAN_MASTER_KEY_FILE=/keys/master.key` on the `gateway-key` volume and the
+example `.env` sets `VAUBAAN_MASTER_KEY_GENERATE=1`. The gateway writes the
+file (32 random bytes, base64, mode 0600) and the setup page hands it to you —
+download it and keep it outside the host; a backup of the store opens with it
+only. Back the two volumes up separately: a copy that holds both the store and
+its key opens every credential. The boot warns when the key file and the store
+share a mount (`VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1` silences it, for a platform
+with one volume whose snapshots you keep apart from the key). Nothing is
+generated once the store holds data: a key missing on an existing store stops
+the container with exit code 78. To provide the key yourself instead,
+`npm run gen-master-key` (needs Node.js) into `VAUBAAN_MASTER_KEY` or a secret
+file named by `VAUBAAN_MASTER_KEY_FILE` (a Docker secret,
+`/run/secrets/<name>`), and leave the generate variable unset. An
+administrator can download the key again later from Administration →
+Encryption, after a fresh sign-in; every download is recorded in the activity
+(handbook
 [configuration](../docs/handbook/configuration.md#master-key-generated-at-the-first-start)).
+
+**Upgrading an instance whose key is on the data volume** (`/data/master.key`,
+the default up to 2.0.0-alpha.11): with the gateway stopped, copy the key to
+the new volume, start, check, then remove the old copy.
+
+```bash
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml stop gateway
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml run --rm --no-deps \
+  --entrypoint sh gateway -c 'cp -p /data/master.key /keys/master.key'
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml run --rm --no-deps \
+  --entrypoint sh gateway -c 'rm /data/master.key'
+```
 
 Pass `--env-file deploy/config/.env` on every Compose command (`up`, `down`,
 `logs`, `config`): Compose reads `GATEWAY_DOMAIN` from it and hands that one

@@ -1002,6 +1002,7 @@ function readEncryption(
 ): EncryptionConfig | null {
   const path = MASTER_KEY_PATH;
   const generateMasterKey = r.bool(keySpec(GENERATE_PATH));
+  const acceptKeyBesideStore = r.bool(keySpec('encryption.accept_key_beside_store'));
   const absent = source.absent !== null;
   const encoded = absent ? undefined : r.string(path, { required: isKeyRequired(keySpec(path)) });
   const masterKey = encoded === undefined ? undefined : decodeKey(encoded, path, r.issues);
@@ -1059,10 +1060,18 @@ function readEncryption(
       previousKeys,
       masterKeyFile: source.file,
       generateMasterKey,
+      acceptKeyBesideStore,
     };
   }
   if (!masterKey) return null;
-  return { masterKey, keyVersion, previousKeys, masterKeyFile: source.file, generateMasterKey };
+  return {
+    masterKey,
+    keyVersion,
+    previousKeys,
+    masterKeyFile: source.file,
+    generateMasterKey,
+    acceptKeyBesideStore,
+  };
 }
 
 function decodeKey(encoded: string, path: string, issues: IssueList): Uint8Array | undefined {

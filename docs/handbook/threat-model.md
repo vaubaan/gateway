@@ -89,8 +89,13 @@ the instance: ADR [trust-model-clear-at-rest-idp-style](../decisions/trust-model
 ## Assets
 
 - **Provider credentials** (`connections.credential_blob`, `instance_config` secrets): XChaCha20-Poly1305, one key per row derived from the master key, row id as associated data.
+<<<<<<< HEAD
 - **The master key**: in the configuration, never the store; a database copy without it opens nothing. Backups hold everything in protected form **as long as the key is kept apart from them**.
 - **Mission tokens**: shown once; SHA-256 of a 32-character random secret (base62 drawn without modulo bias, `packages/shared/src/api-key.property.test.ts`), constant-time compare, looked up by a non-secret prefix (earlier rows argon2id until first use). Delegated tokens and codes: SHA-256. Web sessions: row key = SHA-256 of the cookie.
+=======
+- **The master key**: in the configuration, never the store; a database copy without it opens nothing. Backups hold everything in protected form **as long as the key is kept apart from them**: the reference deployment mounts it on a volume of its own (`/keys`), and the boot warns when the key file shares the store's mount unless `encryption.accept_key_beside_store` says the copies are kept apart (`src/compose/key-placement.test.ts`, `deploy/docker/smoke.sh` step 14).
+- **Mission tokens**: shown once; SHA-256 of a 32-character random secret, constant-time compare, looked up by a non-secret prefix (earlier rows argon2id until first use). Delegated tokens and codes: SHA-256. Web sessions: row key = SHA-256 of the cookie.
+>>>>>>> 0d60b778 (feat(deploy)!: the master key lives apart from the store by default)
 - **Sealed arguments of an open approval** (`requests.args_blob`): sealed like credentials, erased on decision and expiry.
 - **Authority** (ownership, shares, memberships, policies): explicit rows only (**[inv: enumerations-persisted]**), recomputed at every use.
 - **The audit trail**: no update or delete by the application; a risk set goes only with its last entry, inside the purge (**[inv: audit-immutable]**).
