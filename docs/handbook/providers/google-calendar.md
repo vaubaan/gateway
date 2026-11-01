@@ -65,9 +65,8 @@ common to every plugin: [providers README](README.md).
   broker version admitted by this release" (or declare the broker `attestation: none`).
 - Two scopes, never the full `calendar` scope: `calendar.calendarlist.readonly` and
   `calendar.events`, which Google's reference accepts for every read tool and `suggest_time`.
-  Connections made before plugin 0.3.0 also hold `calendar.events.readonly` and
-  `calendar.events.freebusy`: a superset, still accepted. The broker keeps both in its allowlist
-  until no gateway in use asks for them.
+  The broker's allowlist holds these two only (broker 0.2.2): a gateway with a plugin older than
+  0.3.0 gets `invalid_scope` and must upgrade; its connections are reconnected.
 - Discovery seeds `internal_domains` with the account's domain unless it is a consumer one; the
   owner edits it on the account page.
 

@@ -8,9 +8,6 @@ import { REQUIRED_SCOPES, missingScopes, scopesNotGrantedMessage } from '../../s
 import { SCOPES } from '../../src/identity.ts';
 
 const AUTH = 'https://www.googleapis.com/auth/';
-/** Scopes a connection made before 0.3.0 holds, and the plugin no longer asks. */
-const EVENTS_READ = `${AUTH}calendar.events.readonly`;
-const FREE_BUSY = `${AUTH}calendar.events.freebusy`;
 
 describe('missingScopes', () => {
   test('every scope granted: nothing is missing', () => {
@@ -21,17 +18,8 @@ describe('missingScopes', () => {
     expect(missingScopes([])).toEqual([]);
   });
 
-  test('a connection made before 0.3.0 holds a superset: nothing is missing', () => {
-    expect(missingScopes([SCOPES.calendarListRead, EVENTS_READ, FREE_BUSY, SCOPES.events])).toEqual(
-      [],
-    );
-  });
-
   test('an unticked scope is missing', () => {
-    expect(missingScopes([EVENTS_READ, FREE_BUSY])).toEqual([
-      SCOPES.calendarListRead,
-      SCOPES.events,
-    ]);
+    expect(missingScopes(['openid', 'email'])).toEqual([SCOPES.calendarListRead, SCOPES.events]);
   });
 
   test('a wider scope grants the narrower ones', () => {

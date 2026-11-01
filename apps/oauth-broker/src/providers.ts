@@ -21,8 +21,8 @@ export type ProviderTable = ReadonlyMap<string, ProviderDefinition>;
 /**
  * Google: OAuth 2.0 for Web Server Applications. Offline access so the code
  * exchange answers a refresh token, and consent each time so it always does.
- * Scopes: the four the google-calendar plugin asks for (ADR
- * google-calendar-through-an-oauth-broker D4), all sensitive, none restricted;
+ * Scopes: the two the google-calendar plugin asks for (ADR
+ * google-calendar-through-an-oauth-broker D4), both sensitive, none restricted;
  * `openid` and `email` so the answer can name the account.
  */
 export const GOOGLE: ProviderDefinition = {
@@ -34,8 +34,6 @@ export const GOOGLE: ProviderDefinition = {
     'openid',
     'email',
     'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-    'https://www.googleapis.com/auth/calendar.events.readonly',
-    'https://www.googleapis.com/auth/calendar.events.freebusy',
     'https://www.googleapis.com/auth/calendar.events',
   ]),
   authorizeParams: { access_type: 'offline', prompt: 'consent' },
