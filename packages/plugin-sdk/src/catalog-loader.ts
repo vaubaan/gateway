@@ -12,7 +12,7 @@
  *        at boot, TypeScript twins retired) ;
  *        docs/decisions/fallback-risk-only-when-uncategorized.md (one
  *        fallback per catalog, flagged `fallback: true`, in no macro-action) ;
- *        docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md
+ *        docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md
  *        (presets retired : a catalog with a `presets` key does not load).
  *
  * The loader is strict : any structural issue, unknown key, malformed id,

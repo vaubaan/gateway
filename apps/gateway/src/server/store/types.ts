@@ -225,7 +225,7 @@ export interface MissionConnectionRecord {
   readonly resourceSources?: Readonly<Record<string, MissionResourceSource>>;
   /**
    * The trust level of each ticked macro-action, by macro-action id (`trust_levels_json`, migrations
-   * 0025 and 0026): display only, it redraws the form; absent when none was recorded.
+   * 0025 and 0027): display only, it redraws the form; absent when none was recorded.
    */
   readonly trustLevels?: Readonly<Record<string, string>>;
 }

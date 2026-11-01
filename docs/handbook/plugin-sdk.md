@@ -130,10 +130,9 @@ versions of their own, while plugin authors only ever write against the SDK.
 - A test of one call's decision uses `decideCall(plugin, { tool, args, resources, accepted })`: the
   classifier, then the engine with `envResolverFor(resources, plugin.envOf)`, as the gateway does
   (no budget, no gate).
-- A test of what a mission allows builds it with `policyFromMacroActions(plugin, { <id>: <cran> },
-{ envs })`, not by hand: it runs the policy engine's cran rules (`expandAtCran`) and asks first
-  for a write-token handout (`writeHandoutRiskIds`), as the creation form does. It does not model
-  the creator's authority.
+- A test of what a mission allows builds it with `policyFromMacroActions(plugin, { <id>: <trust level> },
+{ envs })`, not by hand: it runs the policy engine's trust-level rules (`expandAtTrustLevel`), as
+  the creation form does. It does not model the creator's authority.
 - `npx vitest run packages/plugin-sdk plugins/_template`; the standalone test after `next build`.
 
 ## Debug

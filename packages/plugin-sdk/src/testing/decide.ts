@@ -19,7 +19,7 @@ export {
   isEnvScopedEntry,
   matches,
   noEnvResolver,
-  palierOf,
+  tierOf,
   prepareCatalog,
   qualifyRiskId,
   resourceEnvResolver,
@@ -62,7 +62,7 @@ export function decideCall(plugin: ProviderPlugin, call: CallUnderTest): CallDec
   if ('denied' in classified) return { outcome: 'classify-denied', reason: classified.denied };
   return evaluateCall({
     executed_slices: classified.slices,
-    token_accepted_risks: new Set(call.accepted),
+    accepted_risks: new Set(call.accepted),
     catalog: call.catalog ?? new PluginRegistry([plugin]).catalogOf(plugin.id),
     envResolver: envResolverFor(call.resources, plugin.envOf?.bind(plugin)),
   });

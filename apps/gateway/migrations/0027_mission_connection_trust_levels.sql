@@ -1,4 +1,4 @@
--- Migration 0026 — the trust levels a mission was composed from, under their English names
+-- Migration 0027 — the trust levels a mission was composed from, under their English names
 -- (risk model §4.6; ADR macro-actions-and-trust-levels-prefill-the-policy, History).
 --
 --   mission_connections.crans_json   renamed `trust_levels_json`: a JSON object,

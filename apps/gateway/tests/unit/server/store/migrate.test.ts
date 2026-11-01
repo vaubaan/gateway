@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the twenty-six migrations 0001 to 0026 in the default directory', () => {
+  it('ships the twenty-seven migrations 0001 to 0027 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -135,6 +135,81 @@ describe('migration runner', () => {
       [24, 'created_resources_join_the_mission'],
       [25, 'mission_connection_crans'],
       [26, 'second_factor_lockout'],
+      [27, 'mission_connection_trust_levels'],
     ]);
+  });
+});
+
+describe('migration 0027: the trust levels under their English names', () => {
+  const AT = '2026-10-30T08:00:00.000Z';
+  const clock = new ManualClock();
+  let db: StoreDb;
+
+  beforeEach(() => {
+    db = openDb({ path: MEMORY_PATH });
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  /** Two missions recorded at version 26: one with levels, one without. */
+  function seedAtVersion26(): void {
+    const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
+    runMigrations(
+      db,
+      shipped.filter((m) => m.version < 27),
+      clock,
+    );
+    db.prepare(
+      "INSERT INTO users (id, subject, identity_key, email, status, created_at) VALUES ('ada', 's', 'k', 'ada@x', 'active', ?)",
+    ).run(AT);
+    db.prepare(
+      `INSERT INTO connections (id, provider, owner_kind, owner_user_id, display_name, status, created_at, updated_at)
+       VALUES ('gh', 'github', 'user', 'ada', 'acme', 'active', ?, ?)`,
+    ).run(AT, AT);
+    const mission = db.prepare(
+      `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, created_at, updated_at)
+       VALUES (?, ?, 'ada', 'active', ?, ?, ?)`,
+    );
+    mission.run('ticked', 'Ticked', AT, AT, AT);
+    mission.run('by-hand', 'By hand', AT, AT, AT);
+    const selection = db.prepare(
+      "INSERT INTO mission_connections (mission_id, connection_id, resource_scope, crans_json) VALUES (?, 'gh', 'all', ?)",
+    );
+    selection.run(
+      'ticked',
+      JSON.stringify({ read: 'prudent', propose: 'confiant', ship: 'autonome' }),
+    );
+    selection.run('by-hand', null);
+  }
+
+  it('renames the column and keeps every mission, its levels rewritten to the new ids', () => {
+    seedAtVersion26();
+
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+
+    expect(
+      db
+        .prepare(
+          'SELECT mission_id, resource_scope, trust_levels_json FROM mission_connections ORDER BY mission_id',
+        )
+        .all(),
+    ).toEqual([
+      { mission_id: 'by-hand', resource_scope: 'all', trust_levels_json: null },
+      {
+        mission_id: 'ticked',
+        resource_scope: 'all',
+        trust_levels_json: JSON.stringify({
+          read: 'careful',
+          propose: 'trusting',
+          ship: 'autonomous',
+        }),
+      },
+    ]);
+    const columns = db
+      .prepare('SELECT name FROM pragma_table_info(?)')
+      .all('mission_connections') as { name: string }[];
+    expect(columns.map((c) => c.name)).not.toContain('crans_json');
   });
 });
