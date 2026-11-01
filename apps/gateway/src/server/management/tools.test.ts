@@ -383,6 +383,32 @@ describe('ManagementTools — every act is the delegating user’s', () => {
       expect(rateKeys).toHaveLength(1);
     });
 
+    it('the instance’s ceiling of active missions is a refusal code of its own', async () => {
+      const message = 'This gateway holds 3 active missions; its ceiling is 3.';
+      const { tools, rateKeys } = rig({
+        missions: {
+          issue: async () => ({
+            ok: false,
+            reason: 'limit-reached',
+            message,
+            limit: { ceiling: 'active-missions', count: 3, limit: 3, message },
+          }),
+        },
+      });
+      const outcome = await tools.issueMission(ACTOR, within);
+      expect(outcome).toMatchObject({
+        ok: false,
+        refusal: {
+          code: 'instance-limit-reached',
+          message: `${message} Nothing was issued.`,
+          count: 3,
+          ceiling: 3,
+        },
+      });
+      if (!outcome.ok) expect(outcome.refusal.hint).toMatch(/revoke a mission|raise the ceiling/);
+      expect(rateKeys).toHaveLength(1);
+    });
+
     it('an issuance outcome the door does not know is a failure, not an answer made up here', async () => {
       const { tools } = rig({
         missions: { issue: async () => ({ ok: false, reason: 'not-found' }) },

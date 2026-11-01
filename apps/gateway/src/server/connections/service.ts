@@ -48,6 +48,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import { catalogEnvsOf } from '../missions/catalog-view';
 import type { Store } from '../store';
@@ -373,6 +374,12 @@ export interface ConnectionServiceDeps {
   readonly fetch: typeof fetch;
   readonly clock: Clock;
   readonly logger: Logger;
+  /**
+   * The `limits.connections` ceiling (spec §4.3 bis): asked before a connect flow
+   * reaches the provider and again before a new connection is stored; never for a
+   * reconnection. Absent: no ceiling.
+   */
+  readonly ceilings?: CeilingCheck;
 }
 
 /** How a failed first discovery is treated when a credential has just been obtained. */
@@ -517,6 +524,8 @@ export class ConnectionService {
     const reconnect = input.reconnectId
       ? await this.requireReconnectable(actor, input.reconnectId, providerId)
       : null;
+    // Before the provider is reached: a refused flow spends no authorization code.
+    if (!reconnect) await this.refuseAtCeiling();
     const flow: FlowStart = {
       actor,
       plugin,
@@ -998,6 +1007,17 @@ export class ConnectionService {
     }
   }
 
+  /** Throws the `ConnectError` of the ceiling of connections when one more does not fit. */
+  private async refuseAtCeiling(): Promise<void> {
+    const reached = await this.deps.ceilings?.refusal('connections');
+    if (!reached) return;
+    this.deps.logger.warn('connection refused at the ceiling of connections', {
+      count: reached.count,
+      ceiling: reached.limit,
+    });
+    throw new ConnectError('connection-limit-reached', reached.message);
+  }
+
   /** Creates the connection, or reconnects the one the flow named; audited either way. */
   private async persist(
     actor: Actor,
@@ -1010,6 +1030,8 @@ export class ConnectionService {
     const sealed = serializeSecret(secret, options.brokerGrant ?? null);
     const metadata = { credential_kind: secret.kind, ...options.metadata };
     if (!options.reconnectId) {
+      // Again when the account is stored: a redirect flow may end long after it started.
+      await this.refuseAtCeiling();
       const created = await connections.create({
         provider: plugin.id,
         owner: { kind: 'user', id: actor.user.id },

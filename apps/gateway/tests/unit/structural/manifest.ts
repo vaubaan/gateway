@@ -932,4 +932,27 @@ export const INVARIANTS: readonly Invariant[] = [
       },
     ],
   },
+  {
+    id: 'ops-stats-counts-only',
+    statement:
+      'GET /ops/stats does not exist without ops.token, refuses a missing or wrong bearer without saying more, and answers counts only: never a name, an e-mail, an identifier of an item, a resource or a configuration value.',
+    source: 'spec §4.3 bis "Counters"; docs/handbook/limits-and-counters.md',
+    proofs: [
+      {
+        file: `${SERVER}/http/ops-stats.test.ts`,
+        tests: [
+          'does not exist without ops.token: 404, whatever is presented',
+          'refuses %s with 401 and says nothing more',
+          'in setup mode: 404 without a token, 401 with a wrong one, else 503 setup',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/limits/ops-stats.test.ts`,
+        tests: [
+          'answers the counts of the instance to the bearer of ops.token, and only to them',
+          'the endpoint does not exist',
+        ],
+      },
+    ],
+  },
 ];

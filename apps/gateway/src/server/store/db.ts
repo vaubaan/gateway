@@ -9,7 +9,7 @@
  * so a future Postgres adapter replaces this file and keeps the repositories' SQL.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 
 import BetterSqlite3 from 'better-sqlite3';
 import { StoreError } from './errors.ts';
@@ -43,6 +43,24 @@ export function openDb(options: OpenDbOptions): StoreDb {
   db.pragma('foreign_keys = ON');
   db.pragma('temp_store = MEMORY');
   return db;
+}
+
+/**
+ * The store's size on disk, in bytes: its pages (`page_count × page_size`), plus the
+ * write-ahead log beside the file when there is one. In memory: the pages alone.
+ */
+export function sizeOnDisk(db: StoreDb, path: string): number {
+  const pages = Number(db.pragma('page_count', { simple: true }));
+  const pageSize = Number(db.pragma('page_size', { simple: true }));
+  let bytes = pages * pageSize;
+  if (path !== MEMORY_PATH) {
+    try {
+      bytes += statSync(/* turbopackIgnore: true */ `${path}-wal`).size;
+    } catch {
+      // No write-ahead log at this instant (checkpointed, or never written).
+    }
+  }
+  return bytes;
 }
 
 function assertSqliteVersion(db: StoreDb): void {

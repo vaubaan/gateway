@@ -1558,6 +1558,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   // ── users (the caller authorizes: operator only) ──────────────────────────
   'UserAdminService.list': READ,
   'UserAdminService.get': READ,
+  // Reads the count of users against its ceiling; throws, writes nothing.
+  'UserAdminService.refuseNewUser': READ,
   'UserAdminService.ensureIdentity': exempt(
     'the user row of an identity the setup names administrator: the act is audited by AdministratorsService.grantUser',
   ),

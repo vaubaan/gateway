@@ -11,6 +11,7 @@
  * synced, no bootstrap revocation).
  */
 import { LEGACY_PROVIDER_ID } from '../config/sign-in';
+import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
@@ -48,6 +49,12 @@ export interface LoginDeps {
    * check reads the new memberships anyway.
    */
   readonly membershipsChanging?: (user: UserRecord) => Promise<MembershipsChanged>;
+  /**
+   * The `limits.users` ceiling (spec §4.3 bis): a first sign-in adds a user and is
+   * refused at the ceiling (`user-limit-reached`); a user who exists always signs in.
+   * Absent: no ceiling.
+   */
+  readonly ceilings?: CeilingCheck;
 }
 
 /** Called once the memberships are replaced (`LoginDeps.membershipsChanging`). */
@@ -99,6 +106,23 @@ export interface LoginContext {
   readonly administrators: Pick<AdministratorsService, 'consumeAtSignIn' | 'current'>;
 }
 
+/**
+ * Throws the `LoginError` of the ceiling of users when one more person does not fit
+ * (spec §4.3 bis). The count and the ceiling go to the log; the sign-in page says
+ * the gateway is full without counting its people to whoever is not one of them.
+ */
+export async function refuseNewUserAtCeiling(
+  deps: Pick<LoginDeps, 'ceilings' | 'logger'>,
+): Promise<void> {
+  const reached = await deps.ceilings?.refusal('users');
+  if (!reached) return;
+  deps.logger.warn('sign-in refused at the ceiling of users', {
+    count: reached.count,
+    ceiling: reached.limit,
+  });
+  throw new LoginError('user-limit-reached', reached.message);
+}
+
 export async function completeLogin(
   deps: LoginDeps,
   claims: IdentityClaims,
@@ -127,6 +151,7 @@ export async function completeLogin(
         'an operator reactivates them under Administration → Users',
     );
   }
+  if (!known) await refuseNewUserAtCeiling(deps);
   const user = await deps.store.users.upsertFromIdp({
     issuer: claims.issuer,
     subject: claims.subject,

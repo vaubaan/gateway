@@ -70,16 +70,17 @@ resource, `/mcp/manage`, whose tools prepare missions. Spec:
 A "no" is a tool error (`isError: true`, `structuredContent.error`), so the model can correct
 itself. `tools.test.ts` holds this table to `MANAGEMENT_REFUSAL_CODES`, both ways:
 
-| `error.code`              | When                                                                                  | Extra fields                     |
-| ------------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
-| `draft-refused`           | `issue_mission` on a draft the preview does not accept                                | `uncovered`, `issues`, `preview` |
-| `mission-not-found`       | no such mission of this user (another user's reads the same)                          | `mission_id`                     |
-| `mission-inactive`        | `rotate_mission_token` on a revoked, expired or orphaned mission                      | `mission_id`, `state`, `orphan`  |
-| `mission-not-issued-here` | `rotate_mission_token` on a mission of the user that this delegation did not issue    | `mission_id`                     |
-| `unknown-provider`        | `get_catalog` on a provider the instance does not ship                                | `providers`                      |
-| `unknown-connection`      | `get_catalog` with a `connection_id` the user holds nothing on                        | `connection_id`                  |
-| `rate-limited`            | the delegation's mutation budget is spent                                             | `retry_after_seconds`            |
-| `internal-error`          | the method threw (logged `management tool failed`); the message never carries details |                                  |
+| `error.code`              | When                                                                                         | Extra fields                     |
+| ------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------- |
+| `draft-refused`           | `issue_mission` on a draft the preview does not accept                                       | `uncovered`, `issues`, `preview` |
+| `mission-not-found`       | no such mission of this user (another user's reads the same)                                 | `mission_id`                     |
+| `mission-inactive`        | `rotate_mission_token` on a revoked, expired or orphaned mission                             | `mission_id`, `state`, `orphan`  |
+| `mission-not-issued-here` | `rotate_mission_token` on a mission of the user that this delegation did not issue           | `mission_id`                     |
+| `unknown-provider`        | `get_catalog` on a provider the instance does not ship                                       | `providers`                      |
+| `unknown-connection`      | `get_catalog` with a `connection_id` the user holds nothing on                               | `connection_id`                  |
+| `rate-limited`            | the delegation's mutation budget is spent                                                    | `retry_after_seconds`            |
+| `instance-limit-reached`  | `issue_mission` while the instance holds as many active missions as `limits.active_missions` | `count`, `ceiling`               |
+| `internal-error`          | the method threw (logged `management tool failed`); the message never carries details        |                                  |
 
 ## Procedures
 

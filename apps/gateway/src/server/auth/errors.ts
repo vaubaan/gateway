@@ -26,6 +26,7 @@ export const LOGIN_ERROR_CODES = [
   'second-factor-refused',
   'second-factor-locked',
   'second-factor-required',
+  'user-limit-reached',
 ] as const;
 export type LoginErrorCode = (typeof LOGIN_ERROR_CODES)[number];
 
@@ -70,6 +71,8 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
     'Too many wrong codes were entered for this account. Wait fifteen minutes, then sign in again.',
   'second-factor-required':
     'This account administers the gateway and needs a second factor: the sign-in continues with its enrolment.',
+  'user-limit-reached':
+    'This gateway already holds as many people as its ceiling allows, so it admits nobody new. Ask an administrator to make room or to raise the ceiling, then sign in again.',
 };
 
 export class LoginError extends Error {
