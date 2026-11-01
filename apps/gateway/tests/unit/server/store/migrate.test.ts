@@ -311,6 +311,30 @@ describe('migration 0029: a mission connection is partitioned into resource sets
     );
   }
 
+  it('starts the trust-raise count of every stored trust level at the upgrade', () => {
+    seedAtVersion28();
+    const before = new Date().toISOString();
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    const marks = db
+      .prepare(
+        'SELECT mission_id, resource_set_id, macro_action_id, level_changed_at, snoozed_at FROM mission_trust_marks',
+      )
+      .all() as { level_changed_at: string }[];
+    // One mark per stored trust level (the `sb` set stored none), stamped at the upgrade:
+    // approvals granted before it never lead to an offer.
+    expect(marks).toEqual([
+      {
+        mission_id: 'm',
+        resource_set_id: 'm:gh',
+        macro_action_id: 'read',
+        level_changed_at: expect.any(String) as string,
+        snoozed_at: null,
+      },
+    ]);
+    expect(marks[0]!.level_changed_at >= before.slice(0, 19)).toBe(true);
+    expect(marks[0]!.level_changed_at > AT).toBe(true);
+  });
+
   it('gives each existing connection one set holding its scope, resources, levels and lines', () => {
     seedAtVersion28();
     runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);

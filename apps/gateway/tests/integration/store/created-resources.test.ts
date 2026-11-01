@@ -204,6 +204,83 @@ describe('created resources in the store', () => {
       });
     });
 
+    describe('with several resource sets (risk model §4.7)', () => {
+      /** Set 1 picks acme/a, set 2 acme/b; `rest` adds a third set taking the rest. */
+      const twoSets = async (rest: 'connection' | null) => {
+        const [a, b] = [(await row('acme/a'))!, (await row('acme/b'))!];
+        const set = (resourceScope: 'selected' | 'connection', resourceIds: string[]) => ({
+          resourceScope,
+          resourceIds,
+          policy: POLICY,
+        });
+        return store.missions.create({
+          name: 'm',
+          creatorUserId: creator,
+          periodSeconds: 86_400,
+          connections: [
+            {
+              connectionId: connection,
+              resourceSets: [
+                set('selected', [a.id]),
+                set('selected', [b.id]),
+                ...(rest ? [set(rest, [])] : []),
+              ],
+            },
+          ],
+        });
+      };
+      const setIds = (m: { connections: readonly { resourceSets: readonly { id: string }[] }[] }) =>
+        m.connections[0]!.resourceSets.map((x) => x.id);
+
+      it('joins the one set the call was judged against', async () => {
+        const m = await twoSets(null);
+        const [, second] = setIds(m);
+        const fresh = await created();
+        expect(
+          await store.missions.addResources(m.id, connection, [fresh.id], 'created', undefined, [
+            second!,
+          ]),
+        ).toMatchObject({ resourceSetId: second, added: [fresh.id] });
+      });
+
+      it('judged against several: the whole-account set when there is one', async () => {
+        const m = await twoSets('connection');
+        const [first, second, whole] = setIds(m);
+        const fresh = await created();
+        expect(
+          await store.missions.addResources(m.id, connection, [fresh.id], 'created', undefined, [
+            first!,
+            second!,
+          ]),
+        ).toEqual({ resourceSetId: whole, scope: 'connection', added: [] });
+      });
+
+      it('judged against several and no whole-account set: the first of them, never another set', async () => {
+        const m = await twoSets(null);
+        const [, second] = setIds(m);
+        const fresh = await created();
+        // Judged against set 2 only once set 1 is out of the candidates: set 2, not set 1.
+        expect(
+          await store.missions.addResources(m.id, connection, [fresh.id], 'created', undefined, [
+            second!,
+            'gone-set',
+          ]),
+        ).toMatchObject({ resourceSetId: second });
+        const other = (
+          await store.connections.upsertDiscoveredResources(connection, [
+            { ref: 'acme/other', displayName: 'Other' },
+          ])
+        )[0]!;
+        const [first] = setIds(m);
+        expect(
+          await store.missions.addResources(m.id, connection, [other.id], 'created', undefined, [
+            second!,
+            first!,
+          ]),
+        ).toMatchObject({ resourceSetId: first });
+      });
+    });
+
     it('an `all` that stored nothing becomes `selected`', async () => {
       const m = await mission('all');
       const fresh = await created();

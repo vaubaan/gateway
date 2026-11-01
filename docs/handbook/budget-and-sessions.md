@@ -46,6 +46,7 @@ How a call that passed the risk check is counted against its mission's quota, ra
 - **Name clash.** The store's camelCase entry is also called `MissionPolicyEntry`; consumers alias it `MissionPolicyEntryRecord`.
 - **Readers built before the service.** Missions and requests are built before the `SessionService` (which needs `requestUrl`), so they default to `missionUsageReader(store.sessions)` — the same current-period-only read, not a copy.
 - **One limiter, disjoint keys.** The root builds one `SlidingWindowRateLimiter` for the budget (`mission:<id>:set:<set>:risk:<risk>`) and every surface limit (`mcp:mission:`, `mcp-verify:`, `connect:`, `request-page:ip:`, `oauth:`, `mgmt:`). It is in memory and single-process; a hosted replacement is Redis behind the same two interfaces, probing before the SQLite transaction and recording after commit.
+- **Set membership is read twice.** The risk stage judges a call on the sets of the mission context loaded at admission, and the budget transaction charges those set ids; an edit that moves a resource to another set between the two charges the call on the sets it was judged against (known limitation, not fixed).
 - **A longer rate window after an edit** counts only what memory still holds: slightly lenient for one window's length.
 - **Git push preflight.** `preflightLimits` runs the same transaction and `decide()` without approvals and counts nothing; the git door calls it before a pack leaves ([git-remote](git-remote.md)).
 

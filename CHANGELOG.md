@@ -84,7 +84,8 @@ Read these before starting the new image on a running instance:
   gated and counted by that resource's set; a call naming none, or resources of
   several sets, must be allowed in each of them, waits for the strictest gate
   and is charged in each. What a call creates joins the set it was judged
-  against. The management door, the preview, an edit, a share's duplicate, the
+  against (judged against several: the whole-account set if any, else the
+  first of them). The management door, the preview, an edit, a share's duplicate, the
   bootstrap kit and the mission page accept or show `resource_sets`; a draft
   without them is one set, as before. Migration 0029 gives every existing
   mission one set per account: nothing changes for it.

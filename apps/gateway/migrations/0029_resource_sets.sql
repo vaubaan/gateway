@@ -22,7 +22,9 @@
 --                           was judged against; a permission request, the missing ones.
 --   permission_refusal_lines  the (set, risk) lines a permission refusal found missing.
 --   mission_trust_marks     per macro-action of a set, when its trust level changed and
---                           when a raise was last put off ("Not now").
+--                           when a raise was last put off ("Not now"); seeded at the
+--                           upgrade for every stored trust level, so that only approvals
+--                           granted after it count.
 --   audit_resource_sets     the sets a call entry was judged against and charged (rows, so
 --                           the counters-vs-audit check is a join); append-only like
 --                           `audit_risks`.
@@ -226,3 +228,12 @@ CREATE TABLE mission_trust_marks (
 ) STRICT; -- sqlite: STRICT
 
 CREATE INDEX mission_trust_marks_mission ON mission_trust_marks (mission_id);
+
+-- An existing mission's approvals were granted before this migration, perhaps before an
+-- earlier change of the trust level that no row recorded: its counts start now, so only
+-- approvals granted after the upgrade lead to a raise proposal.
+INSERT INTO mission_trust_marks (mission_id, resource_set_id, macro_action_id, level_changed_at)
+  SELECT s.mission_id, s.id, t.key,
+         strftime('%Y-%m-%dT%H:%M:%fZ', 'now') -- sqlite: strftime; Postgres: to_char(now() at time zone 'utc', …)
+  FROM mission_resource_sets s, json_each(s.trust_levels_json) t -- sqlite: json_each
+  WHERE s.trust_levels_json IS NOT NULL AND t.key <> '';

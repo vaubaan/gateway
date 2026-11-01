@@ -199,9 +199,11 @@ What a creator ticks per connection, in the connector's words
 - A resource belongs to exactly one set of its connection. At most one set per connection reaches
   the whole connection; resources discovered later join that set.
 - A resource the mission creates joins the set the creating call was judged against. When that call
-  had several candidate sets, it joins the first set of the connection.
-- **The set of a call.** A call goes to the set of the resource each slice names (the same rule as
-  §6, step 2).
+  had several candidate sets, it joins the connection's whole-connection set if it has one, else the
+  first of the candidate sets: never a set the call was not judged against.
+- **The set of a call.** A call goes to the sets of the resources each slice names: every identifier
+  or list value equal to a mission resource's ref (the reading of §6, step 2). A slice citing refs of
+  several sets — an org slug equal to an app's ref, a list of two resources — brings each in.
 - **Calls that cannot be placed in one set.** A call that names no mission resource, or resources
   from several sets, goes to every candidate set: all the sets of the connection in the first case,
   the named sets in the second. Then:
@@ -249,8 +251,8 @@ Each slice gets at most one environment, in this order:
 
 1. **Derived by the plugin** when the environment is part of the call (an `env[prod]` segment),
    whatever the resource's label. A slice spanning several environments derives none.
-2. **Otherwise the label of the resource the slice names** (the first identifier equal to a mission
-   resource's ref); naming none, the label of the mission's only resource of that provider; with
+2. **Otherwise the label of the resources the slice names** (every identifier or list value equal to
+   a mission resource's ref; labels that disagree give none); naming none, the label of the mission's only resource of that provider; with
    several, none. Resources of one call naming several environments resolve to none.
 3. **Otherwise none.**
 

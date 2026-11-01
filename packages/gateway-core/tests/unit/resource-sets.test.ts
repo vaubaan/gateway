@@ -1,6 +1,6 @@
 /**
- * The candidate resource sets of a call and their label (risk model §4.7): the set of
- * the resource each slice names; a slice naming none brings every set in.
+ * The candidate resource sets of a call and their label (risk model §4.7): the sets of
+ * every ref each slice cites; a slice naming none brings every set in.
  */
 import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it } from 'vitest';
@@ -38,9 +38,32 @@ describe('candidateResourceSets', () => {
     expect(ids(candidateResourceSets(mixed, SETS))).toHaveLength(3);
   });
 
-  it('reads the first identifier equal to a ref: a nested one of another set does not count', () => {
+  it('takes every identifier equal to a ref: a nested one of another set brings its set in', () => {
     expect(ids(candidateResourceSets(slices('twin.space[gamma].item[beta].R'), SETS))).toEqual([
       's1',
+      's2',
+    ]);
+  });
+
+  it('is not fooled by an org slug equal to the ref of an app of another set (Fly)', () => {
+    const fly = [
+      { id: 's1', position: 1, refs: ['acme'] },
+      { id: 's2', position: 2, refs: ['acme-db'] },
+    ];
+    expect(ids(candidateResourceSets(slices('fly.org[acme].app[acme-db].deploy.W'), fly))).toEqual([
+      's1',
+      's2',
+    ]);
+  });
+
+  it('judges a list naming resources of two sets against both', () => {
+    const boards = [
+      { id: 's1', position: 1, refs: ['b1'] },
+      { id: 's2', position: 2, refs: ['b2'] },
+    ];
+    expect(ids(candidateResourceSets(slices('miro.board[b1,b2].item[*].W'), boards))).toEqual([
+      's1',
+      's2',
     ]);
   });
 });

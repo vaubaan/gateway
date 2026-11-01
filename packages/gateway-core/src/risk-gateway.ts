@@ -154,9 +154,12 @@ export interface ResourceSetToJudge {
 }
 
 /**
- * The candidate sets of a call (risk model §4.7): the set of the resource each slice
- * names — the first identifier of the slice equal to a mission resource's ref, the rule
- * of §6 step 2 — and, for a slice that names none, every set of the connection. What
+ * The candidate sets of a call (risk model §4.7): for each slice, the sets of every
+ * identifier or list value of the slice equal to a mission resource's ref — the rule
+ * `resourceEnvResolver` reads environments by — and, for a slice that names none, every
+ * set of the connection. A slice citing refs of several sets brings each of them in: an
+ * org slug equal to an app's ref (`fly.org[acme].app[acme-db]`) or a list
+ * (`board[b1,b2]`) can only widen the candidates, never narrow them to one set. What
  * cannot be placed in one set never gets one set's rights alone. Position order.
  */
 export function candidateResourceSets<S extends Pick<ResourceSetToJudge, 'id' | 'refs'>>(
@@ -167,23 +170,25 @@ export function candidateResourceSets<S extends Pick<ResourceSetToJudge, 'id' | 
   for (const set of sets) for (const ref of set.refs) setOfRef.set(ref, set);
   const chosen = new Set<S>();
   for (const slice of slices) {
-    const named = firstNamedSet(slice, setOfRef);
-    if (named === null) return [...sets];
-    chosen.add(named);
+    const named = namedSets(slice, setOfRef);
+    if (named.length === 0) return [...sets];
+    for (const set of named) chosen.add(set);
   }
   return sets.filter((set) => chosen.has(set));
 }
 
-function firstNamedSet<S>(slice: Slice, setOfRef: ReadonlyMap<string, S>): S | null {
+/** The sets of every identifier or list value of the slice that is a mission resource's ref. */
+function namedSets<S>(slice: Slice, setOfRef: ReadonlyMap<string, S>): S[] {
+  const named: S[] = [];
   for (const segment of slice.path) {
     const values =
       segment.kind === 'ident' ? [segment.value] : segment.kind === 'list' ? segment.values : [];
     for (const value of values) {
       const set = setOfRef.get(value);
-      if (set !== undefined) return set;
+      if (set !== undefined) named.push(set);
     }
   }
-  return null;
+  return named;
 }
 
 /** "resource set 2", or "resource sets 1 and 2". */

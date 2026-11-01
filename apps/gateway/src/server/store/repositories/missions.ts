@@ -166,9 +166,12 @@ export interface MissionsRepo {
   /**
    * Adds resources of one of the mission's connections to the explicit selection of one
    * of its sets, each row marked with `source` (ADR created-resources-join-the-mission:
-   * `created` for a resource the mission created). The set is `resourceSetId` — the one
-   * the creating call was judged against — or, when absent or not a set of that
-   * connection, the first set of the connection (risk model §4.7). A set of scope
+   * `created` for a resource the mission created). The set follows `judgedSetIds`, the
+   * sets the creating call was judged against (risk model §4.7): exactly one, that set;
+   * several, the connection's `connection` set if it has one, else the first of them by
+   * position — never a set the call was not judged against, so a resource made under a
+   * strict judgement never gets a looser set's rights. Absent (or none of them a set of
+   * that connection any more): the `connection` set if any, else the first set. A set of scope
    * `connection` already reaches every resource no other set selects: nothing is
    * written. Scope `all` that stored nothing becomes `selected`. An id already selected,
    * in any set, keeps its row, its set and its source. One transaction. `NotFoundError`
@@ -183,7 +186,7 @@ export interface MissionsRepo {
     resourceIds: readonly string[],
     source: MissionResourceSource,
     created?: CreatedBy,
-    resourceSetId?: string,
+    judgedSetIds?: readonly string[],
   ): Promise<AddedMissionResources>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
@@ -1427,7 +1430,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       });
       return requireMission(id);
     },
-    async addResources(missionId, connectionId, resourceIds, source, created, resourceSetId) {
+    async addResources(missionId, connectionId, resourceIds, source, created, judgedSetIds) {
       if (!MISSION_RESOURCE_SOURCES.includes(source)) {
         throw new InvariantError(`unknown mission resource source '${String(source)}'`);
       }
@@ -1436,9 +1439,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         const sets = setsOfConnection.all(missionId, connectionId);
         const [first] = sets;
         if (!first) throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
-        // The set the creating call was judged against; the first set of the connection
-        // when it had several candidate sets, or when that set is gone since.
-        const target = sets.find((set) => set.id === resourceSetId) ?? first;
+        const whole = sets.find((set) => set.resource_scope === 'connection');
+        const judged = sets.filter((set) => judgedSetIds?.includes(set.id) ?? false);
+        const [onlyJudged, ...moreJudged] = judged;
+        const target =
+          onlyJudged && moreJudged.length === 0
+            ? onlyJudged
+            : (whole ?? (onlyJudged ? onlyJudged : first));
         const scope = parseEnum(
           RESOURCE_SCOPES,
           target.resource_scope,
