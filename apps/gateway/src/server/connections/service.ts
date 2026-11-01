@@ -40,6 +40,7 @@ import {
   type ServiceIcon,
   type SshKeyCredentialSpec,
   type TokenExpiry,
+  type TokenPermission,
   type TokenPermissionAccess,
   type TokenReach,
   serviceIconOf,

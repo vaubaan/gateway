@@ -4,7 +4,7 @@
  * mission-token-sha256-digest). The secret leaves this module once, in the
  * return value of `mintMissionToken()`; only the prefix and the digest are
  * persisted. A row naming any other algorithm matches nothing: the
- * argon2id rows of earlier builds were revoked by migration 0027.
+ * argon2id rows of earlier builds were revoked by migration 0028.
  */
 import { apiKeyMatchesDigest, digestApiKey, generateApiKey, parseApiKey } from '@vaubaan/shared';
 

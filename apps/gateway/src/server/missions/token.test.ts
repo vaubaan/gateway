@@ -38,7 +38,7 @@ describe('mission token', () => {
 
   it('never reads a hash under the wrong algorithm, nor under one it does not know', async () => {
     const token = await mintMissionToken();
-    // An argon2id row of an earlier build (revoked by migration 0027) matches nothing.
+    // An argon2id row of an earlier build (revoked by migration 0028) matches nothing.
     const argon = '$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA';
     expect(bearerMatches({ hash: argon, hashAlg: 'argon2id' }, token.secret)).toBe(false);
     expect(bearerMatches({ hash: token.hash, hashAlg: 'argon2id' }, token.secret)).toBe(false);

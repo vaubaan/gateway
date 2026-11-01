@@ -23,7 +23,12 @@ export type { IndexedRiskCatalog } from './risk-evaluator.ts';
 export { prepareCatalog } from './risk-policy.ts';
 export { budgetIssues, exceedsRateCeiling, isValidBudget, ratePerMinute } from './budget.ts';
 export type { BudgetField } from './budget.ts';
-export { carriesGlobIdentifier, evaluateCall, UNQUALIFIED } from './risk-runtime.ts';
+export {
+  carriesGlobIdentifier,
+  evaluateCall,
+  type EvaluateCallInput,
+  UNQUALIFIED,
+} from './risk-runtime.ts';
 export {
   envResolverFor,
   isAcceptableInEnv,

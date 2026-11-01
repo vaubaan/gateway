@@ -37,7 +37,7 @@ Read these before starting the new image on a running instance:
    then remove the old copy (`deploy/README.md`, "Upgrading an instance whose
    key is on the data volume").
 4. **Mission tokens issued before 2.0.0-alpha.1 and never used since** are
-   revoked by migration 0027 (they were still stored as argon2id) and must be
+   revoked by migration 0028 (they were still stored as argon2id) and must be
    re-issued: rotate the member's key, or replace the named key. Tokens used
    once since then are not affected.
 5. **Accounts created before 2.0.0-alpha.1 that nobody signed in to since**
@@ -70,8 +70,9 @@ Read these before starting the new image on a running instance:
 - **A token, a share and held arguments are reached with their parent only**:
   the repositories take `(missionId, tokenId)`, `(connectionId, shareId)` and
   `(missionId, requestId)`; a bare-id lookup does not compile.
-- **The argon2id token path is gone** (and the `argon2` native addon with it):
-  migration 0027 revokes the tokens still stored that way.
+- **The argon2id token path is gone** (the `argon2` native addon stays, for
+  local-account passwords):
+  migration 0028 revokes the tokens still stored that way.
 
 ### Added
 
@@ -307,6 +308,9 @@ Read these before starting the new image on a running instance:
   `plugin-versions` (a plugin README states no version any more) and
   `plugin-data-model-paths` (no known gap left).
 
+- **The image carries `LICENSE` and `NOTICE`** at `/app`, as a redistribution
+  under Apache-2.0 should.
+
 ### Removed
 
 - **Catalog presets.** No plugin ships `presets`, a catalog with the key no
@@ -470,6 +474,9 @@ but not published.
   patch version.
   ADR service-marks-in-brand-colour, amending
   service-icons-declared-by-the-plugin.
+
+- **The image carries `LICENSE` and `NOTICE`** at `/app`, as a redistribution
+  under Apache-2.0 should.
 
 ### Removed
 
@@ -636,6 +643,9 @@ but not published.
 - **Dependencies.** Next.js 16.4.2, js-yaml 5 (the risk catalogs are read
   with the same safe schema: JavaScript, local and binary tags and complex
   keys are refused), imapflow 2.5.6 for Gmail; ESLint 10 for contributors.
+
+- **The image carries `LICENSE` and `NOTICE`** at `/app`, as a redistribution
+  under Apache-2.0 should.
 
 ### Removed
 
@@ -932,6 +942,9 @@ but not published.
   refused, and removing a provider no longer signs its remover out. A start
   with no administrator, no rule and no bootstrap token is refused. ADR
   administrators-live-in-the-instance.
+
+- **The image carries `LICENSE` and `NOTICE`** at `/app`, as a redistribution
+  under Apache-2.0 should.
 
 ### Removed
 
@@ -1897,6 +1910,9 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   are kept under `legacy/` folders. `npm run test:e2e` builds the application and drives
   the standalone server the image runs, with a simulated identity provider and a mocked
   provider; CI installs with `npm ci` and pins every action by commit.
+
+- **The image carries `LICENSE` and `NOTICE`** at `/app`, as a redistribution
+  under Apache-2.0 should.
 
 ### Removed
 

@@ -1,5 +1,5 @@
 /**
- * Migration 0027: a mission token still stored as argon2id (never presented since
+ * Migration 0028: a mission token still stored as argon2id (never presented since
  * the upgrade to the SHA-256 digest) is revoked; every other row is left as it is.
  */
 import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { openStore, SetCatalogIndex } from '../../../src/server/store';
 import { DEFAULT_MIGRATIONS_DIR } from '../../../src/server/store/migrate';
 import { StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing';
 
-const MIGRATION = 27;
+const MIGRATION = 28;
 
 it('revokes the active argon2id tokens, and only them', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'argon2id-migration-'));

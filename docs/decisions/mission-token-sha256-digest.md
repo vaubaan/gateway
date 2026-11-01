@@ -50,9 +50,9 @@ Breaks every running agent on upgrade for no gain.
 ## Amendment 2026-10-31 — the argon2id path is removed
 
 Owner decision before publication (gateway audit F7): the shim goes now rather than at the next
-major. Migration 0027 revokes every active token still stored as argon2id — a token not presented
+major. Migration 0028 revokes every active token still stored as argon2id — a token not presented
 since the upgrade to the digest, which cannot be moved without its secret; its mission keeps its
 other tokens and the creator issues a new one. `bearerMatches` reads the SHA-256 digest only (a row
 of any other algorithm matches nothing), the per-prefix throttle and its `verification-throttled`
-denial leave the doors, `rehashToken` leaves the store and `argon2` leaves the dependencies. The
+denial leave the doors, `rehashToken` leaves the store and `argon2` leaves `@vaubaan/shared` (the gateway keeps the binding for local-account passwords). The
 release notes say which tokens must be re-issued.
