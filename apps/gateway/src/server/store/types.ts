@@ -219,6 +219,18 @@ export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit'] as const
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
 
 /**
+ * The marks of one macro-action of one resource set that start the count of a
+ * trust-raise proposal (risk model §4.7): when an edit last changed its trust level,
+ * and when the creator last answered "Not now". `null`: never.
+ */
+export interface MissionTrustMarkRecord {
+  readonly resourceSetId: string;
+  readonly macroActionId: string;
+  readonly levelChangedAt: Iso | null;
+  readonly snoozedAt: Iso | null;
+}
+
+/**
  * One resource set of a connection of a mission (risk model §4.7, ADR
  * resource-sets-partition-a-mission-connection, migration 0029): its resources, and the
  * lines of the mission's policy that name it. A resource is in exactly one set of its

@@ -29,6 +29,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { TrustRaiseOffer } from '@/components/missions/TrustRaiseOffer';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RelativeTime } from '@/components/RelativeTime';
 import {
@@ -481,6 +482,18 @@ export default async function MissionPage({ params, searchParams }: Props) {
               )}
             </Hint>
           )}
+        </div>
+      )}
+      {detail.trust_raises.length > 0 && (
+        <div className={[styles.block, styles.trustRaises].join(' ')} data-testid="trust-raises">
+          {detail.trust_raises.map((offer) => (
+            <TrustRaiseOffer
+              key={`${offer.resource_set_id}::${offer.macro_action_id}`}
+              missionId={mission.id}
+              offer={offer}
+              accountName={offer.account_name}
+            />
+          ))}
         </div>
       )}
       {first && orphanExplanation && (

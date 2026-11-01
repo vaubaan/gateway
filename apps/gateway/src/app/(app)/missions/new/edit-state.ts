@@ -19,15 +19,52 @@ import {
   type MissionSnapshot,
   type StoredResourceScope,
 } from '@/lib/missions/mission-edit';
-import { trustLevelsOf } from '@/lib/missions/macro-actions';
+import { trustLevelsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 
 import {
   draftOf,
   initialFormState,
   loadResolved,
   periodChoiceOf,
+  raiseMacroAction,
   type FormState,
 } from './form-state';
+
+/**
+ * A trust-raise the edit opens with (risk model §4.7): the macro-action of the set,
+ * and the level it goes to. The server checked it is offered.
+ */
+export interface EditRaise {
+  readonly connectionId: string;
+  readonly resourceSetId: string;
+  readonly macroActionId: string;
+  readonly to: TrustLevel;
+}
+
+/**
+ * The edit state with the raise applied, and the hand-edited lines it replaces. A raise
+ * whose set the form does not show leaves the state as it is.
+ */
+export function raisedEditState(
+  context: readonly IssuanceConnection[],
+  state: FormState,
+  raise: EditRaise,
+): { readonly state: FormState; readonly replaced: readonly RiskId[] } {
+  const connection = context.find((c) => c.id === raise.connectionId);
+  const account = state.connections[raise.connectionId];
+  const index = account?.sets.findIndex((set) => set.id === raise.resourceSetId) ?? -1;
+  const set = account?.sets[index];
+  if (!connection || !account || !set) return { state, replaced: [] };
+  const raised = raiseMacroAction(connection, set, raise.macroActionId, raise.to);
+  const sets = account.sets.map((s, i) => (i === index ? raised.state : s));
+  return {
+    state: {
+      ...state,
+      connections: { ...state.connections, [connection.id]: { ...account, sets } },
+    },
+    replaced: raised.replaced,
+  };
+}
 
 /** What the edit form knows of the mission it edits. */
 export interface EditSource {
@@ -42,6 +79,13 @@ export interface EditSource {
     readonly kind: string;
     readonly risk_ids: readonly RiskId[];
   }[];
+  /** "Raise" of a trust-raise proposal: the edit opens at the new level. */
+  readonly raise?: EditRaise & {
+    readonly label: string;
+    readonly from: TrustLevel;
+    /** The account, and its set when it has several. */
+    readonly where: string;
+  };
 }
 
 /** The mission's accounts as the form loads them: their stored selection and lines. */

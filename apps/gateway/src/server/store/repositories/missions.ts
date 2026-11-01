@@ -21,6 +21,7 @@ import {
   type MissionResourceSetInput,
   type MissionResourceSetRecord,
   type MissionResourceSource,
+  type MissionTrustMarkRecord,
   type RequestLine,
   type ResourceScope,
   type MissionStatus,
@@ -309,6 +310,17 @@ export interface MissionsRepo {
   getMember(missionId: string, userId: string): Promise<MissionMemberRecord | null>;
   /** The current members, in the order they were added. Never the creator. */
   listMembers(missionId: string): Promise<MissionMemberRecord[]>;
+  /** The trust-raise marks of the mission's sets (risk model §4.7). */
+  trustMarks(missionId: string): Promise<MissionTrustMarkRecord[]>;
+  /**
+   * "Not now" on a trust-raise proposal: stamps the macro-action of the set as put off
+   * now. `false` (nothing written) when the set is not the mission's.
+   */
+  snoozeTrustRaise(
+    missionId: string,
+    resourceSetId: string,
+    macroActionId: string,
+  ): Promise<boolean>;
 }
 
 /** What `MissionsRepo.edit` makes of a mission. */
@@ -992,6 +1004,29 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     'UPDATE mission_resource_sets SET position = ?, resource_scope = ?, trust_levels_json = ? WHERE id = ?',
   );
   const deleteSetStmt = db.prepare<[string]>('DELETE FROM mission_resource_sets WHERE id = ?');
+  // A trust level an edit changes restarts the count of its raise proposal (§4.7).
+  const levelChangedStmt = db.prepare<[string, string, string, string]>(
+    `INSERT INTO mission_trust_marks (mission_id, resource_set_id, macro_action_id, level_changed_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (resource_set_id, macro_action_id) DO UPDATE SET level_changed_at = excluded.level_changed_at`,
+  );
+  const snoozeStmt = db.prepare<[string, string, string, string, string, string]>(
+    `INSERT INTO mission_trust_marks (mission_id, resource_set_id, macro_action_id, snoozed_at)
+     SELECT ?, ?, ?, ? FROM mission_resource_sets WHERE id = ? AND mission_id = ?
+     ON CONFLICT (resource_set_id, macro_action_id) DO UPDATE SET snoozed_at = excluded.snoozed_at`,
+  );
+  const trustMarksOf = db.prepare<
+    [string],
+    {
+      resource_set_id: string;
+      macro_action_id: string;
+      level_changed_at: string | null;
+      snoozed_at: string | null;
+    }
+  >(
+    `SELECT resource_set_id, macro_action_id, level_changed_at, snoozed_at
+     FROM mission_trust_marks WHERE mission_id = ? ORDER BY resource_set_id, macro_action_id`,
+  );
   const deleteConnectionStmt = db.prepare<[string, string]>(
     'DELETE FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
   );
@@ -1273,6 +1308,15 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             trustLevelsJsonOf(was) !== trustLevels
           ) {
             updateSetStmt.run(set.position, set.input.resourceScope, trustLevels, set.id);
+          }
+          if (was) {
+            const before = was.trustLevels ?? {};
+            const after = set.input.trustLevels ?? {};
+            for (const macroActionId of new Set([...Object.keys(before), ...Object.keys(after)])) {
+              if (before[macroActionId] !== after[macroActionId]) {
+                levelChangedStmt.run(id, set.id, macroActionId, now);
+              }
+            }
           }
         }
 
@@ -1801,6 +1845,27 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     },
     async listMembers(missionId) {
       return membersOf.all(missionId).map(memberToRecord);
+    },
+    async trustMarks(missionId) {
+      return trustMarksOf.all(missionId).map((row) => ({
+        resourceSetId: row.resource_set_id,
+        macroActionId: row.macro_action_id,
+        levelChangedAt: row.level_changed_at,
+        snoozedAt: row.snoozed_at,
+      }));
+    },
+    async snoozeTrustRaise(missionId, resourceSetId, macroActionId) {
+      if (macroActionId === '') return false;
+      const now = nowIso(ctx);
+      const { changes } = snoozeStmt.run(
+        missionId,
+        resourceSetId,
+        macroActionId,
+        now,
+        resourceSetId,
+        missionId,
+      );
+      return changes > 0;
     },
   };
 }

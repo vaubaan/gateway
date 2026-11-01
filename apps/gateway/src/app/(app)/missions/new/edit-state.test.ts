@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { judgeEdit, type MissionSnapshot } from '@/lib/missions/mission-edit';
 import { acmeConnection } from '../../../../../tests/support/missions/testing';
 
-import { changeLines, editDraftOf, initialEditState } from './edit-state';
+import { changeLines, editDraftOf, initialEditState, raisedEditState } from './edit-state';
 import { expiryOf, RESOURCE_CHOICES, toggleRisk, type FormState } from './form-state';
 
 const NOW = new Date('2026-10-24T09:00:00.000Z');
@@ -177,5 +177,45 @@ describe('the creation form in edit mode', () => {
     expect(RESOURCE_CHOICES.find((c) => c.id === 'all')?.explanation).toBe(
       'The resources listed today, and the ones this mission creates. One found later is not reached until the creator adds it to this mission with “Edit mission”.',
     );
+  });
+});
+
+describe('the creation form in edit mode — opened by "Raise"', () => {
+  it('raises the macro-action of the set it names, and judges as an ordinary edit', () => {
+    const snapshot: MissionSnapshot = {
+      ...SNAPSHOT,
+      connections: [
+        {
+          ...SNAPSHOT.connections[0]!,
+          resource_sets: [
+            { ...SNAPSHOT.connections[0]!.resource_sets[0]!, trust_levels: { read: 'careful' } },
+          ],
+        },
+      ],
+    };
+    const start = initialEditState(context, snapshot);
+    const { state, replaced } = raisedEditState(context, start, {
+      connectionId: acme.id,
+      resourceSetId: 'set-1',
+      macroActionId: 'read',
+      to: 'trusting',
+    });
+    expect(state.connections[acme.id]?.sets[0]?.trustLevels).toEqual({ read: 'trusting' });
+    expect(replaced).toEqual(['acme.read']);
+    const judged = judgeEdit(
+      { connections: context, now: NOW },
+      snapshot,
+      editDraftOf(context, state, snapshot, NOW),
+    );
+    expect(judged.ok).toBe(true);
+    expect(judged.changes.permissions_changed.map((c) => c.risk_id)).toEqual(['acme.read']);
+
+    const elsewhere = raisedEditState(context, start, {
+      connectionId: acme.id,
+      resourceSetId: 'not-a-set',
+      macroActionId: 'read',
+      to: 'trusting',
+    });
+    expect(elsewhere.state).toBe(start);
   });
 });

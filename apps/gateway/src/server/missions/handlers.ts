@@ -49,6 +49,39 @@ export interface MissionHandlers {
   edit(request: Request, missionId: string): Promise<Response>;
   /** `POST /api/missions/:id/edit/preview` — the same body; writes nothing. */
   previewEdit(request: Request, missionId: string): Promise<Response>;
+  /**
+   * `POST /api/missions/:id/trust-raise/not-now` — body `{ resource_set_id,
+   * macro_action_id }`: hides a trust-raise proposal until as many approvals again.
+   */
+  snoozeTrustRaise(request: Request, missionId: string): Promise<Response>;
+}
+
+const INVALID_TRUST_RAISE = {
+  error: 'invalid-trust-raise',
+  message: 'The body is { "resource_set_id": string, "macro_action_id": string }.',
+};
+
+/** The two fields of a "Not now", or `null` when the body is not one. */
+async function trustRaiseTargetOf(
+  request: Request,
+): Promise<{ resource_set_id: string; macro_action_id: string } | null> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const {
+    resource_set_id: set,
+    macro_action_id: action,
+    ...extra
+  } = raw as Record<string, unknown>;
+  if (Object.keys(extra).length > 0) return null;
+  if (typeof set !== 'string' || set === '' || typeof action !== 'string' || action === '') {
+    return null;
+  }
+  return { resource_set_id: set, macro_action_id: action };
 }
 
 const INVALID_LIMITS_EDIT = {
@@ -254,6 +287,15 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
       const result = await deps.service.revoke(principal.user, missionId);
       if (!result.ok) return json(404, NOT_FOUND);
       return json(200, { mission: { id: result.mission.id, status: result.mission.status } });
+    },
+
+    async snoozeTrustRaise(request, missionId) {
+      const principal = await userOf(request);
+      if (principal instanceof Response) return principal;
+      const target = await trustRaiseTargetOf(request);
+      if (!target) return json(400, INVALID_TRUST_RAISE);
+      const result = await deps.service.snoozeTrustRaise(principal.user, missionId, target);
+      return result ? json(200, { ok: true }) : json(404, NOT_FOUND);
     },
 
     async setGate(request, missionId) {

@@ -76,6 +76,8 @@ import {
   ROUTES,
   shortDate,
   TERMS,
+  TRUST_LEVEL_LABELS,
+  TRUST_RAISE_WORDS,
   WAITING,
 } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
@@ -132,7 +134,13 @@ import {
   type FormState,
   type PeriodChoice,
 } from './form-state';
-import { changeLines, editDraftOf, initialEditState, type EditSource } from './edit-state';
+import {
+  changeLines,
+  editDraftOf,
+  initialEditState,
+  raisedEditState,
+  type EditSource,
+} from './edit-state';
 import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
 import { MacroActionPanel, SetPolicy } from './macro-action-panel';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
@@ -209,9 +217,14 @@ export function MissionForm({
   /** The mission this form edits; `null` for a creation. */
   edit?: EditSource | null;
 }) {
-  const [state, setState] = useState<FormState>(() =>
-    edit ? initialEditState(context, edit.snapshot) : startState(context, initial),
-  );
+  // "Raise" of a trust-raise proposal opens the edit at the new level (risk model §4.7).
+  const [opening] = useState(() => {
+    const start = edit ? initialEditState(context, edit.snapshot) : startState(context, initial);
+    return edit?.raise
+      ? raisedEditState(context, start, edit.raise)
+      : { state: start, replaced: [] as readonly string[] };
+  });
+  const [state, setState] = useState<FormState>(opening.state);
   const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<PendingDiscard | null>(null);
   const [now] = useState(() => new Date());
@@ -457,6 +470,35 @@ export function MissionForm({
   return (
     <>
       <PageHeader crumbs={crumbs} title={title} lede={lede} />
+
+      {edit?.raise && (
+        <div className={styles.block}>
+          <Callout
+            tone="info"
+            title={TRUST_RAISE_WORDS.editTitle(
+              edit.raise.label,
+              TRUST_LEVEL_LABELS[edit.raise.from],
+              TRUST_LEVEL_LABELS[edit.raise.to],
+              edit.raise.where,
+            )}
+            testId="raising"
+          >
+            <p>{TRUST_RAISE_WORDS.editLede}</p>
+            {opening.replaced.length > 0 && (
+              <>
+                <p>{TRUST_RAISE_WORDS.replaced}</p>
+                <ul className={styles.issueList} data-testid="raising-replaced">
+                  {opening.replaced.map((riskId) => (
+                    <li key={riskId}>
+                      <Mono>{riskId}</Mono>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </Callout>
+        </div>
+      )}
 
       {initial && !edit && (
         <div className={styles.block}>

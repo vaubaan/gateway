@@ -319,6 +319,16 @@ const KEY_TABLE = [
     format: 'duration',
     default: '24h',
   },
+  // Trust-raise proposals (risk model §4.7): granted approvals on one macro-action of
+  // one resource set, with no refusal since its trust level changed, before a raise is
+  // offered to the creator.
+  {
+    path: 'trust_raise.after_approvals',
+    env: 'VAUBAAN_TRUST_RAISE_AFTER_APPROVALS',
+    kind: 'int',
+    default: 10,
+    min: 1,
+  },
   {
     path: 'approvals.expiry',
     env: 'VAUBAAN_APPROVAL_EXPIRY',

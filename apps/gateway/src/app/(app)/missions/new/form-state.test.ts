@@ -35,6 +35,7 @@ import {
   periodChoiceOf,
   periodOf,
   policyCounts,
+  raiseMacroAction,
   resetEdits,
   removeResourceSet,
   RESOURCE_CHOICES,
@@ -678,5 +679,26 @@ describe('creation form — resource sets', () => {
   it('offers sets only on an account with two resources at least', () => {
     expect(setsOffered(acme)).toBe(true);
     expect(setsOffered(acmeConnection({ resources: [ACME_RESOURCES[0]!] }))).toBe(false);
+  });
+});
+
+describe('creation form — a trust raise (risk model §4.7)', () => {
+  it('rewrites the macro-action’s lines at the next level, keeps the others, and names the hand edits it replaces', () => {
+    let cs = included({ read: 'careful', change: 'careful' });
+    cs = updateEntry(cs, 'acme.read', { quota: '7' });
+    const writes = Object.keys(cs.entries).filter((id) => id.includes('write'));
+    expect(writes.length).toBeGreaterThan(0);
+    cs = updateEntry(cs, writes[0]!, { quota: '3' });
+    const raised = raiseMacroAction(acme, cs, 'change', 'trusting');
+    expect(raised.state.trustLevels).toEqual({ read: 'careful', change: 'trusting' });
+    // The read line, edited by hand, stays; the write line edited by hand is replaced.
+    expect(raised.state.entries['acme.read']?.quota).toBe('7');
+    expect(raised.state.entries[writes[0]!]?.quota).not.toBe('3');
+    expect(raised.replaced).toEqual([writes[0]]);
+  });
+
+  it('replaces nothing it did not write when no line was edited', () => {
+    const raised = raiseMacroAction(acme, included({ change: 'careful' }), 'change', 'trusting');
+    expect(raised.replaced).toEqual([]);
   });
 });

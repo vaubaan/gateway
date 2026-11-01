@@ -88,6 +88,14 @@ Read these before starting the new image on a running instance:
   bootstrap kit and the mission page accept or show `resource_sets`; a draft
   without them is one set, as before. Migration 0029 gives every existing
   mission one set per account: nothing changes for it.
+- **Trust-raise proposals** (risk model §4.7). After 10 approvals granted on
+  one macro-action of one resource set, with no refusal since its trust level
+  last changed, the mission page and Now offer the creator to raise it by one
+  level. "Raise" opens Edit mission at the new level, naming the lines edited
+  by hand it replaces; "Not now" hides the offer until as many approvals again.
+  Nothing is raised automatically, and Autonomous is never offered. The
+  threshold is `trust_raise.after_approvals`
+  (`VAUBAAN_TRUST_RAISE_AFTER_APPROVALS`, default 10).
 - **Contributors sign off their commits** (Developer Certificate of Origin,
   no CLA): `git commit -s`, explained in `CONTRIBUTING.md`; the CI job
   `audit` refuses a pull request with an unsigned commit

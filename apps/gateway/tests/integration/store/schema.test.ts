@@ -44,6 +44,7 @@ const EXPECTED_TABLES = [
   'mission_resource_sets',
   'mission_resources',
   'mission_tokens',
+  'mission_trust_marks',
   'missions',
   'oauth_access_tokens',
   'oauth_client_redirect_uris',

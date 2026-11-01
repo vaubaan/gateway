@@ -9,7 +9,7 @@ import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { ButtonLink, Callout, PageHeader } from '@/components/ui';
-import { MISSION_ACTIONS, ROUTES } from '@/lib/vocabulary';
+import { MISSION_ACTIONS, ROUTES, TRUST_RAISE_WORDS } from '@/lib/vocabulary';
 import { currentUser } from '@/lib/auth/session';
 import { riskPlanesOf, type RiskPlanes } from '@/lib/providers/planes';
 
@@ -19,9 +19,14 @@ export const dynamic = 'force-dynamic';
 
 interface Props {
   params: Promise<{ id: string }>;
+  /** "Raise" of a trust-raise proposal (risk model §4.7): `raise=<set>&action=<macro-action>`. */
+  searchParams: Promise<{ raise?: string | string[]; action?: string | string[] }>;
 }
 
-export default async function EditMissionPage({ params }: Props) {
+const one = (value: string | string[] | undefined): string | null =>
+  typeof value === 'string' && value !== '' ? value : null;
+
+export default async function EditMissionPage({ params, searchParams }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const { id } = await params;
@@ -55,6 +60,18 @@ export default async function EditMissionPage({ params }: Props) {
     );
   }
 
+  const query = await searchParams;
+  const raiseSet = one(query.raise);
+  const raiseAction = one(query.action);
+  // Only an offer the server makes now opens the edit raised; anything else opens it as usual.
+  const offer =
+    raiseSet && raiseAction
+      ? await service.trustRaiseOffer(session.user, view.mission.id, {
+          resource_set_id: raiseSet,
+          macro_action_id: raiseAction,
+        })
+      : null;
+
   const context = await service.issuanceContext(session.user);
   // The services whose data model has several planes: the editor can be sliced by one.
   const planes: Record<string, RiskPlanes> = {};
@@ -66,7 +83,7 @@ export default async function EditMissionPage({ params }: Props) {
 
   return (
     <MissionForm
-      key={`edit:${view.revision}`}
+      key={`edit:${view.revision}${offer ? `:raise:${offer.resource_set_id}:${offer.macro_action_id}` : ''}`}
       context={context}
       missions={[]}
       initial={null}
@@ -77,6 +94,22 @@ export default async function EditMissionPage({ params }: Props) {
         snapshot: view.snapshot,
         used: view.used,
         openRequests: view.open_requests,
+        ...(offer
+          ? {
+              raise: {
+                connectionId: offer.connection_id,
+                resourceSetId: offer.resource_set_id,
+                macroActionId: offer.macro_action_id,
+                to: offer.to,
+                from: offer.from,
+                label: offer.macro_action_label,
+                where: TRUST_RAISE_WORDS.where(
+                  offer.account_name,
+                  offer.several_sets ? offer.resource_set_position : null,
+                ),
+              },
+            }
+          : {}),
       }}
     />
   );

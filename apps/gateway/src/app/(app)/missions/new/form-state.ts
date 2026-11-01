@@ -29,6 +29,7 @@ import {
   highestTier,
   knownTrustLevels,
   linesOfTrustLevels,
+  macroActionOfRisk,
   rowsOf,
   type MacroActionTrustLevels,
   type Tier,
@@ -284,6 +285,68 @@ export function setMacroAction<S extends SetState>(
   if (trustLevel === null) delete trustLevels[actionId];
   else trustLevels[actionId] = trustLevel;
   return applyTrustLevels(connection, { ...state, trustLevels });
+}
+
+/** A trust-raise applied to one set: the set after it, and the lines it replaced. */
+export interface RaisedSet<S extends SetState> {
+  readonly state: S;
+  /**
+   * The lines of the macro-action edited (or removed) by hand, which the raise
+   * rewrites: the form names them before the edit is saved (risk model §4.7).
+   */
+  readonly replaced: readonly RiskId[];
+}
+
+function sameEntry(a: EntryState, b: EntryState): boolean {
+  return (
+    a.quota === b.quota &&
+    a.rateMax === b.rateMax &&
+    a.rateWindow === b.rateWindow &&
+    a.gate === b.gate
+  );
+}
+
+/**
+ * A trust-raise (risk model §4.7): one macro-action moved to `to`, its lines rewritten at
+ * that level, every other line of the set kept as it is — hand edits included. The lines
+ * of the macro-action that differ from what its old level wrote are `replaced`.
+ */
+export function raiseMacroAction<S extends SetState>(
+  connection: IssuanceConnection,
+  state: S,
+  actionId: string,
+  to: TrustLevel,
+): RaisedSet<S> {
+  const action = connection.macro_actions.find((a) => a.id === actionId);
+  if (!action) return { state, replaced: [] };
+  const resources = selectedResources(connection, state);
+  const from = state.trustLevels[actionId];
+  const written = from
+    ? entriesOf(expandMacroAction(connection, action, from, resources).lines)
+    : {};
+  const ofAction = (riskId: RiskId): boolean => {
+    const risk = connection.risks.find((r) => r.risk_id === riskId);
+    return risk !== undefined && macroActionOfRisk(connection, risk)?.id === actionId;
+  };
+  const kept = Object.entries(state.entries).filter(([riskId]) => !ofAction(riskId));
+  const changed = Object.entries(state.entries)
+    .filter(([riskId, entry]) => {
+      if (!ofAction(riskId)) return false;
+      const before = written[riskId];
+      return !before || !sameEntry(before, entry);
+    })
+    .map(([riskId]) => riskId);
+  const removed = Object.keys(written).filter((riskId) => !(riskId in state.entries));
+  const raised = entriesOf(expandMacroAction(connection, action, to, resources).lines);
+  return {
+    state: {
+      ...state,
+      everything: false,
+      trustLevels: { ...state.trustLevels, [actionId]: to },
+      entries: { ...Object.fromEntries(kept), ...raised },
+    },
+    replaced: [...changed, ...removed],
+  };
 }
 
 /** The policy as the trust levels (or "Everything I hold") wrote it: what "Reset" goes back to. */

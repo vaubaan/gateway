@@ -127,6 +127,7 @@ import { checkPolicyLines, previewDraft } from '../../lib/missions/preview';
 import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
+import { trustRaiseOffers, type TrustRaiseOffer } from './trust-raise';
 
 const COPY_SUFFIX = ' (copy)';
 
@@ -165,7 +166,15 @@ export interface MissionServiceDeps {
    * added and before an ended one is given a new end. Absent: no ceiling.
    */
   readonly ceilings?: CeilingCheck;
+  /**
+   * `trust_raise.after_approvals` (risk model §4.7): approvals granted on one
+   * macro-action of one set before a raise is offered. Default 10.
+   */
+  readonly trustRaiseAfterApprovals?: number;
 }
+
+/** The default of `trust_raise.after_approvals`. */
+const DEFAULT_TRUST_RAISE_AFTER_APPROVALS = 10;
 
 export interface PreviewOptions {
   /**
@@ -625,6 +634,11 @@ export interface MissionDetail extends MissionOverview {
   readonly period: DraftPeriod;
   /** The kit with the masked prefix; `null` when no token is active. */
   readonly kit: BootstrapKit | null;
+  /**
+   * The trust-raise proposals of the mission (risk model §4.7): to its creator, while it
+   * runs; empty otherwise.
+   */
+  readonly trust_raises: readonly TrustRaiseOffer[];
 }
 
 /** The reached resources the mission created itself, as `created_resource_ids` (or nothing). */
@@ -1922,7 +1936,96 @@ export class MissionService {
       kit: overview.token
         ? await this.kitOf(mission, { prefix: overview.token.prefix }, connections)
         : null,
+      trust_raises:
+        inspected.role === 'creator' && overview.state.kind === 'active'
+          ? await this.trustRaisesOf(mission)
+          : [],
     };
+  }
+
+  /**
+   * The trust-raise proposals of every running mission the user created (risk model
+   * §4.7), for the Now page: each with its mission's id and name.
+   */
+  async trustRaisesFor(user: Subject): Promise<
+    {
+      readonly mission_id: string;
+      readonly mission_name: string;
+      readonly offers: readonly TrustRaiseOffer[];
+    }[]
+  > {
+    const out: { mission_id: string; mission_name: string; offers: readonly TrustRaiseOffer[] }[] =
+      [];
+    for (const created of await this.deps.store.missions.listForCreator(user.id)) {
+      const { mission, orphan } = await this.deps.grounds.inspect(created);
+      if (orphan || (await this.stateOf(mission)).kind !== 'active') continue;
+      const offers = await this.trustRaisesOf(mission);
+      if (offers.length > 0)
+        out.push({ mission_id: mission.id, mission_name: mission.name, offers });
+    }
+    return out;
+  }
+
+  /**
+   * "Not now" on a trust-raise proposal (risk model §4.7): the offer is hidden until as
+   * many approvals again. The creator only; `null` is "not found" for anyone else, or a
+   * set that is not the mission's. Not an edit of the mission: nothing it allows moves.
+   */
+  async snoozeTrustRaise(
+    user: Subject,
+    missionId: string,
+    target: { readonly resource_set_id: string; readonly macro_action_id: string },
+  ): Promise<{ readonly ok: true } | null> {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return null;
+    const done = await this.deps.store.missions.snoozeTrustRaise(
+      mission.id,
+      target.resource_set_id,
+      target.macro_action_id,
+    );
+    return done ? { ok: true } : null;
+  }
+
+  /**
+   * The one trust-raise proposal "Raise" opens the edit with: offered now on that
+   * macro-action of that set of a running mission the user created; `null` otherwise
+   * (the edit then opens as usual).
+   */
+  async trustRaiseOffer(
+    user: Subject,
+    missionId: string,
+    target: { readonly resource_set_id: string; readonly macro_action_id: string },
+  ): Promise<TrustRaiseOffer | null> {
+    const inspected = await this.ownInspected(user, missionId);
+    if (!inspected || inspected.orphan) return null;
+    if ((await this.stateOf(inspected.mission)).kind !== 'active') return null;
+    const offers = await this.trustRaisesOf(inspected.mission);
+    return (
+      offers.find(
+        (o) =>
+          o.resource_set_id === target.resource_set_id &&
+          o.macro_action_id === target.macro_action_id,
+      ) ?? null
+    );
+  }
+
+  private async trustRaisesOf(mission: MissionRecord): Promise<TrustRaiseOffer[]> {
+    const accounts = new Map<string, { name: string; macroActions: readonly MacroAction[] }>();
+    for (const c of mission.connections) {
+      const connection = await this.deps.store.connections.getById(c.connectionId);
+      if (!connection || !this.deps.registry.get(connection.provider)) continue;
+      accounts.set(c.connectionId, {
+        name: connection.displayName,
+        macroActions: this.macroActionsOf(connection.provider),
+      });
+    }
+    return trustRaiseOffers({
+      mission,
+      accountOf: (connectionId) => accounts.get(connectionId) ?? null,
+      requests: await this.deps.store.requests.listForMission(mission.id),
+      marks: await this.deps.store.missions.trustMarks(mission.id),
+      threshold: this.deps.trustRaiseAfterApprovals ?? DEFAULT_TRUST_RAISE_AFTER_APPROVALS,
+    });
   }
 
   /**

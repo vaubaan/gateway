@@ -1194,6 +1194,29 @@ export const MISSION_ACTIONS = {
   leave: 'Leave the mission',
 } as const;
 
+/** A trust-raise proposal (risk model §4.7), on the mission page and Now. */
+export const TRUST_RAISE_WORDS = {
+  /** "Raise “Change” to Autonomous?" */
+  title: (macroAction: string, to: string): string => `Raise “${macroAction}” to ${to}?`,
+  /** Why it is offered: what was approved, where. */
+  because: (approvals: number, where: string, from: string): string =>
+    `You approved it ${approvals} times on ${where}, with no refusal since it was set to ${from}.`,
+  /** The account, and its set when the account has several ("Acme main, resource set 2"). */
+  where: (accountName: string, setPosition: number | null): string =>
+    setPosition === null ? accountName : `${accountName}, resource set ${setPosition}`,
+  rule: 'Raising is an ordinary edit of the mission, shown before it is saved. Nothing is raised without you.',
+  raise: 'Raise',
+  notNow: 'Not now',
+  /** The toast after "Not now". */
+  hidden: 'Hidden until as many approvals again.',
+  /** The edit form opened by "Raise". */
+  editTitle: (macroAction: string, from: string, to: string, where: string): string =>
+    `Raising “${macroAction}” from ${from} to ${to} on ${where}`,
+  editLede: 'Its lines are rewritten at the new level. Save to apply; nothing changes until then.',
+  /** Lines of the macro-action edited by hand, which the raise replaces. */
+  replaced: 'These lines were edited by hand and are replaced:',
+} as const;
+
 /**
  * Resource sets (risk model §4.7): the resources of one account split in groups, each
  * with its own trust levels and limits. Never "Set" alone; nothing is said of sets

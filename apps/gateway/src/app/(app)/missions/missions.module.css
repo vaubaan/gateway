@@ -630,3 +630,9 @@ p.railRefused {
   font-weight: var(--weight-regular);
   color: var(--ink-2);
 }
+
+/* Trust-raise proposals on the mission page (risk model §4.7), one callout each. */
+.trustRaises {
+  display: grid;
+  gap: var(--space-2);
+}

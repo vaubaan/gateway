@@ -113,6 +113,15 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.mission.id,
     ),
   ),
+  'missions.handlers.snoozeTrustRaise': json('user', 200, (rig, headers) =>
+    rig.root.missions.handlers.snoozeTrustRaise(
+      post(`/api/missions/${rig.mission.id}/trust-raise/not-now`, headers, {
+        resource_set_id: rig.mission.connections[0]?.resourceSets[0]?.id,
+        macro_action_id: 'read',
+      }),
+      rig.mission.id,
+    ),
+  ),
   'missions.handlers.changePermissions': json('user', 200, (rig, headers) =>
     rig.root.missions.handlers.changePermissions(
       post(`/api/missions/${rig.mission.id}/permissions`, headers, {

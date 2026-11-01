@@ -37,6 +37,7 @@ import {
   type SummaryItem,
 } from '@/components/ui';
 import { LocalDate } from '@/components/LocalDate';
+import { TrustRaiseOffer } from '@/components/missions/TrustRaiseOffer';
 import {
   ACTIONS,
   ago,
@@ -288,6 +289,29 @@ function totalsOf(view: View): SummaryItem[] {
   return items;
 }
 
+/**
+ * Trust-raise proposals of the reader's running missions (risk model §4.7), each a
+ * callout with "Raise" and "Not now"; nothing when there is none.
+ */
+function TrustRaisesSection({ view }: { view: View }) {
+  if (view.trust_raises.length === 0) return null;
+  return (
+    <div className={styles.trustRaises} data-testid="now-trust-raises">
+      {view.trust_raises.flatMap(({ mission_id, mission_name, offers }) =>
+        offers.map((offer) => (
+          <TrustRaiseOffer
+            key={`${mission_id}::${offer.resource_set_id}::${offer.macro_action_id}`}
+            missionId={mission_id}
+            missionName={mission_name}
+            offer={offer}
+            accountName={offer.account_name}
+          />
+        )),
+      )}
+    </div>
+  );
+}
+
 export function NowView({ view, viewerId }: { view: View; viewerId: string }) {
   const now = new Date(view.at);
   const somethingWaits = view.waiting.length > 0;
@@ -302,6 +326,7 @@ export function NowView({ view, viewerId }: { view: View; viewerId: string }) {
       {somethingWaits ? (
         <>
           <WaitingSection view={view} viewerId={viewerId} now={now} />
+          <TrustRaisesSection view={view} />
           <RunningSection view={view} now={now} />
           <Section testId="now-totals">
             <SummaryLine items={totalsOf(view)} />
@@ -323,6 +348,7 @@ export function NowView({ view, viewerId }: { view: View; viewerId: string }) {
               />
             }
           />
+          <TrustRaisesSection view={view} />
           {view.totals.missions > 0 && (
             <div className={styles.essential}>
               <Disclosure

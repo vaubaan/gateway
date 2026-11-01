@@ -300,6 +300,14 @@
 # approvals:
 #   expiry: 10m
 
+# Trust-raise proposals (risk model §4.7): after this many approvals granted on
+# one macro-action of one resource set, with no refusal since its trust level
+# last changed, the mission page and Now offer the creator to raise that trust
+# level by one. Nothing is ever raised automatically. A whole number >= 1.
+# env: VAUBAAN_TRUST_RAISE_AFTER_APPROVALS
+# trust_raise:
+#   after_approvals: 10
+
 # Surface rate limit of the execution surface — the MCP door and the git remote
 # together: requests per minute (integer >= 1), per mission, all agents of the
 # mission together (spec §6). Separate from the per-risk rate limits of a

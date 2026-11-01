@@ -21,6 +21,8 @@
 --                           line; an approval request, the gated line of each set the call
 --                           was judged against; a permission request, the missing ones.
 --   permission_refusal_lines  the (set, risk) lines a permission refusal found missing.
+--   mission_trust_marks     per macro-action of a set, when its trust level changed and
+--                           when a raise was last put off ("Not now").
 --   audit_resource_sets     the sets a call entry was judged against and charged (rows, so
 --                           the counters-vs-audit check is a join); append-only like
 --                           `audit_risks`.
@@ -209,3 +211,18 @@ WHEN NOT EXISTS (
 BEGIN
   SELECT RAISE(ABORT, 'audit is append-only; use the retention purge'); -- sqlite: RAISE syntax
 END;
+
+-- Trust-raise proposals (risk model §4.7), per macro-action of a set: when its trust
+-- level last changed by an edit, and when the creator last answered "Not now". The
+-- approvals granted on that macro-action are counted from the latest of these, of the
+-- mission's issuance and of the last approval refused on it. No row: neither happened.
+CREATE TABLE mission_trust_marks (
+  mission_id        TEXT NOT NULL REFERENCES missions (id) ON DELETE CASCADE,
+  resource_set_id   TEXT NOT NULL REFERENCES mission_resource_sets (id) ON DELETE CASCADE,
+  macro_action_id   TEXT NOT NULL CHECK (macro_action_id <> ''),
+  level_changed_at  TEXT,
+  snoozed_at        TEXT,
+  PRIMARY KEY (resource_set_id, macro_action_id)
+) STRICT; -- sqlite: STRICT
+
+CREATE INDEX mission_trust_marks_mission ON mission_trust_marks (mission_id);

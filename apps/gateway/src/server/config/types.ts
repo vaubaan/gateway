@@ -339,6 +339,12 @@ export interface InstanceConfig {
   readonly retentionDays: number;
   readonly requests: { readonly expirySeconds: number };
   readonly approvals: { readonly expirySeconds: number };
+  /**
+   * Trust-raise proposals (risk model §4.7): how many approvals granted on one
+   * macro-action of one resource set, with no refusal since its trust level changed,
+   * before the creator is offered to raise it.
+   */
+  readonly trustRaise: { readonly afterApprovals: number };
   /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
   readonly mcp: { readonly rateLimitPerMinute: number };
   /**
