@@ -263,7 +263,7 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
       creator: role === 'member' ? await personLabel(mission.creatorUserId) : null,
       services,
       holders: await holdersOf(mission.id),
-      issued_via: overview.issuedVia?.client_name ?? null,
+      issued_via: overview.issued_via?.client_name ?? null,
       nearest: nearestLimit(mission.policy, state.remaining, labelOf),
       limits_reached: state.exhausted.length,
       open_requests: await openRequestsOf(overview),

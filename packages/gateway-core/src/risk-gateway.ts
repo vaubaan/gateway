@@ -4,7 +4,7 @@
  * Spec: docs/spec/gateway-risk-model.md §8 (strict-fail runtime);
  * docs/spec/vaubaan-gateway.md §4.1 ("check `risks_touched ⊆ accepted_risks`").
  *
- * `evaluateCallForToken` classifies a call into slices, intersects them with
+ * `evaluateCallForMission` classifies a call into slices, intersects them with
  * the provider catalog, and produces an allow/deny verdict. Unchanged by the
  * v5 pivot: v5 adds the budget *after* this decision, it does not change
  * which risks are acceptable. The pipeline (`pipeline.ts`) orchestrates
@@ -35,17 +35,13 @@ import {
 
 export type { ClassifyOutcome } from '@vaubaan/plugin-sdk';
 
-/** What the decision core reads from the credential: the accepted set. */
+/** What the decision core reads from the mission: the accepted set. */
 export interface AcceptedRisksSnapshot {
   readonly id: string;
   readonly accepted_risks: readonly RiskId[];
-  /** v4 explicit opt-outs; they trump acceptance. A v5 mission carries none:
-   *  leave the field out (or pass `[]`, as the callers written before it
-   *  became optional do). */
-  readonly denied_risks?: readonly RiskId[];
 }
 
-/** Verdict returned by `evaluateCallForToken`. */
+/** Verdict returned by `evaluateCallForMission`. */
 export type CallVerdict =
   | { kind: 'allow'; risks_touched: readonly RiskId[]; executed_slices: readonly Slice[] }
   | {
@@ -78,7 +74,7 @@ export type Classifier = Pick<ProviderPlugin, 'classify' | 'envOf'>;
  * (for the audit entry) — even on `deny` outcomes — so the caller can record
  * them regardless of decision.
  */
-export function evaluateCallForToken(input: {
+export function evaluateCallForMission(input: {
   tool: string;
   args: Readonly<Record<string, unknown>>;
   /** The mission's resources on the connection the call targets. Handed to
@@ -88,7 +84,7 @@ export function evaluateCallForToken(input: {
   /** The public form fields of that connection, handed to the classifier
    *  (`ClassifyConnection`); absent outside a host. */
   connection?: ClassifyConnection;
-  token: AcceptedRisksSnapshot;
+  mission: AcceptedRisksSnapshot;
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
   /** Defaults to `envResolverFor(resources, adapter.envOf)`. A resolver
@@ -96,7 +92,7 @@ export function evaluateCallForToken(input: {
    *  without env qualification (catalog tooling and tests, never a host). */
   envResolver?: EnvResolver | typeof UNQUALIFIED;
 }): CallVerdict {
-  const { tool, args, resources, token, adapter, catalog } = input;
+  const { tool, args, resources, mission, adapter, catalog } = input;
 
   if (!catalog) {
     return { kind: 'no-catalog', provider: 'unknown' };
@@ -109,8 +105,7 @@ export function evaluateCallForToken(input: {
 
   const decision: RiskDecision = evaluateCall({
     executed_slices: classified.slices,
-    token_accepted_risks: new Set(token.accepted_risks),
-    token_denied_risks: new Set(token.denied_risks ?? []),
+    accepted_risks: new Set(mission.accepted_risks),
     catalog,
     envResolver: input.envResolver ?? envResolverFor(resources, adapter.envOf?.bind(adapter)),
   });

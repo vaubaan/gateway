@@ -1,8 +1,8 @@
 /**
  * Which risks each `miro` tool touches, and what the macro-actions hold at a
- * trust cran : the layering (a deletion and a bulk creation need
+ * trust level : the layering (a deletion and a bulk creation need
  * `content-write` too), an update of the canvas touching both deletion risks,
- * the gates of every macro-action at Confiant.
+ * the gates of every macro-action at Trusting.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -111,12 +111,14 @@ describe('the catalog keeps the ids of catalogs 1 and 2', () => {
 describe('macro-actions', () => {
   const actions = miroCatalog.catalog.macro_actions;
   const idsOf = (id: string) => actions.find((a) => a.id === id)!.entries.map((e) => e.risk_id);
-  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-    Object.fromEntries(policyFromMacroActions(miroPlugin, crans).map((l) => [l.risk_id, l.gate]));
+  const gates = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(
+      policyFromMacroActions(miroPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
+    );
 
-  test('look, draw, rework, manage ; looking at Prudent asks first for content and access', () => {
+  test('look, draw, rework, manage ; looking at Careful asks first for content and access', () => {
     expect(actions.map((a) => a.id)).toEqual(['look', 'draw', 'rework', 'manage']);
-    expect(gates({ look: 'prudent' })).toEqual({
+    expect(gates({ look: 'careful' })).toEqual({
       'miro.read-boards': 'auto',
       'miro.read-board-content': 'approval',
       'miro.read-format-guide': 'auto',
@@ -125,13 +127,13 @@ describe('macro-actions', () => {
     });
   });
 
-  test('sharing a board is in manage alone : left out at Prudent, asked first above', () => {
+  test('sharing a board is in manage alone : left out at Careful, asked first above', () => {
     for (const action of actions) {
       expect(idsOf(action.id).includes('miro.board-share'), action.id).toBe(action.id === 'manage');
     }
-    expect(Object.keys(gates({ manage: 'prudent' }))).not.toContain('miro.board-share');
-    for (const cran of ['confiant', 'autonome'] as const) {
-      expect(gates({ manage: cran })['miro.board-share']).toBe('approval');
+    expect(Object.keys(gates({ manage: 'careful' }))).not.toContain('miro.board-share');
+    for (const trustLevel of ['trusting', 'autonomous'] as const) {
+      expect(gates({ manage: trustLevel })['miro.board-share']).toBe('approval');
     }
   });
 
@@ -144,7 +146,7 @@ describe('macro-actions', () => {
     expect(idsOf('rework')).toEqual(['miro.item-delete', 'miro.frame-delete']);
   });
 
-  test('everything at Confiant asks first for deletions, new boards, shares and bulk or recorded content, runs the rest freely', () => {
+  test('everything at Trusting asks first for deletions, new boards, shares and bulk or recorded content, runs the rest freely', () => {
     const asks = new Set([
       'miro.bulk-create',
       'miro.boardcast-create',
@@ -154,10 +156,10 @@ describe('macro-actions', () => {
       'miro.board-share',
     ]);
     const all = gates({
-      look: 'confiant',
-      draw: 'confiant',
-      rework: 'confiant',
-      manage: 'confiant',
+      look: 'trusting',
+      draw: 'trusting',
+      rework: 'trusting',
+      manage: 'trusting',
     });
     for (const [riskId, gate] of Object.entries(all)) {
       expect(gate, riskId).toBe(asks.has(riskId) ? 'approval' : 'auto');

@@ -269,7 +269,7 @@ describe('revoking a connection withdraws the grant at the provider', () => {
     const h = oauthHarness(withRevocation('token-form'), [{ method: 'POST', url: REVOKE_URL }]);
     const { alice, connection } = await connect(h);
     const view = await h.service.get(alice, connection.id);
-    expect(view.providerGrant).toEqual({ withdrawnByGateway: true, byHand: BY_HAND });
+    expect(view.provider_grant).toEqual({ withdrawnByGateway: true, byHand: BY_HAND });
     expect(h.service.providerGrantOf({ provider: 'gone' })).toEqual({
       providerLabel: 'gone',
       grant: { withdrawnByGateway: false, byHand: null },

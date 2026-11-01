@@ -213,7 +213,7 @@ export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
 export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit'] as const;
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
 
-export interface MissionConnection {
+export interface MissionConnectionRecord {
   readonly connectionId: string;
   readonly resourceScope: ResourceScope;
   /** Selected resource ids; empty when `resourceScope` is `all` or `connection`. */
@@ -224,10 +224,10 @@ export interface MissionConnection {
    */
   readonly resourceSources?: Readonly<Record<string, MissionResourceSource>>;
   /**
-   * The trust cran of each ticked macro-action, by macro-action id (`crans_json`, migration
-   * 0025): display only, it redraws the form; absent when none was recorded.
+   * The trust level of each ticked macro-action, by macro-action id (`trust_levels_json`, migrations
+   * 0025 and 0027): display only, it redraws the form; absent when none was recorded.
    */
-  readonly crans?: Readonly<Record<string, string>>;
+  readonly trustLevels?: Readonly<Record<string, string>>;
 }
 
 export interface MissionRecord {
@@ -244,7 +244,7 @@ export interface MissionRecord {
   readonly createdAt: Iso;
   readonly updatedAt: Iso;
   readonly closedAt: Iso | null;
-  readonly connections: readonly MissionConnection[];
+  readonly connections: readonly MissionConnectionRecord[];
   readonly policy: readonly MissionPolicyEntry[];
 }
 

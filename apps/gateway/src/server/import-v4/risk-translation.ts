@@ -19,9 +19,9 @@
  * target whose id or base id a v4 denial names, are dropped and reported
  * (`denied-in-v4`).
  *
- * Each kept id takes its budget and gate from its macro-action at the cran
- * Confiant (`IMPORT_CRAN`; the interface's rule for a hand-ticked risk,
- * `defaultLineOf`): base budget ×3, gate from its palier. An id in no
+ * Each kept id takes its budget and gate from its macro-action at the trust level
+ * Trusting (`IMPORT_TRUST_LEVEL`; the interface's rule for a hand-ticked risk,
+ * `defaultLineOf`): base budget ×3, gate from its tier. An id in no
  * macro-action has no budget to take: dropped and reported, since a quota is
  * never invented — unless the
  * operator asks for it with `carryUnbudgeted` (`--carry-unbudgeted <quota>`,
@@ -30,7 +30,8 @@
  * `approval` gate, always — every use waits for the owner's grant. Only that
  * reason is lifted; every other drop stays a drop.
  */
-import { SECONDS_PER_MINUTE, type TrustCran } from '@vaubaan/policy-engine';
+import type { TrustLevel } from '@vaubaan/policy-engine';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 import {
   formatRiskId,
   parseRiskId,
@@ -67,8 +68,8 @@ export interface TranslatedEntry extends MissionPolicyEntry {
   readonly macroActionId: string | null;
 }
 
-/** The cran an imported mission's lines are written at: v4 missions ran without asking. */
-export const IMPORT_CRAN: TrustCran = 'confiant';
+/** The trust level an imported mission's lines are written at: v4 missions ran without asking. */
+export const IMPORT_TRUST_LEVEL: TrustLevel = 'trusting';
 
 /**
  * `--carry-unbudgeted <quota>`: a risk dropped only because no macro-action
@@ -99,7 +100,7 @@ export interface Translation {
 
 export type TranslatableConnection = Pick<
   IssuanceConnection,
-  'risks' | 'derives_env' | 'macro_actions' | 'write_token_risks' | 'authority'
+  'risks' | 'derives_env' | 'macro_actions' | 'authority'
 >;
 
 /** The provider a v4 risk id belongs to, or `null` when it is not a risk id. */
@@ -231,7 +232,7 @@ function targetsOf(
   return { risks: reachable, expanded: true };
 }
 
-/** The line of a risk: its macro-action's base budget at `IMPORT_CRAN`, gate from its palier. */
+/** The line of a risk: its macro-action's base budget at `IMPORT_TRUST_LEVEL`, gate from its tier. */
 function importLineFor(
   connection: TranslatableConnection,
   risk: CatalogRisk,
@@ -241,6 +242,6 @@ function importLineFor(
 } | null {
   const action = macroActionOfRisk(connection, risk);
   if (!action) return null;
-  const entry = defaultLineOf(connection, { [action.id]: IMPORT_CRAN }, risk);
+  const entry = defaultLineOf(connection, { [action.id]: IMPORT_TRUST_LEVEL }, risk);
   return entry ? { macroActionId: action.id, entry } : null;
 }

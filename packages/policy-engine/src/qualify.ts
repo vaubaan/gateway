@@ -46,8 +46,8 @@ export function isEnvScopedEntry(entry: QualifiableRiskEntry | undefined): boole
  * The one rule for "may this risk be accepted or touched in this env" : an
  * entry that is not env-scoped (no list, or an empty one) is acceptable
  * anywhere ; an env-scoped entry only in a listed env, so never without an
- * env. Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`), the
- * plugin SDK's preset checks and the store's catalog index all call it.
+ * env. Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`) and
+ * the gateway's catalog registry all call it.
  */
 export function isAcceptableInEnv(
   entry: QualifiableRiskEntry | undefined,

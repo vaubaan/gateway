@@ -12,4 +12,4 @@ export * from './risk-policy.ts';
 export * from './budget.ts';
 export * from './risk-runtime.ts';
 export * from './qualify.ts';
-export * from './trust-cran.ts';
+export * from './trust-level.ts';

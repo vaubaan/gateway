@@ -38,7 +38,7 @@
 # Risk count : 10 named risks + 1 fallback.
 
 # catalog_version 7 (2026-10-30) : macro-actions, each entry with its base
-# budget (ADR macro-actions-and-trust-crans-prefill-the-policy). No risk,
+# budget (ADR macro-actions-and-trust-levels-prefill-the-policy). No risk,
 # pattern or preset changed.
 # catalog_version 8 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
@@ -247,9 +247,9 @@ risks:
       persistence: session
     acceptable_in_envs: [development, staging, prod]
 
-# Macro-actions (ADR macro-actions-and-trust-crans-prefill-the-policy) : what a
-# mission creator ticks, each at a trust cran. Every entry but the fallback
-# belongs to exactly one, with its base budget (the cran multiplies it ×1,
+# Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
+# mission creator ticks, each at a trust level. Every entry but the fallback
+# belongs to exactly one, with its base budget (the trust level multiplies it ×1,
 # ×3, ×10). The gateway adds "Anything else", holding the fallback.
 macro_actions:
   - id: peek

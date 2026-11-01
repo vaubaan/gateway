@@ -1,6 +1,6 @@
 /**
  * The catalog's decisions that the kit does not check : which gates ask
- * first, what each macro-action holds at a trust cran, and the data model the
+ * first, what each macro-action holds at a trust level, and the data model the
  * slices use.
  */
 import { describe, expect, test } from 'vitest';
@@ -12,37 +12,37 @@ import { flyCatalog, flyDataModel, flyPlugin } from '../../src/index.ts';
 
 const ENVS = { envs: ['staging', 'prod'] } as const;
 const macroActions = flyCatalog.catalog.macro_actions;
-const gatesAt = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-  new Map(policyFromMacroActions(flyPlugin, crans, ENVS).map((l) => [l.risk_id, l.gate]));
-const everyMacroAction = (cran: 'prudent' | 'confiant' | 'autonome') =>
-  Object.fromEntries(macroActions.map((a) => [a.id, cran]));
+const gatesAt = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+  new Map(policyFromMacroActions(flyPlugin, trustLevels, ENVS).map((l) => [l.risk_id, l.gate]));
+const everyMacroAction = (trustLevel: 'careful' | 'trusting' | 'autonomous') =>
+  Object.fromEntries(macroActions.map((a) => [a.id, trustLevel]));
 
 describe('fly catalog', () => {
-  test('destroying apps and volumes and running commands never run freely ; secrets ask first below Autonome', () => {
+  test('destroying apps and volumes and running commands never run freely ; secrets ask first below Autonomous', () => {
     const neverFree = /\.(app-destroy|volume-destroy|machine-exec)$/;
-    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
-      const gates = gatesAt(everyMacroAction(cran));
+    for (const trustLevel of ['careful', 'trusting', 'autonomous'] as const) {
+      const gates = gatesAt(everyMacroAction(trustLevel));
       for (const [riskId, gate] of gates) {
-        if (neverFree.test(riskId)) expect(gate, `${riskId} at ${cran}`).toBe('approval');
+        if (neverFree.test(riskId)) expect(gate, `${riskId} at ${trustLevel}`).toBe('approval');
       }
     }
-    for (const cran of ['prudent', 'confiant'] as const) {
-      expect(gatesAt({ secrets: cran }).get('fly[prod].secret-write')).toBe('approval');
+    for (const trustLevel of ['careful', 'trusting'] as const) {
+      expect(gatesAt({ secrets: trustLevel }).get('fly[prod].secret-write')).toBe('approval');
     }
   });
 
-  test('running a command inside a machine is in the operate macro-action only, left out at Prudent', () => {
+  test('running a command inside a machine is in the operate macro-action only, left out at Careful', () => {
     const holders = macroActions.filter((a) =>
       a.entries.some((e) => e.risk_id === 'fly.machine-exec'),
     );
     expect(holders.map((a) => a.id)).toEqual(['operate']);
-    expect(gatesAt({ operate: 'prudent' }).has('fly[prod].machine-exec')).toBe(false);
-    expect(gatesAt({ operate: 'confiant' }).get('fly[prod].machine-exec')).toBe('approval');
+    expect(gatesAt({ operate: 'careful' }).has('fly[prod].machine-exec')).toBe(false);
+    expect(gatesAt({ operate: 'trusting' }).get('fly[prod].machine-exec')).toBe('approval');
   });
 
-  test('operate at Confiant : deploys, power, scaling and snapshots run freely, the shell asks first', () => {
+  test('operate at Trusting : deploys, power, scaling and snapshots run freely, the shell asks first', () => {
     expect(
-      policyFromMacroActions(flyPlugin, { operate: 'confiant' }, ENVS).map(
+      policyFromMacroActions(flyPlugin, { operate: 'trusting' }, ENVS).map(
         (e) => `${e.risk_id}:${e.gate}`,
       ),
     ).toEqual([
@@ -62,14 +62,14 @@ describe('fly catalog', () => {
     ]);
   });
 
-  test('observe holds reads only ; at Prudent production deploys and configuration ask first', () => {
+  test('observe holds reads only ; at Careful production deploys and configuration ask first', () => {
     const observe = macroActions.find((a) => a.id === 'observe')!;
     expect(observe.entries.every((e) => e.risk_id.startsWith('fly.read-'))).toBe(true);
-    const prudent = gatesAt({ operate: 'prudent', build: 'confiant', 'tear-down': 'prudent' });
-    expect(prudent.get('fly[prod].deploy')).toBe('approval');
-    expect(prudent.get('fly[prod].machine-config-write')).toBe('approval');
-    expect(prudent.get('fly[staging].machine-power')).toBe('auto');
-    expect(prudent.has('fly[prod].volume-destroy')).toBe(false);
+    const careful = gatesAt({ operate: 'careful', build: 'trusting', 'tear-down': 'careful' });
+    expect(careful.get('fly[prod].deploy')).toBe('approval');
+    expect(careful.get('fly[prod].machine-config-write')).toBe('approval');
+    expect(careful.get('fly[staging].machine-power')).toBe('auto');
+    expect(careful.has('fly[prod].volume-destroy')).toBe(false);
   });
 
   test('every named risk is in exactly one macro-action, the fallback in none', () => {

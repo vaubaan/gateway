@@ -99,7 +99,7 @@ describe('upstash-redis plugin — structural kit', () => {
     assertNoWildcard(upstashRedisPlugin);
   });
 
-  test('ships peek, write, delete and manage ; key-level writes off prod at Prudent ; the fallback in none', () => {
+  test('ships peek, write, delete and manage ; key-level writes off prod at Careful ; the fallback in none', () => {
     const actions = upstashRedisPlugin.catalog.macro_actions ?? [];
     expect(actions.map((a) => a.id)).toEqual(['peek', 'write', 'delete', 'manage']);
     for (const a of actions) {
@@ -113,7 +113,7 @@ describe('upstash-redis plugin — structural kit', () => {
 
     const developer = policyFromMacroActions(
       upstashRedisPlugin,
-      { peek: 'prudent', write: 'prudent', delete: 'prudent' },
+      { peek: 'careful', write: 'careful', delete: 'careful' },
       { envs: ['development', 'staging'] },
     );
     const devRisks = developer.map((e) => e.risk_id);
@@ -125,7 +125,7 @@ describe('upstash-redis plugin — structural kit', () => {
         'upstash-redis[development].delete-data',
       ]),
     );
-    // The irreversible flush is left out at Prudent ; `manage` is not ticked.
+    // The irreversible flush is left out at Careful ; `manage` is not ticked.
     for (const forbidden of [
       'flush-database',
       'execute-arbitrary',
@@ -145,7 +145,7 @@ describe('upstash-redis plugin — structural kit', () => {
 
     const operator = policyFromMacroActions(
       upstashRedisPlugin,
-      { peek: 'confiant', write: 'confiant', delete: 'confiant', manage: 'confiant' },
+      { peek: 'trusting', write: 'trusting', delete: 'trusting', manage: 'trusting' },
       { envs: ['development', 'staging', 'prod'] },
     );
     const gated = operator.filter((e) => e.gate === 'approval').map((e) => e.risk_id);

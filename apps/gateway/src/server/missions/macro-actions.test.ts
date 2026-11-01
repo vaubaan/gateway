@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  cransOf,
+  trustLevelsOf,
   defaultLineOf,
   expandMacroAction,
-  highestPalier,
-  knownCrans,
-  linesOfCrans,
+  highestTier,
+  knownTrustLevels,
+  linesOfTrustLevels,
   macroActionsOf,
-  prefillOfCrans,
+  prefillOfTrustLevels,
   unknownMacroActions,
 } from './macro-actions';
 import { ACME_CATALOG, ACME_RESOURCES, acmeConnection } from './testing';
@@ -40,8 +40,8 @@ describe('macro-actions of a connection', () => {
 
   it('expands per environment, and sets apart what the selection or the authority cannot give', () => {
     const prodOnly = ACME_RESOURCES.filter((r) => r.env === 'prod');
-    const change = expandMacroAction(acme, action('change'), 'confiant', prodOnly);
-    expect(change.lines.map((l) => [l.risk_id, l.gate, l.palier, l.quota])).toEqual([
+    const change = expandMacroAction(acme, action('change'), 'trusting', prodOnly);
+    expect(change.lines.map((l) => [l.risk_id, l.gate, l.tier, l.quota])).toEqual([
       ['acme[prod].write', 'approval', 3, 300],
     ]);
     expect(change.unavailable.map((r) => r.risk_id)).toEqual([
@@ -49,49 +49,53 @@ describe('macro-actions of a connection', () => {
       'acme[staging].bulk-delete',
     ]);
     const narrow = acmeConnection({ authority: ['acme.read'] });
-    expect(expandMacroAction(narrow, action('change'), 'autonome', ACME_RESOURCES).lines).toEqual(
+    expect(expandMacroAction(narrow, action('change'), 'autonomous', ACME_RESOURCES).lines).toEqual(
       [],
     );
   });
 
   it('writes every ticked macro-action in catalog order, and nothing for an unticked one', () => {
-    const lines = linesOfCrans(acme, { administer: 'prudent', read: 'prudent' }, ACME_RESOURCES);
+    const lines = linesOfTrustLevels(
+      acme,
+      { administer: 'careful', read: 'careful' },
+      ACME_RESOURCES,
+    );
     expect(lines.map((l) => l.risk_id)).toEqual(['acme.read', 'acme.admin']);
-    expect(linesOfCrans(acme, {}, ACME_RESOURCES)).toEqual([]);
+    expect(linesOfTrustLevels(acme, {}, ACME_RESOURCES)).toEqual([]);
   });
 
-  it('gives a hand-ticked line its macro-action’s cran, asking first when the cran leaves it out', () => {
+  it('gives a hand-ticked line its macro-action’s trust level, asking first when the trust level leaves it out', () => {
     const bulk = acme.risks.find((r) => r.risk_id === 'acme[staging].bulk-delete');
     if (!bulk) throw new Error('fixture');
     expect(defaultLineOf(acme, {}, bulk)).toMatchObject({ quota: 5, gate: 'approval' });
-    expect(defaultLineOf(acme, { change: 'autonome' }, bulk)).toMatchObject({
+    expect(defaultLineOf(acme, { change: 'autonomous' }, bulk)).toMatchObject({
       quota: 50,
       gate: 'approval',
     });
   });
 
-  it('keeps only crans, and only for macro-actions the connection has', () => {
-    expect(cransOf({ read: 'confiant', change: 'reckless', admin: 3 })).toEqual({
-      read: 'confiant',
+  it('keeps only trust levels, and only for macro-actions the connection has', () => {
+    expect(trustLevelsOf({ read: 'trusting', change: 'reckless', admin: 3 })).toEqual({
+      read: 'trusting',
     });
-    expect(knownCrans(acme, { read: 'autonome', elsewhere: 'prudent' })).toEqual({
-      read: 'autonome',
+    expect(knownTrustLevels(acme, { read: 'autonomous', elsewhere: 'careful' })).toEqual({
+      read: 'autonomous',
     });
-    expect(knownCrans(acme, undefined)).toEqual({});
+    expect(knownTrustLevels(acme, undefined)).toEqual({});
   });
 
-  it('names the highest palier', () => {
-    expect(highestPalier(acme.risks.filter((r) => r.risk_id === 'acme.read'))).toBe(1);
-    expect(highestPalier(acme.risks)).toBe(4);
-    expect(highestPalier([])).toBeNull();
+  it('names the highest tier', () => {
+    expect(highestTier(acme.risks.filter((r) => r.risk_id === 'acme.read'))).toBe(1);
+    expect(highestTier(acme.risks)).toBe(4);
+    expect(highestTier([])).toBeNull();
   });
 
-  it('says what the crans leave out, and why', () => {
+  it('says what the trust levels leave out, and why', () => {
     const narrow = acmeConnection({ authority: ['acme.read', 'acme[staging].write'] });
     const prodOnly = ACME_RESOURCES.filter((r) => r.env !== 'staging');
-    const { lines, left_out } = prefillOfCrans(
+    const { lines, left_out } = prefillOfTrustLevels(
       narrow,
-      { read: 'prudent', change: 'prudent' },
+      { read: 'careful', change: 'careful' },
       prodOnly,
     );
     expect(lines.map((l) => l.risk_id)).toEqual(['acme.read']);
@@ -101,19 +105,16 @@ describe('macro-actions of a connection', () => {
       ['acme[staging].bulk-delete', 'outside-authority'],
     ]);
     expect(
-      prefillOfCrans(acme, { change: 'prudent' }, ACME_RESOURCES).left_out.map((l) => l.reason),
-    ).toEqual(['cran']);
+      prefillOfTrustLevels(acme, { change: 'careful' }, ACME_RESOURCES).left_out.map(
+        (l) => l.reason,
+      ),
+    ).toEqual(['trust-level']);
   });
 
-  it('asks first for a risk that hands a write token, at every cran', () => {
-    const minting = acmeConnection({ write_token_risks: ['acme.read'] });
-    expect(expandMacroAction(minting, action('read'), 'autonome', []).lines[0]?.gate).toBe(
-      'approval',
-    );
-  });
-
-  it('names the crans of a draft that are no macro-action here', () => {
-    expect(unknownMacroActions(acme, { read: 'prudent', deploy: 'autonome' })).toEqual(['deploy']);
+  it('names the trust levels of a draft that are no macro-action here', () => {
+    expect(unknownMacroActions(acme, { read: 'careful', deploy: 'autonomous' })).toEqual([
+      'deploy',
+    ]);
     expect(unknownMacroActions(acme, undefined)).toEqual([]);
   });
 });

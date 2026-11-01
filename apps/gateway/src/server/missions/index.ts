@@ -1,5 +1,5 @@
 /**
- * Missions: authority-bounded issuance, macro-actions at a cran, resource
+ * Missions: authority-bounded issuance, macro-actions at a trust level, resource
  * selection, token mint / rotate / revoke, bootstrap kit; and the members and
  * per-holder tokens of a mission (`team`).
  *
@@ -125,15 +125,15 @@ export {
 } from './everything-i-hold';
 export { missionDraftSchema, parseMissionDraft, type ParsedDraft } from './draft-schema';
 export {
-  CRAN_BUDGET_FACTOR,
-  CRAN_GATES,
+  TRUST_LEVEL_BUDGET_FACTOR,
+  TRUST_LEVEL_GATES,
   expandMacroAction,
   macroActionOfRisk,
   macroActionsOf,
-  palierOf,
-  TRUST_CRANS,
-  type Palier,
-  type TrustCran,
+  tierOf,
+  TRUST_LEVELS,
+  type Tier,
+  type TrustLevel,
 } from './macro-actions';
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {

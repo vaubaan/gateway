@@ -539,29 +539,29 @@ describe('credential spec', () => {
       'stripe[live].refund-create',
       'stripe[live].subscription-cancel',
     ];
-    // Left out at Prudent ; asked first at Confiant and at Autonome.
-    const prudent = policyFromMacroActions(
+    // Left out at Careful ; asked first at Trusting and at Autonomous.
+    const careful = policyFromMacroActions(
       stripePlugin,
-      { 'money-out': 'prudent', cancel: 'prudent' },
+      { 'money-out': 'careful', cancel: 'careful' },
       { envs: ['live'] },
     );
-    expect(prudent).toEqual([]);
-    for (const cran of ['confiant', 'autonome'] as const) {
+    expect(careful).toEqual([]);
+    for (const trustLevel of ['trusting', 'autonomous'] as const) {
       const lines = policyFromMacroActions(
         stripePlugin,
-        { 'money-out': cran, cancel: cran },
+        { 'money-out': trustLevel, cancel: trustLevel },
         { envs: ['live'] },
       );
-      expect(lines.map((e) => e.risk_id).sort(), cran).toEqual(irreversible);
+      expect(lines.map((e) => e.risk_id).sort(), trustLevel).toEqual(irreversible);
       expect(
         lines.every((e) => e.gate === 'approval'),
-        cran,
+        trustLevel,
       ).toBe(true);
     }
     // One mode given, one mode written.
     const testMode = policyFromMacroActions(
       stripePlugin,
-      { books: 'confiant' },
+      { books: 'trusting' },
       { envs: ['test'] },
     );
     expect(testMode.every((e) => e.risk_id.startsWith('stripe[test].'))).toBe(true);

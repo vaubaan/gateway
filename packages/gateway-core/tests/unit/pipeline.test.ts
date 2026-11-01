@@ -12,7 +12,7 @@ import {
   acceptedRisksOf,
   checkConnectionAvailable,
   checkMissionActive,
-  evaluateCallForToken,
+  evaluateCallForMission,
   fingerprintArguments,
   refuse,
   UPSTREAM_ERROR_SUMMARY_MAX_LENGTH,
@@ -152,11 +152,11 @@ function riskStage(action: 'R' | 'W' | 'deny' | 'no-catalog'): RiskStage {
   };
   return {
     evaluate: async (c, req, target) =>
-      evaluateCallForToken({
+      evaluateCallForMission({
         tool: req.tool,
         args: req.args,
         resources: c.resources.filter((r) => r.connection_id === target.connection.id),
-        token: { id: c.token.id, accepted_risks: acceptedRisksOf(c), denied_risks: [] },
+        mission: { id: c.token.id, accepted_risks: acceptedRisksOf(c) },
         adapter: classifier,
         catalog: action === 'no-catalog' ? undefined : indexed,
       }),

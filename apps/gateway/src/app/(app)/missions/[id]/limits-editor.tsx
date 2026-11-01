@@ -31,8 +31,7 @@ import type { Gate } from '@vaubaan/shared';
 
 import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
-
-const SECONDS_PER_MINUTE = 60;
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** One permission of the mission, as the editor needs it: plain data. */
 export interface LimitRow {

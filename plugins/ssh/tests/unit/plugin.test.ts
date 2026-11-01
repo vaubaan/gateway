@@ -1,7 +1,7 @@
 /**
  * Mandatory suite of the SSH plugin : the SDK kit, the v5 classifier (host
  * resolution, read / write, command classes, opaque lines), missions written
- * from macro-actions at trust crans evaluated through the policy engine, the command-line splitter, the
+ * from macro-actions at trust levels evaluated through the policy engine, the command-line splitter, the
  * credential spec and the pin helpers, `execute` and `discoverResources` over
  * a fake transport. No socket is opened here : the real `ssh2` transport is
  * replaced through `createSshPlugin({ transport })` ; it is exercised, host
@@ -28,7 +28,7 @@ import {
   assertSlicesOnDataModel,
   evaluateCall,
   indexCatalog,
-  type MacroActionCranChoice,
+  type MacroActionTrustLevelChoice,
   type MissionPolicyEntry,
   policyFromMacroActions,
   resourceEnvResolver,
@@ -223,10 +223,10 @@ describe('ssh plugin — structural kit', () => {
     expect(ids('install')).toEqual(['ssh.exec-package-install', 'ssh.exec-sudo']);
   });
 
-  test('at Prudent, a credential-file read asks first and a destructive line is left out everywhere', () => {
+  test('at Careful, a credential-file read asks first and a destructive line is left out everywhere', () => {
     const policy = policyFromMacroActions(
       sshPlugin,
-      { look: 'prudent', fix: 'prudent' },
+      { look: 'careful', fix: 'careful' },
       { envs: ['dev', 'staging', 'prod'] },
     );
     const gate = (id: string) => policy.find((line) => line.risk_id === id)?.gate;
@@ -235,7 +235,7 @@ describe('ssh plugin — structural kit', () => {
     expect(
       policy.map((line) => line.risk_id).filter((id) => id.includes('exec-destructive')),
     ).toEqual([]);
-    // A write on prod is irreversible (vector_overrides) : left out at Prudent.
+    // A write on prod is irreversible (vector_overrides) : left out at Careful.
     expect(gate('ssh[prod].exec-write')).toBeUndefined();
   });
 });
@@ -412,7 +412,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
     if ('denied' in out) throw new Error(out.denied);
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(['ssh[prod].exec-write']),
+      accepted_risks: new Set(['ssh[prod].exec-write']),
       catalog: indexed,
       envResolver: resourceEnvResolver([prod]),
     });
@@ -429,7 +429,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
     if ('denied' in out) throw new Error(out.denied);
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(['ssh.exec-read']),
+      accepted_risks: new Set(['ssh.exec-read']),
       catalog: indexed,
       envResolver: resourceEnvResolver([prod]),
     });
@@ -446,7 +446,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
       if ('denied' in out) throw new Error(out.denied);
       const decision = evaluateCall({
         executed_slices: out.slices,
-        token_accepted_risks: new Set([
+        accepted_risks: new Set([
           'ssh.exec-write',
           'ssh[dev].exec-write',
           'ssh[staging].exec-write',
@@ -469,7 +469,7 @@ describe('classifySsh — the runtime qualifies write risks from the host label'
       expect(
         evaluateCall({
           executed_slices: read.slices,
-          token_accepted_risks: new Set(['ssh.exec-read']),
+          accepted_risks: new Set(['ssh.exec-read']),
           catalog: indexed,
           envResolver: resourceEnvResolver([host]),
         }).outcome,
@@ -486,8 +486,8 @@ describe('missions from macro-actions — evaluated through the policy engine, n
   const ENVS = ['dev', 'staging', 'prod'];
 
   /** A mission holding exactly these lines. */
-  const linesOf = (crans: MacroActionCranChoice): MissionPolicyEntry[] =>
-    policyFromMacroActions(sshPlugin, crans, { envs: ENVS });
+  const linesOf = (trustLevels: MacroActionTrustLevelChoice): MissionPolicyEntry[] =>
+    policyFromMacroActions(sshPlugin, trustLevels, { envs: ENVS });
   /** Only the plain read : the narrowest mission. */
   const READ_ONLY: MissionPolicyEntry[] = [
     {
@@ -504,7 +504,7 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     if ('denied' in out) return 'denied';
     const decision = evaluateCall({
       executed_slices: out.slices,
-      token_accepted_risks: new Set(policy.map((e) => e.risk_id)),
+      accepted_risks: new Set(policy.map((e) => e.risk_id)),
       catalog: indexed,
       envResolver: resourceEnvResolver([host]),
     });
@@ -549,31 +549,34 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     '/bin/ls',
   ];
 
-  test.each(INSPECTION)('look, at any cran, runs the inspection %j freely on every host', (cmd) => {
-    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
-      for (const host of HOSTS) {
-        expect(
-          verdict(linesOf({ look: cran }), cmd, host),
-          `${cran} on ${host.env ?? 'unlabelled'}`,
-        ).toBe('auto');
+  test.each(INSPECTION)(
+    'look, at any trust level, runs the inspection %j freely on every host',
+    (cmd) => {
+      for (const trustLevel of ['careful', 'trusting', 'autonomous'] as const) {
+        for (const host of HOSTS) {
+          expect(
+            verdict(linesOf({ look: trustLevel }), cmd, host),
+            `${trustLevel} on ${host.env ?? 'unlabelled'}`,
+          ).toBe('auto');
+        }
       }
-    }
-  });
+    },
+  );
 
   test.each(NEVER_A_READ)(
-    'the plain read refuses %j on every host ; look at Prudent never runs it freely',
+    'the plain read refuses %j on every host ; look at Careful never runs it freely',
     (cmd) => {
       for (const host of HOSTS) {
         expect(verdict(READ_ONLY, cmd, host), host.env ?? 'unlabelled').toBe('denied');
-        expect(verdict(linesOf({ look: 'prudent' }), cmd, host), host.env ?? 'unlabelled').not.toBe(
+        expect(verdict(linesOf({ look: 'careful' }), cmd, host), host.env ?? 'unlabelled').not.toBe(
           'auto',
         );
       }
     },
   );
 
-  test('fix at Prudent : plain writes ask first on dev and staging, nothing on prod ; service control runs freely', () => {
-    const policy = linesOf({ look: 'prudent', fix: 'prudent' });
+  test('fix at Careful : plain writes ask first on dev and staging, nothing on prod ; service control runs freely', () => {
+    const policy = linesOf({ look: 'careful', fix: 'careful' });
     for (const cmd of ['touch /tmp/x', 'git pull --ff-only', './deploy.sh', 'bash deploy.sh']) {
       expect(verdict(policy, cmd, dev), cmd).toBe('approval');
       expect(verdict(policy, cmd, staging), cmd).toBe('approval');
@@ -582,8 +585,8 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     }
   });
 
-  test('fix at Autonome : plain writes and service control run freely off prod and ask first on prod', () => {
-    const policy = linesOf({ look: 'prudent', fix: 'autonome' });
+  test('fix at Autonomous : plain writes and service control run freely off prod and ask first on prod', () => {
+    const policy = linesOf({ look: 'careful', fix: 'autonomous' });
     for (const cmd of [
       'touch /tmp/x',
       'git pull --ff-only',
@@ -622,17 +625,17 @@ describe('missions from macro-actions — evaluated through the policy engine, n
     'ssh other-host uptime',
     'systemctl poweroff',
     "python3 -c 'print(1)'",
-  ])('fix at Prudent, without look or install, refuses %j on dev and on staging', (cmd) => {
-    const policy = linesOf({ fix: 'prudent' });
+  ])('fix at Careful, without look or install, refuses %j on dev and on staging', (cmd) => {
+    const policy = linesOf({ fix: 'careful' });
     expect(verdict(policy, cmd, dev)).toBe('denied');
     expect(verdict(policy, cmd, staging)).toBe('denied');
   });
 
-  test('everything at Autonome : the classes that hurt and every prod write still ask first', () => {
-    const policy = linesOf({ look: 'prudent', fix: 'autonome', install: 'autonome' });
+  test('everything at Autonomous : the classes that hurt and every prod write still ask first', () => {
+    const policy = linesOf({ look: 'careful', fix: 'autonomous', install: 'autonomous' });
     const table: ReadonlyArray<readonly [string, Verdict, Verdict, Verdict]> = [
       ['touch /tmp/x', 'auto', 'auto', 'approval'],
-      // Irreversible : asked first at every cran.
+      // Irreversible : asked first at every trust level.
       ['rm -rf /srv/old', 'approval', 'approval', 'approval'],
       ['/bin/rm -rf /srv/old', 'approval', 'approval', 'approval'],
       ['apt-get --yes install nginx', 'auto', 'auto', 'approval'],
@@ -640,7 +643,7 @@ describe('missions from macro-actions — evaluated through the policy engine, n
       ['systemctl restart app', 'auto', 'auto', 'approval'],
       ['sudo systemctl restart app', 'auto', 'auto', 'approval'],
       ['sudo -n true', 'auto', 'auto', 'approval'],
-      // A credential-file read asks first at Prudent.
+      // A credential-file read asks first at Careful.
       ['cat /etc/shadow', 'approval', 'approval', 'approval'],
       ['cat .env', 'approval', 'approval', 'approval'],
       // An opaque line carries the credential-file marker too.

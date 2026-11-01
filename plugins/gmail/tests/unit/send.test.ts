@@ -16,7 +16,7 @@ import {
   type Resource,
   serializeSlice,
 } from '@vaubaan/plugin-sdk';
-import { mockFetch, palierOf, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, tierOf, risksTouchedBy } from '@vaubaan/plugin-sdk/testing';
 
 import {
   GMAIL_SMTP_HOST,
@@ -136,19 +136,19 @@ describe('classify : a send is priced by its worst recipient', () => {
   });
 });
 
-describe('catalog : the send risks, their paliers and the Send macro-action', () => {
+describe('catalog : the send risks, their tiers and the Send macro-action', () => {
   const entry = (id: string) => gmailCatalog.catalog.risks.find((r) => r.id === id)!;
 
   test('self 1, internal 3, allowlist and external 4', () => {
-    expect(palierOf(entry('gmail.send-to-zone-self').vector)).toBe(1);
-    expect(palierOf(entry('gmail.send-to-zone-internal').vector)).toBe(3);
-    expect(palierOf(entry('gmail.send-to-zone-allowlist').vector)).toBe(4);
+    expect(tierOf(entry('gmail.send-to-zone-self').vector)).toBe(1);
+    expect(tierOf(entry('gmail.send-to-zone-internal').vector)).toBe(3);
+    expect(tierOf(entry('gmail.send-to-zone-allowlist').vector)).toBe(4);
     expect(entry('gmail.send-to-zone-external').vector).toMatchObject({
       reversibility: 'irreversible',
       data: 'pii',
       visibility: 'public',
     });
-    expect(palierOf(entry('gmail.send-to-zone-external').vector)).toBe(4);
+    expect(tierOf(entry('gmail.send-to-zone-external').vector)).toBe(4);
   });
 
   test('the four belong to the Send macro-action', () => {

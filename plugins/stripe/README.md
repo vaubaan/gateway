@@ -87,7 +87,7 @@ Writes (17): `create_product`, `update_product`, `create_price`,
 `create_refund`, `create_payout`, `delete_customer`,
 `create_webhook_endpoint`.
 
-`create_payout` and `delete_customer` are both irreversible: no trust cran runs them freely.
+`create_payout` and `delete_customer` are both irreversible: no trust level runs them freely.
 
 The properties a tool declares are its whole argument surface: the
 classifier refuses a call carrying any other key (`expand`, an undeclared
@@ -162,11 +162,11 @@ resource the call targets.
 | `money-out`  | Refunds and payouts.                                   | `refund-create`, `payout-create`                                                         |
 | `cancel`     | Cancel subscriptions, void invoices, delete customers. | `subscription-cancel`, `invoice-void`, `customer-delete`                                 |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran turns each risk's vector into a gate and scales its
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
+risk model §4.6); the trust level turns each risk's vector into a gate and scales its
 base budget. The persisted policy is the explicit list. Each line is qualified with the mode of the
 selected resource (`stripe[live].refund-create`). Money-out and cancel are
-left out at Prudent and ask first above. The fallback sits in "Anything
+left out at Careful and ask first above. The fallback sits in "Anything
 else": the engine counts it only when no dedicated entry matched a write.
 
 ## Tests

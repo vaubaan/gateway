@@ -2,15 +2,14 @@ import { describe, expect, test } from 'vitest';
 
 import type { RiskCatalog } from '@vaubaan/shared';
 
-import type { ProviderPlugin } from '../../src/plugin.ts';
 import { policyFromMacroActions } from '../../src/testing/index.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 const perMinute = (max: number) => ({ max, window_seconds: 60 });
 
 describe('policyFromMacroActions', () => {
-  test('a mild macro-action at Prudent runs freely at its base budget', () => {
-    expect(policyFromMacroActions(acmePlugin, { read: 'prudent' })).toEqual([
+  test('a mild macro-action at Careful runs freely at its base budget', () => {
+    expect(policyFromMacroActions(acmePlugin, { read: 'careful' })).toEqual([
       { risk_id: 'acme.read-things', quota: 500, rate_limit: perMinute(60), gate: 'auto' },
     ]);
   });
@@ -18,7 +17,7 @@ describe('policyFromMacroActions', () => {
   test('an env-scoped risk gets one line per environment given, its vector resolved there', () => {
     // `acme.thing-write` is mild on staging and costly on prod (vector_overrides).
     expect(
-      policyFromMacroActions(acmePlugin, { write: 'prudent' }, { envs: ['staging', 'prod'] }),
+      policyFromMacroActions(acmePlugin, { write: 'careful' }, { envs: ['staging', 'prod'] }),
     ).toEqual([
       { risk_id: 'acme[staging].thing-write', quota: 50, rate_limit: perMinute(10), gate: 'auto' },
       { risk_id: 'acme[prod].thing-write', quota: 50, rate_limit: perMinute(10), gate: 'approval' },
@@ -26,17 +25,17 @@ describe('policyFromMacroActions', () => {
   });
 
   test('no environment, or one the risk is not acceptable in, yields no env-scoped line', () => {
-    expect(policyFromMacroActions(acmePlugin, { write: 'autonome' })).toEqual([]);
-    expect(policyFromMacroActions(acmePlugin, { write: 'autonome' }, { envs: ['dev'] })).toEqual(
+    expect(policyFromMacroActions(acmePlugin, { write: 'autonomous' })).toEqual([]);
+    expect(policyFromMacroActions(acmePlugin, { write: 'autonomous' }, { envs: ['dev'] })).toEqual(
       [],
     );
   });
 
-  test('the cran multiplies the budget and lifts the gate, catalog order kept', () => {
+  test('the trust level multiplies the budget and lifts the gate, catalog order kept', () => {
     expect(
       policyFromMacroActions(
         acmePlugin,
-        { write: 'autonome', read: 'confiant' },
+        { write: 'autonomous', read: 'trusting' },
         { envs: ['prod'] },
       ),
     ).toEqual([
@@ -46,7 +45,7 @@ describe('policyFromMacroActions', () => {
   });
 
   test('"Anything else" holds the fallback at the default base budget', () => {
-    expect(policyFromMacroActions(acmePlugin, { 'anything-else': 'confiant' })).toEqual([
+    expect(policyFromMacroActions(acmePlugin, { 'anything-else': 'trusting' })).toEqual([
       {
         risk_id: 'acme.uncategorized-write',
         quota: 150,
@@ -57,23 +56,9 @@ describe('policyFromMacroActions', () => {
   });
 
   test('a macro-action the catalog does not declare is refused', () => {
-    expect(() => policyFromMacroActions(acmePlugin, { admin: 'prudent' })).toThrow(
+    expect(() => policyFromMacroActions(acmePlugin, { admin: 'careful' })).toThrow(
       /'admin' is not a macro-action of the 'acme' catalog/,
     );
-  });
-
-  test('a write-token handout asks first at every cran ; a read-only one follows its palier', () => {
-    const [tool] = acmePlugin.tools;
-    const handing = (
-      readOnlyRiskIds?: string[],
-    ): Pick<ProviderPlugin, 'catalog' | 'tokenHandouts'> => ({
-      catalog: acmePlugin.catalog,
-      tokenHandouts: [{ tool: tool!.name, riskIds: ['acme.read-things'], readOnlyRiskIds }],
-    });
-    expect(policyFromMacroActions(handing(), { read: 'autonome' })[0]!.gate).toBe('approval');
-    expect(
-      policyFromMacroActions(handing(['acme.read-things']), { read: 'autonome' })[0]!.gate,
-    ).toBe('auto');
   });
 
   test('the catalog rate ceiling caps the rate ; a deprecated entry is left out', () => {
@@ -93,7 +78,7 @@ describe('policyFromMacroActions', () => {
         },
       ],
     };
-    expect(policyFromMacroActions({ catalog }, { read: 'autonome' })).toEqual([
+    expect(policyFromMacroActions({ catalog }, { read: 'autonomous' })).toEqual([
       { risk_id: 'acme.read-things', quota: 5000, rate_limit: perMinute(20), gate: 'auto' },
     ]);
   });

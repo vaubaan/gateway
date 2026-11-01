@@ -99,10 +99,10 @@ const COLUMNS: readonly Column<ConnectionView>[] = [
     header: 'Account',
     cell: (view) => (
       <span className={shared.named}>
-        <ServiceMark name={view.providerLabel} />
+        <ServiceMark name={view.provider_label} />
         <span className={shared.namedText}>
           <span className={shared.name}>{view.connection.displayName}</span>
-          <span className={shared.sub}>{view.providerLabel}</span>
+          <span className={shared.sub}>{view.provider_label}</span>
         </span>
       </span>
     ),
@@ -110,7 +110,7 @@ const COLUMNS: readonly Column<ConnectionView>[] = [
   {
     id: 'owner',
     header: 'Was owned by',
-    cell: (view) => holderWords(view.ownerLabel),
+    cell: (view) => holderWords(view.owner_label),
   },
   {
     id: 'state',

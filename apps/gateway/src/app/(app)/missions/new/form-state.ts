@@ -1,6 +1,6 @@
 /**
  * State of the one-page mission creation form, and its transitions — pure, so
- * the ergonomics that matter (a macro-action at a cran fills its lines,
+ * the ergonomics that matter (a macro-action at a trust level fills its lines,
  * "select all" yields an enumerated list, a hand-ticked risk gets a sensible
  * default budget, the draft sent to the server is always explicit) are
  * unit-tested without a browser. The decision itself is `previewDraft`,
@@ -20,20 +20,21 @@ import type {
   PreviewIssue,
   ResolvedDraftConnection,
 } from '@/server/missions/model';
-import { EVERYTHING_I_HOLD, expansionDigest } from '@/server/missions/everything-i-hold';
+import { expansionDigest } from '@/server/missions/everything-i-hold';
 import {
-  DEFAULT_CRAN,
+  DEFAULT_TRUST_LEVEL,
   defaultLineOf,
   expandMacroAction,
-  highestPalier,
-  knownCrans,
-  linesOfCrans,
+  highestTier,
+  knownTrustLevels,
+  linesOfTrustLevels,
   rowsOf,
-  type MacroActionCrans,
-  type Palier,
-  type TrustCran,
+  type MacroActionTrustLevels,
+  type Tier,
+  type TrustLevel,
 } from '@/server/missions/macro-actions';
 import { defaultResources, previewConnection } from '@/server/missions/preview';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The inputs of one accepted risk; strings, as typed. An empty string is "no value yet". */
 export interface EntryState {
@@ -45,10 +46,10 @@ export interface EntryState {
 
 /**
  * How the policy of one connection is shown (risk model §4.6): `simple` — the
- * macro-actions of the service, each ticked at a trust cran; `advanced` —
+ * macro-actions of the service, each ticked at a trust level; `advanced` —
  * every permission with its own limit and gate. The persisted policy is the
  * explicit list either way: the view is a property of the screen, and the
- * crans are kept with the mission only to redraw it.
+ * trust levels are kept with the mission only to redraw it.
  */
 export type PolicyView = 'simple' | 'advanced';
 
@@ -101,13 +102,13 @@ export interface ConnectionState {
    * stale. For `all` and `connection`, that default set: what is reached now.
    */
   readonly resourceIds: readonly string[];
-  /** The ticked macro-actions, each with its cran. */
-  readonly crans: MacroActionCrans;
+  /** The ticked macro-actions, each with its trust level. */
+  readonly trustLevels: MacroActionTrustLevels;
   /** True when the policy was filled from "Everything I hold on this account". */
   readonly everything: boolean;
   /** Accepted risks, explicit ids. */
   readonly entries: Readonly<Record<RiskId, EntryState>>;
-  /** True once the lines differ from what the crans (or "Everything I hold") wrote. */
+  /** True once the lines differ from what the trust levels (or "Everything I hold") wrote. */
   readonly edited: boolean;
 }
 
@@ -145,7 +146,6 @@ export interface FormState {
 /** Limits that reset every day are the usual shape of "one key per code project". */
 export const DEFAULT_PERIOD: PeriodChoice = 'day';
 export const DEFAULT_EXPIRY: ExpiryChoice = 'never';
-const MS_PER_DAY = 86_400_000;
 
 export function initialConnectionState(connection: IssuanceConnection): ConnectionState {
   return {
@@ -153,7 +153,7 @@ export function initialConnectionState(connection: IssuanceConnection): Connecti
     view: 'simple',
     resourceScope: 'all',
     resourceIds: defaultResources(connection).map((r) => r.id),
-    crans: {},
+    trustLevels: {},
     everything: false,
     entries: {},
     edited: false,
@@ -209,7 +209,7 @@ function everythingDraft(
 ): DraftConnection {
   return {
     connection_id: connection.id,
-    preset: EVERYTHING_I_HOLD,
+    everything_i_hold: true,
     resources: draftResourcesOf({
       resourceScope: state.resourceScope ?? 'selected',
       resourceIds: state.resourceIds,
@@ -234,49 +234,55 @@ export function applyEverything(
   const { preview } = previewConnection(connection, everythingDraft(connection, state));
   return {
     ...state,
-    crans: {},
+    trustLevels: {},
     everything: true,
     edited: false,
     entries: entriesOf(preview.passes),
   };
 }
 
-/** Fills the policy from the crans: the lines `linesOfCrans` writes, nothing else. */
-export function applyCrans(
+/** Fills the policy from the trust levels: the lines `linesOfTrustLevels` writes, nothing else. */
+export function applyTrustLevels(
   connection: IssuanceConnection,
   state: ConnectionState,
 ): ConnectionState {
-  const lines = linesOfCrans(connection, state.crans, selectedResources(connection, state));
+  const lines = linesOfTrustLevels(
+    connection,
+    state.trustLevels,
+    selectedResources(connection, state),
+  );
   return { ...state, everything: false, edited: false, entries: entriesOf(lines) };
 }
 
 /**
- * Ticks a macro-action at a cran, moves it to another cran, or (`null`) unticks
- * it; the policy is rewritten from the crans. The screen asks first when this
+ * Ticks a macro-action at a trust level, moves it to another trust level, or (`null`) unticks
+ * it; the policy is rewritten from the trust levels. The screen asks first when this
  * would throw edits away (`discardsEdits`).
  */
 export function setMacroAction(
   connection: IssuanceConnection,
   state: ConnectionState,
   actionId: string,
-  cran: TrustCran | null,
+  trustLevel: TrustLevel | null,
 ): ConnectionState {
-  const crans: Record<string, TrustCran> = { ...state.crans };
-  if (cran === null) delete crans[actionId];
-  else crans[actionId] = cran;
-  return applyCrans(connection, { ...state, crans });
+  const trustLevels: Record<string, TrustLevel> = { ...state.trustLevels };
+  if (trustLevel === null) delete trustLevels[actionId];
+  else trustLevels[actionId] = trustLevel;
+  return applyTrustLevels(connection, { ...state, trustLevels });
 }
 
-/** The policy as the crans (or "Everything I hold") wrote it: what "Reset" goes back to. */
+/** The policy as the trust levels (or "Everything I hold") wrote it: what "Reset" goes back to. */
 export function resetEdits(
   connection: IssuanceConnection,
   state: ConnectionState,
 ): ConnectionState {
-  return state.everything ? applyEverything(connection, state) : applyCrans(connection, state);
+  return state.everything
+    ? applyEverything(connection, state)
+    : applyTrustLevels(connection, state);
 }
 
 /**
- * True when rewriting the policy from the crans would throw away something the
+ * True when rewriting the policy from the trust levels would throw away something the
  * creator changed line by line: the screen asks before it does.
  */
 export function discardsEdits(state: ConnectionState): boolean {
@@ -288,23 +294,23 @@ export function setView(state: ConnectionState, view: PolicyView): ConnectionSta
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// The simple view: macro-actions at a cran
+// The simple view: macro-actions at a trust level
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** One macro-action as its row says it: ticked or not, at which cran, and what that yields here. */
+/** One macro-action as its row says it: ticked or not, at which trust level, and what that yields here. */
 export interface MacroActionRow {
   readonly id: string;
   readonly label: string;
   readonly description: string;
-  /** The cran it is ticked at, or `null` when not ticked. */
-  readonly cran: TrustCran | null;
-  /** The cran its counts are read at: its own, or Prudent when not ticked. */
-  readonly shownCran: TrustCran;
+  /** The trust level it is ticked at, or `null` when not ticked. */
+  readonly trustLevel: TrustLevel | null;
+  /** The trust level its counts are read at: its own, or Careful when not ticked. */
+  readonly shownTrustLevel: TrustLevel;
   /** Permissions the macro-action has in this catalog. */
   readonly total: number;
   readonly free: number;
   readonly asks: number;
-  /** Left out by the cran (palier 4 at Prudent). */
+  /** Left out by the trust level (tier 4 at Careful). */
   readonly leftOut: number;
   /** Outside what the reader may allow, or no selected resource carries the environment. */
   readonly unavailable: number;
@@ -318,36 +324,33 @@ export function macroActionRows(
 ): MacroActionRow[] {
   const resources = selectedResources(connection, state);
   return connection.macro_actions.map((action) => {
-    const cran = state.crans[action.id] ?? null;
-    const shownCran = cran ?? DEFAULT_CRAN;
-    const expansion = expandMacroAction(connection, action, shownCran, resources);
+    const trustLevel = state.trustLevels[action.id] ?? null;
+    const shownTrustLevel = trustLevel ?? DEFAULT_TRUST_LEVEL;
+    const expansion = expandMacroAction(connection, action, shownTrustLevel, resources);
     const free = expansion.lines.filter((line) => line.gate === 'auto').length;
     const asks = expansion.lines.length - free;
     return {
       id: action.id,
       label: action.label,
       description: action.description,
-      cran,
-      shownCran,
+      trustLevel,
+      shownTrustLevel,
       total: rowsOf(connection, action).length,
       free,
       asks,
       leftOut: expansion.left_out.length,
       unavailable: expansion.unavailable.length,
-      // Nothing it holds is reachable here, at any cran.
+      // Nothing it holds is reachable here, at any trust level.
       empty:
-        expandMacroAction(connection, action, 'autonome', resources).lines.length === 0 &&
-        cran === null,
+        expandMacroAction(connection, action, 'autonomous', resources).lines.length === 0 &&
+        trustLevel === null,
     };
   });
 }
 
-/** The highest palier among the chosen lines, or `null` when nothing is chosen. */
-export function chosenPalier(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): Palier | null {
-  return highestPalier(connection.risks.filter((risk) => state.entries[risk.risk_id]));
+/** The highest tier among the chosen lines, or `null` when nothing is chosen. */
+export function chosenTier(connection: IssuanceConnection, state: ConnectionState): Tier | null {
+  return highestTier(connection.risks.filter((risk) => state.entries[risk.risk_id]));
 }
 
 /** One risk "Everything I hold" yields on this connection, with the values the mission would get. */
@@ -525,7 +528,7 @@ export function setIncluded(state: ConnectionState, included: boolean): Connecti
 }
 
 /**
- * Changes the resource selection. While the policy is what the crans (or
+ * Changes the resource selection. While the policy is what the trust levels (or
  * "Everything I hold") wrote, it follows the selection (env-qualified entries come and go with the
  * labelled resources); once edited, the creator's entries are kept and the
  * preview flags the ones that no longer resolve.
@@ -560,16 +563,16 @@ export function setResourceScope(
 
 /**
  * The budget a hand-ticked risk starts with: its macro-action's base budget at
- * the cran that macro-action has (Prudent when not ticked), with the gate that
- * cran gives it (`defaultLineOf`) — else blank, and a blank budget blocks
+ * the trust level that macro-action has (Careful when not ticked), with the gate that
+ * trust level gives it (`defaultLineOf`) — else blank, and a blank budget blocks
  * issuance until the creator types one.
  */
 export function defaultEntryFor(
   connection: IssuanceConnection,
-  crans: MacroActionCrans,
+  trustLevels: MacroActionTrustLevels,
   risk: CatalogRisk,
 ): EntryState {
-  const line = defaultLineOf(connection, crans, risk);
+  const line = defaultLineOf(connection, trustLevels, risk);
   return line ? entryOf(line) : BLANK_ENTRY;
 }
 
@@ -581,7 +584,7 @@ export function toggleRisk(
   const entries = { ...state.entries };
   if (entries[risk.risk_id]) delete entries[risk.risk_id];
   else {
-    entries[risk.risk_id] = defaultEntryFor(connection, state.crans, risk);
+    entries[risk.risk_id] = defaultEntryFor(connection, state.trustLevels, risk);
   }
   return { ...state, entries, edited: true };
 }
@@ -636,7 +639,7 @@ export function selectAll(connection: IssuanceConnection, state: ConnectionState
   for (const risk of connection.risks) {
     if (risk.deprecated || risk.fallback) continue;
     if (unavailableReason(connection, risk, resources, held) !== null) continue;
-    entries[risk.risk_id] ??= defaultEntryFor(connection, state.crans, risk);
+    entries[risk.risk_id] ??= defaultEntryFor(connection, state.trustLevels, risk);
   }
   return { ...state, entries, edited: true };
 }
@@ -675,12 +678,12 @@ function draftConnection(connection: IssuanceConnection, state: ConnectionState)
     connection_id: connection.id,
     resources: draftResourcesOf(state),
     // The persisted policy is the explicit enumeration: "Everything I hold" is not sent.
-    preset: null,
+    everything_i_hold: false,
     // Kept with the mission to redraw this form. Sent beside lines only: without
     // any, the server would write the policy from them, and an emptied policy
     // must stay empty.
-    ...(Object.keys(state.crans).length > 0 && Object.keys(state.entries).length > 0
-      ? { crans: state.crans }
+    ...(Object.keys(state.trustLevels).length > 0 && Object.keys(state.entries).length > 0
+      ? { trust_levels: state.trustLevels }
       : {}),
     policy: connection.risks
       .filter((risk) => state.entries[risk.risk_id] !== undefined)
@@ -766,7 +769,7 @@ function sameLines(
 /**
  * Loads a resolved draft (a mission being edited or duplicated, an agent's
  * proposal after preview) into the form: its connections included, its
- * entries ticked with their values, its crans ticked. When the crans write
+ * entries ticked with their values, its trust levels ticked. When the trust levels write
  * exactly those lines the simple view redraws them; otherwise the lines are
  * marked edited and shown in the advanced view, the honest view of them.
  */
@@ -783,16 +786,20 @@ export function loadResolved(
       line.resources.scope === 'connection'
         ? defaultResources(connection).map((r) => r.id)
         : line.resources.resource_ids;
-    const crans = knownCrans(connection, line.crans);
+    const trustLevels = knownTrustLevels(connection, line.trust_levels);
     const entries = entriesOf(line.policy);
-    const written = linesOfCrans(connection, crans, selectedResources(connection, { resourceIds }));
-    const matches = Object.keys(crans).length > 0 && sameLines(entries, written);
+    const written = linesOfTrustLevels(
+      connection,
+      trustLevels,
+      selectedResources(connection, { resourceIds }),
+    );
+    const matches = Object.keys(trustLevels).length > 0 && sameLines(entries, written);
     connections[connection.id] = {
       included: true,
       view: matches ? 'simple' : 'advanced',
       resourceScope: line.resources.scope === 'connection' ? 'connection' : 'selected',
       resourceIds,
-      crans,
+      trustLevels,
       everything: false,
       entries,
       edited: !matches,

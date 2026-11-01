@@ -1,19 +1,14 @@
 /**
  * The tools of a service as a table: the name as the protocol spells it, what
  * it does, its arguments, its plane when the service has several, and the
- * permissions the plugin declares for it — which is "by arguments" for every
- * tool but the ones that hand the agent a token.
+ * permissions it needs — "by arguments" for every tool: the plugin decides
+ * them call by call.
  */
-import { Callout, DataTable, Mono, Tag, type Column } from '@/components/ui';
+import { DataTable, Mono, Tag, type Column } from '@/components/ui';
 import { REFERENCE_WORDS } from '@/lib/vocabulary';
-import { noteBody } from '@/server/missions/catalog-view';
-import { REFERENCE_SECTIONS, riskAnchor } from '@/server/providers/links';
+import { REFERENCE_SECTIONS } from '@/server/providers/links';
 import { OTHER_PLANE } from '@/server/providers/planes';
-import {
-  TOKEN_HANDOUT_NOTE,
-  TOOL_RISKS_NOTE,
-  type ToolReference,
-} from '@/server/providers/reference';
+import { TOOL_RISKS_NOTE, type ToolReference } from '@/server/providers/reference';
 
 import styles from '../reference.module.css';
 
@@ -86,27 +81,7 @@ export function ToolList({
       id: 'permissions',
       header: REFERENCE_WORDS.tabs.permissions,
       width: '19%',
-      cell: (tool) =>
-        tool.declared_risks === null ? (
-          <span className={styles.quiet}>{REFERENCE_WORDS.byArguments}</span>
-        ) : (
-          <span className={styles.arguments}>
-            {tool.hands_token && <Tag tone="bad">{REFERENCE_WORDS.handsToken}</Tag>}
-            {tool.declared_risks.map((riskId) => (
-              <a
-                key={riskId}
-                href={`#${riskAnchor(riskId)}`}
-                className={styles.idLink}
-                onClick={(event) => {
-                  event.preventDefault();
-                  onGo(riskAnchor(riskId));
-                }}
-              >
-                <Mono>{riskId}</Mono>
-              </a>
-            ))}
-          </span>
-        ),
+      cell: () => <span className={styles.quiet}>{REFERENCE_WORDS.byArguments}</span>,
     },
   ];
 
@@ -130,17 +105,6 @@ export function ToolList({
         <summary>Why no permission is listed per tool</summary>
         <p>{TOOL_RISKS_NOTE}</p>
       </details>
-      {tools.some((tool) => tool.hands_token) && (
-        <div className={styles.callout}>
-          <Callout
-            tone="warn"
-            title="One tool hands a token to the agent"
-            testId="token-handout-note"
-          >
-            {noteBody(TOKEN_HANDOUT_NOTE)}
-          </Callout>
-        </div>
-      )}
       {total === 0 ? (
         <p className={styles.empty}>This service declares no tool.</p>
       ) : tools.length === 0 ? (

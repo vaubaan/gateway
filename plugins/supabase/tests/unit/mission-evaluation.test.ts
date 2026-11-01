@@ -2,14 +2,14 @@
  * The whole decision, not the classifier alone : real catalog, real
  * classifier, and the engine's `evaluateCall` with the resolver the gateway
  * builds (`envResolverFor(mission resources, plugin.envOf)` — the exact
- * composition of `evaluateCallForToken` in `@vaubaan/gateway-core`).
+ * composition of `evaluateCallForMission` in `@vaubaan/gateway-core`).
  *
  * Pins what the per-slice tests cannot see :
  *   - an env-scoped risk touched on a project the owner did not label, or
  *     labelled outside `acceptable_in_envs`, refuses the call whatever the
  *     mission accepted (listing users on an unlabelled project, bulk row
  *     writes of a migration on prod) ;
- *   - what a mission written from macro-actions at trust crans allows and
+ *   - what a mission written from macro-actions at trust levels allows and
  *     refuses, call by call, on a correctly labelled project — none needs the
  *     fallback to do what its macro-actions say.
  */
@@ -66,7 +66,7 @@ function decide(
   if ('denied' in outcome) throw new Error(`${tool} denied by the classifier: ${outcome.denied}`);
   return evaluateCall({
     executed_slices: outcome.slices,
-    token_accepted_risks: new Set(accepted),
+    accepted_risks: new Set(accepted),
     catalog: indexed,
     envResolver: envResolverFor(mission, plugin.envOf?.bind(plugin)),
   });
@@ -75,15 +75,15 @@ function decide(
 /** The missions the decisions below are made for, written as the creation form writes them. */
 const MISSIONS = {
   /** Reads, no environment : nothing env-scoped. */
-  'read-only-analyst': policyFromMacroActions(plugin, { query: 'prudent' }),
+  'read-only-analyst': policyFromMacroActions(plugin, { query: 'careful' }),
   /** Everything but administration, on staging only. */
   'staging-developer': policyFromMacroActions(
     plugin,
     {
-      query: 'autonome',
-      'change-data': 'autonome',
-      'change-schema': 'autonome',
-      'ship-functions': 'autonome',
+      query: 'autonomous',
+      'change-data': 'autonomous',
+      'change-schema': 'autonomous',
+      'ship-functions': 'autonomous',
     },
     { envs: ['staging'] },
   ),
@@ -93,10 +93,10 @@ const MISSIONS = {
    * row write on prod whatever the mission holds (`acceptable_in_envs`).
    */
   'migration-operator': [
-    ...policyFromMacroActions(plugin, { query: 'prudent' }),
+    ...policyFromMacroActions(plugin, { query: 'careful' }),
     ...policyFromMacroActions(
       plugin,
-      { 'change-schema': 'confiant' },
+      { 'change-schema': 'trusting' },
       { envs: ['staging', 'prod'] },
     ),
     ...(['supabase[staging].bulk-row-write', 'supabase[staging].db-role-write'] as const).map(
@@ -472,7 +472,7 @@ describe('supabase missions from macro-actions — decisions on labelled project
     expectRows('migration-operator', rows);
   });
 
-  test('change-schema at Confiant gates what it allows on prod behind an approval', () => {
+  test('change-schema at Trusting gates what it allows on prod behind an approval', () => {
     const lines = MISSIONS['migration-operator'];
     for (const query of [DDL, RLS]) {
       const decision = decide(...migration(PROD, query), missionRisks('migration-operator'));

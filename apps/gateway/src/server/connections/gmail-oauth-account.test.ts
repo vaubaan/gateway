@@ -67,8 +67,8 @@ describe('a Gmail account connected by OAuth in an earlier build', () => {
 
     // The account page names the way as retired.
     expect(await h.service.get(alice, existing.id)).toMatchObject({
-      credentialKind: 'oauth2',
-      wayRetired: true,
+      credential_kind: 'oauth2',
+      way_retired: true,
     });
 
     // Discovery records the reason without calling the plugin.
@@ -102,7 +102,7 @@ describe('a Gmail account connected by OAuth in an earlier build', () => {
     });
     expect(imap.sessions.length).toBeGreaterThan(0);
     expect(imap.sessions.every((email) => email === 'alice@example.com')).toBe(true);
-    expect((await h.service.get(alice, existing.id)).wayRetired).toBe(false);
+    expect((await h.service.get(alice, existing.id)).way_retired).toBe(false);
     expect(
       unavailableReason(
         gmail,

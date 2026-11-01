@@ -11,7 +11,7 @@ import {
   USER_STATUSES,
   type Gate,
   type Iso,
-  type MissionConnection,
+  type MissionConnectionRecord,
   type MissionIssuerRecord,
   type MissionMemberRecord,
   type MissionPolicyEntry,
@@ -37,7 +37,7 @@ export interface CreateMissionInput {
   readonly periodSeconds: number | null;
   readonly expiresAt?: Iso | null;
   readonly delegationId?: string | null;
-  readonly connections: readonly MissionConnection[];
+  readonly connections: readonly MissionConnectionRecord[];
   /** One entry per accepted risk, each with its budget. Every id must be in the catalog. */
   readonly policy: readonly MissionPolicyEntry[];
 }
@@ -284,7 +284,7 @@ export interface MissionEditInput {
   readonly name: string;
   readonly expiresAt: Iso | null;
   /** Every connection of the mission after the edit, with its selection. */
-  readonly connections: readonly MissionConnection[];
+  readonly connections: readonly MissionConnectionRecord[];
   /** The whole policy after the edit. */
   readonly policy: readonly MissionPolicyEntry[];
   /** The session's summary event of the edit, given how many requests it closed. */
@@ -359,7 +359,7 @@ interface PolicyRow {
 interface ConnectionRow {
   connection_id: string;
   resource_scope: string;
-  crans_json: string | null;
+  trust_levels_json: string | null;
 }
 
 interface SelectedRow {
@@ -455,7 +455,7 @@ function policyToRecord(row: PolicyRow): MissionPolicyEntry {
 function connectionToRecord(
   row: ConnectionRow,
   selected: readonly SelectedRow[],
-): MissionConnection {
+): MissionConnectionRecord {
   const sources: Record<string, MissionResourceSource> = {};
   for (const r of selected) {
     const source = parseEnum(MISSION_RESOURCE_SOURCES, r.source, 'mission_resources.source');
@@ -470,29 +470,33 @@ function connectionToRecord(
     ),
     resourceIds: selected.map((r) => r.resource_id),
     ...(Object.keys(sources).length > 0 ? { resourceSources: sources } : {}),
-    ...(row.crans_json === null ? {} : { crans: cransOf(row.crans_json) }),
+    ...(row.trust_levels_json === null
+      ? {}
+      : { trustLevels: trustLevelsOf(row.trust_levels_json) }),
   };
 }
 
-/** `crans_json` as stored: an object of strings; anything else is corrupt. */
-function cransOf(json: string): Record<string, string> {
+/** `trust_levels_json` as stored: an object of strings; anything else is corrupt. */
+function trustLevelsOf(json: string): Record<string, string> {
   const parsed: unknown = JSON.parse(json);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new InvariantError('mission_connections.crans_json is not an object');
+    throw new InvariantError('mission_connections.trust_levels_json is not an object');
   }
-  const crans: Record<string, string> = {};
-  for (const [id, cran] of Object.entries(parsed)) {
-    if (typeof cran !== 'string') {
-      throw new InvariantError(`mission_connections.crans_json: '${id}' is not a string`);
+  const trustLevels: Record<string, string> = {};
+  for (const [id, trustLevel] of Object.entries(parsed)) {
+    if (typeof trustLevel !== 'string') {
+      throw new InvariantError(`mission_connections.trust_levels_json: '${id}' is not a string`);
     }
-    crans[id] = cran;
+    trustLevels[id] = trustLevel;
   }
-  return crans;
+  return trustLevels;
 }
 
-/** What `crans_json` stores: NULL for no cran, so an empty record reads back absent. */
-function cransJsonOf(c: Pick<MissionConnection, 'crans'>): string | null {
-  return c.crans && Object.keys(c.crans).length > 0 ? JSON.stringify(c.crans) : null;
+/** What `trust_levels_json` stores: NULL for no trust level, so an empty record reads back absent. */
+function trustLevelsJsonOf(c: Pick<MissionConnectionRecord, 'trustLevels'>): string | null {
+  return c.trustLevels && Object.keys(c.trustLevels).length > 0
+    ? JSON.stringify(c.trustLevels)
+    : null;
 }
 
 /**
@@ -501,7 +505,7 @@ function cransJsonOf(c: Pick<MissionConnection, 'crans'>): string | null {
  */
 function assertConnectionSelections(
   ctx: RepoContext,
-  connections: readonly MissionConnection[],
+  connections: readonly MissionConnectionRecord[],
 ): void {
   if (connections.length === 0) {
     throw new InvariantError('a mission carries at least one connection');
@@ -577,7 +581,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
   );
   const insertConnection = db.prepare<[string, string, string, string | null]>(
-    `INSERT INTO mission_connections (mission_id, connection_id, resource_scope, crans_json)
+    `INSERT INTO mission_connections (mission_id, connection_id, resource_scope, trust_levels_json)
      VALUES (?, ?, ?, ?)`,
   );
   const insertResource = db.prepare<[string, string, string]>(
@@ -593,7 +597,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
      WHERE mission_id = ? ORDER BY risk_id`,
   );
   const connectionsOf = db.prepare<[string], ConnectionRow>(
-    'SELECT connection_id, resource_scope, crans_json FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
+    'SELECT connection_id, resource_scope, trust_levels_json FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
   );
   const resourcesOf = db.prepare<[string, string], SelectedRow>(
     'SELECT resource_id, source FROM mission_resources WHERE mission_id = ? AND connection_id = ? ORDER BY resource_id',
@@ -765,8 +769,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const rescopeStmt = db.prepare<[string, string, string]>(
     'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
   );
-  const recranStmt = db.prepare<[string | null, string, string]>(
-    'UPDATE mission_connections SET crans_json = ? WHERE mission_id = ? AND connection_id = ?',
+  const rewriteTrustLevelsStmt = db.prepare<[string | null, string, string]>(
+    'UPDATE mission_connections SET trust_levels_json = ? WHERE mission_id = ? AND connection_id = ?',
   );
   const deleteConnectionStmt = db.prepare<[string, string]>(
     'DELETE FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
@@ -812,11 +816,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   /** The rows of one connection that move, and nothing else. In-transaction. */
   function writeSelection(
     missionId: string,
-    old: MissionConnection | undefined,
-    c: MissionConnection,
+    old: MissionConnectionRecord | undefined,
+    c: MissionConnectionRecord,
   ): void {
     if (!old) {
-      insertConnection.run(missionId, c.connectionId, c.resourceScope, cransJsonOf(c));
+      insertConnection.run(missionId, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));
       for (const resourceId of c.resourceIds)
         insertEditedResource.run(missionId, c.connectionId, resourceId);
       return;
@@ -824,8 +828,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     if (old.resourceScope !== c.resourceScope) {
       rescopeStmt.run(c.resourceScope, missionId, c.connectionId);
     }
-    const crans = cransJsonOf(c);
-    if (crans !== cransJsonOf(old)) recranStmt.run(crans, missionId, c.connectionId);
+    const trustLevels = trustLevelsJsonOf(c);
+    if (trustLevels !== trustLevelsJsonOf(old))
+      rewriteTrustLevelsStmt.run(trustLevels, missionId, c.connectionId);
     const had = new Set(old.resourceIds);
     const has = new Set(c.resourceIds);
     for (const resourceId of old.resourceIds) {
@@ -1019,7 +1024,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           now,
         );
         for (const c of input.connections) {
-          insertConnection.run(id, c.connectionId, c.resourceScope, cransJsonOf(c));
+          insertConnection.run(id, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));
           for (const resourceId of c.resourceIds)
             insertResource.run(id, c.connectionId, resourceId);
         }

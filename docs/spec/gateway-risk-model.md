@@ -10,6 +10,12 @@ status: stable
 > [vaubaan-gateway](./vaubaan-gateway.md). Decision:
 > [pivot-to-risk-based-model](../decisions/pivot-to-risk-based-model.md). Section numbers are cited
 > by code: keep them.
+>
+> **History:** 2026-10-31 — the trust level (Careful, Trusting, Autonomous) and the tier of §4.6 got
+> their English names before publication, a breaking rename in the alpha window (owner decision,
+> recorded in the History of
+> [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md));
+> what each trust level writes did not change.
 
 ## 0. The idea — accepted risks, not granted capabilities
 
@@ -124,7 +130,7 @@ Six axes, each a closed scale from mildest to most severe:
 - `visibility`: `internal` · `team` · `public`
 - `persistence`: `stateless` · `session` · `posture`
 
-The vector **explains** and **orders** risks, and gives each entry its **palier** (§4.6), which only
+The vector **explains** and **orders** risks, and gives each entry its **tier** (§4.6), which only
 pre-fills a gate in the creation form. No runtime decision is derived from it.
 
 ### 4.3 The fallback entry
@@ -157,33 +163,31 @@ pre-fills a gate in the creation form. No runtime decision is derived from it.
   matches, so missions holding it keep working; "select all" skips it; a macro-action listing it is
   refused.
 
-### 4.6 Macro-actions and trust crans
+### 4.6 Macro-actions and trust levels
 
 What a creator ticks per connection, in the connector's words
-([ADR](../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)):
+([ADR](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)):
 
 - A catalog declares **3 to 6 macro-actions** (`id`, `label`, `description`, `entries`); every entry
   that is neither the fallback nor deprecated belongs to **exactly one**, listed unqualified with its
   **base budget** (quota, rate limit; no gate). The gateway adds `anything-else`, holding the
   fallback. A catalog breaking this does not load.
-- **Palier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
+- **Tier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
   reversible but `pii` or `secret` data, `bulk` or `account` blast, or `unbounded` cost → 2, else 1.
-- **Cran**, one per ticked macro-action, `prudent` by default:
+- **Trust level**, one per ticked macro-action, `careful` by default:
 
-  | Palier | Prudent      | Confiant | Autonome |
-  | ------ | ------------ | -------- | -------- |
-  | 1      | auto         | auto     | auto     |
-  | 2      | approval     | auto     | auto     |
-  | 3      | approval     | approval | auto     |
-  | 4      | not accepted | approval | approval |
+  | Tier | Careful      | Trusting | Autonomous |
+  | ---- | ------------ | -------- | ---------- |
+  | 1    | auto         | auto     | auto       |
+  | 2    | approval     | auto     | auto       |
+  | 3    | approval     | approval | auto       |
+  | 4    | not accepted | approval | approval   |
 
-- The cran multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
+- The trust level multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
   ceiling (§4bis).
-- A risk whose tool hands the agent a provider token that can write is pre-filled `approval` at
-  every cran, whatever its palier.
 - A catalog ships no presets: a `presets` key does not load.
 - The result is explicit lines (§5), shown before issuance and editable one by one; the mission
-  keeps the cran per macro-action only to redraw the form.
+  keeps the trust level per macro-action only to redraw the form.
 
 ## 4bis. Scope caps — designed, not enforced in v5.0
 
@@ -199,7 +203,7 @@ What a creator ticks per connection, in the connector's words
 
 Its connections (one provider each); per connection its resources (ref, optional environment label);
 its policy, one explicit entry per accepted risk, env-scoped risks qualified. No slice, pattern,
-explicit deny, macro-action or cran.
+explicit deny, macro-action or trust level.
 
 ## 6. Environment resolution
 
@@ -270,8 +274,8 @@ environment no selected resource carries, on a provider that does not derive it)
 or **budget invalid** (not positive whole numbers, gate outside the closed set, rate above the
 catalog ceiling). Any finding blocks issuance, reported with its risks.
 
-- A macro-action at a cran is expanded into lines first, then checked like any line.
-- Macro-actions at a cran are intersected with what the creator holds: risks exceeding authority
+- A macro-action at a trust level is expanded into lines first, then checked like any line.
+- Macro-actions at a trust level are intersected with what the creator holds: risks exceeding authority
   or unresolvable are left out and reported, not findings.
 - A share's restriction is the same kind of list, each id valid by §4.4.
 

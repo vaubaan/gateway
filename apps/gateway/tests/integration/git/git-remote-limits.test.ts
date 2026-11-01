@@ -13,7 +13,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { serializeSecret } from '../../../src/server/connections';
 import type { AuditCallRecord } from '../../../src/server/store';
 import { line, TEST_PUBLIC_URL, type IssuedMission } from '../../../src/server/execution/testing';
-import { DEVELOPER_CRANS, openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
+import {
+  DEVELOPER_TRUST_LEVELS,
+  openGitRig,
+  REPOSITORY,
+  type GitResult,
+  type GitRig,
+} from './support';
 
 let rig: GitRig;
 
@@ -45,7 +51,7 @@ async function commit(repo: string, path: string, content: string | Buffer): Pro
 
 describe('the pack cap', () => {
   it('refuses a push over git.max_pack_mb, audits it, and leaves nothing upstream', async () => {
-    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
+    const mission = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
     const repo = await cloneWith(mission);
     ok(await rig.git(repo, ['checkout', '-q', '-b', 'feature/big'], null));
     await commit(repo, 'big.bin', randomBytes(3 * 1024 * 1024));
@@ -88,7 +94,7 @@ describe('the budget', () => {
 
 describe('keys and missions that stopped', () => {
   it('a replaced key no longer authenticates; the new one does', async () => {
-    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
+    const mission = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
     const rotated = await rig.root.missions.service.rotate(rig.ada, mission.mission.id);
     if (!rotated.ok) throw new Error('rotate refused');
     const dir = rig.workdir();
@@ -99,7 +105,7 @@ describe('keys and missions that stopped', () => {
   });
 
   it('an expired mission is refused with its reason', async () => {
-    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
+    const mission = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
     rig.root.store.db
       .prepare('UPDATE missions SET expires_at = ? WHERE id = ?')
       .run('2020-01-01T00:00:00.000Z', mission.mission.id);
@@ -126,7 +132,7 @@ describe('a token connection (fine-grained personal access token)', () => {
     ]);
     const issued = await rig.root.missions.service.issue(rig.ada, {
       name: 'Token connection',
-      connections: [{ connection_id: tokenConnection.id, crans: DEVELOPER_CRANS }],
+      connections: [{ connection_id: tokenConnection.id, trust_levels: DEVELOPER_TRUST_LEVELS }],
       period: { kind: 'recurring', length_seconds: 86_400 },
       expires_at: null,
     });
@@ -156,7 +162,7 @@ describe('what the token holds at GitHub', () => {
       metadata: 'read',
       contents: 'read',
     });
-    const mission = await rig.missionOn(readOnly, DEVELOPER_CRANS);
+    const mission = await rig.missionOn(readOnly, DEVELOPER_TRUST_LEVELS);
     const dir = rig.workdir();
     ok(await rig.git(dir, ['clone', '-q', rig.remote(), 'app'], mission.token));
     const repo = join(dir, 'app');
@@ -235,7 +241,7 @@ describe('one execution surface', () => {
   });
 
   it('the catalog gives the remote of each repository', async () => {
-    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
+    const mission = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
     const response = await rig.root.execution.handlers.catalog(
       new Request(`${TEST_PUBLIC_URL}/mcp/catalog`, {
         headers: { authorization: `Bearer ${mission.token}` },

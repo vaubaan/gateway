@@ -1,51 +1,36 @@
 /**
  * The macro-actions of a connection as the creation form ticks them (risk
- * model §4.6; ADR macro-actions-and-trust-crans-prefill-the-policy): the
+ * model §4.6; ADR macro-actions-and-trust-levels-prefill-the-policy): the
  * catalog's own, plus "Anything else" holding the fallback, each expanded at
- * a trust cran against the selected resources and the creator's authority.
+ * a trust level against the selected resources and the creator's authority.
  *
  * Pure and browser-safe, like `catalog-view.ts`: the form and the server run
  * the same functions. What they write is explicit lines; the mission keeps
- * the crans only to redraw the form.
+ * the trust levels only to redraw the form.
  */
 import {
   ANYTHING_ELSE_BASE_BUDGET,
   ANYTHING_ELSE_MACRO_ACTION,
-  CRAN_BUDGET_FACTOR,
-  CRAN_GATES,
-  DEFAULT_CRAN,
-  expandAtCran,
+  TRUST_LEVEL_BUDGET_FACTOR,
+  TRUST_LEVEL_GATES,
+  DEFAULT_TRUST_LEVEL,
+  expandAtTrustLevel,
   isFallbackEntry,
-  isTrustCran,
-  palierOf,
-  TRUST_CRANS,
-  type CranCandidate,
-  type CranLine,
-  type Palier,
-  type TrustCran,
+  isTrustLevel,
+  tierOf,
+  TRUST_LEVELS,
+  type TrustLevelCandidate,
+  type TrustLevelLine,
+  type Tier,
+  type TrustLevel,
 } from '@vaubaan/policy-engine';
 import type { Gate, MacroAction, RiskCatalog, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource, LeftOutEntry } from './model';
 
-/** The cran of each ticked macro-action of one connection, by macro-action id. */
-export type MacroActionCrans = Readonly<Record<string, TrustCran>>;
-
-export const CRAN_LABELS: Readonly<Record<TrustCran, string>> = {
-  prudent: 'Prudent',
-  confiant: 'Confiant',
-  autonome: 'Autonome',
-};
-
-/** What each cran does, in one line, wherever its chip shows a tooltip. */
-export const CRAN_HINTS: Readonly<Record<TrustCran, string>> = {
-  prudent:
-    'Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.',
-  confiant:
-    'Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.',
-  autonome: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
-};
+/** The trust level of each ticked macro-action of one connection, by macro-action id. */
+export type MacroActionTrustLevels = Readonly<Record<string, TrustLevel>>;
 
 /**
  * The catalog's macro-actions, then "Anything else" with the catalog's
@@ -67,11 +52,11 @@ export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {
   ];
 }
 
-/** One macro-action at one cran, on this connection with these resources. */
+/** One macro-action at one trust level, on this connection with these resources. */
 export interface MacroActionExpansion {
-  readonly lines: readonly CranLine[];
-  /** Risks the cran leaves out (palier 4 at Prudent). */
-  readonly left_out: readonly { readonly risk_id: RiskId; readonly palier: Palier }[];
+  readonly lines: readonly TrustLevelLine[];
+  /** Risks the trust level leaves out (tier 4 at Careful). */
+  readonly left_out: readonly { readonly risk_id: RiskId; readonly tier: Tier }[];
   /** Rows of the macro-action this creator cannot get here: outside the authority, or no resource carries the environment. */
   readonly unavailable: readonly CatalogRisk[];
 }
@@ -85,30 +70,28 @@ export function rowsOf(
   return connection.risks.filter((risk) => ids.has(risk.base_id) && !risk.deprecated);
 }
 
-/** A row as `expandAtCran` reads it, from its macro-action entry's base budget. */
+/** A row as `expandAtTrustLevel` reads it, from its macro-action entry's base budget. */
 function candidateOf(
-  connection: Pick<IssuanceConnection, 'write_token_risks'>,
   risk: Pick<CatalogRisk, 'base_id' | 'risk_id' | 'vector' | 'rate_ceiling_per_minute'>,
   entry: MacroAction['entries'][number],
-): CranCandidate {
+): TrustLevelCandidate {
   return {
     risk_id: risk.risk_id,
     vector: risk.vector,
     base: { quota: entry.quota, rate_limit: entry.rate_limit },
     rate_ceiling_per_minute: risk.rate_ceiling_per_minute,
-    hands_write_token: connection.write_token_risks.includes(risk.base_id),
   };
 }
 
 export function expandMacroAction(
-  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env' | 'write_token_risks'>,
+  connection: Pick<IssuanceConnection, 'risks' | 'authority' | 'derives_env'>,
   action: MacroAction,
-  cran: TrustCran,
+  trustLevel: TrustLevel,
   resources: readonly Pick<IssuanceResource, 'env'>[],
 ): MacroActionExpansion {
   const held = new Set(connection.authority);
   const base = new Map(action.entries.map((entry) => [entry.risk_id, entry]));
-  const candidates: CranCandidate[] = [];
+  const candidates: TrustLevelCandidate[] = [];
   const unavailable: CatalogRisk[] = [];
   for (const risk of rowsOf(connection, action)) {
     const entry = base.get(risk.base_id);
@@ -117,36 +100,36 @@ export function expandMacroAction(
       unavailable.push(risk);
       continue;
     }
-    candidates.push(candidateOf(connection, risk, entry));
+    candidates.push(candidateOf(risk, entry));
   }
-  return { ...expandAtCran(candidates, cran), unavailable };
+  return { ...expandAtTrustLevel(candidates, trustLevel), unavailable };
 }
 
-type CransConnection = Pick<
+type TrustLevelsConnection = Pick<
   IssuanceConnection,
-  'risks' | 'authority' | 'derives_env' | 'macro_actions' | 'write_token_risks'
+  'risks' | 'authority' | 'derives_env' | 'macro_actions'
 >;
 
 /**
- * What the crans write on a connection: the lines of every ticked
+ * What the trust levels write on a connection: the lines of every ticked
  * macro-action, catalog order, and what they leave out, with why.
  */
-export function prefillOfCrans(
-  connection: CransConnection,
-  crans: MacroActionCrans,
+export function prefillOfTrustLevels(
+  connection: TrustLevelsConnection,
+  trustLevels: MacroActionTrustLevels,
   resources: readonly Pick<IssuanceResource, 'env'>[],
-): { readonly lines: CranLine[]; readonly left_out: LeftOutEntry[] } {
-  const byId = new Map<RiskId, CranLine>();
+): { readonly lines: TrustLevelLine[]; readonly left_out: LeftOutEntry[] } {
+  const byId = new Map<RiskId, TrustLevelLine>();
   const leftOut = new Map<RiskId, LeftOutEntry>();
   const held = new Set(connection.authority);
   const envOf = new Map(connection.risks.map((risk) => [risk.risk_id, risk.env]));
   for (const action of connection.macro_actions) {
-    const cran = crans[action.id];
-    if (!cran) continue;
-    const expansion = expandMacroAction(connection, action, cran, resources);
+    const trustLevel = trustLevels[action.id];
+    if (!trustLevel) continue;
+    const expansion = expandMacroAction(connection, action, trustLevel, resources);
     for (const line of expansion.lines) byId.set(line.risk_id, line);
     for (const { risk_id } of expansion.left_out) {
-      leftOut.set(risk_id, { risk_id, reason: 'cran', env: envOf.get(risk_id) ?? null });
+      leftOut.set(risk_id, { risk_id, reason: 'trust-level', env: envOf.get(risk_id) ?? null });
     }
     for (const risk of expansion.unavailable) {
       const reason = held.has(risk.risk_id) ? 'unresolvable-env' : 'outside-authority';
@@ -162,12 +145,12 @@ export function prefillOfCrans(
 }
 
 /** The explicit lines of every ticked macro-action, catalog order. */
-export function linesOfCrans(
-  connection: CransConnection,
-  crans: MacroActionCrans,
+export function linesOfTrustLevels(
+  connection: TrustLevelsConnection,
+  trustLevels: MacroActionTrustLevels,
   resources: readonly Pick<IssuanceResource, 'env'>[],
-): CranLine[] {
-  return prefillOfCrans(connection, crans, resources).lines;
+): TrustLevelLine[] {
+  return prefillOfTrustLevels(connection, trustLevels, resources).lines;
 }
 
 /** The macro-action a catalog row belongs to, or `undefined` (a deprecated entry). */
@@ -182,42 +165,42 @@ export function macroActionOfRisk(
 
 /**
  * The line a risk ticked by hand starts with: its macro-action's base budget
- * at the cran that macro-action has (Prudent when it is not ticked), and the
- * gate that cran gives its palier; a risk the cran leaves out asks first.
+ * at the trust level that macro-action has (Careful when it is not ticked), and the
+ * gate that trust level gives its tier; a risk the trust level leaves out asks first.
  * `null` for a risk in no macro-action.
  */
 export function defaultLineOf(
-  connection: Pick<IssuanceConnection, 'macro_actions' | 'write_token_risks'>,
-  crans: MacroActionCrans,
+  connection: Pick<IssuanceConnection, 'macro_actions'>,
+  trustLevels: MacroActionTrustLevels,
   risk: Pick<CatalogRisk, 'base_id' | 'risk_id' | 'vector' | 'rate_ceiling_per_minute'>,
 ): {
   readonly quota: number;
-  readonly rate_limit: CranLine['rate_limit'];
+  readonly rate_limit: TrustLevelLine['rate_limit'];
   readonly gate: Gate;
 } | null {
   const action = macroActionOfRisk(connection, risk);
   const entry = action?.entries.find((e) => e.risk_id === risk.base_id);
   if (!action || !entry) return null;
-  const cran = crans[action.id] ?? DEFAULT_CRAN;
-  const [line] = expandAtCran([candidateOf(connection, risk, entry)], cran).lines;
+  const trustLevel = trustLevels[action.id] ?? DEFAULT_TRUST_LEVEL;
+  const [line] = expandAtTrustLevel([candidateOf(risk, entry)], trustLevel).lines;
   if (line) return { quota: line.quota, rate_limit: line.rate_limit, gate: line.gate };
-  // Left out at this cran: ticked by hand, it asks first, at the base budget.
+  // Left out at this trust level: ticked by hand, it asks first, at the base budget.
   return { quota: entry.quota, rate_limit: entry.rate_limit, gate: 'approval' };
 }
 
 /**
- * The crans of a draft that name a macro-action of this connection: anything
+ * The trust levels of a draft that name a macro-action of this connection: anything
  * else is dropped (`unknownMacroActions` names it).
  */
-export function knownCrans(
+export function knownTrustLevels(
   connection: Pick<IssuanceConnection, 'macro_actions'>,
   raw: Readonly<Record<string, unknown>> | undefined,
-): MacroActionCrans {
+): MacroActionTrustLevels {
   const ids = new Set(connection.macro_actions.map((action) => action.id));
-  return Object.fromEntries(Object.entries(cransOf(raw)).filter(([id]) => ids.has(id)));
+  return Object.fromEntries(Object.entries(trustLevelsOf(raw)).filter(([id]) => ids.has(id)));
 }
 
-/** The ids a draft gives a cran that are not macro-actions of this connection. */
+/** The ids a draft gives a trust level that are not macro-actions of this connection. */
 export function unknownMacroActions(
   connection: Pick<IssuanceConnection, 'macro_actions'>,
   raw: Readonly<Record<string, unknown>> | undefined,
@@ -226,23 +209,25 @@ export function unknownMacroActions(
   return Object.keys(raw ?? {}).filter((id) => !ids.has(id));
 }
 
-/** The entries of a stored or posted record that are crans, whatever their macro-action. */
-export function cransOf(raw: Readonly<Record<string, unknown>> | undefined): MacroActionCrans {
+/** The entries of a stored or posted record that are trust levels, whatever their macro-action. */
+export function trustLevelsOf(
+  raw: Readonly<Record<string, unknown>> | undefined,
+): MacroActionTrustLevels {
   if (!raw) return {};
   return Object.fromEntries(
-    Object.entries(raw).filter((pair): pair is [string, TrustCran] => isTrustCran(pair[1])),
+    Object.entries(raw).filter((pair): pair is [string, TrustLevel] => isTrustLevel(pair[1])),
   );
 }
 
-/** The highest palier among lines, or `null` for none. */
-export function highestPalier(lines: readonly Pick<CatalogRisk, 'vector'>[]): Palier | null {
-  let highest: Palier | null = null;
+/** The highest tier among lines, or `null` for none. */
+export function highestTier(lines: readonly Pick<CatalogRisk, 'vector'>[]): Tier | null {
+  let highest: Tier | null = null;
   for (const line of lines) {
-    const palier = palierOf(line.vector);
-    if (highest === null || palier > highest) highest = palier;
+    const tier = tierOf(line.vector);
+    if (highest === null || tier > highest) highest = tier;
   }
   return highest;
 }
 
-export { CRAN_BUDGET_FACTOR, CRAN_GATES, DEFAULT_CRAN, palierOf, TRUST_CRANS };
-export type { Palier, TrustCran };
+export { TRUST_LEVEL_BUDGET_FACTOR, TRUST_LEVEL_GATES, DEFAULT_TRUST_LEVEL, tierOf, TRUST_LEVELS };
+export type { Tier, TrustLevel };

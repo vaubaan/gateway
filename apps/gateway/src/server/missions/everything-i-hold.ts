@@ -11,20 +11,19 @@
  *
  * Pure and browser-safe: the creation form runs it as the server does.
  */
-import { budgetAtCran } from '@vaubaan/policy-engine';
+import { budgetAtTrustLevel } from '@vaubaan/policy-engine';
 import type { MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
 import { macroActionOfRisk } from './macro-actions';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource, SeverityLevel } from './model';
+import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
-/** The id a draft names it by in `preset`. No catalog may declare a macro-action of that id. */
+/** Its id where the gateway names it (a notice, the reference). No catalog may declare a macro-action of that id. */
 export const EVERYTHING_I_HOLD = 'everything-i-hold';
 export const EVERYTHING_I_HOLD_LABEL = 'Everything I hold on this account';
 export const EVERYTHING_I_HOLD_DESCRIPTION =
   'Every permission you may allow on this account that the selected resources can reach, the uncategorized writes included, written out one by one: each at the service’s rate ceiling, with a generous daily limit, running freely.';
-
-const SECONDS_PER_MINUTE = 60;
 
 /**
  * The quota of a line in no macro-action, by the catalog's severity level:
@@ -54,8 +53,8 @@ export interface EverythingIHold {
 }
 
 /**
- * The budget of a line: its macro-action's base budget at Autonome (the
- * widest cran), the rate then the catalog ceiling per minute when the entry
+ * The budget of a line: its macro-action's base budget at Autonomous (the
+ * widest trust level), the rate then the catalog ceiling per minute when the entry
  * sets one; by level for a risk in no macro-action.
  */
 export function budgetFor(
@@ -75,7 +74,7 @@ export function budgetFor(
       rate_limit: ceiling ?? { max: RATE_BY_LEVEL[risk.level], window_seconds: SECONDS_PER_MINUTE },
     };
   }
-  const widest = budgetAtCran(entry, 'autonome', risk.rate_ceiling_per_minute);
+  const widest = budgetAtTrustLevel(entry, 'autonomous', risk.rate_ceiling_per_minute);
   return { quota: widest.quota, rate_limit: ceiling ?? widest.rate_limit };
 }
 

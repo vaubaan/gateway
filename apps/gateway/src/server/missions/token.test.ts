@@ -91,7 +91,7 @@ describe('parseMissionDraft', () => {
     connections: [
       {
         provider: 'github',
-        crans: { read: 'confiant', propose: 'prudent' },
+        trust_levels: { read: 'trusting', propose: 'careful' },
         resources: { scope: 'selected', resource_refs: ['acme/app'] },
         policy: [{ risk_id: 'github.code-read', quota: 5, gate: 'approval' }],
       },
@@ -104,27 +104,27 @@ describe('parseMissionDraft', () => {
     const parsed = parseMissionDraft(valid);
     expect(parsed.ok).toBe(true);
     expect(parsed.ok && parsed.draft.connections[0]?.policy?.[0]?.gate).toBe('approval');
-    expect(parsed.ok && parsed.draft.connections[0]?.crans).toEqual({
-      read: 'confiant',
-      propose: 'prudent',
+    expect(parsed.ok && parsed.draft.connections[0]?.trust_levels).toEqual({
+      read: 'trusting',
+      propose: 'careful',
     });
   });
 
-  it('accepts the built-in everything-i-hold in place of crans', () => {
+  it('accepts the built-in everything-i-hold in place of trust levels', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      connections: [{ provider: 'github', preset: 'everything-i-hold' }],
+      connections: [{ provider: 'github', everything_i_hold: true }],
     });
-    expect(parsed.ok && parsed.draft.connections[0]?.preset).toBe('everything-i-hold');
+    expect(parsed.ok && parsed.draft.connections[0]?.everything_i_hold).toBe(true);
   });
 
-  it('refuses a cran that is not one of the three', () => {
+  it('refuses a trust level that is not one of the three', () => {
     const parsed = parseMissionDraft({
       ...valid,
-      connections: [{ provider: 'github', crans: { read: 'reckless' } }],
+      connections: [{ provider: 'github', trust_levels: { read: 'reckless' } }],
     });
     expect(parsed.ok).toBe(false);
-    expect(!parsed.ok && parsed.problems.join(' ')).toContain('connections.0.crans');
+    expect(!parsed.ok && parsed.problems.join(' ')).toContain('connections.0.trust_levels');
   });
 
   it('refuses unknown keys, so a typo never drops a restriction silently', () => {

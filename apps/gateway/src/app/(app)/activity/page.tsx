@@ -85,12 +85,12 @@ import { changeLines, type ChangeNames } from './change-lines';
 import { LINES_PARAM, linesValue, moreLines, parseLines } from './lines';
 import { LoadEarlier } from './load-earlier';
 import { When } from './when';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export const dynamic = 'force-dynamic';
 
 /** The query parameter that opens the detail of one line. */
 const OPEN_PARAM = 'open';
-const MS_PER_DAY = 86_400_000;
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

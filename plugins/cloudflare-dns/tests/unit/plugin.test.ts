@@ -997,30 +997,30 @@ describe('credential spec and macro-actions', () => {
     expect(pattern.test('short')).toBe(false);
   });
 
-  test('macro-actions : look-up, point, change-domain, rule-zone ; the writes ask first below Autonome', () => {
+  test('macro-actions : look-up, point, change-domain, rule-zone ; the writes ask first below Autonomous', () => {
     expect((cloudflareDnsPlugin.catalog.macro_actions ?? []).map((a) => a.id)).toEqual([
       'look-up',
       'point',
       'change-domain',
       'rule-zone',
     ]);
-    const all = (cran: 'prudent' | 'confiant' | 'autonome') =>
+    const all = (trustLevel: 'careful' | 'trusting' | 'autonomous') =>
       policyFromMacroActions(cloudflareDnsPlugin, {
-        'look-up': cran,
-        point: cran,
-        'change-domain': cran,
-        'rule-zone': cran,
+        'look-up': trustLevel,
+        point: trustLevel,
+        'change-domain': trustLevel,
+        'rule-zone': trustLevel,
       });
-    const withGate = (cran: 'prudent' | 'confiant' | 'autonome', gate: string) =>
-      all(cran)
+    const withGate = (trustLevel: 'careful' | 'trusting' | 'autonomous', gate: string) =>
+      all(trustLevel)
         .filter((l) => l.gate === gate)
         .map((l) => l.risk_id);
 
-    expect(withGate('prudent', 'auto')).toEqual([
+    expect(withGate('careful', 'auto')).toEqual([
       'cloudflare-dns.read-zone-metadata',
       'cloudflare-dns.read-records',
     ]);
-    expect(withGate('confiant', 'approval')).toEqual([
+    expect(withGate('trusting', 'approval')).toEqual([
       'cloudflare-dns.record-write',
       'cloudflare-dns.critical-record-write',
       'cloudflare-dns.record-delete',
@@ -1029,12 +1029,14 @@ describe('credential spec and macro-actions', () => {
       'cloudflare-dns.dnssec-write',
       'cloudflare-dns.zone-delete',
     ]);
-    // Autonome : only the irreversible zone deletion still asks first.
-    expect(withGate('autonome', 'approval')).toEqual(['cloudflare-dns.zone-delete']);
-    // Prudent leaves the zone deletion out ; the fallback is ticked on its own.
-    expect(all('prudent').map((l) => l.risk_id)).not.toContain('cloudflare-dns.zone-delete');
-    for (const cran of ['prudent', 'confiant', 'autonome'] as const) {
-      expect(all(cran).map((l) => l.risk_id)).not.toContain('cloudflare-dns.uncategorized-write');
+    // Autonomous : only the irreversible zone deletion still asks first.
+    expect(withGate('autonomous', 'approval')).toEqual(['cloudflare-dns.zone-delete']);
+    // Careful leaves the zone deletion out ; the fallback is ticked on its own.
+    expect(all('careful').map((l) => l.risk_id)).not.toContain('cloudflare-dns.zone-delete');
+    for (const trustLevel of ['careful', 'trusting', 'autonomous'] as const) {
+      expect(all(trustLevel).map((l) => l.risk_id)).not.toContain(
+        'cloudflare-dns.uncategorized-write',
+      );
     }
   });
 });

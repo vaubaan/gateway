@@ -122,7 +122,11 @@ export const CONNECTIONS_PATH = '/accounts';
 export const CONNECT_CALLBACK_PATH = '/connections/callback';
 const SSH_KEY_COMMENT = 'vaubaan-gateway';
 
-/** The human behind a request, with their *current* groups (never a snapshot). */
+/**
+ * The human behind a request, with their *current* groups (never a snapshot):
+ * what an act on a connection is checked against. Not a `Subject` (authority),
+ * which is trusted by id only and reads nothing else from the caller.
+ */
 export interface Actor {
   readonly user: UserRecord;
   readonly groups: readonly GroupRecord[];
@@ -239,31 +243,31 @@ export interface ProviderGrantView {
 
 export interface ConnectionView {
   readonly connection: ConnectionRecord;
-  readonly providerLabel: string;
+  readonly provider_label: string;
   /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
-  readonly providerIcon: ServiceIcon | null;
-  readonly providerGrant: ProviderGrantView;
+  readonly provider_icon: ServiceIcon | null;
+  readonly provider_grant: ProviderGrantView;
   /** How this account was made (`connectionCredentialKind`); `null` when unknown and the plugin is gone. */
-  readonly credentialKind: StoredCredentialKind | null;
+  readonly credential_kind: StoredCredentialKind | null;
   /**
    * The account was made a way its plugin no longer declares (`isRetiredWay`):
    * it runs nothing until its owner reconnects it.
    */
-  readonly wayRetired: boolean;
+  readonly way_retired: boolean;
   /** What the service said the pasted token acts as, at connect time (`octocat`); `null` when not said. */
-  readonly tokenAccount: string | null;
+  readonly token_account: string | null;
   /**
    * The OAuth broker a brokered account was made through, and whether it is
    * attested (false: declared `attestation: none`; ADR
    * oauth-broker-stateless-in-an-attested-enclave D4). `null` for any other
    * account, or when the broker is no longer configured (`attested` unknown).
    */
-  readonly oauthBroker: { readonly name: string; readonly attested: boolean | null } | null;
+  readonly oauth_broker: { readonly name: string; readonly attested: boolean | null } | null;
   /** When the pasted token stops working, as the service said at connect time; `null` when it did not. */
-  readonly tokenExpiresAt: string | null;
-  readonly ownerLabel: string;
+  readonly token_expires_at: string | null;
+  readonly owner_label: string;
   /** `ssh-key`: the line to append to `authorized_keys`. */
-  readonly publicKey: string | null;
+  readonly public_key: string | null;
   /** Non-secret values the user entered (team id, host, user…). */
   readonly fields: Readonly<Record<string, string>>;
   readonly discovery: DiscoveryRecord | null;
@@ -276,7 +280,7 @@ export interface ConnectionDetail extends ConnectionView {
    * The labels the owner may choose as the default environment for unlabelled
    * resources (`catalogEnvsOf`); empty when the catalog has no env-scoped risk.
    */
-  readonly defaultEnvChoices: readonly string[];
+  readonly default_env_choices: readonly string[];
 }
 
 export interface StartInput {
@@ -505,7 +509,7 @@ export class ConnectionService {
     return {
       ...(await this.view(connection)),
       resources: await this.deps.store.connections.listResources(connection.id),
-      defaultEnvChoices: this.defaultEnvChoices(connection.provider),
+      default_env_choices: this.defaultEnvChoices(connection.provider),
     };
   }
 
@@ -1671,23 +1675,23 @@ export class ConnectionService {
     const accountSaid = pasted || kind === 'oauth2';
     return {
       connection,
-      providerLabel: registered?.plugin.displayName ?? connection.provider,
-      providerIcon: registered ? serviceIconOf(registered.plugin) : null,
-      providerGrant: this.providerGrantOf(connection).grant,
-      credentialKind: kind,
-      wayRetired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
-      tokenAccount: accountSaid && typeof metadata.account === 'string' ? metadata.account : null,
-      oauthBroker: this.oauthBrokerOf(metadata),
-      tokenExpiresAt: pasted ? connection.credentialExpiresAt : null,
-      ownerLabel: await this.ownerLabel(connection),
-      publicKey: typeof metadata.public_key === 'string' ? metadata.public_key : null,
+      provider_label: registered?.plugin.displayName ?? connection.provider,
+      provider_icon: registered ? serviceIconOf(registered.plugin) : null,
+      provider_grant: this.providerGrantOf(connection).grant,
+      credential_kind: kind,
+      way_retired: registered ? isRetiredWay(kind, registered.plugin.credential.kind) : false,
+      token_account: accountSaid && typeof metadata.account === 'string' ? metadata.account : null,
+      oauth_broker: this.oauthBrokerOf(metadata),
+      token_expires_at: pasted ? connection.credentialExpiresAt : null,
+      owner_label: await this.ownerLabel(connection),
+      public_key: typeof metadata.public_key === 'string' ? metadata.public_key : null,
       fields: connectionPublicFields(connection),
       discovery: discoveryOf(metadata.discovery),
     };
   }
 
   /** The broker named at connect time (`metadata.oauth_broker`), as configured now. */
-  private oauthBrokerOf(metadata: Record<string, unknown>): ConnectionView['oauthBroker'] {
+  private oauthBrokerOf(metadata: Record<string, unknown>): ConnectionView['oauth_broker'] {
     const name = metadata.oauth_broker;
     if (typeof name !== 'string') return null;
     return { name, attested: this.deps.brokers.byName(name)?.attested ?? null };

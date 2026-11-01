@@ -51,25 +51,25 @@ const ENVS = ['dev', 'preview', 'staging', 'prod'];
 /**
  * The accepted risks of three missions a creator composes (risk model §4.6) :
  * `read-only` ticks Watch ; `developer` ticks Watch, Deploy and Configure at
- * Prudent and unticks the prod variable values in the advanced view ;
- * `operator` ticks every macro-action at Confiant and unticks the Railway
- * agent. Prudent leaves `bulk-variables-replace` out (irreversible).
+ * Careful and unticks the prod variable values in the advanced view ;
+ * `operator` ticks every macro-action at Trusting and unticks the Railway
+ * agent. Careful leaves `bulk-variables-replace` out (irreversible).
  */
 const MISSIONS: Readonly<Record<string, readonly string[]>> = {
-  'read-only': risksOf({ watch: 'prudent' }),
-  developer: risksOf({ watch: 'prudent', deploy: 'prudent', configure: 'prudent' }).filter(
+  'read-only': risksOf({ watch: 'careful' }),
+  developer: risksOf({ watch: 'careful', deploy: 'careful', configure: 'careful' }).filter(
     (id) => id !== 'railway[prod].read-variables',
   ),
   operator: risksOf({
-    watch: 'confiant',
-    deploy: 'confiant',
-    configure: 'confiant',
-    create: 'confiant',
+    watch: 'trusting',
+    deploy: 'trusting',
+    configure: 'trusting',
+    create: 'trusting',
   }).filter((id) => id !== 'railway.agent-action'),
 };
 
-function risksOf(crans: Parameters<typeof policyFromMacroActions>[1]): string[] {
-  return policyFromMacroActions(railwayPlugin, crans, { envs: ENVS }).map((e) => e.risk_id);
+function risksOf(trustLevels: Parameters<typeof policyFromMacroActions>[1]): string[] {
+  return policyFromMacroActions(railwayPlugin, trustLevels, { envs: ENVS }).map((e) => e.risk_id);
 }
 
 function missionRisks(id: string): readonly string[] {
@@ -269,12 +269,12 @@ describe('railway missions — decision per call', () => {
     );
   });
 
-  test('the agent meta-tool asks first below Autonome ; the fallback is in no macro-action', () => {
-    for (const cran of ['prudent', 'confiant'] as const) {
-      const line = policyFromMacroActions(railwayPlugin, { create: cran }).find(
+  test('the agent meta-tool asks first below Autonomous ; the fallback is in no macro-action', () => {
+    for (const trustLevel of ['careful', 'trusting'] as const) {
+      const line = policyFromMacroActions(railwayPlugin, { create: trustLevel }).find(
         (e) => e.risk_id === 'railway.agent-action',
       );
-      expect(line?.gate, cran).toBe('approval');
+      expect(line?.gate, trustLevel).toBe('approval');
     }
     const listed = (railwayPlugin.catalog.macro_actions ?? []).flatMap((a) =>
       a.entries.map((e) => e.risk_id),

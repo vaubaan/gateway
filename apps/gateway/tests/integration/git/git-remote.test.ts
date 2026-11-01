@@ -16,7 +16,7 @@ import type { AuditCallRecord } from '../../../src/server/store';
 import { line, type IssuedMission } from '../../../src/server/execution/testing';
 import {
   CONNECTION_TOKEN,
-  DEVELOPER_CRANS,
+  DEVELOPER_TRUST_LEVELS,
   openGitRig,
   OTHER_REPOSITORY,
   REPOSITORY,
@@ -32,7 +32,7 @@ let developer: IssuedMission;
 
 beforeAll(async () => {
   rig = await openGitRig();
-  developer = await rig.mission({ crans: DEVELOPER_CRANS });
+  developer = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
 }, 60_000);
 
 afterAll(async () => {
@@ -362,7 +362,7 @@ describe('keys', () => {
   });
 
   it('refuses a revoked mission with its reason', async () => {
-    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
+    const mission = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
     await rig.root.missions.service.revoke(rig.ada, mission.mission.id);
     const dir = rig.workdir();
     const result = await rig.git(dir, ['clone', '-q', rig.remote(), 'a'], mission.token);
@@ -376,7 +376,7 @@ describe('keys', () => {
     const issued = await rig.root.missions.service.issue(rig.ada, {
       name: 'Two accounts',
       connections: [
-        { connection_id: account.id, crans: DEVELOPER_CRANS },
+        { connection_id: account.id, trust_levels: DEVELOPER_TRUST_LEVELS },
         {
           connection_id: rig.connection.id,
           resources: { scope: 'all' },

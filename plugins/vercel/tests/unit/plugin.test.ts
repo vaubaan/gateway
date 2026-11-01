@@ -96,7 +96,7 @@ describe('vercel plugin — structural kit', () => {
   test('a developer mission (watch and deploy on preview) never touches production configuration', () => {
     const developer = policyFromMacroActions(
       vercelPlugin,
-      { watch: 'confiant', deploy: 'confiant' },
+      { watch: 'trusting', deploy: 'trusting' },
       { envs: ['preview', 'development'] },
     );
     const risks = developer.map((line) => line.risk_id);
@@ -119,10 +119,10 @@ describe('vercel plugin — structural kit', () => {
     );
   });
 
-  test('an operator mission at Confiant asks first for production deploys and configuration', () => {
+  test('an operator mission at Trusting asks first for production deploys and configuration', () => {
     const operator = policyFromMacroActions(
       vercelPlugin,
-      { watch: 'confiant', deploy: 'confiant', configure: 'confiant', own: 'confiant' },
+      { watch: 'trusting', deploy: 'trusting', configure: 'trusting', own: 'trusting' },
       { envs: ['preview', 'development', 'prod'] },
     );
     const gated = operator.filter((e) => e.gate === 'approval').map((e) => e.risk_id);

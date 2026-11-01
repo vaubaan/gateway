@@ -160,7 +160,7 @@ describe('the reference of the shipped plugins', () => {
     }
   });
 
-  it('gives every live entry one macro-action and a line or "left out" at each cran', () => {
+  it('gives every live entry one macro-action and a line or "left out" at each trust level', () => {
     for (const reference of references) {
       expect(new Set(reference.macro_actions.map((action) => action.anchor)).size).toBe(
         reference.macro_actions.length,
@@ -168,7 +168,7 @@ describe('the reference of the shipped plugins', () => {
       for (const entry of reference.risk_groups.flatMap((group) => group.entries)) {
         if (entry.deprecated) continue;
         expect(entry.macro_action, `${reference.id}/${entry.base_id}`).not.toBeNull();
-        for (const cells of Object.values(entry.at_cran)) {
+        for (const cells of Object.values(entry.at_trust_level)) {
           expect(cells.map((cell) => cell.risk.risk_id)).toEqual(
             entry.variants.map((risk) => risk.risk_id),
           );
@@ -176,9 +176,9 @@ describe('the reference of the shipped plugins', () => {
             if (cell.line) expect(cell.line.quota).toBeGreaterThan(0);
           }
         }
-        // Prudent leaves out palier 4 and nothing else.
-        for (const cell of entry.at_cran.prudent) {
-          expect(cell.line === null).toBe(cell.palier === 4);
+        // Careful leaves out tier 4 and nothing else.
+        for (const cell of entry.at_trust_level.careful) {
+          expect(cell.line === null).toBe(cell.tier === 4);
         }
       }
       // The fallback is in "Anything else", last.
@@ -208,23 +208,8 @@ describe('the reference of the shipped plugins', () => {
     expect(tool?.description).not.toBe('');
   });
 
-  it('marks no tool and no risk as handing a provider token: no shipped plugin declares one', () => {
-    // The GitHub App's install-token mint is gone (ADR one-place-to-authorize-services-token-first):
-    // its two risks stay in the catalog, deprecated, with no tool declared for them.
-    for (const reference of references) {
-      expect(
-        reference.tools.some((t) => t.hands_token),
-        reference.id,
-      ).toBe(false);
-      expect(
-        reference.tools.filter((t) => t.declared_risks !== null),
-        reference.id,
-      ).toEqual([]);
-      const handed = reference.risk_groups
-        .flatMap((group) => group.entries)
-        .filter((entry) => entry.hands_token);
-      expect(handed, reference.id).toEqual([]);
-    }
+  it('lists no tool that mints a provider token: the GitHub App and its mint are gone', () => {
+    // ADR one-place-to-authorize-services-token-first: the two risks stay in the catalog, deprecated.
     const github = referenceOf('github');
     expect(github.tools.find((t) => t.name === 'github__mint_install_token')).toBeUndefined();
   });
@@ -241,20 +226,17 @@ describe('the reference of the shipped plugins', () => {
     });
   });
 
-  it('names, on each risk, its macro-action and the tools declared for it', () => {
+  it('names, on each risk, its macro-action', () => {
     const github = referenceOf('github');
     const entries = github.risk_groups.flatMap((group) => group.entries);
     const byId = new Map(entries.map((entry) => [entry.base_id, entry]));
     expect(byId.get('github.read-code')?.macro_action?.id).toBe('read');
     expect(byId.get('github.uncategorized-write')?.macro_action?.id).toBe('anything-else');
-    // The deprecated mint risk of the App: no macro-action, no tool.
-    expect(byId.get('github.mint-install-token-push')).toMatchObject({
-      declared_tools: [],
-      macro_action: null,
-    });
-    // Force-push is costly (palier 3): it asks first until Autonome.
+    // The deprecated mint risk of the App: no macro-action.
+    expect(byId.get('github.mint-install-token-push')).toMatchObject({ macro_action: null });
+    // Force-push is costly (tier 3): it asks first until Autonomous.
     expect(
-      Object.values(byId.get('github.force-push')?.at_cran ?? {}).map(
+      Object.values(byId.get('github.force-push')?.at_trust_level ?? {}).map(
         (cells) => cells[0]?.line?.gate,
       ),
     ).toEqual(['approval', 'approval', 'auto']);

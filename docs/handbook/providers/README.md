@@ -20,11 +20,11 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 
 - The catalog is loaded with `catalogPathNextTo`; exactly one `<id>.uncategorized-write` fallback,
   `fallback: true`, in no macro-action; a risk id is deprecated (`replaced_by`), never deleted.
-- A creator ticks macro-actions at a trust cran (risk model §4.6); the persisted policy is always
+- A creator ticks macro-actions at a trust level (risk model §4.6); the persisted policy is always
   the explicit list of risk ids. A catalog has no `presets` (retired).
 - Every entry but the fallback and deprecated ones is in exactly one macro-action, unqualified,
   with a base budget; a new entry joins one in the same pull request
-  ([ADR](../../decisions/macro-actions-and-trust-crans-prefill-the-policy.md)).
+  ([ADR](../../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 - **What is executed is what was classified**: one reader per plugin, shared by `classify` and
   `execute`; an identifier outside its grammar is refused, never escaped; one the slice grammar
   cannot carry is classified `[*]`

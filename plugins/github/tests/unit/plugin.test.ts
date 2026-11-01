@@ -1,7 +1,7 @@
 /**
  * Mandatory structural suite of the github plugin (spec §10) : the SDK kit,
  * catalog coverage of every declared tool, the fallback lint, the
- * macro-actions at their trust crans and the credential spec. The classifier branches are pinned in
+ * macro-actions at their trust levels and the credential spec. The classifier branches are pinned in
  * `classify.test.ts`, the risks each tool touches in `risk-catalog.test.ts`,
  * upstream calls in `execute.test.ts`.
  */
@@ -250,9 +250,11 @@ describe('github plugin — structural kit', () => {
   });
 });
 
-describe('github catalog — macro-actions at a trust cran', () => {
-  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-    Object.fromEntries(policyFromMacroActions(githubPlugin, crans).map((l) => [l.risk_id, l.gate]));
+describe('github catalog — macro-actions at a trust level', () => {
+  const gates = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(
+      policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
+    );
 
   test('read, propose, ship, administer ; catalog version 11', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
@@ -264,16 +266,16 @@ describe('github catalog — macro-actions at a trust cran', () => {
     expect(githubCatalog.catalog.catalog_version).toBe(11);
   });
 
-  test('read at Prudent : code and metadata run freely, the global search asks first', () => {
-    expect(gates({ read: 'prudent' })).toEqual({
+  test('read at Careful : code and metadata run freely, the global search asks first', () => {
+    expect(gates({ read: 'careful' })).toEqual({
       'github.read-code': 'auto',
       'github.read-meta': 'auto',
       'github.search-global': 'approval',
     });
   });
 
-  test('propose at Prudent writes on feature branches and PRs, never on protected branches or admin surfaces', () => {
-    const propose = gates({ propose: 'prudent' });
+  test('propose at Careful writes on feature branches and PRs, never on protected branches or admin surfaces', () => {
+    const propose = gates({ propose: 'careful' });
     for (const id of [
       'github.feature-branch-write',
       'github.git-push',
@@ -298,19 +300,19 @@ describe('github catalog — macro-actions at a trust cran', () => {
     }
   });
 
-  test('ship at Confiant : merges, tags and releases ask first ; deleting a release is left out at Prudent', () => {
-    expect(gates({ ship: 'confiant' })).toEqual({
+  test('ship at Trusting : merges, tags and releases ask first ; deleting a release is left out at Careful', () => {
+    expect(gates({ ship: 'trusting' })).toEqual({
       'github.merge-protected': 'approval',
       'github.tag-write': 'approval',
       'github.create-release': 'approval',
       'github.delete-release': 'approval',
     });
-    expect(Object.keys(gates({ ship: 'prudent' }))).not.toContain('github.delete-release');
+    expect(Object.keys(gates({ ship: 'careful' }))).not.toContain('github.delete-release');
   });
 
-  test('administer : branch protection and workflow files ask first below Autonome', () => {
-    for (const cran of ['prudent', 'confiant'] as const) {
-      expect(gates({ administer: cran })).toEqual({
+  test('administer : branch protection and workflow files ask first below Autonomous', () => {
+    for (const trustLevel of ['careful', 'trusting'] as const) {
+      expect(gates({ administer: trustLevel })).toEqual({
         'github.branch-protection-write': 'approval',
         'github.workflow-write-via-file': 'approval',
       });
@@ -319,13 +321,13 @@ describe('github catalog — macro-actions at a trust cran', () => {
 
   test('no macro-action of the catalog holds the fallback — the creator ticks "Anything else"', () => {
     const all = gates({
-      read: 'autonome',
-      propose: 'autonome',
-      ship: 'autonome',
-      administer: 'autonome',
+      read: 'autonomous',
+      propose: 'autonomous',
+      ship: 'autonomous',
+      administer: 'autonomous',
     });
     expect(Object.keys(all)).not.toContain('github.uncategorized-write');
-    expect(gates({ 'anything-else': 'prudent' })).toEqual({
+    expect(gates({ 'anything-else': 'careful' })).toEqual({
       'github.uncategorized-write': 'approval',
     });
   });

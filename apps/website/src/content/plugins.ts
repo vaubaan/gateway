@@ -53,7 +53,7 @@ export interface MacroActionEntryInfo {
   readonly rateWindowSeconds: number;
 }
 
-/** A macro-action of the catalog (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+/** A macro-action of the catalog (ADR macro-actions-and-trust-levels-prefill-the-policy). */
 export interface MacroActionInfo {
   readonly id: string;
   readonly label: string;
@@ -100,8 +100,6 @@ export interface PluginInfo {
   readonly risks: readonly RiskInfo[];
   readonly macroActions: readonly MacroActionInfo[];
   readonly credentials: readonly CredentialInfo[];
-  /** Tools that hand the agent a short-lived provider token, each a permission of its own. */
-  readonly tokenHandouts: readonly { readonly tool: string; readonly riskIds: readonly string[] }[];
   readonly gitRemote: boolean;
 }
 
@@ -242,10 +240,6 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
       })),
     })),
     credentials: [credentialInfo(plugin.credential)],
-    tokenHandouts: (plugin.tokenHandouts ?? []).map((handout) => ({
-      tool: handout.tool,
-      riskIds: [...handout.riskIds],
-    })),
     gitRemote: plugin.gitRemote !== undefined,
   };
 }

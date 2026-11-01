@@ -93,8 +93,8 @@ tools.
 
 ## Risks and macro-actions
 
-A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
-Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions, each at a trust level (Careful / Trusting /
+Autonomous, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
 | Macro-action | What it covers                                                         | Its risks                                                                                           |
@@ -108,7 +108,7 @@ An update of the canvas (`canvas_update_from_svg`) may delete what the new
 SVG no longer holds: it needs `item-delete` and `frame-delete`. Sharing a
 board or changing a role on it (`board-share`) gives whoever is named
 everything on the board, possibly outside the company: it is in `manage`
-only, left out at Prudent and asked first above.
+only, left out at Careful and asked first above.
 
 ## Refreshing the tool list
 

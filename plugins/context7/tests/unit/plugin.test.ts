@@ -135,10 +135,10 @@ describe('context7 plugin — structural kit', () => {
   });
 
   // The question leaves for a third party and cannot be recalled : the
-  // vector is irreversible, so no cran runs a query freely.
-  test('a query is left out at Prudent and asks first at the other crans', () => {
-    expect(policyFromMacroActions(context7Plugin, { ask: 'prudent' })).toEqual([]);
-    expect(policyFromMacroActions(context7Plugin, { ask: 'confiant' })).toEqual([
+  // vector is irreversible, so no trust level runs a query freely.
+  test('a query is left out at Careful and asks first at the other trust levels', () => {
+    expect(policyFromMacroActions(context7Plugin, { ask: 'careful' })).toEqual([]);
+    expect(policyFromMacroActions(context7Plugin, { ask: 'trusting' })).toEqual([
       {
         risk_id: `${PROVIDER_ID}.query-docs`,
         quota: 900,

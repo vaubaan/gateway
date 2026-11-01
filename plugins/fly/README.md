@@ -105,8 +105,8 @@ redacted from every answer; `exec` capped at 60 s and 64 KiB of output.
 
 ## Macro-actions
 
-A creator ticks macro-actions, each at a trust cran (Prudent / Confiant /
-Autonome, risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions, each at a trust level (Careful / Trusting /
+Autonomous, risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The fallback sits apart, under "Anything else".
 
 | Macro-action | What it covers                                               | Its risks                                                                                                              |
@@ -118,8 +118,8 @@ multiplies the base budget. The fallback sits apart, under "Anything else".
 | `tear-down`  | Destroy machines, volumes, apps, addresses and certificates. | `machine-destroy`, `volume-destroy`, `app-destroy`, `ip-release`, `certificate-remove`                                 |
 
 Destroying an app or a volume and `exec` are irreversible: left out at
-Prudent, they ask first at every other cran. Writing secrets asks first below
-Autonome.
+Careful, they ask first at every other trust level. Writing secrets asks first below
+Autonomous.
 
 ## Tests
 
@@ -128,4 +128,4 @@ Autonome.
 sample per tool, `assertIdentifiersRefused`), the classifier branch by
 branch (refusals, the image guard, hostile identifiers fed to `classify`
 and `execute`), the executor and its guards, discovery and the token check
-against `mockFetch`, and the gates each cran gives. No test calls Fly.
+against `mockFetch`, and the gates each trust level gives. No test calls Fly.

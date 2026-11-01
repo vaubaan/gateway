@@ -7,37 +7,43 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 export const KEY = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 
-/** A trust cran as the interface names it. */
-export type Cran = 'Prudent' | 'Confiant' | 'Autonome';
+/** A trust level as the interface names it. */
+export type TrustLevel = 'Careful' | 'Trusting' | 'Autonomous';
 
 /**
  * Includes an account in the mission being created and ticks macro-actions at a
- * cran, by their labels: `{ Read: 'Confiant', Propose: 'Prudent' }`.
+ * trust level, by their labels: `{ Read: 'Trusting', Propose: 'Careful' }`.
  */
-export async function includeWithCrans(
+export async function includeWithTrustLevels(
   page: Page,
   account: string,
-  crans: Readonly<Record<string, Cran>>,
+  trustLevels: Readonly<Record<string, TrustLevel>>,
 ): Promise<void> {
   await page.getByLabel(`Include ${account}`).check();
-  for (const [action, cran] of Object.entries(crans)) await pickCran(page, account, action, cran);
+  for (const [action, trustLevel] of Object.entries(trustLevels))
+    await pickTrustLevel(page, account, action, trustLevel);
 }
 
-/** The radio of one cran of a macro-action of an account. */
-export function cranChoice(page: Page, account: string, action: string, cran: Cran): Locator {
-  return page
-    .getByRole('group', { name: `Cran of ${action} on ${account}` })
-    .getByRole('radio', { name: new RegExp(`^${cran}\\b`) });
-}
-
-/** Ticks a macro-action at a cran (or moves it there). */
-export async function pickCran(
+/** The radio of one trust level of a macro-action of an account. */
+export function trustLevelChoice(
   page: Page,
   account: string,
   action: string,
-  cran: Cran,
+  trustLevel: TrustLevel,
+): Locator {
+  return page
+    .getByRole('group', { name: `Trust level of ${action} on ${account}` })
+    .getByRole('radio', { name: new RegExp(`^${trustLevel}\\b`) });
+}
+
+/** Ticks a macro-action at a trust level (or moves it there). */
+export async function pickTrustLevel(
+  page: Page,
+  account: string,
+  action: string,
+  trustLevel: TrustLevel,
 ): Promise<void> {
-  await cranChoice(page, account, action, cran).check();
+  await trustLevelChoice(page, account, action, trustLevel).check();
 }
 
 /** The Simple or Advanced view of an account's permissions. */

@@ -18,7 +18,7 @@ import {
   type MissionSnapshot,
   type StoredResourceScope,
 } from '@/server/missions/mission-edit';
-import { cransOf } from '@/server/missions/macro-actions';
+import { trustLevelsOf } from '@/server/missions/macro-actions';
 
 import {
   draftOf,
@@ -51,9 +51,9 @@ export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConn
       c.resource_scope === 'connection'
         ? { scope: 'connection' }
         : { scope: 'selected', resource_ids: [...c.resource_ids] },
-    preset: null,
+    everything_i_hold: false,
     policy: c.policy,
-    crans: cransOf(c.crans),
+    trust_levels: trustLevelsOf(c.trust_levels),
   }));
 }
 

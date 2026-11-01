@@ -146,7 +146,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     const { tools, calls } = rig();
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     await tools.issueMission(ACTOR, within);
     const issue = calls.find((call) => call.method === 'issue');
@@ -187,7 +187,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
 
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     await tools.issueMission(ACTOR, within);
     const second = await tools.issueMission(ACTOR, within);
@@ -238,7 +238,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
         orphan: null,
         lost: [],
         token: null,
-        issuedVia:
+        issued_via:
           delegationId === null
             ? null
             : { delegation_id: delegationId, client_id: clientId, client_name: 'Agent' },
@@ -344,7 +344,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
   describe('the mission service decides last: its answer after the door’s own check stands', () => {
     const within: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', crans: { read: 'prudent' } }],
+      connections: [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
     };
     /** A mission of the user that serves calls, as `get` returns it. */
     const active = {
@@ -361,7 +361,7 @@ describe('ManagementTools — every act is the delegating user’s', () => {
       creator: { id: 'user-ada', email: 'ada@example.com' },
       orphan: null,
       token: null,
-      issuedVia: {
+      issued_via: {
         delegation_id: ACTOR.delegationId,
         client_id: ACTOR.clientId,
         client_name: 'Agent',
@@ -507,14 +507,14 @@ describe('views', () => {
     expect(actions.administer?.unavailable).toEqual(['acme.admin']);
   });
 
-  it('a macro-action says what each cran writes, with the mission module’s own expansion', () => {
+  it('a macro-action says what each trust level writes, with the mission module’s own expansion', () => {
     const owner = connectionView(acmeConnection());
     const change = owner.macro_actions.find((action) => action.id === 'change');
-    // Writes are costly (palier 3), bulk deletes irreversible (palier 4).
-    expect(change?.at_cran).toEqual({
-      prudent: { auto: 0, approval: 2, left_out: 1 },
-      confiant: { auto: 0, approval: 3, left_out: 0 },
-      autonome: { auto: 2, approval: 1, left_out: 0 },
+    // Writes are costly (tier 3), bulk deletes irreversible (tier 4).
+    expect(change?.at_trust_level).toEqual({
+      careful: { auto: 0, approval: 2, left_out: 1 },
+      trusting: { auto: 0, approval: 3, left_out: 0 },
+      autonomous: { auto: 2, approval: 1, left_out: 0 },
     });
     expect(owner.macro_actions.map((action) => action.id)).toEqual([
       'read',
@@ -571,7 +571,7 @@ describe('views', () => {
         orphan: { cause, connection_id: 'conn-acme', uncovered: ['acme.read'] },
         lost: [],
         token: null,
-        issuedVia: null,
+        issued_via: null,
       }) as unknown as MissionOverview;
     const causes = [
       'creator-removed',
@@ -680,16 +680,16 @@ describe('views', () => {
     expect(
       flagged.risks.filter((risk) => risk.in_my_authority).map((risk) => risk.risk_id),
     ).toEqual(SHARED);
-    // Each risk says its palier and macro-action; the crans say what a palier gets.
+    // Each risk says its tier and macro-action; the trust levels say what a tier gets.
     expect(plain.risks.find((risk) => risk.risk_id === 'acme[staging].bulk-delete')).toMatchObject({
-      palier: 4,
+      tier: 4,
       macro_action: 'change',
     });
     expect(plain.risks.find((risk) => risk.risk_id === 'acme.legacy-export')?.macro_action).toBe(
       null,
     );
     expect(plain.macro_actions.map((action) => action.id)).toContain('anything-else');
-    expect(plain.crans.prudent).toEqual({
+    expect(plain.trust_levels.careful).toEqual({
       gates: { '1': 'auto', '2': 'approval', '3': 'approval', '4': null },
       budget_factor: 1,
     });
@@ -720,7 +720,7 @@ describe('views', () => {
   it('preview and issue accept `everything-i-hold`: the policy is the explicit list', () => {
     const draft: MissionDraft = {
       ...DRAFT,
-      connections: [{ connection_id: 'conn-acme', preset: 'everything-i-hold' }],
+      connections: [{ connection_id: 'conn-acme', everything_i_hold: true }],
     };
     const preview = previewDraft(
       { connections: [acmeConnection({ basis: 'share', authority: SHARED })], now: NOW },
@@ -729,10 +729,7 @@ describe('views', () => {
     const view = previewView(preview);
     expect(view.ok).toBe(true);
     expect(view.policy.map((line) => line.risk_id)).toEqual(SHARED);
-    expect(view.connections[0]?.preset).toEqual({
-      id: 'everything-i-hold',
-      label: 'Everything I hold on this account',
-    });
+    expect(view.connections[0]?.everything_i_hold).toBe(true);
     expect(view.notices.map((n) => n.code)).toContain('everything-i-hold-expanded');
   });
 
@@ -771,8 +768,8 @@ describe('views', () => {
       state: { kind: 'orphaned' },
       orphan: { cause: 'connection-revoked', connection_id: 'conn-acme', uncovered: [] },
       lost: [{ connection_id: 'conn-acme', cause: 'connection-revoked', final: true }],
-      token: { prefix: 'AbCd1234', createdAt: NOW.toISOString() },
-      issuedVia: { delegation_id: 'delegation-2', client_id: 'other', client_name: 'Other agent' },
+      token: { prefix: 'AbCd1234', created_at: NOW.toISOString() },
+      issued_via: { delegation_id: 'delegation-2', client_id: 'other', client_name: 'Other agent' },
     } as MissionOverview;
     const view = missionView(overview, ACTOR, (prefix) => `masked:${prefix}`);
     expect(view).toMatchObject({

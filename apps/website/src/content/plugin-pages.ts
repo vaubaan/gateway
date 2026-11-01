@@ -98,7 +98,7 @@ export function pluginPageMarkdown(
     '',
     '## Macro-actions',
     '',
-    'A macro-action groups the permissions of one thing to do with the service, each with a base limit per period and a base rate. The person creating a mission ticks macro-actions and sets each to a trust level, Prudent, Confiant or Autonome: the level decides, from how hard each permission is to undo, whether it runs freely, asks first or is left out, and raises the limits. "Anything else", added by the gateway, holds the catch-all permission. The mission stores the explicit list, which the person can still edit line by line.',
+    'A macro-action groups the permissions of one thing to do with the service, each with a base limit per period and a base rate. The person creating a mission ticks macro-actions and sets each to a trust level, Careful, Trusting or Autonomous: the level decides, from how hard each permission is to undo, whether it runs freely, asks first or is left out, and raises the limits. "Anything else", added by the gateway, holds the catch-all permission. The mission stores the explicit list, which the person can still edit line by line.',
     '',
   );
   for (const action of plugin.macroActions) {
@@ -124,14 +124,6 @@ export function pluginPageMarkdown(
         ['Tool', 'What it does'],
         plugin.tools.map((tool) => [code(tool.name), text(tool.title ?? tool.description)]),
       ),
-      '',
-    );
-  }
-  if (plugin.tokenHandouts.length > 0) {
-    lines.push(
-      'Tools that hand the agent a short-lived provider token (the one exception to "the agent never holds a credential"), each a permission of its own:',
-      '',
-      ...plugin.tokenHandouts.map((h) => `- ${code(h.tool)}: ${h.riskIds.map(code).join(', ')}`),
       '',
     );
   }

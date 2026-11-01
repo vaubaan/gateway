@@ -271,7 +271,7 @@ export const INVARIANTS: readonly Invariant[] = [
     id: 'macro-actions-group-the-catalog',
     statement:
       'Every shipped catalog groups each of its live risks but the fallback in exactly one macro-action of its own explicit risks, never a wildcard; no catalog ships presets or declares a macro-action named "anything-else" or "everything-i-hold".',
-    source: 'spec §10, §3.2; ADR macro-actions-and-trust-crans-prefill-the-policy',
+    source: 'spec §10, §3.2; ADR macro-actions-and-trust-levels-prefill-the-policy',
     specBullet:
       'every catalog groups each of its risks but the fallback in exactly one macro-action, and no catalog ships presets',
     proofs: [
@@ -951,6 +951,22 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'answers the counts of the instance to the bearer of ops.token, and only to them',
           'the endpoint does not exist',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'no-french-vocabulary',
+    statement:
+      'The repository speaks English: no file names the trust level, its tier or the three levels by their first, French names, except the changelog, the applied migrations that stored them and the History of their ADR.',
+    source:
+      'ADR macro-actions-and-trust-levels-prefill-the-policy, History (owner decision of 2026-10-31)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/no-french-vocabulary.test.ts`,
+        tests: [
+          'scans a meaningful set of files',
+          'no scanned file names a trust level, a tier or a level in French',
         ],
       },
     ],

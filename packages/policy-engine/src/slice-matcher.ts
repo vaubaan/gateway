@@ -17,7 +17,7 @@
  *  - `intersects(a, b)` :
  *      true iff there exists at least one concrete slice matched by both
  *      `a` and `b`. Used when both sides may contain wildcards (e.g. for
- *      "does this preset overlap a critical risk pattern").
+ *      "does this pattern overlap a critical risk pattern").
  *
  * The matching is structural on the segment array. `[*]` matches any
  * single concrete segment ; `[**]` matches zero-or-more (recursive

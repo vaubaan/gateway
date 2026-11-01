@@ -130,7 +130,7 @@ describe('management door — every answer matches its advertised output schema'
     await agent.close();
   });
 
-  it('preview_policy: a draft that passes, one beyond the authority, crans alone, an unresolvable environment, an unknown risk', async () => {
+  it('preview_policy: a draft that passes, one beyond the authority, trust levels alone, an unresolvable environment, an unknown risk', async () => {
     await shareWithBob();
     const bob = await agentOf(BOB);
     await yes(bob, 'preview_policy', draftOn(github, ['github.read-code']));
@@ -141,10 +141,12 @@ describe('management door — every answer matches its advertised output schema'
       draftOn(github, ['github.read-code', 'github.feature-branch-write']),
     );
     expect(beyond.ok).toBe(false);
-    // Crans bounded by the authority: what they leave out is listed.
+    // Trust levels bounded by the authority: what they leave out is listed.
     await yes(bob, 'preview_policy', {
-      name: 'From crans',
-      connections: [{ connection_id: github, crans: { read: 'confiant', propose: 'confiant' } }],
+      name: 'From trust levels',
+      connections: [
+        { connection_id: github, trust_levels: { read: 'trusting', propose: 'trusting' } },
+      ],
       period: { kind: 'one-off' },
       expires_at: '2027-01-01T00:00:00.000Z',
     });
@@ -158,8 +160,8 @@ describe('management door — every answer matches its advertised output schema'
     await yes(ada, 'preview_policy', {
       name: 'Two providers',
       connections: [
-        { connection_id: github, crans: { read: 'prudent' } },
-        { provider: 'supabase', crans: { query: 'prudent' }, resources: { scope: 'all' } },
+        { connection_id: github, trust_levels: { read: 'careful' } },
+        { provider: 'supabase', trust_levels: { query: 'careful' }, resources: { scope: 'all' } },
       ],
       period: { kind: 'recurring', length_seconds: 3600 },
       expires_at: null,
@@ -170,7 +172,7 @@ describe('management door — every answer matches its advertised output schema'
       connections: [
         {
           connection_id: supabase,
-          crans: { query: 'prudent' },
+          trust_levels: { query: 'careful' },
           resources: { scope: 'connection' },
         },
       ],
@@ -184,7 +186,7 @@ describe('management door — every answer matches its advertised output schema'
     await shareWithBob();
     const agent = await agentOf(BOB);
 
-    // ── issue: explicit policy, and crans with an expiry ──
+    // ── issue: explicit policy, and trust levels with an expiry ──
     const issued = await yes<IssuedMissionAnswer>(
       agent,
       'issue_mission',
@@ -192,19 +194,19 @@ describe('management door — every answer matches its advertised output schema'
     );
     expect(issued.token.secret).toMatch(/^vbn_live_/);
     expect(issued.bootstrap_kit.env).toContain(issued.token.secret);
-    const fromCrans = await yes<IssuedMissionAnswer>(agent, 'issue_mission', {
-      name: 'One-off from crans',
-      connections: [{ connection_id: github, crans: { read: 'prudent' } }],
+    const fromTrustLevels = await yes<IssuedMissionAnswer>(agent, 'issue_mission', {
+      name: 'One-off from trust levels',
+      connections: [{ connection_id: github, trust_levels: { read: 'careful' } }],
       period: { kind: 'one-off' },
       expires_at: '2027-01-01T00:00:00.000Z',
     });
-    expect(fromCrans.token.secret).toMatch(/^vbn_live_/);
+    expect(fromTrustLevels.token.secret).toMatch(/^vbn_live_/);
 
     // ── read: the list, one mission in detail ──
     const listed = await yes<MissionsAnswer>(agent, 'list_my_missions');
     expect(listed.missions).toHaveLength(2);
     await yes(agent, 'list_my_missions', { mission_id: issued.mission.mission_id });
-    await yes(agent, 'list_my_missions', { mission_id: fromCrans.mission.mission_id });
+    await yes(agent, 'list_my_missions', { mission_id: fromTrustLevels.mission.mission_id });
 
     // ── rotate: the new token arrives ──
     const rotated = await yes<RotatedTokenAnswer>(agent, 'rotate_mission_token', {

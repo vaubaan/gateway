@@ -6,7 +6,7 @@
  * the touched risks with the environment label of the database
  * (`envResolverFor(resources, plugin.envOf)`, the resolver the gateway
  * builds) and checks them against the accepted risks of a mission written
- * from macro-actions at trust crans (`policyFromMacroActions`).
+ * from macro-actions at trust levels (`policyFromMacroActions`).
  *
  * Two rules are pinned here :
  *   - an env-scoped risk touched on a database with no label, or with a
@@ -47,17 +47,17 @@ function database(env?: string): Resource {
 /** The missions below, written as the creation form writes them. */
 const MISSIONS = {
   /** Inspect : `peek`, no environment needed. */
-  'read-only': policyFromMacroActions(upstashRedisPlugin, { peek: 'prudent' }),
-  /** Key writes and DEL off prod ; at Prudent the irreversible flush is left out. */
+  'read-only': policyFromMacroActions(upstashRedisPlugin, { peek: 'careful' }),
+  /** Key writes and DEL off prod ; at Careful the irreversible flush is left out. */
   developer: policyFromMacroActions(
     upstashRedisPlugin,
-    { peek: 'prudent', write: 'prudent', delete: 'prudent' },
+    { peek: 'careful', write: 'careful', delete: 'careful' },
     { envs: ['development', 'staging'] },
   ),
-  /** Everything, everywhere, at Confiant. */
+  /** Everything, everywhere, at Trusting. */
   operator: policyFromMacroActions(
     upstashRedisPlugin,
-    { peek: 'confiant', write: 'confiant', delete: 'confiant', manage: 'confiant' },
+    { peek: 'trusting', write: 'trusting', delete: 'trusting', manage: 'trusting' },
     { envs: ['development', 'staging', 'prod'] },
   ),
 } as const;
@@ -72,7 +72,7 @@ function gateIn(id: keyof typeof MISSIONS, riskId: string): string | undefined {
   return MISSIONS[id].find((e) => e.risk_id === riskId)?.gate;
 }
 
-/** Classify, then decide — the two steps of `evaluateCallForToken`. */
+/** Classify, then decide — the two steps of `evaluateCallForMission`. */
 function decide(
   accepted: ReadonlySet<string>,
   resource: Resource,
@@ -84,7 +84,7 @@ function decide(
   if ('denied' in outcome) throw new Error(`classifier denied: ${outcome.denied}`);
   return evaluateCall({
     executed_slices: outcome.slices,
-    token_accepted_risks: accepted,
+    accepted_risks: accepted,
     catalog: indexed,
     envResolver: envResolverFor(resources, plugin.envOf?.bind(plugin)),
   });
@@ -211,7 +211,7 @@ describe('peek — inspect, no write', () => {
   });
 });
 
-describe('peek, write and delete at Prudent on development and staging — key-level writes and targeted DEL', () => {
+describe('peek, write and delete at Careful on development and staging — key-level writes and targeted DEL', () => {
   const accepted = acceptedBy('developer');
 
   for (const env of ['development', 'staging']) {
@@ -276,7 +276,7 @@ describe('peek, write and delete at Prudent on development and staging — key-l
   });
 });
 
-describe('every macro-action at Confiant — everything, each command under the risk that names it', () => {
+describe('every macro-action at Trusting — everything, each command under the risk that names it', () => {
   const accepted = acceptedBy('operator');
 
   test('allows every class of command in every environment', () => {

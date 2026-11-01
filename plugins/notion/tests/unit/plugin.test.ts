@@ -103,12 +103,12 @@ describe('notion plugin — structural kit', () => {
     }
   });
 
-  test('at Confiant the destructive operations ask first ; everything else runs freely', () => {
+  test('at Trusting the destructive operations ask first ; everything else runs freely', () => {
     const policy = policyFromMacroActions(notionPlugin, {
-      read: 'confiant',
-      comment: 'confiant',
-      write: 'confiant',
-      reorganize: 'confiant',
+      read: 'trusting',
+      comment: 'trusting',
+      write: 'trusting',
+      reorganize: 'trusting',
     });
     const gated = policy.filter((l) => l.gate === 'approval').map((l) => l.risk_id);
     expect(gated.sort()).toEqual([

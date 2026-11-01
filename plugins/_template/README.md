@@ -93,8 +93,8 @@ and a mission needs both.
 
 ## Macro-actions
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome),
-risk model §4.6: the cran sets each risk's gate from its vector and scales its
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous),
+risk model §4.6: the trust level sets each risk's gate from its vector and scales its
 base budget; the mission stores the explicit lines.
 
 | Macro-action | What it covers                     | Its risks                                         |

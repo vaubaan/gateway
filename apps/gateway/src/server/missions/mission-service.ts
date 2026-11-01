@@ -8,7 +8,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * the `AuthorityService` what the creator may accept, and leaves the decision
  * to the pure `previewDraft`. A mission is persisted as an explicit
  * enumeration: explicit resource ids (even for "all"), explicit policy
- * entries (never a macro-action or cran), and the creator's own token, whose
+ * entries (never a macro-action or trust level), and the creator's own token, whose
  * secret is returned once. Members and the other tokens of a mission are the
  * `MissionTeamService`'s (`team-service.ts`); this service says who may read a
  * mission (`access`) and what a presented token is worth (`verifyToken`).
@@ -23,7 +23,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * `connections/mapping.ts` only; no record is written into an audit payload.
  */
 import type { TokenHolder } from '@vaubaan/gateway-core';
-import { writeHandoutRiskIds, type PluginRegistry } from '@vaubaan/plugin-sdk';
+import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import {
   isGate,
   parseRiskId,
@@ -38,7 +38,7 @@ import {
 
 import type {
   AuthorityService,
-  AuthoritySubject,
+  Subject,
   InspectedMission,
   LostPart,
   MissionGrounds,
@@ -72,7 +72,7 @@ import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
-  MissionConnection as MissionConnectionRecord,
+  MissionConnectionRecord,
   MissionRecord,
   MissionTokenRecord,
   ResourceScope,
@@ -86,7 +86,7 @@ import {
 } from './bootstrap-kit';
 import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from './catalog-view';
-import { knownCrans, macroActionsOf, type MacroActionCrans } from './macro-actions';
+import { knownTrustLevels, macroActionsOf, type MacroActionTrustLevels } from './macro-actions';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -551,9 +551,9 @@ export interface MissionOverview {
    * The public part of the reader's own active token of this mission; `null`
    * when they have none (a member who has not generated theirs, a revoked token).
    */
-  readonly token: { readonly prefix: string; readonly createdAt: string } | null;
+  readonly token: { readonly prefix: string; readonly created_at: string } | null;
   /** The client that issued it by delegation; `null` for a mission issued in the interface. */
-  readonly issuedVia: MissionIssuer | null;
+  readonly issued_via: MissionIssuer | null;
 }
 
 export interface MissionDetailConnection {
@@ -616,9 +616,6 @@ export interface MissionDetail extends MissionOverview {
   readonly kit: BootstrapKit | null;
 }
 
-/** A user who may read the mission: `id`, and nothing else is trusted from the caller. */
-type Reader = AuthoritySubject;
-
 /** The reached resources the mission created itself, as `created_resource_ids` (or nothing). */
 function createdIdsOf(
   selection: MissionConnectionRecord,
@@ -650,13 +647,14 @@ function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): Issuanc
  * non-empty list for `selected`. Readers treat that row as "none".
  */
 function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnectionRecord {
-  const crans = Object.keys(resolved.crans).length > 0 ? { crans: resolved.crans } : {};
+  const trustLevels =
+    Object.keys(resolved.trust_levels).length > 0 ? { trustLevels: resolved.trust_levels } : {};
   if (resolved.resources.scope === 'connection') {
     return {
       connectionId: resolved.connection_id,
       resourceScope: 'connection',
       resourceIds: [],
-      ...crans,
+      ...trustLevels,
     };
   }
   const resourceIds = resolved.resources.resource_ids;
@@ -664,23 +662,23 @@ function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnection
     connectionId: resolved.connection_id,
     resourceScope: resourceIds.length > 0 ? 'selected' : 'all',
     resourceIds,
-    ...crans,
+    ...trustLevels,
   };
 }
 
-/** The crans an edited draft records per connection, kept to the macro-actions each connection has. */
-function cransOfDraft(
+/** The trust levels an edited draft records per connection, kept to the macro-actions each connection has. */
+function trustLevelsOfDraft(
   context: readonly IssuanceConnection[],
   draft: MissionDraft,
-): Map<string, MacroActionCrans> {
-  const crans = new Map<string, MacroActionCrans>();
+): Map<string, MacroActionTrustLevels> {
+  const trustLevels = new Map<string, MacroActionTrustLevels>();
   for (const line of draft.connections) {
     const connection = context.find(
       (c) => c.id === line.connection_id || (!line.connection_id && c.provider === line.provider),
     );
-    if (connection) crans.set(connection.id, knownCrans(connection, line.crans));
+    if (connection) trustLevels.set(connection.id, knownTrustLevels(connection, line.trust_levels));
   }
-  return crans;
+  return trustLevels;
 }
 
 /**
@@ -741,7 +739,7 @@ export class MissionService {
    * connection on which they hold a non-empty authority, with its resources,
    * its catalog as explicit ids and its macro-actions.
    */
-  async issuanceContext(user: AuthoritySubject): Promise<IssuanceConnection[]> {
+  async issuanceContext(user: Subject): Promise<IssuanceConnection[]> {
     const candidates = await this.deps.authority.connectionsOf(user);
     const context: IssuanceConnection[] = [];
     for (const connection of candidates) {
@@ -753,7 +751,7 @@ export class MissionService {
   }
 
   private async issuanceConnection(
-    user: AuthoritySubject,
+    user: Subject,
     connection: ConnectionRecord,
   ): Promise<IssuanceConnection | null> {
     const registered = this.deps.registry.get(connection.provider);
@@ -771,7 +769,6 @@ export class MissionService {
       resources: resources.map((r) => toIssuanceResource(r, this.isSelf(connection.provider, r))),
       risks: this.risksOf(connection.provider),
       authority: authority.riskIds,
-      write_token_risks: [...writeHandoutRiskIds(plugin)],
       macro_actions: this.macroActionsOf(connection.provider),
     };
   }
@@ -801,7 +798,7 @@ export class MissionService {
    * importer) — so that the preview and the later issuance agree.
    */
   async preview(
-    user: AuthoritySubject,
+    user: Subject,
     draft: MissionDraft,
     options: PreviewOptions = {},
   ): Promise<MissionPreview> {
@@ -814,7 +811,7 @@ export class MissionService {
   // ───────────────────────────────────────────────────────────────────────────
 
   async issue(
-    user: AuthoritySubject,
+    user: Subject,
     draft: MissionDraft,
     options: IssueOptions = {},
   ): Promise<IssueResult> {
@@ -876,7 +873,7 @@ export class MissionService {
    * itself keeps reaching none. A whole-connection source is drafted
    * `{ scope: 'connection' }`: the copy is as wide as its source, no wider.
    */
-  async draftFrom(user: AuthoritySubject, missionId: string): Promise<MissionDraft | null> {
+  async draftFrom(user: Subject, missionId: string): Promise<MissionDraft | null> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
     const connections: DraftConnection[] = [];
@@ -890,11 +887,11 @@ export class MissionService {
           c.resourceScope === 'selected'
             ? { scope: 'selected', resource_ids: await this.survivingResources(c, provider) }
             : { scope: c.resourceScope },
-        preset: null,
+        everything_i_hold: false,
         policy: mission.policy
           .map(policyEntryOf)
           .filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
-        ...(c.crans ? { crans: c.crans } : {}),
+        ...(c.trustLevels ? { trust_levels: c.trustLevels } : {}),
       });
     }
     return {
@@ -940,7 +937,7 @@ export class MissionService {
    * returns a new mission with its own token and its own budget.
    */
   async duplicate(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     overrides: Partial<Pick<MissionDraft, 'name' | 'period' | 'expires_at'>> = {},
     options: IssueOptions = {},
@@ -983,7 +980,7 @@ export class MissionService {
    * human rotates any of their missions in the interface.
    */
   async rotate(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: IssueOptions = {},
   ): Promise<RotateResult> {
@@ -1031,7 +1028,7 @@ export class MissionService {
    * it"). Anyone else reads none. Derived at this instant, like every reading of
    * `orphaned`.
    */
-  async orphanedOn(user: AuthoritySubject, connectionId: string): Promise<OrphanedOnConnection[]> {
+  async orphanedOn(user: Subject, connectionId: string): Promise<OrphanedOnConnection[]> {
     const connection = await this.deps.store.connections.getById(connectionId);
     if (!connection || !(await this.owns(user, connection))) return [];
     const orphaned: OrphanedOnConnection[] = [];
@@ -1055,7 +1052,7 @@ export class MissionService {
    * the connection lists them, so that its owner knows what removing an access or
    * disconnecting would stop.
    */
-  async onConnection(user: AuthoritySubject, connectionId: string): Promise<MissionOnConnection[]> {
+  async onConnection(user: Subject, connectionId: string): Promise<MissionOnConnection[]> {
     const connection = await this.deps.store.connections.getById(connectionId);
     if (!connection || !(await this.owns(user, connection))) return [];
     const listed: MissionOnConnection[] = [];
@@ -1102,7 +1099,7 @@ export class MissionService {
    * for the creator only.
    */
   async revoke(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: IssueOptions = {},
   ): Promise<RevokeResult> {
@@ -1148,7 +1145,7 @@ export class MissionService {
    * the missions of their connection that serve.
    */
   private async closableBy(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     options: IssueOptions,
   ): Promise<{ mission: MissionRecord; closer: Closer } | null> {
@@ -1170,7 +1167,7 @@ export class MissionService {
   }
 
   /** The one definition of "owns the connection now": the authority's (`basis: 'owner'`). */
-  private async owns(user: AuthoritySubject, connection: ConnectionRecord): Promise<boolean> {
+  private async owns(user: Subject, connection: ConnectionRecord): Promise<boolean> {
     return (await this.deps.authority.authorityOf(user, connection)).basis === 'owner';
   }
 
@@ -1183,7 +1180,7 @@ export class MissionService {
    * risk, and leaves the open requests where they are.
    */
   async setGate(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     riskId: RiskId,
     gate: string,
@@ -1265,7 +1262,7 @@ export class MissionService {
    * revocation would.
    */
   async setLimits(
-    user: AuthoritySubject,
+    user: Subject,
     missionId: string,
     edits: readonly LimitEdit[],
   ): Promise<SetLimitsResult> {
@@ -1348,7 +1345,7 @@ export class MissionService {
     return { ok: true, mission: written.mission, changed };
   }
 
-  async permissionOptions(user: AuthoritySubject, missionId: string) {
+  async permissionOptions(user: Subject, missionId: string) {
     const mission = await this.ownMission(user, missionId);
     if (!mission || gateEditBlockedBy(mission)) return null;
     const reached = await this.detailConnections(mission);
@@ -1395,7 +1392,7 @@ export class MissionService {
   }
 
   /** Shared by a direct edit and the creator's answer to a permission request. */
-  async changePermissions(user: AuthoritySubject, missionId: string, raw: unknown) {
+  async changePermissions(user: Subject, missionId: string, raw: unknown) {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false as const, reason: 'not-found' };
     const parsed = permissionEditSchema.safeParse(raw);
@@ -1469,7 +1466,7 @@ export class MissionService {
         resource_scope: c.resourceScope,
         resource_ids: [...c.resourceIds],
         policy: policy.filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
-        ...(c.crans ? { crans: c.crans } : {}),
+        ...(c.trustLevels ? { trust_levels: c.trustLevels } : {}),
       });
     }
     return {
@@ -1485,7 +1482,7 @@ export class MissionService {
    * draft, its revision, what was used this period and the open requests. `null`
    * ("not found") for anyone but the creator.
    */
-  async editView(user: AuthoritySubject, missionId: string): Promise<MissionEditView | null> {
+  async editView(user: Subject, missionId: string): Promise<MissionEditView | null> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
     const snapshot = await this.snapshotOf(mission);
@@ -1512,7 +1509,7 @@ export class MissionService {
   }
 
   /** The judgement of an edit against the mission as it stands. */
-  private async judged(user: AuthoritySubject, missionId: string, raw: unknown) {
+  private async judged(user: Subject, missionId: string, raw: unknown) {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false as const, reason: 'not-found' as const };
     const blocked = gateEditBlockedBy(mission);
@@ -1529,18 +1526,14 @@ export class MissionService {
       mission,
       snapshot,
       judgement,
-      crans: cransOfDraft(connections, body.draft),
+      trustLevels: trustLevelsOfDraft(connections, body.draft),
       asked: body.revision,
       revision: revisionOfRecord(mission),
     };
   }
 
   /** What an edit would change, or why it would be refused. Writes nothing. */
-  async previewEdit(
-    user: AuthoritySubject,
-    missionId: string,
-    raw: unknown,
-  ): Promise<EditPreviewResult> {
+  async previewEdit(user: Subject, missionId: string, raw: unknown): Promise<EditPreviewResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
     const { judgement } = judged;
@@ -1570,10 +1563,10 @@ export class MissionService {
    * mission then reads `orphaned` and serves nothing, as an issuance racing the same
    * revocation would.
    */
-  async edit(user: AuthoritySubject, missionId: string, raw: unknown): Promise<EditResult> {
+  async edit(user: Subject, missionId: string, raw: unknown): Promise<EditResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
-    const { mission, snapshot, judgement, revision, crans } = judged;
+    const { mission, snapshot, judgement, revision, trustLevels } = judged;
     if (judged.asked !== revision) return { ok: false, reason: 'conflict' };
     if (!judgement.ok) {
       return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
@@ -1591,12 +1584,12 @@ export class MissionService {
       name: after.name,
       expiresAt: after.expires_at,
       connections: after.connections.map((c) => {
-        const recorded = crans.get(c.connection_id);
+        const recorded = trustLevels.get(c.connection_id);
         return {
           connectionId: c.connection_id,
           resourceScope: c.resource_scope,
           resourceIds: c.resource_scope === 'connection' ? [] : [...c.resource_ids],
-          ...(recorded && Object.keys(recorded).length > 0 ? { crans: recorded } : {}),
+          ...(recorded && Object.keys(recorded).length > 0 ? { trustLevels: recorded } : {}),
         };
       }),
       policy: after.connections.flatMap((c) => c.policy.map(policyEntryRecordOf)),
@@ -1637,7 +1630,7 @@ export class MissionService {
    * resources the mission reaches there. Empty when every line passes.
    */
   private async limitIssues(
-    user: AuthoritySubject,
+    user: Subject,
     mission: MissionRecord,
     lines: readonly MissionPolicyEntry[],
   ): Promise<PreviewIssue[]> {
@@ -1814,7 +1807,7 @@ export class MissionService {
    * (`role: 'creator'`) and the ones shared with them as a member
    * (`role: 'member'`, spec §4.2 "Missions").
    */
-  async list(user: Reader): Promise<MissionOverview[]> {
+  async list(user: Subject): Promise<MissionOverview[]> {
     const created = await this.deps.store.missions.listForCreator(user.id);
     const shared = (await this.isActiveUser(user.id))
       ? await this.deps.store.missions.listForMember(user.id)
@@ -1856,7 +1849,7 @@ export class MissionService {
    * (`gates_editable: false`, and every mutation of this service answers
    * `not-found` to anyone but the creator).
    */
-  async get(user: Reader, missionId: string): Promise<MissionDetail | null> {
+  async get(user: Subject, missionId: string): Promise<MissionDetail | null> {
     const inspected = await this.access(user, missionId);
     if (!inspected) return null;
     const { mission } = inspected;
@@ -1929,7 +1922,7 @@ export class MissionService {
 
   private async overviewOf(
     { mission, orphan, lost, role }: MissionAccess,
-    reader: Reader,
+    reader: Subject,
     issuedVia: MissionIssuer | null,
   ): Promise<MissionOverview> {
     const token = await this.ownToken(mission.id, reader.id);
@@ -1949,8 +1942,8 @@ export class MissionService {
         cause: part.cause,
         final: isFinalLoss(part.cause),
       })),
-      token: token ? { prefix: token.prefix, createdAt: token.createdAt } : null,
-      issuedVia,
+      token: token ? { prefix: token.prefix, created_at: token.createdAt } : null,
+      issued_via: issuedVia,
     };
   }
 
@@ -2010,7 +2003,7 @@ export class MissionService {
    * and "no longer shared with you". Every mutation of the mission itself goes
    * through `ownMission` instead, which knows the creator only.
    */
-  async access(user: Reader, missionId: string): Promise<MissionAccess | null> {
+  async access(user: Subject, missionId: string): Promise<MissionAccess | null> {
     const mission = await this.deps.store.missions.getById(missionId);
     if (!mission) return null;
     const membership = await this.membershipOf(mission, user.id);
@@ -2038,17 +2031,11 @@ export class MissionService {
    * One answer for "does not exist" and "not yours". The mission is returned as
    * it stands now: `orphaned` when the creator's authority is missing.
    */
-  private async ownMission(
-    user: AuthoritySubject,
-    missionId: string,
-  ): Promise<MissionRecord | null> {
+  private async ownMission(user: Subject, missionId: string): Promise<MissionRecord | null> {
     return (await this.ownInspected(user, missionId))?.mission ?? null;
   }
 
-  private async ownInspected(
-    user: AuthoritySubject,
-    missionId: string,
-  ): Promise<InspectedMission | null> {
+  private async ownInspected(user: Subject, missionId: string): Promise<InspectedMission | null> {
     const mission = await this.deps.store.missions.getById(missionId);
     if (!mission || mission.creatorUserId !== user.id) return null;
     return this.deps.grounds.inspect(mission);

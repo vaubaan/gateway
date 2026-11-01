@@ -4,8 +4,8 @@
  * §4.2 "Request inbox").
  *
  * The mission is composed from the GitHub plugin's macro-actions as they ship:
- * Administer at Prudent gates writing a workflow file (palier 3) `approval`, at
- * its base budget of 50; Propose at Confiant runs the feature-branch write
+ * Administer at Careful gates writing a workflow file (tier 3) `approval`, at
+ * its base budget of 50; Propose at Trusting runs the feature-branch write
  * freely, at three times its base budget of 500. The
  * executor is an MCP client holding the mission token; its calls go over HTTP
  * on `/mcp`, through the real execution door.
@@ -79,7 +79,7 @@ test.afterEach(async () => {
   agent = null;
 });
 
-test('a gated action of the developer crans: refused, approved by its creator only, replayed once', async ({
+test('a gated action of the developer trust levels: refused, approved by its creator only, replayed once', async ({
   browser,
   request,
 }) => {

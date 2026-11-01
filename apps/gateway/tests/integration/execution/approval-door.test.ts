@@ -1,10 +1,10 @@
 /**
  * "Approve an action" through the real execution door (spec §7.7, §3.5, §4.1
  * `approval-required`; §10 "integration: approval and replay"): the real GitHub
- * plugin, its Read, Propose and Administer macro-actions at Confiant, a mocked
+ * plugin, its Read, Propose and Administer macro-actions at Trusting, a mocked
  * upstream.
  *
- * Administer at Confiant gates `github.workflow-write-via-file` (palier 3). A file write under
+ * Administer at Trusting gates `github.workflow-write-via-file` (tier 3). A file write under
  * `.github/workflows/` on a feature branch touches that risk and the ungated
  * `github.feature-branch-write`: a multi-risk call with one gated risk. Over JSON-RPC
  * on `/mcp`: refusal → the creator grants → the identical replay passes and reaches
@@ -74,11 +74,11 @@ async function openRig(): Promise<Rig> {
   ]);
   const issued = await missions.service.issue(instance.ada, {
     name: 'Develop acme/app',
-    // The macro-actions as the plugin ships them, at a cran: nothing adjusted.
+    // The macro-actions as the plugin ships them, at a trust level: nothing adjusted.
     connections: [
       {
         connection_id: github.id,
-        crans: { read: 'confiant', propose: 'confiant', administer: 'confiant' },
+        trust_levels: { read: 'trusting', propose: 'trusting', administer: 'trusting' },
       },
     ],
     period: { kind: 'recurring', length_seconds: 86_400 },
@@ -93,7 +93,7 @@ async function openRig(): Promise<Rig> {
   };
 }
 
-describe('approve an action through the execution door (GitHub macro-actions at Confiant)', () => {
+describe('approve an action through the execution door (GitHub macro-actions at Trusting)', () => {
   let rig: Rig;
 
   beforeEach(async () => {
@@ -118,7 +118,7 @@ describe('approve an action through the execution door (GitHub macro-actions at 
     return url.slice(url.lastIndexOf('/') + 1);
   }
 
-  /** The quota the cran wrote: the macro-action's base budget ×3 at Confiant. */
+  /** The quota the trust level wrote: the macro-action's base budget ×3 at Trusting. */
   const quota = (riskId: string): number => {
     const entry = rig.mission.mission.policy.find((e) => e.riskId === riskId);
     if (!entry) throw new Error(`${riskId} is not in the mission`);
@@ -130,7 +130,7 @@ describe('approve an action through the execution door (GitHub macro-actions at 
     return Object.fromEntries(usage.consumed);
   };
 
-  it('Confiant gates the workflow write, and nothing else on this call', () => {
+  it('Trusting gates the workflow write, and nothing else on this call', () => {
     const gate = (riskId: string) =>
       rig.mission.mission.policy.find((entry) => entry.riskId === riskId)?.gate;
     expect(gate(GATED)).toBe('approval');

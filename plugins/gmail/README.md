@@ -161,15 +161,15 @@ and sends over SMTP.
 | `draft`      | Write and edit drafts. Nothing leaves.                               | `draft-write`, `draft-to-zone-self`, `-internal`, `-allowlist`                         |
 | `tidy`       | Apply, remove and create labels.                                     | `label-write`, `label-create`, `bulk-label-write`                                      |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran sets each risk's gate from its vector and
-multiplies the base budget. The mission stores the explicit list. At Prudent the sensitive
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
+risk model §4.6); the trust level sets each risk's gate from its vector and
+multiplies the base budget. The mission stores the explicit list. At Careful the sensitive
 and bulk reads and bulk labels ask first. In no macro-action:
 `gmail.draft-to-zone-external-unbounded` (the exfiltration vector — never
 acceptable: the classifier refuses the draft, and the entry is kept
 `deprecated` because ids are never deleted) and the fallback. Sending
 (the four `gmail.send-to-zone-*`) is its own macro-action, "Send": a sent
-message cannot be called back, so it is ticked on purpose; self is palier 1,
+message cannot be called back, so it is ticked on purpose; self is tier 1,
 internal 3, allowlist and external 4.
 
 ## Credential — an app password

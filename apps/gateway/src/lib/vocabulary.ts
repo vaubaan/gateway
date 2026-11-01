@@ -10,8 +10,11 @@
  * protocol spells it (in mono) and everything around it with these words.
  *
  * Pure and browser-safe, usable in server and client components. Its one
- * import is `lib/dates`, the one place a date becomes text.
+ * import is `lib/dates`, the one place a date becomes text (and the type of a
+ * trust level, which keys the words of each).
  */
+import type { TrustLevel } from '@vaubaan/policy-engine';
+
 import { formatDay } from './dates';
 
 /** The product, and how it names itself in the shell. */
@@ -601,18 +604,18 @@ export const PART_LOSS_WORDS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Reference (the pages under `/reference`). Protocol names: provider, plugin,
-// risk, macro-action, cran, tool, plane, slice pattern.
+// risk, macro-action, trust level, tool, plane, slice pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const REFERENCE_WORDS = {
   services: 'Services',
   tabs: { permissions: 'Permissions', tools: 'Tools', model: 'How it is modelled' },
   permission: 'Permission',
-  comparison: 'Permissions, and what each trust cran gives them',
+  comparison: 'Permissions, and what each trust level gives them',
   comparisonNote:
-    'A macro-action at a cran is a starting point; a mission always stores the explicit list. Figures are calls per period.',
+    'A macro-action at a trust level is a starting point; a mission always stores the explicit list. Figures are calls per period.',
   macroActions: 'Macro-actions',
-  macroActionsNote: 'What a mission ticks on this service, each at a trust cran.',
+  macroActionsNote: 'What a mission ticks on this service, each at a trust level.',
   notIncluded: 'not included',
   leftOut: 'left out',
   asksFirst: 'asks first',
@@ -620,7 +623,6 @@ export const REFERENCE_WORDS = {
   hideHowToRead: 'Hide how to read this page',
   noMatch: 'Nothing matches.',
   byArguments: 'by arguments',
-  handsToken: 'hands a token to the agent',
   anythingElse: 'anything not named',
   retired: 'being retired',
 } as const;
@@ -642,9 +644,25 @@ export const ENVIRONMENT_WORDS = {
   none: 'none: every permission is held once',
 } as const;
 
-/** "Palier 3" — the palier of a permission, 1 mild to 4 irreversible. */
-export function palierWord(palier: number): string {
-  return `Palier ${palier}`;
+/** A trust level as the interface names it (risk model §4.6). */
+export const TRUST_LEVEL_LABELS: Readonly<Record<TrustLevel, string>> = {
+  careful: 'Careful',
+  trusting: 'Trusting',
+  autonomous: 'Autonomous',
+};
+
+/** What each trust level does, in one line, wherever its chip shows a tooltip. */
+export const TRUST_LEVEL_HINTS: Readonly<Record<TrustLevel, string>> = {
+  careful:
+    'Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.',
+  trusting:
+    'Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.',
+  autonomous: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
+};
+
+/** "Tier 3" — the tier of a permission, 1 mild to 4 irreversible. */
+export function tierWord(tier: number): string {
+  return `Tier ${tier}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1090,7 +1108,7 @@ export const FIRST_RUN = {
     },
     mission: {
       title: 'Give an agent a mission',
-      text: 'Name it, pick the resources, tick what the agent may do at a trust cran, read the three-line summary, create. You get the key.',
+      text: 'Name it, pick the resources, tick what the agent may do at a trust level, read the three-line summary, create. You get the key.',
     },
     kit: {
       title: 'Paste the kit into your agent',
@@ -1202,7 +1220,7 @@ export const MISSION_WORDS = {
   noKeyWorks: 'No key works on this mission now.',
   notServing: 'No key can be made now: the mission does not serve calls.',
   explicitList:
-    'Only the accounts you can use. Each macro-action, at its cran, writes explicit permissions.',
+    'Only the accounts you can use. Each macro-action, at its trust level, writes explicit permissions.',
   /** An account a mission was given whole (resource scope `connection`). */
   wholeAccount: 'the whole account, including resources found later',
   /** After a resource the mission created itself (ADR created-resources-join-the-mission). */

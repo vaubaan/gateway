@@ -1,29 +1,29 @@
 /**
  * `policyFromMacroActions` — the explicit policy a creator writes by ticking
- * macro-actions at trust crans, for plugin tests.
+ * macro-actions at trust levels, for plugin tests.
  *
  * Spec : docs/spec/gateway-risk-model.md §4.6 (macro-actions).
- * ADR  : docs/decisions/macro-actions-and-trust-crans-prefill-the-policy.md.
+ * ADR  : docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md.
  *
- * It runs the policy engine's own rules (`expandAtCran`, `budgetAtCran`,
+ * It runs the policy engine's own rules (`expandAtTrustLevel`, `budgetAtTrustLevel`,
  * `qualifyRiskId`, `resolveVector`) the way the creation form does : one line
  * per account-scoped risk, one per environment given for an env-scoped risk
- * acceptable there, deprecated entries left out, a write-token handout asked
- * first. The creator's authority is not modelled : a test holds every risk.
+ * acceptable there, deprecated entries left out. The creator's authority is
+ * not modelled : a test holds every risk.
  */
 
 import {
   ANYTHING_ELSE_BASE_BUDGET,
   ANYTHING_ELSE_MACRO_ACTION,
-  expandAtCran,
+  expandAtTrustLevel,
   fallbackEntriesOf,
   isAcceptableInEnv,
   isEnvScopedEntry,
   qualifyRiskId,
   resolveVector,
   unqualifyRiskId,
-  type CranCandidate,
-  type TrustCran,
+  type TrustLevelCandidate,
+  type TrustLevel,
 } from '@vaubaan/policy-engine';
 import type {
   MacroAction,
@@ -33,11 +33,10 @@ import type {
   RiskId,
 } from '@vaubaan/shared';
 
-import { writeHandoutRiskIds } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 
-/** The cran of each ticked macro-action, by macro-action id (`anything-else` for the fallback). */
-export type MacroActionCranChoice = Readonly<Record<string, TrustCran>>;
+/** The trust level of each ticked macro-action, by macro-action id (`anything-else` for the fallback). */
+export type MacroActionTrustLevelChoice = Readonly<Record<string, TrustLevel>>;
 
 export interface MacroActionPolicyOptions {
   /**
@@ -53,16 +52,15 @@ export interface MacroActionPolicyOptions {
  * cannot tick a typo and assert on nothing.
  */
 export function policyFromMacroActions(
-  plugin: Pick<ProviderPlugin, 'catalog' | 'tokenHandouts'>,
-  crans: MacroActionCranChoice,
+  plugin: Pick<ProviderPlugin, 'catalog'>,
+  trustLevels: MacroActionTrustLevelChoice,
   options: MacroActionPolicyOptions = {},
 ): MissionPolicyEntry[] {
   const catalog = plugin.catalog;
   const actions = new Map(macroActionsWithFallback(catalog).map((a) => [a.id, a]));
   const byId = new Map(catalog.risks.map((risk) => [risk.id, risk]));
-  const writeHandouts = writeHandoutRiskIds(plugin);
   const lines = new Map<RiskId, MissionPolicyEntry>();
-  for (const [actionId, cran] of Object.entries(crans)) {
+  for (const [actionId, trustLevel] of Object.entries(trustLevels)) {
     const action = actions.get(actionId);
     if (!action) {
       throw new Error(
@@ -73,9 +71,9 @@ export function policyFromMacroActions(
       const risk = byId.get(entry.risk_id);
       if (!risk || risk.deprecated === true) return [];
       const base = { quota: entry.quota, rate_limit: entry.rate_limit };
-      return candidatesOf(risk, base, writeHandouts.has(risk.id), options.envs ?? []);
+      return candidatesOf(risk, base, options.envs ?? []);
     });
-    for (const line of expandAtCran(candidates, cran).lines) {
+    for (const line of expandAtTrustLevel(candidates, trustLevel).lines) {
       lines.set(line.risk_id, {
         risk_id: line.risk_id,
         quota: line.quota,
@@ -106,14 +104,12 @@ function macroActionsWithFallback(catalog: RiskCatalog): MacroAction[] {
 /** One candidate per explicit id of the risk the mission's environments reach. */
 function candidatesOf(
   risk: RiskEntry,
-  base: CranCandidate['base'],
-  handsWriteToken: boolean,
+  base: TrustLevelCandidate['base'],
   envs: readonly string[],
-): CranCandidate[] {
+): TrustLevelCandidate[] {
   const common = {
     base,
     rate_ceiling_per_minute: risk.infra_limits?.calls_per_minute_max ?? null,
-    hands_write_token: handsWriteToken,
   };
   if (!isEnvScopedEntry(risk)) return [{ risk_id: risk.id, vector: risk.vector, ...common }];
   return [...new Set(envs)]

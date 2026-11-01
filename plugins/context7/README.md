@@ -97,11 +97,11 @@ needed), write the array, re-read the classifier, bump the version.
 | ------------ | ----------------------------------------- | ------------------------------------------------ |
 | `ask`        | Ask Context7 about library documentation. | `query-docs` (base: 300 per period, 20 a minute) |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
+risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The mission stores the explicit list. The question cannot be
-recalled once sent, so `query-docs` is irreversible: left out at Prudent, it
-asks first at Confiant and Autonome.
+recalled once sent, so `query-docs` is irreversible: left out at Careful, it
+asks first at Trusting and Autonomous.
 
 ## Failures
 

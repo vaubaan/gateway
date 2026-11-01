@@ -9,7 +9,7 @@
  * which makes this barrel server-only. Browser code and the packages the
  * UI bundles (`@vaubaan/policy-engine`) import values from the subpaths
  * `@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` (closed sets and
- * their guards : `GATES`, `isGate`…) and `@vaubaan/shared/api-key`
+ * their guards : `GATES`, `isGate`…), `@vaubaan/shared/time` and `@vaubaan/shared/api-key`
  * instead ; type imports from the barrel are erased and always safe.
  */
 
@@ -22,3 +22,4 @@ export * from './domain.ts';
 export * from './session-events.ts';
 export * from './data-model.ts';
 export * from './wildcard.ts';
+export * from './time.ts';

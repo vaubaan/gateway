@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import { PluginDefinitionError, definePlugin, pluginIssues } from '../../src/define-plugin.ts';
+import {
+  PluginDefinitionError,
+  RETIRED_TOKEN_HANDOUTS_ISSUE,
+  definePlugin,
+  pluginIssues,
+} from '../../src/define-plugin.ts';
 import type { ProviderPlugin } from '../../src/plugin.ts';
 import {
   CredentialKindMismatch,
@@ -287,53 +292,15 @@ describe('definePlugin', () => {
     );
   });
 
-  test('a token handout names a declared tool and risks of the catalog', () => {
+  test('a plugin that still declares tokenHandouts is refused: no tool hands a token', () => {
     const [tool] = acmePlugin.tools;
     const [risk] = acmePlugin.catalog.risks;
-    const withHandout = (tokenHandouts: unknown): ProviderPlugin =>
-      ({ ...acmePlugin, tokenHandouts }) as ProviderPlugin;
-    expect(
-      pluginIssues(
-        withHandout([{ tool: tool!.name, riskIds: [risk!.id], readOnlyRiskIds: [risk!.id] }]),
-      ),
-    ).toEqual([]);
-    expect(pluginIssues(withHandout('yes'))).toEqual([
-      'tokenHandouts: expected a list when present',
-    ]);
-    expect(pluginIssues(withHandout([{ tool: 'acme__nope', riskIds: [] }, 3]))).toEqual([
-      "tokenHandouts[0].tool 'acme__nope' is not a tool of this plugin",
-      'tokenHandouts[0].riskIds: expected at least one risk',
-      'tokenHandouts[1]: expected { tool, riskIds }',
-    ]);
-    expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: ['acme.unknown'] }]))).toEqual([
-      "tokenHandouts[0].riskIds: 'acme.unknown' is not a risk of the catalog",
-    ]);
-  });
-
-  // Spec §2.4: a token-handing risk that grants write is asked first at every
-  // trust cran (`policyFromMacroActions` tests it); undeclared means write.
-  describe('the token-handing risks', () => {
-    const [tool] = acmePlugin.tools;
-    const handing = (riskIds: string[], readOnlyRiskIds?: unknown): ProviderPlugin =>
-      ({
-        ...acmePlugin,
-        tokenHandouts: [{ tool: tool!.name, riskIds, readOnlyRiskIds }],
-      }) as ProviderPlugin;
-
-    test('a write handout is well-formed: the cran, not the definition, gates it', () => {
-      expect(pluginIssues(handing(['acme.thing-write']))).toEqual([]);
-    });
-
-    test('read-only is declared among the risks of the handout, as a list', () => {
-      expect(pluginIssues(handing(['acme.read-things'], ['acme.thing-write']))).toEqual(
-        expect.arrayContaining([
-          "tokenHandouts[0].readOnlyRiskIds: 'acme.thing-write' is not one of its riskIds",
-        ]),
-      );
-      expect(pluginIssues(handing(['acme.read-things'], 'all'))).toEqual(
-        expect.arrayContaining(['tokenHandouts[0].readOnlyRiskIds: expected a list when present']),
-      );
-    });
+    const withHandouts = {
+      ...acmePlugin,
+      tokenHandouts: [{ tool: tool!.name, riskIds: [risk!.id] }],
+    } as unknown as ProviderPlugin;
+    expect(pluginIssues(withHandouts)).toEqual([RETIRED_TOKEN_HANDOUTS_ISSUE]);
+    expect(pluginIssues(acmePlugin)).toEqual([]);
   });
 
   test('catalog rules apply (retired presets) through the definition', () => {

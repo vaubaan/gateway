@@ -40,6 +40,7 @@ discovering and curating its resources. Spec:
 - **Status writers are conditional updates, each naming its transition**: a refresh or late callback racing a revocation never revives a connection. `revoked` is terminal and nulls the credential. Which statuses serve calls is one function, `isUnavailableConnectionStatus` (`active` and `unowned` serve).
 - **Revoke in the store first, then withdraw at the provider** (bounded, never throws): the local revocation never waits on the provider.
 - **A connection of another owner reads exactly like a missing one** (`not-found`).
+- **Views are snake_case, records camelCase**: `ConnectionView` and `ConnectionDetail` cross into pages and the management door (`provider_label`, `way_retired`, `token_expires_at`, `owner_label`, `default_env_choices`…); the `connection` they carry is the store's camelCase `ConnectionRecord`.
 - **The effective environment label is computed on read** (`resource-env.ts`: own label, else the connection default); the default is never written to a resource row, so clearing it un-labels inheriting resources.
 
 ## Traps

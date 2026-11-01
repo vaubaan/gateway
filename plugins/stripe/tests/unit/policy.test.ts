@@ -2,7 +2,7 @@
  * Decision-path suite of the Stripe plugin : each case goes through the real
  * classifier, the real YAML catalog and the engine's `evaluateCall` with the
  * resolver the host builds (`envResolverFor(resources, plugin.envOf)`) — the
- * same composition as `evaluateCallForToken` in `@vaubaan/gateway-core`,
+ * same composition as `evaluateCallForMission` in `@vaubaan/gateway-core`,
  * which a plugin does not import.
  *
  * Covers what the tool-by-tool suite cannot see : an argument that changes
@@ -64,7 +64,7 @@ function decide(
   if ('denied' in classified) return { kind: 'classify-denied', reason: classified.denied };
   const decision = evaluateCall({
     executed_slices: classified.slices,
-    token_accepted_risks: new Set(accepted),
+    accepted_risks: new Set(accepted),
     catalog: stripeCatalog.indexed,
     envResolver: envResolverFor(resources, plugin.envOf?.bind(plugin)),
   });
@@ -78,28 +78,34 @@ const missingOf = (verdict: Verdict): readonly RiskId[] => {
   return verdict.missing;
 };
 
-type Crans = Parameters<typeof policyFromMacroActions>[1];
+type TrustLevels = Parameters<typeof policyFromMacroActions>[1];
 
 /**
  * The missions of this suite, as a creator composes them : macro-actions at a
- * trust cran, and the risks a creator unticks in the advanced view.
+ * trust level, and the risks a creator unticks in the advanced view.
  */
-const MISSIONS: Readonly<Record<string, { crans: Crans; untick?: readonly string[] }>> = {
-  // Books at Prudent, customer PII unticked.
-  'read-only': { crans: { books: 'prudent' }, untick: ['read-customer-pii'] },
-  'test-mode-developer': {
-    crans: {
-      books: 'autonome',
-      'set-up': 'autonome',
-      bill: 'autonome',
-      'money-out': 'autonome',
-      cancel: 'autonome',
+const MISSIONS: Readonly<Record<string, { trustLevels: TrustLevels; untick?: readonly string[] }>> =
+  {
+    // Books at Careful, customer PII unticked.
+    'read-only': { trustLevels: { books: 'careful' }, untick: ['read-customer-pii'] },
+    'test-mode-developer': {
+      trustLevels: {
+        books: 'autonomous',
+        'set-up': 'autonomous',
+        bill: 'autonomous',
+        'money-out': 'autonomous',
+        cancel: 'autonomous',
+      },
     },
-  },
-  'finance-operator': {
-    crans: { books: 'confiant', bill: 'confiant', 'money-out': 'confiant', cancel: 'confiant' },
-  },
-};
+    'finance-operator': {
+      trustLevels: {
+        books: 'trusting',
+        bill: 'trusting',
+        'money-out': 'trusting',
+        cancel: 'trusting',
+      },
+    },
+  };
 
 /**
  * The accepted set a mission yields on a selection of resources : one line per
@@ -109,7 +115,7 @@ function acceptedFrom(missionId: string, selected: readonly Resource[]): RiskId[
   const mission = MISSIONS[missionId];
   if (!mission) throw new Error(`no mission '${missionId}'`);
   const envs = selected.flatMap((r) => (r.env ? [r.env] : []));
-  return policyFromMacroActions(stripePlugin, mission.crans, { envs })
+  return policyFromMacroActions(stripePlugin, mission.trustLevels, { envs })
     .map((e) => e.risk_id)
     .filter((id) => !(mission.untick ?? []).some((name) => id.endsWith(`].${name}`)));
 }
@@ -317,7 +323,7 @@ describe('the mode of a call : resolved from the resource, refused when it canno
     ]) {
       const decision = evaluateCall({
         executed_slices: [parseSlice(raw)],
-        token_accepted_risks: new Set([...everything, ...baseIds]),
+        accepted_risks: new Set([...everything, ...baseIds]),
         catalog: stripeCatalog.indexed,
         envResolver: resourceEnvResolver([unlabelled]),
       });

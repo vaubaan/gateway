@@ -463,8 +463,10 @@ describe('gmail verify and discoverResources', () => {
 describe('gmail macro-actions', () => {
   const riskOf = (riskId: string) => gmailPlugin.catalog.risks.find((r) => r.id === riskId)!;
   const isWrite = (riskId: string) => String(riskOf(riskId).matches).endsWith('.W');
-  const gates = (crans: Parameters<typeof policyFromMacroActions>[1]) =>
-    Object.fromEntries(policyFromMacroActions(gmailPlugin, crans).map((l) => [l.risk_id, l.gate]));
+  const gates = (trustLevels: Parameters<typeof policyFromMacroActions>[1]) =>
+    Object.fromEntries(
+      policyFromMacroActions(gmailPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
+    );
 
   test('ships search, draft, send and tidy', () => {
     expect(gmailPlugin.catalog.macro_actions?.map((a) => a.id)).toEqual([
@@ -476,16 +478,16 @@ describe('gmail macro-actions', () => {
     expect(gmailPlugin.catalog.catalog_version).toBe(8);
   });
 
-  test('search at Prudent : reads only, every sender zone freely ; bulk and sensitive reads ask first', () => {
-    const g = gates({ search: 'prudent' });
+  test('search at Careful : reads only, every sender zone freely ; bulk and sensitive reads ask first', () => {
+    const g = gates({ search: 'careful' });
     expect(Object.keys(g).some(isWrite)).toBe(false);
     expect(g['gmail.read-from-zone-unknown']).toBe('auto');
     expect(g['gmail.bulk-read']).toBe('approval');
     expect(g['gmail.read-sensitive-label']).toBe('approval');
   });
 
-  test('draft and tidy : drafts to self / internal / allowlist and single labels run freely ; bulk labels ask first at Prudent', () => {
-    const g = gates({ draft: 'prudent', tidy: 'prudent' });
+  test('draft and tidy : drafts to self / internal / allowlist and single labels run freely ; bulk labels ask first at Careful', () => {
+    const g = gates({ draft: 'careful', tidy: 'careful' });
     expect(g['gmail.draft-to-zone-self']).toBe('auto');
     expect(g['gmail.draft-to-zone-internal']).toBe('auto');
     expect(g['gmail.draft-to-zone-allowlist']).toBe('auto');
@@ -500,9 +502,9 @@ describe('gmail macro-actions', () => {
     expect(listed).not.toContain('gmail.uncategorized-write');
     expect(listed).not.toContain('gmail.draft-to-zone-external-unbounded');
     const all = policyFromMacroActions(gmailPlugin, {
-      search: 'autonome',
-      draft: 'autonome',
-      tidy: 'autonome',
+      search: 'autonomous',
+      draft: 'autonomous',
+      tidy: 'autonomous',
     });
     expect(all.some((l) => l.risk_id.includes('['))).toBe(false);
   });

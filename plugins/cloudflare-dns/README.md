@@ -156,10 +156,10 @@ three.
 | `change-domain` | Apex, MX and NS records, deletions and imports. | `critical-record-write`, `record-delete`, `import-records` |
 | `rule-zone`     | Zone settings, DNSSEC and zone deletion.        | `zone-settings-write`, `dnssec-write`, `zone-delete`       |
 
-A creator ticks macro-actions at a trust cran (Prudent / Confiant / Autonome,
-risk model §4.6); the cran sets each risk's gate from its vector and
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
+risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The mission stores the explicit list. `zone-delete` is irreversible: left out at
-Prudent, it asks first at the other crans. The fallback sits in "Anything
+Careful, it asks first at the other trust levels. The fallback sits in "Anything
 else".
 
 ## Tests

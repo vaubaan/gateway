@@ -9,6 +9,7 @@
     "./domain": "./src/domain.ts",
     "./refusal": "./src/refusal.ts",
     "./risk-id": "./src/risk-id.ts",
+    "./time": "./src/time.ts",
     "./wildcard": "./src/wildcard.ts"
   },
   "scripts": {

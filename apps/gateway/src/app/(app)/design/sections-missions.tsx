@@ -2,7 +2,7 @@
 
 /**
  * Gallery, part four: the components added with the mission pages — the rest
- * behind "···", a choice among trust crans, a key shown once, a form with its
+ * behind "···", a choice among trust levels, a key shown once, a form with its
  * rail. Every value is invented.
  */
 import { useState } from 'react';
@@ -39,32 +39,32 @@ export const MISSION_SECTION_ITEMS = [
   { id: 'form-rail', label: 'Form with a rail' },
 ] as const;
 
-function Crans({ theme }: { theme: string }) {
-  const [value, setValue] = useState('confiant');
+function TrustLevels({ theme }: { theme: string }) {
+  const [value, setValue] = useState('trusting');
   return (
-    <ChoiceRow legend="Cran of Propose on GitHub acme">
+    <ChoiceRow legend="Trust level of Propose on GitHub acme">
       <ChoiceChip
-        name={`design-cran-${theme}`}
-        value="prudent"
-        checked={value === 'prudent'}
+        name={`design-trust-level-${theme}`}
+        value="careful"
+        checked={value === 'careful'}
         onChange={setValue}
-        label="Prudent"
+        label="Careful"
         title="Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out."
       />
       <ChoiceChip
-        name={`design-cran-${theme}`}
-        value="confiant"
-        checked={value === 'confiant'}
+        name={`design-trust-level-${theme}`}
+        value="trusting"
+        checked={value === 'trusting'}
         onChange={setValue}
-        label="Confiant"
+        label="Trusting"
         title="Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3."
       />
       <ChoiceChip
-        name={`design-cran-${theme}`}
-        value="autonome"
-        checked={value === 'autonome'}
+        name={`design-trust-level-${theme}`}
+        value="autonomous"
+        checked={value === 'autonomous'}
         onChange={setValue}
-        label="Autonome"
+        label="Autonomous"
         unavailable="none you may allow here"
       />
     </ChoiceRow>
@@ -102,10 +102,10 @@ export function MissionSections() {
         rule="One choice among a few, each with a short fact beside it. A choice that would yield nothing is not hidden and not offered silently: it is dashed, cannot be picked, and says why."
       >
         <Specimen
-          name="Trust cran of a macro-action"
+          name="Trust level of a macro-action"
           note="chosen, available, unavailable with its reason"
         >
-          {(theme) => <Crans theme={theme} />}
+          {(theme) => <TrustLevels theme={theme} />}
         </Specimen>
       </GallerySection>
 

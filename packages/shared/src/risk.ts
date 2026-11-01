@@ -2,7 +2,7 @@
  * Risk-based authorization types.
  *
  * Spec : docs/spec/gateway-risk-model.md (slices, catalogs, 6-D vector,
- *        scope caps) ; docs/spec/vaubaan-gateway.md §3.2 (presets).
+ *        scope caps, §4.6 macro-actions) ; docs/spec/vaubaan-gateway.md §3.2 (budgets).
  * ADR  : docs/decisions/unified-gates-drop-confirm.md,
  *        docs/decisions/plugin-contract-and-credential-spec.md.
  *
@@ -153,8 +153,8 @@ export interface RiskEntry {
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
   /** 6D vector explaining the risk's profile. Drives UI ordering, audit
-   *  explainability and the palier a trust cran pre-fills a gate from
-   *  (ADR macro-actions-and-trust-crans-prefill-the-policy) ; the runtime
+   *  explainability and the tier a trust level pre-fills a gate from
+   *  (ADR macro-actions-and-trust-levels-prefill-the-policy) ; the runtime
    *  derives no decision from it.
    *  When `vector_overrides` is present this is the default (non-prod)
    *  profile ; per-env overrides replace individual axes. */
@@ -248,8 +248,8 @@ export interface MacroActionEntry extends Budget {
 
 /**
  * What a mission creator ticks on a connection, in the connector's own words
- * (ADR macro-actions-and-trust-crans-prefill-the-policy). Every entry but the
- * fallback belongs to exactly one macro-action ; a trust cran turns its
+ * (ADR macro-actions-and-trust-levels-prefill-the-policy). Every entry but the
+ * fallback belongs to exactly one macro-action ; a trust level turns its
  * entries into explicit policy lines. Never a grant by itself.
  */
 export interface MacroAction {
@@ -269,7 +269,7 @@ export interface MacroAction {
 export interface RiskCatalog {
   readonly provider: string;
   readonly risks: readonly RiskEntry[];
-  /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-crans-prefill-the-policy). */
+  /** Required by the SDK loader and `definePlugin` (ADR macro-actions-and-trust-levels-prefill-the-policy). */
   readonly macro_actions?: readonly MacroAction[];
   /** Monotonic integer bumped on every reviewed change of the YAML. */
   readonly catalog_version?: number;

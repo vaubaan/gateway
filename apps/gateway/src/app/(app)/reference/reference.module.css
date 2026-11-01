@@ -149,12 +149,12 @@
   text-align: left;
   vertical-align: bottom;
 }
-.comparison thead th.cranHead {
+.comparison thead th.trustLevelHead {
   width: 132px;
   text-align: center;
   white-space: nowrap;
 }
-.cranName {
+.trustLevelName {
   display: block;
   color: var(--ink);
   font-size: var(--text-sm);
@@ -213,7 +213,7 @@
 .severityCell {
   white-space: nowrap;
 }
-.cranCell {
+.trustLevelCell {
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -373,7 +373,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-half);
   }
-  .comparison thead th.cranHead {
+  .comparison thead th.trustLevelHead {
     width: 96px;
   }
 }

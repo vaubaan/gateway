@@ -4,9 +4,7 @@
  *
  * What each permission means for git is the plugin's declaration
  * (`GitRemoteCapability.abilities`); whether the mission holds it, and
- * whether it asks first, is the mission's policy. A tool that hands a raw
- * provider token (`tokenHandouts`) is named apart: during that token's life
- * the rules above do not apply.
+ * whether it asks first, is the mission's policy.
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
@@ -19,8 +17,6 @@ export interface MissionGitView {
   readonly can: readonly string[];
   readonly asks: readonly string[];
   readonly cannot: readonly string[];
-  /** The tools of the provider that hand a raw token, when the mission holds one of their permissions. */
-  readonly rawTokenTools: readonly string[];
   /** The provider's name (`GitHub`). */
   readonly provider: string;
 }
@@ -56,15 +52,11 @@ export function missionGitView(input: {
     else if (gate === 'approval') asks.push(ability.words);
     else can.push(ability.words);
   }
-  const rawTokenTools = (registered.plugin.tokenHandouts ?? [])
-    .filter((handout) => handout.riskIds.some((risk) => gateOf.has(risk)))
-    .map((handout) => handout.tool);
   return {
     remotes: refs.map((ref) => `${base}${ref}.git`),
     can,
     asks,
     cannot,
-    rawTokenTools,
     provider: registered.plugin.displayName,
   };
 }

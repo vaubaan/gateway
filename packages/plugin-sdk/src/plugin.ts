@@ -106,22 +106,6 @@ export interface ExecuteContext extends ConnectionContext {
   readonly emitPart?: ToolResultPartSink;
 }
 
-/** One tool that hands a provider token to the agent, and the risks that gate it. */
-export interface TokenHandout {
-  /** A tool of this plugin (`acme__mint_deploy_token`). */
-  readonly tool: string;
-  /** Unqualified ids of this plugin's catalog ; at least one. */
-  readonly riskIds: readonly string[];
-  /**
-   * The risks among `riskIds` whose token cannot write at the provider
-   * (`contents:read` for a clone). Spec §2.4 : a token-handing risk that
-   * grants write is asked first at every trust cran ; a read-only one follows
-   * its palier. A risk that is not listed here is taken as write — absent,
-   * every handout risk of the tool is (`writeHandoutRiskIds`).
-   */
-  readonly readOnlyRiskIds?: readonly string[];
-}
-
 export interface ProviderPlugin {
   /** Provider id : lowercase slug (`github`, `cloudflare-dns`). Prefixes every tool name. */
   readonly id: string;
@@ -159,16 +143,6 @@ export interface ProviderPlugin {
    * shipped with the gateway fills it (structural test).
    */
   readonly summary?: string;
-  /**
-   * The tools whose very purpose is to hand the agent a short-lived,
-   * narrowly scoped provider token (spec vaubaan-gateway §2.4, the one
-   * deliberate exception to "the executor never sees a provider
-   * credential"), each with the catalog risks such a call touches. A
-   * declaration for the reader : the provider reference marks these tools
-   * and risks ; the host decides nothing from it. Absent for a plugin
-   * that hands no token.
-   */
-  readonly tokenHandouts?: readonly TokenHandout[];
   /**
    * What each tool does, in a few words a person reads at a glance : a verb
    * and its object, sentence case, no final period (`github__merge_pull_request`

@@ -23,7 +23,13 @@ import { MAX_TEMPORARY_REFS_PER_MISSION } from '../../../src/server/git';
 import type { AuditCallRecord } from '../../../src/server/store';
 import { line, type IssuedMission } from '../../../src/server/execution/testing';
 import { isolatedGitEnv } from './fake-github-host';
-import { DEVELOPER_CRANS, openGitRig, REPOSITORY, type GitResult, type GitRig } from './support';
+import {
+  DEVELOPER_TRUST_LEVELS,
+  openGitRig,
+  REPOSITORY,
+  type GitResult,
+  type GitRig,
+} from './support';
 
 const run = promisify(execFile);
 const PUSH = 'github__git_push';
@@ -34,7 +40,7 @@ let developer: IssuedMission;
 
 beforeAll(async () => {
   rig = await openGitRig();
-  developer = await rig.mission({ crans: DEVELOPER_CRANS });
+  developer = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
 }, 60_000);
 
 afterAll(async () => {
@@ -181,7 +187,7 @@ describe('F2 — temporary refs', () => {
   });
 
   it(`a mission holds at most ${MAX_TEMPORARY_REFS_PER_MISSION} temporary refs`, async () => {
-    const mission = await rig.mission({ crans: DEVELOPER_CRANS });
+    const mission = await rig.mission({ trustLevels: DEVELOPER_TRUST_LEVELS });
     const main = (await rig.host.refOf(REPOSITORY, 'refs/heads/main'))!;
     const far = new Date(Date.now() + 3_600_000).toISOString();
     const held = Array.from({ length: MAX_TEMPORARY_REFS_PER_MISSION }, (_, i) => ({

@@ -370,9 +370,9 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
     expect(run('select * from vault.decrypted_secrets;')).not.toContain('supabase.auth.read-users');
   });
 
-  test('read-managed-schemas asks first at Prudent, and only in an environment the mission reaches', () => {
+  test('read-managed-schemas asks first at Careful, and only in an environment the mission reaches', () => {
     const lines = (envs: readonly string[]) =>
-      policyFromMacroActions(supabasePlugin, { query: 'prudent' }, { envs });
+      policyFromMacroActions(supabasePlugin, { query: 'careful' }, { envs });
     expect(
       lines(['staging']).find((l) => l.risk_id === 'supabase[staging].read-managed-schemas')?.gate,
     ).toBe('approval');

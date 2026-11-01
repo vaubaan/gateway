@@ -1,12 +1,12 @@
 /**
- * The permissions of a service against the trust crans: first the
+ * The permissions of a service against the trust levels: first the
  * macro-actions a mission ticks, then one row per catalog entry — what it
  * allows in words, its id in mono, its macro-action, one line on why it
- * matters, its severity and palier — and one column per cran with the gate
- * and limit that cran writes, or "left out". The difference between two crans
+ * matters, its severity and tier — and one column per trust level with the gate
+ * and limit that trust level writes, or "left out". The difference between two trust levels
  * is read along a row; "why?" unfolds the entry: the whole reason, the six
  * words behind the severity, what it covers, its tools, and its line at each
- * cran.
+ * trust level.
  *
  * An entry is listed once, under the kind of its most severe variant, so its
  * anchor (`#risk-<id>`) is unique; an entry that exists once per environment
@@ -14,18 +14,20 @@
  */
 import { Fragment } from 'react';
 
-import { Callout, EnvTag, GateMark, Mono, SeverityChip, Tag, WhyCells } from '@/components/ui';
+import { EnvTag, GateMark, Mono, SeverityChip, Tag, WhyCells } from '@/components/ui';
 import {
   ACTIONS,
   count,
   formatNumber,
   gateWordOf,
   GATE_WORDS,
-  palierWord,
+  tierWord,
   PERMISSION_KINDS,
   REFERENCE_WORDS,
   SEVERITY_LABEL,
   TERMS,
+  TRUST_LEVEL_HINTS,
+  TRUST_LEVEL_LABELS,
 } from '@/lib/vocabulary';
 import {
   DEPRECATED_NOTE,
@@ -33,13 +35,11 @@ import {
   formatRate,
   noteBody,
 } from '@/server/missions/catalog-view';
-import { CRAN_HINTS, CRAN_LABELS, TRUST_CRANS } from '@/server/missions/macro-actions';
+import { TRUST_LEVELS } from '@/server/missions/macro-actions';
 import type { CatalogRisk } from '@/server/missions/model';
 import { riskReferencePath } from '@/server/providers/links';
 import {
-  TOKEN_ACCESS_BADGE,
-  TOKEN_HANDOUT_NOTE,
-  type CranCell,
+  type TrustLevelCell,
   type MacroActionReference,
   type RiskReference,
   type RiskReferenceGroup,
@@ -55,8 +55,8 @@ function worstVariant(entry: RiskReference): CatalogRisk | undefined {
   );
 }
 
-/** One cell: per variant, the gate and limit the cran writes, or "left out". */
-function CranCellView({ cells }: { cells: readonly CranCell[] }) {
+/** One cell: per variant, the gate and limit the trust level writes, or "left out". */
+function TrustLevelCellView({ cells }: { cells: readonly TrustLevelCell[] }) {
   return cells.map(({ risk, line }) => (
     <span key={risk.risk_id} className={styles.limit}>
       {risk.env && <EnvTag env={risk.env} />}
@@ -92,7 +92,7 @@ export function PermissionComparison({
   /** A filter is on: an empty list then means "nothing matches", not "no permission". */
   filtered: boolean;
 }) {
-  const span = TRUST_CRANS.length + 2;
+  const span = TRUST_LEVELS.length + 2;
   const ids = groups.flatMap((group) => group.entries.map((entry) => entry.base_id));
   const allOpen = ids.length > 0 && ids.every((id) => expanded.has(id));
 
@@ -143,9 +143,9 @@ export function PermissionComparison({
         ))}
       </ul>
       <div className={styles.scroll}>
-        <table className={styles.comparison} data-testid="cran-matrix">
+        <table className={styles.comparison} data-testid="trust-level-matrix">
           <caption className="vbn-sr-only">
-            The permissions of the service, and the gate and limit each trust cran gives each of
+            The permissions of the service, and the gate and limit each trust level gives each of
             them
           </caption>
           <thead>
@@ -154,15 +154,15 @@ export function PermissionComparison({
               <th scope="col" className={styles.severityHead}>
                 {SEVERITY_LABEL}
               </th>
-              {TRUST_CRANS.map((cran) => (
+              {TRUST_LEVELS.map((trustLevel) => (
                 <th
-                  key={cran}
+                  key={trustLevel}
                   scope="col"
-                  data-testid={`cran-${cran}`}
-                  title={CRAN_HINTS[cran]}
-                  className={styles.cranHead}
+                  data-testid={`trust-level-${trustLevel}`}
+                  title={TRUST_LEVEL_HINTS[trustLevel]}
+                  className={styles.trustLevelHead}
                 >
-                  <span className={styles.cranName}>{CRAN_LABELS[cran]}</span>
+                  <span className={styles.trustLevelName}>{TRUST_LEVEL_LABELS[trustLevel]}</span>
                 </th>
               ))}
             </tr>
@@ -196,8 +196,7 @@ export function PermissionComparison({
                         {(entry.envs.length > 0 ||
                           entry.macro_action ||
                           entry.fallback ||
-                          entry.deprecated ||
-                          entry.token_access) && (
+                          entry.deprecated) && (
                           <span className={styles.tags}>
                             {entry.macro_action && (
                               <a
@@ -215,11 +214,6 @@ export function PermissionComparison({
                             ))}
                             {entry.fallback && <Tag>{REFERENCE_WORDS.anythingElse}</Tag>}
                             {entry.deprecated && <Tag>{REFERENCE_WORDS.retired}</Tag>}
-                            {entry.token_access && (
-                              <Tag tone={entry.token_access === 'write' ? 'bad' : 'warn'}>
-                                {TOKEN_ACCESS_BADGE[entry.token_access]}
-                              </Tag>
-                            )}
                           </span>
                         )}
                         <span className={styles.why}>
@@ -239,14 +233,14 @@ export function PermissionComparison({
                       <td className={styles.severityCell}>
                         {shown && <SeverityChip level={shown.level} />}
                       </td>
-                      {TRUST_CRANS.map((cran) => (
+                      {TRUST_LEVELS.map((trustLevel) => (
                         <td
-                          key={cran}
-                          className={styles.cranCell}
-                          data-testid={`cell-${cran}-${entry.base_id}`}
+                          key={trustLevel}
+                          className={styles.trustLevelCell}
+                          data-testid={`cell-${trustLevel}-${entry.base_id}`}
                         >
                           {entry.macro_action ? (
-                            <CranCellView cells={entry.at_cran[cran]} />
+                            <TrustLevelCellView cells={entry.at_trust_level[trustLevel]} />
                           ) : (
                             <>
                               <span aria-hidden="true">—</span>
@@ -291,18 +285,6 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
       ) : (
         shown && <WhyCells values={shown.vector} />
       )}
-      {entry.token_access && (
-        <Callout
-          tone={entry.token_access === 'write' ? 'bad' : 'warn'}
-          title={
-            entry.token_access === 'write'
-              ? 'Hands the agent a token that can write'
-              : 'Hands the agent a read-only token'
-          }
-        >
-          {noteBody(TOKEN_HANDOUT_NOTE)}
-        </Callout>
-      )}
       <dl className={styles.detailFacts}>
         <dt>Held</dt>
         <dd>
@@ -330,18 +312,6 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
             ))}
           </ul>
         </dd>
-        {entry.declared_tools.length > 0 && (
-          <>
-            <dt>Tools</dt>
-            <dd>
-              {entry.declared_tools.map((tool) => (
-                <Fragment key={tool}>
-                  <Mono>{tool}</Mono>{' '}
-                </Fragment>
-              ))}
-            </dd>
-          </>
-        )}
         <dt>Macro-action</dt>
         <dd>
           {entry.macro_action === null ? (
@@ -350,17 +320,17 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
             <>
               {entry.macro_action.label}
               <ul className={styles.patterns}>
-                {TRUST_CRANS.flatMap((cran) =>
-                  entry.at_cran[cran].map(({ risk, palier, line }) => (
-                    <li key={`${cran}:${risk.risk_id}`}>
-                      {CRAN_LABELS[cran]}
+                {TRUST_LEVELS.flatMap((trustLevel) =>
+                  entry.at_trust_level[trustLevel].map(({ risk, tier, line }) => (
+                    <li key={`${trustLevel}:${risk.risk_id}`}>
+                      {TRUST_LEVEL_LABELS[trustLevel]}
                       {risk.env && (
                         <>
                           {' '}
                           <EnvTag env={risk.env} />
                         </>
                       )}{' '}
-                      ({palierWord(palier)}):{' '}
+                      ({tierWord(tier)}):{' '}
                       {line === null
                         ? REFERENCE_WORDS.leftOut
                         : `${formatNumber(line.quota)} per period, ${formatRate(line.rate_limit)}, ${

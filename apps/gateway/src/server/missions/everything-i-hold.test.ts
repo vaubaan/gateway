@@ -32,7 +32,7 @@ function draftWith(
 ): MissionDraft {
   return {
     name: 'My own agents',
-    connections: [{ connection_id: connection.id, preset: EVERYTHING_I_HOLD, resources }],
+    connections: [{ connection_id: connection.id, everything_i_hold: true, resources }],
     period: { kind: 'recurring', length_seconds: 86_400 },
     expires_at: null,
   };
@@ -98,7 +98,7 @@ describe('everything I hold — the expansion', () => {
     expect(idsOf(connection, [])).toContain('acme[staging].bulk-delete');
   });
 
-  it('budgets: the macro-action base budget at Autonome, the rate at the catalog ceiling when it sets one; by level in no macro-action', () => {
+  it('budgets: the macro-action base budget at Autonomous, the rate at the catalog ceiling when it sets one; by level in no macro-action', () => {
     const connection = acmeConnection();
     const byId = new Map(
       everythingIHold(connection, ACME_RESOURCES).entries.map((e) => [e.risk_id, e]),
@@ -220,7 +220,7 @@ describe('everything I hold — the preview', () => {
         connections: [
           {
             connection_id: connection.id,
-            preset: EVERYTHING_I_HOLD,
+            everything_i_hold: true,
             policy: [{ risk_id: 'acme.admin' }],
           },
         ],
@@ -235,16 +235,17 @@ describe('everything I hold — the preview', () => {
     ]);
   });
 
-  it('a preset id names the built-in one instead', () => {
+  it('is asked by name only: `false` writes nothing on its own', () => {
     const connection = acmeConnection();
     const p = previewDraft(
       { connections: [connection], now: NOW },
       {
         ...draftWith(connection),
-        connections: [{ connection_id: connection.id, preset: 'everything' }],
+        connections: [{ connection_id: connection.id, everything_i_hold: false }],
       },
     );
-    expect(p.issues.find((i) => i.code === 'unknown-preset')?.message).toContain(EVERYTHING_I_HOLD);
+    expect(p.connections[0]?.everything_i_hold).toBe(false);
+    expect(p.policy).toEqual([]);
   });
 });
 
