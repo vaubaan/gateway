@@ -216,6 +216,13 @@ Read these before starting the new image on a running instance:
   every mission's recorded levels on upgrade; agents holding a draft with
   `crans` must send `trust_levels`.
 
+- **Google Calendar asks two scopes instead of four**
+  (`@vaubaan/plugin-google-calendar` 0.3.0): `calendar.calendarlist.readonly`
+  and `calendar.events`, which Google's reference accepts for every read tool
+  and `suggest_time`; `calendar.events.readonly` and
+  `calendar.events.freebusy` are no longer asked, and the broker's allowlist
+  (`@vaubaan/oauth-broker` 0.2.2) no longer admits them: a gateway on an older
+  plugin must upgrade, and a connection made before is reconnected.
 - **The README opens for a visitor**: a short pitch, badges, two screenshots
   of the demo, `npm run demo` first, "How it works" in a few lines, and a
   Status that says what to expect from a pre-release. The handbook

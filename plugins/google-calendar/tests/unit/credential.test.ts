@@ -19,17 +19,12 @@ describe('missingScopes', () => {
   });
 
   test('an unticked scope is missing', () => {
-    expect(missingScopes([SCOPES.eventsRead, SCOPES.freeBusy])).toEqual([
-      SCOPES.calendarListRead,
-      SCOPES.events,
-    ]);
+    expect(missingScopes(['openid', 'email'])).toEqual([SCOPES.calendarListRead, SCOPES.events]);
   });
 
   test('a wider scope grants the narrower ones', () => {
     expect(missingScopes([`${AUTH}calendar`])).toEqual([]);
-    expect(missingScopes([`${AUTH}calendar.calendarlist`, SCOPES.events, SCOPES.freeBusy])).toEqual(
-      [],
-    );
+    expect(missingScopes([`${AUTH}calendar.calendarlist`, SCOPES.events])).toEqual([]);
   });
 
   test('the message names what is missing in the gateway’s words', () => {

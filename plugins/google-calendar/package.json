@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-google-calendar",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for Google Calendar, through Google's official Calendar MCP server and an OAuth broker",

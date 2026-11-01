@@ -16,13 +16,8 @@ import type { OAuth2BrokeredSpec } from '@vaubaan/plugin-sdk';
 
 import { BROKER_PROVIDER, SCOPES } from './identity.ts';
 
-/** The four scopes the tools need, and nothing else (never the full `calendar` scope). */
-export const REQUIRED_SCOPES = [
-  SCOPES.calendarListRead,
-  SCOPES.eventsRead,
-  SCOPES.freeBusy,
-  SCOPES.events,
-] as const;
+/** The two scopes the tools need, and nothing else (never the full `calendar` scope). */
+export const REQUIRED_SCOPES = [SCOPES.calendarListRead, SCOPES.events] as const;
 
 export const googleCalendarCredential: OAuth2BrokeredSpec = {
   kind: 'oauth2',
@@ -33,8 +28,6 @@ export const googleCalendarCredential: OAuth2BrokeredSpec = {
 /** What a person reads for each required scope, on Google's consent screen terms. */
 const SCOPE_LABEL: Readonly<Record<(typeof REQUIRED_SCOPES)[number], string>> = {
   [SCOPES.calendarListRead]: 'see the list of calendars',
-  [SCOPES.eventsRead]: 'see events',
-  [SCOPES.freeBusy]: 'see free/busy',
   [SCOPES.events]: 'edit events',
 };
 
@@ -46,7 +39,6 @@ const WIDER: Readonly<Partial<Record<(typeof REQUIRED_SCOPES)[number], readonly 
     'https://www.googleapis.com/auth/calendar.calendarlist',
     'https://www.googleapis.com/auth/calendar.readonly',
   ],
-  [SCOPES.eventsRead]: [SCOPES.events, 'https://www.googleapis.com/auth/calendar.readonly'],
 };
 
 /**
