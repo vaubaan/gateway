@@ -35,11 +35,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // The Markdown twins of the pages (website spec §2.6), generated into public/.
-        source: '/:path(.+\\.md)',
-        headers: [{ key: 'Content-Type', value: 'text/markdown; charset=utf-8' }],
-      },
-      {
         // The same address answers HTML or Markdown depending on Accept (src/proxy.ts).
         source: '/:section(docs|plugins|trust)/:rest*',
         headers: [{ key: 'Vary', value: 'Accept' }],

@@ -3,8 +3,10 @@ import { notFound } from 'next/navigation';
 
 import { GeneratedPage, generatedPageMetadata } from '@/components/GeneratedPage';
 import { siteData } from '@/site/data';
+import { liveSite, pageMarkdown } from '@/site/live';
 
-export const dynamic = 'force-static';
+// HEALTH_REVALIDATE_SECONDS: the collector is read again at most once an hour.
+export const revalidate = 3600;
 export const dynamicParams = false;
 
 interface Props {
@@ -22,6 +24,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PluginPage({ params }: Props) {
   const { id } = await params;
-  if (!siteData().plugins.some((p) => p.id === id)) notFound();
-  return <GeneratedPage path={`/plugins/${id}`} />;
+  const live = await liveSite();
+  const markdown = pageMarkdown(`/plugins/${id}`, live);
+  if (markdown === null) notFound();
+  return <GeneratedPage path={`/plugins/${id}`} markdown={markdown} />;
 }

@@ -2,11 +2,18 @@
  * What the site serves for language models, agents and crawlers (website
  * spec §2.6), built from the same page list the HTML is built from:
  * `llms.txt`, `llms-full.txt`, `plugins.json`, `sitemap.xml`, `robots.txt`
- * and the Markdown twin path of every page. Pure functions.
+ * and the Markdown twin path of every page. Pure functions. `llms.txt`,
+ * `sitemap.xml` and `robots.txt` are written to `public/` at build time;
+ * `llms-full.txt` and `plugins.json` repeat the plugin pages, so a route
+ * renders them with the collector read (`src/site/live.ts`).
  */
 import { GITHUB_REPO, SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from '../site/constants';
+import type { Health } from './health';
 import type { PluginWithHealth } from './plugin-pages';
 import type { ValidationThresholds } from './thresholds';
+
+/** The files served by a route rather than from `public/` (rendered with the collector read). */
+export const LIVE_FILES = ['plugins.json', 'llms-full.txt'] as const;
 
 export type PageGroup = 'home' | 'docs' | 'plugins' | 'trust';
 
@@ -71,11 +78,38 @@ export function llmsFullTxt(pages: readonly SitePage[]): string {
   return parts.join('\n');
 }
 
-/** `/plugins.json`: the data the plugin pages show. */
+/** The `health` of one plugin in `plugins.json`: the version's state, then the history. */
+function healthJson(health: Health): Record<string, unknown> {
+  const v = health.version;
+  const version: Record<string, unknown> =
+    v.state === 'measured'
+      ? {
+          state: v.state,
+          reports: v.reports,
+          success_rate: v.successRate,
+          validated: v.validated,
+        }
+      : v.state === 'below-threshold'
+        ? { state: v.state, reports: v.reports }
+        : { state: v.state };
+  return {
+    ...version,
+    all_versions: health.allVersions
+      ? { reports: health.allVersions.reports, versions: health.allVersions.versions }
+      : null,
+  };
+}
+
+/**
+ * `/plugins.json`: the data the plugin pages show, with the health read at
+ * `health_read_at` (null when the collector could not be read) and refreshed
+ * at most every `health_refreshed_every_seconds`.
+ */
 export function pluginsJson(
   plugins: readonly PluginWithHealth[],
   thresholds: ValidationThresholds,
   healthFetchedAt: string | null,
+  healthRefreshedEverySeconds: number,
 ): string {
   return `${JSON.stringify(
     {
@@ -86,6 +120,7 @@ export function pluginsJson(
         window_days: thresholds.windowDays,
       },
       health_read_at: healthFetchedAt,
+      health_refreshed_every_seconds: healthRefreshedEverySeconds,
       plugins: plugins.map((p) => ({
         id: p.id,
         name: p.name,
@@ -93,15 +128,7 @@ export function pluginsJson(
         description: p.description,
         page: absolute(`/plugins/${p.id}`),
         source: `${GITHUB_REPO}/tree/main/${p.dir}`,
-        health:
-          p.health.state === 'measured'
-            ? {
-                state: 'measured',
-                reports: p.health.reports,
-                success_rate: p.health.successRate,
-                validated: p.health.validated,
-              }
-            : { state: 'not-enough-reports' },
+        health: healthJson(p.health),
         tools: p.tools.map((t) => ({ name: t.name, title: t.title, description: t.description })),
         risks: p.risks.map((r) => ({
           id: r.id,
