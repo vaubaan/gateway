@@ -18,7 +18,7 @@ import { UpstreamAuthError } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CALL_REJECTED_RPC_CODE } from '../../../src/server/execution';
-import { agePastStaleGrace } from '../../../src/server/store/testing';
+import { agePastStaleGrace } from '../../support/store/testing';
 import {
   DEPOT_API_KEY,
   depotSecret,
@@ -28,7 +28,7 @@ import {
   type ExecutionInstance,
   type IssuedMission,
   type RpcBody,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const READ = 'depot.read';
 const WRITE_STAGING = 'depot[staging].write';

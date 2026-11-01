@@ -30,8 +30,6 @@ import {
   isSignInProviderId,
   localProviderOf,
   issuerKey,
-  LEGACY_PROVIDER_ID,
-  legacyProviderOf,
   normalizeEmailDomains,
   SIGN_IN_KINDS,
   type SignInProvider,
@@ -58,6 +56,8 @@ import {
   readEnvSource,
   readFileSource,
   retiredConfigKeys,
+  RETIRED_IDP_ENV_PREFIX,
+  RETIRED_IDP_KEY,
   secretEnvVariables,
   OAUTH_BROKER_BLOCK,
   OAUTH_BROKER_ENV_PREFIX,
@@ -71,7 +71,6 @@ import {
   CLIENT_REGISTRATION_POLICIES,
   type ClientRegistrationPolicy,
   type EncryptionConfig,
-  type IdpConfig,
   type InstanceConfig,
   LOG_LEVELS,
   type LimitsConfig,
@@ -441,12 +440,13 @@ function validate(
     r.issues.add('self_resources', message, envNamesFor('self_resources')),
   );
   const clientIpHeader = readClientIpHeader(r, trustedProxies);
+  requireAddressSource(r, env, trustedProxies, clientIpHeader);
   const storePath = r.string('store.path', { required: isKeyRequired(keySpec('store.path')) });
   const restore = readRestore(r);
   const encryption = readEncryption(r, masterKey, restore.from !== null);
-  const idp = readIdp(r);
+  refuseSingleProviderKeys(r, raw, env);
   const signIn = readSignIn(r);
-  const signInProviders = checkSignInProviders(r, idp, signIn);
+  const signInProviders = checkSignInProviders(r, signIn);
   const admin = readAdmin(r, signInProviders);
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
   const limits = readLimits(r);
@@ -468,6 +468,7 @@ function validate(
   const requestExpiry = r.duration(keySpec('requests.expiry'));
   const approvalExpiry = r.duration(keySpec('approvals.expiry'));
   const mcpRateLimit = r.int(keySpec('mcp.rate_limit_per_minute'));
+  const callTimeoutSeconds = r.int(keySpec('execution.call_timeout_seconds'));
   const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
   const gitRequestTimeout = r.duration(keySpec('git.request_timeout'));
   const oauth = readOAuth(r);
@@ -488,7 +489,6 @@ function validate(
     store: { path: storePath },
     restore,
     encryption,
-    idp,
     signIn,
     admin,
     retiredKeys: retiredConfigKeys(raw, env),
@@ -505,6 +505,7 @@ function validate(
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
     mcp: { rateLimitPerMinute: mcpRateLimit },
+    execution: { callTimeoutSeconds },
     git: {
       maxPackBytes: gitMaxPackMb * BYTES_PER_MEGABYTE,
       requestTimeoutSeconds: gitRequestTimeout,
@@ -587,6 +588,35 @@ function readClientIpHeader(r: Reader, trustedProxies: readonly string[]): Clien
     return null;
   }
   return header;
+}
+
+/**
+ * In production (`NODE_ENV=production`: the image, never the demo nor a test), a
+ * source of client addresses is required: without `trusted_proxies` or
+ * `client_ip_header` every address-keyed window is one shared by all callers, so
+ * one client can hold everybody's sign-in and approval links at 429 (threat model
+ * A2). `accept_shared_address_windows` states that choice instead.
+ */
+function requireAddressSource(
+  r: Reader,
+  env: EnvSource,
+  trustedProxies: readonly string[],
+  clientIpHeader: ClientIpHeader | null,
+): void {
+  const accepted = r.bool(keySpec('accept_shared_address_windows'));
+  if (env.NODE_ENV !== 'production' || accepted) return;
+  if (trustedProxies.length > 0 || clientIpHeader !== null) return;
+  // A client_ip_header that was refused is already an issue of its own.
+  if (r.string('client_ip_header') !== undefined) return;
+  r.issues.add(
+    'trusted_proxies',
+    'a source of client addresses is required in production: set trusted_proxies to the address of the reverse proxy in front of the instance, or client_ip_header behind an edge that overwrites it; or set accept_shared_address_windows to share every address-keyed limit among all callers (deploy/README.md)',
+    [
+      ...envNamesFor('trusted_proxies'),
+      ...envNamesFor('client_ip_header'),
+      ...envNamesFor('accept_shared_address_windows'),
+    ],
+  );
 }
 
 /**
@@ -1000,6 +1030,7 @@ function readEncryption(
 ): EncryptionConfig | null {
   const path = MASTER_KEY_PATH;
   const generateMasterKey = r.bool(keySpec(GENERATE_PATH));
+  const acceptKeyBesideStore = r.bool(keySpec('encryption.accept_key_beside_store'));
   const absent = source.absent !== null;
   const encoded = absent ? undefined : r.string(path, { required: isKeyRequired(keySpec(path)) });
   const masterKey = encoded === undefined ? undefined : decodeKey(encoded, path, r.issues);
@@ -1057,10 +1088,18 @@ function readEncryption(
       previousKeys,
       masterKeyFile: source.file,
       generateMasterKey,
+      acceptKeyBesideStore,
     };
   }
   if (!masterKey) return null;
-  return { masterKey, keyVersion, previousKeys, masterKeyFile: source.file, generateMasterKey };
+  return {
+    masterKey,
+    keyVersion,
+    previousKeys,
+    masterKeyFile: source.file,
+    generateMasterKey,
+    acceptKeyBesideStore,
+  };
 }
 
 function decodeKey(encoded: string, path: string, issues: IssueList): Uint8Array | undefined {
@@ -1082,38 +1121,22 @@ function normalizeBase64(text: string): string {
   return padded + '='.repeat((4 - (padded.length % 4)) % 4);
 }
 
-function readIdp(r: Reader): IdpConfig | null {
-  const block = r.tree('idp');
-  if (!block || Object.keys(block).length === 0) return null;
-  // The block exists: its three connection keys are now required.
-  const issuerKey = keySpec('idp.issuer');
-  const issuer = r.url(issuerKey.path, {
-    required: isKeyRequired(issuerKey, true),
-    https: issuerKey.https,
-  });
-  const clientId = r.string('idp.client_id', {
-    required: isKeyRequired(keySpec('idp.client_id'), true),
-  });
-  const clientSecret = r.string('idp.client_secret', {
-    required: isKeyRequired(keySpec('idp.client_secret'), true),
-  });
-  const claims = {
-    sub: r.text(keySpec('idp.claims.sub')),
-    email: r.text(keySpec('idp.claims.email')),
-    groups: r.text(keySpec('idp.claims.groups')),
-  };
-  if (issuer && isGithubDotComHost(issuer)) {
-    // The idp.* keys describe an OpenID Connect provider; GitHub goes under sign_in.<id>.
-    r.issues.add(
-      issuerKey.path,
-      `${GITHUB_IS_NOT_OIDC} (sign_in.<id>.kind: github)`,
-      envNamesFor(issuerKey.path),
-    );
-  }
-  const allowedEmailDomains = r.stringList('idp.allowed_email_domains').map((d) => d.toLowerCase());
-  const invitationOnly = r.bool(keySpec('idp.invitation_only'));
-  if (!issuer || !clientId || !clientSecret) return null;
-  return { issuer, clientId, clientSecret, claims, allowedEmailDomains, invitationOnly };
+/**
+ * The single-provider keys of earlier builds (`idp.*`, `VAUBAAN_IDP_*`) are refused:
+ * ignored, they would leave the instance without the provider people sign in with.
+ * The same provider is `sign_in.idp.*`, whose callback is `<public_url>/auth/callback/idp`
+ * (gateway audit 2026-10-31, F7; CHANGELOG upgrade note).
+ */
+function refuseSingleProviderKeys(r: Reader, raw: RawTree, env: EnvSource): void {
+  const variables = Object.keys(env)
+    .filter((name) => name.startsWith(RETIRED_IDP_ENV_PREFIX) && env[name] !== undefined)
+    .sort();
+  if (raw[RETIRED_IDP_KEY] === undefined && variables.length === 0) return;
+  r.issues.add(
+    RETIRED_IDP_KEY,
+    'the single-provider keys are retired: write the same provider as sign_in.idp.* (kind oidc, issuer, client_id, client_secret, claims, allowed_email_domains, invitation_only; VAUBAAN_SIGN_IN_IDP_KIND=oidc, VAUBAAN_SIGN_IN_IDP_ISSUER, …) and register <public_url>/auth/callback/idp at the identity provider',
+    variables,
+  );
 }
 
 /**
@@ -1255,17 +1278,12 @@ function normalizeDomainsAt(r: Reader, path: string): string[] {
 }
 
 /**
- * The rules across the providers the configuration sets: one id each (`idp.*` is
- * the provider `idp`), one issuer each (a user is (issuer, subject): two providers
+ * The rules across the providers the configuration sets: one issuer each (a user is (issuer, subject): two providers
  * of one issuer would be one population with two admission rules), and an
  * admission rule for every open provider.
  */
-function checkSignInProviders(
-  r: Reader,
-  idp: IdpConfig | null,
-  signIn: readonly SignInProvider[],
-): SignInProvider[] {
-  const all = [...(idp ? [legacyProviderOf(idp)] : []), ...signIn];
+function checkSignInProviders(r: Reader, signIn: readonly SignInProvider[]): SignInProvider[] {
+  const all = [...signIn];
   const issuers = new Map<string, string>();
   const locals = all.filter((p) => p.kind === 'local');
   if (locals.length > 1) {
@@ -1275,17 +1293,7 @@ function checkSignInProviders(
     );
   }
   for (const provider of all) {
-    const path = provider.id === LEGACY_PROVIDER_ID && idp ? 'idp' : `sign_in.${provider.id}`;
-    if (
-      provider.id === LEGACY_PROVIDER_ID &&
-      idp &&
-      signIn.some((p) => p.id === LEGACY_PROVIDER_ID)
-    ) {
-      r.issues.add(
-        'sign_in.idp',
-        "the id 'idp' is the provider the idp.* keys describe; set one or the other",
-      );
-    }
+    const path = `sign_in.${provider.id}`;
     const key = issuerKey(provider.issuer);
     const other = issuers.get(key);
     if (other !== undefined && other !== provider.id) {
@@ -1298,18 +1306,10 @@ function checkSignInProviders(
     issuers.set(key, provider.id);
     const problem = admissionProblem(provider);
     if (problem) {
-      r.issues.add(
-        provider.id === LEGACY_PROVIDER_ID && idp
-          ? 'idp.allowed_email_domains'
-          : `${path}.allowed_email_domains`,
-        problem,
-        provider.id === LEGACY_PROVIDER_ID && idp
-          ? [...envNamesFor('idp.allowed_email_domains'), ...envNamesFor('idp.invitation_only')]
-          : [
-              ...envNamesFor(`${path}.allowed_email_domains`),
-              ...envNamesFor(`${path}.invitation_only`),
-            ],
-      );
+      r.issues.add(`${path}.allowed_email_domains`, problem, [
+        ...envNamesFor(`${path}.allowed_email_domains`),
+        ...envNamesFor(`${path}.invitation_only`),
+      ]);
     }
   }
   return all;

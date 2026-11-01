@@ -56,7 +56,7 @@ import {
   TEST_PUBLIC_URL,
   type DepotExecute,
   type ExecutionInstance,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const COLLECTOR_HOST = 'collector.example.net';
 const COLLECTOR_KEY = 'pk_test_public_key';

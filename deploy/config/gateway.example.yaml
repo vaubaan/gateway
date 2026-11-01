@@ -37,11 +37,21 @@
 
 # Reverse proxies whose X-Forwarded-For header is trusted for client IPs
 # (surface rate limits, audit). IP addresses or CIDR blocks. Default: none.
-# 172.16.0.0/12 is Docker's default address pool (the Caddy container of
-# compose.yaml); narrow it to your proxy's address when you can.
+# compose.yaml trusts Caddy's fixed address, 172.30.253.2. Name your proxy's
+# address, never a whole Docker pool such as 172.16.0.0/12: every container on
+# it could then pick the address it is limited and audited under.
+# In production (the image) the gateway refuses to start without this or
+# client_ip_header, unless accept_shared_address_windows is set.
 # env: VAUBAAN_TRUSTED_PROXIES (comma-separated)
 # trusted_proxies:
-#   - 172.16.0.0/12
+#   - 172.30.253.2
+
+# With neither trusted_proxies nor client_ip_header, every address-keyed limit
+# (sign-in, the bootstrap token, the request page, the authorization server)
+# is one window shared by all callers, and the audit records no address.
+# Production refuses that unless it is accepted here.
+# env: VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS
+# accept_shared_address_windows: false
 
 # Provider resources that host or run this instance: never reachable by a
 # mission (not offered at issuance, refused at execution). Each entry is
@@ -94,6 +104,12 @@
 #   # administrator. Refused once the store holds data, and with restore.from.
 #   # env: VAUBAAN_MASTER_KEY_GENERATE
 #   generate_master_key: false
+#   # The boot warns when the key file sits on the same mount as the store (a
+#   # copy of that volume opens every credential; compose.yaml mounts the key
+#   # on a volume of its own). Set it only where the platform offers one
+#   # volume and its snapshots are kept apart from the key.
+#   # env: VAUBAAN_ACCEPT_KEY_BESIDE_STORE
+#   accept_key_beside_store: false
 #   # Version stamped on new blobs (integer >= 1). Increase it when you rotate the key.
 #   # env: VAUBAAN_MASTER_KEY_VERSION
 #   key_version: 1
@@ -104,33 +120,9 @@
 #   previous_keys:
 #     1: ${file:/run/secrets/vaubaan_master_key_v1}
 
-# OpenID Connect provider (spec D2). Optional at first boot: until it is set,
-# the operator signs in with bootstrap_token. Once present, issuer (https),
-# client_id and client_secret are required and bootstrap_token becomes
-# optional; claims and allowed_email_domains keep their defaults.
-# idp:
-#   # env: VAUBAAN_IDP_ISSUER
-#   issuer: https://login.example.com/realms/acme
-#   # env: VAUBAAN_IDP_CLIENT_ID
-#   client_id: vaubaan-gateway
-#   # env: VAUBAAN_IDP_CLIENT_SECRET or VAUBAAN_IDP_CLIENT_SECRET_FILE
-#   client_secret: ${VAUBAAN_IDP_CLIENT_SECRET}
-#   # Claim names in the ID token / userinfo. Defaults shown.
-#   # env: VAUBAAN_IDP_CLAIM_SUB, VAUBAAN_IDP_CLAIM_EMAIL, VAUBAAN_IDP_CLAIM_GROUPS
-#   claims:
-#     sub: sub
-#     email: email
-#     groups: groups
-#   # Only users whose email domain is listed (or who are invited) may sign
-#   # in. Default: everyone the directory signs in — refused for an issuer
-#   # where anyone can open an account (personal Google or Microsoft).
-#   # env: VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS (comma-separated)
-#   allowed_email_domains:
-#     - example.com
-#   # Admit invited addresses (Settings → People) and the admin emails only,
-#   # instead of domains. Default false.
-#   # env: VAUBAAN_IDP_INVITATION_ONLY
-#   invitation_only: false
+# The single-provider block `idp:` of earlier builds is refused: write that
+# provider as `sign_in.idp` (kind oidc) under `sign_in:` below, and register its
+# callback <public_url>/auth/callback/idp at the identity provider.
 
 # OAuth brokers this instance is enrolled with, keyed by a name of your choice.
 # A broker owns an OAuth client at a provider that offers no key a person can
@@ -315,6 +307,14 @@
 # env: VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE
 # mcp:
 #   rate_limit_per_minute: 600
+
+# The deadline of one tool call on the execution door, in seconds (integer
+# >= 1). A provider that has not answered by then is left: the call is
+# stopped, recorded in the audit as an upstream error ending in "(timeout)",
+# and the agent is told so. It was counted against the mission.
+# env: VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS
+# execution:
+#   call_timeout_seconds: 120
 
 # The git remote (https://<public_url>/git/<owner>/<repo>.git, spec §4.1 ter).
 # max_pack_mb: the largest push accepted, in MiB (1 to 4096); a larger push is

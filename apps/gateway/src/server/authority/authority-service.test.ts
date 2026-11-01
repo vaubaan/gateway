@@ -2,12 +2,16 @@ import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { RegistryCatalogIndex } from '../compose/registry';
-import { fakePlugin } from '../compose/testing';
+import { fakePlugin } from '../../../tests/support/compose/testing';
 import { openMemoryStore, type Store } from '../store';
-import { StubEncryptor } from '../store/testing';
+import { StubEncryptor } from '../../../tests/support/store/testing';
 import type { ConnectionRecord, Principal, UserRecord } from '../store/types';
 import { ConnectionAuthorityService } from './authority-service';
-import { explicitRiskIdsOf, fullCatalogRiskIds, uncoveredRisks } from './catalog-authority';
+import {
+  explicitRiskIdsOf,
+  fullCatalogRiskIds,
+  uncoveredRisks,
+} from '../../lib/authority/catalog-authority';
 
 /** The fake plugin's catalog as explicit ids: `acme.thing-write` is env-scoped. */
 const ACME_FULL = [
@@ -90,7 +94,7 @@ describe('ConnectionAuthorityService', () => {
     });
 
     it('treats every current member of an owner group as an owner, recomputed on each call', async () => {
-      const group = await store.groups.getOrCreate('github-admins', 'local');
+      const group = await store.groups.getOrCreate('github-admins', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       const connection = await connect({ kind: 'group', id: group.id });
       expect((await authority.authorityOf(bob, connection)).basis).toBe('owner');
@@ -135,8 +139,8 @@ describe('ConnectionAuthorityService', () => {
 
     it('unions a direct share and the shares made to the groups of the user', async () => {
       const connection = await connect({ kind: 'user', id: ada.id });
-      const team = await store.groups.getOrCreate('team', 'local');
-      const other = await store.groups.getOrCreate('other', 'local');
+      const team = await store.groups.getOrCreate('team', 'local', null);
+      const other = await store.groups.getOrCreate('other', 'local', null);
       await store.groups.addMember(team.id, bob.id);
       await share(connection, { kind: 'user', id: bob.id }, [READ]);
       await share(connection, { kind: 'group', id: team.id }, [WRITE_STAGING]);
@@ -161,7 +165,7 @@ describe('ConnectionAuthorityService', () => {
       const connection = await connect({ kind: 'user', id: ada.id });
       const direct = await share(connection, { kind: 'user', id: bob.id }, [READ, WRITE_PROD]);
       expect((await authority.authorityOf(bob, connection)).riskIds).toEqual([READ, WRITE_PROD]);
-      await store.shares.revoke(direct.id);
+      await store.shares.revoke({ connectionId: direct.connectionId, shareId: direct.id });
       expect(await authority.authorityOf(bob, connection)).toMatchObject({
         basis: 'none',
         riskIds: [],
@@ -170,7 +174,7 @@ describe('ConnectionAuthorityService', () => {
 
     it('is recomputed from the current membership, never from a snapshot', async () => {
       const connection = await connect({ kind: 'user', id: ada.id });
-      const team = await store.groups.getOrCreate('team', 'local');
+      const team = await store.groups.getOrCreate('team', 'local', null);
       await share(connection, { kind: 'group', id: team.id }, [READ]);
       // The same service instance, asked three times around two membership changes.
       expect((await authority.authorityOf(bob, connection)).riskIds).toEqual([]);
@@ -187,7 +191,7 @@ describe('ConnectionAuthorityService', () => {
     });
 
     it('lists the connections a user owns or received, once each', async () => {
-      const group = await store.groups.getOrCreate('platform', 'local');
+      const group = await store.groups.getOrCreate('platform', 'local', null);
       await store.groups.addMember(group.id, ada.id);
       const own = await connect({ kind: 'user', id: ada.id });
       const viaGroup = await connect({ kind: 'group', id: group.id });
@@ -240,7 +244,7 @@ describe('ConnectionAuthorityService', () => {
     });
 
     it('reads the groups once for several group-owned connections', async () => {
-      const group = await store.groups.getOrCreate('platform', 'local');
+      const group = await store.groups.getOrCreate('platform', 'local', null);
       await store.groups.addMember(group.id, ada.id);
       const first = await connect({ kind: 'group', id: group.id });
       const second = await connect({ kind: 'group', id: group.id });
@@ -301,7 +305,7 @@ describe('ConnectionAuthorityService', () => {
     });
 
     it('observes a membership change on the very next check', async () => {
-      const group = await store.groups.getOrCreate('platform', 'local');
+      const group = await store.groups.getOrCreate('platform', 'local', null);
       await store.groups.addMember(group.id, bob.id);
       const connection = await connect({ kind: 'group', id: group.id });
       const question = [{ connection, riskIds: [READ] }];

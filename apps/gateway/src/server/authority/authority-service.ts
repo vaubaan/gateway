@@ -28,7 +28,7 @@ import type { GroupsRepo } from '../store/repositories/groups';
 import type { SharesRepo } from '../store/repositories/shares';
 import type { UsersRepo } from '../store/repositories/users';
 import type { ConnectionRecord, Principal } from '../store/types';
-import { fullCatalogRiskIds, uncoveredRisks } from './catalog-authority';
+import { fullCatalogRiskIds, uncoveredRisks } from '../../lib/authority/catalog-authority';
 
 /** Why the user holds this authority. */
 export type AuthorityBasis = 'owner' | 'share' | 'none';

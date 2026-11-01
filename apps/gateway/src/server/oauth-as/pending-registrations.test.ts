@@ -7,7 +7,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { MAX_PENDING_REGISTRATIONS, PENDING_REGISTRATION_TTL_MS } from './clients';
 import { OAuthProtocolError } from './errors';
-import { LOOPBACK_REDIRECT, openOAuthRig, WEB_REDIRECT, type OAuthRig } from './testing';
+import {
+  LOOPBACK_REDIRECT,
+  openOAuthRig,
+  WEB_REDIRECT,
+  type OAuthRig,
+} from '../../../tests/support/oauth-as/testing';
 
 const webClient = (i: number) => ({
   client_name: `Decoy ${i}`,

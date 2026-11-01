@@ -53,7 +53,7 @@ import type { MissionAccess, MissionRole, MissionService, RevealedToken } from '
 import { mintMissionToken, type TokenMinter } from './token';
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
-import { parseTokenName } from './token-name';
+import { parseTokenName } from '../../lib/missions/token-name';
 
 export interface MissionTeamDeps {
   readonly store: Pick<Store, 'missions' | 'users' | 'sessions' | 'auditWriter'>;
@@ -457,8 +457,9 @@ export class MissionTeamService {
   ): Promise<ReplaceNamedTokenResult> {
     const mission = await this.creatorMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
-    const old = await this.deps.store.missions.getToken(tokenId);
-    if (!old || old.missionId !== mission.id) return { ok: false, reason: 'not-found' };
+    // A token of another mission reads as missing: the key carries the mission.
+    const old = await this.deps.store.missions.getToken({ missionId: mission.id, tokenId });
+    if (!old) return { ok: false, reason: 'not-found' };
     if (old.holder.kind !== 'named' || old.status !== 'active') {
       return { ok: false, reason: 'not-replaceable' };
     }
@@ -552,13 +553,16 @@ export class MissionTeamService {
     const access = await this.deps.missions.access(user, missionId);
     if (!access) return { ok: false, reason: 'not-found' };
     const { mission, role } = access;
-    const token = await this.deps.store.missions.getToken(tokenId);
-    // A token of another mission is not this mission's: same answer as an unknown id.
-    if (!token || token.missionId !== mission.id) return { ok: false, reason: 'not-found' };
+    // A token of another mission reads as missing: same answer as an unknown id.
+    const token = await this.deps.store.missions.getToken({ missionId: mission.id, tokenId });
+    if (!token) return { ok: false, reason: 'not-found' };
     const own = token.holder.kind === 'member' && token.holder.userId === user.id;
     if (role !== 'creator' && !own) return { ok: false, reason: 'not-found' };
 
-    const revoked = await this.deps.store.missions.revokeToken(token.id);
+    const revoked = await this.deps.store.missions.revokeToken({
+      missionId: mission.id,
+      tokenId: token.id,
+    });
     if (!revoked) return { ok: true, token_id: token.id, already: true };
     await this.auditRevocation(user.id, revoked, own ? 'by-holder' : 'by-creator');
     await this.recordRevocation(mission.id, user.id, revoked);

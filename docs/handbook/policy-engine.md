@@ -27,8 +27,9 @@ last_reviewed: 2026-10-27
 
 ## Invariants
 
+- **The barrel names the public API** (`src/index.ts`, no `export *`, **[inv: named-package-barrels]**): a name the other packages need is added there on purpose; the package's own tests import from the module.
 - Values come only from the browser-safe subpaths `@vaubaan/shared/risk-id` and `/domain`: the
-  issuance UI bundles this package and the barrel pulls in `node:crypto` and argon2.
+  issuance UI bundles this package and the barrel pulls in `node:crypto`.
 - One rule each, called by every consumer: `isAcceptableInEnv` (issuance, runtime, SDK macro-action
   checks, the store's `RegistryCatalogIndex`), `budgetIssues` (SDK loader, `macroActionIssues`,
   issuance preview). Never re-implement them.

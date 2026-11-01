@@ -18,7 +18,7 @@
  * back once more, with the list of that instant.
  */
 import { guardMutation, refusalResponse, type Authenticator, type RefusalWording } from '../auth';
-import { notAFormResponse, readForm } from '../auth/handlers';
+import { notAFormResponse, readForm } from '../http/form';
 import {
   actorOf,
   connectionPath,

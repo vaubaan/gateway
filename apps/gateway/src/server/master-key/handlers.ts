@@ -17,7 +17,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import { auditActorId, type Authenticator } from '../auth/authenticator';
 import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from '../auth/guard';
-import { notAFormResponse, readForm } from '../auth/handlers';
+import { notAFormResponse, readForm } from '../http/form';
 import type { SessionService } from '../auth/session-service';
 import { MASTER_KEY_FILE_NAME } from '../crypto/master-key-file';
 import type { Logger } from '../logging';

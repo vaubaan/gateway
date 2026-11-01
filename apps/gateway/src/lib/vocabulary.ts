@@ -1355,6 +1355,10 @@ export const TOKEN_CONNECT = {
   expiresSoonTitle: (date: string) => `The token expires ${date}`,
   expiresSoonBody:
     'Create a new token at the service and reconnect before then; missions keep running on the same account.',
+  lacksTitle: (count: number) =>
+    count === 1 ? 'The token lacks a permission' : `The token lacks ${count} permissions`,
+  lacksBody: (service: string) =>
+    `${service} said, when the token was checked, that it does not hold these. The tools that need them fail until you create a token with them and reconnect; the account keeps its missions.`,
   pasteTitle: 'Paste it here',
 } as const;
 

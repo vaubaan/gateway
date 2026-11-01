@@ -97,8 +97,7 @@ scripts/publish-manifest.ts restore`.
 Its dependencies `@vaubaan/shared` and `@vaubaan/policy-engine` are workspace packages with
 `exports` on TypeScript sources and version `0.0.0`: published as they are, the SDK cannot be
 installed. Either publish both too, or inline them. **Recommended: inline them** (bundle the
-JavaScript the SDK uses and roll up its declarations at build): `@vaubaan/shared` carries `argon2`, a
-native module no plugin needs, and publishing both would make two more APIs public contracts with
+JavaScript the SDK uses and roll up its declarations at build): publishing both would make two more APIs public contracts with
 versions of their own, while plugin authors only ever write against the SDK.
 
 ## Traps
@@ -110,7 +109,7 @@ versions of their own, while plugin authors only ever write against the SDK.
 - The YAML reaches `.next/standalone` only through the `plugins/*/src/**/*.yaml` glob of
   `outputFileTracingIncludes` in `apps/gateway/next.config.ts`: keep it under
   `plugins/<id>/src/` (`standalone-plugin-catalogs.test.ts` checks after a build).
-- `@vaubaan/shared`'s barrel is server-only (argon2, `node:crypto`); code the UI bundles takes
+- `@vaubaan/shared`'s barrel is server-only (`node:crypto`); code the UI bundles takes
   values from `@vaubaan/shared/risk-id`, `/domain`, `/api-key`.
 - A plugin matching a glob from its arguments uses `matchWildcard`, never a `RegExp`.
 - A destructive operation gets its own risk through a verb leaf (`widget[<id>].delete.W`); the

@@ -6,7 +6,7 @@ tracks:
   - apps/gateway/src/server/connections/broker-attestation.ts
   - apps/gateway/src/server/connections/attestation-gcp.ts
   - apps/gateway/src/server/connections/broker-measurements.json
-  - apps/gateway/src/server/connections/fake-oauth-broker.ts
+  - apps/gateway/tests/support/connections/fake-oauth-broker.ts
   - apps/gateway/src/server/config/oauth-brokers.ts
 last_reviewed: 2026-10-27
 ---
@@ -27,7 +27,7 @@ an `attestation` mode ([configuration](configuration.md)).
   TLS connection, `/attest`, timeouts.
 - [`attestation-gcp.ts`](../../apps/gateway/src/server/connections/attestation-gcp.ts) — its header
   lists every claim checked in a Confidential Space token.
-- [`fake-oauth-broker.ts`](../../apps/gateway/src/server/connections/fake-oauth-broker.ts) — the
+- [`fake-oauth-broker.ts`](../../apps/gateway/tests/support/connections/fake-oauth-broker.ts) — the
   reference behaviour; `oauth-broker.test.ts` pins every case below.
 
 ## Invariants

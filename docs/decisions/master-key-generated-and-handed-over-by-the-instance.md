@@ -49,3 +49,28 @@ self-hoster.
 ### Show the key on the page, or paste it for a restore
 
 A page is cached, screen-shared and printed; a text field invites the shell history back.
+
+## Amendment 2026-10-31 — the key is kept apart from the store by default
+
+The "Consequences" line "key and store share the volume" is withdrawn as a default (pre-publication
+security audit, M4): a volume snapshot, a platform backup or a stolen disk then held the store and
+the key that opens it, and encryption at rest was a format.
+
+- The reference deployment (`deploy/compose.yaml`) mounts a volume of its own for the key,
+  `gateway-key` at `/keys`, and the example `.env` names `/keys/master.key`; the image creates `/keys`
+  (uid 10001, mode 0700) and the entrypoint gives it back to that user when started as root.
+  Generation, the setup handover and setup mode are unchanged: the key directory is writable, so
+  a Docker secret (read-only) stays the way to bring a key of one's own, never the generated one.
+- At boot, when the key file and the store sit on one mount (read from `/proc/self/mountinfo`; two
+  Docker volumes on one disk are two mounts), the gateway logs one warning naming both paths, unless
+  `encryption.accept_key_beside_store` (`VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1`) says the operator keeps
+  the volume's copies apart from the key — for a platform with one volume per service (Railway),
+  where giving the key as a variable is the better answer. A warning, not a refusal: an existing
+  instance keeps starting, and a single-volume host is a legitimate choice once stated.
+- A Compose instance whose `.env` still names `/data/master.key` keeps starting, with the warning;
+  moving the key is copying it to `/keys`, naming it in `.env`, then removing the old copy
+  (`deploy/README.md`). The compose file does not set the variable itself: an operator who gives
+  the key by value (`VAUBAAN_MASTER_KEY`) would otherwise meet "set either …, not both".
+
+Rejected: a Docker secret as the default (the generated key cannot be written to it, and the quick
+start would need Node.js again); refusing to boot (it would stop every Railway instance on upgrade).

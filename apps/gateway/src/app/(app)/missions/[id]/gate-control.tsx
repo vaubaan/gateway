@@ -14,7 +14,7 @@ import { Switch, useToast } from '@/components/ui';
 import { GATE_WORDS } from '@/lib/vocabulary';
 import type { Gate } from '@vaubaan/shared';
 
-import { messageOf } from '../message-of';
+import { useAction } from '@/lib/http/post-json';
 import styles from '../missions.module.css';
 
 export function GateControl({
@@ -32,39 +32,27 @@ export function GateControl({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
   // The switch moves at once and comes back if the gateway refuses: what it shows while
   // the request is under way is what was asked, never a third state.
   const [asked, setAsked] = useState<Gate | null>(null);
   useEffect(() => setAsked(null), [gate]);
 
   async function change(next: Gate) {
-    setBusy(true);
-    setError(null);
     setAsked(next);
-    try {
-      const res = await fetch(`/api/missions/${encodeURIComponent(missionId)}/gate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ risk_id: riskId, gate: next }),
-      });
-      if (!res.ok) {
-        setAsked(null);
-        setError(messageOf(await res.json().catch(() => null), res.status));
-        return;
-      }
-      toast({
-        title: next === 'approval' ? `“${label}” asks you first` : `“${label}” runs freely`,
-        description: 'From the next call.',
-      });
-      router.refresh();
-    } catch {
+    const answer = await run(`/api/missions/${encodeURIComponent(missionId)}/gate`, {
+      risk_id: riskId,
+      gate: next,
+    });
+    if (!answer.ok) {
       setAsked(null);
-      setError('The gateway could not be reached.');
-    } finally {
-      setBusy(false);
+      return;
     }
+    toast({
+      title: next === 'approval' ? `“${label}” asks you first` : `“${label}” runs freely`,
+      description: 'From the next call.',
+    });
+    router.refresh();
   }
 
   return (

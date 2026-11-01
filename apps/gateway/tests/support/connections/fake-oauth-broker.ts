@@ -1,0 +1,703 @@
+/**
+ * A fake OAuth broker: the contract test kit of ADR
+ * google-calendar-through-an-oauth-broker ("A contract test kit (a fake broker)
+ * ships with the gateway's tests"), on the stateless, attested contract of ADR
+ * oauth-broker-stateless-in-an-attested-enclave. Not for production.
+ *
+ * An in-memory server on the loopback interface that implements the calls of
+ * docs/handbook/oauth-broker-contract.md exactly as written there — the
+ * request and answer bodies, the status codes, the error codes, the lifetime
+ * of a grant — plus the provider's side of the flow, which a test drives
+ * instead of a browser (`approve`, `deny`). An implementer of a real broker
+ * can read this file as the reference behaviour.
+ *
+ *   const broker = await FakeOAuthBroker.start({ keys: { 'key-of-instance-a': 'instance-a' } });
+ *   broker.recordReturnUrl('instance-a', 'https://gateway.example.com/connections/callback/google-calendar');
+ *   const brokers = new OAuthBrokers([broker.configFor('key-of-instance-a')],
+ *     { fetch, attestation: broker.attestationKit() });
+ *   …
+ *   await broker.stop();
+ *
+ * It serves at the root of its URL (`https://127.0.0.1:<port>`), over HTTPS
+ * with a key of its own (a throwaway self-signed certificate,
+ * `fake-tls-certificate.ts`). By default it plays an attested broker:
+ * `POST /attest` (no body, no key) answered with a cached evidence on the
+ * **test-only** platform `fake-enclave`, refreshed every five minutes, whose
+ * adapter and allowlist `attestationKit()` hands to the code under test — the
+ * configuration can never name it. `{ attestation: 'none' }` plays a broker
+ * outside an enclave: no `/attest`, its certificate checked by a fetch that
+ * trusts it (`trustingFetch()`).
+ *
+ * Like a real broker it keeps no token: the refresh tokens it hands out are
+ * opaque values the fake *provider* knows (`providerRefreshTokens`), bound to
+ * the instance that redeemed them, which the broker side only reads when the
+ * gateway presents one. Knobs: `down()` / `up()` (503 to
+ * everything), `clock` (the grant's lifetime), `refusingProvider()` (the
+ * provider refuses every refresh token: `invalid_grant`), `refusingCode()`
+ * (the provider refuses the code at the redeem: `invalid_grant`), `attestWith()`
+ * (evidence for another version, key, lifetime or a debug image),
+ * `rotateTlsKey()` (the enclave restarted), `holdAttest()` (a slow
+ * attestation), `redirecting()` (a 3xx answer), and the record of every call
+ * (`calls`).
+ */
+import {
+  createHash,
+  generateKeyPairSync,
+  randomBytes,
+  X509Certificate,
+  type KeyObject,
+} from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import {
+  createServer as createTlsServer,
+  request as httpsRequest,
+  type Server as HttpsServer,
+} from 'node:https';
+import type { AddressInfo } from 'node:net';
+
+import { jwtVerify, SignJWT } from 'jose';
+
+import type { OAuthBrokerConfig } from '../../../src/server/config/types';
+import {
+  AttestationRefused,
+  BROKER_ATTESTATION_AUDIENCE,
+  spkiHashOf,
+  type AttestationPlatform,
+  type BrokerAttestationKit,
+} from '../../../src/server/connections/broker-attestation';
+import { fakeTlsCertificate } from './fake-tls-certificate';
+
+/** How long a one-time grant may wait for its redeem (contract: "minutes-long"). */
+export const FAKE_GRANT_TTL_MS = 5 * 60_000;
+/** The lifetime of the access tokens the fake hands out. */
+export const FAKE_ACCESS_TOKEN_TTL_MS = 60 * 60_000;
+/** The lifetime of the fake's attestation evidence. */
+export const FAKE_ATTESTATION_TTL_MS = 60 * 60_000;
+/** How often the fake mints a new evidence; between, `/attest` answers the cached one. */
+export const FAKE_ATTESTATION_REFRESH_MS = 5 * 60_000;
+/** The provider the fake serves, unless told otherwise. */
+export const FAKE_BROKER_PROVIDER = 'google';
+/** The provider's consent page the fake answers `POST /flows` with. */
+export const FAKE_AUTHORIZE_URL = 'https://accounts.provider.example.com/o/oauth2/v2/auth';
+/** The test-only enclave platform. No production kit knows it. */
+export const FAKE_ENCLAVE_PLATFORM = 'fake-enclave';
+/** The measurement the fake reports, admitted by `attestationKit()`. */
+export const FAKE_BROKER_MEASUREMENT = `sha256:${'f'.repeat(64)}`;
+const FAKE_ENCLAVE_ISSUER = 'https://fake-enclave.example.com';
+
+export interface FakeOAuthBrokerOptions {
+  /** Broker key → the instance it enrolls. */
+  readonly keys: Readonly<Record<string, string>>;
+  /** Providers served; default `['google']`. */
+  readonly providers?: readonly string[];
+  /** The account the provider says the person signed in as. */
+  readonly account?: string;
+  /** The scopes the provider granted; default: the scopes the flow asked for. */
+  readonly grantedScopes?: readonly string[];
+  readonly now?: () => number;
+  /** `fake-enclave` (the default): `/attest` answered. `none`: no `/attest`, not attested. */
+  readonly attestation?: 'fake-enclave' | 'none';
+}
+
+/** One call the fake received: what the gateway sent, the key's instance, the answer's status. */
+export interface FakeBrokerCall {
+  readonly method: string;
+  readonly path: string;
+  readonly instance: string | null;
+  readonly body: Record<string, unknown> | null;
+  readonly status: number;
+  /** Whether the call carried an `Authorization` header at all. */
+  readonly withKey: boolean;
+}
+
+/** What the next attestations say, instead of the truth. */
+export interface FakeAttestationOverride {
+  readonly measurement?: string;
+  /** The SPKI hash the evidence carries (default: the key the server presents). */
+  readonly spkiHash?: string;
+  readonly debug?: boolean;
+  /** The evidence's lifetime (default `FAKE_ATTESTATION_TTL_MS`). */
+  readonly ttlMs?: number;
+}
+
+interface Flow {
+  readonly instance: string;
+  readonly provider: string;
+  readonly scopes: readonly string[];
+  readonly returnUrl: string;
+  readonly state: string;
+  readonly challenge: string;
+}
+
+interface PendingGrant {
+  readonly flow: Flow;
+  readonly issuedAt: number;
+  used: boolean;
+}
+
+/** A refresh token as the fake provider knows it; the broker side keeps nothing. */
+interface ProviderGrant {
+  /** The instance it is bound to: another instance presenting it is refused. */
+  readonly instance: string;
+  readonly provider: string;
+  readonly scopes: readonly string[];
+  revoked: boolean;
+}
+
+const MAX_BODY_BYTES = 64 * 1024;
+
+export class FakeOAuthBroker {
+  private readonly flows = new Map<string, Flow>();
+  private readonly pendingGrants = new Map<string, PendingGrant>();
+  private readonly returnUrls = new Map<string, Set<string>>();
+  private isDown = false;
+  private providerRefuses = false;
+  private providerRefusesCode = false;
+  private override: FakeAttestationOverride = {};
+  private cachedEvidence: { readonly evidence: string; readonly at: number } | null = null;
+  private attestHold: Promise<void> | null = null;
+  private readonly redirects = new Set<string>();
+  /** The provider's side: every refresh token it issued, by value. Not the broker's state. */
+  readonly providerRefreshTokens = new Map<string, ProviderGrant>();
+  readonly calls: FakeBrokerCall[] = [];
+  /** Refresh tokens revoked at the provider through `POST /revoke`. */
+  readonly revokedAtProvider: string[] = [];
+
+  private constructor(
+    private readonly server: HttpsServer,
+    readonly url: URL,
+    private readonly options: FakeOAuthBrokerOptions,
+    /** The PEM of the certificate it presents (changes with `rotateTlsKey`). */
+    private certPem: string,
+    private readonly enclave: {
+      readonly signingKey: KeyObject;
+      readonly verifyKey: KeyObject;
+      spkiHash: string;
+    } | null,
+  ) {}
+
+  static async start(options: FakeOAuthBrokerOptions): Promise<FakeOAuthBroker> {
+    let broker: FakeOAuthBroker | null = null;
+    const handler = (req: IncomingMessage, res: ServerResponse): void => {
+      void broker?.handle(req, res);
+    };
+    const attested = (options.attestation ?? FAKE_ENCLAVE_PLATFORM) === FAKE_ENCLAVE_PLATFORM;
+    const certificate = fakeTlsCertificate();
+    const server = createTlsServer({ key: certificate.keyPem, cert: certificate.certPem }, handler);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    const keys = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+    broker = new FakeOAuthBroker(
+      server,
+      // At the root, with a port: as the reference broker serves.
+      new URL(`https://127.0.0.1:${port}`),
+      options,
+      certificate.certPem,
+      attested
+        ? {
+            signingKey: keys.privateKey,
+            verifyKey: keys.publicKey,
+            spkiHash: spkiHashOf(new X509Certificate(certificate.certPem)),
+          }
+        : null,
+    );
+    return broker;
+  }
+
+  async stop(): Promise<void> {
+    this.server.closeAllConnections();
+    await new Promise<void>((resolve) => this.server.close(() => resolve()));
+  }
+
+  /** The configuration block of an instance enrolled with this broker under `key`. */
+  configFor(key: string, name = 'main', providers: readonly string[] = []): OAuthBrokerConfig {
+    return {
+      name,
+      url: this.url,
+      key,
+      providers,
+      attestation: this.enclave ? 'required' : 'none',
+    };
+  }
+
+  /**
+   * The test-only platform adapter that verifies this fake's evidence, and an
+   * allowlist admitting its measurement: what the code under test is built
+   * with instead of `productionAttestationKit`.
+   */
+  attestationKit(allowlist = [FAKE_BROKER_MEASUREMENT]): BrokerAttestationKit {
+    const verifyKey = this.enclave?.verifyKey;
+    if (!verifyKey) throw new Error('fake broker: started with attestation none');
+    return {
+      platforms: [fakeEnclavePlatform(verifyKey)],
+      allowlist: allowlist.map((measurement) => ({
+        platform: FAKE_ENCLAVE_PLATFORM,
+        measurement,
+        broker_version: 'fake',
+      })),
+    };
+  }
+
+  /**
+   * A `fetch` that trusts this fake's certificate as its own authority, and
+   * checks the chain and the name like any HTTPS client: what a test hands a
+   * broker declared `attestation: none`. It never follows a redirect.
+   */
+  trustingFetch(): typeof fetch {
+    const ca = this.certPem;
+    return (input, init) => {
+      const url = new URL(
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+      );
+      return new Promise<Response>((resolve, reject) => {
+        const req = httpsRequest(
+          url,
+          {
+            method: init?.method ?? 'GET',
+            headers: init?.headers as Record<string, string> | undefined,
+            ca,
+            signal: init?.signal ?? undefined,
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.once('error', reject);
+            res.once('end', () => {
+              const status = res.statusCode ?? 0;
+              if (status >= 300 && status < 400 && init?.redirect === 'error') {
+                reject(new TypeError('redirect refused'));
+                return;
+              }
+              resolve(new Response(status === 204 ? null : Buffer.concat(chunks), { status }));
+            });
+          },
+        );
+        req.once('error', reject);
+        req.end(typeof init?.body === 'string' ? init.body : undefined);
+      });
+    };
+  }
+
+  /** The SPKI hash of the TLS key the server presents now. */
+  get spkiHash(): string | null {
+    return this.enclave?.spkiHash ?? null;
+  }
+
+  /** What the next attestations claim, instead of the truth (`{}` restores it). */
+  attestWith(override: FakeAttestationOverride): void {
+    this.override = override;
+    this.cachedEvidence = null;
+  }
+
+  /**
+   * `/attest` waits until `release()`: a slow attestation. `arrived` resolves
+   * when the first one is waiting.
+   */
+  holdAttest(): { arrived: Promise<void>; release: () => void } {
+    let release = (): void => undefined;
+    let arrive = (): void => undefined;
+    const arrived = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    this.attestHold = new Promise<void>((resolve) => {
+      release = () => {
+        this.attestHold = null;
+        resolve();
+      };
+    });
+    this.onAttestWaiting = arrive;
+    return { arrived, release };
+  }
+
+  private onAttestWaiting: (() => void) | null = null;
+
+  /** Answer `302 Found` to the route (`/attest`, `/token`…) from now on. */
+  redirecting(route: string): void {
+    this.redirects.add(route);
+  }
+
+  /** The enclave restarted: a new TLS key, which no earlier attestation carries. */
+  rotateTlsKey(): void {
+    if (!this.enclave) throw new Error('fake broker: started with attestation none');
+    const certificate = fakeTlsCertificate();
+    this.server.setSecureContext({
+      key: certificate.keyPem,
+      cert: certificate.certPem,
+    });
+    this.certPem = certificate.certPem;
+    this.enclave.spkiHash = spkiHashOf(new X509Certificate(certificate.certPem));
+    this.cachedEvidence = null;
+  }
+
+  /** Enrollment: a return URL the broker has on record for an instance. */
+  recordReturnUrl(instance: string, returnUrl: string): void {
+    const urls = this.returnUrls.get(instance) ?? new Set<string>();
+    urls.add(returnUrl);
+    this.returnUrls.set(instance, urls);
+  }
+
+  /** The broker answers 503 to everything until `up()`. */
+  down(): void {
+    this.isDown = true;
+  }
+
+  up(): void {
+    this.isDown = false;
+  }
+
+  /** The provider no longer accepts the refresh tokens (the person removed the access there). */
+  refusingProvider(): void {
+    this.providerRefuses = true;
+  }
+
+  /** The provider refuses the authorization codes at the exchange (redeem: `invalid_grant`). */
+  refusingCode(): void {
+    this.providerRefusesCode = true;
+  }
+
+  /**
+   * The person allowed the access at the provider, and the provider came back to
+   * the broker: the browser is sent to `return_url?grant=…&state=…`. `authorizeUrl`
+   * is what `POST /flows` answered.
+   */
+  approve(authorizeUrl: string): URL {
+    const flow = this.flowOf(authorizeUrl);
+    const grant = token('gr');
+    this.pendingGrants.set(grant, { flow, issuedAt: this.now(), used: false });
+    const back = new URL(flow.returnUrl);
+    back.searchParams.set('grant', grant);
+    back.searchParams.set('state', flow.state);
+    return back;
+  }
+
+  /** The person refused at the provider: `return_url?error=access_denied&state=…`. */
+  deny(authorizeUrl: string): URL {
+    const flow = this.flowOf(authorizeUrl);
+    const back = new URL(flow.returnUrl);
+    back.searchParams.set('error', 'access_denied');
+    back.searchParams.set('state', flow.state);
+    return back;
+  }
+
+  private flowOf(authorizeUrl: string): Flow {
+    const id = new URL(authorizeUrl).searchParams.get('state');
+    const flow = id ? this.flows.get(id) : undefined;
+    if (!flow) throw new Error('fake broker: no such flow');
+    this.flows.delete(id ?? '');
+    return flow;
+  }
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now();
+  }
+
+  // ── HTTP ──────────────────────────────────────────────────────────────────
+
+  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const path = (req.url ?? '/').split('?')[0] ?? '/';
+    const method = req.method ?? 'GET';
+    const body = await readBody(req);
+    const answer = (
+      status: number,
+      payload: Record<string, unknown> | null,
+      instance: string | null,
+    ) => {
+      this.calls.push({
+        method,
+        path,
+        instance,
+        body,
+        status,
+        withKey: req.headers.authorization !== undefined,
+      });
+      res.statusCode = status;
+      if (payload === null) {
+        res.end();
+        return;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(payload));
+    };
+    if (this.isDown) {
+      answer(503, { error: 'temporarily_unavailable', message: 'down' }, null);
+      return;
+    }
+    const prefix = this.url.pathname.replace(/\/+$/, '');
+    if (this.redirects.has(path.slice(prefix.length))) {
+      res.setHeader('Location', 'https://elsewhere.example.com/');
+      answer(302, null, null);
+      return;
+    }
+    // `/attest` takes no key and no body: anyone may ask which code runs here.
+    if (method === 'POST' && path === `${prefix}/attest`) {
+      const [status, payload] = await this.attest();
+      answer(status, payload, null);
+      return;
+    }
+    const instance = this.instanceOf(req.headers.authorization);
+    if (instance === null) {
+      answer(401, { error: 'invalid_key', message: 'unknown broker key' }, null);
+      return;
+    }
+    if (!path.startsWith(`${prefix}/`)) {
+      answer(404, { error: 'not_found', message: 'no such path' }, instance);
+      return;
+    }
+    const route = path.slice(prefix.length);
+    const [status, payload] =
+      method === 'POST'
+        ? await this.route(route, body, instance)
+        : [404, { error: 'not_found', message: 'no such path' }];
+    answer(status, payload, instance);
+  }
+
+  private instanceOf(header: string | undefined): string | null {
+    if (!header?.startsWith('Bearer ')) return null;
+    return this.options.keys[header.slice('Bearer '.length)] ?? null;
+  }
+
+  private async route(
+    route: string,
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): Promise<[number, Record<string, unknown> | null]> {
+    switch (route) {
+      case '/flows':
+        return this.startFlow(body, instance);
+      case '/grants/redeem':
+        return this.redeem(body, instance);
+      case '/token':
+        return this.refresh(body, instance);
+      case '/revoke':
+        return this.revoke(body, instance);
+      default:
+        return [404, refusal('not_found')];
+    }
+  }
+
+  private startFlow(
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): [number, Record<string, unknown>] {
+    const provider = body?.provider;
+    const scopes = body?.scopes;
+    const returnUrl = body?.return_url;
+    const state = body?.state;
+    const challenge = body?.challenge;
+    if (
+      typeof provider !== 'string' ||
+      !Array.isArray(scopes) ||
+      !scopes.every((s) => typeof s === 'string') ||
+      typeof returnUrl !== 'string' ||
+      typeof state !== 'string' ||
+      typeof challenge !== 'string' ||
+      body?.challenge_method !== 'S256'
+    ) {
+      return [400, refusal('invalid_request')];
+    }
+    if (!this.serves(provider)) return [400, refusal('unsupported_provider')];
+    if (!this.returnUrls.get(instance)?.has(returnUrl)) {
+      return [403, refusal('return_url_not_registered')];
+    }
+    const flowId = token('fl');
+    this.flows.set(flowId, { instance, provider, scopes, returnUrl, state, challenge });
+    const authorize = new URL(FAKE_AUTHORIZE_URL);
+    // The broker's own state towards the provider, and its own redirect URI: never the gateway's.
+    authorize.searchParams.set('state', flowId);
+    authorize.searchParams.set('redirect_uri', 'https://broker.example.com/oauth/callback/google');
+    authorize.searchParams.set('scope', scopes.join(' '));
+    return [201, { authorize_url: authorize.href }];
+  }
+
+  private redeem(
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): [number, Record<string, unknown>] {
+    const grantText = body?.grant;
+    const verifier = body?.verifier;
+    if (typeof grantText !== 'string' || typeof verifier !== 'string') {
+      return [400, refusal('invalid_request')];
+    }
+    const pending = this.pendingGrants.get(grantText);
+    // Unknown, used, late, another instance's, the wrong verifier: one answer for all.
+    const refused: [number, Record<string, unknown>] = [400, refusal('invalid_grant')];
+    if (!pending || pending.used) return refused;
+    pending.used = true;
+    // The flow is over whatever happens: the broker keeps nothing of it.
+    this.pendingGrants.delete(grantText);
+    if (this.now() - pending.issuedAt > FAKE_GRANT_TTL_MS) return refused;
+    if (pending.flow.instance !== instance) return refused;
+    if (s256(verifier) !== pending.flow.challenge) return refused;
+    // Only now is the provider's code exchanged: the provider issues the tokens, or refuses.
+    if (this.providerRefusesCode) return refused;
+    const scopes = this.options.grantedScopes ?? pending.flow.scopes;
+    const refreshToken = token('rt');
+    this.providerRefreshTokens.set(refreshToken, {
+      instance,
+      provider: pending.flow.provider,
+      scopes,
+      revoked: false,
+    });
+    return [
+      200,
+      {
+        refresh_token: refreshToken,
+        access_token: token('at'),
+        expires_at: this.expiry(),
+        account: this.options.account ?? 'person@example.com',
+        scopes,
+      },
+    ];
+  }
+
+  /** The broker adds its client secret and asks the provider; it writes nothing. */
+  private refresh(
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): [number, Record<string, unknown>] {
+    const provider = body?.provider;
+    const refreshToken = body?.refresh_token;
+    if (typeof provider !== 'string' || typeof refreshToken !== 'string') {
+      return [400, refusal('invalid_request')];
+    }
+    if (!this.serves(provider)) return [400, refusal('unsupported_provider')];
+    const known = this.providerRefreshTokens.get(refreshToken);
+    if (
+      !known ||
+      known.revoked ||
+      known.provider !== provider ||
+      known.instance !== instance ||
+      this.providerRefuses
+    ) {
+      return [400, refusal('invalid_grant')];
+    }
+    return [200, { access_token: token('at'), expires_at: this.expiry(), scopes: known.scopes }];
+  }
+
+  /** Relayed to the provider's revocation endpoint; 204 also when already revoked. */
+  private revoke(
+    body: Record<string, unknown> | null,
+    instance: string,
+  ): [number, Record<string, unknown> | null] {
+    const provider = body?.provider;
+    const refreshToken = body?.refresh_token;
+    if (typeof provider !== 'string' || typeof refreshToken !== 'string') {
+      return [400, refusal('invalid_request')];
+    }
+    if (!this.serves(provider)) return [400, refusal('unsupported_provider')];
+    const known = this.providerRefreshTokens.get(refreshToken);
+    if (known && !known.revoked && known.instance === instance) {
+      known.revoked = true;
+      this.revokedAtProvider.push(refreshToken);
+    }
+    return [204, null];
+  }
+
+  /**
+   * `POST /attest` → `{platform, evidence}` on the test-only platform: a
+   * cached evidence naming the server's TLS key, minted again every five
+   * minutes. No nonce: a replay names a key the replayer cannot present.
+   */
+  private async attest(): Promise<[number, Record<string, unknown>]> {
+    if (!this.enclave) return [404, refusal('not_found')];
+    if (this.attestHold) {
+      this.onAttestWaiting?.();
+      this.onAttestWaiting = null;
+      await this.attestHold;
+    }
+    const now = this.now();
+    if (!this.cachedEvidence || now - this.cachedEvidence.at >= FAKE_ATTESTATION_REFRESH_MS) {
+      const evidence = await new SignJWT({
+        eat_nonce: [this.override.spkiHash ?? this.enclave.spkiHash],
+        measurement: this.override.measurement ?? FAKE_BROKER_MEASUREMENT,
+        debug: this.override.debug ?? false,
+      })
+        .setProtectedHeader({ alg: 'ES256' })
+        .setIssuer(FAKE_ENCLAVE_ISSUER)
+        .setAudience(BROKER_ATTESTATION_AUDIENCE)
+        .setIssuedAt(Math.floor(now / 1000))
+        .setExpirationTime(
+          Math.floor((now + (this.override.ttlMs ?? FAKE_ATTESTATION_TTL_MS)) / 1000),
+        )
+        .sign(this.enclave.signingKey);
+      this.cachedEvidence = { evidence, at: now };
+    }
+    return [200, { platform: FAKE_ENCLAVE_PLATFORM, evidence: this.cachedEvidence.evidence }];
+  }
+
+  private serves(provider: string): boolean {
+    return (this.options.providers ?? [FAKE_BROKER_PROVIDER]).includes(provider);
+  }
+
+  private expiry(): string {
+    return new Date(this.now() + FAKE_ACCESS_TOKEN_TTL_MS).toISOString();
+  }
+}
+
+/**
+ * The adapter of the test-only `fake-enclave` platform: the fake's evidence
+ * is a JWT signed with its own key, carrying the SPKI hash, the measurement
+ * and a debug flag. Handed to the code under test by
+ * `attestationKit()`; no production kit contains it.
+ */
+export function fakeEnclavePlatform(verifyKey: KeyObject): AttestationPlatform {
+  return {
+    platform: FAKE_ENCLAVE_PLATFORM,
+    async verify(evidence, expected) {
+      if (typeof evidence !== 'string') throw new AttestationRefused('no evidence');
+      let payload: Record<string, unknown>;
+      try {
+        ({ payload } = await jwtVerify(evidence, verifyKey, {
+          issuer: FAKE_ENCLAVE_ISSUER,
+          audience: BROKER_ATTESTATION_AUDIENCE,
+          algorithms: ['ES256'],
+          currentDate: expected.now,
+        }));
+      } catch {
+        throw new AttestationRefused('the attestation token is not valid');
+      }
+      if (payload.debug !== false) throw new AttestationRefused('the broker runs a debug image');
+      const nonces = payload.eat_nonce;
+      if (!Array.isArray(nonces) || nonces.length !== 1 || nonces[0] !== expected.spkiHash) {
+        throw new AttestationRefused('the attestation is not bound to this connection’s key');
+      }
+      const { measurement, exp, iat } = payload;
+      if (typeof measurement !== 'string' || typeof exp !== 'number' || typeof iat !== 'number') {
+        throw new AttestationRefused('the attestation names no measurement');
+      }
+      return { measurement, issuedAt: iat * 1000, expiresAt: exp * 1000 };
+    },
+  };
+}
+
+function refusal(error: string): Record<string, unknown> {
+  return { error, message: error.replace(/_/g, ' ') };
+}
+
+function token(prefix: string): string {
+  return `${prefix}_${randomBytes(18).toString('base64url')}`;
+}
+
+function s256(verifier: string): string {
+  return createHash('sha256').update(verifier).digest('base64url');
+}
+
+async function readBody(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+    size += buffer.length;
+    if (size > MAX_BODY_BYTES) return null;
+    chunks.push(buffer);
+  }
+  if (chunks.length === 0) return null;
+  try {
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}

@@ -17,7 +17,7 @@ import {
   executionInstance,
   line,
   type ExecutionInstance,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 /** `depot__create_space` has no risk of its own: the fallback write covers it. */
 const CREATE = 'depot.uncategorized-write';

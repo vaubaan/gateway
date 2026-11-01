@@ -26,10 +26,10 @@ import {
   type TabItem,
 } from '@/components/ui';
 import { REFERENCE_WORDS, type WHY_LABELS, WHY_ORDER } from '@/lib/vocabulary';
-import { DEPRECATED_NOTE, FALLBACK_NOTE, noteBody } from '@/server/missions/catalog-view';
-import { REFERENCE_SECTIONS } from '@/server/providers/links';
-import { OTHER_PLANE } from '@/server/providers/planes';
-import { OTHER_PLANE_NOTE, type ProviderReference } from '@/server/providers/reference';
+import { DEPRECATED_NOTE, FALLBACK_NOTE, noteBody } from '@/lib/missions/catalog-view';
+import { REFERENCE_SECTIONS } from '@/lib/providers/links';
+import { OTHER_PLANE } from '@/lib/providers/planes';
+import { OTHER_PLANE_NOTE, type ProviderReference } from '@/lib/providers/reference';
 
 import styles from '../reference.module.css';
 import { DataModelSection } from './data-model';

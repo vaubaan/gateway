@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { argon2Passwords, type PasswordHasher } from '../crypto/password';
 import { silentLogger } from '../logging/logger';
-import { openTestStore, type TestStore } from '../store/testing';
+import { openTestStore, type TestStore } from '../../../tests/support/store/testing';
 import { LOCAL_LOCKOUT, LocalAccountsService } from './local-accounts';
 
 const PROVIDER = 'local';

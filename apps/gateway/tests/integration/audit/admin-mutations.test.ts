@@ -11,7 +11,7 @@
  * until it is classified; a mutation is then driven on an ephemeral instance
  * and must leave the administrative entry named next to it.
  */
-import { switchOnForTests } from '../../../src/server/auth/testing';
+import { switchOnForTests } from '../../support/auth/testing';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +25,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { generateEd25519KeyPair, type Actor } from '../../../src/server/connections';
 import {
   API_KEY_SPEC,
@@ -36,13 +36,14 @@ import {
   OAUTH_SPEC,
   seedRegisteredClient,
   stateOf,
-} from '../../../src/server/connections/testing';
+} from '../../support/connections/testing';
 import type { IssuedLink } from '../../../src/server/auth';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import type { LocalAccountRecord } from '../../../src/server/store';
 import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
-import { pkcePair } from '../../../src/server/oauth-as/testing';
+import { pkcePair } from '../../support/oauth-as/testing';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 import { answerAnyDiscovery } from '../auth/fake-idp';
 import type {
   ConnectionRecord,
@@ -294,7 +295,7 @@ async function openRig(): Promise<Rig> {
       const mission = await rig.issue();
       const [carried] = mission.connections;
       if (!carried) throw new Error('expected a connection');
-      const group = await root.store.groups.getOrCreate('mission-owners', 'local');
+      const group = await root.store.groups.getOrCreate('mission-owners', 'local', null);
       await root.store.groups.addMember(group.id, aliceUser.id);
       await root.store.connections.transferOwner(carried.connectionId, {
         kind: 'group',
@@ -304,7 +305,7 @@ async function openRig(): Promise<Rig> {
     },
     async ownerless() {
       const connection = await rig.connectByKey();
-      const group = await root.store.groups.getOrCreate('key-admins', 'local');
+      const group = await root.store.groups.getOrCreate('key-admins', 'local', null);
       await root.store.groups.addMember(group.id, aliceUser.id);
       await root.store.connections.transferOwner(connection.id, { kind: 'group', id: group.id });
       await root.store.groups.removeMember(group.id, aliceUser.id);
@@ -380,8 +381,6 @@ type Rule =
 const READ: Rule = { kind: 'read' };
 const exempt = (why: string): Rule => ({ kind: 'exempt', why });
 
-const FAKE_BROKER =
-  'the fake OAuth broker of the contract test kit (fake-oauth-broker.ts): a test double the composition root never builds';
 const SESSION_STATE =
   'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
 const SYSTEM_REFRESH =
@@ -578,7 +577,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     target: connections,
     prepare: async (rig) => {
       const connection = await rig.connectByKey();
-      const group = await rig.root.store.groups.getOrCreate('key-admins', 'local');
+      const group = await rig.root.store.groups.getOrCreate('key-admins', 'local', null);
       await rig.root.store.groups.addMember(group.id, rig.alice.user.id);
       return { connection, group };
     },
@@ -634,21 +633,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   'FetchChannel.send': exempt(
     'carries a broker call to a broker declared attestation: none; nothing is written in the store; the act it carries is classified on OAuthBrokerClient',
   ),
-  'FakeOAuthBroker.attestWith': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.attestationKit': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.rotateTlsKey': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.trustingFetch': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.holdAttest': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.redirecting': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.approve': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.configFor': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.deny': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.down': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.recordReturnUrl': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.refusingCode': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.refusingProvider': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.stop': exempt(FAKE_BROKER),
-  'FakeOAuthBroker.up': exempt(FAKE_BROKER),
   'PendingConnectStore.create': exempt(SESSION_STATE),
   'PendingConnectStore.take': exempt(SESSION_STATE),
   'NoticeStore.put': exempt(SESSION_STATE),
@@ -662,7 +646,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionService.preview': READ,
   'MissionService.draftFrom': READ,
   'MissionService.verifyToken': exempt(
-    'authentication of a call, not an administrative act; its one write replaces the stored hash of a token an earlier build stored as argon2id by the sha256 digest of the same secret (same row, same holder, same status), and is logged',
+    'authentication of a call, not an administrative act: it reads the token, its mission and its holder, and writes nothing',
   ),
   'MissionService.list': READ,
   'MissionService.get': READ,
@@ -969,9 +953,10 @@ const RULES: Readonly<Record<string, Rule>> = {
         target: { kind: 'user', email: 'bob@example.com' },
         riskIds: ['keyco.read-things'],
       });
-      return share.id;
+      return { shareId: share.id, connectionId: connection.id };
     },
-    drive: (rig, shareId: string) => rig.root.shares.service.revoke(rig.alice, shareId),
+    drive: (rig, { shareId, connectionId }: { shareId: string; connectionId: string }) =>
+      rig.root.shares.service.revoke(rig.alice, shareId, connectionId),
     writes: { act: 'share-revoked', object: 'share', actor: 'alice' },
   },
 
@@ -1043,30 +1028,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   ),
 
   // ── auth ──────────────────────────────────────────────────────────────────
-  'IdpSettingsService.current': READ,
-  'IdpSettingsService.stored': READ,
-  'IdpSettingsService.save': {
-    kind: 'mutation',
-    target: (root) => root.auth.idp,
-    drive: async (rig) =>
-      rig.root.auth.handlers.saveIdpSettings(
-        await rig.operatorPost('/api/admin/identity-provider', {
-          issuer: 'https://idp.example.com',
-          client_id: 'gateway',
-          client_secret: 'idp-client-secret',
-          claim_sub: 'sub',
-          claim_email: 'email',
-          claim_groups: 'groups',
-          allowed_email_domains: 'example.com',
-        }),
-      ),
-    writes: {
-      act: 'config-changed',
-      object: 'instance-config',
-      objectId: 'idp',
-      actor: 'operator',
-    },
-  },
   'SignInProvidersService.views': READ,
   'SignInProvidersService.view': READ,
   'SignInProvidersService.resolve': READ,
@@ -1077,12 +1038,10 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: (root) => root.auth.providers,
     prepare: (rig) =>
-      rig.root.auth.idp.save({
+      saveTestOidcProvider(rig.root.store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
-        claims: { sub: 'sub', email: 'email', groups: 'groups' },
-        allowedEmailDomains: [],
       }),
     drive: async (rig) =>
       rig.root.auth.handlers.setSecondFactorWaiver(
@@ -1092,7 +1051,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: {
       act: 'second-factor-waiver-changed',
       object: 'instance-config',
-      objectId: 'idp',
+      objectId: 'sign-in:idp',
       actor: 'operator',
     },
   },
@@ -1319,12 +1278,10 @@ const RULES: Readonly<Record<string, Rule>> = {
     kind: 'mutation',
     target: (root) => root.auth.administrators,
     prepare: (rig) =>
-      rig.root.auth.idp.save({
+      saveTestOidcProvider(rig.root.store.config, {
         issuer: 'https://idp.example.com',
         clientId: 'c',
         clientSecret: 's',
-        claims: { sub: 'sub', email: 'email', groups: 'groups' },
-        allowedEmailDomains: [],
       }),
     drive: async (rig) =>
       rig.root.users.handlers.addAdministratorGroup(
@@ -1803,7 +1760,6 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'administrator-granted',
       'administrator-revoked',
       'approval-granted',
-      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

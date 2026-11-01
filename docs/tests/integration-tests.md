@@ -10,7 +10,7 @@ tracks:
   - apps/gateway/tests/integration/git/fake-github-host.ts
   - plugins/gmail/tests/unit/fake-imap.ts
   - plugins/caldav/tests/unit/fake-caldav.ts
-  - apps/gateway/src/server/connections/fake-oauth-broker.ts
+  - apps/gateway/tests/support/
   - apps/gateway/tests/demo/
   - apps/gateway/tests/unit/structural/manifest.ts
   - apps/gateway/tests/unit/structural/index.test.ts
@@ -35,6 +35,7 @@ last_reviewed: 2026-10-27
 
 ## Conventions
 
+- Test fakes and fixtures shared across suites live under `apps/gateway/tests/support/<subsystem>/` (`testing.ts`, the fake OAuth broker and its certificate), never under `src/`: no production file imports them.
 - Naming: `*.test.ts(x)`; `*.property.test.ts` for property tests; `*.bench.test.ts` measures a cost rather than asserting a behaviour.
 - Unit tests of a plugin live in `plugins/<id>/tests/unit/`; gateway integration tests in `apps/gateway/tests/integration/<subsystem>/`; tests that read the repository's own files (docs, Dockerfiles, catalogs, source) in `apps/gateway/tests/unit/structural/`.
 - No module state survives a file: each test builds its own root on its own `:memory:` store, so the `shared` project's order never matters.

@@ -22,7 +22,7 @@ import {
   type AuditFilters,
   type AuditViewer,
 } from '../../../src/server/audit';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { seedConnection } from '../../support/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
@@ -136,7 +136,7 @@ describe('audit search: visibility, filters, paging', () => {
   });
 
   it('a member of the owning group sees the connection, a non-member does not', async () => {
-    const group = await rig.root.store.groups.getOrCreate('platform', 'idp');
+    const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
     const shared = await seedConnection(rig.root.store, {
       provider: 'github',
@@ -284,7 +284,7 @@ describe('audit search: visibility, filters, paging', () => {
     await rig.root.missions.team.addMember(rig.seeded.ada, mission.id, {
       email: rig.seeded.bob.email,
     });
-    const group = await rig.root.store.groups.getOrCreate('platform', 'idp');
+    const group = await rig.root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
     const groupOwned = await seedConnection(rig.root.store, {
       provider: 'github',
@@ -466,7 +466,8 @@ describe('audit search: visibility, filters, paging', () => {
         act,
         object: { type, id },
         before: null,
-        after: null,
+        // A share entry names its connection, as the share service writes it.
+        after: type === 'share' ? { connection_id: connection.id } : null,
         delegated_client_id: null,
       });
     }

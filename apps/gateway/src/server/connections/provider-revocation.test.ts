@@ -24,7 +24,7 @@ import {
   OAUTH_SPEC,
   stateOf,
   type ConnectionsHarness,
-} from './testing';
+} from '../../../tests/support/connections/testing';
 
 const REVOKE_URL = 'https://provider.example.com/oauth/revoke';
 const BY_HAND = 'Remove the application in the settings of your OAuth Co account, under Apps.';

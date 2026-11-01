@@ -5,7 +5,7 @@
  * that still have grounds, nobody can share or reconnect it — and the
  * operator's reassignment, their only act on the domain.
  */
-import { throughSecondFactor } from '../../../src/server/auth/testing';
+import { throughSecondFactor } from '../../support/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
@@ -13,6 +13,7 @@ import { ConnectError } from '../../../src/server/connections';
 import type { GroupRecord, UserRecord } from '../../../src/server/store/types';
 import { FakeIdp } from '../auth/fake-idp';
 import { authorityRig, OPERATOR_EMAIL, PURGE, READ, type AuthorityRig } from './support';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };
@@ -284,7 +285,7 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
   beforeEach(async () => {
     idp = new FakeIdp(CLIENT);
     rig = await authorityRig({ deps: { oidc: { fetch: idp.fetch, allowInsecureIssuer: true } } });
-    await rig.root.auth.idp.save({
+    await saveTestOidcProvider(rig.root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -309,6 +310,7 @@ describe('a sign-in that changes the IdP groups settles what the lost membership
     const callback = idp.authorize(new URL(start.headers.get('location') ?? ''));
     const first = await rig.root.auth.handlers.loginCallback(
       new Request(callback.href, { headers: { cookie: cookies } }),
+      'idp',
     );
     // The gateway's own second factor, answered as the person's app would.
     let jar = first.headers

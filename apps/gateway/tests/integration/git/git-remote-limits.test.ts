@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { serializeSecret } from '../../../src/server/connections';
 import type { AuditCallRecord } from '../../../src/server/store';
-import { line, TEST_PUBLIC_URL, type IssuedMission } from '../../../src/server/execution/testing';
+import { line, TEST_PUBLIC_URL, type IssuedMission } from '../../support/execution/testing';
 import {
   DEVELOPER_TRUST_LEVELS,
   openGitRig,

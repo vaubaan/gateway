@@ -52,7 +52,7 @@ import {
 import type { MissionGrounds, Subject } from '../authority';
 import { revivesEndedMission, type CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
-import { enumerateCatalog } from '../missions/catalog-view';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import { InvariantError, NotFoundError } from '../store/errors';
@@ -856,7 +856,9 @@ export class RequestService {
 
     // An overdue request reads `expired` before the sweeper erases its blob:
     // nothing is opened for it either.
-    const openArguments = open ? await store.requests.getArguments(request.id) : null;
+    const openArguments = open
+      ? await store.requests.getArguments({ missionId: mission.id, requestId: request.id })
+      : null;
     return {
       kind: 'approval',
       request: summary,

@@ -85,8 +85,12 @@ import {
   type KitPolicyLine,
 } from './bootstrap-kit';
 import { gitRemoteBase } from '../git/paths';
-import { enumerateCatalog } from './catalog-view';
-import { knownTrustLevels, macroActionsOf, type MacroActionTrustLevels } from './macro-actions';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
+import {
+  knownTrustLevels,
+  macroActionsOf,
+  type MacroActionTrustLevels,
+} from '../../lib/missions/macro-actions';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -100,7 +104,7 @@ import type {
   PreviewNotice,
   ResolvedDraftConnection,
   SeverityLevel,
-} from './model';
+} from '../../lib/missions/model';
 import { parseMissionDraft } from './draft-schema';
 import {
   auditOfChanges,
@@ -112,16 +116,9 @@ import {
   type MissionChanges,
   type MissionSnapshot,
   type MissionSnapshotConnection,
-} from './mission-edit';
-import { checkPolicyLines, previewDraft } from './preview';
-import {
-  bearerMatches,
-  digestOfBearer,
-  isLegacyTokenHash,
-  mintMissionToken,
-  prefixOfBearer,
-  type TokenMinter,
-} from './token';
+} from '../../lib/missions/mission-edit';
+import { checkPolicyLines, previewDraft } from '../../lib/missions/preview';
+import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
 
@@ -490,20 +487,6 @@ export type TokenVerification =
       readonly token: VerifiedToken;
     }
   | { readonly outcome: 'unknown' };
-
-/**
- * Asked before the one slow verification left: the argon2id check of a token
- * stored by an earlier build. The caller owns the limiter and its key.
- */
-export type LegacyHashGate = () => Promise<
-  { readonly allowed: true } | { readonly allowed: false; readonly retryAfterMs: number }
->;
-
-/** The gate refused: nothing was computed, the Bearer was not judged. */
-export interface LegacyHashThrottled {
-  readonly outcome: 'throttled';
-  readonly retryAfterMs: number;
-}
 
 /** What a user is to a mission they can read (spec §0 "Mission member"). */
 export type MissionRole = 'creator' | 'member';
@@ -1692,59 +1675,14 @@ export class MissionService {
    * SHA-256 digest, then what the token is worth at this instant
    * (`standingOf`). A malformed Bearer, an unknown prefix and a wrong secret
    * are the same answer (`unknown`).
-   *
-   * A row an earlier build stored as an argon2id hash is checked with argon2id
-   * — the only slow path left. `legacyGate`, when given, is asked first and may
-   * refuse (`throttled`): the execution door passes its limiter there, so wrong
-   * secrets replayed on such a prefix cannot make the instance spend its CPU.
-   * When the Bearer matches, the stored value is replaced by the digest of that
-   * same Bearer, so the token never takes the slow path again. A write that
-   * fails is logged and the call goes on: the token is as valid as before, and
-   * the next call tries again.
    */
-  async verifyToken(bearer: string): Promise<TokenVerification>;
-  async verifyToken(
-    bearer: string,
-    legacyGate: LegacyHashGate,
-  ): Promise<TokenVerification | LegacyHashThrottled>;
-  async verifyToken(
-    bearer: string,
-    legacyGate?: LegacyHashGate,
-  ): Promise<TokenVerification | LegacyHashThrottled> {
+  async verifyToken(bearer: string): Promise<TokenVerification> {
     const prefix = prefixOfBearer(bearer);
     if (!prefix) return { outcome: 'unknown' };
     const found = await this.deps.store.missions.findTokenByPrefix(prefix);
     if (!found) return { outcome: 'unknown' };
-    const legacy = isLegacyTokenHash(found.token);
-    if (legacy && legacyGate) {
-      const gate = await legacyGate();
-      if (!gate.allowed) return { outcome: 'throttled', retryAfterMs: gate.retryAfterMs };
-    }
-    if (!(await bearerMatches(found.token, bearer))) return { outcome: 'unknown' };
-    if (legacy) await this.moveToDigest(found.token, bearer);
+    if (!bearerMatches(found.token, bearer)) return { outcome: 'unknown' };
     return this.standingOf(found);
-  }
-
-  /** Replaces a matched legacy hash by the SHA-256 digest of the same Bearer. Never throws. */
-  private async moveToDigest(token: MissionTokenRecord, bearer: string): Promise<void> {
-    try {
-      const moved = await this.deps.store.missions.rehashToken(token.id, {
-        fromHash: token.hash,
-        ...digestOfBearer(bearer),
-      });
-      if (moved) {
-        this.deps.logger.info('mission token moved to its sha256 digest', {
-          mission_id: token.missionId,
-          token_prefix: token.prefix,
-        });
-      }
-    } catch (error) {
-      this.deps.logger.warn('mission token not moved to its sha256 digest', {
-        mission_id: token.missionId,
-        token_prefix: token.prefix,
-        error_class: error instanceof Error ? error.name : typeof error,
-      });
-    }
   }
 
   /**

@@ -6,7 +6,7 @@
  * its person at the first sign-in, and no act leaves the instance without an
  * administrator who has a way in.
  */
-import { switchOnForTests } from '../../../src/server/auth/testing';
+import { switchOnForTests } from '../../support/auth/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CONFIGURATION_ACTOR_ID } from '@vaubaan/gateway-core';
 
@@ -14,9 +14,10 @@ import { SESSION_COOKIE } from '../../../src/server/auth';
 import { completeLogin } from '../../../src/server/auth/login';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { silentLogger } from '../../../src/server/logging';
 import { openMemoryStore, type Store } from '../../../src/server/store';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const IDP = 'https://idp.example.com';
@@ -121,7 +122,7 @@ describe('administrators live in the instance', () => {
       },
     );
     roots.push(root);
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: IDP,
       clientId: 'c',
       clientSecret: 's',
@@ -191,10 +192,11 @@ describe('administrators live in the instance', () => {
         {
           VAUBAAN_ADMIN_EMAILS: undefined,
           VAUBAAN_BOOTSTRAP_TOKEN: undefined,
-          VAUBAAN_IDP_ISSUER: IDP,
-          VAUBAAN_IDP_CLIENT_ID: 'c',
-          VAUBAAN_IDP_CLIENT_SECRET: 's',
-          VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS: 'example.com',
+          VAUBAAN_SIGN_IN_IDP_KIND: 'oidc',
+          VAUBAAN_SIGN_IN_IDP_ISSUER: IDP,
+          VAUBAAN_SIGN_IN_IDP_CLIENT_ID: 'c',
+          VAUBAAN_SIGN_IN_IDP_CLIENT_SECRET: 's',
+          VAUBAAN_SIGN_IN_IDP_ALLOWED_EMAIL_DOMAINS: 'example.com',
         },
       ),
     ).rejects.toThrow(/no administrator yet and no admin rule/);

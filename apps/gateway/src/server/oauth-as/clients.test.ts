@@ -9,7 +9,12 @@ import {
 import { ClientDocumentError, type FetchedDocument } from './client-metadata-document';
 import { OAuthProtocolError } from './errors';
 import { CLIENT_ID_PREFIX, CLIENT_SECRET_PREFIX, digestOf } from './secrets';
-import { LOOPBACK_REDIRECT, openOAuthRig, WEB_REDIRECT, type OAuthRig } from './testing';
+import {
+  LOOPBACK_REDIRECT,
+  openOAuthRig,
+  WEB_REDIRECT,
+  type OAuthRig,
+} from '../../../tests/support/oauth-as/testing';
 
 const DOCUMENT_URL = 'https://agent.example.net/oauth/client.json';
 

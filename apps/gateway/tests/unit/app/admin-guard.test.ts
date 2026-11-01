@@ -13,11 +13,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireOperator } from '@/lib/auth/session';
 import { SESSION_COOKIE } from '@/server/auth';
 import { getRoot, resetRoot, type GatewayRoot } from '@/server/compose';
-import { memoryStoreDeps } from '@/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '@/server/config';
-import { validEnv } from '@/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 
 import { appDir, outcomeOf, renderPage, surfaceFiles } from './guard-harness';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const request = vi.hoisted(() => ({ headers: new Headers() }));
 vi.mock('next/headers', () => ({ headers: async () => request.headers }));
@@ -60,7 +61,7 @@ describe('the Administration surface authorizes in every page and route', () => 
       subject,
       email,
     });
-    await root.store.groups.syncIdpMemberships(user.id, groups);
+    await root.store.groups.syncIdpMemberships(user.id, groups, 'idp');
     const session = await root.auth.sessions.create({
       kind: 'user',
       userId: user.id,
@@ -74,7 +75,7 @@ describe('the Administration surface authorizes in every page and route', () => 
   }
 
   async function configureIdp(): Promise<void> {
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: ISSUER,
       clientId: CLIENT_ID,
       clientSecret: 'admin-guard-client-secret',

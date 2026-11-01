@@ -52,7 +52,7 @@ import {
 } from '../../../src/lib/vocabulary';
 import { CONNECT_CALLBACK_PATH, CONNECTIONS_PATH } from '../../../src/server/connections/service';
 import { DELEGATIONS_PAGE } from '../../../src/server/oauth-as/handlers';
-import { PROVIDERS_PATH } from '../../../src/server/providers/links';
+import { PROVIDERS_PATH } from '../../../src/lib/providers/links';
 import { INBOX_PATH } from '../../../src/server/requests/url';
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/app');

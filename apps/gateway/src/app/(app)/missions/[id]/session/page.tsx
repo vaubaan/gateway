@@ -62,7 +62,7 @@ import {
   type SessionHolderView,
   type SessionTimelineFilter,
 } from '@/server/audit';
-import { riskExplainer } from '@/server/providers/reference';
+import { riskExplainer } from '@/lib/providers/reference';
 
 import styles from '../../missions.module.css';
 import { missionMark } from '../../mission-view';

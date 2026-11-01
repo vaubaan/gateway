@@ -16,7 +16,7 @@ import {
   SessionHistoryRetention,
 } from '../../../src/server/budget';
 import { silentLogger, type Logger } from '../../../src/server/logging';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing';
+import { openTestStore, type TestStore } from '../../support/store/testing';
 import { buildTestRoot } from '../missions/support';
 
 const NOW = '2026-10-13T09:00:00.000Z';

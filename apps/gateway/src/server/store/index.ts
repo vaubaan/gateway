@@ -226,6 +226,9 @@ export { SqliteAuditWriter } from './audit-writer.ts';
 export type { AuditAppender, AuditEntry, AuditWriter } from './audit-writer.ts';
 export * from './types.ts';
 export { effectiveResourceEnv, ownResourceEnv, type EffectiveEnv } from './resource-env.ts';
+export type { MissionTokenKey } from './repositories/missions.ts';
+export type { ShareKey } from './repositories/shares.ts';
+export type { RequestKey } from './repositories/requests.ts';
 export type { UpsertUserInput, UsersRepo } from './repositories/users.ts';
 export type { GroupsRepo } from './repositories/groups.ts';
 export type {

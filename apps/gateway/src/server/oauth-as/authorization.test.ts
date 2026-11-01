@@ -9,7 +9,13 @@ import {
 } from './authorization';
 import { AuthorizationPageError, AuthorizationRedirectError } from './errors';
 import { digestOf } from './secrets';
-import { LOOPBACK_REDIRECT, openOAuthRig, pkcePair, WEB_REDIRECT, type OAuthRig } from './testing';
+import {
+  LOOPBACK_REDIRECT,
+  openOAuthRig,
+  pkcePair,
+  WEB_REDIRECT,
+  type OAuthRig,
+} from '../../../tests/support/oauth-as/testing';
 
 function query(fields: Record<string, string | undefined>): URLSearchParams {
   const params = new URLSearchParams();

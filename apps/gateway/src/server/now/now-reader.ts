@@ -23,7 +23,7 @@ import type { Iso8601, MissionTokenKind, RiskId } from '@vaubaan/shared';
 
 import type { Actor, ConnectionService } from '../connections';
 import type { MissionOverview, MissionRole, MissionService } from '../missions';
-import { riskExplainer } from '../providers/reference';
+import { riskExplainer } from '../../lib/providers/reference';
 import type { RequestService, WaitingItem } from '../requests';
 import { effectiveState } from '../requests/state';
 import type { ShareService } from '../shares';

@@ -46,6 +46,16 @@
  * after N parts: the caller was gone`. The credit stays consumed in every
  * case (ADR atomic-budget-accounting).
  *
+ * A deadline on every call (`execution.call_timeout_seconds`): the plugin
+ * receives `ctx.signal`, aborted when the caller goes away or when the
+ * deadline passes, and the stage stops waiting for it at that moment even
+ * if the plugin does not listen. A call past its deadline is never retried;
+ * it leaves as `UpstreamFailureError` whose summary ends in `(timeout)` —
+ * the audit's `upstream_error` — and whose detail tells the agent the call
+ * was counted and that its effect at the provider is unknown. A provider
+ * that never answers therefore holds the request, the decrypted credential
+ * and the audit entry for that long at most.
+ *
  * Telemetry (spec §9): the final outcome of a call that reached
  * `plugin.execute` is handed, once, to the injected `TelemetrySink`
  * (`telemetry-sink.ts`; a no-op unless the composition root wires the
@@ -89,7 +99,11 @@ export interface UpstreamStageDeps {
   readonly logger: Logger;
   /** Receives each `plugin.execute` outcome; default: a sink that does nothing. */
   readonly telemetry?: TelemetrySink;
+  /** How long one call may wait for its plugin (`execution.call_timeout_seconds`), in seconds. */
+  readonly callTimeoutSeconds: number;
 }
+
+const MS_PER_SECOND = 1000;
 
 /** The provider said the credential itself is not valid (as opposed to "not allowed"). */
 function credentialRejected(err: unknown): err is UpstreamAuthError {
@@ -130,6 +144,54 @@ export class CallerGoneError extends Error {
 }
 
 /**
+ * The call's deadline passed (`execution.call_timeout_seconds`) before the
+ * plugin answered: what the stage rejects with, and what it records.
+ */
+export class CallTimeoutError extends Error {
+  constructor(readonly seconds: number) {
+    super(`no answer within ${seconds} seconds`);
+    this.name = 'CallTimeoutError';
+  }
+}
+
+/**
+ * What one call runs under: the signal the plugin receives (the caller's,
+ * joined with the deadline) and the deadline alone, which tells a timeout
+ * from a caller that left.
+ */
+interface CallLimits {
+  readonly signal: AbortSignal;
+  readonly deadline: AbortSignal;
+  readonly seconds: number;
+}
+
+function limitsOf(call: CallRequest, seconds: number): CallLimits {
+  const deadline = AbortSignal.timeout(seconds * MS_PER_SECOND);
+  const signal = call.signal ? AbortSignal.any([call.signal, deadline]) : deadline;
+  return { signal, deadline, seconds };
+}
+
+/** Why the call stopped when its signal was aborted: the deadline, or the caller. */
+function stopReason(limits: CallLimits): Error {
+  return limits.deadline.aborted ? new CallTimeoutError(limits.seconds) : new CallerGoneError();
+}
+
+/**
+ * Settles with `promise`, or rejects as soon as the call's signal is aborted:
+ * a plugin that ignores `ctx.signal` still releases the request at the deadline.
+ */
+function untilStopped<T>(promise: Promise<T>, limits: CallLimits): Promise<T> {
+  const { signal } = limits;
+  if (signal.aborted) return Promise.reject(stopReason(limits));
+  let stop: () => void = () => undefined;
+  const stopped = new Promise<never>((_, reject) => {
+    stop = () => reject(stopReason(limits));
+    signal.addEventListener('abort', stop, { once: true });
+  });
+  return Promise.race([promise, stopped]).finally(() => signal.removeEventListener('abort', stop));
+}
+
+/**
  * The parts of one call's result, relayed to the caller as the plugin emits
  * them (`ExecuteContext.emitPart`), and counted: the count is what tells a
  * stream that broke midway from a call that failed before delivering
@@ -141,12 +203,12 @@ interface PartRelay {
   readonly emit: ToolResultPartSink;
 }
 
-function partRelayOf(call: CallRequest): PartRelay {
+function partRelayOf(call: CallRequest, limits: CallLimits): PartRelay {
   const relay: PartRelay = {
     count: 0,
     async emit(part) {
-      // Read between two parts only: a provider call in flight is never interrupted.
-      if (call.signal?.aborted) throw new CallerGoneError();
+      // A stream that outlived its caller or its deadline stops at its next part.
+      if (limits.signal.aborted) throw stopReason(limits);
       relay.count += 1;
       await call.onPart?.(part);
     },
@@ -164,9 +226,24 @@ function asUpstreamFailure(err: unknown, provider: string, parts: number): Upstr
   const status = httpStatusOf(err);
   const className = upstreamErrorClassName(err);
   const detail = err instanceof Error ? err.message : String(err);
+  if (err instanceof CallTimeoutError) {
+    const after = parts > 0 ? ` after ${partsPhrase(parts)}` : '';
+    return new UpstreamFailureError({
+      summary: `${provider} call stopped${after}: no answer within ${err.seconds} s (timeout)`,
+      detail:
+        `timeout: ${provider} did not answer within ${err.seconds} seconds, so Vaubaan stopped the call` +
+        `${after} (execution.call_timeout_seconds). It was counted against the mission; whether ` +
+        `${provider} carried it out is unknown: check before repeating a change.`,
+      status: null,
+      cause: err,
+    });
+  }
   if (err instanceof CallerGoneError) {
     return new UpstreamFailureError({
-      summary: `${provider} stream stopped after ${partsPhrase(parts)}: the caller was gone`,
+      summary:
+        parts > 0
+          ? `${provider} stream stopped after ${partsPhrase(parts)}: the caller was gone`
+          : `${provider} call stopped: the caller was gone`,
       detail,
       status: null,
       cause: err,
@@ -219,13 +296,14 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     call: CallRequest,
     target: CallTarget,
     relay: PartRelay,
+    limits: CallLimits,
   ) {
     // The first attempt starts the clock; a retry keeps it.
     const startedAt = reached.get(call)?.startedAt ?? performance.now();
     reached.set(call, { plugin: resolved.plugin, startedAt });
-    return resolved.plugin.execute(
+    const answer = resolved.plugin.execute(
       {
-        ...deps.credentials.contextOf(resolved),
+        ...deps.credentials.contextOf(resolved, limits.signal),
         resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
         agentLabel: call.agent_label,
         credentialCache: deps.credentialCache.scopeFor(resolved.connection),
@@ -234,6 +312,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
       call.tool,
       call.args,
     );
+    return untilStopped(answer, limits);
   }
 
   /** Maps a broker failure to the refusal the agent reads, or returns the error untouched. */
@@ -263,6 +342,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     call: CallRequest,
     target: CallTarget,
     relay: PartRelay,
+    limits: CallLimits,
   ): Promise<unknown> {
     const connectionId = target.connection.id;
     let resolved: ResolvedCredential;
@@ -273,10 +353,12 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     }
     // Once a part has left for the caller the call is never replayed: a retry
     // would deliver the beginning of the result twice.
-    const retriable = (err: unknown): boolean => credentialRejected(err) && relay.count === 0;
+    // A call past its deadline, or whose caller left, is not replayed either.
+    const retriable = (err: unknown): boolean =>
+      credentialRejected(err) && relay.count === 0 && !limits.signal.aborted;
 
     try {
-      return await forward(resolved, ctx, call, target, relay);
+      return await forward(resolved, ctx, call, target, relay, limits);
     } catch (err) {
       if (!retriable(err)) throw err;
       deps.logger.warn('upstream rejected the credential', {
@@ -288,7 +370,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
 
     if ((await deps.credentialCache.drop(connectionId)) > 0) {
       try {
-        return await forward(resolved, ctx, call, target, relay);
+        return await forward(resolved, ctx, call, target, relay, limits);
       } catch (err) {
         if (!retriable(err)) throw err;
       }
@@ -302,21 +384,27 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     }
     // A second rejection right after a successful refresh is final for this call;
     // the next call starts over and the broker decides the connection's fate.
-    return forward(refreshed, ctx, call, target, relay);
+    return forward(refreshed, ctx, call, target, relay, limits);
   }
 
   return {
     async execute(ctx, call, target): Promise<unknown> {
-      const relay = partRelayOf(call);
+      const limits = limitsOf(call, deps.callTimeoutSeconds);
+      const relay = partRelayOf(call, limits);
       try {
-        const result = await attempt(ctx, call, target, relay);
+        const result = await attempt(ctx, call, target, relay, limits);
         report(call, { ok: true, result });
         return result;
-      } catch (err) {
+      } catch (thrown) {
+        if (thrown instanceof UpstreamRefusalError) {
+          if (!call.signal?.aborted) report(call, { ok: false, error: thrown });
+          throw thrown;
+        }
+        // Whatever the plugin threw once its signal fired (an AbortError of its fetch)
+        // is the deadline's or the caller's doing: recorded as such.
+        const err = limits.signal.aborted ? stopReason(limits) : thrown;
         // The caller left: not an outcome of the plugin, nothing to report (spec §9).
-        const callerGone = err instanceof CallerGoneError || call.signal?.aborted === true;
-        if (!callerGone) report(call, { ok: false, error: err });
-        if (err instanceof UpstreamRefusalError) throw err;
+        if (!(err instanceof CallerGoneError)) report(call, { ok: false, error: err });
         throw asUpstreamFailure(err, target.connection.provider, relay.count);
       }
     },

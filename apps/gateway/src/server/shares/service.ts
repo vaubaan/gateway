@@ -41,8 +41,8 @@ import {
 } from '../authority';
 import { ConnectError, ownerActRefusal, type Actor, type ConnectionService } from '../connections';
 import type { Logger } from '../logging';
-import { enumerateCatalog } from '../missions/catalog-view';
-import type { CatalogRisk } from '../missions/model';
+import { enumerateCatalog } from '../../lib/missions/catalog-view';
+import type { CatalogRisk } from '../../lib/missions/model';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
 import { InvariantError } from '../store/errors';
@@ -55,7 +55,7 @@ import type {
   UserRecord,
 } from '../store/types';
 import { ShareError, type ShareErrorCode } from './errors';
-import type { EnvLabelling } from './restriction';
+import type { EnvLabelling } from '../../lib/shares/restriction';
 
 /** Who a share is made to, as the owner names them: a user by email, or a group. */
 export type ShareTargetInput =
@@ -343,13 +343,10 @@ export class ShareService {
    * connection and serves through its others; one with nothing else reads `orphaned`.
    * Both serve again on this connection when a new share covers them.
    */
-  async revoke(actor: Actor, shareId: string, onConnectionId?: string): Promise<RevokeOutcome> {
-    const share = await this.deps.store.shares.getById(shareId);
+  async revoke(actor: Actor, shareId: string, connectionId: string): Promise<RevokeOutcome> {
+    // The route names the connection in its URL: a share of another connection is not there.
+    const share = await this.deps.store.shares.get({ connectionId, shareId });
     if (!share) throw new ShareError('not-found');
-    // A route names the connection in its URL: a share of another connection is not there.
-    if (onConnectionId !== undefined && share.connectionId !== onConnectionId) {
-      throw new ShareError('not-found');
-    }
     await this.owned(actor, share.connectionId);
     const targetLabel = await principalLabel(this.deps.store, share.target);
     if (share.status === 'revoked') return { share, targetLabel, orphaned: 0, partsLost: 0 };
@@ -357,12 +354,14 @@ export class ShareService {
     const watch = await this.deps.grounds.watchConnection(share.connectionId);
     let revoked: ShareRecord;
     try {
-      revoked = await this.deps.store.shares.revoke(share.id);
+      revoked = await this.deps.store.shares.revoke({ connectionId, shareId: share.id });
     } catch (err) {
       // Another revocation won between the read above and the conditional UPDATE: the
       // share is revoked, by the act that wrote its entry. Same answer as a repeat.
       const current =
-        err instanceof InvariantError ? await this.deps.store.shares.getById(share.id) : null;
+        err instanceof InvariantError
+          ? await this.deps.store.shares.get({ connectionId, shareId: share.id })
+          : null;
       if (current?.status !== 'revoked') throw err;
       return { share: current, targetLabel, orphaned: 0, partsLost: 0 };
     }

@@ -177,7 +177,7 @@ describe('requests: exhaust and claim over HTTP', () => {
 
   it('a co-owner of the connection is not the creator', async () => {
     const claim = await exhaust();
-    const group = await root.store.groups.getOrCreate('platform', 'idp');
+    const group = await root.store.groups.getOrCreate('platform', 'idp', 'idp');
     await root.store.groups.addMember(group.id, seeded.ada.id);
     await root.store.groups.addMember(group.id, seeded.bob.id);
     await root.store.connections.transferOwner(seeded.github.connection.id, {
@@ -388,7 +388,25 @@ describe('requests: exhaust and claim over HTTP', () => {
     });
   });
 
-  describe('per-IP rate limit on /r/*', () => {
+  describe('rate limit on /r/*', () => {
+    it('keys a signed-in creator on their session: an anonymous flood never holds them out', async () => {
+      const claim = await exhaust();
+      // No trusted proxy here: every anonymous caller shares one address window.
+      const forged = new Headers({ cookie: '__Host-vbn_session=forged-value' });
+      for (let i = 0; i < REQUEST_PAGE_RATE_LIMIT; i += 1) {
+        await root.requests.handlers.open(get(claim.url), claim.id);
+      }
+      expect((await root.requests.handlers.open(get(claim.url), claim.id)).status).toBe(429);
+      // A cookie that opens no session is counted with the address, never in a window of its own.
+      expect((await root.requests.handlers.open(get(claim.url, forged), claim.id)).status).toBe(
+        429,
+      );
+
+      const headers = await sessionHeaders(root, seeded.ada);
+      const res = await root.requests.handlers.open(get(claim.url, headers), claim.id);
+      expect(res.status).not.toBe(429);
+    });
+
     it('answers 429 with Retry-After once the window is spent, before looking at anything', async () => {
       const claim = await exhaust();
       const headers = await sessionHeaders(root, seeded.ada);

@@ -13,7 +13,16 @@
  * the scope boards:write"), which is kept as it is (one line, bounded). The
  * plugin's rule is to quote nothing the provider sent in it (ADR
  * provider-error-text-stays-with-the-agent, amendment of 2026-10-21).
+ *
+ * A second one, at connect time only (amendment of 2026-10-31): the sentence of an
+ * `UpstreamAuthError` thrown while the person connects — "Gmail refused the IMAP
+ * sign-in of x: the app password is wrong…" — names the fix, so it is kept, on one
+ * line, bounded, with every value of the credential being connected masked first.
+ * Only the connect page sees it: the caller passes the credential it just received,
+ * and a call without one (refresh, a later discovery, the log) keeps the status
+ * alone.
  */
+import type { CredentialSecret } from '@vaubaan/plugin-sdk';
 import { CredentialRefusal, UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
 
 import {
@@ -31,9 +40,51 @@ const OAUTH_ERROR_CODE = /^[a-z_]{1,40}$/;
 /** An error class name is shown only when it looks like one. */
 const ERROR_NAME = /^[A-Za-z][A-Za-z0-9]{0,40}$/;
 
-export function providerFailureReason(err: unknown): string {
+/** A credential value shorter than this is not masked (an empty field, a port). */
+const MASKED_MIN_LENGTH = 4;
+export const MASK = '[credential]';
+
+/** Every string the credential carries (a token, a password, a user name, a key file). */
+function credentialValues(value: unknown, into: Set<string> = new Set()): Set<string> {
+  if (typeof value === 'string') {
+    if (value.length >= MASKED_MIN_LENGTH) into.add(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) credentialValues(item, into);
+  } else if (typeof value === 'object' && value !== null) {
+    for (const item of Object.values(value)) credentialValues(item, into);
+  }
+  return into;
+}
+
+/** The sentence with each value of the credential, as is and URL-encoded, replaced by `MASK`. */
+export function maskCredential(sentence: string, credential: CredentialSecret): string {
+  const values = [...credentialValues(credential)].flatMap((v) => [v, encodeURIComponent(v)]);
+  // Longest first: a value that contains another is masked whole.
+  values.sort((a, b) => b.length - a.length);
+  let masked = sentence;
+  for (const value of values) masked = masked.split(value).join(MASK);
+  return masked;
+}
+
+/** The plugin's sentence of a rejection at connect time: masked, one bounded line, with its status. */
+function connectSentence(err: UpstreamAuthError, credential: CredentialSecret): string {
+  const line = oneLine(maskCredential(err.message, credential));
+  const status = `HTTP ${err.upstreamStatus}`;
+  return line.includes(status) ? line : `${line} (${status})`;
+}
+
+/**
+ * The reason of a provider failure in the gateway's words. `connecting`: the
+ * credential the person is connecting right now, given only by the connect page's
+ * checks (`verify`, the first discovery): a rejection then keeps the plugin's
+ * sentence, masked.
+ */
+export function providerFailureReason(err: unknown, connecting?: CredentialSecret): string {
   if (err instanceof CredentialRefusal) return oneLine(err.message);
   if (err instanceof UpstreamAuthError) {
+    if (connecting !== undefined && err.message.trim() !== '') {
+      return connectSentence(err, connecting);
+    }
     return `the provider rejected the credential (HTTP ${err.upstreamStatus})`;
   }
   if (err instanceof UpstreamHttpError) return `the provider answered HTTP ${err.status}`;

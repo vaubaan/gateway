@@ -5,8 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { UnknownRiskIdError, type Store } from '../../../src/server/store/index.ts';
-import { makeUnowned, openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { NotFoundError, UnknownRiskIdError, type Store } from '../../../src/server/store/index.ts';
+import { makeUnowned, openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 describe('connections repository', () => {
   let t: TestStore;
@@ -24,7 +24,7 @@ describe('connections repository', () => {
         email: 'o@x',
       })
     ).id;
-    group = (await store.groups.getOrCreate('github-admins', 'idp')).id;
+    group = (await store.groups.getOrCreate('github-admins', 'idp', 'idp')).id;
   });
   afterEach(() => store.close());
 
@@ -406,7 +406,7 @@ describe('shares repository', () => {
         email: 't@x',
       })
     ).id;
-    group = (await store.groups.getOrCreate('devs', 'idp')).id;
+    group = (await store.groups.getOrCreate('devs', 'idp', 'idp')).id;
     connection = (
       await store.connections.create({
         provider: 'github',
@@ -499,14 +499,23 @@ describe('shares repository', () => {
       direct.id,
       viaGroup.id,
     ]);
-    const revoked = await store.shares.revoke(direct.id);
+    // Named with another connection, the share is not there: nothing is written.
+    await expect(
+      store.shares.revoke({ connectionId: 'another-connection', shareId: direct.id }),
+    ).rejects.toThrow(NotFoundError);
+    expect(
+      await store.shares.get({ connectionId: 'another-connection', shareId: direct.id }),
+    ).toBeNull();
+    const revoked = await store.shares.revoke({ connectionId: connection, shareId: direct.id });
     expect(revoked.status).toBe('revoked');
     expect(revoked.revokedAt).not.toBeNull();
     expect((await store.shares.listActiveForTargets(principals)).map((s) => s.id)).toEqual([
       viaGroup.id,
     ]);
     expect(await store.shares.listForConnection(connection)).toHaveLength(2);
-    await expect(store.shares.revoke(direct.id)).rejects.toThrow(/already revoked/);
-    expect(await store.shares.getById('missing')).toBeNull();
+    await expect(
+      store.shares.revoke({ connectionId: connection, shareId: direct.id }),
+    ).rejects.toThrow(/already revoked/);
+    expect(await store.shares.get({ connectionId: connection, shareId: 'missing' })).toBeNull();
   });
 });

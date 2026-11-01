@@ -85,14 +85,15 @@ import type {
   PreviewIssue,
   PreviewNotice,
   ResolvedDraftConnection,
-} from '@/server/missions/model';
-import { hasChanges, judgeEdit } from '@/server/missions/mission-edit';
-import { defaultResources, previewDraft } from '@/server/missions/preview';
-import type { TrustLevel } from '@/server/missions/macro-actions';
-import type { RiskPlanes } from '@/server/providers/planes';
+} from '@/lib/missions/model';
+import { hasChanges, judgeEdit } from '@/lib/missions/mission-edit';
+import { defaultResources, previewDraft } from '@/lib/missions/preview';
+import type { TrustLevel } from '@/lib/missions/macro-actions';
+import type { RiskPlanes } from '@/lib/providers/planes';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
-import { messageOf } from '../message-of';
+import { messageOf } from '@/lib/http/message-of';
+import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import styles from '../missions.module.css';
 import { CustomEditor } from './custom-editor';
 import {
@@ -192,8 +193,6 @@ const EMPTY: ConnectionState = {
   edited: false,
 };
 
-const UNREACHABLE = 'The gateway could not be reached.';
-
 export function MissionForm({
   context,
   missions,
@@ -215,8 +214,7 @@ export function MissionForm({
   const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<PendingDiscard | null>(null);
   const [now] = useState(() => new Date());
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, error, setError, run } = useAction();
   const [serverIssues, setServerIssues] = useState<readonly PreviewIssue[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
@@ -313,67 +311,41 @@ export function MissionForm({
   }
 
   async function create() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch('/api/missions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draftOf(context, state, new Date())),
+    const answer = await run('/api/missions', draftOf(context, state, new Date()), {
+      errorOf: refusalOf,
+    });
+    const { body } = answer;
+    const made = revealedOf(body);
+    if (answer.status === 201 && isCreatedBody(body) && made) {
+      setConfirming(false);
+      setCreated({
+        missionId: body.mission.id,
+        name: body.mission.name,
+        ...made,
+        permissions: preview.policy.length,
+        services: included.map(({ connection }) => connection.provider_label),
       });
-      const body: unknown = await res.json().catch(() => null);
-      const made = revealedOf(body);
-      if (res.status === 201 && isCreatedBody(body) && made) {
-        setConfirming(false);
-        setCreated({
-          missionId: body.mission.id,
-          name: body.mission.name,
-          ...made,
-          permissions: preview.policy.length,
-          services: included.map(({ connection }) => connection.provider_label),
-        });
-      } else if (res.status === 422 && isRefusedBody(body)) {
-        setConfirming(false);
-        setServerIssues(body.preview.issues);
-      } else {
-        setError(problemsOf(body) ?? messageOf(body, res.status));
-      }
-    } catch {
-      setError(UNREACHABLE);
-    } finally {
-      setBusy(false);
+    } else if (answer.status === 422 && isRefusedBody(body)) {
+      setConfirming(false);
+      setServerIssues(body.preview.issues);
     }
   }
 
   /** "Save changes": the edit, judged again by the server, applied at once. */
   async function save() {
     if (!edit) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/missions/${encodeURIComponent(edit.missionId)}/edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          draft: editDraftOf(context, state, edit.snapshot, new Date()),
-          revision: edit.revision,
-        }),
-      });
-      const body: unknown = await res.json().catch(() => null);
-      if (res.ok) {
-        window.location.assign(`${ROUTES.missions}/${edit.missionId}?edited=1`);
-        return;
-      }
-      if (res.status === 422 && isRecord(body) && Array.isArray(body.issues)) {
-        setConfirming(false);
-        setServerIssues(body.issues as PreviewIssue[]);
-      } else {
-        setError(problemsOf(body) ?? messageOf(body, res.status));
-      }
-    } catch {
-      setError(UNREACHABLE);
-    } finally {
-      setBusy(false);
+    const answer = await run(
+      `/api/missions/${encodeURIComponent(edit.missionId)}/edit`,
+      { draft: editDraftOf(context, state, edit.snapshot, new Date()), revision: edit.revision },
+      { errorOf: refusalOf },
+    );
+    if (answer.ok) {
+      window.location.assign(`${ROUTES.missions}/${edit.missionId}?edited=1`);
+      return;
+    }
+    if (answer.status === 422 && isIssuesBody(answer.body)) {
+      setConfirming(false);
+      setServerIssues(answer.body.issues);
     }
   }
 
@@ -399,34 +371,26 @@ export function MissionForm({
       period: proposal.period ?? periodOf(state.period),
       expires_at: proposal.expires_at ?? null,
     };
-    setBusy(true);
-    try {
-      const res = await fetch('/api/missions/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(draft),
-      });
-      const body: unknown = await res.json().catch(() => null);
-      if (res.ok && isPreviewBody(body)) {
-        const loaded = loadResolved(context, initialFormState(context), body.preview.resolved);
-        setState({
-          ...loaded,
-          name: body.preview.name || state.name,
-          period: periodChoiceOf(body.preview.period),
-          expiry: body.preview.expires_at ? 'custom' : 'never',
-          expiryCustom: body.preview.expires_at ? toLocalInput(body.preview.expires_at) : '',
-        });
-        setServerIssues([]);
-        setProposalReport(body.preview);
-        setPending(null);
-      } else {
-        setError(problemsOf(body) ?? messageOf(body, res.status));
-      }
-    } catch {
-      setError(UNREACHABLE);
-    } finally {
-      setBusy(false);
+    const answer = await run('/api/missions/preview', draft, {
+      errorOf: (refused) => problemsOf(refused.body) ?? refused.message,
+    });
+    const { body } = answer;
+    if (!answer.ok) return;
+    if (!isPreviewBody(body)) {
+      setError(problemsOf(body) ?? messageOf(body, answer.status));
+      return;
     }
+    const loaded = loadResolved(context, initialFormState(context), body.preview.resolved);
+    setState({
+      ...loaded,
+      name: body.preview.name || state.name,
+      period: periodChoiceOf(body.preview.period),
+      expiry: body.preview.expires_at ? 'custom' : 'never',
+      expiryCustom: body.preview.expires_at ? toLocalInput(body.preview.expires_at) : '',
+    });
+    setServerIssues([]);
+    setProposalReport(body.preview);
+    setPending(null);
   }
 
   if (created)
@@ -1130,4 +1094,24 @@ function isPreviewBody(body: unknown): body is { preview: MissionPreview } {
 function problemsOf(body: unknown): string | null {
   if (isRecord(body) && Array.isArray(body.problems)) return body.problems.map(String).join('; ');
   return null;
+}
+
+/** An edit refused for its draft (422) lists the issues the form shows beside its lines. */
+function isIssuesBody(body: unknown): body is { issues: readonly PreviewIssue[] } {
+  return (
+    isRecord(body) &&
+    Array.isArray(body.issues) &&
+    body.issues.every((issue) => isRecord(issue) && typeof issue.message === 'string')
+  );
+}
+
+/**
+ * The error a refusal of the mission API shows: none for the 422 the form shows as
+ * issues beside its lines, the problems of a refused draft, or the gateway's sentence.
+ */
+function refusalOf(answer: Extract<PostAnswer, { ok: false }>): string | null {
+  if (answer.status === 422 && (isRefusedBody(answer.body) || isIssuesBody(answer.body))) {
+    return null;
+  }
+  return problemsOf(answer.body) ?? answer.message;
 }

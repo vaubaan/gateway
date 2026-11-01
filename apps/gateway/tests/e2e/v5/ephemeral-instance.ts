@@ -54,7 +54,7 @@ import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { serializeSecret } from '../../../src/server/connections';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { seedConnection } from '../../support/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 import { seedDayOfWork, type AuditRig } from '../../integration/audit/support';
 import { FakeGithub, routeFetch } from '../../integration/auth/fake-github';
@@ -77,6 +77,7 @@ import {
   MOCK_GITHUB,
   PUBLIC_URL,
 } from './instance';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const CLIENT = { clientId: 'vaubaan-gateway-e2e', clientSecret: 'e2e-client-secret' };
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -444,7 +445,7 @@ async function main(): Promise<void> {
       },
     }),
   );
-  await root.auth.idp.save({
+  await saveTestOidcProvider(root.store.config, {
     issuer: idp.issuer.href,
     clientId: CLIENT.clientId,
     clientSecret: CLIENT.clientSecret,

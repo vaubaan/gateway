@@ -3,6 +3,8 @@ title: Authority — owners, shares, groups, orphaned missions, unowned connecti
 tracks:
   - apps/gateway/src/server/authority/
   - apps/gateway/src/server/shares/
+  - apps/gateway/src/lib/shares/
+  - apps/gateway/src/lib/authority/
   - apps/gateway/src/server/groups/
   - apps/gateway/src/server/connections/service.ts
   - apps/gateway/src/server/execution/admission.ts
@@ -26,7 +28,7 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
   `authorityOf` (issuance), `gapsOf` (the cheap re-check on every door request).
 - [`mission-grounds.ts`](../../apps/gateway/src/server/authority/mission-grounds.ts) — derives
   `orphaned` and lost parts; the watches that audit a change.
-- [`catalog-authority.ts`](../../apps/gateway/src/server/authority/catalog-authority.ts) — the
+- [`catalog-authority.ts`](../../apps/gateway/src/lib/authority/catalog-authority.ts) — the
   enumeration and monotonicity rules everything reuses (browser-safe).
 - [`shares/service.ts`](../../apps/gateway/src/server/shares/service.ts),
   [`connections/service.ts`](../../apps/gateway/src/server/connections/service.ts) — shares,

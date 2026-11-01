@@ -14,7 +14,7 @@
 import { parseEventDetails, type SessionEventDetails } from '@vaubaan/shared';
 
 import { GATE_WORDS, gateWordOf } from '@/lib/vocabulary';
-import { describeMissionChange } from '@/server/missions/change-words';
+import { describeMissionChange } from '@/lib/missions/change-words';
 
 /** What kind of line it is: it chooses the mark, and its word for assistive technology. */
 export type EventTone = 'ok' | 'bad' | 'warn' | 'neutral';

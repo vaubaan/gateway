@@ -3,7 +3,7 @@
  * selection, token mint / rotate / revoke, bootstrap kit; and the members and
  * per-holder tokens of a mission (`team`).
  *
- * Server-only barrel (`node:crypto` and argon2 through `token.ts`). Client components import
+ * Server-only barrel (`node:crypto` through `token.ts`). Client components import
  * the pure files directly — `model`, `catalog-view`, `preview`, `summary` —
  * never this index.
  * Handbook: docs/handbook/missions.md.
@@ -113,7 +113,12 @@ export {
   type BootstrapKit,
   type BootstrapKitInput,
 } from './bootstrap-kit';
-export { enumerateCatalog, isResolvable, severityLevel, severityOf } from './catalog-view';
+export {
+  enumerateCatalog,
+  isResolvable,
+  severityLevel,
+  severityOf,
+} from '../../lib/missions/catalog-view';
 export {
   EVERYTHING_I_HOLD,
   EVERYTHING_I_HOLD_DESCRIPTION,
@@ -122,7 +127,7 @@ export {
   expansionDigest,
   type EverythingIHold,
   type ExpansionDigest,
-} from './everything-i-hold';
+} from '../../lib/missions/everything-i-hold';
 export { missionDraftSchema, parseMissionDraft, type ParsedDraft } from './draft-schema';
 export {
   TRUST_LEVEL_BUDGET_FACTOR,
@@ -134,18 +139,16 @@ export {
   TRUST_LEVELS,
   type Tier,
   type TrustLevel,
-} from './macro-actions';
+} from '../../lib/missions/macro-actions';
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
   MissionService,
   tokenHolderOf,
   type IssueOptions,
   type IssueResult,
-  type LegacyHashGate,
   type LimitReachedResult,
   type LimitChangeView,
   type LimitEdit,
-  type LegacyHashThrottled,
   type MissionAccess,
   type MissionDetail,
   type MissionDetailConnection,
@@ -182,9 +185,17 @@ export {
   type TeamMemberView,
   type TeamTokenView,
 } from './team-service';
-export { parseTokenName, TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from './token-name';
-export type * from './model';
-export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './model';
+export {
+  parseTokenName,
+  TOKEN_NAME_MAX_LENGTH,
+  TOKEN_NAME_RULE,
+} from '../../lib/missions/token-name';
+export type * from '../../lib/missions/model';
+export {
+  PREVIEW_ISSUE_CODES,
+  PREVIEW_NOTICE_CODES,
+  SEVERITY_LEVELS,
+} from '../../lib/missions/model';
 export { reachedResources, reachesLaterResources } from '../store/mission-reach';
 export {
   budgetProblem,
@@ -192,11 +203,10 @@ export {
   previewConnection,
   previewDraft,
   uncoveredOf,
-} from './preview';
+} from '../../lib/missions/preview';
 export { explainOrphan, type OrphanExplanation } from './orphan-reason';
-export { summarize } from './summary';
+export { summarize } from '../../lib/missions/summary';
 export {
-  LEGACY_TOKEN_HASH_ALG,
   maskedToken,
   mintMissionToken,
   MISSION_TOKEN_HASH_ALG,

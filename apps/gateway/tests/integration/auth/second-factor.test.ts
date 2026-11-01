@@ -8,13 +8,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
-import { passSecondFactor } from '../../../src/server/auth/testing';
+import { passSecondFactor } from '../../support/auth/testing';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { base32Decode, totpCode, totpStepOf } from '../../../src/server/crypto/totp';
 import { FakeIdp } from './fake-idp';
+import { saveTestOidcProvider } from '../../support/auth/testing';
 
 const PUBLIC_URL = 'https://gateway.example.com';
 const CLIENT = { clientId: 'vaubaan-gateway', clientSecret: 'client-secret-for-tests' };
@@ -49,7 +50,7 @@ describe('a second factor for everyone', () => {
       oidc: { fetch: idp.fetch, allowInsecureIssuer: true },
       ...memoryStoreDeps,
     });
-    await root.auth.idp.save({
+    await saveTestOidcProvider(root.store.config, {
       issuer: idp.issuer.href,
       clientId: CLIENT.clientId,
       clientSecret: CLIENT.clientSecret,
@@ -70,6 +71,7 @@ describe('a second factor for everyone', () => {
     const callback = idp.authorize(new URL(start.headers.get('location') ?? ''));
     const finish = await root.auth.handlers.loginCallback(
       new Request(callback.href, { headers: { cookie: cookieHeader(b) } }),
+      'idp',
     );
     absorb(b, finish);
     return finish;

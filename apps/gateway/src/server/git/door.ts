@@ -144,7 +144,6 @@ function denialAnswer(denial: AdmissionDenial): Response {
   switch (denial.denial) {
     case 'cross-origin':
       return gitText(HTTP_FORBIDDEN, 'Cross-origin requests are not accepted on this endpoint.');
-    case 'verification-throttled':
     case 'rate-limited': {
       const seconds = Math.max(1, Math.ceil(denial.retryAfterMs / MS_PER_SECOND));
       return gitText(

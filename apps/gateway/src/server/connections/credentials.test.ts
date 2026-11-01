@@ -7,7 +7,7 @@ import type { ConnectionContext, CredentialSecret, OAuth2Secret } from '@vaubaan
 import type { MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
-import { makeUnowned } from '../store/testing';
+import { makeUnowned } from '../../../tests/support/store/testing';
 import { parseSecret, serializeSecret } from './credential-codec';
 import { REFRESH_SKEW_MS } from './credentials';
 import { ConnectionUnavailableError, ProviderUnreachableError } from './errors';
@@ -17,7 +17,7 @@ import {
   fixturePlugin,
   OAUTH_SPEC,
   type ConnectionsHarness,
-} from './testing';
+} from '../../../tests/support/connections/testing';
 
 const TOKEN_URL = OAUTH_SPEC.tokenUrl;
 const RESOURCE = 'https://mcp.example.com';
@@ -80,7 +80,7 @@ describe('resolve', () => {
     expect(resolved.plugin.id).toBe('oauthco');
     expect(h.fetch.calls).toHaveLength(0);
 
-    const ctx = h.broker.contextOf(resolved);
+    const ctx = h.broker.contextOf(resolved, new AbortController().signal);
     expect(JSON.stringify(ctx)).not.toContain('csecret');
   });
 

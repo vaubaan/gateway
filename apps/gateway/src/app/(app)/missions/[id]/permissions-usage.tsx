@@ -19,8 +19,8 @@ import {
 } from '@/components/ui';
 import { formatNumber, gateWordOf, reachedOnAccount, usage, usedColumn } from '@/lib/vocabulary';
 import type { MissionDetail } from '@/server/missions';
-import type { CatalogRisk } from '@/server/missions/model';
-import { riskReferencePath } from '@/server/providers/links';
+import type { CatalogRisk } from '@/lib/missions/model';
+import { riskReferencePath } from '@/lib/providers/links';
 import { parseRiskId } from '@vaubaan/shared';
 
 import styles from '../missions.module.css';

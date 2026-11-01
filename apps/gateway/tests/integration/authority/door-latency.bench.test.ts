@@ -11,7 +11,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { line, type IssuedMission } from '../../../src/server/execution/testing';
+import { line, type IssuedMission } from '../../support/execution/testing';
 import { authorityRig, READ, type AuthorityRig } from './support';
 
 const SETTLE_ITERATIONS = 20_000;
@@ -44,7 +44,7 @@ describe.skipIf(!process.env.VAUBAAN_BENCH)('latency of the authority re-check',
 
     // 2. The creator holds a share made to one of their five groups.
     for (const name of ['g1', 'g2', 'g3', 'g4', 'readers']) {
-      const group = await store.groups.getOrCreate(name, 'idp');
+      const group = await store.groups.getOrCreate(name, 'idp', 'idp');
       await store.groups.addMember(group.id, rig.bob.id);
     }
     const readers = (await store.groups.getByName('readers'))!;

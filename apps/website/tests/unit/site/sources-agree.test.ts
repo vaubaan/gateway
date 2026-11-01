@@ -9,7 +9,7 @@ import { KEYS } from '../../../../gateway/src/server/config/sources';
 import {
   severityLevel,
   severityOf as gatewayScore,
-} from '../../../../gateway/src/server/missions/catalog-view';
+} from '../../../../gateway/src/lib/missions/catalog-view';
 import {
   configKeysMarkdown,
   CONFIG_HANDBOOK,

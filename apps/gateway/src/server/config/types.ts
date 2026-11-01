@@ -33,17 +33,6 @@ export interface IdpClaimMapping {
   readonly emailVerified?: string;
 }
 
-export interface IdpConfig {
-  readonly issuer: URL;
-  readonly clientId: string;
-  readonly clientSecret: string;
-  readonly claims: IdpClaimMapping;
-  /** Empty list means "any domain the IdP authenticates" (a company directory only). */
-  readonly allowedEmailDomains: readonly string[];
-  /** Only invited addresses and the admin emails are admitted (`idp.invitation_only`). */
-  readonly invitationOnly: boolean;
-}
-
 /**
  * The admin rule of the configuration (spec §4.3): optional, a seed. The boot applies
  * it once while the store names no administrator; afterwards the administrators live
@@ -79,6 +68,11 @@ export interface EncryptionConfig {
    * start when it is absent (ADR master-key-generated-and-handed-over-by-the-instance).
    */
   readonly generateMasterKey: boolean;
+  /**
+   * `encryption.accept_key_beside_store`: the operator knows the key file shares a mount
+   * with the store and keeps the volume's copies apart; the boot does not warn.
+   */
+  readonly acceptKeyBesideStore: boolean;
 }
 
 /** What an encryptor is built from: the keys of the block, without its provenance. */
@@ -322,14 +316,9 @@ export interface InstanceConfig {
   readonly restore: RestoreConfig;
   readonly encryption: EncryptionConfig;
   /**
-   * The single-provider keys (`idp.*`): the provider `idp` (`LEGACY_PROVIDER_ID`),
-   * `null` when they are absent.
-   */
-  readonly idp: IdpConfig | null;
-  /**
    * The sign-in providers of the `sign_in.<id>.*` keys, in the order of the file then
-   * the environment. Together with `idp` they are the providers the configuration
-   * sets (`fileSignInProviders`); with none, the bootstrap token is required.
+   * the environment: the providers the configuration sets; with none, the bootstrap
+   * token is required.
    */
   readonly signIn: readonly SignInProvider[];
   readonly admin: AdminRule;
@@ -352,6 +341,11 @@ export interface InstanceConfig {
   readonly approvals: { readonly expirySeconds: number };
   /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
   readonly mcp: { readonly rateLimitPerMinute: number };
+  /**
+   * The execution door's plugin calls: how long one call may wait for its provider, in
+   * seconds, before it is stopped and answered as a timeout.
+   */
+  readonly execution: { readonly callTimeoutSeconds: number };
   /**
    * The git remote (spec §4.1 ter): the largest push accepted, in bytes, and
    * how long one git request may last, in seconds. Both fail closed.
@@ -377,7 +371,6 @@ export interface InstanceConfig {
  */
 export function secretValues(config: InstanceConfig | SetupConfig): string[] {
   const out: string[] = [];
-  if (config.idp) out.push(config.idp.clientSecret);
   for (const provider of config.signIn) {
     if (provider.kind !== 'local') out.push(provider.clientSecret);
   }

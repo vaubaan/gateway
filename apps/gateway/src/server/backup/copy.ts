@@ -15,7 +15,6 @@
  */
 import { rmSync, statSync } from 'node:fs';
 
-import { IdpSettingsService } from '../auth/idp-settings';
 import { SignInProvidersService, type CarriedSignIn } from '../auth/sign-in-providers';
 import type { InstanceConfig } from '../config';
 import type { Encryptor } from '../crypto';
@@ -84,13 +83,7 @@ async function writeIntoCopy(options: StoreCopyOptions): Promise<CarriedSignIn> 
   const clock = { now: options.now ?? (() => new Date()) };
   const copy = openCopyConfig(options.target, options.encryptor, clock);
   try {
-    const providers = new SignInProvidersService(
-      config,
-      async () => [],
-      new IdpSettingsService(config.idp, copy.config),
-      copy.config,
-      clock,
-    );
+    const providers = new SignInProvidersService(config, async () => [], copy.config, clock);
     const carried = await providers.carryIntoStore();
     await copy.config.delete(BACKUP_STATUS_KEY);
     return carried;

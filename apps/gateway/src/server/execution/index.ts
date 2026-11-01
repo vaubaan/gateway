@@ -40,7 +40,13 @@ import { createUpstreamStage } from './upstream-stage';
 export interface ExecutionModuleDeps {
   readonly config: Pick<
     InstanceConfig,
-    'publicUrl' | 'trustedProxies' | 'clientIpHeader' | 'mcp' | 'selfResources' | 'requests'
+    | 'publicUrl'
+    | 'trustedProxies'
+    | 'clientIpHeader'
+    | 'mcp'
+    | 'execution'
+    | 'selfResources'
+    | 'requests'
   >;
   readonly store: Store;
   readonly registry: PluginRegistry;
@@ -112,6 +118,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
       credentialCache,
       logger,
       telemetry: deps.telemetry,
+      callTimeoutSeconds: deps.config.execution.callTimeoutSeconds,
     }),
     audit: deps.telemetry
       ? withDecisionTelemetry(deps.store.auditWriter, deps.telemetry, (error) =>
@@ -142,10 +149,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     clock,
   });
 
-  const tokens = new TokenVerifier({
-    missions: deps.missions.service,
-    rateLimiter: deps.rateLimiter,
-  });
+  const tokens = new TokenVerifier({ missions: deps.missions.service });
   const door = new ExecutionDoor({
     permissionTool: permissionRequestTool,
     permissionAudit: deps.store.auditWriter,
@@ -231,13 +235,7 @@ export {
 } from './request-meta';
 export { citedRefs, createResourceStage } from './resource-stage';
 export { createRiskStage } from './risk-stage';
-export {
-  TokenVerifier,
-  VERIFY_ATTEMPTS_PER_WINDOW,
-  VERIFY_WINDOW_MS,
-  verifyThrottleKey,
-  type VerifyOutcome,
-} from './token-verifier';
+export { TokenVerifier } from './token-verifier';
 export {
   buildCatalog,
   callableProviders,

@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { buildRoot, SEALED_KEY_MISMATCH } from './root';
 
 const KEY_A = randomBytes(32).toString('base64');

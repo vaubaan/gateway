@@ -8,31 +8,26 @@
  *
  * Also here: the protocol edges of the door (2025-era and 2026-07-28 clients,
  * plain `curl`-style JSON-RPC), the bearer dispatch and the separation of the
- * three credentials (spec §6), token verification (the sha256 digest, and the
- * tokens an earlier build stored as argon2id), the surface rate
- * limit, the catalog endpoint and "no secret in logs".
+ * three credentials (spec §6), token verification (the sha256 digest), the
+ * surface rate limit, the catalog endpoint and "no secret in logs".
  */
 
 import { Client, ProtocolError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { githubPlugin } from '@vaubaan/plugin-github';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
-import { digestApiKey, hashApiKeyArgon2id } from '@vaubaan/shared';
+import { digestApiKey } from '@vaubaan/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { serializeSecret } from '../../../src/server/connections';
-import {
-  SURFACE_RATE_LIMITED_RPC_CODE,
-  VERIFY_ATTEMPTS_PER_WINDOW,
-  type MissionCatalog,
-} from '../../../src/server/execution';
+import { SURFACE_RATE_LIMITED_RPC_CODE, type MissionCatalog } from '../../../src/server/execution';
 import {
   executionInstance,
   line,
   TEST_PUBLIC_URL,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import type { ConnectionRecord } from '../../../src/server/store/types';
 
 const INSTALLATION_ID = '4242';
@@ -451,18 +446,6 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
         .prepare('SELECT hash, hash_alg FROM mission_tokens WHERE prefix = ?')
         .get(prefix) as { hash: string; hash_alg: string };
 
-    /** Rewrites the row the way a build before the sha256 digest stored it. */
-    async function storeAsEarlierBuild(
-      of: GithubInstance,
-      mission: { readonly token: string; readonly prefix: string },
-    ): Promise<string> {
-      const argon = await hashApiKeyArgon2id(mission.token);
-      of.root.store.db
-        .prepare("UPDATE mission_tokens SET hash = ?, hash_alg = 'argon2id' WHERE prefix = ?")
-        .run(argon, mission.prefix);
-      return argon;
-    }
-
     it('remembers no verification: a revocation is seen on the very next call', async () => {
       const mission = await instance.issueGithub();
       expect(storedHash(instance, mission.prefix)).toEqual({
@@ -481,104 +464,20 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
 
     it('answers 401 to every wrong secret on a real prefix, never 429, and the agent is never held', async () => {
       const mission = await instance.issueGithub();
-      for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW + 5; i++) {
+      for (let i = 0; i < 40; i++) {
         expect((await instance.rpc(wrongSecret(mission.prefix, i), LIST)).status).toBe(401);
       }
       // No trusted proxy here: every caller shares one address. It does not matter any more.
       expect((await instance.rpc(mission.token, LIST)).status).toBe(200);
     });
 
-    it('a token issued by an earlier build keeps working, and its first call moves it to the digest', async () => {
+    it('a row an earlier build stored as argon2id authenticates nothing (migration 0027 revoked them)', async () => {
       const mission = await instance.issueGithub();
-      const argon = await storeAsEarlierBuild(instance, mission);
-      expect(storedHash(instance, mission.prefix)).toEqual({ hash: argon, hash_alg: 'argon2id' });
-
-      // A wrong secret changes nothing.
-      expect((await instance.rpc(wrongSecret(mission.prefix, 1), LIST)).status).toBe(401);
-      expect(storedHash(instance, mission.prefix).hash_alg).toBe('argon2id');
-
-      // The same Bearer, unchanged, still authenticates...
-      expect((await instance.rpc(mission.token, LIST)).status).toBe(200);
-      // ...and the row now holds the digest of that Bearer: same row, same prefix.
-      expect(storedHash(instance, mission.prefix)).toEqual({
-        hash: digestApiKey(mission.token),
-        hash_alg: 'sha256',
-      });
-      const rows = await instance.root.store.missions.listTokens(mission.mission.id);
-      expect(rows.map((r) => [r.prefix, r.status])).toEqual([[mission.prefix, 'active']]);
-      expect((await instance.rpc(mission.token, LIST)).status).toBe(200);
-      // A wrong secret is still wrong after the move.
-      expect((await instance.rpc(wrongSecret(mission.prefix, 2), LIST)).status).toBe(401);
+      instance.root.store.db
+        .prepare("UPDATE mission_tokens SET hash = ?, hash_alg = 'argon2id' WHERE prefix = ?")
+        .run('$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA', mission.prefix);
+      expect((await instance.rpc(mission.token, LIST)).status).toBe(401);
     });
-
-    it('a legacy token retired before it was ever moved is still refused by its reason', async () => {
-      const mission = await instance.issueGithub();
-      await storeAsEarlierBuild(instance, mission);
-      await instance.root.missions.service.revoke(instance.ada, mission.mission.id);
-      const after = await instance.rpc(mission.token, LIST);
-      expect(after.body.error?.data).toMatchObject({ code: 'mission-inactive', status: 'revoked' });
-    });
-
-    it('throttles the argon2id check of wrong secrets on a legacy prefix', async () => {
-      const mission = await instance.issueGithub();
-      await storeAsEarlierBuild(instance, mission);
-      const statuses: number[] = [];
-      for (let i = 0; i <= VERIFY_ATTEMPTS_PER_WINDOW; i++) {
-        statuses.push((await instance.rpc(wrongSecret(mission.prefix, i), LIST)).status);
-      }
-      expect(statuses.slice(0, VERIFY_ATTEMPTS_PER_WINDOW).every((s) => s === 401)).toBe(true);
-      expect(statuses[VERIFY_ATTEMPTS_PER_WINDOW]).toBe(429);
-    }, 60_000);
-
-    it('does not lock the agent of a legacy token out when another address floods its prefix, and the move ends the throttle', async () => {
-      const proxied = await githubInstance({ VAUBAAN_TRUSTED_PROXIES: '10.0.0.0/8' });
-      try {
-        const mission = await proxied.issueGithub();
-        await storeAsEarlierBuild(proxied, mission);
-        const attacker = { 'x-forwarded-for': '203.0.113.7:4711, 10.0.0.1' };
-        const agent = { 'x-forwarded-for': '198.51.100.9, 10.0.0.1' };
-        for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
-          expect((await proxied.rpc(wrongSecret(mission.prefix, i), LIST, attacker)).status).toBe(
-            401,
-          );
-        }
-        // The flooding address is throttled, whatever source port it comes from...
-        const samePeer = { 'x-forwarded-for': '203.0.113.7:9, 10.0.0.1' };
-        expect((await proxied.rpc(wrongSecret(mission.prefix, 98), LIST, samePeer)).status).toBe(
-          429,
-        );
-        // ...the real agent, calling from elsewhere, is not: its call moves the row.
-        expect((await proxied.rpc(mission.token, LIST, agent)).status).toBe(200);
-        expect(storedHash(proxied, mission.prefix).hash_alg).toBe('sha256');
-        // Nothing slow is left to protect: the flood is answered 401 again, from any address.
-        expect((await proxied.rpc(wrongSecret(mission.prefix, 99), LIST, attacker)).status).toBe(
-          401,
-        );
-        expect((await proxied.rpc(mission.token, LIST, attacker)).status).toBe(200);
-      } finally {
-        await proxied.close();
-      }
-    }, 60_000);
-
-    it('accepted risk, legacy tokens only: with no trusted proxy, the agent of a token never moved is held at 429 while its prefix is flooded', async () => {
-      // Threat-model handbook, "Accepted risks": every caller shares the `unknown`
-      // window of a legacy prefix, and a prefix is not a secret. The boot log says so
-      // (`NO_TRUSTED_PROXY_WARNING`); the remedy is `trusted_proxies` (test above),
-      // or one call of the real agent before the flood.
-      const mission = await instance.issueGithub();
-      await storeAsEarlierBuild(instance, mission);
-      for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
-        expect((await instance.rpc(wrongSecret(mission.prefix, i, 'd'), LIST)).status).toBe(401);
-      }
-      const cold = await instance.rpc(mission.token, LIST);
-      expect(cold.status).toBe(429);
-      expect(Number(cold.headers.get('retry-after'))).toBeGreaterThan(0);
-      // Nothing was learnt and nothing was changed: the mission and its token stand.
-      expect((await instance.root.store.missions.getById(mission.mission.id))?.status).toBe(
-        'active',
-      );
-      expect(storedHash(instance, mission.prefix).hash_alg).toBe('argon2id');
-    }, 60_000);
 
     it('applies the surface rate limit per mission, not per agent', async () => {
       const limited = await githubInstance({ VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE: '3' });

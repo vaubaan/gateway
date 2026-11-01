@@ -6,7 +6,12 @@ import { loadInstanceConfig, MASTER_KEY_BYTES } from './load';
 import { CONFIG_FILE_ENV } from './sources';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import { KEYS, secretEnvVariables } from './sources';
-import { TEST_BOOTSTRAP_TOKEN, TEST_MASTER_KEY, fakeFiles, validEnv } from './testing';
+import {
+  TEST_BOOTSTRAP_TOKEN,
+  TEST_MASTER_KEY,
+  fakeFiles,
+  validEnv,
+} from '../../../tests/support/config/testing';
 import { secretValues } from './types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -26,6 +31,38 @@ function paths(err: ConfigError): string[] {
   return err.issues.map((i) => i.path);
 }
 
+describe('loadInstanceConfig — a source of client addresses in production', () => {
+  const production = (overrides: Record<string, string> = {}) =>
+    validEnv({ NODE_ENV: 'production', ...overrides });
+
+  it('refuses to start in production with neither trusted_proxies nor client_ip_header', () => {
+    const err = failure(production());
+    expect(paths(err)).toEqual(['trusted_proxies']);
+    const [issue] = err.issues;
+    expect(issue?.env).toEqual([
+      'VAUBAAN_TRUSTED_PROXIES',
+      'VAUBAAN_CLIENT_IP_HEADER',
+      'VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS',
+    ]);
+  });
+
+  it('starts with either source, or with the shared windows accepted', () => {
+    const sources: Record<string, string>[] = [
+      { VAUBAAN_TRUSTED_PROXIES: '172.30.253.2' },
+      { VAUBAAN_CLIENT_IP_HEADER: 'x-real-ip' },
+      { VAUBAAN_ACCEPT_SHARED_ADDRESS_WINDOWS: '1' },
+    ];
+    for (const env of sources) {
+      expect(() => loadInstanceConfig({ env: production(env) })).not.toThrow();
+    }
+  });
+
+  it('asks nothing outside production (the demo, the tests, a developer)', () => {
+    expect(() => loadInstanceConfig({ env: validEnv() })).not.toThrow();
+    expect(() => loadInstanceConfig({ env: validEnv({ NODE_ENV: 'development' }) })).not.toThrow();
+  });
+});
+
 describe('loadInstanceConfig — required keys', () => {
   it('loads the minimal environment-only configuration with defaults', () => {
     const { config, configFile } = loadInstanceConfig({ env: validEnv() });
@@ -34,7 +71,7 @@ describe('loadInstanceConfig — required keys', () => {
     expect(config.store.path).toBe('/tmp/vaubaan-test/gateway.db');
     expect(config.encryption.keyVersion).toBe(1);
     expect(config.encryption.masterKey).toHaveLength(32);
-    expect(config.idp).toBeNull();
+    expect(config.signIn).toEqual([]);
     expect(config.admin).toEqual({ group: null, emails: ['ops@example.com'] });
     expect(config.bootstrapToken).toBe(TEST_BOOTSTRAP_TOKEN);
     expect(config.telemetry).toEqual({
@@ -46,6 +83,7 @@ describe('loadInstanceConfig — required keys', () => {
     expect(config.retentionDays).toBe(90);
     expect(config.requests.expirySeconds).toBe(24 * 3600);
     expect(config.approvals.expirySeconds).toBe(600);
+    expect(config.execution.callTimeoutSeconds).toBe(120);
     expect(config.log.level).toBe('info');
     expect(config.trustedProxies).toEqual([]);
     expect(config.retiredKeys).toEqual([]);
@@ -128,11 +166,13 @@ describe('loadInstanceConfig — required keys', () => {
         VAUBAAN_TELEMETRY_ENABLED: 'maybe',
         VAUBAAN_LOG_LEVEL: 'loud',
         VAUBAAN_MASTER_KEY_VERSION: 'two',
+        VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS: '0',
       }),
     );
     expect(paths(err).sort()).toEqual(
       [
         'encryption.key_version',
+        'execution.call_timeout_seconds',
         'log.level',
         'requests.expiry',
         'retention_days',
@@ -147,8 +187,10 @@ describe('loadInstanceConfig — required keys', () => {
         VAUBAAN_TELEMETRY_ENABLED: 'true',
         VAUBAAN_TELEMETRY_COLLECTOR_URL: 'https://collector.example.net/ingest',
         VAUBAAN_LOG_LEVEL: 'debug',
+        VAUBAAN_EXECUTION_CALL_TIMEOUT_SECONDS: '30',
       }),
     });
+    expect(ok.config.execution.callTimeoutSeconds).toBe(30);
     expect(ok.config.requests.expirySeconds).toBe(172_800);
     expect(ok.config.approvals.expirySeconds).toBe(90);
     expect(ok.config.retentionDays).toBe(30);
@@ -238,50 +280,37 @@ describe('loadInstanceConfig — admin rule', () => {
   });
 });
 
-describe('loadInstanceConfig — IdP block', () => {
+describe('loadInstanceConfig — sign-in providers and the bootstrap token', () => {
   const idpEnv = {
-    VAUBAAN_IDP_ISSUER: 'https://login.example.com/realms/acme',
-    VAUBAAN_IDP_CLIENT_ID: 'vaubaan-gateway',
-    VAUBAAN_IDP_CLIENT_SECRET: 'idp-secret-value',
+    VAUBAAN_SIGN_IN_IDP_KIND: 'oidc',
+    VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://login.example.com/realms/acme',
+    VAUBAAN_SIGN_IN_IDP_CLIENT_ID: 'vaubaan-gateway',
+    VAUBAAN_SIGN_IN_IDP_CLIENT_SECRET: 'idp-secret-value',
   };
 
   it('is optional as a whole; the bootstrap token is then required', () => {
-    expect(loadInstanceConfig({ env: validEnv() }).config.idp).toBeNull();
+    expect(loadInstanceConfig({ env: validEnv() }).config.signIn).toEqual([]);
     expect(paths(failure(validEnv({ VAUBAAN_BOOTSTRAP_TOKEN: undefined })))).toEqual([
       'bootstrap_token',
     ]);
   });
 
-  it('makes the bootstrap token optional once configured, with default claim mapping', () => {
+  it('makes the bootstrap token optional once a provider is configured, with default claim mapping', () => {
     const { config } = loadInstanceConfig({
       env: validEnv({ ...idpEnv, VAUBAAN_BOOTSTRAP_TOKEN: undefined }),
     });
     expect(config.bootstrapToken).toBeNull();
-    expect(config.idp).toEqual({
+    const [provider] = config.signIn;
+    expect(provider).toMatchObject({
+      id: 'idp',
       issuer: new URL('https://login.example.com/realms/acme'),
       clientId: 'vaubaan-gateway',
-      clientSecret: 'idp-secret-value',
-      claims: { sub: 'sub', email: 'email', groups: 'groups' },
-      allowedEmailDomains: [],
-      invitationOnly: false,
     });
-  });
-
-  it('names the missing sub-keys of a partial block and requires https', () => {
-    const err = failure(validEnv({ VAUBAAN_IDP_ISSUER: 'http://login.example.com' }));
-    expect(paths(err).sort()).toEqual(['idp.client_id', 'idp.client_secret', 'idp.issuer']);
-  });
-
-  it('reads claim mapping and allowed domains', () => {
-    const { config } = loadInstanceConfig({
-      env: validEnv({
-        ...idpEnv,
-        VAUBAAN_IDP_CLAIM_GROUPS: 'memberOf',
-        VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS: 'Example.com,example.org',
-      }),
+    expect(provider?.kind === 'oidc' && provider.claims).toMatchObject({
+      sub: 'sub',
+      email: 'email',
+      groups: 'groups',
     });
-    expect(config.idp?.claims.groups).toBe('memberOf');
-    expect(config.idp?.allowedEmailDomains).toEqual(['example.com', 'example.org']);
   });
 });
 
@@ -446,9 +475,9 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
   it('reports an unsupported ${...} syntax in the YAML instead of keeping it literally', () => {
     const err = failure(validEnv({ [CONFIG_FILE_ENV]: '/etc/gw.yaml' }), {
       '/etc/gw.yaml':
-        'idp:\n  issuer: https://idp.example.com\n  client_id: a\n  client_secret: ${IDP_SECRET:-fallback}\n',
+        'sign_in:\n  idp:\n    kind: oidc\n    issuer: https://idp.example.com\n    client_id: a\n    client_secret: ${IDP_SECRET:-fallback}\n',
     });
-    expect(paths(err)).toContain('idp.client_secret');
+    expect(paths(err)).toContain('sign_in.idp.client_secret');
     expect(err.message).toContain('unsupported ${...} reference');
   });
 
@@ -457,9 +486,10 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
       env: validEnv({
         VAUBAAN_MASTER_KEY_VERSION: '2',
         VAUBAAN_MASTER_KEY_PREVIOUS: `1=${oldKey}`,
-        VAUBAAN_IDP_ISSUER: 'https://idp.example.com',
-        VAUBAAN_IDP_CLIENT_ID: 'gw',
-        VAUBAAN_IDP_CLIENT_SECRET: 'idp-s3cret',
+        VAUBAAN_SIGN_IN_IDP_KIND: 'oidc',
+        VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://idp.example.com',
+        VAUBAAN_SIGN_IN_IDP_CLIENT_ID: 'gw',
+        VAUBAAN_SIGN_IN_IDP_CLIENT_SECRET: 'idp-s3cret',
       }),
     });
     const secrets = secretValues(config);
@@ -541,7 +571,7 @@ describe('KEYS and the example files stay in sync', () => {
     expect(configFile).toBe(path);
     expect(config.publicUrl.origin).toBe('https://gateway.example.com');
     expect(config.admin).toEqual({ group: null, emails: ['ops@example.com'] });
-    expect(config.idp).toBeNull();
+    expect(config.signIn).toEqual([]);
     expect(config.retiredKeys).toEqual([]);
     expect(config.bootstrapToken).toBe(TEST_BOOTSTRAP_TOKEN);
   });

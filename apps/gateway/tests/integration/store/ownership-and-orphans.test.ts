@@ -12,7 +12,7 @@ import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
 import type { Store } from '../../../src/server/store/index.ts';
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { STORED_MISSION_STATUSES } from '../../../src/server/store/repositories/enums.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 import type { ConnectionRecord, Principal } from '../../../src/server/store/types.ts';
 
 describe('ownership and orphan states in the store', () => {
@@ -39,7 +39,7 @@ describe('ownership and orphan states in the store', () => {
         email: 'bob@x',
       })
     ).id;
-    group = (await store.groups.getOrCreate('github-admins', 'local')).id;
+    group = (await store.groups.getOrCreate('github-admins', 'local', null)).id;
   });
   afterEach(() => store.close());
 
@@ -56,7 +56,7 @@ describe('ownership and orphan states in the store', () => {
     it('marks unowned exactly the active connections whose owner group has no member', async () => {
       const empty = await connect(byGroup);
       const users = await connect({ kind: 'user', id: ada });
-      const populated = await store.groups.getOrCreate('populated', 'local');
+      const populated = await store.groups.getOrCreate('populated', 'local', null);
       await store.groups.addMember(populated.id, bob);
       const owned = await connect({ kind: 'group', id: populated.id });
       const revoked = await connect(byGroup);
@@ -258,10 +258,22 @@ describe('ownership and orphan states in the store', () => {
       });
 
       expect(second.replaced?.id).toBe(first.created.id);
-      expect((await store.shares.getById(first.created.id))?.status).toBe('revoked');
+      expect(
+        (
+          await store.shares.get({
+            connectionId: first.created.connectionId,
+            shareId: first.created.id,
+          })
+        )?.status,
+      ).toBe('revoked');
       expect(second.created).toMatchObject({ status: 'active', restriction: ['github.code-read'] });
-      expect((await store.shares.getById(toGroup.id))?.status).toBe('active');
-      expect((await store.shares.getById(other.id))?.status).toBe('active');
+      expect(
+        (await store.shares.get({ connectionId: toGroup.connectionId, shareId: toGroup.id }))
+          ?.status,
+      ).toBe('active');
+      expect(
+        (await store.shares.get({ connectionId: other.connectionId, shareId: other.id }))?.status,
+      ).toBe('active');
     });
 
     it('replaceForTarget writes nothing when a risk is unknown: the previous share stays active', async () => {
@@ -308,18 +320,18 @@ describe('ownership and orphan states in the store', () => {
       const created = await store.groups.createLocal('platform');
       expect(created).toMatchObject({ name: 'platform', source: 'local' });
       expect(await store.groups.createLocal('platform')).toBeNull();
-      await store.groups.getOrCreate('claimed', 'idp');
+      await store.groups.getOrCreate('claimed', 'idp', 'idp');
       expect(await store.groups.createLocal('claimed')).toBeNull();
       expect((await store.groups.getByName('claimed'))?.source).toBe('idp');
     });
 
     it('a user’s groups are the IdP-sourced and the local ones together; a claim sync touches only the first', async () => {
       await store.groups.addMember(group, bob);
-      await store.groups.syncIdpMemberships(bob, ['dev', 'github-admins']);
+      await store.groups.syncIdpMemberships(bob, ['dev', 'github-admins'], 'idp');
       const names = async () =>
         (await store.groups.groupsOf(bob)).map((g) => `${g.source}:${g.name}`);
       expect(await names()).toEqual(['idp:dev', 'local:github-admins']);
-      await store.groups.syncIdpMemberships(bob, []);
+      await store.groups.syncIdpMemberships(bob, [], 'idp');
       expect(await names()).toEqual(['local:github-admins']);
     });
   });

@@ -13,7 +13,7 @@ import {
   type Store,
   type TokenHolderRecord,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const POLICY: MissionPolicyEntry[] = [
   { riskId: 'github.code-read', quota: 100, rateLimit: 30, rateWindowSeconds: 60, gate: 'auto' },
@@ -219,27 +219,6 @@ describe('missions repository', () => {
     });
   }
 
-  it('replaces the stored proof of a token only while the row still holds the proof it was read with', async () => {
-    const m = await create();
-    const { token } = await issue(m.id, 'vbn_live_rehash', member(creator));
-    const other = await issue(m.id, 'vbn_live_other', named('CI'));
-
-    const change = { fromHash: token.hash, hash: 'digest-1', hashAlg: 'sha256' };
-    expect(await store.missions.rehashToken(token.id, change)).toBe(true);
-    expect(await store.missions.getToken(token.id)).toEqual({
-      ...token,
-      hash: 'digest-1',
-      hashAlg: 'sha256',
-    });
-    // A second writer that read the old proof writes nothing.
-    expect(await store.missions.rehashToken(token.id, { ...change, hash: 'digest-2' })).toBe(false);
-    expect((await store.missions.getToken(token.id))?.hash).toBe('digest-1');
-    // Unknown row, or the proof of another row: nothing is written anywhere.
-    expect(await store.missions.rehashToken('missing', change)).toBe(false);
-    expect(await store.missions.rehashToken(other.token.id, change)).toBe(false);
-    expect(await store.missions.getToken(other.token.id)).toEqual(other.token);
-  });
-
   it('issues one active token per member; a member rotating retires their own token only', async () => {
     const m = await create();
     const bob = (
@@ -277,8 +256,10 @@ describe('missions repository', () => {
       ['vbn_live_bbbb', 'active'],
     ]);
     expect(tokens[0]?.retiredAt).toBe(t.clock.now().toISOString());
-    expect(await store.missions.getToken(bobs.token.id)).toMatchObject({ status: 'active' });
-    expect(await store.missions.getToken(ci.token.id)).toMatchObject({
+    expect(
+      await store.missions.getToken({ missionId: m.id, tokenId: bobs.token.id }),
+    ).toMatchObject({ status: 'active' });
+    expect(await store.missions.getToken({ missionId: m.id, tokenId: ci.token.id })).toMatchObject({
       status: 'active',
       kind: 'named',
       holder: { kind: 'named', name: 'CI runner' },
@@ -287,7 +268,7 @@ describe('missions repository', () => {
     expect(await store.missions.revokeTokens(m.id)).toBe(3);
     expect((await store.missions.findTokenByPrefix('vbn_live_bbbb'))?.token.status).toBe('revoked');
     expect(await store.missions.findTokenByPrefix('unknown')).toBeNull();
-    expect(await store.missions.getToken('unknown')).toBeNull();
+    expect(await store.missions.getToken({ missionId: m.id, tokenId: 'unknown' })).toBeNull();
   });
 
   it('revokes one token on its own; the others keep working', async () => {
@@ -295,12 +276,25 @@ describe('missions repository', () => {
     const mine = await issue(m.id, 'p-mine', member(creator));
     const ci = await issue(m.id, 'p-ci', named('CI runner'));
     t.clock.advance(1000);
-    const revoked = await store.missions.revokeToken(ci.token.id);
+    const revoked = await store.missions.revokeToken({ missionId: m.id, tokenId: ci.token.id });
     expect(revoked).toMatchObject({ status: 'revoked', retiredAt: t.clock.now().toISOString() });
     // Idempotent: nothing is written the second time.
-    expect(await store.missions.revokeToken(ci.token.id)).toBeNull();
-    expect(await store.missions.revokeToken('unknown')).toBeNull();
-    expect((await store.missions.getToken(mine.token.id))?.status).toBe('active');
+    expect(await store.missions.revokeToken({ missionId: m.id, tokenId: ci.token.id })).toBeNull();
+    expect(await store.missions.revokeToken({ missionId: m.id, tokenId: 'unknown' })).toBeNull();
+    // A token named with another mission is not there: read as missing, nothing written.
+    const other = await create();
+    expect(
+      await store.missions.getToken({ missionId: other.id, tokenId: mine.token.id }),
+    ).toBeNull();
+    expect(
+      await store.missions.revokeToken({ missionId: other.id, tokenId: mine.token.id }),
+    ).toBeNull();
+    expect(
+      await store.missions.markTokenUsed({ missionId: other.id, tokenId: mine.token.id }, 60),
+    ).toBe(false);
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: mine.token.id }))?.status,
+    ).toBe('active');
     // The name is free again once its token is retired.
     await expect(issue(m.id, 'p-ci-2', named('CI runner'))).resolves.toMatchObject({
       replaced: null,
@@ -379,16 +373,30 @@ describe('missions repository', () => {
   it('records the last use of a token at most once per granularity', async () => {
     const m = await create();
     const { token } = await issue(m.id, 'p1', member(creator));
-    expect(await store.missions.markTokenUsed(token.id, 60)).toBe(true);
+    expect(await store.missions.markTokenUsed({ missionId: m.id, tokenId: token.id }, 60)).toBe(
+      true,
+    );
     const first = t.clock.now().toISOString();
-    expect((await store.missions.getToken(token.id))?.lastUsedAt).toBe(first);
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: token.id }))?.lastUsedAt,
+    ).toBe(first);
     t.clock.advance(30_000);
-    expect(await store.missions.markTokenUsed(token.id, 60)).toBe(false);
-    expect((await store.missions.getToken(token.id))?.lastUsedAt).toBe(first);
+    expect(await store.missions.markTokenUsed({ missionId: m.id, tokenId: token.id }, 60)).toBe(
+      false,
+    );
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: token.id }))?.lastUsedAt,
+    ).toBe(first);
     t.clock.advance(31_000);
-    expect(await store.missions.markTokenUsed(token.id, 60)).toBe(true);
-    expect((await store.missions.getToken(token.id))?.lastUsedAt).toBe(t.clock.now().toISOString());
-    expect(await store.missions.markTokenUsed('unknown', 60)).toBe(false);
+    expect(await store.missions.markTokenUsed({ missionId: m.id, tokenId: token.id }, 60)).toBe(
+      true,
+    );
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: token.id }))?.lastUsedAt,
+    ).toBe(t.clock.now().toISOString());
+    expect(await store.missions.markTokenUsed({ missionId: m.id, tokenId: 'unknown' }, 60)).toBe(
+      false,
+    );
   });
 
   // ── Members ────────────────────────────────────────────────────────────────
@@ -456,8 +464,12 @@ describe('missions repository', () => {
     const removed = await store.missions.removeMember(m.id, bob);
     expect(removed?.member.removedAt).toBe(t.clock.now().toISOString());
     expect(removed?.tokenRevoked?.id).toBe(bobs.token.id);
-    expect((await store.missions.getToken(bobs.token.id))?.status).toBe('revoked');
-    expect((await store.missions.getToken(mine.token.id))?.status).toBe('active');
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: bobs.token.id }))?.status,
+    ).toBe('revoked');
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: mine.token.id }))?.status,
+    ).toBe('active');
     expect(await store.missions.listMembers(m.id)).toEqual([]);
     expect(await store.missions.listForMember(bob)).toEqual([]);
     expect((await store.missions.getMember(m.id, bob))?.removedAt).not.toBeNull();
@@ -474,7 +486,9 @@ describe('missions repository', () => {
     });
     expect(again.member).toMatchObject({ removedAt: null, addedAt: t.clock.now().toISOString() });
     expect(again.tokenRevoked).toBeNull();
-    expect((await store.missions.getToken(bobs.token.id))?.status).toBe('revoked');
+    expect(
+      (await store.missions.getToken({ missionId: m.id, tokenId: bobs.token.id }))?.status,
+    ).toBe('revoked');
     const removedAgain = await store.missions.removeMember(m.id, bob);
     expect(removedAgain?.tokenRevoked).toBeNull();
   });
@@ -556,7 +570,9 @@ describe('missions repository', () => {
     });
 
     expect(added.tokenRevoked).toMatchObject({ id: 'stale', status: 'revoked' });
-    expect((await store.missions.getToken('stale'))?.status).toBe('revoked');
+    expect((await store.missions.getToken({ missionId: m.id, tokenId: 'stale' }))?.status).toBe(
+      'revoked',
+    );
   });
 
   it('revokes the member tokens of a user on the missions they did not create, and leaves their own missions alone', async () => {
@@ -582,8 +598,12 @@ describe('missions repository', () => {
     expect(revoked.map((x) => x.id).sort()).toEqual([a.token.id, b.token.id].sort());
     expect(revoked.every((x) => x.status === 'revoked')).toBe(true);
     // Their own mission follows the derived `orphaned` rule instead: the token is kept.
-    expect((await store.missions.getToken(own.token.id))?.status).toBe('active');
-    expect((await store.missions.getToken(creators.token.id))?.status).toBe('active');
+    expect(
+      (await store.missions.getToken({ missionId: bobsOwn.id, tokenId: own.token.id }))?.status,
+    ).toBe('active');
+    expect(
+      (await store.missions.getToken({ missionId: shared.id, tokenId: creators.token.id }))?.status,
+    ).toBe('active');
     // Still a member: a reactivated user generates a new token.
     expect((await store.missions.listMembers(shared.id)).map((x) => x.userId)).toEqual([bob]);
     expect(await store.missions.revokeMemberTokensOf(bob)).toEqual([]);

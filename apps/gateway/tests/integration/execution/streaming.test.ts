@@ -36,7 +36,7 @@ import {
   TEST_PUBLIC_URL,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const MODERN_REVISION = '2026-07-28';
 const READ = 'depot.read';

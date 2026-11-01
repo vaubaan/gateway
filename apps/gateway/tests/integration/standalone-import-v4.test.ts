@@ -22,9 +22,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { RegistryCatalogIndex } from '../../src/server/compose/registry';
 import { buildShippedRegistry } from '../../src/server/compose/shipped-plugins';
 import { loadInstanceConfig } from '../../src/server/config';
-import { validEnv } from '../../src/server/config/testing';
+import { validEnv } from '../support/config/testing';
 import { createEncryptor } from '../../src/server/crypto';
-import { fixtureBundle } from '../../src/server/import-v4/testing';
+import { fixtureBundle } from '../support/import-v4/testing';
 import { openStore } from '../../src/server/store';
 
 const appDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -59,7 +59,13 @@ describe.skipIf(!hasBundle)('the importer runs from the standalone output', () =
   function run(args: string[], input: string) {
     return spawnSync(process.execPath, [bundlePath, ...args], {
       cwd: standaloneApp,
-      env: { PATH: process.env.PATH ?? '', NODE_ENV: 'production', ...env },
+      // The image's environment: production, where a source of client addresses is required.
+      env: {
+        PATH: process.env.PATH ?? '',
+        NODE_ENV: 'production',
+        VAUBAAN_TRUSTED_PROXIES: '127.0.0.1',
+        ...env,
+      },
       input,
       encoding: 'utf8',
       timeout: 60_000,

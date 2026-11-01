@@ -45,7 +45,7 @@ import { fileURLToPath } from 'node:url';
 import { Client, ProtocolError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { streamToolResult, textParts } from '@vaubaan/plugin-sdk';
 
-import { executionInstance, line } from '../../src/server/execution/testing';
+import { executionInstance, line } from '../support/execution/testing';
 
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const STANDALONE_SERVER = resolve(APP_DIR, '.next/standalone/apps/gateway/server.js');

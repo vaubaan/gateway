@@ -15,7 +15,7 @@ import { MEMORY_PATH, openDb, type StoreDb } from '../../../src/server/store/db.
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { identityKeyOf } from '../../../src/server/store/repositories/users.ts';
 import { InvariantError } from '../../../src/server/store/errors.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const OLD_IDP = 'https://old-idp.example.com';
 const NEW_IDP = 'https://new-idp.example.com';
@@ -83,7 +83,6 @@ describe('users keyed by (issuer, subject)', () => {
       InvariantError,
     );
     await expect(users.getByIdentity(issuer, 's')).rejects.toThrow(InvariantError);
-    await expect(users.bindUnboundTo(issuer)).rejects.toThrow(InvariantError);
     expect(await users.list()).toEqual([]);
   });
 
@@ -165,58 +164,5 @@ describe('accounts from before migration 0011', () => {
     expect(byKey.get('1042')).toBeUndefined();
     // No issuer-qualified key can equal an unbound one: `unbound` is not an issuer.
     expect(() => identityKeyOf('unbound', '1042')).toThrow(InvariantError);
-  });
-});
-
-describe('binding the accounts of an earlier image to the first issuer that signs in', () => {
-  let t: TestStore;
-
-  beforeEach(() => {
-    t = openTestStore();
-    // The store is at the current schema; rows are put back in the state 0011 leaves them.
-    const insert = t.store.db.prepare(
-      `INSERT INTO users (id, identity_key, issuer, subject, email, status, created_at)
-       VALUES (?, ?, NULL, ?, ?, ?, ?)`,
-    );
-    insert.run('ada', 'unbound 1042', '1042', 'ada@x', 'active', AT);
-    insert.run('bob', 'unbound 7', '7', 'bob@x', 'removed', AT);
-  });
-  afterEach(async () => {
-    await t.store.close();
-  });
-
-  it('binds all of them at once, and only once', async () => {
-    const { users } = t.store;
-    expect(await users.getByIdentity(OLD_IDP, '1042')).toBeNull();
-
-    expect(await users.bindUnboundTo(OLD_IDP)).toBe(2);
-
-    expect(await users.getByIdentity(OLD_IDP, '1042')).toMatchObject({
-      id: 'ada',
-      issuer: OLD_IDP,
-    });
-    // The one who did not sign in is bound too — deactivated as it was.
-    expect(await users.getByIdentity(OLD_IDP, '7')).toMatchObject({ id: 'bob', status: 'removed' });
-    // Done: a later sign-in from another issuer finds nothing left to take.
-    expect(await users.bindUnboundTo(NEW_IDP)).toBe(0);
-    expect(await users.getByIdentity(NEW_IDP, '1042')).toBeNull();
-    expect((await users.getById('ada'))?.issuer).toBe(OLD_IDP);
-  });
-
-  it('a returning user finds their own account, not a new one', async () => {
-    const { users } = t.store;
-    await users.bindUnboundTo(OLD_IDP);
-    const back = await users.upsertFromIdp({ issuer: OLD_IDP, subject: '1042', email: 'ada@new' });
-    expect(back).toMatchObject({ id: 'ada', email: 'ada@new', issuer: OLD_IDP });
-    expect(await users.list()).toHaveLength(2);
-  });
-
-  it('leaves unbound an account that would collide with one already bound to that issuer', async () => {
-    const { users } = t.store;
-    // Somebody already signed in as (OLD_IDP, 1042) on the new schema.
-    const taken = await users.upsertFromIdp({ issuer: OLD_IDP, subject: '1042', email: 'new@x' });
-    expect(await users.bindUnboundTo(OLD_IDP)).toBe(1);
-    expect((await users.getById('ada'))?.issuer).toBeNull();
-    expect((await users.getByIdentity(OLD_IDP, '1042'))?.id).toBe(taken.id);
   });
 });

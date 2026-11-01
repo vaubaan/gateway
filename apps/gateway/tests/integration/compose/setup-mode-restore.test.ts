@@ -6,15 +6,24 @@
  * Real files in a temporary directory: the copy is made as `backup` makes it.
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { BOOTSTRAP_MAX_MISSES } from '../../../src/server/auth/bootstrap';
 import { bootOrExit, EXIT_CONFIG_ERROR, startInstance } from '../../../src/server/compose/boot';
 import { getRoot, resetRoot } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { createEncryptor } from '../../../src/server/crypto';
 import { setupResponse } from '../../../src/server/http';
 import {
@@ -25,6 +34,8 @@ import {
   SetupModeError,
   TOKEN_FIELD,
 } from '../../../src/server/setup';
+import { SETUP_MISSES_FILE_NAME } from '../../../src/server/setup/misses';
+import { clearSetup } from '../../../src/server/setup/state';
 import { openStore, SetCatalogIndex } from '../../../src/server/store';
 import { backupTo, openReadonlyDb } from '../../../src/server/store/db';
 
@@ -52,7 +63,7 @@ describe('setup mode: the setup receives the key for a restore', () => {
         .config.encryption,
     );
     const old = openStore({ path: source, encryptor, catalog: new SetCatalogIndex([]) });
-    await old.config.setSecret('idp.client_secret', SECRET);
+    await old.config.setSecret('sign_in.company.client_secret', SECRET);
     await old.close();
     backup = join(dir, 'old', 'backup.sqlite');
     const db = openReadonlyDb(source);
@@ -189,6 +200,47 @@ describe('setup mode: the setup receives the key for a restore', () => {
     expect(log).not.toContain(other);
   });
 
+  it('keeps the count of wrong tokens next to the key file: a restart does not reset it', async () => {
+    const pristine = { ...env };
+    const restart = async () => {
+      clearSetup();
+      env = { ...pristine };
+      return start();
+    };
+    const missesFile = join(dir, 'new', SETUP_MISSES_FILE_NAME);
+
+    const first = await start();
+    await receive(first.handlers, { token: 'not-the-token-at-all-0123456789', key: KEY });
+    expect(readFileSync(missesFile, 'utf8')).toBe('1\n');
+    expect(statSync(missesFile).mode & 0o777).toBe(0o600);
+    expect((await restart()).setup.misses).toBe(1);
+
+    // Earlier starts already spent all but one attempt.
+    writeFileSync(missesFile, `${BOOTSTRAP_MAX_MISSES - 1}\n`);
+    const nearly = await restart();
+    const locked = await receive(nearly.handlers, {
+      token: 'still-not-the-token-0123456789',
+      key: KEY,
+    });
+    expect(location(locked)).toBe('/admin/bootstrap?error=setup-locked');
+    const again = await restart();
+    expect(location(await receive(again.handlers, { token: TOKEN, key: KEY }))).toBe(
+      '/admin/bootstrap?error=setup-locked',
+    );
+    expect(existsSync(keyFile)).toBe(false);
+
+    // A count that is not a number locks too (it fails closed); deleting it unlocks.
+    writeFileSync(missesFile, 'garbage\n');
+    expect((await restart()).setup.misses).toBe(BOOTSTRAP_MAX_MISSES);
+    rmSync(missesFile);
+    const fresh = await restart();
+    expect(location(await receive(fresh.handlers, { token: TOKEN, key: KEY }))).toBe(
+      '/admin/bootstrap',
+    );
+    // The restored store counts from here on.
+    expect(existsSync(missesFile)).toBe(false);
+  });
+
   it('the right key: written 0600, the copy verified and restored, the gateway serves', async () => {
     const { handlers } = await start();
     const res = await receive(handlers, { token: TOKEN, key: `${KEY}\n` });
@@ -200,7 +252,9 @@ describe('setup mode: the setup receives the key for a restore', () => {
 
     const root = await getRoot();
     expect(root.store.kind).toBe('sqlite');
-    await expect(root.store.config.getSecret('idp.client_secret')).resolves.toBe(SECRET);
+    await expect(root.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
+      SECRET,
+    );
     expect((await root.masterKey.service.state()).generatedAt).toBeNull();
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store restored"');

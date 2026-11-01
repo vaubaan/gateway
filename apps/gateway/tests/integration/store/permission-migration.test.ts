@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { openStore, SetCatalogIndex } from '../../../src/server/store';
 import { DEFAULT_MIGRATIONS_DIR } from '../../../src/server/store/migrate';
-import { StubEncryptor, TEST_RISK_IDS } from '../../../src/server/store/testing';
+import { heldArguments, StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing';
 
 it('upgrades existing requests and approvals without losing encrypted arguments or grants', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'permission-migration-'));
@@ -73,9 +73,9 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
     const approvalBefore = store.db.prepare('SELECT * FROM approvals').all();
     await store.close();
     store = openStore(options);
-    expect(store.schemaVersion).toBe(27);
+    expect(store.schemaVersion).toBe(28);
     expect(await store.requests.getById(request.id)).toEqual(request);
-    expect(await store.requests.getArguments(request.id)).toEqual({
+    expect(await heldArguments(store, request.id)).toEqual({
       marker: 'preserved encrypted content',
     });
     expect(store.db.prepare('SELECT * FROM approvals').all()).toEqual(approvalBefore);

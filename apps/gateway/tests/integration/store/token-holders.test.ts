@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { holderColumns } from '../../../src/server/store/repositories/sessions.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const AT = '2026-10-13T08:00:00.000Z';
 const READ = 'github.code-read';
@@ -62,7 +62,12 @@ describe('token holders (migration 0010)', () => {
          VALUES ('a1', ?, 'call', 'm-ada', 'github__get_file', 'abc', 'allowed')`,
       ).run(AT);
 
-      runMigrations(db, shipped, t.clock);
+      // Up to 0026: 0027 revokes the argon2id rows this era stored (its own test).
+      runMigrations(
+        db,
+        shipped.filter((m) => m.version < 27),
+        t.clock,
+      );
 
       expect(
         db

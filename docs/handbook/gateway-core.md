@@ -27,6 +27,7 @@ and the call pipeline whose stages the application fills
 
 ## Invariants
 
+- **The barrel names the public API** (`src/index.ts`, no `export *`, **[inv: named-package-barrels]**): a name the other packages need is added there on purpose; the package's own tests import from the module.
 - No transport, store or provider here: the package depends only on
   `@vaubaan/shared`, `@vaubaan/policy-engine` and `classify` / `envOf` of the
   plugin SDK. Domain types are defined once in `@vaubaan/shared`.

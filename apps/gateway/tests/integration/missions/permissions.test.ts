@@ -5,7 +5,7 @@ import {
   type ExecutionInstance,
   type IssuedMission,
   type RpcBody,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { sessionHeaders } from './support';
 import type { MissionPolicyEntry } from '@vaubaan/shared';

@@ -15,7 +15,12 @@ import {
   type RequestRecord,
   type Store,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, refuseRequest, type TestStore } from '../../../src/server/store/testing.ts';
+import {
+  heldArguments,
+  openTestStore,
+  refuseRequest,
+  type TestStore,
+} from '../../support/store/testing.ts';
 
 const READ = 'github.code-read';
 const WRITE = 'github.write-feature-branch';
@@ -211,7 +216,7 @@ describe('store: the approval gate', () => {
         hasArguments: true,
         decidedAt: null,
       });
-      expect(await store.requests.getArguments(request.id)).toEqual(ARGS);
+      expect(await heldArguments(store, request.id)).toEqual(ARGS);
       expect(await store.approvals.getByRequest(request.id)).toBeNull();
       expect(await eventsOf()).toEqual([]);
     });
@@ -266,16 +271,16 @@ describe('store: the approval gate', () => {
   describe('requests.getArguments', () => {
     it('opens the arguments of an open request only, even before the sweeper ran', async () => {
       const request = await approvalRequest({ expiresAt: '2026-10-13T09:30:00.000Z' });
-      expect(await store.requests.getArguments(request.id)).toEqual(ARGS);
+      expect(await heldArguments(store, request.id)).toEqual(ARGS);
       t.clock.set('2026-10-13T09:29:59.999Z');
-      expect(await store.requests.getArguments(request.id)).toEqual(ARGS);
+      expect(await heldArguments(store, request.id)).toEqual(ARGS);
       // Overdue: the blob is still in the row, and it is not opened.
       t.clock.set('2026-10-13T09:30:00.000Z');
       expect(blobOf(request.id)?.args_blob).not.toBeNull();
-      expect(await store.requests.getArguments(request.id)).toBeNull();
+      expect(await heldArguments(store, request.id)).toBeNull();
       expect(await store.requests.sweepExpired()).toHaveLength(1);
       expect(blobOf(request.id)).toEqual({ args_blob: null, key_version: null });
-      expect(await store.requests.getArguments(request.id)).toBeNull();
+      expect(await heldArguments(store, request.id)).toBeNull();
     });
   });
 

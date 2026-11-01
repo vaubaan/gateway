@@ -24,7 +24,7 @@ import {
   executionInstance,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import type { ConnectionRecord } from '../../../src/server/store/types';
 import { FakeGithubHost, isolatedGitEnv } from './fake-github-host';
 

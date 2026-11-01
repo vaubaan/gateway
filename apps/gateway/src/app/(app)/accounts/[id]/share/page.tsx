@@ -21,8 +21,8 @@ import {
 } from '@/lib/connections/session';
 import { holderWords } from '@/lib/vocabulary';
 import { connectionPath, isConnectError } from '@/server/connections';
-import { providerPath } from '@/server/providers/links';
-import { providerReference } from '@/server/providers/reference';
+import { providerPath } from '@/lib/providers/links';
+import { providerReference } from '@/lib/providers/reference';
 import {
   isShareError,
   SHARE_CONFIRM_PARAM,

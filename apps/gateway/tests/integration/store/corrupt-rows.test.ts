@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import { InvariantError, type Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const RISK = 'github.code-read';
 const BOGUS = 'bogus';
@@ -96,7 +96,7 @@ describe('store rows with a value outside a closed set', () => {
   });
 
   it('refuses an unknown groups.source', async () => {
-    const group = await store.groups.getOrCreate('platform', 'idp');
+    const group = await store.groups.getOrCreate('platform', 'idp', 'idp');
     corrupt('groups', 'source', 'id', group.id);
     await expectLoudFailure(() => store.groups.getById(group.id), 'groups.source');
   });
@@ -109,7 +109,10 @@ describe('store rows with a value outside a closed set', () => {
       createdByUserId: userId,
     });
     corrupt('shares', 'status', 'id', share.id);
-    await expectLoudFailure(() => store.shares.getById(share.id), 'shares.status');
+    await expectLoudFailure(
+      () => store.shares.get({ connectionId: share.connectionId, shareId: share.id }),
+      'shares.status',
+    );
   });
 
   it('refuses an unknown missions.status', async () => {

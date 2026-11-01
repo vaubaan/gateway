@@ -10,7 +10,7 @@ import {
   type EntityNode,
   type EnvironmentReference,
   type PlaneTree,
-} from '@/server/providers/reference';
+} from '@/lib/providers/reference';
 
 import styles from '../reference.module.css';
 

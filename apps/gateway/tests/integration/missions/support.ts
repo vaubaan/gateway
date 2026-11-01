@@ -7,10 +7,10 @@
  */
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
-import { seedConnection, type SeededConnection } from '../../../src/server/missions/testing';
+import { validEnv } from '../../support/config/testing';
+import { seedConnection, type SeededConnection } from '../../support/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
 
 export const PUBLIC_URL = 'https://gateway.example.com';

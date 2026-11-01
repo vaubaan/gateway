@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { budgetMissionOf } from '../../../src/server/budget';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { seedConnection } from '../../support/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   issueMission,

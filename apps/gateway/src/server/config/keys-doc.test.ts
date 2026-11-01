@@ -112,9 +112,7 @@ function expectedDefault(spec: KeySpec): string {
   switch (spec.required) {
     case 'always':
       return 'required';
-    case 'with-idp':
-      return 'required once idp is set';
-    case 'without-idp':
+    case 'without-sign-in':
       return 'required while no sign-in provider is set';
     case undefined:
       return spec.default === undefined ? NONE : String(spec.default);

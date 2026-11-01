@@ -1,15 +1,15 @@
 /**
  * Native addons survive the Next.js build (Turbopack, `output: 'standalone'`).
  *
- * `argon2` and `better-sqlite3` ship prebuilt N-API `.node` binaries in their
- * package (`prebuilds/`), loaded through a path computed at run time that
- * Next's file tracing does not discover on its own; `next.config.ts` lists them in
+ * `better-sqlite3` ships a prebuilt N-API `.node` binary in its package
+ * (`prebuilds/`), loaded through a path computed at run time that Next's file
+ * tracing does not discover on its own; `next.config.ts` lists it in
  * `outputFileTracingIncludes`. This test reads the build output and checks:
  *
  * 1. the route handler trace (`/healthz`, compiled by the build) includes the
- *    `.node` binaries of both addons;
- * 2. a Node process started inside `.next/standalone` loads both addons from
- *    the standalone `node_modules` (not from the repository's) and runs them.
+ *    `.node` binary;
+ * 2. a Node process started inside `.next/standalone` loads the addon from
+ *    the standalone `node_modules` (not from the repository's) and runs it.
  *
  * The suite is skipped when `apps/gateway/.next/standalone` is absent (no
  * build yet). CI builds before testing, so it runs there; the container smoke
@@ -47,30 +47,14 @@ function runInStandalone(script: string): {
 }
 
 describe.skipIf(!hasBuild)('standalone output keeps the native addons (Next build)', () => {
-  it('traces the argon2 and better-sqlite3 binaries for the /healthz route handler', () => {
+  it('traces the better-sqlite3 binary for the /healthz route handler', () => {
     const trace = JSON.parse(readFileSync(healthzTrace, 'utf8')) as NftTrace;
     const nodeBinaries = trace.files.filter((f) => f.endsWith('.node'));
-    expect(
-      nodeBinaries.some((f) =>
-        new RegExp(`argon2/prebuilds/${process.platform}-${process.arch}/argon2\\..*node$`).test(f),
-      ),
-    ).toBe(true);
     expect(
       nodeBinaries.some((f) =>
         new RegExp(`better-sqlite3/prebuilds/${process.platform}-${process.arch}\\.node$`).test(f),
       ),
     ).toBe(true);
-  });
-
-  it('loads argon2 from the standalone node_modules and hashes', () => {
-    const { status, stdout, stderr } = runInStandalone(
-      "const p=require.resolve('argon2');require('argon2').hash('smoke').then(h=>{console.log(JSON.stringify({p,ok:h.startsWith('$argon2id')}))})",
-    );
-    expect(stderr).toBe('');
-    expect(status).toBe(0);
-    const out = JSON.parse(stdout.trim()) as { p: string; ok: boolean };
-    expect(out.ok).toBe(true);
-    expect(out.p.startsWith(join(standaloneDir, 'node_modules'))).toBe(true);
   });
 
   it('loads better-sqlite3 from the standalone node_modules and queries', () => {

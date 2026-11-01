@@ -65,7 +65,7 @@ import {
   WAITING,
   type SeverityWord,
 } from '@/lib/vocabulary';
-import { riskReferencePath } from '@/server/providers/links';
+import { riskReferencePath } from '@/lib/providers/links';
 import type {
   ApprovalOption,
   ApprovalView,

@@ -620,8 +620,7 @@ export const INVARIANTS: readonly Invariant[] = [
         file: `${INTEGRATION}/execution/door-http.test.ts`,
         tests: [
           'applies the surface rate limit per mission, not per agent',
-          'throttles the argon2id check of wrong secrets on a legacy prefix',
-          'does not lock the agent of a legacy token out when another address floods its prefix, and the move ends the throttle',
+          'answers 401 to every wrong secret on a real prefix, never 429, and the agent is never held',
         ],
       },
       {
@@ -632,6 +631,7 @@ export const INVARIANTS: readonly Invariant[] = [
         file: `${INTEGRATION}/requests/request-handlers.test.ts`,
         tests: [
           'answers 429 with Retry-After once the window is spent, before looking at anything',
+          'keys a signed-in creator on their session: an anonymous flood never holds them out',
         ],
       },
       {
@@ -951,6 +951,48 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'answers the counts of the instance to the bearer of ops.token, and only to them',
           'the endpoint does not exist',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'lookups-keyed-by-parent',
+    statement:
+      'A mission token, a share and the arguments a request holds are read and changed only with their parent (mission, connection, mission): no repository method takes their id alone.',
+    source: 'Security audit 2026-10-31, L8; handbook store',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/keyed-lookups.test.ts`,
+        tests: [
+          'a token, a share and held arguments take a key with their parent, never an id alone',
+          'the repositories name the parent in every statement that reads or changes one by its id',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'named-package-barrels',
+    statement:
+      'The barrels of @vaubaan/shared, @vaubaan/gateway-core, @vaubaan/policy-engine and @vaubaan/telemetry name every export: no `export *`, so a change of a package contract is a visible line.',
+    source: 'Packages audit 2026-10-31, F5; handbook gateway-core',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/named-barrels.test.ts`,
+        tests: ['names every export, none with export *'],
+      },
+    ],
+  },
+  {
+    id: 'client-imports-no-server-value',
+    statement:
+      'A client component imports no value from src/server (types only), and the pure rules the forms run (src/lib/authority, missions, providers, shares) import no value from src/server.',
+    source: 'Packages audit 2026-10-31, F6; handbook web-app',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/client-imports.test.ts`,
+        tests: [
+          'a client component imports no value from src/server',
+          'the pure rules of src/lib import no value from src/server',
         ],
       },
     ],

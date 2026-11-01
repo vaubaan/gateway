@@ -19,7 +19,7 @@ import {
   createBudgetStage,
   type BudgetMission,
 } from '../../../src/server/budget/index.ts';
-import { alwaysGrounded } from '../../../src/server/authority/testing.ts';
+import { alwaysGrounded } from '../../support/authority/testing.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import { RequestService } from '../../../src/server/requests/index.ts';
 import {

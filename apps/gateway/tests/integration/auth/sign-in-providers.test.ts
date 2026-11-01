@@ -6,16 +6,16 @@
  * `FakeIdp` and GitHub through the in-process `FakeGithub`, the host-agnostic
  * handlers driven with web-standard `Request`s. No network.
  */
-import { throughSecondFactor } from '../../../src/server/auth/testing';
-import { switchOnForTests } from '../../../src/server/auth/testing';
+import { throughSecondFactor } from '../../support/auth/testing';
+import { switchOnForTests } from '../../support/auth/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LOGIN_COOKIE, SESSION_COOKIE } from '../../../src/server/auth';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { memoryStoreDeps } from '../../support/compose/testing';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { validEnv } from '../../support/config/testing';
+import { seedConnection } from '../../support/missions/testing';
 import { FakeGithub, routeFetch, type FakeGithubUser } from './fake-github';
 import { answerAnyDiscovery, FakeIdp } from './fake-idp';
 
@@ -156,9 +156,9 @@ describe('several sign-in providers: OpenID Connect and GitHub on one instance',
     expect(res.headers.get('location')).toBe('/login?return_to=%2Fmissions');
   });
 
-  it('each provider has its own callback; the provider idp keeps /auth/callback', () => {
+  it('each provider has its own callback, the provider idp too', () => {
     expect(root.auth.flows.callbackUrl('github').href).toBe(`${PUBLIC_URL}/auth/callback/github`);
-    expect(root.auth.flows.callbackUrl('idp').href).toBe(`${PUBLIC_URL}/auth/callback`);
+    expect(root.auth.flows.callbackUrl('idp').href).toBe(`${PUBLIC_URL}/auth/callback/idp`);
   });
 
   it('signs in through the company directory on an allowed domain', async () => {

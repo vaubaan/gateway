@@ -20,7 +20,7 @@ import {
   line,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const SEEDS = [20261013, 7, 424242];
 const CALLS = 240;

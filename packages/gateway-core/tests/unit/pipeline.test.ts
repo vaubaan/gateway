@@ -8,29 +8,29 @@ import { indexCatalog } from '@vaubaan/policy-engine';
 
 import {
   CallPipeline,
-  MemoryAuditWriter,
-  acceptedRisksOf,
   checkConnectionAvailable,
   checkMissionActive,
-  evaluateCallForMission,
-  fingerprintArguments,
-  refuse,
   UPSTREAM_ERROR_SUMMARY_MAX_LENGTH,
   UpstreamFailureError,
   UpstreamRefusalError,
   upstreamErrorClassName,
-  type AuditWriter,
   type BudgetStage,
   type CallPipelineDeps,
   type CallRequest,
-  type Classifier,
-  type MissionConnection,
-  type MissionContext,
-  type MissionResource,
   type ResourceStage,
   type RiskStage,
   type UpstreamStage,
-} from '../../src/index.ts';
+} from '../../src/pipeline.ts';
+import { MemoryAuditWriter, type AuditWriter } from '../../src/audit.ts';
+import {
+  acceptedRisksOf,
+  type MissionConnection,
+  type MissionContext,
+  type MissionResource,
+} from '../../src/types.ts';
+import { evaluateCallForMission, type Classifier } from '../../src/risk-gateway.ts';
+import { fingerprintArguments } from '../../src/fingerprint.ts';
+import { refuse } from '../../src/errors.ts';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 

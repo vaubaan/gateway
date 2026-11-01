@@ -14,7 +14,7 @@ import type {
   RecordCallRefused,
   RecordCallResult,
 } from '../../../src/server/budget/index.ts';
-import { alwaysGrounded } from '../../../src/server/authority/testing.ts';
+import { alwaysGrounded } from '../../support/authority/testing.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import {
   RequestService,
@@ -180,7 +180,7 @@ describe('RequestService', () => {
     it('a co-owner of the connection through its owner group is refused', async () => {
       const id = await exhaust();
       const bob = await otherUser('bob@x');
-      const group = await f.store.groups.getOrCreate('platform', 'idp');
+      const group = await f.store.groups.getOrCreate('platform', 'idp', 'idp');
       await f.store.groups.addMember(group.id, bob.id);
       await f.store.groups.addMember(group.id, f.creatorId);
       await f.store.connections.transferOwner(f.connectionId, { kind: 'group', id: group.id });

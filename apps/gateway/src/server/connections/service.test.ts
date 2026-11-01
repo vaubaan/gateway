@@ -8,7 +8,7 @@ import type { ConnectionContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
-import { makeUnowned } from '../store/testing';
+import { makeUnowned } from '../../../tests/support/store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError, type ConnectErrorCode } from './errors';
 import { codeChallengeS256 } from './oauth2';
@@ -22,7 +22,7 @@ import {
   SSH_KEY_SPEC,
   stateOf,
   type ConnectionsHarness,
-} from './testing';
+} from '../../../tests/support/connections/testing';
 
 const TOKEN_OK: MockRoute = {
   method: 'POST',
@@ -397,9 +397,12 @@ describe('api-key — form checked by a first discovery', () => {
       h.service.start(alice, 'keyco', { fields: { token: 'tok-secret-123', team_id: 'team_a' } }),
       'credential-rejected',
     );
-    // The provider's own text is not shown: it can echo the key (ADR
-    // provider-error-text-stays-with-the-agent).
-    expect(rejected.detail).toBe('Key Co: the provider rejected the credential (HTTP 401)');
+    // At connect time the plugin's sentence is kept, every value of the pasted
+    // credential masked (ADR provider-error-text-stays-with-the-agent, 2026-10-31).
+    expect(rejected.detail).toBe(
+      'Key Co: GET /domains answered 401: This API key is restricted to only send emails (HTTP 401)',
+    );
+    expect(rejected.detail).not.toContain('tok-secret-123');
     expect(rejected.detail).not.toContain('tok-secret-123');
     expect(await h.store.connections.list()).toEqual([]);
     expect(h.audit.admin).toEqual([]);

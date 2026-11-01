@@ -17,7 +17,7 @@ import {
   SSH_PRIVATE_KEY,
   STRIPE_TEST_KEY,
   VERCEL_TOKEN,
-} from './testing';
+} from '../../../tests/support/import-v4/testing';
 
 const parse = (value: unknown) => parseBundle(JSON.stringify(value));
 

@@ -18,7 +18,7 @@ import {
   type Authenticator,
   type Principal,
 } from '../auth';
-import { notAFormResponse, readForm } from '../auth/handlers';
+import { notAFormResponse, readForm } from '../http/form';
 import { createNoticeRedirect, type Notice, type NoticeStore } from '../connections';
 import type { Logger } from '../logging';
 import { GROUP_ERROR_MESSAGES, GroupError } from './errors';

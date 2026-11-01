@@ -3,7 +3,8 @@
 #
 #   deploy/docker/smoke.sh <image>
 #
-# 1. incomplete configuration  -> the container exits 78 (EX_CONFIG) and names the key
+# 1. incomplete configuration  -> the container exits 78 (EX_CONFIG) and names the key, a source of
+#                                 client addresses among them (NODE_ENV=production)
 # 2. http public URL           -> same, naming public_url
 # 3. complete configuration    -> /healthz answers 200 within the start period, no secret logged,
 #                                 run hardened as deploy/compose.yaml runs it: read-only root,
@@ -34,6 +35,10 @@
 #                                 no store, an http source exits 78 without echoing it, the right hash
 #                                 restores and serves /healthz, and a restart only warns
 #                                 (handbook store, "Restore")
+# 14. key apart from the store  -> a key generated on /keys (a volume of its own, as compose.yaml
+#                                 mounts it) boots without the key-beside-store warning, mode 0600;
+#                                 a key generated on /data, beside the store, boots with it once
+#                                 (ADR master-key-generated-and-handed-over-by-the-instance)
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -55,12 +60,15 @@ ROOT_NAME="vaubaan-smoke-root-$$"
 VOLUME="vaubaan-smoke-data-$$"
 RESTORE_NAME="vaubaan-smoke-restore-$$"
 RESTORE_VOLUME="vaubaan-smoke-restore-data-$$"
+KEY_NAME="vaubaan-smoke-key-$$"
+KEY_DATA_VOLUME="vaubaan-smoke-key-data-$$"
+KEY_VOLUME="vaubaan-smoke-key-keys-$$"
 MASTER_KEY="$(head -c 32 /dev/urandom | base64 | tr -d '\n')"
 BOOTSTRAP="smoke-$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 
 cleanup() {
-  docker rm -f "$NAME" "$ROOT_NAME" "$RESTORE_NAME" >/dev/null 2>&1 || true
-  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" "$DATA_VOLUME" >/dev/null 2>&1 || true
+  docker rm -f "$NAME" "$ROOT_NAME" "$RESTORE_NAME" "$KEY_NAME" >/dev/null 2>&1 || true
+  docker volume rm -f "$VOLUME" "$RESTORE_VOLUME" "$DATA_VOLUME" "$KEY_DATA_VOLUME" "$KEY_VOLUME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -76,6 +84,8 @@ set -e
 echo "$out" | grep -q 'encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)' \
   || fail "exit message does not name VAUBAAN_MASTER_KEY:\n$out"
 echo "$out" | grep -q 'store.path: missing required key' || fail "exit message does not name store.path"
+echo "$out" | grep -q 'trusted_proxies: a source of client addresses is required in production' \
+  || fail "exit message does not ask for a source of client addresses:\n$out"
 echo "$out" | grep -q 'bootstrap_token: missing required key' || fail "exit message does not name bootstrap_token"
 pass "incomplete configuration exits $code naming the missing keys"
 
@@ -101,6 +111,7 @@ docker run -d --name "$NAME" -p "127.0.0.1:${PORT}:3000" \
   --read-only --cap-drop ALL --security-opt no-new-privileges:true --tmpfs /tmp \
   -v "$DATA_VOLUME:/data" \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+  -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1 \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
@@ -218,6 +229,7 @@ docker run --rm --user 0 --entrypoint sh -v "$VOLUME:/data" "$IMAGE" \
   -c 'chown -R 0:0 /data && touch /data/left-by-root && ln -s /usr/local/bin/vaubaan-entrypoint /data/planted-link' >/dev/null
 docker run -d --name "$ROOT_NAME" --user 0 -v "$VOLUME:/data" \
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+  -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1 \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
@@ -331,6 +343,7 @@ pass "restore ships, refuses root, checks a copy as 10001, never replaces a live
 docker volume create "$RESTORE_VOLUME" >/dev/null
 restore_env=(
   -e VAUBAAN_PUBLIC_URL=https://gateway.example.com
+  -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1
   -e VAUBAAN_STORE_PATH=/data/gateway.db
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY"
   -e VAUBAAN_ADMIN_EMAILS=ops@example.com
@@ -380,5 +393,31 @@ skipped="$(grep -cF 'restore.from is set but the store exists' <<<"$logs" || tru
 [ "$restored" = "1" ] || fail "the store was restored $restored times, expected once:\n$logs"
 [ "$skipped" = "1" ] || fail "the restart logged the skipped restore $skipped times, expected once:\n$logs"
 pass "a new instance restores the copy at first boot (wrong hash and http refused), a restart only warns"
+
+# 14. The master key apart from the store: generated on its own volume, no warning;
+#     generated beside the store, one warning naming the variable that accepts it.
+BESIDE='the master key file is on the same mount as the store'
+key_boot() {
+  docker rm -f "$KEY_NAME" >/dev/null 2>&1 || true
+  docker volume rm -f "$KEY_DATA_VOLUME" "$KEY_VOLUME" >/dev/null 2>&1 || true
+  docker run -d --name "$KEY_NAME" -v "$KEY_DATA_VOLUME:/data" -v "$KEY_VOLUME:/keys" \
+    -e VAUBAAN_PUBLIC_URL=https://gateway.example.com \
+    -e VAUBAAN_STORE_PATH=/data/gateway.db \
+    -e VAUBAAN_MASTER_KEY_FILE="$1" -e VAUBAAN_MASTER_KEY_GENERATE=1 \
+    -e VAUBAAN_ADMIN_EMAILS=ops@example.com \
+    -e VAUBAAN_BOOTSTRAP_TOKEN="$BOOTSTRAP" \
+    -e VAUBAAN_TRUSTED_PROXIES=127.0.0.1 \
+    "$IMAGE" >/dev/null
+  wait_healthy "$KEY_NAME" "the container generating its key at $1 stopped before /healthz answered"
+  docker logs "$KEY_NAME" 2>&1
+}
+logs="$(key_boot /keys/master.key)"
+if grep -qF "$BESIDE" <<<"$logs"; then fail "a key on its own volume was reported beside the store:\n$logs"; fi
+mode="$(docker exec "$KEY_NAME" stat -c '%a %u' /keys/master.key)"
+[ "$mode" = "600 10001" ] || fail "the generated key on /keys is '$mode', expected '600 10001'"
+logs="$(key_boot /data/master.key)"
+[ "$(grep -cF "$BESIDE" <<<"$logs" || true)" = "1" ] || fail "a key beside the store was not reported once:\n$logs"
+grep -qF 'VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1' <<<"$logs" || fail "the warning does not name the variable that accepts it"
+pass "a key on its own volume boots quietly; a key beside the store is reported once"
 
 echo "SMOKE PASSED"

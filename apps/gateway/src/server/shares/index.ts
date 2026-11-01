@@ -84,7 +84,7 @@ export {
   summarizeRestriction,
   type EnvLabelling,
   type SeverityGroup,
-} from './restriction';
+} from '../../lib/shares/restriction';
 export {
   labellingOf,
   ShareService,

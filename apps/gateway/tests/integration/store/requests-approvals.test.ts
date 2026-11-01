@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   InvariantError,
+  NotFoundError,
   type ApprovalRecord,
   type ApprovedCall,
   type Store,
@@ -13,9 +14,10 @@ import {
 import {
   grantApprovalRequest,
   openTestStore,
+  heldArguments,
   refuseRequest,
   type TestStore,
-} from '../../../src/server/store/testing.ts';
+} from '../../support/store/testing.ts';
 
 const MERGE = 'github.merge-protected';
 
@@ -75,11 +77,15 @@ describe('requests repository', () => {
     });
     expect(request).toMatchObject({ kind: 'approval', state: 'open', hasArguments: true });
     expect(t.encryptor.sealCalls).toEqual([{ associatedData: `request:${request.id}` }]);
-    expect(await store.requests.getArguments(request.id)).toEqual({
+    expect(await heldArguments(store, request.id)).toEqual({
       owner: 'acme',
       repo: 'a',
       pull_number: 7,
     });
+    // Read with another mission, the request is not there: its arguments are never opened.
+    await expect(
+      store.requests.getArguments({ missionId: 'another-mission', requestId: request.id }),
+    ).rejects.toThrow(NotFoundError);
     const raw = store.db
       .prepare<[string], { args_blob: Buffer; key_version: number }>(
         'SELECT args_blob, key_version FROM requests WHERE id = ?',
@@ -125,7 +131,7 @@ describe('requests repository', () => {
       decidedAt: t.clock.now().toISOString(),
       decision: { resolution: 'grant', approval_id: approval.id },
     });
-    expect(await store.requests.getArguments(request.id)).toBeNull();
+    expect(await heldArguments(store, request.id)).toBeNull();
     // A second decision changes nothing and its rules do not run.
     let ran = false;
     const second = await store.requests.decideApproval(request.id, creator, () => {
@@ -177,7 +183,9 @@ describe('requests repository', () => {
     expect(await store.requests.listOpenForCreator(other)).toEqual([]);
     await refuseRequest(store, r.id, creator);
     expect(await store.requests.listOpenForCreator(creator)).toEqual([]);
-    await expect(store.requests.getArguments('missing')).rejects.toThrow(/not found/);
+    await expect(store.requests.getArguments({ missionId, requestId: 'missing' })).rejects.toThrow(
+      /not found/,
+    );
   });
 });
 

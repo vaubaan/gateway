@@ -24,7 +24,7 @@
 import { guardMutation, refusalResponse, type Authenticator, type UserPrincipal } from '../auth';
 import { parseMissionDraft } from './draft-schema';
 import type { LimitEdit, MissionService } from './mission-service';
-import type { MissionDraft } from './model';
+import type { MissionDraft } from '../../lib/missions/model';
 
 export interface MissionHandlerDeps {
   readonly publicUrl: URL;

@@ -20,7 +20,7 @@ import { parseRiskId } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
-import { EVERYTHING_I_HOLD } from '../../../src/server/missions/everything-i-hold';
+import { EVERYTHING_I_HOLD } from '../../../src/lib/missions/everything-i-hold';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PLUGINS = resolve(HERE, '../../../../../plugins');

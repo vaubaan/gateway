@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { everythingIHold } from '@/server/missions/everything-i-hold';
-import type { MacroActionTrustLevels } from '@/server/missions/macro-actions';
-import { previewDraft } from '@/server/missions/preview';
-import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from '@/server/missions/testing';
+import { everythingIHold } from '@/lib/missions/everything-i-hold';
+import type { MacroActionTrustLevels } from '@/lib/missions/macro-actions';
+import { previewDraft } from '@/lib/missions/preview';
+import {
+  ACME_HIDDEN,
+  ACME_RESOURCES,
+  ACME_STALE,
+  acmeConnection,
+} from '../../../../../tests/support/missions/testing';
 
 import {
   applyTrustLevels,

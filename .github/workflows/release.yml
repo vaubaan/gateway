@@ -157,8 +157,8 @@ jobs:
 
   # The image of the release, built natively on each architecture (no
   # emulation), then the container smoke test on it: /healthz answers the
-  # version and the commit being released, and argon2 and better-sqlite3 — the
-  # two native addons — load on that architecture. Holds no write permission.
+  # version and the commit being released, and better-sqlite3 — the native
+  # addon of the store — loads on that architecture. Holds no write permission.
   # The matrix comes from `plan`: both architectures, or amd64 alone on a
   # private repository.
   image:

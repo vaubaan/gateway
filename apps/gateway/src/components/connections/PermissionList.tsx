@@ -6,7 +6,7 @@
  */
 import { Mono, SeverityChip } from '@/components/ui';
 import type { SeverityWord } from '@/lib/vocabulary';
-import { riskReferencePath } from '@/server/providers/links';
+import { riskReferencePath } from '@/lib/providers/links';
 
 import styles from './account.module.css';
 

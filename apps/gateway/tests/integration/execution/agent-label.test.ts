@@ -24,7 +24,7 @@ import {
   type ExecutionInstance,
   type IssuedMission,
   type RpcBody,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 
 const READ = 'depot.read';
 const TOOL = 'depot__read_item';

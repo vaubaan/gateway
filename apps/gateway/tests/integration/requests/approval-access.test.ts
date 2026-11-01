@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
-import { seedConnection } from '../../../src/server/missions/testing';
+import { seedConnection } from '../../support/missions/testing';
 import { ADDRESSED_TO_CREATOR, type ApprovalView } from '../../../src/server/requests';
 import type { MissionRecord, UserRecord } from '../../../src/server/store/types';
 import {
@@ -43,7 +43,7 @@ describe('the arguments of an approval request are for the creator only', () => 
       subject: 'idp|carol',
       email: 'carol@example.com',
     });
-    const team = await root.store.groups.getOrCreate('platform', 'local');
+    const team = await root.store.groups.getOrCreate('platform', 'local', null);
     await root.store.groups.setMembers(team.id, [seeded.ada.id, carol.id]);
     const connection = await seedConnection(root.store, {
       provider: 'github',

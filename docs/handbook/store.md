@@ -35,6 +35,9 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   only guard.
 - Check-then-act writes are one conditional `UPDATE` whose `changes` decides; no writer sets a
   credential, status or owner without a condition.
+- A mission token, a share and a request's held arguments are reached with their parent only
+  (`MissionTokenKey`, `ShareKey`, `RequestKey`): no repository method takes their id alone, and one
+  of another parent reads as missing (**[inv: lookups-keyed-by-parent]**).
 - Single writers: sessions, counters and events only through `repositories/sessions.ts`; a
   request is decided only by `decideClaim` / `decideApproval`, a counter lowered only in a claim.
 - Derived, never stored: a mission's `orphaned` ([authority](authority.md); type, read and `0007`

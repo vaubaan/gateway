@@ -31,7 +31,7 @@ import {
 import { CATCH_UP_DELAY_MS } from '../../../src/server/backup/scheduled';
 import { backupStatusStore } from '../../../src/server/backup/status';
 import { loadInstanceConfig, secretValues, type InstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { createEncryptor } from '../../../src/server/crypto';
 import {
   BACKUP_FORMAT_V1,
@@ -144,7 +144,7 @@ describe('the scheduled backup', () => {
       encryptor: await createEncryptor(config.encryption),
       catalog: new SetCatalogIndex([]),
     });
-    await store.config.setSecret('idp.client_secret', SECRET);
+    await store.config.setSecret('sign_in.company.client_secret', SECRET);
     lines = [];
     audit = new MemoryAuditWriter();
   });
@@ -282,7 +282,7 @@ describe('the scheduled backup', () => {
       expect(report.sha256).toBe(sha);
       const restored = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
       try {
-        expect(await restored.config.getSecret('idp.client_secret')).toBe(SECRET);
+        expect(await restored.config.getSecret('sign_in.company.client_secret')).toBe(SECRET);
         expect(await restored.config.get(BACKUP_STATUS_KEY)).toBeNull();
       } finally {
         await restored.close();
@@ -355,7 +355,7 @@ describe('the scheduled backup', () => {
       });
       const restored = openStore({ path: target, encryptor, catalog: new SetCatalogIndex([]) });
       try {
-        expect(await restored.config.getSecret('idp.client_secret')).toBe(SECRET);
+        expect(await restored.config.getSecret('sign_in.company.client_secret')).toBe(SECRET);
       } finally {
         await restored.close();
       }

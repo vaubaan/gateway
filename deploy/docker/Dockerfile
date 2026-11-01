@@ -5,7 +5,7 @@
 # Handbook: docs/handbook/configuration.md, deploy/README.md
 
 # ---------------------------------------------------------------------------
-# base: debian-slim so the prebuilt native addons (argon2, better-sqlite3,
+# base: debian-slim so the prebuilt native addons (better-sqlite3,
 # ssh2's optional cpu-features) load against glibc without a compiler.
 # Pinned by version and by digest (multi-architecture index); every other stage
 # starts from this one. Written on the FROM line itself, not through an ARG,
@@ -76,18 +76,22 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
  && groupadd --system --gid 10001 vaubaan \
  && useradd --system --uid 10001 --gid vaubaan --home-dir /app --shell /usr/sbin/nologin vaubaan \
- && mkdir -p /data /config \
- && chown vaubaan:vaubaan /data
+ && mkdir -p /data /keys /config \
+ && chown vaubaan:vaubaan /data /keys \
+ && chmod 0700 /keys
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/standalone ./
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/static ./apps/gateway/.next/static
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/public ./apps/gateway/public
+# The licence and its notices travel with the image (Apache-2.0 §4).
+COPY --chown=vaubaan:vaubaan LICENSE NOTICE ./
 # Started as root (a platform whose volume is root-owned, e.g. Railway with
-# RAILWAY_RUN_UID=0), it gives /data to vaubaan and drops to it; otherwise it
+# RAILWAY_RUN_UID=0), it gives /data and /keys to vaubaan and drops to it; otherwise it
 # execs the server as is (deploy/docker/entrypoint.sh).
 COPY deploy/docker/entrypoint.sh /usr/local/bin/vaubaan-entrypoint
 RUN chmod 0755 /usr/local/bin/vaubaan-entrypoint
 USER vaubaan
-# No VOLUME instruction: /data is mounted by the deployment (Compose volume, a
+# No VOLUME instruction: /data (the store) and /keys (the master key, kept
+# apart from the store) are mounted by the deployment (Compose volume, a
 # platform volume such as Railway's, which refuses VOLUME, or `docker run -v`).
 # Without a mount the database lives in the container and dies with it.
 EXPOSE 3000

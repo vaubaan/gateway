@@ -22,7 +22,7 @@ import {
   type MissionPolicyEntry,
   type Store,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 const POLICY: MissionPolicyEntry[] = [
   { riskId: 'github.code-read', quota: 100, rateLimit: 30, rateWindowSeconds: 60, gate: 'auto' },

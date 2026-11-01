@@ -11,8 +11,14 @@
 import { useState } from 'react';
 
 import { Button, Callout, Field } from '@/components/ui';
+import { postJson } from '@/lib/http/post-json';
 
 import { keyBytes, proofOf } from './recovery-proof';
+
+function challengeOf(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null || !('challenge' in body)) return null;
+  return typeof body.challenge === 'string' ? body.challenge : null;
+}
 
 export function RecoverWithKey() {
   const [state, setState] = useState<'idle' | 'working' | 'refused' | 'bad-file' | 'busy'>('idle');
@@ -25,19 +31,16 @@ export function RecoverWithKey() {
       setState('bad-file');
       return;
     }
-    const asked = await fetch('/api/recover/challenge', { method: 'POST' });
-    if (!asked.ok) {
+    const asked = await postJson('/api/recover/challenge');
+    const challenge = asked.ok ? challengeOf(asked.body) : null;
+    if (challenge === null) {
+      key.fill(0);
       setState(asked.status === 429 ? 'busy' : 'refused');
       return;
     }
-    const { challenge } = (await asked.json()) as { challenge: string };
     const proof = await proofOf(key, window.location.origin, challenge);
     key.fill(0);
-    const answered = await fetch('/api/recover/proof', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ proof }),
-    });
+    const answered = await postJson('/api/recover/proof', { proof });
     if (answered.ok) {
       window.location.reload();
       return;

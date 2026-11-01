@@ -6,7 +6,6 @@ import {
   admissionProblem,
   adminGroupProblem,
   admitsEveryone,
-  fileSignInProviders,
   githubApiBase,
   isGithubDotComHost,
   isOpenProvider,
@@ -18,12 +17,14 @@ import {
   entraTenantOf,
 } from './sign-in';
 import { parseSignInEnvName } from './sources';
-import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from './testing';
+import { fakeFiles, TEST_BOOTSTRAP_TOKEN, validEnv } from '../../../tests/support/config/testing';
 
+/** The company's directory, as the provider `idp` (what the single-provider keys described). */
 const IDP_ENV = {
-  VAUBAAN_IDP_ISSUER: 'https://login.example.com/realms/acme',
-  VAUBAAN_IDP_CLIENT_ID: 'vaubaan-gateway',
-  VAUBAAN_IDP_CLIENT_SECRET: 'idp-secret-value',
+  VAUBAAN_SIGN_IN_IDP_KIND: 'oidc',
+  VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://login.example.com/realms/acme',
+  VAUBAAN_SIGN_IN_IDP_CLIENT_ID: 'vaubaan-gateway',
+  VAUBAAN_SIGN_IN_IDP_CLIENT_SECRET: 'idp-secret-value',
 };
 const GITHUB_ENV = {
   VAUBAAN_SIGN_IN_GITHUB_KIND: 'github',
@@ -50,9 +51,31 @@ function messages(err: ConfigError): string {
 }
 
 describe('sign-in providers in the configuration', () => {
-  it('keeps the single idp.* keys working as the provider idp', () => {
+  it('refuses the single-provider keys of earlier builds, naming the sign_in.idp.* way', () => {
+    const err = failure({
+      VAUBAAN_IDP_ISSUER: 'https://login.example.com/realms/acme',
+      VAUBAAN_IDP_CLIENT_ID: 'vaubaan-gateway',
+      VAUBAAN_IDP_CLIENT_SECRET: 'idp-secret-value',
+    });
+    expect(err.issues).toEqual([
+      expect.objectContaining({
+        path: 'idp',
+        env: ['VAUBAAN_IDP_CLIENT_ID', 'VAUBAAN_IDP_CLIENT_SECRET', 'VAUBAAN_IDP_ISSUER'],
+      }),
+    ]);
+    expect(messages(err)).toContain('sign_in.idp.*');
+    expect(messages(err)).toContain('/auth/callback/idp');
+    expect(messages(err)).not.toContain('idp-secret-value');
+    const fromFile = failure(
+      { VAUBAAN_CONFIG_FILE: '/c.yaml' },
+      { '/c.yaml': 'idp:\n  issuer: https://login.example.com\n' },
+    );
+    expect(fromFile.issues.map((i) => i.path)).toEqual(['idp']);
+  });
+
+  it('reads the provider idp as an ordinary sign_in.idp.* provider', () => {
     const { config } = loadInstanceConfig({ env: validEnv(IDP_ENV) });
-    expect(fileSignInProviders(config)).toEqual([
+    expect(config.signIn).toEqual([
       expect.objectContaining({
         id: 'idp',
         kind: 'oidc',
@@ -61,7 +84,6 @@ describe('sign-in providers in the configuration', () => {
         invitationOnly: false,
       }),
     ]);
-    expect(config.signIn).toEqual([]);
   });
 
   it('reads a GitHub provider from the environment, with github.com as its issuer', () => {
@@ -84,7 +106,7 @@ describe('sign-in providers in the configuration', () => {
     expect(config.bootstrapToken).toBeNull();
   });
 
-  it('reads several providers from the file next to the idp.* keys, and the secret by reference', () => {
+  it('reads several providers from the file next to the environment, and the secret by reference', () => {
     const yaml = [
       'sign_in:',
       '  partners:',
@@ -104,8 +126,8 @@ describe('sign-in providers in the configuration', () => {
       env: validEnv({ ...IDP_ENV, VAUBAAN_CONFIG_FILE: '/c.yaml', VAUBAAN_ADMIN_GROUP: 'idp:ops' }),
       readFile: fakeFiles({ '/c.yaml': yaml, '/run/secrets/p': 'partner-secret\n' }),
     });
-    expect(fileSignInProviders(config).map((p) => p.id)).toEqual(['idp', 'partners', 'github']);
-    const partners = config.signIn[0];
+    expect(config.signIn.map((p) => p.id)).toEqual(['idp', 'partners', 'github']);
+    const partners = config.signIn[1];
     expect(partners).toMatchObject({
       clientSecret: 'partner-secret',
       allowedEmailDomains: ['partner.example.org'],
@@ -121,15 +143,17 @@ describe('sign-in providers in the configuration', () => {
     expect(err.issues[0]?.env).toContain('VAUBAAN_SIGN_IN_GITHUB_INVITATION_ONLY');
   });
 
-  it('refuses the single idp.* keys pointing at personal Google accounts without a rule', () => {
-    const err = failure({ ...IDP_ENV, VAUBAAN_IDP_ISSUER: 'https://accounts.google.com' });
-    expect(messages(err)).toMatch(/idp\.allowed_email_domains: anyone can hold an account/);
+  it('refuses an OpenID Connect provider at personal Google accounts without a rule', () => {
+    const err = failure({ ...IDP_ENV, VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://accounts.google.com' });
+    expect(messages(err)).toMatch(
+      /sign_in\.idp\.allowed_email_domains: anyone can hold an account/,
+    );
     // With a rule, it loads.
     loadInstanceConfig({
       env: validEnv({
         ...IDP_ENV,
-        VAUBAAN_IDP_ISSUER: 'https://accounts.google.com',
-        VAUBAAN_IDP_INVITATION_ONLY: 'true',
+        VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://accounts.google.com',
+        VAUBAAN_SIGN_IN_IDP_INVITATION_ONLY: 'true',
       }),
     });
   });
@@ -210,9 +234,9 @@ describe('sign-in providers in the configuration', () => {
         'sign_in.gh.issuer: GitHub is not an OpenID Connect provider: choose the GitHub kind',
       );
     }
-    expect(messages(failure({ ...IDP_ENV, VAUBAAN_IDP_ISSUER: 'https://github.com' }))).toMatch(
-      /idp\.issuer: GitHub is not an OpenID Connect provider: choose the GitHub kind/,
-    );
+    expect(
+      messages(failure({ ...IDP_ENV, VAUBAAN_SIGN_IN_IDP_ISSUER: 'https://github.com' })),
+    ).toMatch(/sign_in\.idp\.issuer: GitHub is not an OpenID Connect provider/);
     // The GitHub kind at github.com loads as before: the way out the message names.
     const { config } = loadInstanceConfig({ env: validEnv(GITHUB_ENV) });
     expect(config.signIn).toEqual([

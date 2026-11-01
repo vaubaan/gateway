@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { bootOrExit, EXIT_BOOT_ERROR } from '../../../src/server/compose/boot';
 import { buildRoot, type GatewayRoot, type RootDeps } from '../../../src/server/compose/root';
 import { loadInstanceConfig } from '../../../src/server/config';
-import { validEnv } from '../../../src/server/config/testing';
+import { validEnv } from '../../support/config/testing';
 import { healthResponse } from '../../../src/server/http/healthz';
 import { UnknownRiskIdError } from '../../../src/server/store';
 import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
@@ -51,11 +51,11 @@ describe('composition root over the embedded SQLite store', () => {
 
     expect(existsSync(path)).toBe(true);
     expect(root.store.kind).toBe('sqlite');
-    expect(root.store.schemaVersion).toBe(27);
+    expect(root.store.schemaVersion).toBe(28);
     expect(
       root.store.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()
         ?.n,
-    ).toBe(27);
+    ).toBe(28);
     await expect(root.store.ping()).resolves.toBeUndefined();
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
 
@@ -68,19 +68,19 @@ describe('composition root over the embedded SQLite store', () => {
 
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store opened"');
-    expect(log).toContain('"schema_version":27');
+    expect(log).toContain('"schema_version":28');
     expect(log).toContain('"msg":"composition root ready"');
   });
 
   it('seals store secrets with the encryptor built from the configuration, and reopens without re-migrating', async () => {
     const path = join(tempDir(), 'gateway.db');
     const first = await boot(path);
-    await first.store.config.setSecret('idp.client_secret', 's3cret-value');
+    await first.store.config.setSecret('sign_in.company.client_secret', 's3cret-value');
     const raw = first.store.db
       .prepare<[string], { secret_blob: Buffer; key_version: number }>(
         'SELECT secret_blob, key_version FROM instance_config WHERE key = ?',
       )
-      .get('idp.client_secret');
+      .get('sign_in.company.client_secret');
     expect(raw?.key_version).toBe(first.encryptor.currentKeyVersion);
     expect(raw?.secret_blob.toString('utf8')).not.toContain('s3cret-value');
     await first.close();
@@ -88,13 +88,15 @@ describe('composition root over the embedded SQLite store', () => {
 
     // Same master key (validEnv is stable per process), same file: the secret opens.
     const second = await boot(path);
-    expect(second.store.schemaVersion).toBe(27);
+    expect(second.store.schemaVersion).toBe(28);
     expect(
       second.store.db
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
-    ).toBe(27);
-    await expect(second.store.config.getSecret('idp.client_secret')).resolves.toBe('s3cret-value');
+    ).toBe(28);
+    await expect(second.store.config.getSecret('sign_in.company.client_secret')).resolves.toBe(
+      's3cret-value',
+    );
   });
 
   it('refuses to persist a risk id the registry does not know', async () => {

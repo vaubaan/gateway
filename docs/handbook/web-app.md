@@ -11,10 +11,12 @@ tracks:
   - apps/gateway/src/lib/dates.ts
   - apps/gateway/src/lib/theme.ts
   - apps/gateway/src/lib/auth/session.ts
+  - apps/gateway/src/lib/http/
   - apps/gateway/src/app/(app)/design/
   - apps/gateway/src/server/now/
   - apps/gateway/src/server/http/document.ts
   - apps/gateway/src/server/providers/
+  - apps/gateway/src/lib/providers/
   - apps/gateway/next.config.ts
   - apps/gateway/tests/unit/app/
 last_reviewed: 2026-10-27
@@ -38,7 +40,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 
 ## Invariants
 
-- **Everything that decides is under `src/server/`**, host-agnostic (never imports `next`); a `route.ts` is one line over `root.<module>.handlers`. Pages are server components, `force-dynamic`, reading through `getRoot()`; the only browser `fetch` goes to `/api/missions/**`.
+- **Everything that decides is under `src/server/`**, host-agnostic (never imports `next`), except the pure rules a form runs before it posts (`src/lib/{authority,missions,providers,shares}`), shared with the server and importing nothing from it; a client component imports only types from `@/server/` (**[inv: client-imports-no-server-value]**); a `route.ts` is one line over `root.<module>.handlers`. Pages are server components, `force-dynamic`, reading through `getRoot()`; the only browser `fetch` goes to `/api/**`, through `postJson` / `useAction` (`lib/http/post-json.ts`: one busy flag, one error, "The gateway could not be reached." in one wording).
 - **A layout is navigation, never the authorization boundary**: the App Router can render a segment without its layout, so every page authenticates itself, first statement, before reading the root (`app-guard.test.ts`, `admin-guard.test.ts` discover every page and route). `src/proxy.ts` decides nothing: it sets the security headers and the CSP nonce.
 - **A page shows what its service decides**: a control shown or hidden follows a rule written once next to the act and read from the view (`ownerActRefusal`, `gateEditBlockedBy`, `transferTargets`, `reassignTargets`); a page never re-spells it. `tests/integration/authority/rules-read-by-pages.test.ts` holds both sides.
 - **Seven navigation entries is the budget**: a feature adds no entry; a page under none goes in `ALSO_UNDER` (`nav.ts`). Ownerless accounts are an admin-only region of Accounts (`/accounts#without-owner`), shown only when one exists; `/admin/connections` redirects there.
@@ -48,7 +50,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 - **Words live in `vocabulary.ts`** only, the trust levels' names and hints (`TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`) included: a page never prints a protocol name as prose, it prints an id with `Mono`. Routes follow the words (`/accounts`, `/waiting`); `src/server/` keeps protocol names.
 - **A page is built from `components/ui/`**: a missing component is added there with its specimen in `/design`, never in the page. Colours exist only in `tokens.css` as plain hex (`design-tokens.test.ts`: AA pairs, both dark blocks identical, no raw colour elsewhere). The one exception is a service's brand colour: it comes from its plugin (`ServiceIcon`), never a map in the interface, and reaches `ServiceMark` as `--mark-color`; a near-black brand turns to `--ink` in the dark theme (`darkThemeMarkColor`, WCAG luminance under 0.1).
 - **Every human page carries `BuildFooter`**, including the authorization server's HTML pages; one version source, the root `package.json`.
-- **The reference is generated** from the plugin registry (`server/providers/reference.ts`): a registered plugin has its page; reference URLs and anchors are built only by `server/providers/links.ts`.
+- **The reference is generated** from the plugin registry (`lib/providers/reference.ts`): a registered plugin has its page; reference URLs and anchors are built only by `lib/providers/links.ts`.
 
 ## Traps
 

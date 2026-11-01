@@ -4,8 +4,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { judgeEdit, type MissionSnapshot } from '@/server/missions/mission-edit';
-import { acmeConnection } from '@/server/missions/testing';
+import { judgeEdit, type MissionSnapshot } from '@/lib/missions/mission-edit';
+import { acmeConnection } from '../../../../../tests/support/missions/testing';
 
 import { changeLines, editDraftOf, initialEditState } from './edit-state';
 import { expiryOf, RESOURCE_CHOICES, toggleRisk, type FormState } from './form-state';

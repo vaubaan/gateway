@@ -2,14 +2,14 @@ import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadInstanceConfig } from '../config';
-import { validEnv } from '../config/testing';
+import { validEnv } from '../../../tests/support/config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import { RegistryCatalogIndex } from './registry';
 import { buildRoot, getRoot, NO_TRUSTED_PROXY_WARNING, resetRoot, type RootDeps } from './root';
 import { SHIPPED_PLUGINS } from './shipped-plugins';
-import { fakePlugin, memoryStoreDeps } from './testing';
+import { fakePlugin, memoryStoreDeps } from '../../../tests/support/compose/testing';
 
 const quiet: RootDeps = {
   loadConfig: () => loadInstanceConfig({ env: validEnv() }),
@@ -28,7 +28,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(27);
+    expect(root.store.schemaVersion).toBe(28);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);

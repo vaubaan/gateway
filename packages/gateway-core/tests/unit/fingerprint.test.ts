@@ -6,7 +6,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
-import { canonicalJson, fingerprintArguments, unfaithfulArgument } from '../../src/index.ts';
+import { canonicalJson, fingerprintArguments, unfaithfulArgument } from '../../src/fingerprint.ts';
 
 describe('canonicalJson', () => {
   it('sorts object keys recursively and keeps array order', () => {

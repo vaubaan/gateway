@@ -9,7 +9,10 @@
  *
  * Order of the checks, the same on the three routes (spec §6):
  *
- *   1. per-IP rate limit (`/r/*` only)           → 429
+ *   1. rate limit (`/r/*` only)                  → 429
+ *      (per signed-in user when the request carries a live session, so an
+ *      anonymous flood never holds a creator out of an approval link; per
+ *      client address otherwise, one window for all when no address is known)
  *   2. a bearer was presented                    → 403 `wrong-credential-kind`
  *      (a mission token opens the execution door only, a delegated token the
  *      management door only; requests are granted in a human session, so an
@@ -38,7 +41,7 @@ import type { ClaimProblemCode } from './claim';
 import type { DecideResult, RequestService } from './request-service';
 import { inboxRequestPath, requestPath } from './url';
 
-/** Requests per client address and per window on the request surface. */
+/** Requests per signed-in user, else per client address, and per window on the request surface. */
 export const REQUEST_PAGE_RATE_LIMIT = 30;
 export const REQUEST_PAGE_RATE_WINDOW_MS = 60_000;
 
@@ -140,10 +143,20 @@ function fieldsOf(form: FormData): Record<string, string> {
 }
 
 export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers {
+  /**
+   * The window of step 1: the signed-in user's when the cookie opens a live session
+   * (a forged cookie opens none, so it cannot mint windows), the address's otherwise.
+   */
+  async function windowOf(request: Request): Promise<string> {
+    const principal = await deps.authenticator.authenticate(request.headers);
+    if (principal?.kind === 'user') return `request-page:user:${principal.user.id}`;
+    return `request-page:ip:${deps.clientIp(request.headers)}`;
+  }
+
   /** Step 1, on the forwarded URL only: `null` when the request may go on. */
   async function limited(request: Request): Promise<Response | null> {
     const limit = await deps.rateLimiter.take(
-      `request-page:ip:${deps.clientIp(request.headers)}`,
+      await windowOf(request),
       REQUEST_PAGE_RATE_LIMIT,
       REQUEST_PAGE_RATE_WINDOW_MS,
     );

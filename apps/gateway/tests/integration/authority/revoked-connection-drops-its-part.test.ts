@@ -12,7 +12,7 @@
 import type { AdminAuditEntry } from '@vaubaan/gateway-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { fakePlugin } from '../../../src/server/compose/testing';
+import { fakePlugin } from '../../support/compose/testing';
 import { serializeSecret } from '../../../src/server/connections';
 import type { MissionCatalog } from '../../../src/server/execution';
 import {
@@ -21,7 +21,7 @@ import {
   TEST_PUBLIC_URL,
   type ExecutionInstance,
   type IssuedMission,
-} from '../../../src/server/execution/testing';
+} from '../../support/execution/testing';
 import { missionView } from '../../../src/server/management/views';
 import type { ConnectionRecord, UserRecord } from '../../../src/server/store/types';
 
@@ -232,7 +232,11 @@ describe('a revoked connection removes only its part of a mission', () => {
     }
     const mission = await issueBoth(bob);
     const [depotShare] = await instance.root.store.shares.listForConnection(instance.connection.id);
-    const withdrawn = await instance.root.shares.service.revoke(owner, depotShare!.id);
+    const withdrawn = await instance.root.shares.service.revoke(
+      owner,
+      depotShare!.id,
+      depotShare!.connectionId,
+    );
     expect(withdrawn).toMatchObject({ orphaned: 0, partsLost: 1 });
 
     const refused = await instance.call(mission, 'depot__read_item', { space: 'scratch' });

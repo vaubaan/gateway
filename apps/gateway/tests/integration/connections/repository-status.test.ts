@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../../src/server/store/index.ts';
-import { makeUnowned, openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { makeUnowned, openTestStore, type TestStore } from '../../support/store/testing.ts';
 
 describe('connection statuses at the repository', () => {
   let t: TestStore;

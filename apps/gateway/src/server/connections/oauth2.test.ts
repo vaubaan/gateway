@@ -13,7 +13,7 @@ import {
   revokeGrant,
   type OAuth2Client,
 } from './oauth2';
-import { OAUTH_SPEC } from './testing';
+import { OAUTH_SPEC } from '../../../tests/support/connections/testing';
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 const CLIENT: OAuth2Client = { clientId: 'client id/1', clientSecret: 's3cr:et+value' };

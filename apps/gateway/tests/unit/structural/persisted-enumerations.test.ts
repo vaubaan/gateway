@@ -21,7 +21,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../../src/server/store';
-import { openTestStore } from '../../../src/server/store/testing';
+import { openTestStore } from '../../support/store/testing';
 
 interface ColumnRow {
   readonly table_name: string;

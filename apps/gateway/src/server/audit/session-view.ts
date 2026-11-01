@@ -62,7 +62,7 @@ import {
 import type { Subject } from '../authority';
 import type { MissionState } from '../budget';
 import type { MissionDetail, MissionRole, MissionService, SeverityLevel } from '../missions';
-import { missionChangeClauses } from '../missions/change-words';
+import { missionChangeClauses } from '../../lib/missions/change-words';
 import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
 import type {

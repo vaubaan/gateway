@@ -18,6 +18,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { createAuditModule, type AuditModule } from '../audit';
 import { createBackupModule, type BackupService, type BackupTimers } from '../backup';
 import { createAuthModule, type AuthModule, type LinkMailer, type OidcOptions } from '../auth';
+import { upgradeSingleProviderSettings } from '../auth/single-provider-upgrade';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
@@ -55,6 +56,12 @@ import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkSelfResources, RegistryCatalogIndex } from './registry';
+import {
+  KEY_BESIDE_STORE_WARNING,
+  keyBesideStore,
+  PROCESS_MOUNT_FACTS,
+  type MountFacts,
+} from './key-placement';
 import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
@@ -153,6 +160,8 @@ export interface RootDeps {
   readonly backupTimers?: BackupTimers;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
+  /** Where the key file and the store sit (tests inject mounts of their own). */
+  readonly mountFacts?: MountFacts;
 }
 
 export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
@@ -172,6 +181,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       key_version: config.encryption.keyVersion,
     });
   }
+  warnKeyBesideStore(logger, config, deps.mountFacts);
   // The proxy sends HSTS when the public URL is https (`server/http/security-headers.ts`).
   publishHttps(config.publicUrl.protocol === 'https:');
 
@@ -269,7 +279,6 @@ function logConfigurationSummary(
     source: configFile ? `file ${configFile} over environment` : 'environment',
     public_url: config.publicUrl.origin,
     instance_name: config.instanceName ?? 'not set (Administration decides; the host by default)',
-    idp: config.idp ? config.idp.issuer.origin : 'not configured',
     sign_in: config.signIn.map((provider) => `${provider.id} (${provider.kind})`),
     admin_rule:
       config.admin.group === null && config.admin.emails.length === 0
@@ -300,8 +309,8 @@ function logConfigurationSummary(
  * that proxy: with `trusted_proxies` empty no client address is believed, and every
  * limit keyed on the address is one window shared by all callers. Nothing is bypassed
  * (a forged `X-Forwarded-For` is ignored), but one caller can then hold the others at
- * 429: anybody on the request page, and — knowing a token prefix, which is not a
- * secret — an agent whose token is not verified yet. Said once at boot, naming the key.
+ * 429: anybody signed out on the request page, sign-in, the authorization server.
+ * Said once at boot, naming the key.
  */
 export const NO_TRUSTED_PROXY_WARNING =
   'trusted_proxies is empty: no client address is resolved, so the address-keyed limits are shared by all callers';
@@ -327,12 +336,35 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     env: 'VAUBAAN_TRUSTED_PROXIES',
     affected: [
       'request page: one per-IP window for everybody',
-      'execution door, tokens issued by an earlier build only: one argon2id verification window per token prefix (a flood of wrong secrets on such a prefix holds its agent at 429 until the token has been used once)',
       'authorization server: one registration window and one token window for everybody (one caller can hold every delegated client at 429 when it renews its token)',
       'audit: client_ip is not recorded',
     ],
     remedy:
       'set it to the address or CIDR block of the reverse proxy in front of the instance (deploy/README.md), or, behind an edge that overwrites a client-address header (Railway: X-Real-IP), set client_ip_header',
+  });
+}
+
+/**
+ * The key file on the store's mount: one copy of the volume opens every credential
+ * (ADR master-key-generated-and-handed-over-by-the-instance, amendment 2026-10-31).
+ * Said once at boot, unless the operator accepted it; nothing is said when the key is
+ * given by value or the placement cannot be told.
+ */
+function warnKeyBesideStore(
+  logger: Logger,
+  config: InstanceConfig,
+  facts: MountFacts = PROCESS_MOUNT_FACTS,
+): void {
+  const keyFile = config.encryption.masterKeyFile;
+  if (keyFile === null || config.encryption.acceptKeyBesideStore) return;
+  if (keyBesideStore(keyFile, config.store.path, facts) !== true) return;
+  logger.warn(KEY_BESIDE_STORE_WARNING, {
+    key_file: keyFile,
+    store_path: config.store.path,
+    remedy:
+      'mount the key on a volume of its own (deploy/compose.yaml mounts gateway-key at /keys), or give it as a secret (VAUBAAN_MASTER_KEY_FILE=/run/secrets/…); keep a copy off the host',
+    accept:
+      'VAUBAAN_ACCEPT_KEY_BESIDE_STORE=1 when the volume’s snapshots are kept apart from the key',
   });
 }
 
@@ -409,6 +441,14 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
           instanceLabel: config.instanceName ?? config.publicUrl.host,
         })
       : undefined);
+  // Before anything reads the sign-in providers: the `idp.*` settings of earlier builds
+  // become the saved provider `idp` (a no-op once done).
+  await upgradeSingleProviderSettings({
+    store,
+    configured: config.signIn,
+    logger,
+    now: () => (deps.clock ?? { now: () => new Date() }).now(),
+  });
   const auth = createAuthModule({
     clock: deps.clock,
     mailer,

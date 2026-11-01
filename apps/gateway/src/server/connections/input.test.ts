@@ -9,7 +9,7 @@ import {
   readCredentialFields,
   resolveReturnTo,
 } from './input';
-import { API_KEY_SPEC, PUBLIC_URL } from './testing';
+import { API_KEY_SPEC, PUBLIC_URL } from '../../../tests/support/connections/testing';
 
 describe('readCredentialFields', () => {
   it('trims, splits secret from visible values and skips blank optional fields', () => {
