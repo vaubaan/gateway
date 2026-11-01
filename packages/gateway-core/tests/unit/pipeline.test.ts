@@ -105,6 +105,7 @@ const ctx: MissionContext = {
   },
   connections: [connection],
   resources: [resource],
+  resource_sets: [{ id: 'set_1', connection_id: 'con_1', position: 1, resource_ids: ['res_1'] }],
   policy: [
     {
       risk_id: 'supabase.read-data',

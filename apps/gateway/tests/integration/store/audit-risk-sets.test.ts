@@ -195,6 +195,10 @@ describe('audit: accepted-risk sets', () => {
     row.run('old', READ, 1, 0, 9);
     row.run('old', WRITE, 1, 1, 4);
     row.run('old', MERGE, 0, 1, null);
+    // Migration 0029 attributed the entry to the one set of its mission's connection.
+    store.db
+      .prepare("INSERT INTO audit_resource_sets (audit_id, resource_set_id) VALUES ('old', 's1')")
+      .run();
 
     const record = await store.audit.getById('old');
     if (record?.kind !== 'call') throw new Error('expected a call record');
@@ -204,6 +208,7 @@ describe('audit: accepted-risk sets', () => {
     expect(
       await store.audit.countAllowedTouches(
         'm1',
+        's1',
         WRITE,
         '2026-10-01T00:00:00.000Z',
         '2026-11-01T00:00:00.000Z',

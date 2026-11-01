@@ -35,7 +35,13 @@ import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** One permission of the mission, as the editor needs it: plain data. */
 export interface LimitRow {
+  /** Unique among the rows: the line's set and its risk. */
+  readonly key: string;
   readonly risk_id: string;
+  /** The resource set of the line (risk model §4.7). */
+  readonly resource_set_id: string;
+  /** Tells two lines of one risk apart in ids ("-set2"); empty for the first set. */
+  readonly suffix: string;
   readonly label: string;
   readonly level: SeverityWord;
   readonly env: string | null;
@@ -95,14 +101,14 @@ export function LimitsEditor({
   const rows = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
   const [drafts, setDrafts] = useState<Readonly<Record<string, Draft>>>(() =>
     Object.fromEntries(
-      rows.map((r) => [r.risk_id, { quota: String(r.quota), rate: String(r.rate_max) }]),
+      rows.map((r) => [r.key, { quota: String(r.quota), rate: String(r.rate_max) }]),
     ),
   );
   const [confirming, setConfirming] = useState(false);
   const { busy, error, setError, run } = useAction();
 
   const draftOf = (row: LimitRow): Draft =>
-    drafts[row.risk_id] ?? { quota: String(row.quota), rate: String(row.rate_max) };
+    drafts[row.key] ?? { quota: String(row.quota), rate: String(row.rate_max) };
   const invalid = rows.filter((row) => {
     const d = draftOf(row);
     return wholeOf(d.quota) === null || wholeOf(d.rate) === null;
@@ -128,6 +134,7 @@ export function LimitsEditor({
     const answer = await run(`/api/missions/${encodeURIComponent(missionId)}/limits`, {
       limits: changes.map(({ row, quota, rate }) => ({
         risk_id: row.risk_id,
+        resource_set_id: row.resource_set_id,
         quota,
         rate_limit: { max: rate },
       })),
@@ -157,7 +164,7 @@ export function LimitsEditor({
               const perMinute = row.rate_window_seconds === SECONDS_PER_MINUTE;
               return (
                 <PermissionRow
-                  key={row.risk_id}
+                  key={row.key}
                   label={
                     <>
                       {row.label}
@@ -182,8 +189,8 @@ export function LimitsEditor({
                       value={d.quota}
                       aria-label={`Limit for ${row.risk_id}`}
                       aria-invalid={wholeOf(d.quota) === null}
-                      onChange={(e) => set(row.risk_id, 'quota', e.target.value)}
-                      data-testid={`limit-quota-${row.risk_id}`}
+                      onChange={(e) => set(row.key, 'quota', e.target.value)}
+                      data-testid={`limit-quota-${row.risk_id}${row.suffix}`}
                     />
                   }
                   perMinute={
@@ -202,8 +209,8 @@ export function LimitsEditor({
                             : `Calls per ${row.rate_window_seconds} seconds for ${row.risk_id}`
                         }
                         aria-invalid={wholeOf(d.rate) === null}
-                        onChange={(e) => set(row.risk_id, 'rate', e.target.value)}
-                        data-testid={`limit-rate-${row.risk_id}`}
+                        onChange={(e) => set(row.key, 'rate', e.target.value)}
+                        data-testid={`limit-rate-${row.risk_id}${row.suffix}`}
                       />
                       {!perMinute && <span>per {row.rate_window_seconds} s</span>}
                     </span>
@@ -249,7 +256,7 @@ export function LimitsEditor({
           <>
             <ul className={styles.limitChanges} data-testid="limits-changes">
               {changes.map(({ row, quota, rate }) => (
-                <li key={row.risk_id}>
+                <li key={row.key}>
                   <strong>{row.label}</strong> <code>{row.risk_id}</code>
                   <br />
                   {quota !== row.quota && (

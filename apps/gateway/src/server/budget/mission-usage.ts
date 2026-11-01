@@ -12,7 +12,7 @@
  * `missionUsageReader(store.sessions)`, which is the same function over the same store.
  */
 
-import type { RiskId } from '@vaubaan/shared';
+import type { PolicyLineKey } from '@vaubaan/shared';
 import type { SessionsRepo } from '../store/index.ts';
 import { sessionCounterOf, type BudgetMission } from './mapping.ts';
 import { consumedInPeriod, deriveMissionState, type MissionState } from './mission-state.ts';
@@ -22,8 +22,8 @@ export interface MissionUsage {
   /** `null` until the first call gives the mission its session. */
   readonly session_id: string | null;
   readonly period: CurrentPeriod;
-  /** Actions consumed per risk in `period`; a risk never touched is absent. */
-  readonly consumed: ReadonlyMap<RiskId, number>;
+  /** Actions consumed per line (set, risk) in `period`; a line never touched is absent. */
+  readonly consumed: ReadonlyMap<PolicyLineKey, number>;
   readonly state: MissionState;
 }
 

@@ -30,6 +30,11 @@ interface CallEventDetails {
   readonly fingerprint: string;
   /** Every risk the call touches. */
   readonly risk_ids: readonly RiskId[];
+  /**
+   * The resource sets the call was judged against (risk model §4.7): each touched risk
+   * is charged in each when allowed. Absent on an event stored before sets existed.
+   */
+  readonly resource_set_ids?: readonly string[];
   /** Free-form agent label copied from the call; attribution only. */
   readonly agent_label: string | null;
   /**
@@ -43,7 +48,7 @@ interface CallEventDetails {
 }
 
 export interface CallAllowedEventDetails extends CallEventDetails {
-  /** Remaining quota per touched risk, once the call is counted. */
+  /** Remaining quota per touched risk, once the call is counted: the least among its sets. */
   readonly remaining: Readonly<Record<RiskId, number>>;
   /** The approvals the call consumed. */
   readonly approval_ids: readonly string[];
@@ -224,6 +229,9 @@ export interface MissionChangedEventDetails {
   readonly expires_at?: Iso8601 | null;
   readonly connections_added: number;
   readonly connections_removed: number;
+  /** Resource sets added to, or removed from, an account the edit kept (risk model §4.7). */
+  readonly resource_sets_added?: number;
+  readonly resource_sets_removed?: number;
   readonly resources_added: number;
   readonly resources_removed: number;
   /** Accounts whose scope (every resource known now / the whole account / picked) moved. */
@@ -367,6 +375,7 @@ function isCallDetails(d: Fields): boolean {
     isText(d.tool) &&
     isText(d.fingerprint) &&
     isTextList(d.risk_ids) &&
+    isOptionalTextList(d.resource_set_ids) &&
     isTextOrNull(d.agent_label) &&
     isOptionalText(d.token_id) &&
     hasOptionalHolder(d)
@@ -486,6 +495,8 @@ function isMissionChanged(d: Fields): d is Fields & MissionChangedEventDetails {
     isOptionalText(d.expires_at) &&
     isCount(d.connections_added) &&
     isCount(d.connections_removed) &&
+    (d.resource_sets_added === undefined || isCount(d.resource_sets_added)) &&
+    (d.resource_sets_removed === undefined || isCount(d.resource_sets_removed)) &&
     isCount(d.resources_added) &&
     isCount(d.resources_removed) &&
     isCount(d.scopes_changed) &&

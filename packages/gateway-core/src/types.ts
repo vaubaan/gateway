@@ -118,6 +118,20 @@ export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_na
  *  `classify` without an adapter. */
 export type MissionResource = ConnectionResource;
 
+/**
+ * One resource set of a connection of the mission (risk model §4.7): the resources it
+ * holds now and, through the lines of `MissionContext.policy` that name it, its policy.
+ * A connection has one set or more; a resource is in exactly one.
+ */
+export interface MissionResourceSet {
+  readonly id: string;
+  readonly connection_id: string;
+  /** Its place among the sets of its connection, from 1 ("Resource set 2"). */
+  readonly position: number;
+  /** The ids of the mission resources (`MissionContext.resources`) it holds now. */
+  readonly resource_ids: readonly string[];
+}
+
 /** What the pipeline needs of the mission row. `period` is the shared
  *  discriminated union: `{ kind: 'one-off' }` or a recurring period. */
 export type MissionSummary = Pick<
@@ -174,8 +188,11 @@ export interface MissionContext {
   /** Resource selection, all connections together. Empty for a connection
    *  means the mission may touch nothing on it. */
   readonly resources: readonly MissionResource[];
-  /** The explicit policy; its `risk_id`s are the accepted risks
-   *  (`acceptedRisksOf(ctx)`). Nothing stores `accepted_risks` beside it. */
+  /** The resource sets of every connection, by connection then position. */
+  readonly resource_sets: readonly MissionResourceSet[];
+  /** The explicit policy, every line naming its resource set (`resource_set_id`); the
+   *  accepted risks of a set are the `risk_id`s of its lines. Nothing stores
+   *  `accepted_risks` beside it. */
   readonly policy: MissionPolicy;
   readonly session: SessionHandle | null;
 }

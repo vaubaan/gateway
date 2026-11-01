@@ -31,6 +31,7 @@ import type {
   MissionTokenKind,
   RiskId,
 } from '@vaubaan/shared';
+import { lineKeyOf } from '@vaubaan/shared/domain';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 import type { CurrentPeriod, MissionState } from '../budget';
@@ -87,6 +88,11 @@ export interface CatalogResource {
    * mission key as the password. Absent otherwise.
    */
   readonly git_remote?: string;
+  /**
+   * "resource set 2": the set of the connection the resource is in, when the mission
+   * gives the connection several (risk model §4.7). Absent with one set.
+   */
+  readonly resource_set?: string;
 }
 
 /** Where the instance's git remote lives (`<public_url>/git/`). */
@@ -115,6 +121,8 @@ export interface CatalogConnection {
 
 export interface CatalogBudgetLine {
   readonly risk_id: RiskId;
+  /** The set of the line, when its connection has several (as `CatalogResource`). */
+  readonly resource_set?: string;
   readonly quota: number;
   readonly consumed: number;
   readonly remaining: number;
@@ -206,13 +214,15 @@ export function buildCatalog(
           ...(gitRemote && connection.provider === gitProvider
             ? { git_remote: gitRemoteUrl(gitRemote, r.ref) }
             : {}),
+          ...setLabelOfResource(ctx, r.id),
         })),
     })),
     budget: ctx.policy.map((entry) => {
       // An inactive mission has nothing left to spend.
-      const left = remaining ? (remaining[entry.risk_id] ?? entry.quota) : 0;
+      const left = remaining ? (remaining[lineKeyOf(entry)] ?? entry.quota) : 0;
       return {
         risk_id: entry.risk_id,
+        ...setLabelOf(ctx, entry.resource_set_id),
         quota: entry.quota,
         consumed: Math.max(0, entry.quota - left),
         remaining: left,
@@ -221,4 +231,23 @@ export function buildCatalog(
       };
     }),
   };
+}
+
+/** `{ resource_set: "resource set 2" }` when the set's connection has several sets. */
+export function setLabelOf(
+  ctx: Pick<MissionContext, 'resource_sets'>,
+  resourceSetId: string | undefined,
+): { readonly resource_set?: string } {
+  const set = ctx.resource_sets.find((s) => s.id === resourceSetId);
+  if (!set) return {};
+  const several = ctx.resource_sets.filter((s) => s.connection_id === set.connection_id).length > 1;
+  return several ? { resource_set: `resource set ${set.position}` } : {};
+}
+
+function setLabelOfResource(
+  ctx: Pick<MissionContext, 'resource_sets'>,
+  resourceId: string,
+): { readonly resource_set?: string } {
+  const set = ctx.resource_sets.find((s) => s.resource_ids.includes(resourceId));
+  return setLabelOf(ctx, set?.id);
 }

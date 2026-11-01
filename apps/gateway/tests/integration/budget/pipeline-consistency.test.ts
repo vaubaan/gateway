@@ -66,6 +66,9 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
       },
     ],
     resources: [],
+    resource_sets: [...new Set(mission.policy.map((entry) => entry.resource_set_id ?? ''))].map(
+      (id, i) => ({ id, connection_id: f.connectionId, position: i + 1, resource_ids: [] }),
+    ),
     policy: mission.policy,
     session: null,
   };
@@ -141,7 +144,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
 
     const report = await countersAgreeWithAudit(f.store, f.mission, f.clock.now());
     expect(report.mismatches).toEqual([]);
-    expect(new Map(report.risks.map((r) => [r.risk_id, r]))).toEqual(
+    expect(new Map(report.risks.map(({ resource_set_id: _set, ...r }) => [r.risk_id, r]))).toEqual(
       new Map([
         [READ, { risk_id: READ, counted: 6, credited: 0, audited: 6 }],
         [WRITE, { risk_id: WRITE, counted: 1, credited: 0, audited: 1 }],
@@ -177,7 +180,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     await f.store.sessions.recordEvent(session.id, { kind: 'reset' });
 
     const report = await countersAgreeWithAudit(f.store, f.mission, f.clock.now());
-    expect(report.risks.find((r) => r.risk_id === READ)).toEqual({
+    expect(report.risks.find((r) => r.risk_id === READ)).toMatchObject({
       risk_id: READ,
       counted: 1,
       credited: 0,
@@ -216,7 +219,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     const report = await countersAgreeWithAudit(f.store, oneOff, f.clock.now());
     expect(report.period.end).toBeNull();
     expect(report.mismatches).toEqual([]);
-    expect(report.risks.find((r) => r.risk_id === WRITE)).toEqual({
+    expect(report.risks.find((r) => r.risk_id === WRITE)).toMatchObject({
       risk_id: WRITE,
       counted: 1,
       credited: 0,
@@ -264,7 +267,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
 
     const report = await check();
     expect(report.mismatches).toEqual([]);
-    expect(new Map(report.risks.map((r) => [r.risk_id, r]))).toEqual(
+    expect(new Map(report.risks.map(({ resource_set_id: _set, ...r }) => [r.risk_id, r]))).toEqual(
       new Map([
         // READ was never claimed: nothing was given back on it.
         [READ, { risk_id: READ, counted: 3, credited: 0, audited: 3 }],
@@ -278,7 +281,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     await pipeline.execute(ctx, request([READ]));
     const next = await check();
     expect(next.mismatches).toEqual([]);
-    expect(next.risks.find((r) => r.risk_id === READ)).toEqual({
+    expect(next.risks.find((r) => r.risk_id === READ)).toMatchObject({
       risk_id: READ,
       counted: 1,
       credited: 0,

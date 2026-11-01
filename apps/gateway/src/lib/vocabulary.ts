@@ -1194,6 +1194,28 @@ export const MISSION_ACTIONS = {
   leave: 'Leave the mission',
 } as const;
 
+/**
+ * Resource sets (risk model §4.7): the resources of one account split in groups, each
+ * with its own trust levels and limits. Never "Set" alone; nothing is said of sets
+ * while an account has one.
+ */
+export const RESOURCE_SET_WORDS = {
+  /** "Resource set 2". */
+  title: (position: number): string => `Resource set ${position}`,
+  add: '+ Add a resource set',
+  remove: 'Remove this resource set',
+  /** The scope select of a set's head. */
+  scope: 'Resources',
+  /** A resource another set of the account holds. */
+  heldBy: (position: number): string => `in resource set ${position}`,
+  /** Why a set takes no "rest" scope: another set of the account does. */
+  restTaken: 'another resource set of this account already takes the rest',
+  /** What `all` and `connection` mean once an account has several sets. */
+  rest: 'every resource the other resource sets of this account do not pick',
+  explanation:
+    'Each resource set has its own trust levels and limits. A call is judged by the set of the resource it names; a call that names none, or resources of several sets, must be allowed in each.',
+} as const;
+
 /** Sentences the mission pages share. */
 export const MISSION_WORDS = {
   editLede:

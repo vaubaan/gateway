@@ -44,6 +44,12 @@ export interface AnsweredCall {
   readonly tool: string;
   /** The connection the call was resolved to (`CallAuditEntry.connection_id`). */
   readonly connectionId: string | null;
+  /**
+   * The resource sets the call was judged against (`CallAuditEntry.resource_set_ids`,
+   * risk model §4.7): what it created joins the first. Absent: the first set of the
+   * connection.
+   */
+  readonly resourceSetIds?: readonly string[];
   /** What the plugin returned: an `isError` result is a call the plugin declined. */
   readonly result: unknown;
   /**

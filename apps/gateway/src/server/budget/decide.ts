@@ -22,7 +22,14 @@
  * decremented, no approval is consumed.
  */
 
-import type { MissionPolicy, MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
+import {
+  policyLineKey,
+  type MissionPolicy,
+  type MissionPolicyEntry,
+  type PolicyLineKey,
+  type RateLimit,
+  type RiskId,
+} from '@vaubaan/shared';
 import { BudgetInvariantError } from './errors.ts';
 import { effectiveGate } from './gates.ts';
 import type { CurrentPeriod } from './period.ts';
@@ -189,4 +196,108 @@ export function decide(input: DecideInput): BudgetOutcome {
     remaining[entry.risk_id] = entry.quota - (input.counters.get(entry.risk_id) ?? 0) - 1;
   }
   return { kind: 'allow', decrements: risks, remaining, approvals_to_consume: approvalsToConsume };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Several resource sets (risk model §4.7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One line of the policy a call is charged on: a risk in one resource set. */
+export interface BudgetLine {
+  readonly resource_set_id: string;
+  readonly risk_id: RiskId;
+}
+
+/** The decision of one candidate set: `decide()` over that set's lines. */
+export interface SetDecision {
+  readonly resource_set_id: string;
+  readonly outcome: BudgetOutcome;
+}
+
+export interface AllowAcrossSets {
+  readonly kind: 'allow';
+  /** Every (set, touched risk) line whose counter gains one action. */
+  readonly decrements: readonly BudgetLine[];
+  /** Remaining quota per touched line after the decrement. */
+  readonly remaining: Readonly<Record<PolicyLineKey, number>>;
+  /** Approvals consumed, each once whatever the number of sets it stood under. */
+  readonly approvals_to_consume: readonly ApprovalToConsume[];
+}
+
+/** A refusal of one set, with the set that caused it; an approval names every gated line. */
+export type RefuseAcrossSets = Refuse & {
+  readonly resource_set_id: string;
+  /** For `approval-required`: the gated line of each set whose gate asks now. */
+  readonly gated_lines: readonly BudgetLine[];
+};
+
+export type BudgetOutcomeAcrossSets = AllowAcrossSets | RefuseAcrossSets;
+
+const REFUSAL_ORDER: readonly BudgetRefusalCode[] = [
+  'budget-exhausted',
+  'rate-limited',
+  'approval-required',
+];
+
+/**
+ * The call's outcome from the decision of each candidate set (risk model §4.7): each
+ * set's quota and rate limit are checked and charged, and the most restrictive gate
+ * applies. The order stays dimension-major across the sets: a quota refusal in any set
+ * comes before a rate refusal in any, and both before an approval, so a human is never
+ * asked to approve what another set's budget refuses. An approval request covers the
+ * call: every gated risk of every set. Pure.
+ */
+export function combineSetDecisions(decisions: readonly SetDecision[]): BudgetOutcomeAcrossSets {
+  if (decisions.length === 0) {
+    throw new BudgetInvariantError('a call is charged on at least one resource set');
+  }
+  const gatedLines: BudgetLine[] = [];
+  for (const { resource_set_id, outcome } of decisions) {
+    const gated =
+      outcome.kind === 'allow'
+        ? outcome.approvals_to_consume.map((a) => a.risk_id)
+        : outcome.code === 'approval-required'
+          ? outcome.details.gated_risks
+          : [];
+    for (const risk_id of gated) gatedLines.push({ resource_set_id, risk_id });
+  }
+  for (const code of REFUSAL_ORDER) {
+    const refused = decisions.find(
+      (d): d is SetDecision & { readonly outcome: Refuse } =>
+        d.outcome.kind === 'refuse' && d.outcome.code === code,
+    );
+    if (!refused) continue;
+    const { outcome } = refused;
+    if (outcome.code === 'approval-required') {
+      return {
+        ...outcome,
+        details: {
+          ...outcome.details,
+          gated_risks: distinctRisks(gatedLines.map((line) => line.risk_id)),
+        },
+        resource_set_id: refused.resource_set_id,
+        gated_lines: gatedLines,
+      };
+    }
+    return { ...outcome, resource_set_id: refused.resource_set_id, gated_lines: [] };
+  }
+  const decrements: BudgetLine[] = [];
+  const remaining: Record<PolicyLineKey, number> = {};
+  const approvals = new Map<string, ApprovalToConsume>();
+  for (const { resource_set_id, outcome } of decisions) {
+    if (outcome.kind !== 'allow') continue;
+    for (const risk_id of outcome.decrements) decrements.push({ resource_set_id, risk_id });
+    for (const [risk_id, left] of Object.entries(outcome.remaining)) {
+      remaining[policyLineKey(resource_set_id, risk_id)] = left;
+    }
+    for (const approval of outcome.approvals_to_consume) {
+      if (!approvals.has(approval.approval_id)) approvals.set(approval.approval_id, approval);
+    }
+  }
+  return {
+    kind: 'allow',
+    decrements,
+    remaining,
+    approvals_to_consume: [...approvals.values()],
+  };
 }

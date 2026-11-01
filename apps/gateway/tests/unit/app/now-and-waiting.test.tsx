@@ -138,6 +138,7 @@ function approval(overrides: Partial<ApprovalView> = {}): ApprovalView {
       risks: [
         {
           risk_id: MERGE,
+          resource_set_id: 'set-1',
           label: 'Merge to a protected branch',
           quota: 50,
           consumed: 0,
@@ -151,6 +152,7 @@ function approval(overrides: Partial<ApprovalView> = {}): ApprovalView {
     gates: [
       {
         risk_id: MERGE,
+        resource_set_id: 'set-1',
         label: 'Merge to a protected branch',
         policy: 'approval',
         open_until: null,
@@ -214,10 +216,18 @@ function claim(overrides: Partial<ClaimView> = {}): ClaimView {
     },
     asker: NIGHTLY,
     period: PERIOD,
-    risk: { risk_id: READ, label: 'Read code', quota: 5000, consumed: 5000, remaining: 0 },
+    risk: {
+      risk_id: READ,
+      resource_set_id: 'set-1',
+      label: 'Read code',
+      quota: 5000,
+      consumed: 5000,
+      remaining: 0,
+    },
     other_risks: [
       {
         risk_id: 'github.read-meta',
+        resource_set_id: 'set-1',
         label: 'Read metadata',
         quota: 100,
         consumed: 3,
@@ -458,7 +468,11 @@ describe('the page of an approval', () => {
   });
 
   it('says one answer covers the call when it needs several permissions, and what is left of each', () => {
-    const second = { risk_id: 'github.workflow-edit', label: 'Edit a workflow' };
+    const second = {
+      risk_id: 'github.workflow-edit',
+      resource_set_id: 'set-1',
+      label: 'Edit a workflow',
+    };
     const html = page(
       approval({
         request: summary({ risks: [...summary().risks, second] }),

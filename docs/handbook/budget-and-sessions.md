@@ -8,16 +8,16 @@ tracks:
   - packages/gateway-core/src/fingerprint.ts
   - packages/shared/src/session-events.ts
   - apps/gateway/src/server/compose/root.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-01
 ---
 
 # Budget and sessions — handbook
 
-How a call that passed the risk check is counted against its mission's quota, rate and gate. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.3, §3.2–3.5, §6; ADR [atomic-budget-accounting](../decisions/atomic-budget-accounting.md). Claims and approvals after a refusal: [requests](requests.md).
+How a call that passed the risk check is counted against its mission's quota, rate and gate. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.3, §3.2–3.5, §6; ADRs [atomic-budget-accounting](../decisions/atomic-budget-accounting.md), [resource-sets-partition-a-mission-connection](../decisions/resource-sets-partition-a-mission-connection.md). Claims and approvals after a refusal: [requests](requests.md).
 
 ## Start here
 
-- [`decide.ts`](../../apps/gateway/src/server/budget/decide.ts) — the pure decision.
+- [`decide.ts`](../../apps/gateway/src/server/budget/decide.ts) — the pure decision, and `combineSetDecisions` across the resource sets of one call.
 - [`session-service.ts`](../../apps/gateway/src/server/budget/session-service.ts) — `recordCall`: runs `decide()` inside the store transaction, writes events, opens requests.
 - [`gates.ts`](../../apps/gateway/src/server/budget/gates.ts) — `effectiveGate`, `openedGatesOf`.
 - [`mapping.ts`](../../apps/gateway/src/server/budget/mapping.ts) — the only store ⇄ domain translation for missions.
@@ -28,8 +28,9 @@ How a call that passed the risk check is counted against its mission's quota, ra
 - **Decrement and decision are one transaction.** `sessions.decideAndDecrement` reads counters, the live policy (`livePolicy`: quota, rate, window and gate as stored now; a touched risk no longer stored fails closed), opened gates and usable approvals, then calls `decide()`: no call decided after an edit commits passes above the new limit.
 - **Dimension-major order**: every touched risk's quota, then every rate window, then every gate; the first failing risk names the refusal and refuses the whole call. An approved call still passes quota and rate first.
 - **A refused call changes nothing**: no counter, no window entry, no approval consumed. Windows are peeked before `decide()` and pushed only on allow, inside the transaction callback.
-- **Rollover is a key change.** Counters are keyed `(session, risk, period_start)`; after the period ends the new key has no row, so counters read zero. Nothing runs in the background.
-- **One spelling of the gate in force.** `effectiveGate` is used by `decide()`, the request page and the mission page. An opening counts only for the current `period_start` and while no later `gate-changed` or `permission-removed` of that risk exists, ties included (the edit wins).
+- **Each resource set keeps its budget** (risk model §4.7). `recordCall` runs `decide()` once per set the call was judged against (`resource_set_ids` of the risk verdict; absent, the sets whose policy names a touched risk — an empty list throws `BudgetInvariantError`), and `combineSetDecisions` keeps the dimension-major order across the sets: a quota refusal in any set before a rate refusal in any, before an approval. An allowed call is charged in every set; the audit entry carries the charged sets (`audit_resource_sets`), and `countersAgreeWithAudit` compares per `(set, risk)`. An approval stays per call: it covers each gated line of each set.
+- **Rollover is a key change.** Counters are keyed `(session, set, risk, period_start)`; after the period ends the new key has no row, so counters read zero. Nothing runs in the background.
+- **One spelling of the gate in force.** `effectiveGate` is used by `decide()`, the request page and the mission page. An opening counts only for the current `period_start` and while no later `gate-changed` or `permission-removed` of that line exists, ties included (the edit wins). Openings are per line (`openedGatesOf` → `Set<PolicyLineKey>`): an event with no `resource_set_id` (written before 0029 on an event the migration could not attribute) opens nothing, and closes every set.
 - **One budget per mission.** `agent_label` and the token holder are copied into events, never a key nor an input of `decide`: adding a token or a label adds no budget.
 - **One fingerprint everywhere.** `fingerprintArguments` (canonical JSON, `@vaubaan/gateway-core`) binds approval requests, approvals, the `approval-required` refusal and the audit's `arguments_hash`. The approval key is mission + tool + fingerprint.
 - **One event contract.** `SessionEventDetails` (`packages/shared/src/session-events.ts`) types every writer's `NewEvent`; readers call `parseEventDetails` only (`null` on an unknown kind or bad shape, never throws). Stored keys are data: renaming one needs a migration of `events`.
@@ -44,7 +45,7 @@ How a call that passed the risk check is counted against its mission's quota, ra
 - **One-off anchor.** `budget-stage.ts` re-reads the mission row for a one-off period's anchor, because the shared one-off `Period` carries none.
 - **Name clash.** The store's camelCase entry is also called `MissionPolicyEntry`; consumers alias it `MissionPolicyEntryRecord`.
 - **Readers built before the service.** Missions and requests are built before the `SessionService` (which needs `requestUrl`), so they default to `missionUsageReader(store.sessions)` — the same current-period-only read, not a copy.
-- **One limiter, disjoint keys.** The root builds one `SlidingWindowRateLimiter` for the budget (`mission:<id>:risk:<risk>`) and every surface limit (`mcp:mission:`, `mcp-verify:`, `connect:`, `request-page:ip:`, `oauth:`, `mgmt:`). It is in memory and single-process; a hosted replacement is Redis behind the same two interfaces, probing before the SQLite transaction and recording after commit.
+- **One limiter, disjoint keys.** The root builds one `SlidingWindowRateLimiter` for the budget (`mission:<id>:set:<set>:risk:<risk>`) and every surface limit (`mcp:mission:`, `mcp-verify:`, `connect:`, `request-page:ip:`, `oauth:`, `mgmt:`). It is in memory and single-process; a hosted replacement is Redis behind the same two interfaces, probing before the SQLite transaction and recording after commit.
 - **A longer rate window after an edit** counts only what memory still holds: slightly lenient for one window's length.
 - **Git push preflight.** `preflightLimits` runs the same transaction and `decide()` without approvals and counts nothing; the git door calls it before a pack leaves ([git-remote](git-remote.md)).
 

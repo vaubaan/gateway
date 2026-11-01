@@ -23,14 +23,22 @@ const SNAPSHOT: MissionSnapshot = {
       connection_id: acme.id,
       provider: 'acme',
       display_name: acme.display_name,
-      resource_scope: 'selected',
-      resource_ids: ['res-app-staging'],
-      policy: [
+      resource_sets: [
         {
-          risk_id: 'acme.read',
-          quota: 10,
-          rate_limit: { max: 10, window_seconds: 60 },
-          gate: 'auto',
+          key: 'set-1',
+          id: 'set-1',
+          position: 1,
+          resource_scope: 'selected',
+          resource_ids: ['res-app-staging'],
+          policy: [
+            {
+              resource_set_id: 'set-1',
+              risk_id: 'acme.read',
+              quota: 10,
+              rate_limit: { max: 10, window_seconds: 60 },
+              gate: 'auto',
+            },
+          ],
         },
       ],
     },
@@ -47,8 +55,7 @@ describe('the creation form in edit mode', () => {
     expect(expiryOf(state, NOW)).toBe(SNAPSHOT.expires_at);
     expect(state.connections[acme.id]).toMatchObject({
       included: true,
-      resourceScope: 'selected',
-      resourceIds: ['res-app-staging'],
+      sets: [{ id: 'set-1', resourceScope: 'selected', resourceIds: ['res-app-staging'] }],
     });
     const judged = judgeEdit(
       { connections: context, now: NOW },
@@ -69,9 +76,16 @@ describe('the creation form in edit mode', () => {
           connection_id: 'conn-lost',
           provider: 'lost',
           display_name: 'Lost',
-          resource_scope: 'all',
-          resource_ids: [],
-          policy: [],
+          resource_sets: [
+            {
+              key: 'set-lost',
+              id: 'set-lost',
+              position: 1,
+              resource_scope: 'all',
+              resource_ids: [],
+              policy: [],
+            },
+          ],
         },
       ],
     };
@@ -84,7 +98,8 @@ describe('the creation form in edit mode', () => {
   it('lists every change with what it means', () => {
     const state = initialEditState(context, SNAPSHOT);
     const cs = state.connections[acme.id];
-    if (!cs) throw new Error('fixture');
+    const set = cs?.sets[0];
+    if (!cs || !set) throw new Error('fixture');
     const read = acme.risks.find((r) => r.risk_id === 'acme.read');
     if (!read) throw new Error('fixture');
     // Remove the read permission, add scratch.
@@ -93,8 +108,10 @@ describe('the creation form in edit mode', () => {
       connections: {
         ...state.connections,
         [acme.id]: {
-          ...toggleRisk(acme, cs, read),
-          resourceIds: ['res-app-staging', 'res-scratch'],
+          ...cs,
+          sets: [
+            { ...toggleRisk(acme, set, read), resourceIds: ['res-app-staging', 'res-scratch'] },
+          ],
         },
       },
     };
@@ -104,7 +121,14 @@ describe('the creation form in edit mode', () => {
         ...state.connections,
         [acme.id]: {
           ...cs,
-          entries: { 'acme.read': { quota: '2', rateMax: '10', rateWindow: '60', gate: 'auto' } },
+          sets: [
+            {
+              ...set,
+              entries: {
+                'acme.read': { quota: '2', rateMax: '10', rateWindow: '60', gate: 'auto' },
+              },
+            },
+          ],
         },
       },
     };
@@ -138,7 +162,7 @@ describe('the creation form in edit mode', () => {
     );
     const [limit] = changeLines(
       judgedLower.changes,
-      { used: { 'acme.read': 4 }, openRequests: [] },
+      { used: { 'set-1::acme.read': 4 }, openRequests: [] },
       naming,
     );
     expect(limit).toMatchObject({

@@ -25,7 +25,7 @@ import {
   type ApprovalView,
   type DecideResult,
 } from '../../../src/server/requests/index.ts';
-import type { MissionPolicyEntry as PolicyRecord } from '../../../src/server/store/types.ts';
+import type { MissionPolicyLineInput as PolicyRecord } from '../../../src/server/store/types.ts';
 import {
   APPROVAL_VALIDITY_SECONDS,
   DAY_SECONDS,
@@ -57,6 +57,11 @@ interface StoredRequest {
   key_version: number | null;
   state: string;
   decision_json: string | null;
+}
+
+/** The one resource set of a mission of this suite. */
+function setOf(m: BudgetMission): string {
+  return m.policy[0]?.resource_set_id ?? '';
 }
 
 describe('approval gate: refusal, decision, replay', () => {
@@ -294,8 +299,24 @@ describe('approval gate: refusal, decision, replay', () => {
         arguments_erased: false,
         slices: ['github.repo[acme/app].branch[main].W'],
         risks: [
-          { risk_id: READ, label: READ, quota: 10, consumed: 1, remaining: 9, gate: 'auto' },
-          { risk_id: MERGE, label: MERGE, quota: 3, consumed: 0, remaining: 3, gate: 'approval' },
+          {
+            risk_id: READ,
+            resource_set_id: setOf(mission),
+            label: READ,
+            quota: 10,
+            consumed: 1,
+            remaining: 9,
+            gate: 'auto',
+          },
+          {
+            risk_id: MERGE,
+            resource_set_id: setOf(mission),
+            label: MERGE,
+            quota: 3,
+            consumed: 0,
+            remaining: 3,
+            gate: 'approval',
+          },
         ],
         // Not a git push: no page of the provider to read.
         provider_pages: [],
@@ -1011,7 +1032,10 @@ describe('approval gate: refusal, decision, replay', () => {
       const first = refused(await call());
       await f.store.missions.replacePolicy(
         mission.id,
-        POLICY.filter((entry) => entry.riskId !== MERGE),
+        POLICY.filter((entry) => entry.riskId !== MERGE).map((entry) => ({
+          ...entry,
+          resourceSetId: setOf(mission),
+        })),
       );
       expect(
         await requests.decide(creator(), first.request_id, { resolution: 'grant' }),

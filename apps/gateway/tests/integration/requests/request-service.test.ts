@@ -232,14 +232,29 @@ describe('RequestService', () => {
       expect(view.period).toEqual({ index: 0, start: ANCHOR, end: DAY1 });
       expect(view.risk).toEqual({
         risk_id: WRITE,
+        resource_set_id: f.setId,
         label: WRITE,
         quota: 1,
         consumed: 1,
         remaining: 0,
       });
       expect(view.other_risks).toEqual([
-        { risk_id: READ, label: READ, quota: 10, consumed: 2, remaining: 8 },
-        { risk_id: MERGE, label: MERGE, quota: 2, consumed: 0, remaining: 2 },
+        {
+          risk_id: READ,
+          resource_set_id: f.setId,
+          label: READ,
+          quota: 10,
+          consumed: 2,
+          remaining: 8,
+        },
+        {
+          risk_id: MERGE,
+          resource_set_id: f.setId,
+          label: MERGE,
+          quota: 2,
+          consumed: 0,
+          remaining: 2,
+        },
       ]);
       // Most recent first: the refusal, the claim it dropped, then the allowed calls.
       expect(view.events.map((e) => e.kind).sort()).toEqual(
@@ -480,10 +495,10 @@ describe('RequestService', () => {
     it('the store never lets a counter go below zero', async () => {
       const id = await exhaust();
       const result = await f.store.requests.decideClaim(id, f.creatorId, (ctx) => {
-        expect(ctx.creditCounter(ANCHOR, WRITE, 2)).toBe(false);
-        expect(ctx.creditCounter(ANCHOR, WRITE, 0)).toBe(false);
-        expect(ctx.creditCounter(ANCHOR, READ, 1)).toBe(false); // no row at all
-        expect(ctx.creditCounter(ANCHOR, WRITE, 1)).toBe(true);
+        expect(ctx.creditCounter(ANCHOR, { resourceSetId: f.setId, riskId: WRITE }, 2)).toBe(false);
+        expect(ctx.creditCounter(ANCHOR, { resourceSetId: f.setId, riskId: WRITE }, 0)).toBe(false);
+        expect(ctx.creditCounter(ANCHOR, { resourceSetId: f.setId, riskId: READ }, 1)).toBe(false); // no row at all
+        expect(ctx.creditCounter(ANCHOR, { resourceSetId: f.setId, riskId: WRITE }, 1)).toBe(true);
         return { state: 'granted', decision: { test: true } };
       });
       expect(result.status).toBe('decided');
@@ -698,7 +713,7 @@ describe('RequestService', () => {
       expect((await call([READ])).outcome).toBe('allowed');
       expect(await f.service.stateOf(f.mission, f.clock.now())).toMatchObject({
         kind: 'active',
-        exhausted: [WRITE],
+        exhausted: [`${f.setId}::${WRITE}`],
       });
       // Next period: the quota is back without anyone granting anything.
       f.clock.set('2026-10-14T00:00:01.000Z');
@@ -767,7 +782,7 @@ describe('RequestService', () => {
       const id = await exhaust();
       await expect(
         f.store.requests.decideClaim(id, f.creatorId, (ctx) => {
-          ctx.resetCounter(ANCHOR, WRITE);
+          ctx.resetCounter(ANCHOR, { resourceSetId: f.setId, riskId: WRITE });
           ctx.recordEvent({
             kind: 'reset',
             details: { request_id: id, period_start: ANCHOR, period_end: null, credits: {} },
@@ -839,7 +854,7 @@ describe('RequestService', () => {
       await requests.sweep();
       expect(await f.service.stateOf(oneOff, f.clock.now())).toMatchObject({
         kind: 'active',
-        exhausted: [WRITE],
+        exhausted: [`${oneOff.policy[0]?.resource_set_id ?? ''}::${WRITE}`],
       });
       expect((await call([READ], oneOff)).outcome).toBe('allowed');
       // The next refused call opens a new claim instead of reusing the expired one.

@@ -95,7 +95,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   const credentialCache = new ConnectionCredentialCache(deps.cache);
 
   const stages: ExecutionStages = {
-    permissionRefusal: (ctx, call, missing) =>
+    permissionRefusal: (ctx, call, missing, lines) =>
       deps.store.requests.recordPermissionRefusal({
         missionId: ctx.mission.id,
         tokenId: ctx.token.id,
@@ -106,6 +106,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
         tool: call.tool,
         fingerprint: fingerprintArguments(call.args),
         riskIds: missing,
+        lines: lines.map((line) => ({ resourceSetId: line.resource_set_id, riskId: line.risk_id })),
       }),
     resources: createResourceStage({
       registry: deps.registry,

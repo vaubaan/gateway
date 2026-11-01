@@ -60,10 +60,24 @@ export interface KitConnection {
   readonly resources: readonly KitResource[];
   /** Issued on the whole connection: resources discovered later are reached too. */
   readonly reaches_later?: boolean;
+  /**
+   * The connection's resource sets (risk model §4.7), only when it has several: each
+   * with its label ("Resource set 1") and what it reaches. Absent with one set.
+   */
+  readonly resource_sets?: readonly KitResourceSet[];
+}
+
+export interface KitResourceSet {
+  readonly label: string;
+  readonly resources: readonly KitResource[];
+  /** The set reaches the resources no other set selects, later ones included. */
+  readonly reaches_later: boolean;
 }
 
 export interface KitPolicyLine extends MissionPolicyEntry {
   readonly label: string;
+  /** "Resource set 2", when its account has several sets; absent otherwise. */
+  readonly resource_set?: string;
 }
 
 export interface BootstrapKitInput {
@@ -185,7 +199,28 @@ export const CREATED_RESOURCES_LINE =
 function policyLine(entry: KitPolicyLine, period: DraftPeriod): string {
   const gate =
     entry.gate === 'approval' ? 'asks the mission creator first, each time' : 'runs freely';
-  return `- \`${entry.risk_id}\` — ${entry.label}: ${entry.quota} ${periodPhrase(period)}, at most ${entry.rate_limit.max} per ${entry.rate_limit.window_seconds}s, ${gate}`;
+  const where = entry.resource_set ? ` (${entry.resource_set})` : '';
+  return `- \`${entry.risk_id}\`${where} — ${entry.label}: ${entry.quota} ${periodPhrase(period)}, at most ${entry.rate_limit.max} per ${entry.rate_limit.window_seconds}s, ${gate}`;
+}
+
+/** What resource sets mean for the agent: said once, when an account has several. */
+export const RESOURCE_SETS_LINE =
+  'Where an account is split into resource sets, each set has its own permissions and limits. A call is judged by the set of the resource it names; a call that names no resource of the mission, or resources of several sets, must be allowed in each of those sets, asks first if any of them asks first, and counts against the limits of each.';
+
+/** The sets of an account, one line each. */
+function setLines(sets: readonly KitResourceSet[]): string[] {
+  return sets.map((set) => {
+    if (set.reaches_later) {
+      const known =
+        set.resources.length === 0
+          ? 'none known yet'
+          : `known now: ${set.resources.map(resourceLine).join(', ')}`;
+      return `  - ${set.label}: every resource of the account the other sets do not hold, including resources discovered later (${known}).`;
+    }
+    const resources =
+      set.resources.length === 0 ? 'no resource' : set.resources.map(resourceLine).join(', ');
+    return `  - ${set.label}: ${resources}`;
+  });
 }
 
 /**
@@ -257,7 +292,13 @@ function agentInstructions(
   managementEndpoint: string,
 ): string {
   const { mission } = input;
-  const connections = input.connections.map((c) => {
+  const connections = input.connections.flatMap((c) => {
+    if (c.resource_sets && c.resource_sets.length > 1) {
+      return [
+        `- ${c.provider_label} "${c.display_name}" — in resource sets:`,
+        ...setLines(c.resource_sets),
+      ];
+    }
     if (c.reaches_later) return `- ${c.provider_label} "${c.display_name}" — ${wholeAccount(c)}`;
     const resources =
       c.resources.length === 0
@@ -284,6 +325,9 @@ function agentInstructions(
     '### Accounts and resources you may touch',
     ...connections,
     CREATED_RESOURCES_LINE,
+    ...(input.connections.some((c) => (c.resource_sets?.length ?? 0) > 1)
+      ? [RESOURCE_SETS_LINE]
+      : []),
     '',
     `### Permissions and limits (${resetPhrase(mission.period)}; the mission ${expiryPhrase(mission.expires_at)})`,
     ...input.policy.map((entry) => policyLine(entry, mission.period)),

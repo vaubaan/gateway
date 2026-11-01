@@ -18,6 +18,7 @@ import type { MissionDraft } from '../../lib/missions/model';
 const MAX_CONNECTIONS = 32;
 const MAX_ENTRIES = 2000;
 const MAX_RESOURCES = 5000;
+const MAX_RESOURCE_SETS = 32;
 
 const text = z.string().min(1).max(300);
 
@@ -76,6 +77,49 @@ const resourcesSchema = z.discriminatedUnion('scope', [
     .strict(),
 ]);
 
+const resourcesField = () =>
+  resourcesSchema
+    .optional()
+    .describe(
+      'The resources the mission may touch on this connection. Default: `all` (every resource known now). `connection` also reaches resources discovered later.',
+    );
+
+const everythingField = () =>
+  z
+    .boolean()
+    .optional()
+    .describe(
+      '`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
+    );
+
+const policyField = () =>
+  z
+    .array(entrySchema)
+    .max(MAX_ENTRIES)
+    .optional()
+    .describe('Exactly the risks the mission accepts on this connection, each with its budget.');
+
+const trustLevelsField = () =>
+  z
+    .record(z.string().max(64), z.enum(TRUST_LEVELS))
+    .optional()
+    .describe(
+      'The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s tier, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.',
+    );
+
+const resourceSetSchema = z
+  .object({
+    id: text
+      .optional()
+      .describe('The stored set an edit of the mission keeps; ignored when a mission is issued.'),
+    resources: resourcesField(),
+    everything_i_hold: everythingField(),
+    policy: policyField(),
+    trust_levels: trustLevelsField(),
+  })
+  .strict()
+  .describe('One resource set: some resources of the connection with their own policy and budget.');
+
 const connectionSchema = z
   .object({
     connection_id: text
@@ -86,27 +130,17 @@ const connectionSchema = z
       .describe(
         'Instead of `connection_id`, when the user holds exactly one usable connection of that provider.',
       ),
-    resources: resourcesSchema
+    resources: resourcesField(),
+    everything_i_hold: everythingField(),
+    policy: policyField(),
+    trust_levels: trustLevelsField(),
+    resource_sets: z
+      .array(resourceSetSchema)
+      .min(1)
+      .max(MAX_RESOURCE_SETS)
       .optional()
       .describe(
-        'The resources the mission may touch on this connection. Default: `all` (every resource known now). `connection` also reaches resources discovered later.',
-      ),
-    everything_i_hold: z
-      .boolean()
-      .optional()
-      .describe(
-        '`true` for the built-in everything-i-hold: every non-deprecated risk the user holds on the connection that the selected resources can reach, the fallback included, written out as explicit lines (catalog rate ceiling, generous quota for a daily period, gate `auto`). Alone, it is the whole policy of the connection (bounded by the user’s authority). With `policy`, it only supplies the budget of the risks that give none. Only when the user asks for everything they hold.',
-      ),
-    policy: z
-      .array(entrySchema)
-      .max(MAX_ENTRIES)
-      .optional()
-      .describe('Exactly the risks the mission accepts on this connection, each with its budget.'),
-    trust_levels: z
-      .record(z.string().max(64), z.enum(TRUST_LEVELS))
-      .optional()
-      .describe(
-        'The trust level (`careful`, `trusting`, `autonomous`) of each macro-action of `get_catalog` to tick, by macro-action id. Without `policy`, the macro-actions at their trust levels write the policy (gate from each risk’s tier, budget from its base budget ×1, ×3 or ×10), bounded by the user’s authority and the selected resources; with `policy`, `policy` is the whole list and the trust levels are only kept to redraw the form. The usual way to compose a mission: tick the macro-actions the task needs at the lowest trust level that does it.',
+        'Instead of `resources`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each with its own resources, trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Only when the task needs different trust on different resources of one account (staging free, production careful).',
       ),
   })
   .strict();

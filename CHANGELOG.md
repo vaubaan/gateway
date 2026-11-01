@@ -76,6 +76,18 @@ Read these before starting the new image on a running instance:
 
 ### Added
 
+- **Resource sets: one account of a mission split in parts with their own
+  rights and budget** (risk model §4.7). In the mission form, an account with
+  two resources or more offers "+ Add a resource set": each set picks its
+  resources (or takes every resource no other set picks, or the whole account)
+  and has its own trust levels and lines. A call naming a resource is judged,
+  gated and counted by that resource's set; a call naming none, or resources of
+  several sets, must be allowed in each of them, waits for the strictest gate
+  and is charged in each. What a call creates joins the set it was judged
+  against. The management door, the preview, an edit, a share's duplicate, the
+  bootstrap kit and the mission page accept or show `resource_sets`; a draft
+  without them is one set, as before. Migration 0029 gives every existing
+  mission one set per account: nothing changes for it.
 - **Contributors sign off their commits** (Developer Certificate of Origin,
   no CLA): `git commit -s`, explained in `CONTRIBUTING.md`; the CI job
   `audit` refuses a pull request with an unsigned commit

@@ -19,6 +19,7 @@
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { lineKeyOf } from '@vaubaan/shared/domain';
 
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
@@ -242,11 +243,11 @@ export default async function MissionSessionPage({ params, searchParams }: Props
       id: 'counted',
       header: 'Counted',
       cell: (row) => {
-        const counted = view.risks.filter((risk) => (row.consumed[risk.risk_id] ?? 0) > 0);
+        const counted = view.risks.filter((risk) => (row.consumed[lineKeyOf(risk)] ?? 0) > 0);
         if (counted.length === 0) return <span className={styles.quietText}>nothing</span>;
         return counted.map((risk) => (
           <span key={risk.risk_id} className={styles.permissionLine}>
-            {risk.label} · {usage(row.consumed[risk.risk_id] ?? 0, risk.quota)}
+            {risk.label} · {usage(row.consumed[lineKeyOf(risk)] ?? 0, risk.quota)}
             <span className={styles.sub}>
               <Mono quiet>{risk.risk_id}</Mono>
             </span>

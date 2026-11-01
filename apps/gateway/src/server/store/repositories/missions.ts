@@ -11,12 +11,17 @@ import {
   USER_STATUSES,
   type Gate,
   type Iso,
+  type MissionConnectionInput,
   type MissionConnectionRecord,
   type MissionIssuerRecord,
   type MissionMemberRecord,
   type MissionPolicyEntry,
+  type MissionPolicyLineInput,
   type MissionRecord,
+  type MissionResourceSetInput,
+  type MissionResourceSetRecord,
   type MissionResourceSource,
+  type RequestLine,
   type ResourceScope,
   type MissionStatus,
   type MissionTokenRecord,
@@ -26,6 +31,8 @@ import {
 } from '../types.ts';
 import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 import { GATES, STORED_MISSION_STATUSES } from './enums.ts';
+import { riskIdsOf } from './approvals.ts';
+import { requestLinesOf, storedLinesOf } from './requests.ts';
 import { createSessionPrimitives } from './sessions.ts';
 
 export interface CreateMissionInput {
@@ -37,9 +44,18 @@ export interface CreateMissionInput {
   readonly periodSeconds: number | null;
   readonly expiresAt?: Iso | null;
   readonly delegationId?: string | null;
-  readonly connections: readonly MissionConnectionRecord[];
-  /** One entry per accepted risk, each with its budget. Every id must be in the catalog. */
-  readonly policy: readonly MissionPolicyEntry[];
+  /**
+   * Every connection with its sets and their lines (`resourceSets`), or with its
+   * selection directly: it then has one set, whose lines are the `policy` lines of its
+   * provider.
+   */
+  readonly connections: readonly MissionConnectionInput[];
+  /**
+   * The lines of the connections given without sets, placed in the set of the
+   * connection of their provider (the first segment of the risk id). Every id must be in
+   * the catalog; a line no connection is for is refused.
+   */
+  readonly policy?: readonly MissionPolicyLineInput[];
 }
 
 export interface IssueTokenInput {
@@ -93,7 +109,9 @@ export interface CreatedBy {
 
 /** What `addResources` did on one connection of a mission. */
 export interface AddedMissionResources {
-  /** The connection's scope after the write (`all` with an id becomes `selected`). */
+  /** The set the resources joined. */
+  readonly resourceSetId: string;
+  /** The set's scope after the write (`all` with an id becomes `selected`). */
   readonly scope: ResourceScope;
   /** The ids written now, in the given order; an id already selected is not repeated. */
   readonly added: readonly string[];
@@ -131,6 +149,11 @@ export interface MissionsRepo {
    * `request` events, then `summary(requestsClosed)`.
    */
   edit(id: string, edit: MissionEditInput): Promise<MissionEditResult | null>;
+  /**
+   * Replaces the whole policy (every line names a set of the mission) when the stored one
+   * is still `expected`; with `requestId`, grants that open permission request, whose
+   * every line must be in `policy`. `null` (nothing written) otherwise.
+   */
   changePermissions(
     id: string,
     policy: readonly MissionPolicyEntry[],
@@ -140,15 +163,18 @@ export interface MissionsRepo {
   ): Promise<MissionRecord | null>;
   create(input: CreateMissionInput): Promise<MissionRecord>;
   /**
-   * Adds resources of one of the mission's connections to its explicit selection, each
-   * row marked with `source` (ADR created-resources-join-the-mission: `created` for a
-   * resource the mission created). Scope `connection` already reaches every resource of
-   * the connection: nothing is written. Scope `all` that stored nothing becomes
-   * `selected`. An id already selected keeps its row and its source. One transaction.
-   * `NotFoundError` when the mission does not carry the connection; `InvariantError`
-   * when a resource is not one of that connection's. With `created`, the mission's
-   * session (when it has one) records a `resources-created` event in the same
-   * transaction, whatever the scope: the mission reaches what it created.
+   * Adds resources of one of the mission's connections to the explicit selection of one
+   * of its sets, each row marked with `source` (ADR created-resources-join-the-mission:
+   * `created` for a resource the mission created). The set is `resourceSetId` — the one
+   * the creating call was judged against — or, when absent or not a set of that
+   * connection, the first set of the connection (risk model §4.7). A set of scope
+   * `connection` already reaches every resource no other set selects: nothing is
+   * written. Scope `all` that stored nothing becomes `selected`. An id already selected,
+   * in any set, keeps its row, its set and its source. One transaction. `NotFoundError`
+   * when the mission does not carry the connection; `InvariantError` when a resource is
+   * not one of that connection's. With `created`, the mission's session (when it has
+   * one) records a `resources-created` event in the same transaction, whatever the
+   * scope: the mission reaches what it created.
    */
   addResources(
     missionId: string,
@@ -156,6 +182,7 @@ export interface MissionsRepo {
     resourceIds: readonly string[],
     source: MissionResourceSource,
     created?: CreatedBy,
+    resourceSetId?: string,
   ): Promise<AddedMissionResources>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
@@ -181,18 +208,23 @@ export interface MissionsRepo {
    */
   setStatus(id: string, status: StoredMissionStatus): Promise<MissionRecord>;
   setExpiresAt(id: string, expiresAt: Iso | null): Promise<MissionRecord>;
-  /** The creator enlarges or shrinks the mission; the whole policy is replaced atomically. */
+  /**
+   * The creator enlarges or shrinks the mission; the whole policy is replaced atomically.
+   * Each line names a set of the mission (`resourceSetId`).
+   */
   replacePolicy(id: string, policy: readonly MissionPolicyEntry[]): Promise<MissionRecord>;
   /**
-   * Sets the gate of one accepted risk (spec §3.5 "at issuance, or later") and, when the
+   * Sets the gate of one accepted line (spec §3.5 "at issuance, or later") and, when the
    * mission has a session, records the `gate-changed` event in the same transaction: the
    * event is what ends a gate opening granted earlier in the period, so the two must not
-   * come apart. Returns the gate the risk had; `null` (nothing written) when the risk is
-   * not in the mission's policy. Setting the gate it already has writes nothing.
+   * come apart. The line is a risk in a set, or a risk alone when exactly one set of the
+   * mission accepts it. Returns the gate the line had; `null` (nothing written) when it
+   * is not in the mission's policy, or the risk alone names several lines. Setting the
+   * gate it already has writes nothing.
    */
   setGate(
     id: string,
-    riskId: RiskId,
+    line: RiskId | RequestLine,
     gate: Gate,
     actorUserId: string,
     options?: SetGateOptions,
@@ -286,10 +318,16 @@ export interface MissionEditInput {
   readonly unchanged: (current: MissionRecord) => boolean;
   readonly name: string;
   readonly expiresAt: Iso | null;
-  /** Every connection of the mission after the edit, with its selection. */
-  readonly connections: readonly MissionConnectionRecord[];
-  /** The whole policy after the edit. */
-  readonly policy: readonly MissionPolicyEntry[];
+  /**
+   * Every connection of the mission after the edit, with its sets in order and their
+   * lines: a set with the `id` of a stored set of that connection is that set (its
+   * counters and requests follow it); any other is a new set. A connection given with
+   * its selection directly (one set, lines in `policy`) keeps the connection's one
+   * stored set, when it has one.
+   */
+  readonly connections: readonly MissionConnectionInput[];
+  /** The lines of the connections given without sets, as `CreateMissionInput.policy`. */
+  readonly policy?: readonly MissionPolicyLineInput[];
   /** The session's summary event of the edit, given how many requests it closed. */
   readonly summary: (requestsClosed: number) => NewEvent;
 }
@@ -301,16 +339,19 @@ export interface MissionEditResult {
   readonly closedRequests: readonly { readonly id: string; readonly kind: string }[];
 }
 
-/** The new limits of one accepted risk (`MissionsRepo.setLimits`). */
+/** The new limits of one accepted line (`MissionsRepo.setLimits`). */
 export interface LimitChange {
+  /** The set of the line; absent when exactly one set of the mission accepts the risk. */
+  readonly resourceSetId?: string;
   readonly riskId: RiskId;
   readonly quota: number;
   /** Calls allowed per rate window; the window itself does not change. */
   readonly rateLimit: number;
 }
 
-/** One listed risk as `setLimits` found it and left it. */
+/** One listed line as `setLimits` found it and left it. */
 export interface AppliedLimitChange {
+  readonly resourceSetId: string;
   readonly riskId: RiskId;
   readonly before: { readonly quota: number; readonly rateLimit: number };
   readonly after: { readonly quota: number; readonly rateLimit: number };
@@ -352,6 +393,7 @@ interface IssuerRow {
 }
 
 interface PolicyRow {
+  resource_set_id: string;
   risk_id: string;
   quota: number;
   rate_limit: number;
@@ -361,12 +403,19 @@ interface PolicyRow {
 
 interface ConnectionRow {
   connection_id: string;
+}
+
+interface SetRow {
+  id: string;
+  connection_id: string;
+  position: number;
   resource_scope: string;
   trust_levels_json: string | null;
 }
 
 interface SelectedRow {
   resource_id: string;
+  resource_set_id: string;
   source: string;
 }
 
@@ -447,6 +496,7 @@ function memberToRecord(row: MemberRow): MissionMemberRecord {
 
 function policyToRecord(row: PolicyRow): MissionPolicyEntry {
   return {
+    resourceSetId: row.resource_set_id,
     riskId: row.risk_id,
     quota: row.quota,
     rateLimit: row.rate_limit,
@@ -455,21 +505,19 @@ function policyToRecord(row: PolicyRow): MissionPolicyEntry {
   };
 }
 
-function connectionToRecord(
-  row: ConnectionRow,
-  selected: readonly SelectedRow[],
-): MissionConnectionRecord {
+function setToRecord(row: SetRow, selected: readonly SelectedRow[]): MissionResourceSetRecord {
   const sources: Record<string, MissionResourceSource> = {};
   for (const r of selected) {
     const source = parseEnum(MISSION_RESOURCE_SOURCES, r.source, 'mission_resources.source');
     if (source !== 'issuance') sources[r.resource_id] = source;
   }
   return {
-    connectionId: row.connection_id,
+    id: row.id,
+    position: row.position,
     resourceScope: parseEnum(
       RESOURCE_SCOPES,
       row.resource_scope,
-      'mission_connections.resource_scope',
+      'mission_resource_sets.resource_scope',
     ),
     resourceIds: selected.map((r) => r.resource_id),
     ...(Object.keys(sources).length > 0 ? { resourceSources: sources } : {}),
@@ -483,12 +531,12 @@ function connectionToRecord(
 function trustLevelsOf(json: string): Record<string, string> {
   const parsed: unknown = JSON.parse(json);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new InvariantError('mission_connections.trust_levels_json is not an object');
+    throw new InvariantError('mission_resource_sets.trust_levels_json is not an object');
   }
   const trustLevels: Record<string, string> = {};
   for (const [id, trustLevel] of Object.entries(parsed)) {
     if (typeof trustLevel !== 'string') {
-      throw new InvariantError(`mission_connections.trust_levels_json: '${id}' is not a string`);
+      throw new InvariantError(`mission_resource_sets.trust_levels_json: '${id}' is not a string`);
     }
     trustLevels[id] = trustLevel;
   }
@@ -496,19 +544,75 @@ function trustLevelsOf(json: string): Record<string, string> {
 }
 
 /** What `trust_levels_json` stores: NULL for no trust level, so an empty record reads back absent. */
-function trustLevelsJsonOf(c: Pick<MissionConnectionRecord, 'trustLevels'>): string | null {
+function trustLevelsJsonOf(c: {
+  readonly trustLevels?: Readonly<Record<string, string>>;
+}): string | null {
   return c.trustLevels && Object.keys(c.trustLevels).length > 0
     ? JSON.stringify(c.trustLevels)
     : null;
 }
 
+/** True for a risk id of this provider: its first segment, before `.` or `[`. */
+export function isRiskOfProvider(riskId: RiskId, provider: string): boolean {
+  return riskId.startsWith(`${provider}.`) || riskId.startsWith(`${provider}[`);
+}
+
+/** A connection of a write, with its sets and their lines. */
+interface ResolvedConnectionInput {
+  readonly connectionId: string;
+  readonly resourceSets: readonly MissionResourceSetInput[];
+}
+
 /**
- * Every connection carries an explicit, consistent selection (`selected`), or no id at
- * all (`all`: none known at issuance; `connection`: the whole connection, read live).
+ * The connections of a write with their sets: a connection given with its selection
+ * directly becomes one set holding the `policy` lines of its provider. A line no
+ * connection of that shape is for is refused.
+ */
+function resolveConnectionInputs(
+  ctx: RepoContext,
+  connections: readonly MissionConnectionInput[],
+  policy: readonly MissionPolicyLineInput[] = [],
+): ResolvedConnectionInput[] {
+  const providerOf = ctx.db.prepare<[string], { provider: string }>(
+    'SELECT provider FROM connections WHERE id = ?',
+  );
+  const placed = new Set<MissionPolicyLineInput>();
+  const resolved = connections.map((c): ResolvedConnectionInput => {
+    if ('resourceSets' in c) return { connectionId: c.connectionId, resourceSets: c.resourceSets };
+    const provider = providerOf.get(c.connectionId)?.provider;
+    if (provider === undefined) throw new NotFoundError('connection', c.connectionId);
+    const lines = policy.filter((line) => isRiskOfProvider(line.riskId, provider));
+    for (const line of lines) placed.add(line);
+    return {
+      connectionId: c.connectionId,
+      resourceSets: [
+        {
+          resourceScope: c.resourceScope,
+          resourceIds: c.resourceIds,
+          ...(c.trustLevels ? { trustLevels: c.trustLevels } : {}),
+          policy: lines,
+        },
+      ],
+    };
+  });
+  const unplaced = policy.filter((line) => !placed.has(line));
+  if (unplaced.length > 0) {
+    throw new InvariantError(
+      `policy line(s) ${unplaced.map((l) => l.riskId).join(', ')} name no connection of the mission`,
+    );
+  }
+  return resolved;
+}
+
+/**
+ * Every connection carries at least one set; each set an explicit, consistent selection
+ * (`selected`), or no id at all (`all`: none known at issuance; `connection`: what no
+ * other set selects, read live). The sets of a connection partition its selection: a
+ * resource in one set only, one set at most of scope `connection`.
  */
 function assertConnectionSelections(
   ctx: RepoContext,
-  connections: readonly MissionConnectionRecord[],
+  connections: readonly ResolvedConnectionInput[],
 ): void {
   if (connections.length === 0) {
     throw new InvariantError('a mission carries at least one connection');
@@ -516,32 +620,67 @@ function assertConnectionSelections(
   const resourceConnection = ctx.db.prepare<[string], { connection_id: string }>(
     'SELECT connection_id FROM connection_resources WHERE id = ?',
   );
+  const seenConnections = new Set<string>();
   for (const c of connections) {
-    if (c.resourceScope === 'selected' && c.resourceIds.length === 0) {
-      throw new InvariantError(`connection ${c.connectionId}: selected scope with no resource`);
+    if (seenConnections.has(c.connectionId)) {
+      throw new InvariantError(`connection ${c.connectionId} is listed twice`);
     }
-    if (c.resourceScope !== 'selected' && c.resourceIds.length > 0) {
+    seenConnections.add(c.connectionId);
+    if (c.resourceSets.length === 0) {
+      throw new InvariantError(`connection ${c.connectionId}: no resource set`);
+    }
+    if (c.resourceSets.filter((set) => set.resourceScope === 'connection').length > 1) {
       throw new InvariantError(
-        `connection ${c.connectionId}: '${c.resourceScope}' scope lists resources`,
+        `connection ${c.connectionId}: two resource sets reach the whole connection`,
       );
     }
-    for (const resourceId of c.resourceIds) {
-      const owner = resourceConnection.get(resourceId);
-      if (!owner) throw new NotFoundError('connection_resource', resourceId);
-      if (owner.connection_id !== c.connectionId) {
+    const seenResources = new Set<string>();
+    const seenSets = new Set<string>();
+    for (const set of c.resourceSets) {
+      if (set.id !== undefined) {
+        if (seenSets.has(set.id)) {
+          throw new InvariantError(`resource set ${set.id} is listed twice`);
+        }
+        seenSets.add(set.id);
+      }
+      if (set.resourceScope === 'selected' && set.resourceIds.length === 0) {
+        throw new InvariantError(`connection ${c.connectionId}: selected scope with no resource`);
+      }
+      if (set.resourceScope !== 'selected' && set.resourceIds.length > 0) {
         throw new InvariantError(
-          `resource ${resourceId} does not belong to connection ${c.connectionId}`,
+          `connection ${c.connectionId}: '${set.resourceScope}' scope lists resources`,
         );
+      }
+      for (const resourceId of set.resourceIds) {
+        if (seenResources.has(resourceId)) {
+          throw new InvariantError(
+            `resource ${resourceId} is in two resource sets of connection ${c.connectionId}`,
+          );
+        }
+        seenResources.add(resourceId);
+        const owner = resourceConnection.get(resourceId);
+        if (!owner) throw new NotFoundError('connection_resource', resourceId);
+        if (owner.connection_id !== c.connectionId) {
+          throw new InvariantError(
+            `resource ${resourceId} does not belong to connection ${c.connectionId}`,
+          );
+        }
       }
     }
   }
 }
 
-function validatePolicy(ctx: RepoContext, policy: readonly MissionPolicyEntry[]): void {
-  const ids = policy.map((p) => p.riskId);
-  if (new Set(ids).size !== ids.length) throw new InvariantError('duplicate risk id in policy');
+function validateLines(
+  ctx: RepoContext,
+  lines: readonly MissionPolicyLineInput[],
+  where: string,
+): void {
+  const ids = lines.map((p) => p.riskId);
+  if (new Set(ids).size !== ids.length) {
+    throw new InvariantError(`duplicate risk id in the policy of ${where}`);
+  }
   assertKnownRiskIds(ctx.catalog, ids);
-  for (const entry of policy) {
+  for (const entry of lines) {
     if (!Number.isInteger(entry.quota) || entry.quota < 0) {
       throw new InvariantError(`quota must be a non-negative integer (${entry.riskId})`);
     }
@@ -552,6 +691,47 @@ function validatePolicy(ctx: RepoContext, policy: readonly MissionPolicyEntry[])
       throw new InvariantError(`rate window must be a positive integer (${entry.riskId})`);
     }
   }
+}
+
+/** Every line of every set, checked; a line of one set appears once in it. */
+function validateSets(ctx: RepoContext, connections: readonly ResolvedConnectionInput[]): void {
+  for (const c of connections) {
+    for (const [index, set] of c.resourceSets.entries()) {
+      validateLines(ctx, set.policy, `resource set ${index + 1} of connection ${c.connectionId}`);
+    }
+  }
+}
+
+/** A flat policy whose lines name sets: each (set, risk) once, each set one of `sets`. */
+function validateFlatPolicy(
+  ctx: RepoContext,
+  policy: readonly MissionPolicyEntry[],
+  sets: ReadonlySet<string>,
+): void {
+  const keys = policy.map((p) => `${p.resourceSetId}\n${p.riskId}`);
+  if (new Set(keys).size !== keys.length) throw new InvariantError('duplicate line in policy');
+  for (const line of policy) {
+    if (!sets.has(line.resourceSetId)) {
+      throw new InvariantError(`resource set ${line.resourceSetId} is not one of the mission's`);
+    }
+  }
+  validateLines(
+    ctx,
+    policy
+      .map(({ resourceSetId: _set, ...line }) => line)
+      .filter((line, i, all) => all.findIndex((other) => other.riskId === line.riskId) === i),
+    'the mission',
+  );
+}
+
+/** The ids of every set of a mission. */
+function setIdsOf(mission: MissionRecord): Set<string> {
+  return new Set(mission.connections.flatMap((c) => c.resourceSets.map((set) => set.id)));
+}
+
+/** The one key of a line, for maps: its set and its risk. */
+function lineKey(line: { readonly resourceSetId: string; readonly riskId: RiskId }): string {
+  return `${line.resourceSetId}\n${line.riskId}`;
 }
 
 export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
@@ -583,37 +763,50 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
        expires_at, delegation_id, created_at, updated_at)
      VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
   );
-  const insertConnection = db.prepare<[string, string, string, string | null]>(
-    `INSERT INTO mission_connections (mission_id, connection_id, resource_scope, trust_levels_json)
-     VALUES (?, ?, ?, ?)`,
+  const insertConnection = db.prepare<[string, string]>(
+    'INSERT INTO mission_connections (mission_id, connection_id) VALUES (?, ?)',
   );
-  const insertResource = db.prepare<[string, string, string]>(
-    'INSERT INTO mission_resources (mission_id, connection_id, resource_id) VALUES (?, ?, ?)',
-  );
-  const insertPolicy = db.prepare<[string, string, number, number, number, string]>(
-    `INSERT INTO mission_policy (mission_id, risk_id, quota, rate_limit, rate_window_seconds, gate)
+  const insertSet = db.prepare<[string, string, string, number, string, string | null]>(
+    `INSERT INTO mission_resource_sets
+       (id, mission_id, connection_id, position, resource_scope, trust_levels_json)
      VALUES (?, ?, ?, ?, ?, ?)`,
   );
+  const insertResource = db.prepare<[string, string, string, string, string]>(
+    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  const insertPolicy = db.prepare<[string, string, string, number, number, number, string]>(
+    `INSERT INTO mission_policy
+       (mission_id, resource_set_id, risk_id, quota, rate_limit, rate_window_seconds, gate)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
   const deletePolicy = db.prepare<[string]>('DELETE FROM mission_policy WHERE mission_id = ?');
+  // Risk order first, the order a policy was always read in; a risk in two sets by position.
   const policyOf = db.prepare<[string], PolicyRow>(
-    `SELECT risk_id, quota, rate_limit, rate_window_seconds, gate FROM mission_policy
-     WHERE mission_id = ? ORDER BY risk_id`,
+    `SELECT p.resource_set_id, p.risk_id, p.quota, p.rate_limit, p.rate_window_seconds, p.gate
+     FROM mission_policy p JOIN mission_resource_sets s ON s.id = p.resource_set_id
+     WHERE p.mission_id = ? ORDER BY p.risk_id, s.connection_id, s.position`,
   );
   const connectionsOf = db.prepare<[string], ConnectionRow>(
-    'SELECT connection_id, resource_scope, trust_levels_json FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
+    'SELECT connection_id FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
   );
-  const resourcesOf = db.prepare<[string, string], SelectedRow>(
-    'SELECT resource_id, source FROM mission_resources WHERE mission_id = ? AND connection_id = ? ORDER BY resource_id',
+  const setsOf = db.prepare<[string], SetRow>(
+    `SELECT id, connection_id, position, resource_scope, trust_levels_json
+     FROM mission_resource_sets WHERE mission_id = ? ORDER BY connection_id, position, id`,
   );
-  const scopeOf = db.prepare<[string, string], { resource_scope: string }>(
-    'SELECT resource_scope FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
+  const setsOfConnection = db.prepare<[string, string], SetRow>(
+    `SELECT id, connection_id, position, resource_scope, trust_levels_json
+     FROM mission_resource_sets WHERE mission_id = ? AND connection_id = ? ORDER BY position, id`,
   );
-  const setScope = db.prepare<[string, string, string]>(
-    'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
+  const resourcesOf = db.prepare<[string], SelectedRow>(
+    'SELECT resource_id, resource_set_id, source FROM mission_resources WHERE mission_id = ? ORDER BY resource_id',
   );
-  const insertResourceFrom = db.prepare<[string, string, string, string]>(
-    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, source)
-     VALUES (?, ?, ?, ?) ON CONFLICT (mission_id, resource_id) DO NOTHING`,
+  const setScope = db.prepare<[string, string]>(
+    'UPDATE mission_resource_sets SET resource_scope = ? WHERE id = ?',
+  );
+  const insertResourceFrom = db.prepare<[string, string, string, string, string]>(
+    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source)
+     VALUES (?, ?, ?, ?, ?) ON CONFLICT (mission_id, resource_id) DO NOTHING`,
   );
   const resourceConnectionOf = db.prepare<[string], { connection_id: string; ref: string }>(
     'SELECT connection_id, ref FROM connection_resources WHERE id = ?',
@@ -625,20 +818,21 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     'UPDATE missions SET expires_at = ?, updated_at = ? WHERE id = ?',
   );
   const touch = db.prepare<[string, string]>('UPDATE missions SET updated_at = ? WHERE id = ?');
-  const gateOf = db.prepare<[string, string], { gate: string }>(
-    'SELECT gate FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+  const setsOfRisk = db.prepare<[string, string], { resource_set_id: string }>(
+    'SELECT resource_set_id FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+  );
+  const lineOf = db.prepare<
+    [string, string, string],
+    { quota: number; rate_limit: number; rate_window_seconds: number; gate: string }
+  >(
+    `SELECT quota, rate_limit, rate_window_seconds, gate FROM mission_policy
+     WHERE mission_id = ? AND resource_set_id = ? AND risk_id = ?`,
   );
   const setGateStmt = db.prepare<[string, string, string]>(
-    'UPDATE mission_policy SET gate = ? WHERE mission_id = ? AND risk_id = ?',
-  );
-  const limitsOf = db.prepare<
-    [string, string],
-    { quota: number; rate_limit: number; rate_window_seconds: number }
-  >(
-    'SELECT quota, rate_limit, rate_window_seconds FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+    'UPDATE mission_policy SET gate = ? WHERE resource_set_id = ? AND risk_id = ?',
   );
   const setLimitsStmt = db.prepare<[number, number, string, string]>(
-    'UPDATE mission_policy SET quota = ?, rate_limit = ? WHERE mission_id = ? AND risk_id = ?',
+    'UPDATE mission_policy SET quota = ?, rate_limit = ? WHERE resource_set_id = ? AND risk_id = ?',
   );
   // The session's events belong to the sessions repository: its primitives run here,
   // inside this repository's transaction.
@@ -728,6 +922,14 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   }
 
   function toRecord(row: MissionRow): MissionRecord {
+    // perf: three queries per mission (sets, resources, policy); a Postgres port joins.
+    const selected = new Map<string, SelectedRow[]>();
+    for (const r of resourcesOf.all(row.id)) {
+      const list = selected.get(r.resource_set_id) ?? [];
+      list.push(r);
+      selected.set(r.resource_set_id, list);
+    }
+    const sets = setsOf.all(row.id);
     return {
       id: row.id,
       name: row.name,
@@ -740,10 +942,12 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       closedAt: row.closed_at,
-      // perf: one query per connection; a Postgres port joins or aggregates instead.
-      connections: connectionsOf
-        .all(row.id)
-        .map((c) => connectionToRecord(c, resourcesOf.all(row.id, c.connection_id))),
+      connections: connectionsOf.all(row.id).map((c): MissionConnectionRecord => ({
+        connectionId: c.connection_id,
+        resourceSets: sets
+          .filter((set) => set.connection_id === c.connection_id)
+          .map((set) => setToRecord(set, selected.get(set.id) ?? [])),
+      })),
       policy: policyOf.all(row.id).map(policyToRecord),
     };
   }
@@ -754,10 +958,26 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     return toRecord(row);
   }
 
+  function writeLine(missionId: string, setId: string, p: MissionPolicyLineInput): void {
+    insertPolicy.run(missionId, setId, p.riskId, p.quota, p.rateLimit, p.rateWindowSeconds, p.gate);
+  }
+
   function writePolicy(missionId: string, policy: readonly MissionPolicyEntry[]): void {
-    for (const p of policy) {
-      insertPolicy.run(missionId, p.riskId, p.quota, p.rateLimit, p.rateWindowSeconds, p.gate);
+    for (const p of policy) writeLine(missionId, p.resourceSetId, p);
+  }
+
+  /** The set a line names: given, or the one set of the mission that accepts the risk. */
+  function lineOfInput(
+    missionId: string,
+    line: RiskId | { readonly resourceSetId?: string; readonly riskId: RiskId },
+  ): RequestLine | null {
+    if (typeof line !== 'string' && line.resourceSetId !== undefined) {
+      return { resourceSetId: line.resourceSetId, riskId: line.riskId };
     }
+    const riskId = typeof line === 'string' ? line : line.riskId;
+    const sets = setsOfRisk.all(missionId, riskId);
+    const [only] = sets;
+    return sets.length === 1 && only ? { resourceSetId: only.resource_set_id, riskId } : null;
   }
 
   const renameStmt = db.prepare<[string, string]>('UPDATE missions SET name = ? WHERE id = ?');
@@ -768,32 +988,25 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
        closed_at = CASE WHEN status = 'expired' THEN NULL ELSE closed_at END
      WHERE id = ?`,
   );
-  /** A resource row an edit adds: source `edit` (ADR mission-editable-after-issuance). */
-  const insertEditedResource = db.prepare<[string, string, string]>(
-    `INSERT INTO mission_resources (mission_id, connection_id, resource_id, source)
-     VALUES (?, ?, ?, 'edit')`,
+  const updateSetStmt = db.prepare<[number, string, string | null, string]>(
+    'UPDATE mission_resource_sets SET position = ?, resource_scope = ?, trust_levels_json = ? WHERE id = ?',
   );
-  const rescopeStmt = db.prepare<[string, string, string]>(
-    'UPDATE mission_connections SET resource_scope = ? WHERE mission_id = ? AND connection_id = ?',
-  );
-  const rewriteTrustLevelsStmt = db.prepare<[string | null, string, string]>(
-    'UPDATE mission_connections SET trust_levels_json = ? WHERE mission_id = ? AND connection_id = ?',
-  );
+  const deleteSetStmt = db.prepare<[string]>('DELETE FROM mission_resource_sets WHERE id = ?');
   const deleteConnectionStmt = db.prepare<[string, string]>(
     'DELETE FROM mission_connections WHERE mission_id = ? AND connection_id = ?',
-  );
-  const deleteResourcesOfStmt = db.prepare<[string, string]>(
-    'DELETE FROM mission_resources WHERE mission_id = ? AND connection_id = ?',
   );
   const deleteResourceStmt = db.prepare<[string, string]>(
     'DELETE FROM mission_resources WHERE mission_id = ? AND resource_id = ?',
   );
+  const moveResourceStmt = db.prepare<[string, string, string]>(
+    'UPDATE mission_resources SET resource_set_id = ? WHERE mission_id = ? AND resource_id = ?',
+  );
   const deleteLineStmt = db.prepare<[string, string]>(
-    'DELETE FROM mission_policy WHERE mission_id = ? AND risk_id = ?',
+    'DELETE FROM mission_policy WHERE resource_set_id = ? AND risk_id = ?',
   );
   const updateLineStmt = db.prepare<[number, number, number, string, string, string]>(
     `UPDATE mission_policy SET quota = ?, rate_limit = ?, rate_window_seconds = ?, gate = ?
-     WHERE mission_id = ? AND risk_id = ?`,
+     WHERE resource_set_id = ? AND risk_id = ?`,
   );
   const openRequestsStmt = db.prepare<
     [string],
@@ -812,7 +1025,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
      AND (risk_id = ? OR EXISTS (SELECT 1 FROM json_each(approvals.risk_ids_json) WHERE value = ?))`,
   );
 
-  function sameLimits(a: MissionPolicyEntry, b: MissionPolicyEntry): boolean {
+  function sameLimits(a: MissionPolicyLineInput, b: MissionPolicyLineInput): boolean {
     return (
       a.quota === b.quota &&
       a.rateLimit === b.rateLimit &&
@@ -820,38 +1033,25 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     );
   }
 
-  /** The rows of one connection that move, and nothing else. In-transaction. */
-  function writeSelection(
-    missionId: string,
-    old: MissionConnectionRecord | undefined,
-    c: MissionConnectionRecord,
-  ): void {
-    if (!old) {
-      insertConnection.run(missionId, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));
-      for (const resourceId of c.resourceIds)
-        insertEditedResource.run(missionId, c.connectionId, resourceId);
-      return;
-    }
-    if (old.resourceScope !== c.resourceScope) {
-      rescopeStmt.run(c.resourceScope, missionId, c.connectionId);
-    }
-    const trustLevels = trustLevelsJsonOf(c);
-    if (trustLevels !== trustLevelsJsonOf(old))
-      rewriteTrustLevelsStmt.run(trustLevels, missionId, c.connectionId);
-    const had = new Set(old.resourceIds);
-    const has = new Set(c.resourceIds);
-    for (const resourceId of old.resourceIds) {
-      if (!has.has(resourceId)) deleteResourceStmt.run(missionId, resourceId);
-    }
-    for (const resourceId of c.resourceIds) {
-      if (!had.has(resourceId)) insertEditedResource.run(missionId, c.connectionId, resourceId);
-    }
+  /** The limits and gate of a line, as an event names them. */
+  function lineDetails(p: MissionPolicyLineInput): {
+    quota: number;
+    rate_limit_max: number;
+    rate_window_seconds: number;
+    gate: Gate;
+  } {
+    return {
+      quota: p.quota,
+      rate_limit_max: p.rateLimit,
+      rate_window_seconds: p.rateWindowSeconds,
+      gate: p.gate,
+    };
   }
 
-  /** The open claims and approval requests about a removed risk, closed. In-transaction. */
+  /** The open claims and approval requests about a removed line, closed. In-transaction. */
   function closeMootRequests(
     missionId: string,
-    gone: ReadonlySet<RiskId>,
+    gone: ReadonlySet<string>,
     actorUserId: string,
     now: Iso,
     record: (event: NewEvent) => void,
@@ -859,8 +1059,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     const closed: { id: string; kind: string }[] = [];
     if (gone.size === 0) return closed;
     for (const row of openRequestsStmt.all(missionId)) {
-      const listed = row.risk_ids_json ? (JSON.parse(row.risk_ids_json) as string[]) : [];
-      const moot = [...new Set([row.risk_id, ...listed])].filter((r) => gone.has(r));
+      const lines = requestLinesOf(
+        riskIdsOf(row.risk_id, row.risk_ids_json),
+        storedLinesOf(ctx, row.id),
+      );
+      const moot = [...new Set(lines.filter((l) => gone.has(lineKey(l))).map((l) => l.riskId))];
       if (moot.length === 0) continue;
       const decision = JSON.stringify({ resolution: 'mission-changed', removed: moot });
       if (closeRequestStmt.run(now, actorUserId, decision, row.id).changes === 0) continue;
@@ -868,6 +1071,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       record({
         kind: 'request',
         riskId: row.risk_id,
+        resourceSetId: lines[0]?.resourceSetId ?? null,
         details: {
           request_id: row.id,
           request_kind: row.kind === 'claim' ? 'claim' : 'approval',
@@ -879,13 +1083,57 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     return closed;
   }
 
+  /** A set of a write, with the id it is stored under. */
+  interface PlannedSet {
+    readonly id: string;
+    readonly kept: boolean;
+    readonly position: number;
+    readonly connectionId: string;
+    readonly input: MissionResourceSetInput;
+  }
+
+  /** Inserts one connection with its sets, resources and lines. In-transaction. */
+  function insertConnectionWithSets(missionId: string, c: ResolvedConnectionInput): void {
+    insertConnection.run(missionId, c.connectionId);
+    c.resourceSets.forEach((set, index) => {
+      const setId = ctx.newId();
+      insertSet.run(
+        setId,
+        missionId,
+        c.connectionId,
+        index + 1,
+        set.resourceScope,
+        trustLevelsJsonOf(set),
+      );
+      for (const resourceId of set.resourceIds) {
+        insertResource.run(missionId, c.connectionId, resourceId, setId, 'issuance');
+      }
+      for (const line of set.policy) writeLine(missionId, setId, line);
+    });
+  }
+
   return {
-    async edit(id, input) {
-      validatePolicy(ctx, input.policy);
-      assertConnectionSelections(ctx, input.connections);
+    async edit(id, raw) {
+      const resolved = resolveConnectionInputs(ctx, raw.connections, raw.policy);
+      validateSets(ctx, resolved);
+      assertConnectionSelections(ctx, resolved);
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const before = requireMission(id);
+        // A connection given flat keeps its one stored set.
+        const input = {
+          ...raw,
+          connections: resolved.map((c, i): ResolvedConnectionInput => {
+            const given = raw.connections[i];
+            const flat = given !== undefined && !('resourceSets' in given);
+            const stored = before.connections.find((b) => b.connectionId === c.connectionId);
+            const [only] = stored?.resourceSets ?? [];
+            const [set] = c.resourceSets;
+            return flat && only && set && stored?.resourceSets.length === 1
+              ? { ...c, resourceSets: [{ ...set, id: only.id }] }
+              : c;
+          }),
+        };
         if (
           before.creatorUserId !== input.actorUserId ||
           before.status === 'revoked' ||
@@ -901,64 +1149,163 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           else setExpiry.run(input.expiresAt, now, id);
         }
 
-        const was = new Map(before.connections.map((c) => [c.connectionId, c]));
-        const next = new Set(input.connections.map((c) => c.connectionId));
+        // ── Which set is which: a stored id on the same connection keeps its set. ──
+        const stored = new Map<string, { connectionId: string; set: MissionResourceSetRecord }>();
         for (const c of before.connections) {
-          if (next.has(c.connectionId)) continue;
-          deleteResourcesOfStmt.run(id, c.connectionId);
-          deleteConnectionStmt.run(id, c.connectionId);
+          for (const set of c.resourceSets)
+            stored.set(set.id, { connectionId: c.connectionId, set });
         }
-        for (const c of input.connections) writeSelection(id, was.get(c.connectionId), c);
+        const planned: PlannedSet[] = input.connections.flatMap((c) =>
+          c.resourceSets.map((set, index): PlannedSet => {
+            const kept =
+              set.id !== undefined && stored.get(set.id)?.connectionId === c.connectionId;
+            return {
+              id: kept && set.id !== undefined ? set.id : ctx.newId(),
+              kept,
+              position: index + 1,
+              connectionId: c.connectionId,
+              input: set,
+            };
+          }),
+        );
+        const keptIds = new Set(planned.filter((p) => p.kept).map((p) => p.id));
+        const nextConnections = new Set(input.connections.map((c) => c.connectionId));
 
         const session = sessions.sessionOfMission(id);
         const record = (event: NewEvent): void => {
           if (session) sessions.recordEvent(session.id, event, now);
         };
         const actorUserId = input.actorUserId;
-        const linesBefore = new Map(before.policy.map((p) => [p.riskId, p]));
-        const linesAfter = new Set(input.policy.map((p) => p.riskId));
-        const removed = before.policy.filter((p) => !linesAfter.has(p.riskId));
+
+        // ── The lines removed go first, while their sets still exist. ──
+        const linesBefore = new Map(before.policy.map((p) => [lineKey(p), p]));
+        const linesAfter = new Map<string, MissionPolicyEntry>();
+        for (const set of planned) {
+          for (const line of set.input.policy) {
+            const entry: MissionPolicyEntry = { ...line, resourceSetId: set.id };
+            linesAfter.set(lineKey(entry), entry);
+          }
+        }
+        const removed = before.policy.filter((p) => !linesAfter.has(lineKey(p)));
         for (const p of removed) {
-          deleteLineStmt.run(id, p.riskId);
+          deleteLineStmt.run(p.resourceSetId, p.riskId);
           // An approval must not survive the removal and re-addition of its risk.
           retireApprovalsStmt.run(now, id, p.riskId, p.riskId);
           record({
             kind: 'permission-removed',
             riskId: p.riskId,
+            resourceSetId: p.resourceSetId,
             actorUserId,
-            details: {
-              quota: p.quota,
-              rate_limit_max: p.rateLimit,
-              rate_window_seconds: p.rateWindowSeconds,
-              gate: p.gate,
-            },
+            details: lineDetails(p),
           });
         }
-        for (const p of input.policy) {
-          const old = linesBefore.get(p.riskId);
+
+        // ── The sets and their resources. Order matters: one `connection` set per
+        // connection at every instant, and a resource row always names a set that exists.
+        const removedSets = [...stored.entries()].filter(([setId]) => !keptIds.has(setId));
+        for (const c of input.connections) {
+          if (!before.connections.some((b) => b.connectionId === c.connectionId)) {
+            insertConnection.run(id, c.connectionId);
+          }
+        }
+        for (const set of planned) {
+          const was = stored.get(set.id)?.set;
+          if (
+            set.kept &&
+            was?.resourceScope === 'connection' &&
+            set.input.resourceScope !== 'connection'
+          ) {
+            setScope.run(set.input.resourceScope, set.id);
+          }
+        }
+        for (const [setId, { set }] of removedSets) {
+          if (set.resourceScope === 'connection') deleteSetStmt.run(setId);
+        }
+        for (const set of planned) {
+          if (set.kept) continue;
+          insertSet.run(
+            set.id,
+            id,
+            set.connectionId,
+            set.position,
+            set.input.resourceScope,
+            trustLevelsJsonOf(set.input),
+          );
+        }
+        for (const c of before.connections) {
+          if (nextConnections.has(c.connectionId)) continue;
+          // Its sets, resources and lines go with it (foreign keys, ON DELETE CASCADE).
+          deleteConnectionStmt.run(id, c.connectionId);
+        }
+        const placedBefore = new Map<string, string>();
+        for (const c of before.connections) {
+          if (!nextConnections.has(c.connectionId)) continue;
+          for (const set of c.resourceSets) {
+            for (const resourceId of set.resourceIds) placedBefore.set(resourceId, set.id);
+          }
+        }
+        const placedAfter = new Map<string, PlannedSet>();
+        for (const set of planned) {
+          for (const resourceId of set.input.resourceIds) placedAfter.set(resourceId, set);
+        }
+        for (const [resourceId] of placedBefore) {
+          if (!placedAfter.has(resourceId)) deleteResourceStmt.run(id, resourceId);
+        }
+        for (const [resourceId, set] of placedAfter) {
+          const was = placedBefore.get(resourceId);
+          if (was === undefined)
+            insertResource.run(id, set.connectionId, resourceId, set.id, 'edit');
+          else if (was !== set.id) moveResourceStmt.run(set.id, id, resourceId);
+        }
+        for (const [setId, { connectionId, set }] of removedSets) {
+          if (set.resourceScope !== 'connection' && nextConnections.has(connectionId)) {
+            deleteSetStmt.run(setId);
+          }
+        }
+        for (const set of planned) {
+          if (!set.kept) continue;
+          const was = stored.get(set.id)?.set;
+          const trustLevels = trustLevelsJsonOf(set.input);
+          if (
+            !was ||
+            was.position !== set.position ||
+            was.resourceScope !== set.input.resourceScope ||
+            trustLevelsJsonOf(was) !== trustLevels
+          ) {
+            updateSetStmt.run(set.position, set.input.resourceScope, trustLevels, set.id);
+          }
+        }
+
+        // ── The lines added or changed. ──
+        for (const [key, p] of linesAfter) {
+          const old = linesBefore.get(key);
           if (!old) {
-            insertPolicy.run(id, p.riskId, p.quota, p.rateLimit, p.rateWindowSeconds, p.gate);
+            writeLine(id, p.resourceSetId, p);
             record({
               kind: 'permission-added',
               riskId: p.riskId,
+              resourceSetId: p.resourceSetId,
               actorUserId,
-              details: {
-                quota: p.quota,
-                rate_limit_max: p.rateLimit,
-                rate_window_seconds: p.rateWindowSeconds,
-                gate: p.gate,
-              },
+              details: lineDetails(p),
             });
             continue;
           }
           const limitsMove = !sameLimits(old, p);
           if (!limitsMove && old.gate === p.gate) continue;
-          updateLineStmt.run(p.quota, p.rateLimit, p.rateWindowSeconds, p.gate, id, p.riskId);
+          updateLineStmt.run(
+            p.quota,
+            p.rateLimit,
+            p.rateWindowSeconds,
+            p.gate,
+            p.resourceSetId,
+            p.riskId,
+          );
           if (limitsMove) {
             const windowMoves = old.rateWindowSeconds !== p.rateWindowSeconds;
             record({
               kind: 'limits-changed',
               riskId: p.riskId,
+              resourceSetId: p.resourceSetId,
               actorUserId,
               details: {
                 quota: p.quota,
@@ -978,12 +1325,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             record({
               kind: 'gate-changed',
               riskId: p.riskId,
+              resourceSetId: p.resourceSetId,
               actorUserId,
               details: { gate: p.gate, gate_before: old.gate },
             });
           }
         }
-        const gone = new Set(removed.map((p) => p.riskId));
+        const gone = new Set(removed.map(lineKey));
         const closed = closeMootRequests(id, gone, actorUserId, now, record);
         touch.run(now, id);
         record(input.summary(closed.length));
@@ -1014,8 +1362,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       return issuers;
     },
     async create(input) {
-      validatePolicy(ctx, input.policy);
-      assertConnectionSelections(ctx, input.connections);
+      const connections = resolveConnectionInputs(ctx, input.connections, input.policy);
+      validateSets(ctx, connections);
+      assertConnectionSelections(ctx, connections);
       const id = ctx.newId();
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
@@ -1030,27 +1379,26 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           now,
           now,
         );
-        for (const c of input.connections) {
-          insertConnection.run(id, c.connectionId, c.resourceScope, trustLevelsJsonOf(c));
-          for (const resourceId of c.resourceIds)
-            insertResource.run(id, c.connectionId, resourceId);
-        }
-        writePolicy(id, input.policy);
+        for (const c of connections) insertConnectionWithSets(id, c);
       });
       return requireMission(id);
     },
-    async addResources(missionId, connectionId, resourceIds, source, created) {
+    async addResources(missionId, connectionId, resourceIds, source, created, resourceSetId) {
       if (!MISSION_RESOURCE_SOURCES.includes(source)) {
         throw new InvariantError(`unknown mission resource source '${String(source)}'`);
       }
       const now = nowIso(ctx);
       return withImmediateTransaction(db, (): AddedMissionResources => {
-        const row = scopeOf.get(missionId, connectionId);
-        if (!row) throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
+        const sets = setsOfConnection.all(missionId, connectionId);
+        const [first] = sets;
+        if (!first) throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
+        // The set the creating call was judged against; the first set of the connection
+        // when it had several candidate sets, or when that set is gone since.
+        const target = sets.find((set) => set.id === resourceSetId) ?? first;
         const scope = parseEnum(
           RESOURCE_SCOPES,
-          row.resource_scope,
-          'mission_connections.resource_scope',
+          target.resource_scope,
+          'mission_resource_sets.resource_scope',
         );
         const refs: string[] = [];
         for (const resourceId of resourceIds) {
@@ -1064,16 +1412,21 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           if (!refs.includes(owner.ref)) refs.push(owner.ref);
         }
         const added: string[] = [];
-        // Scope `connection` reaches every resource of the connection already.
+        // A set of scope `connection` reaches every resource no other set selects already.
         const writes = scope !== 'connection' && resourceIds.length > 0;
         if (writes) {
           // `all` stores no id only when nothing was known at issuance: with one, it is a list.
-          if (scope === 'all') setScope.run('selected', missionId, connectionId);
+          if (scope === 'all') setScope.run('selected', target.id);
           for (const resourceId of resourceIds) {
             if (added.includes(resourceId)) continue;
-            if (insertResourceFrom.run(missionId, connectionId, resourceId, source).changes > 0) {
-              added.push(resourceId);
-            }
+            const inserted = insertResourceFrom.run(
+              missionId,
+              connectionId,
+              resourceId,
+              target.id,
+              source,
+            );
+            if (inserted.changes > 0) added.push(resourceId);
           }
           touch.run(now, missionId);
         }
@@ -1093,7 +1446,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             now,
           );
         }
-        return { scope: writes ? 'selected' : scope, added };
+        return { resourceSetId: target.id, scope: writes ? 'selected' : scope, added };
       });
     },
     async getById(id) {
@@ -1125,10 +1478,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       return requireMission(id);
     },
     async replacePolicy(id, policy) {
-      validatePolicy(ctx, policy);
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
-        requireMission(id);
+        const mission = requireMission(id);
+        validateFlatPolicy(ctx, policy, setIdsOf(mission));
         deletePolicy.run(id);
         writePolicy(id, policy);
         touch.run(now, id);
@@ -1136,15 +1489,22 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       });
     },
     async changePermissions(id, policy, expected, actor, requestId) {
-      validatePolicy(ctx, policy);
       const key = (lines: readonly MissionPolicyEntry[]) =>
         JSON.stringify(
           [...lines]
-            .sort((a, b) => a.riskId.localeCompare(b.riskId))
-            .map((p) => [p.riskId, p.quota, p.rateLimit, p.rateWindowSeconds, p.gate]),
+            .sort((a, b) => lineKey(a).localeCompare(lineKey(b)))
+            .map((p) => [
+              p.resourceSetId,
+              p.riskId,
+              p.quota,
+              p.rateLimit,
+              p.rateWindowSeconds,
+              p.gate,
+            ]),
         );
       return withImmediateTransaction(db, () => {
         const mission = requireMission(id);
+        validateFlatPolicy(ctx, policy, setIdsOf(mission));
         if (
           mission.creatorUserId !== actor ||
           mission.status === 'revoked' ||
@@ -1153,15 +1513,24 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           return null;
         const now = nowIso(ctx);
         if (requestId) {
-          const request = db.prepare<[string, string, string], { risk_ids_json: string }>(
-            "SELECT risk_ids_json FROM requests WHERE id = ? AND mission_id = ? AND kind = 'permission' AND state = 'open' AND expires_at > ?",
+          const request = db.prepare<
+            [string, string, string],
+            { risk_id: string; risk_ids_json: string | null }
+          >(
+            `SELECT risk_id, risk_ids_json FROM requests
+             WHERE id = ? AND mission_id = ? AND kind = 'permission' AND state = 'open' AND expires_at > ?`,
           );
           const row = request.get(requestId, id, now);
           if (!row) return null;
-          const risks = JSON.parse(row.risk_ids_json) as string[];
-          if (!risks.every((risk) => policy.some((p) => p.riskId === risk))) return null;
+          const asked = requestLinesOf(
+            riskIdsOf(row.risk_id, row.risk_ids_json),
+            storedLinesOf(ctx, requestId),
+          );
+          const granted = new Set(policy.map(lineKey));
+          if (asked.length === 0 || !asked.every((line) => granted.has(lineKey(line)))) return null;
         }
-        const removed = mission.policy.filter((p) => !policy.some((n) => n.riskId === p.riskId));
+        const kept = new Set(policy.map(lineKey));
+        const removed = mission.policy.filter((p) => !kept.has(lineKey(p)));
         deletePolicy.run(id);
         writePolicy(id, policy);
         touch.run(now, id);
@@ -1173,6 +1542,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
               {
                 kind: 'gate-changed',
                 riskId: p.riskId,
+                resourceSetId: p.resourceSetId,
                 actorUserId: actor,
                 details: { gate: 'approval', gate_before: p.gate },
               },
@@ -1189,12 +1559,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           );
         }
         // An unconsumed approval must not survive removal and re-addition of its risk.
-        for (const p of removed) {
-          db.prepare(
-            `UPDATE approvals SET consumed_at = ? WHERE mission_id = ? AND consumed_at IS NULL
-            AND (risk_id = ? OR EXISTS (SELECT 1 FROM json_each(approvals.risk_ids_json) WHERE value = ?))`,
-          ).run(now, id, p.riskId, p.riskId);
-        }
+        for (const p of removed) retireApprovalsStmt.run(now, id, p.riskId, p.riskId);
         if (requestId)
           db.prepare(
             `UPDATE requests SET state = 'granted', decided_at = ?, decided_by_user_id = ?,
@@ -1203,16 +1568,18 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         return requireMission(id);
       });
     },
-    async setGate(id, riskId, gate, actorUserId, options = {}) {
+    async setGate(id, line, gate, actorUserId, options = {}) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const mission = requireMission(id);
-        const row = gateOf.get(id, riskId);
+        const target = lineOfInput(id, line);
+        if (!target) return null;
+        const row = lineOf.get(id, target.resourceSetId, target.riskId);
         if (!row) return null;
         const previous = parseEnum(GATES, row.gate, 'mission_policy.gate');
         const closing = previous === gate && gate === 'approval' && options.closeOpening === true;
         if (previous === gate && !closing) return { mission, previous, openingClosed: false };
-        if (!closing) setGateStmt.run(gate, id, riskId);
+        if (!closing) setGateStmt.run(gate, target.resourceSetId, target.riskId);
         touch.run(now, id);
         const session = sessions.sessionOfMission(id);
         if (session) {
@@ -1220,7 +1587,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             session.id,
             {
               kind: 'gate-changed',
-              riskId,
+              riskId: target.riskId,
+              resourceSetId: target.resourceSetId,
               actorUserId,
               details: { gate, gate_before: previous },
             } satisfies NewEvent,
@@ -1235,8 +1603,6 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       });
     },
     async setLimits(id, changes, actorUserId) {
-      const ids = changes.map((c) => c.riskId);
-      if (new Set(ids).size !== ids.length) throw new InvariantError('duplicate risk id in limits');
       for (const change of changes) {
         if (!Number.isInteger(change.quota) || change.quota < 0) {
           throw new InvariantError(`quota must be a non-negative integer (${change.riskId})`);
@@ -1249,12 +1615,18 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       return withImmediateTransaction(db, () => {
         requireMission(id);
         const applied: AppliedLimitChange[] = [];
+        const seen = new Set<string>();
         for (const change of changes) {
-          const row = limitsOf.get(id, change.riskId);
+          const target = lineOfInput(id, change);
+          if (!target) return null;
+          if (seen.has(lineKey(target))) throw new InvariantError('duplicate line in limits');
+          seen.add(lineKey(target));
+          const row = lineOf.get(id, target.resourceSetId, target.riskId);
           if (!row) return null;
           const moved = row.quota !== change.quota || row.rate_limit !== change.rateLimit;
           applied.push({
-            riskId: change.riskId,
+            resourceSetId: target.resourceSetId,
+            riskId: target.riskId,
             before: { quota: row.quota, rateLimit: row.rate_limit },
             after: { quota: change.quota, rateLimit: change.rateLimit },
             rateWindowSeconds: row.rate_window_seconds,
@@ -1263,7 +1635,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         }
         const moved = applied.filter((a) => a.changed);
         if (moved.length === 0) return { mission: requireMission(id), changes: applied };
-        for (const a of moved) setLimitsStmt.run(a.after.quota, a.after.rateLimit, id, a.riskId);
+        for (const a of moved) {
+          setLimitsStmt.run(a.after.quota, a.after.rateLimit, a.resourceSetId, a.riskId);
+        }
         touch.run(now, id);
         const session = sessions.sessionOfMission(id);
         if (session) {
@@ -1273,6 +1647,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
               {
                 kind: 'limits-changed',
                 riskId: a.riskId,
+                resourceSetId: a.resourceSetId,
                 actorUserId,
                 details: {
                   quota: a.after.quota,

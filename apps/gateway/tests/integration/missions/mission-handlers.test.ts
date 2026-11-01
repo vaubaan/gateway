@@ -170,9 +170,14 @@ describe('missions: HTTP handlers', () => {
     const { preview } = (await res.json()) as { preview: MissionPreview };
     expect(preview.ok).toBe(true);
     expect(preview.resolved[0]?.connection_id).toBe(seeded.github.connection.id);
-    expect(preview.resolved[0]?.resources).toMatchObject({ scope: 'selected' });
-    expect(preview.resolved[0]?.resources).toHaveProperty('resource_ids', [expect.any(String)]);
-    expect(preview.resolved[0]?.trust_levels).toEqual({ read: 'trusting', propose: 'trusting' });
+    expect(preview.resolved[0]?.resource_sets[0]?.resources).toMatchObject({ scope: 'selected' });
+    expect(preview.resolved[0]?.resource_sets[0]?.resources).toHaveProperty('resource_ids', [
+      expect.any(String),
+    ]);
+    expect(preview.resolved[0]?.resource_sets[0]?.trust_levels).toEqual({
+      read: 'trusting',
+      propose: 'trusting',
+    });
     expect(preview.policy.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.merge-protected', 'approval'],

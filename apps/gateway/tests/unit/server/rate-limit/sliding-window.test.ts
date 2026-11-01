@@ -89,9 +89,13 @@ describe('SlidingWindowRateLimiter — RateLimiter port (take)', () => {
 });
 
 describe('rateWindowKey', () => {
-  it('keys a window by mission and risk', () => {
-    expect(rateWindowKey('mis_1', 'github.code-read')).toBe('mission:mis_1:risk:github.code-read');
-    expect(rateWindowKey('mis_1', 'a')).not.toBe(rateWindowKey('mis_2', 'a'));
-    expect(rateWindowKey('mis_1', 'a')).not.toBe(rateWindowKey('mis_1', 'b'));
+  it('keys a window by mission, resource set and risk', () => {
+    expect(rateWindowKey('mis_1', 'set_1', 'github.code-read')).toBe(
+      'mission:mis_1:set:set_1:risk:github.code-read',
+    );
+    expect(rateWindowKey('mis_1', 's', 'a')).not.toBe(rateWindowKey('mis_2', 's', 'a'));
+    expect(rateWindowKey('mis_1', 's', 'a')).not.toBe(rateWindowKey('mis_1', 's', 'b'));
+    // Each resource set keeps its own rate limit (risk model §4.7).
+    expect(rateWindowKey('mis_1', 's1', 'a')).not.toBe(rateWindowKey('mis_1', 's2', 'a'));
   });
 });

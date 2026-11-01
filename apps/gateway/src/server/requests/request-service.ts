@@ -26,11 +26,14 @@ import type { AdminAct } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { serializeSlice } from '@vaubaan/policy-engine';
 import {
+  lineKeyOf,
   parseRiskId,
+  policyLineKey,
   type Gate,
   type Iso8601,
   type MissionPolicyEntry,
   type MissionTokenKind,
+  type PolicyLineKey,
   type RequestKind,
   type RequestStatus,
   type RiskId,
@@ -44,6 +47,7 @@ import {
   GATE_EVENT_KINDS,
   missionUsageReader,
   openedGatesOf,
+  openedInSet,
   type BudgetMission,
   type CurrentPeriod,
   type MissionState,
@@ -63,7 +67,7 @@ import type {
   RequestDecisionOutcome,
   StoredMissionFacts,
 } from '../store/repositories/requests';
-import type { EventRecord, MissionRecord, RequestRecord } from '../store/types';
+import type { EventRecord, MissionRecord, RequestLine, RequestRecord } from '../store/types';
 import {
   type ApprovalDecision,
   type ApprovalOption,
@@ -71,6 +75,7 @@ import {
   type ApprovalProblem,
   type ApprovalSituation,
   checkApprovalDecision,
+  closedGateLines,
   closedGates,
   parseApprovalDecision,
 } from './approval';
@@ -171,6 +176,8 @@ export interface RequestCall {
 
 export interface RiskBudgetLine {
   readonly risk_id: RiskId;
+  /** The resource set of the line (risk model §4.7). */
+  readonly resource_set_id: string;
   readonly label: string;
   readonly quota: number;
   readonly consumed: number;
@@ -271,6 +278,8 @@ export interface ApprovalCall {
 /** The gate of one risk an approval request covers, as the mission holds it now. */
 export interface ApprovalGateLine {
   readonly risk_id: RiskId;
+  /** The resource set of the line (risk model §4.7). */
+  readonly resource_set_id: string;
   readonly label: string;
   readonly policy: Gate | null;
   readonly open_until: Iso8601 | null;
@@ -437,10 +446,7 @@ export class RequestService {
       items.push({
         request: this.summaryOf(request, mission, now, await this.resourceOf(request)),
         asker: await this.askerOf(request),
-        budget: request.riskIds.flatMap((riskId) => {
-          const entry = budget.policy.find((candidate) => candidate.risk_id === riskId);
-          return entry ? [this.lineOf(entry, consumed)] : [];
-        }),
+        budget: entriesOfRequest(budget, request).map((entry) => this.lineOf(entry, consumed)),
         period,
         period_seconds: mission.periodSeconds,
       });
@@ -506,7 +512,12 @@ export class RequestService {
     const budget = budgetMissionOf(mission);
     const { session_id, state, period, consumed } = await this.budget.usageOf(budget, now);
     const lines = budget.policy.map((entry) => this.lineOf(entry, consumed));
-    const risk = lines.find((line) => line.risk_id === request.riskId) ?? null;
+    const claimed = claimLineOf(budget, request);
+    const isClaimed = (line: RiskBudgetLine): boolean =>
+      claimed !== null &&
+      line.risk_id === claimed.riskId &&
+      line.resource_set_id === claimed.resourceSetId;
+    const risk = lines.find(isClaimed) ?? null;
     const events = await this.lastEvents(session_id);
 
     return {
@@ -524,7 +535,7 @@ export class RequestService {
         asker: await this.askerOf(request),
         period,
         risk,
-        other_risks: lines.filter((line) => line.risk_id !== request.riskId),
+        other_risks: lines.filter((line) => !isClaimed(line)),
         events: events.map(eventLineOf),
         options:
           summary.state === 'open'
@@ -651,6 +662,7 @@ export class RequestService {
             { ...ctx.request, tool },
             gateEventsOf(ctx, ctx.request.riskIds, period),
             validitySeconds,
+            requestLines(budget, ctx.request),
           ),
         });
       });
@@ -828,11 +840,12 @@ export class RequestService {
         })
       : [];
     const opened = openedGatesOf(gateEvents, period);
-    const gates: ApprovalGateLine[] = request.riskIds.map((riskId) => ({
-      risk_id: riskId,
-      label: this.labelOf(riskId),
-      policy: budget.policy.find((entry) => entry.risk_id === riskId)?.gate ?? null,
-      open_until: opened.has(riskId) ? period.end : null,
+    const gates: ApprovalGateLine[] = requestLines(budget, request).map((line) => ({
+      risk_id: line.riskId,
+      resource_set_id: line.resourceSetId,
+      label: this.labelOf(line.riskId),
+      policy: entryOfLine(budget, line)?.gate ?? null,
+      open_until: opened.has(policyLineKey(line.resourceSetId, line.riskId)) ? period.end : null,
     }));
     const [firstGate] = gates;
     if (!firstGate) throw new InvariantError(`approval request ${request.id} names no risk`);
@@ -846,9 +859,19 @@ export class RequestService {
       refusalCode: request.kind === 'permission' ? 'risk-not-accepted' : 'approval-required',
     });
     const touched = new Set<RiskId>([...(audited?.risks_touched ?? []), ...request.riskIds]);
+    // The sets the call was judged against: the ones the audit entry names, else the
+    // request's own.
+    const sets = new Set(
+      audited?.resource_set_ids && audited.resource_set_ids.length > 0
+        ? audited.resource_set_ids
+        : requestLines(budget, request).map((line) => line.resourceSetId),
+    );
     const risks: TouchedRiskLine[] = budget.policy
-      .filter((entry) => touched.has(entry.risk_id))
-      .map((entry) => ({ ...this.lineOf(entry, consumed), gate: effectiveGate(entry, opened) }));
+      .filter((entry) => touched.has(entry.risk_id) && sets.has(entry.resource_set_id ?? ''))
+      .map((entry) => ({
+        ...this.lineOf(entry, consumed),
+        gate: effectiveGate(entry, openedInSet(opened, entry.resource_set_id ?? '')),
+      }));
 
     const approval =
       request.state === 'granted' ? await store.approvals.getByRequest(request.id) : null;
@@ -906,6 +929,7 @@ export class RequestService {
               { ...request, tool },
               gateEvents,
               this.deps.approvalValiditySeconds,
+              requestLines(budget, request),
             ),
           )
         : [],
@@ -1019,10 +1043,14 @@ export class RequestService {
     };
   }
 
-  private lineOf(entry: MissionPolicyEntry, consumed: ReadonlyMap<RiskId, number>): RiskBudgetLine {
-    const used = consumed.get(entry.risk_id) ?? 0;
+  private lineOf(
+    entry: MissionPolicyEntry,
+    consumed: ReadonlyMap<PolicyLineKey, number>,
+  ): RiskBudgetLine {
+    const used = consumed.get(lineKeyOf(entry)) ?? 0;
     return {
       risk_id: entry.risk_id,
+      resource_set_id: entry.resource_set_id ?? '',
       label: this.labelOf(entry.risk_id),
       quota: entry.quota,
       consumed: used,
@@ -1073,23 +1101,67 @@ function decidedMissionOf(derived: MissionRecord, stored: StoredMissionFacts): B
   };
 }
 
+/**
+ * The lines a request is about. A row the migration could not attribute to a set
+ * (`lines` empty) reads its risks in every set of the mission that accepts them.
+ */
+function requestLines(
+  mission: Pick<BudgetMission, 'policy'>,
+  request: Pick<RequestRecord, 'lines' | 'riskIds'>,
+): RequestLine[] {
+  if (request.lines.length > 0) return [...request.lines];
+  return mission.policy
+    .filter((entry) => request.riskIds.includes(entry.risk_id))
+    .map((entry) => ({ resourceSetId: entry.resource_set_id ?? '', riskId: entry.risk_id }));
+}
+
+/** The policy entry of one line; `undefined` once it left the policy. */
+function entryOfLine(
+  mission: Pick<BudgetMission, 'policy'>,
+  line: RequestLine,
+): MissionPolicyEntry | undefined {
+  return mission.policy.find(
+    (entry) => entry.risk_id === line.riskId && entry.resource_set_id === line.resourceSetId,
+  );
+}
+
+/** The entries of the lines of a request still in the policy, in the request's order. */
+function entriesOfRequest(
+  mission: Pick<BudgetMission, 'policy'>,
+  request: Pick<RequestRecord, 'lines' | 'riskIds'>,
+): MissionPolicyEntry[] {
+  return requestLines(mission, request).flatMap((line) => {
+    const entry = entryOfLine(mission, line);
+    return entry ? [entry] : [];
+  });
+}
+
+/** The one line a claim is about. */
+function claimLineOf(
+  mission: Pick<BudgetMission, 'policy'>,
+  request: Pick<RequestRecord, 'lines' | 'riskIds' | 'riskId'>,
+): RequestLine | null {
+  return requestLines(mission, request).find((line) => line.riskId === request.riskId) ?? null;
+}
+
 function situationOf(
   mission: BudgetMission,
   missionState: MissionState['kind'],
   period: CurrentPeriod,
-  request: Pick<RequestRecord, 'riskId' | 'expiresAt'>,
-  consumed: ReadonlyMap<RiskId, number>,
+  request: Pick<RequestRecord, 'riskId' | 'riskIds' | 'lines' | 'expiresAt'>,
+  consumed: ReadonlyMap<PolicyLineKey, number>,
   now: Date,
 ): ClaimSituation {
   const { riskId } = request;
+  const line = claimLineOf(mission, request);
   return {
     now,
     mission_state: missionState,
     expires_at: mission.expires_at,
     period_end: period.end,
     risk_id: riskId,
-    quota: mission.policy.find((entry) => entry.risk_id === riskId)?.quota ?? null,
-    consumed: consumed.get(riskId) ?? 0,
+    quota: line ? (entryOfLine(mission, line)?.quota ?? null) : null,
+    consumed: line ? (consumed.get(policyLineKey(line.resourceSetId, line.riskId)) ?? 0) : 0,
     request_expires_at: request.expiresAt,
   };
 }
@@ -1110,15 +1182,18 @@ function approvalSituationOf(
   request: Pick<RequestRecord, 'riskIds' | 'expiresAt'> & { readonly tool: string },
   gateEvents: readonly EventRecord[],
   approvalValiditySeconds: number,
+  /** The request's lines (`requestLines`). */
+  lines: readonly RequestLine[],
 ): ApprovalSituation {
   const opened = openedGatesOf(gateEvents, period);
   return {
     mission_state: missionState,
     period_end: period.end,
-    risks: request.riskIds.map((riskId) => ({
-      risk_id: riskId,
-      gate: mission.policy.find((entry) => entry.risk_id === riskId)?.gate ?? null,
-      gate_open: opened.has(riskId),
+    risks: lines.map((line) => ({
+      risk_id: line.riskId,
+      resource_set_id: line.resourceSetId,
+      gate: entryOfLine(mission, line)?.gate ?? null,
+      gate_open: opened.has(policyLineKey(line.resourceSetId, line.riskId)),
     })),
     tool: request.tool,
     approval_valid_seconds: approvalValiditySeconds,
@@ -1180,13 +1255,15 @@ function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput):
       // `checkApprovalDecision` refused a mission whose period never ends.
       if (period.end === null) throw new InvariantError('a gate is opened until a period end');
       const span = { period_start: period.start, period_end: period.end };
-      // Every gate of the request that is still closed, one event each: an opening is
-      // read per risk (`openedGatesOf`), and `checkApprovalDecision` found at least one.
+      // Every gate of the request that is still closed, one event per line: an opening
+      // is read per line (`openedGatesOf`), and `checkApprovalDecision` found one at least.
+      const lines = closedGateLines(situation);
       const opened = closedGates(situation);
-      for (const openedRisk of opened) {
+      for (const line of lines) {
         const recorded = ctx.recordEvent({
           kind: 'gate-opened',
-          riskId: openedRisk,
+          riskId: line.risk_id,
+          resourceSetId: line.resource_set_id,
           actorUserId: user.id,
           details: { request_id: request.id, ...span },
         });
@@ -1233,17 +1310,22 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
   const problem = checkClaimDecision(situation, decision);
   if (problem) throw new ClaimProblemError(problem);
   const riskId = ctx.request.riskId;
+  // A claim is about one line (risk model §4.7): its risk in the set whose budget was spent.
+  const line = ctx.request.lines.find((l) => l.riskId === riskId);
+  if (!line) throw new InvariantError(`claim ${ctx.request.id} names no resource set`);
+  const resourceSetId = line.resourceSetId;
   const base = { request_id: ctx.request.id };
   const span = { period_start: period.start, period_end: period.end };
 
   switch (decision.resolution) {
     case 'reset-period': {
       // The claimed risk, and no other: a claim on one risk reopens nothing else.
-      const given = ctx.resetCounter(period.start, riskId);
+      const given = ctx.resetCounter(period.start, line);
       const credits: Record<RiskId, number> = given > 0 ? { [riskId]: given } : {};
       ctx.recordEvent({
         kind: 'reset',
         riskId,
+        resourceSetId,
         actorUserId: user.id,
         details: { ...base, ...span, credits },
       });
@@ -1256,7 +1338,7 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
       };
     }
     case 'extend-quota': {
-      if (!ctx.creditCounter(period.start, riskId, decision.amount)) {
+      if (!ctx.creditCounter(period.start, line, decision.amount)) {
         throw new ClaimProblemError({
           code: 'invalid-amount',
           message: `Fewer than ${decision.amount} actions were consumed on '${riskId}' in the current period.`,
@@ -1266,6 +1348,7 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
       ctx.recordEvent({
         kind: 'extension',
         riskId,
+        resourceSetId,
         actorUserId: user.id,
         details: { ...base, dimension: 'quota', amount: decision.amount, ...span, credits },
       });

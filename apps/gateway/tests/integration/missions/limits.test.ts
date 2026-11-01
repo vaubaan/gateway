@@ -119,7 +119,10 @@ describe('changing the limits of a mission after issuance', () => {
       refusal: { code: 'budget-exhausted', risk_id: READ, quota: 2, consumed: 3 },
     });
     const detail = await service().get(rig.seeded.ada, mission.id);
-    expect(detail?.state).toMatchObject({ kind: 'active', exhausted: [READ] });
+    expect(detail?.state).toMatchObject({
+      kind: 'active',
+      exhausted: [expect.stringMatching(new RegExp(`::${READ.replace('.', '\\.')}$`))],
+    });
     // The other risks of the mission keep working.
     expect((await call(await fresh(), PR)).outcome).toBe('allowed');
 
@@ -416,6 +419,7 @@ describe('changing the limits of a mission after issuance', () => {
         changed: [
           {
             risk_id: READ,
+            resource_set_id: expect.any(String) as string,
             before: { quota: 5, rate_limit: { max: 50, window_seconds: 60 } },
             after: { quota: 12, rate_limit: { max: 6, window_seconds: 60 } },
           },

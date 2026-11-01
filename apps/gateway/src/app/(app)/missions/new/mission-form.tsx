@@ -72,6 +72,7 @@ import {
   MISSION_ACTIONS,
   MISSION_WORDS,
   PAGES,
+  RESOURCE_SET_WORDS,
   ROUTES,
   shortDate,
   TERMS,
@@ -97,33 +98,43 @@ import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import styles from '../missions.module.css';
 import { CustomEditor } from './custom-editor';
 import {
+  addResourceSet,
   applyTrustLevels,
   applyEverything,
   discardsEdits,
   draftOf,
   EXPIRY_CHOICES,
   expiryOf,
+  initialConnectionState,
   initialFormState,
+  initialSetState,
   issueSentence,
   loadResolved,
   PERIOD_CHOICES,
   periodChoiceOf,
   periodOf,
+  removeResourceSet,
   resetEdits,
   RESOURCE_CHOICES,
   setIncluded,
   setMacroAction,
+  setOfResource,
   setResourceScope,
   setResources,
+  setsOffered,
   setView,
+  takesTheRest,
+  updateSet,
   type ConnectionState,
   type ExpiryChoice,
+  type ResourceChoice,
+  type SetState,
   type FormState,
   type PeriodChoice,
 } from './form-state';
 import { changeLines, editDraftOf, initialEditState, type EditSource } from './edit-state';
 import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
-import { MacroActionPanel } from './macro-action-panel';
+import { MacroActionPanel, SetPolicy } from './macro-action-panel';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 export interface InitialDraft {
@@ -173,25 +184,15 @@ function startState(
  * would throw away what they changed in the editor of one account.
  */
 type PendingDiscard =
-  | { readonly kind: 'reset'; readonly connectionId: string }
+  | { readonly kind: 'reset'; readonly connectionId: string; readonly setIndex: number }
   | {
       readonly kind: 'trust-level';
       readonly connectionId: string;
+      readonly setIndex: number;
       readonly actionId: string;
       readonly trustLevel: TrustLevel | null;
     }
-  | { readonly kind: 'everything'; readonly connectionId: string };
-
-const EMPTY: ConnectionState = {
-  included: false,
-  view: 'simple',
-  resourceScope: 'all',
-  resourceIds: [],
-  trustLevels: {},
-  everything: false,
-  entries: {},
-  edited: false,
-};
+  | { readonly kind: 'everything'; readonly connectionId: string; readonly setIndex: number };
 
 export function MissionForm({
   context,
@@ -242,7 +243,10 @@ export function MissionForm({
   const issues = serverIssues.length > 0 ? serverIssues : (judgement?.issues ?? preview.issues);
   const ready = judgement ? judgement.ok && changed : preview.ok;
   const permissionCount = judgement
-    ? judgement.after.connections.reduce((n, c) => n + c.policy.length, 0)
+    ? judgement.after.connections.reduce(
+        (n, c) => n + c.resource_sets.reduce((m, set) => m + set.policy.length, 0),
+        0,
+      )
     : preview.policy.length;
   const included: IncludedAccount[] = context.flatMap((connection) => {
     const cs = state.connections[connection.id];
@@ -276,38 +280,53 @@ export function MissionForm({
   function pickTrustLevel(
     connection: IssuanceConnection,
     cs: ConnectionState,
+    setIndex: number,
     actionId: string,
     trustLevel: TrustLevel | null,
   ) {
-    if (discardsEdits(cs)) {
-      setPending({ kind: 'trust-level', connectionId: connection.id, actionId, trustLevel });
+    const set = cs.sets[setIndex];
+    if (!set) return;
+    if (discardsEdits(set)) {
+      setPending({
+        kind: 'trust-level',
+        connectionId: connection.id,
+        setIndex,
+        actionId,
+        trustLevel,
+      });
       return;
     }
-    patchConnection(connection.id, setMacroAction(connection, cs, actionId, trustLevel));
+    patchConnection(
+      connection.id,
+      updateSet(connection, cs, setIndex, setMacroAction(connection, set, actionId, trustLevel)),
+    );
   }
-  function pickEverything(connection: IssuanceConnection, cs: ConnectionState) {
-    if (discardsEdits(cs)) {
-      setPending({ kind: 'everything', connectionId: connection.id });
+  function pickEverything(connection: IssuanceConnection, cs: ConnectionState, setIndex: number) {
+    const set = cs.sets[setIndex];
+    if (!set) return;
+    if (discardsEdits(set)) {
+      setPending({ kind: 'everything', connectionId: connection.id, setIndex });
       return;
     }
-    patchConnection(connection.id, applyEverything(connection, cs));
+    patchConnection(
+      connection.id,
+      updateSet(connection, cs, setIndex, applyEverything(connection, set)),
+    );
   }
   function confirmDiscard() {
     if (!pending) return;
     const connection = context.find((c) => c.id === pending.connectionId);
     const cs = connection ? state.connections[connection.id] : undefined;
+    const set = cs?.sets[pending.setIndex];
     setPending(null);
-    if (!connection || !cs) return;
-    if (pending.kind === 'reset') patchConnection(connection.id, resetEdits(connection, cs));
+    if (!connection || !cs || !set) return;
+    const apply = (next: typeof set) =>
+      patchConnection(connection.id, updateSet(connection, cs, pending.setIndex, next));
+    if (pending.kind === 'reset') apply(resetEdits(connection, set));
     if (pending.kind === 'trust-level') {
-      patchConnection(
-        connection.id,
-        setMacroAction(connection, cs, pending.actionId, pending.trustLevel),
-      );
+      apply(setMacroAction(connection, set, pending.actionId, pending.trustLevel));
     }
-    if (pending.kind === 'everything') {
-      patchConnection(connection.id, applyEverything(connection, cs));
-    }
+    if (pending.kind === 'everything') apply(applyEverything(connection, set));
   }
 
   async function create() {
@@ -604,23 +623,29 @@ export function MissionForm({
           <FormStep n={2} title="Accounts and permissions" hint={MISSION_WORDS.explicitList}>
             <div className={styles.accounts}>
               {context.map((connection) => {
-                const cs = state.connections[connection.id] ?? EMPTY;
+                const cs = state.connections[connection.id] ?? initialConnectionState(connection);
                 const name = `${connection.provider_label} ${connection.display_name}`;
+                const several = cs.sets.length > 1;
+                const first = cs.sets[0] ?? initialSetState(connection);
                 // "N of M": M is "all resources" (neither hidden nor stale) plus
                 // the hidden ones the person ticked on purpose.
                 const total =
                   defaultResources(connection).length +
-                  connection.resources.filter((r) => r.hidden && cs.resourceIds.includes(r.id))
+                  connection.resources.filter((r) => r.hidden && first.resourceIds.includes(r.id))
                     .length;
                 const listedCount = connection.resources.length;
-                const whole = cs.resourceScope === 'connection';
-                const selected = connection.resources.filter((r) => cs.resourceIds.includes(r.id));
+                const whole = first.resourceScope === 'connection';
+                const selected = connection.resources.filter((r) =>
+                  first.resourceIds.includes(r.id),
+                );
                 const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
                 // The expansion of "Everything I hold" is said by the macro-action panel, in its words.
                 const notices = preview.notices.filter(
                   (n) =>
                     n.connection_id === connection.id && n.code !== 'everything-i-hold-expanded',
                 );
+                const setPatch = (index: number, next: SetState) =>
+                  patchConnection(connection.id, updateSet(connection, cs, index, next));
                 return (
                   <div
                     key={connection.id}
@@ -649,6 +674,13 @@ export function MissionForm({
                       <span className={styles.accountResources}>
                         {!cs.included ? (
                           'not in this mission'
+                        ) : several ? (
+                          <span className={styles.resourceNames}>
+                            {count(cs.sets.length, {
+                              one: 'resource set',
+                              many: 'resource sets',
+                            })}
+                          </span>
                         ) : (
                           <>
                             <span className={styles.resourceNames}>
@@ -669,8 +701,8 @@ export function MissionForm({
                             {listedCount > 0 && (
                               <span className={styles.resourceCount}>
                                 {whole
-                                  ? `${cs.resourceIds.length} known now`
-                                  : `${cs.resourceIds.length} of ${total}`}
+                                  ? `${first.resourceIds.length} known now`
+                                  : `${first.resourceIds.length} of ${total}`}
                               </span>
                             )}
                             <Button
@@ -680,7 +712,7 @@ export function MissionForm({
                               aria-label={`${MISSION_ACTIONS.change} the resources of ${name}: ${
                                 whole
                                   ? MISSION_WORDS.wholeAccount
-                                  : `${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`
+                                  : `${first.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`
                               }`}
                               onClick={() => toggleResources(connection.id)}
                             >
@@ -691,7 +723,7 @@ export function MissionForm({
                       </span>
                     </div>
 
-                    {cs.included && openResources.has(connection.id) && (
+                    {cs.included && !several && openResources.has(connection.id) && (
                       <div className={styles.resourceScope} data-testid="resource-scope">
                         <ChoiceRow legend={`Resources of ${name} the mission reaches`}>
                           {RESOURCE_CHOICES.map((choice) => (
@@ -699,12 +731,9 @@ export function MissionForm({
                               key={choice.id}
                               name={`resource-scope-${connection.id}`}
                               value={choice.id}
-                              checked={cs.resourceScope === choice.id}
+                              checked={first.resourceScope === choice.id}
                               onChange={() =>
-                                patchConnection(
-                                  connection.id,
-                                  setResourceScope(connection, cs, choice.id),
-                                )
+                                setPatch(0, setResourceScope(connection, first, choice.id))
                               }
                               label={choice.label}
                               hint={choice.hint}
@@ -712,86 +741,116 @@ export function MissionForm({
                           ))}
                         </ChoiceRow>
                         <p className={styles.quietText}>
-                          {RESOURCE_CHOICES.find((c) => c.id === cs.resourceScope)?.explanation}
+                          {RESOURCE_CHOICES.find((c) => c.id === first.resourceScope)?.explanation}
                         </p>
                       </div>
                     )}
 
                     {cs.included &&
+                      !several &&
                       openResources.has(connection.id) &&
-                      cs.resourceScope !== 'connection' &&
+                      first.resourceScope !== 'connection' &&
                       listedCount > 0 && (
-                        <div
-                          className={styles.resources}
-                          role="group"
-                          aria-label={`Resources of ${name}`}
-                        >
-                          {connection.resources.map((r) => (
-                            <Checkbox
-                              key={r.id}
-                              checked={cs.resourceIds.includes(r.id)}
-                              // Discovery no longer returns it, or it hosts this
-                              // instance: never part of a new mission.
-                              disabled={r.stale || r.self}
-                              aria-label={`Resource ${r.ref}`}
-                              onChange={(e) =>
-                                patchConnection(
-                                  connection.id,
-                                  setResources(
-                                    connection,
-                                    cs,
-                                    e.target.checked
-                                      ? [...cs.resourceIds, r.id]
-                                      : cs.resourceIds.filter((id) => id !== r.id),
-                                  ),
-                                )
-                              }
-                            >
-                              <span className={styles.resource}>
-                                {r.display_name || r.ref}
-                                {r.display_name && r.display_name !== r.ref && (
-                                  <span className={styles.quietText}> {r.ref}</span>
-                                )}
-                                <EnvTag env={r.env} />
-                                {r.hidden && <Tag>hidden by its owner</Tag>}
-                                {r.stale && <Tag tone="warn">no longer found</Tag>}
-                                {r.self && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}
-                              </span>
-                            </Checkbox>
-                          ))}
-                        </div>
+                        <ResourcePicker
+                          connection={connection}
+                          state={cs}
+                          index={0}
+                          label={`Resources of ${name}`}
+                          onChange={(ids) => setPatch(0, setResources(connection, first, ids))}
+                        />
                       )}
 
                     {cs.included && (
                       <MacroActionPanel
                         connection={connection}
-                        state={cs}
+                        view={cs.view}
                         onView={(view) => patchConnection(connection.id, setView(cs, view))}
-                        onTrustLevel={(actionId, trustLevel) =>
-                          pickTrustLevel(connection, cs, actionId, trustLevel)
-                        }
-                        onEverything={() => pickEverything(connection, cs)}
-                        onLeaveEverything={() =>
-                          patchConnection(
-                            connection.id,
-                            applyTrustLevels(connection, { ...cs, trustLevels: {} }),
-                          )
-                        }
-                        advanced={
-                          <CustomEditor
-                            connection={connection}
-                            state={cs}
-                            planes={planes[connection.provider] ?? null}
-                            limitLabel={limitColumn(periodSeconds)}
-                            onChange={(next) => patchConnection(connection.id, next)}
-                            onReset={
-                              cs.edited && (cs.everything || Object.keys(cs.trustLevels).length > 0)
-                                ? () => setPending({ kind: 'reset', connectionId: connection.id })
-                                : null
+                      >
+                        {several && (
+                          <p className={styles.quietText} data-testid="resource-sets-explained">
+                            {RESOURCE_SET_WORDS.explanation}
+                          </p>
+                        )}
+                        {cs.sets.map((set, index) => (
+                          <div
+                            key={set.id ?? `new-${index}`}
+                            className={several ? styles.resourceSet : undefined}
+                            data-testid={
+                              several
+                                ? `resource-set-${connection.provider}-${index + 1}`
+                                : undefined
                             }
-                          />
-                        }
-                      />
+                          >
+                            {several && (
+                              <ResourceSetHead
+                                connection={connection}
+                                state={cs}
+                                index={index}
+                                onScope={(scope) =>
+                                  setPatch(index, setResourceScope(connection, set, scope))
+                                }
+                                onResources={(ids) =>
+                                  setPatch(index, setResources(connection, set, ids))
+                                }
+                                onRemove={() =>
+                                  patchConnection(
+                                    connection.id,
+                                    removeResourceSet(connection, cs, index),
+                                  )
+                                }
+                              />
+                            )}
+                            <SetPolicy
+                              connection={connection}
+                              state={set}
+                              view={cs.view}
+                              setIndex={index}
+                              onTrustLevel={(actionId, trustLevel) =>
+                                pickTrustLevel(connection, cs, index, actionId, trustLevel)
+                              }
+                              onEverything={() => pickEverything(connection, cs, index)}
+                              onLeaveEverything={() =>
+                                setPatch(
+                                  index,
+                                  applyTrustLevels(connection, { ...set, trustLevels: {} }),
+                                )
+                              }
+                              advanced={
+                                <CustomEditor
+                                  connection={connection}
+                                  state={set}
+                                  setIndex={index}
+                                  planes={planes[connection.provider] ?? null}
+                                  limitLabel={limitColumn(periodSeconds)}
+                                  onChange={(next) => setPatch(index, next)}
+                                  onReset={
+                                    set.edited &&
+                                    (set.everything || Object.keys(set.trustLevels).length > 0)
+                                      ? () =>
+                                          setPending({
+                                            kind: 'reset',
+                                            connectionId: connection.id,
+                                            setIndex: index,
+                                          })
+                                      : null
+                                  }
+                                />
+                              }
+                            />
+                          </div>
+                        ))}
+                        {setsOffered(connection) && (
+                          <button
+                            type="button"
+                            className={styles.addResourceSet}
+                            onClick={() =>
+                              patchConnection(connection.id, addResourceSet(connection, cs))
+                            }
+                          >
+                            {RESOURCE_SET_WORDS.add}
+                          </button>
+                        )}
+                      </MacroActionPanel>
                     )}
                     {cs.included &&
                       notices.map((n) => (
@@ -1114,4 +1173,138 @@ function refusalOf(answer: Extract<PostAnswer, { ok: false }>): string | null {
     return null;
   }
   return problemsOf(answer.body) ?? answer.message;
+}
+
+/** The resources of an account to tick for one set; one another set picks is held there. */
+function ResourcePicker({
+  connection,
+  state,
+  index,
+  label,
+  onChange,
+}: {
+  connection: IssuanceConnection;
+  state: ConnectionState;
+  /** The set the ticks are for. */
+  index: number;
+  label: string;
+  onChange: (resourceIds: readonly string[]) => void;
+}) {
+  const set = state.sets[index];
+  if (!set) return null;
+  return (
+    <div className={styles.resources} role="group" aria-label={label}>
+      {connection.resources.map((r) => {
+        const holder = setOfResource(state, r.id);
+        const elsewhere = holder !== null && holder !== index;
+        return (
+          <Checkbox
+            key={r.id}
+            checked={set.resourceIds.includes(r.id)}
+            // Discovery no longer returns it, or it hosts this instance: never part of
+            // a new mission. One another set holds is unticked there first.
+            disabled={r.stale || r.self || elsewhere}
+            aria-label={`Resource ${r.ref}`}
+            onChange={(e) =>
+              onChange(
+                e.target.checked
+                  ? [...set.resourceIds, r.id]
+                  : set.resourceIds.filter((id) => id !== r.id),
+              )
+            }
+          >
+            <span className={styles.resource}>
+              {r.display_name || r.ref}
+              {r.display_name && r.display_name !== r.ref && (
+                <span className={styles.quietText}> {r.ref}</span>
+              )}
+              <EnvTag env={r.env} />
+              {r.hidden && <Tag>hidden by its owner</Tag>}
+              {r.stale && <Tag tone="warn">no longer found</Tag>}
+              {r.self && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}
+              {elsewhere && holder !== null && <Tag>{RESOURCE_SET_WORDS.heldBy(holder + 1)}</Tag>}
+            </span>
+          </Checkbox>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The head of one resource set when an account has several (risk model §4.7): its
+ * title, its scope, its resources when it picks them, and its removal.
+ */
+function ResourceSetHead({
+  connection,
+  state,
+  index,
+  onScope,
+  onResources,
+  onRemove,
+}: {
+  connection: IssuanceConnection;
+  state: ConnectionState;
+  index: number;
+  onScope: (scope: ResourceChoice) => void;
+  onResources: (resourceIds: readonly string[]) => void;
+  onRemove: () => void;
+}) {
+  const set = state.sets[index];
+  if (!set) return null;
+  const title = RESOURCE_SET_WORDS.title(index + 1);
+  const name = `${connection.provider_label} ${connection.display_name}`;
+  const restTaken = state.sets.some((other, i) => i !== index && takesTheRest(other));
+  const reached = connection.resources.filter((r) => set.resourceIds.includes(r.id));
+  return (
+    <>
+      <div className={styles.resourceSetHead}>
+        <span className={styles.resourceSetTitle}>{title}</span>
+        <Select
+          className={styles.resourceSetScope}
+          value={set.resourceScope}
+          aria-label={`${RESOURCE_SET_WORDS.scope} of ${title} of ${name}`}
+          onChange={(e) => {
+            const scope = RESOURCE_CHOICES.find((c) => c.id === e.target.value);
+            if (scope) onScope(scope.id);
+          }}
+        >
+          {RESOURCE_CHOICES.map((choice) => (
+            <option
+              key={choice.id}
+              value={choice.id}
+              disabled={choice.id !== 'selected' && restTaken}
+              title={
+                choice.id !== 'selected' && restTaken ? RESOURCE_SET_WORDS.restTaken : undefined
+              }
+            >
+              {choice.label}
+            </option>
+          ))}
+        </Select>
+        <span className={styles.resourceNames}>
+          {reached.length === 0
+            ? 'No resource yet'
+            : listed(
+                reached.map((r) => r.display_name || r.ref),
+                3,
+              )}
+        </span>
+        <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
+          {RESOURCE_SET_WORDS.remove}
+        </Button>
+      </div>
+      {takesTheRest(set) ? (
+        <p className={styles.quietText}>{RESOURCE_SET_WORDS.rest}</p>
+      ) : (
+        <ResourcePicker
+          connection={connection}
+          state={state}
+          index={index}
+          label={`Resources of ${title} of ${name}`}
+          onChange={onResources}
+        />
+      )}
+    </>
+  );
 }

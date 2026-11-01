@@ -59,6 +59,8 @@ export interface BudgetExhaustedRefusal extends RefusalBase<'budget-exhausted'> 
   readonly period_end: string | null;
   /** Where the mission creator can reset or extend. */
   readonly claim_url: string;
+  /** The resource set whose budget is spent, when the connection has several (risk model §4.7). */
+  readonly resource_set?: string;
 }
 
 export interface ApprovalRequiredRefusal extends RefusalBase<'approval-required'> {
@@ -96,6 +98,8 @@ export interface RateLimitedRefusal extends RefusalBase<'rate-limited'> {
   readonly risk_id: RiskId;
   readonly limit: RateLimit;
   readonly retry_after_seconds: number;
+  /** The resource set whose rate limit is reached, when the connection has several. */
+  readonly resource_set?: string;
 }
 
 /** Statuses that make a connection unusable. An `unowned` connection (its
@@ -212,10 +216,13 @@ export const refuse = {
     consumed: number;
     period_end: string | null;
     claim_url: string;
+    /** "resource set 2", when the connection has several sets. */
+    resource_set?: string;
   }): BudgetExhaustedRefusal {
     const next = input.period_end
       ? `The quota reloads at ${input.period_end}.`
       : 'This mission has no next period; only a claim can reopen this risk.';
+    const where = input.resource_set ? ` in ${input.resource_set}` : '';
     return {
       code: 'budget-exhausted',
       risk_id: input.risk_id,
@@ -223,7 +230,8 @@ export const refuse = {
       consumed: input.consumed,
       period_end: input.period_end,
       claim_url: input.claim_url,
-      hint: `Budget exhausted for '${input.risk_id}': ${input.consumed}/${input.quota} actions used this period. ${next} A claim for the mission creator is open at ${input.claim_url}. ${HAND_TO_HUMAN}`,
+      ...(input.resource_set ? { resource_set: input.resource_set } : {}),
+      hint: `Budget exhausted for '${input.risk_id}'${where}: ${input.consumed}/${input.quota} actions used this period. ${next} A claim for the mission creator is open at ${input.claim_url}. ${HAND_TO_HUMAN}`,
     };
   },
 
@@ -287,13 +295,16 @@ export const refuse = {
     risk_id: RiskId;
     limit: RateLimit;
     retry_after_seconds: number;
+    /** "resource set 2", when the connection has several sets. */
+    resource_set?: string;
   }): RateLimitedRefusal {
     return {
       code: 'rate-limited',
       risk_id: input.risk_id,
       limit: { max: input.limit.max, window_seconds: input.limit.window_seconds },
       retry_after_seconds: input.retry_after_seconds,
-      hint: `Rate limit reached for '${input.risk_id}': ${input.limit.max} actions per ${input.limit.window_seconds}s. Wait ${input.retry_after_seconds}s before retrying. The quota is not consumed by this refusal.`,
+      ...(input.resource_set ? { resource_set: input.resource_set } : {}),
+      hint: `Rate limit reached for '${input.risk_id}'${input.resource_set ? ` in ${input.resource_set}` : ''}: ${input.limit.max} actions per ${input.limit.window_seconds}s. Wait ${input.retry_after_seconds}s before retrying. The quota is not consumed by this refusal.`,
     };
   },
 

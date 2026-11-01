@@ -46,6 +46,7 @@ import type {
   MissionConnection,
   MissionContext,
   MissionResource,
+  MissionResourceSet,
 } from '@vaubaan/gateway-core';
 
 import { periodOf, policyEntryOf } from '../budget';
@@ -58,7 +59,7 @@ import {
 } from '../connections/mapping';
 import type { LostPart } from '../authority';
 import type { Store } from '../store';
-import { reachedResources, reachesLaterResources } from '../store/mission-reach';
+import { reachedResourcesBySet, reachesLaterResources } from '../store/mission-reach';
 import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
 
 export type MissionContextStore = Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
@@ -104,6 +105,7 @@ export async function loadMissionContext(
 ): Promise<MissionContext> {
   const connections: MissionConnection[] = [];
   const resources: MissionResource[] = [];
+  const resourceSets: MissionResourceSet[] = [];
   const lostOn = new Map(lost.map((part) => [part.connectionId, part.cause] as const));
 
   for (const selection of mission.connections) {
@@ -131,10 +133,22 @@ export async function loadMissionContext(
           ? { lost: 'connection-revoked' as const }
           : {}),
     });
-    const reached = reachedResources(selection, discovered, (r) =>
+    const bySet = reachedResourcesBySet(selection, discovered, (r) =>
       isSelfResource(selfResources, connection.provider, r.ref),
     );
-    for (const record of reached) resources.push(missionResourceOf(connection, record));
+    for (const set of selection.resourceSets) {
+      const reached = bySet.get(set.id) ?? [];
+      resourceSets.push({
+        id: set.id,
+        connection_id: connection.id,
+        position: set.position,
+        resource_ids: reached.map((r) => r.id),
+      });
+    }
+    const reachedIds = new Set([...bySet.values()].flat().map((r) => r.id));
+    for (const record of discovered) {
+      if (reachedIds.has(record.id)) resources.push(missionResourceOf(connection, record));
+    }
   }
 
   const session = await store.sessions.getByMission(mission.id);
@@ -150,6 +164,7 @@ export async function loadMissionContext(
     token: { id: token.id, prefix: token.prefix, holder: token.holder },
     connections,
     resources,
+    resource_sets: resourceSets,
     policy: mission.policy.map(policyEntryOf),
     session: session ? { id: session.id, started_at: session.createdAt } : null,
   };

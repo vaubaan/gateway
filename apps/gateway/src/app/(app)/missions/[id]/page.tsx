@@ -62,6 +62,7 @@ import {
   MISSION_ACTIONS,
   MISSION_WORDS,
   periodWord,
+  RESOURCE_SET_WORDS,
   ROUTES,
   SECTIONS,
   TERMS,
@@ -200,16 +201,35 @@ export default async function MissionPage({ params, searchParams }: Props) {
   const missionPath = `${ROUTES.missions}/${mission.id}`;
   const limitGroups: LimitGroup[] = editingLimits
     ? detail.connections
-        .map((connection) => ({
-          key: connection.id,
-          title: `${connection.provider_label} · ${connection.display_name}`,
-          note: reachedOnAccount(
-            connection.resources.map((r) => r.display_name || r.ref),
-            connection.reaches_later,
-          ),
+        .flatMap((connection) => {
+          // One group per account; per resource set when it has several (risk model §4.7).
+          const several = connection.resource_sets.length > 1;
+          return (several ? connection.resource_sets : [null]).map((set) => ({ connection, set }));
+        })
+        .map(({ connection, set }) => ({
+          key: set ? `${connection.id}:${set.id}` : connection.id,
+          title: set
+            ? `${connection.provider_label} · ${connection.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
+            : `${connection.provider_label} · ${connection.display_name}`,
+          note: set
+            ? reachedOnAccount(
+                set.resources.map((r) => r.display_name || r.ref),
+                set.reaches_later,
+              )
+            : reachedOnAccount(
+                connection.resources.map((r) => r.display_name || r.ref),
+                connection.reaches_later,
+              ),
           rows: detail.policy
-            .filter((entry) => parseRiskId(entry.risk_id)?.provider === connection.provider)
+            .filter((entry) =>
+              set
+                ? entry.resource_set_id === set.id
+                : parseRiskId(entry.risk_id)?.provider === connection.provider,
+            )
             .map((entry) => ({
+              key: `${entry.resource_set_id ?? ''}:${entry.risk_id}`,
+              resource_set_id: entry.resource_set_id ?? '',
+              suffix: set && set.position > 1 ? `-set${set.position}` : '',
               risk_id: entry.risk_id,
               label: entry.label,
               level: entry.level ?? 'low',

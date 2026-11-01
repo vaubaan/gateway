@@ -12,9 +12,11 @@
  *   record    `ConnectionsRepo.upsertDiscoveredResources`: the row is inserted (it
  *             reads the connection's default environment) or its stale flag cleared,
  *             owner edits kept, no other row touched
- *   join      `MissionsRepo.addResources(…, 'created')`: added to the mission's
- *             selection when its scope on the connection is an explicit list; a
- *             no-op under scope `connection`, which reaches the row already
+ *   join      `MissionsRepo.addResources(…, 'created')`: added to the selection of
+ *             the resource set the call was judged against (the first set of the
+ *             connection when it was judged against several, risk model §4.7) when
+ *             that set's scope is an explicit list; a no-op under scope
+ *             `connection`, which reaches the row already
  *   audit     one `mission-resources-added` entry, cause `created-by-the-mission`,
  *             with the mission, the connection, the tool and the refs; the actor is
  *             the human behind the call's key
@@ -85,12 +87,16 @@ export class CreatedResources {
         connectionId,
         created,
       );
+      // The set the creating call was judged against; with several candidate sets, the
+      // first set of the connection (risk model §4.7), which the store also falls back on.
+      const judged = call.resourceSetIds ?? [];
       const joined = await this.deps.store.missions.addResources(
         ctx.mission.id,
         connectionId,
         rows.map((r) => r.id),
         'created',
         { tool: call.tool, actorUserId: callerUserId(ctx) },
+        judged.length === 1 ? judged[0] : undefined,
       );
       const refs = rows.map((r) => r.ref);
       await this.deps.audit.write({
@@ -105,6 +111,7 @@ export class CreatedResources {
           connection_id: connectionId,
           tool: call.tool,
           refs,
+          resource_set_id: joined.resourceSetId,
           resource_scope: joined.scope,
           added_to_selection: rows.filter((r) => joined.added.includes(r.id)).map((r) => r.ref),
         },

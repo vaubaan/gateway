@@ -79,7 +79,7 @@ describe('self resources: never reachable by a mission', () => {
     expect(listed.filter((r) => r.self).map((r) => r.ref)).toEqual([SELF]);
 
     const all = await instance.issue({ policy: [line('depot.read')] });
-    const stored = all.mission.connections[0]?.resourceIds ?? [];
+    const stored = all.mission.connections[0]?.resourceSets[0]?.resourceIds ?? [];
     const selfId = instance.resources.find((r) => r.ref === SELF)!.id;
     expect(stored).not.toContain(selfId);
     expect(stored).toHaveLength(2);

@@ -16,9 +16,15 @@ export {
 } from './period.ts';
 export { canonicalJson, fingerprintArguments } from './fingerprint.ts';
 export {
+  combineSetDecisions,
   decide,
   distinctRisks,
   type Allow,
+  type AllowAcrossSets,
+  type BudgetLine,
+  type BudgetOutcomeAcrossSets,
+  type RefuseAcrossSets,
+  type SetDecision,
   type ApprovalToConsume,
   type BudgetOutcome,
   type BudgetRefusalCode,
@@ -26,7 +32,13 @@ export {
   type RateProbe,
   type Refuse,
 } from './decide.ts';
-export { effectiveGate, GATE_EVENT_KINDS, openedGatesOf, type GateEventLike } from './gates.ts';
+export {
+  effectiveGate,
+  GATE_EVENT_KINDS,
+  openedGatesOf,
+  openedInSet,
+  type GateEventLike,
+} from './gates.ts';
 export {
   consumedInPeriod,
   deriveMissionState,
@@ -41,9 +53,12 @@ export {
   periodOf,
   policyEntryOf,
   policyEntryRecordOf,
+  policyLineInputOf,
+  resourceSetLabelOf,
   sessionCounterOf,
   statedPeriodOf,
   type BudgetMission,
+  type BudgetResourceSet,
   type StatedPeriod,
 } from './mapping.ts';
 export {

@@ -23,7 +23,14 @@
  * each other; each only calls the other's functions once the store is being built.
  */
 
-import { isMissionTokenKind, GATES, type Gate, type MissionTokenKind } from '@vaubaan/shared';
+import {
+  isMissionTokenKind,
+  GATES,
+  policyLineKey,
+  type Gate,
+  type MissionTokenKind,
+  type PolicyLineKey,
+} from '@vaubaan/shared';
 
 import { withImmediateTransaction } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
@@ -32,6 +39,7 @@ import type {
   EventRecord,
   Iso,
   UntypedNewEvent,
+  RequestLine,
   RequestRecord,
   RiskId,
   SessionCounterRecord,
@@ -55,27 +63,41 @@ import {
   type OpenRequestLookup,
 } from './requests.ts';
 
-export interface DecideInput {
+export type DecideInput = {
   readonly missionId: string;
-  /** Risks the call touches; the counters of exactly these are read and, on allow, incremented. */
-  readonly riskIds: readonly RiskId[];
   /** Start of the current period, computed by the caller from the mission's anchor and length. */
   readonly periodStart: Iso;
-}
+} & (
+  | {
+      /**
+       * The lines the call is charged on — each touched risk in each resource set the
+       * call was judged against (risk model §4.7); the counters of exactly these are read
+       * and, on allow, incremented.
+       */
+      readonly lines: readonly RequestLine[];
+    }
+  | {
+      /**
+       * Risks alone: each in every set of the mission that accepts it (`linesOfRisks`),
+       * exact for a mission with one set per connection.
+       */
+      readonly riskIds: readonly RiskId[];
+    }
+);
 
 /** What the `decide` callback sees and may do, all inside the open transaction. */
 export interface DecideContext {
   readonly session: SessionRecord;
-  /** Consumed count per requested risk in this period (0 when no row exists yet). */
-  readonly counters: ReadonlyMap<RiskId, number>;
+  /** Consumed count per requested line in this period (0 when no row exists yet). */
+  readonly counters: ReadonlyMap<PolicyLineKey, number>;
   /**
    * The limits of the requested risks as the mission's policy stores them NOW, read in
    * this transaction: a limit changed after the caller loaded the mission is the one
    * that decides (`MissionsRepo.setLimits` writes in a transaction of its own, so a
    * decision sees either the old values or the new ones, never a call above the new
-   * limit once it is committed). A risk absent from the policy has no entry.
+   * limit once it is committed). A line absent from the policy has no entry.
    */
-  readonly limits: ReadonlyMap<RiskId, StoredLimits>;
+  readonly limits: ReadonlyMap<PolicyLineKey, StoredLimits>;
   readonly now: Iso;
   /**
    * Non-consuming lookup of the usable approvals of the mission for one call (tool and
@@ -120,7 +142,7 @@ export interface RiskEventQuery {
 }
 
 export interface DecisionOutcome {
-  /** True increments every requested counter by one; false leaves them untouched. */
+  /** True increments every requested line's counter by one; false leaves them untouched. */
   readonly allow: boolean;
   /** Event written in the same transaction (e.g. `call-allowed`, `call-refused`). */
   readonly event?: UntypedNewEvent | null;
@@ -129,8 +151,8 @@ export interface DecisionOutcome {
 export interface DecideResult<R extends DecisionOutcome> {
   readonly outcome: R;
   readonly session: SessionRecord;
-  /** Counters after the transaction, for the requested risks. */
-  readonly counters: ReadonlyMap<RiskId, number>;
+  /** Counters after the transaction, for the requested lines. */
+  readonly counters: ReadonlyMap<PolicyLineKey, number>;
 }
 
 export interface SessionsRepo {
@@ -139,7 +161,7 @@ export interface SessionsRepo {
   getOrCreate(missionId: string): Promise<SessionRecord>;
   /**
    * Runs `decide` inside one `BEGIN IMMEDIATE` transaction with the current counters and,
-   * when it allows, increments the counters of every requested risk by one. The callback
+   * when it allows, increments the counters of every requested line by one. The callback
    * must be synchronous and side-effect free apart from the `DecideContext` methods.
    */
   decideAndDecrement<R extends DecisionOutcome>(
@@ -244,6 +266,7 @@ interface SessionRow {
 
 interface CounterRow {
   session_id: string;
+  resource_set_id: string;
   risk_id: string;
   period_start: string;
   consumed: number;
@@ -251,6 +274,7 @@ interface CounterRow {
 
 interface LimitsRow {
   gate: string;
+  resource_set_id: string;
   risk_id: string;
   quota: number;
   rate_limit: number;
@@ -263,13 +287,15 @@ interface EventRow {
   ts: string;
   kind: string;
   risk_id: string | null;
+  resource_set_id: string | null;
   actor_user_id: string | null;
   details_json: string | null;
 }
 
 const SESSION_COLUMNS = 'id, mission_id, created_at';
-const COUNTER_COLUMNS = 'session_id, risk_id, period_start, consumed';
-const EVENT_COLUMNS = 'id, session_id, ts, kind, risk_id, actor_user_id, details_json';
+const COUNTER_COLUMNS = 'session_id, resource_set_id, risk_id, period_start, consumed';
+const EVENT_COLUMNS =
+  'id, session_id, ts, kind, risk_id, resource_set_id, actor_user_id, details_json';
 /** `kind IN (…)` over the call kinds: constants of this file, never input. */
 const CALL_KINDS_SQL = CALL_EVENT_KINDS.map((kind) => `'${kind}'`).join(', ');
 
@@ -280,6 +306,7 @@ function sessionToRecord(row: SessionRow): SessionRecord {
 function counterToRecord(row: CounterRow): SessionCounterRecord {
   return {
     sessionId: row.session_id,
+    resourceSetId: row.resource_set_id,
     riskId: row.risk_id,
     periodStart: row.period_start,
     consumed: row.consumed,
@@ -293,6 +320,7 @@ function eventToRecord(row: EventRow): EventRecord {
     ts: row.ts,
     kind: row.kind,
     riskId: row.risk_id,
+    resourceSetId: row.resource_set_id,
     actorUserId: row.actor_user_id,
     details: parseJsonObject(row.details_json, 'events.details_json'),
   };
@@ -308,10 +336,10 @@ export interface SessionPrimitives {
   sessionOfMission(missionId: string): SessionRecord | null;
   /** Appends one event at `now` and returns the stored row. */
   recordEvent(sessionId: string, event: UntypedNewEvent, now: Iso): EventRecord;
-  /** Every counter of the session in the period starting at `periodStart`, by risk id. */
+  /** Every counter of the session in the period starting at `periodStart`, by line. */
   countersOfPeriod(sessionId: string, periodStart: Iso): SessionCounterRecord[];
-  /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
-  creditCounter(sessionId: string, periodStart: Iso, riskId: RiskId, amount: number): boolean;
+  /** Gives `amount` actions back on one line; false (nothing written) when fewer were consumed. */
+  creditCounter(sessionId: string, periodStart: Iso, line: RequestLine, amount: number): boolean;
   /** Events of the session of some kinds about some risks since an instant, oldest first. */
   riskEvents(sessionId: string, query: RiskEventQuery): EventRecord[];
 }
@@ -333,21 +361,23 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
       string | null,
       string | null,
       string | null,
+      string | null,
     ]
   >(
     `INSERT INTO events (${EVENT_COLUMNS}, agent_label, token_kind, token_holder)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const eventById = db.prepare<[string], EventRow>(
     `SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`,
   );
   const countersOfPeriod = db.prepare<[string, string], CounterRow>(
     `SELECT ${COUNTER_COLUMNS} FROM session_counters
-     WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
+     WHERE session_id = ? AND period_start = ? ORDER BY risk_id, resource_set_id`,
   );
-  const creditOne = db.prepare<[number, string, string, string, number]>(
+  const creditOne = db.prepare<[number, string, string, string, string, number]>(
     `UPDATE session_counters SET consumed = consumed - ?
-     WHERE session_id = ? AND period_start = ? AND risk_id = ? AND consumed >= ?`,
+     WHERE session_id = ? AND period_start = ? AND resource_set_id = ? AND risk_id = ?
+       AND consumed >= ?`,
   );
 
   return {
@@ -364,6 +394,7 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
         now,
         event.kind,
         event.riskId ?? null,
+        event.resourceSetId ?? null,
         event.actorUserId ?? null,
         toJson(event.details),
         agentLabelColumn(event),
@@ -375,8 +406,11 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     countersOfPeriod(sessionId, periodStart) {
       return countersOfPeriod.all(sessionId, periodStart).map(counterToRecord);
     },
-    creditCounter(sessionId, periodStart, riskId, amount) {
-      return creditOne.run(amount, sessionId, periodStart, riskId, amount).changes === 1;
+    creditCounter(sessionId, periodStart, line, amount) {
+      return (
+        creditOne.run(amount, sessionId, periodStart, line.resourceSetId, line.riskId, amount)
+          .changes === 1
+      );
     },
     riskEvents(sessionId, query) {
       if (query.kinds.length === 0 || query.riskIds.length === 0) return [];
@@ -401,13 +435,15 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     `INSERT INTO sessions (id, mission_id, created_at) VALUES (?, ?, ?)
      ON CONFLICT (mission_id) DO NOTHING`,
   );
-  const increment = db.prepare<[string, string, string]>(
-    `INSERT INTO session_counters (session_id, risk_id, period_start, consumed) VALUES (?, ?, ?, 1)
-     ON CONFLICT (session_id, risk_id, period_start) DO UPDATE SET consumed = session_counters.consumed + 1`,
+  const increment = db.prepare<[string, string, string, string]>(
+    `INSERT INTO session_counters (session_id, resource_set_id, risk_id, period_start, consumed)
+     VALUES (?, ?, ?, ?, 1)
+     ON CONFLICT (session_id, resource_set_id, risk_id, period_start)
+     DO UPDATE SET consumed = session_counters.consumed + 1`,
   );
   const countersAll = db.prepare<[string], CounterRow>(
     `SELECT ${COUNTER_COLUMNS} FROM session_counters
-     WHERE session_id = ? ORDER BY period_start, risk_id`,
+     WHERE session_id = ? ORDER BY period_start, risk_id, resource_set_id`,
   );
   const missionExists = db.prepare<[string], { one: number }>(
     'SELECT 1 AS one FROM missions WHERE id = ?',
@@ -461,12 +497,20 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     return requireRow(primitives.sessionOfMission(missionId) ?? undefined, 'session', missionId);
   }
 
+  /** The distinct risk ids of some lines, for an `IN (…)` list. */
+  function riskIdsOfLines(lines: readonly RequestLine[]): RiskId[] {
+    return [...new Set(lines.map((line) => line.riskId))];
+  }
+
   function readCounters(
     sessionId: string,
     periodStart: Iso,
-    riskIds: readonly RiskId[],
-  ): Map<RiskId, number> {
-    const result = new Map<RiskId, number>(riskIds.map((r) => [r, 0]));
+    lines: readonly RequestLine[],
+  ): Map<PolicyLineKey, number> {
+    const result = new Map<PolicyLineKey, number>(
+      lines.map((l) => [policyLineKey(l.resourceSetId, l.riskId), 0]),
+    );
+    const riskIds = riskIdsOfLines(lines);
     if (riskIds.length === 0) return result;
     const rows = db
       .prepare<string[], CounterRow>(
@@ -474,23 +518,34 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
          WHERE session_id = ? AND period_start = ? AND risk_id IN (${placeholders(riskIds.length)})`,
       )
       .all(sessionId, periodStart, ...riskIds);
-    for (const row of rows) result.set(row.risk_id, row.consumed);
+    for (const row of rows) {
+      const key = policyLineKey(row.resource_set_id, row.risk_id);
+      if (result.has(key)) result.set(key, row.consumed);
+    }
     return result;
   }
 
-  function readLimits(missionId: string, riskIds: readonly RiskId[]): Map<RiskId, StoredLimits> {
-    const result = new Map<RiskId, StoredLimits>();
+  function readLimits(
+    missionId: string,
+    lines: readonly RequestLine[],
+  ): Map<PolicyLineKey, StoredLimits> {
+    const result = new Map<PolicyLineKey, StoredLimits>();
+    const riskIds = riskIdsOfLines(lines);
     if (riskIds.length === 0) return result;
+    const wanted = new Set(lines.map((l) => policyLineKey(l.resourceSetId, l.riskId)));
     // A Postgres port reads these rows `FOR SHARE`, so that a limits update waits for
     // the decision (or the decision for the update) instead of interleaving.
     const rows = db
       .prepare<string[], LimitsRow>(
-        `SELECT risk_id, quota, rate_limit, rate_window_seconds, gate FROM mission_policy
+        `SELECT resource_set_id, risk_id, quota, rate_limit, rate_window_seconds, gate
+         FROM mission_policy
          WHERE mission_id = ? AND risk_id IN (${placeholders(riskIds.length)})`,
       )
       .all(missionId, ...riskIds);
     for (const row of rows) {
-      result.set(row.risk_id, {
+      const key = policyLineKey(row.resource_set_id, row.risk_id);
+      if (!wanted.has(key)) continue;
+      result.set(key, {
         gate: parseEnum(GATES, row.gate, 'mission_policy.gate'),
         quota: row.quota,
         rateLimit: row.rate_limit,
@@ -498,6 +553,27 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       });
     }
     return result;
+  }
+
+  const setsOfRisk = db.prepare<[string, string], { resource_set_id: string }>(
+    `SELECT p.resource_set_id FROM mission_policy p
+       JOIN mission_resource_sets s ON s.id = p.resource_set_id
+     WHERE p.mission_id = ? AND p.risk_id = ? ORDER BY s.connection_id, s.position`,
+  );
+  const firstSetOf = db.prepare<[string], { id: string }>(
+    'SELECT id FROM mission_resource_sets WHERE mission_id = ? ORDER BY connection_id, position LIMIT 1',
+  );
+
+  /** The lines of a decision: given, or each risk in every set that accepts it. */
+  function linesOfInput(input: DecideInput): RequestLine[] {
+    if ('lines' in input) return [...input.lines];
+    return [...new Set(input.riskIds)].flatMap((riskId): RequestLine[] => {
+      const sets = setsOfRisk.all(input.missionId, riskId).map((r) => r.resource_set_id);
+      // A risk no set accepts is counted in the mission's first set: the decision refuses it.
+      const fallback = sets.length === 0 ? firstSetOf.get(input.missionId)?.id : undefined;
+      const all = fallback !== undefined ? [fallback] : sets;
+      return all.map((resourceSetId) => ({ resourceSetId, riskId }));
+    });
   }
 
   function recentRows(sessionId: string, options: RecentEventsOptions): EventRow[] {
@@ -569,14 +645,20 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     },
     async decideAndDecrement(input, decide) {
       const now = nowIso(ctx);
-      const riskIds = [...new Set(input.riskIds)];
+      const seen = new Set<PolicyLineKey>();
+      const lines = linesOfInput(input).filter((line) => {
+        const key = policyLineKey(line.resourceSetId, line.riskId);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       return withImmediateTransaction(db, () => {
         const session = getOrCreateSync(input.missionId, now);
-        const counters = readCounters(session.id, input.periodStart, riskIds);
+        const counters = readCounters(session.id, input.periodStart, lines);
         const context: DecideContext = {
           session,
           counters,
-          limits: readLimits(input.missionId, riskIds),
+          limits: readLimits(input.missionId, lines),
           now,
           findApprovals: (call) => findApprovalsSync(ctx, input.missionId, call, now),
           consumeApproval: (id) => consumeApprovalSync(ctx, input.missionId, id, now),
@@ -592,13 +674,15 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
         };
         const outcome = decide(context);
         if (outcome.allow) {
-          for (const riskId of riskIds) increment.run(session.id, riskId, input.periodStart);
+          for (const line of lines) {
+            increment.run(session.id, line.resourceSetId, line.riskId, input.periodStart);
+          }
         }
         if (outcome.event) primitives.recordEvent(session.id, outcome.event, now);
         return {
           outcome,
           session,
-          counters: readCounters(session.id, input.periodStart, riskIds),
+          counters: readCounters(session.id, input.periodStart, lines),
         };
       });
     },

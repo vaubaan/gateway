@@ -42,9 +42,22 @@ export interface AcceptedRisksSnapshot {
 }
 
 /** Verdict returned by `evaluateCallForMission`. */
+/** What the verdict of a call judged against resource sets adds (risk model §4.7). */
+interface ResourceSetsJudged {
+  /** The candidate sets the call was judged against, in position order. Absent: no set. */
+  resource_set_ids?: readonly string[];
+  /** The risks every candidate set accepts: what the call was judged against, for the
+   *  audit's accepted snapshot. Absent: the mission's whole accepted list. */
+  accepted_risks?: readonly RiskId[];
+}
+
 export type CallVerdict =
-  | { kind: 'allow'; risks_touched: readonly RiskId[]; executed_slices: readonly Slice[] }
-  | {
+  | ({
+      kind: 'allow';
+      risks_touched: readonly RiskId[];
+      executed_slices: readonly Slice[];
+    } & ResourceSetsJudged)
+  | ({
       kind: 'deny';
       /** The structured refusal code carried by the engine's decision. */
       code: Extract<RefusalCode, 'risk-not-accepted'>;
@@ -54,7 +67,9 @@ export type CallVerdict =
       risks_touched: readonly RiskId[];
       executed_slices: readonly Slice[];
       hint: string;
-    }
+      /** The missing risks per candidate set, when the call was judged against several. */
+      missing_by_set?: readonly { resource_set_id: string; missing_risks: readonly RiskId[] }[];
+    } & ResourceSetsJudged)
   | { kind: 'classify-denied'; reason: string }
   | { kind: 'no-catalog'; provider: string };
 
@@ -125,4 +140,177 @@ export function evaluateCallForMission(input: {
     executed_slices: classified.slices,
     hint: decision.hint,
   };
+}
+
+/** One resource set of the connection a call targets, with what it accepts. */
+export interface ResourceSetToJudge {
+  readonly id: string;
+  /** Its place among the sets of the connection, from 1. */
+  readonly position: number;
+  /** The refs of the mission resources it holds. */
+  readonly refs: readonly string[];
+  /** The risks its lines accept. */
+  readonly accepted_risks: readonly RiskId[];
+}
+
+/**
+ * The candidate sets of a call (risk model §4.7): the set of the resource each slice
+ * names — the first identifier of the slice equal to a mission resource's ref, the rule
+ * of §6 step 2 — and, for a slice that names none, every set of the connection. What
+ * cannot be placed in one set never gets one set's rights alone. Position order.
+ */
+export function candidateResourceSets<S extends Pick<ResourceSetToJudge, 'id' | 'refs'>>(
+  slices: readonly Slice[],
+  sets: readonly S[],
+): S[] {
+  const setOfRef = new Map<string, S>();
+  for (const set of sets) for (const ref of set.refs) setOfRef.set(ref, set);
+  const chosen = new Set<S>();
+  for (const slice of slices) {
+    const named = firstNamedSet(slice, setOfRef);
+    if (named === null) return [...sets];
+    chosen.add(named);
+  }
+  return sets.filter((set) => chosen.has(set));
+}
+
+function firstNamedSet<S>(slice: Slice, setOfRef: ReadonlyMap<string, S>): S | null {
+  for (const segment of slice.path) {
+    const values =
+      segment.kind === 'ident' ? [segment.value] : segment.kind === 'list' ? segment.values : [];
+    for (const value of values) {
+      const set = setOfRef.get(value);
+      if (set !== undefined) return set;
+    }
+  }
+  return null;
+}
+
+/** "resource set 2", or "resource sets 1 and 2". */
+export function resourceSetsLabel(sets: readonly Pick<ResourceSetToJudge, 'position'>[]): string {
+  const positions = sets.map((set) => String(set.position));
+  if (positions.length === 1) return `resource set ${positions[0]}`;
+  const last = positions.pop();
+  return `resource sets ${positions.join(', ')} and ${last}`;
+}
+
+/**
+ * Pure, like `evaluateCallForMission`, for a connection whose mission part holds
+ * resource sets (risk model §4.7): the call is classified once, its candidate sets
+ * found from the slices, and the risk step (`evaluateCall`, unchanged) runs once per
+ * candidate set against that set's accepted risks. Every touched risk must be accepted
+ * in every candidate set; the missing ones are the union. Environment resolution reads
+ * the resources of the whole connection: the set chooses only the policy. When the
+ * connection has several sets, a refusal's hint names the sets it was judged against.
+ */
+export function evaluateCallForResourceSets(input: {
+  tool: string;
+  args: Readonly<Record<string, unknown>>;
+  /** Every mission resource of the connection, all sets together. */
+  resources: readonly Resource[];
+  connection?: ClassifyConnection;
+  /** The sets of the connection, in position order; never empty. */
+  sets: readonly ResourceSetToJudge[];
+  adapter: Classifier;
+  catalog: IndexedRiskCatalog | undefined;
+  envResolver?: EnvResolver | typeof UNQUALIFIED;
+}): CallVerdict {
+  const { tool, args, resources, sets, adapter, catalog } = input;
+  if (!catalog) return { kind: 'no-catalog', provider: 'unknown' };
+  const classified: ClassifyOutcome = adapter.classify(tool, args, resources, input.connection);
+  if ('denied' in classified) return { kind: 'classify-denied', reason: classified.denied };
+
+  const slices = classified.slices;
+  const candidates = candidateResourceSets(slices, sets);
+  const envResolver = input.envResolver ?? envResolverFor(resources, adapter.envOf?.bind(adapter));
+  const decisions = candidates.map((set) => ({
+    set,
+    decision: evaluateCall({
+      executed_slices: slices,
+      accepted_risks: new Set(set.accepted_risks),
+      catalog,
+      envResolver,
+    }),
+  }));
+  const resource_set_ids = candidates.map((set) => set.id);
+  const accepted_risks = intersection(candidates.map((set) => set.accepted_risks));
+
+  const refused = decisions.flatMap(({ set, decision }) =>
+    decision.outcome === 'denied' ? [{ set, decision }] : [],
+  );
+  const [first] = decisions;
+  if (refused.length === 0 && first && first.decision.outcome === 'allowed') {
+    return {
+      kind: 'allow',
+      risks_touched: first.decision.risks_touched,
+      executed_slices: slices,
+      resource_set_ids,
+      accepted_risks,
+    };
+  }
+  const [firstRefusal] = refused;
+  if (!firstRefusal || firstRefusal.decision.outcome !== 'denied') {
+    // No candidate set: a connection without sets accepts nothing.
+    return {
+      kind: 'deny',
+      code: 'risk-not-accepted',
+      missing_risks: [],
+      risks_touched: [],
+      executed_slices: slices,
+      hint: 'this mission holds no resource set on this connection: it accepts nothing there.',
+      resource_set_ids,
+      accepted_risks,
+    };
+  }
+  const missing: RiskId[] = [];
+  const touched: RiskId[] = [];
+  for (const { decision } of refused) {
+    if (decision.outcome !== 'denied') continue;
+    for (const r of decision.missing_risks) if (!missing.includes(r)) missing.push(r);
+  }
+  for (const { decision } of decisions) {
+    const all =
+      decision.outcome === 'allowed'
+        ? decision.risks_touched
+        : [...decision.covered_risks, ...decision.missing_risks];
+    for (const r of all) if (!touched.includes(r)) touched.push(r);
+  }
+  const several = sets.length > 1;
+  const hintOf = (decision: (typeof refused)[number]['decision']): string =>
+    decision.outcome === 'denied' ? decision.hint : '';
+  const hint = !several
+    ? firstRefusal.decision.hint
+    : candidates.length === 1
+      ? `In ${resourceSetsLabel(candidates)} of this account, ${hintOf(firstRefusal.decision)}`
+      : `This call cannot be placed in one resource set of this account, so it is judged against ${resourceSetsLabel(
+          candidates,
+        )}: every risk it touches must be accepted in each. ${refused
+          .map(({ set, decision }) => `In ${resourceSetsLabel([set])}: ${hintOf(decision)}`)
+          .join(' ')}`;
+  return {
+    kind: 'deny',
+    code: firstRefusal.decision.code,
+    missing_risks: missing,
+    risks_touched: touched,
+    executed_slices: slices,
+    hint,
+    resource_set_ids,
+    accepted_risks,
+    ...(several
+      ? {
+          missing_by_set: refused.map(({ set, decision }) => ({
+            resource_set_id: set.id,
+            missing_risks: decision.outcome === 'denied' ? decision.missing_risks : [],
+          })),
+        }
+      : {}),
+  };
+}
+
+/** The risks every list holds, in the order of the first. */
+function intersection(lists: readonly (readonly RiskId[])[]): RiskId[] {
+  const [first, ...rest] = lists;
+  if (!first) return [];
+  const others = rest.map((list) => new Set(list));
+  return [...new Set(first)].filter((r) => others.every((other) => other.has(r)));
 }

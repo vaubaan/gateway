@@ -26,11 +26,14 @@ import type { TokenHolder } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import {
   isGate,
+  lineKeyOf,
   parseRiskId,
+  policyLineKey,
   type Gate,
   type Iso8601,
   type MacroAction,
   type MissionPolicyEntry,
+  type PolicyLineKey,
   type RateLimit,
   type RiskId,
   type SessionEventDetails,
@@ -55,6 +58,7 @@ import {
   openedGatesOf,
   policyEntryOf,
   policyEntryRecordOf,
+  policyLineInputOf,
   statedPeriodOf,
   type CurrentPeriod,
   type MissionState,
@@ -67,14 +71,18 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { TokenNotIssuableError } from '../store/errors';
 import { isOnMission, membershipOf, type Membership } from '../store/membership';
-import { reachedResources, reachesLaterResources } from '../store/mission-reach';
+import { reachedResourcesBySet, reachesLaterResources } from '../store/mission-reach';
 import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
+  MissionConnectionInput,
   MissionConnectionRecord,
   MissionRecord,
+  MissionResourceSetInput,
+  MissionResourceSetRecord,
   MissionTokenRecord,
+  RequestLine,
   ResourceScope,
   UserRecord,
 } from '../store/types';
@@ -86,15 +94,12 @@ import {
 } from './bootstrap-kit';
 import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
-import {
-  knownTrustLevels,
-  macroActionsOf,
-  type MacroActionTrustLevels,
-} from '../../lib/missions/macro-actions';
+import { macroActionsOf } from '../../lib/missions/macro-actions';
 import type {
   CatalogRisk,
   DraftConnection,
   DraftPeriod,
+  DraftResourceSet,
   IssuanceConnection,
   IssuanceResource,
   MissionDraft,
@@ -103,6 +108,7 @@ import type {
   PreviewIssue,
   PreviewNotice,
   ResolvedDraftConnection,
+  ResolvedDraftSet,
   SeverityLevel,
 } from '../../lib/missions/model';
 import { parseMissionDraft } from './draft-schema';
@@ -311,18 +317,21 @@ export type SetGateResult =
       readonly state: 'revoked' | 'orphaned';
     };
 
-/** The new limits of one accepted risk, as the creator asks for them. */
+/** The new limits of one accepted line, as the creator asks for them. */
 export interface LimitEdit {
   readonly risk_id: RiskId;
+  /** The set of the line; absent when exactly one set of the mission accepts the risk. */
+  readonly resource_set_id?: string;
   /** Actions per period. */
   readonly quota: number;
   /** Calls per rate window; the window is the one the mission was issued with. */
   readonly rate_limit_max: number;
 }
 
-/** One risk whose limits moved, before and after. */
+/** One line whose limits moved, before and after. */
 export interface LimitChangeView {
   readonly risk_id: RiskId;
+  readonly resource_set_id: string;
   readonly before: { readonly quota: number; readonly rate_limit: RateLimit };
   readonly after: { readonly quota: number; readonly rate_limit: RateLimit };
 }
@@ -362,8 +371,8 @@ export interface MissionEditView {
   readonly revision: string;
   /** Why the mission cannot be edited now; `null` when it can. */
   readonly blocked: 'revoked' | 'orphaned' | null;
-  /** Calls used in the current period, per risk: what a lowered limit is compared with. */
-  readonly used: Readonly<Record<RiskId, number>>;
+  /** Calls used in the current period, per line (`lineKeyOf`): what a lowered limit is compared with. */
+  readonly used: Readonly<Record<PolicyLineKey, number>>;
   /** Open claims and approval requests, with the risks they are about. */
   readonly open_requests: readonly {
     readonly id: string;
@@ -444,8 +453,12 @@ function revisionOfRecord(mission: MissionRecord): string {
     period: statedPeriodOf(mission),
     connections: mission.connections.map((c) => ({
       connection_id: c.connectionId,
-      resource_scope: c.resourceScope,
-      resource_ids: c.resourceIds,
+      resource_sets: c.resourceSets.map((set) => ({
+        id: set.id,
+        position: set.position,
+        resource_scope: set.resourceScope,
+        resource_ids: set.resourceIds,
+      })),
     })),
     policy: mission.policy.map(policyEntryOf),
   });
@@ -539,6 +552,19 @@ export interface MissionOverview {
   readonly issued_via: MissionIssuer | null;
 }
 
+/** One resource set of a connection of a mission, as its page reads it (risk model §4.7). */
+export interface MissionDetailSet {
+  readonly id: string;
+  /** From 1: "Resource set 2". */
+  readonly position: number;
+  /** What the set reaches now. */
+  readonly resources: readonly IssuanceResource[];
+  /** The set reaches the resources no other set selects, later ones included. */
+  readonly reaches_later: boolean;
+  /** The trust levels the set was composed from; absent when none was recorded. */
+  readonly trust_levels?: Readonly<Record<string, string>>;
+}
+
 export interface MissionDetailConnection {
   readonly id: string;
   readonly provider: string;
@@ -549,6 +575,8 @@ export interface MissionDetailConnection {
   readonly resources: readonly IssuanceResource[];
   /** Issued on the whole connection: resources discovered later are reached too. */
   readonly reaches_later: boolean;
+  /** Its resource sets, in order; one for a connection given without sets. */
+  readonly resource_sets: readonly MissionDetailSet[];
   /** Why this connection no longer serves the mission; `null` while it serves. */
   readonly lost: PartLossCause | null;
   /**
@@ -604,8 +632,10 @@ function createdIdsOf(
   selection: MissionConnectionRecord,
   reached: readonly Pick<ConnectionResourceRecord, 'id'>[],
 ): { readonly created_resource_ids?: readonly string[] } {
-  const sources = selection.resourceSources ?? {};
-  const ids = reached.filter((r) => sources[r.id] === 'created').map((r) => r.id);
+  const sources = new Map(
+    selection.resourceSets.flatMap((set) => Object.entries(set.resourceSources ?? {})),
+  );
+  const ids = reached.filter((r) => sources.get(r.id) === 'created').map((r) => r.id);
   return ids.length > 0 ? { created_resource_ids: ids } : {};
 }
 
@@ -622,46 +652,41 @@ function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): Issuanc
 }
 
 /**
- * What a mission stores per connection. A whole-connection selection is stored
+ * What a mission stores per resource set. A whole-connection selection is stored
  * as scope `connection` with no id: what it reaches is read when the mission is
  * read (`reachedResources`). Every other selection is an explicit list of ids;
- * a connection on which nothing resolved (no resource known, or every resource
- * hidden) stores scope `all` with an empty list, because the store requires a
- * non-empty list for `selected`. Readers treat that row as "none".
+ * a set on which nothing resolved (no resource known, or every resource hidden)
+ * stores scope `all` with an empty list, because the store requires a non-empty
+ * list for `selected`. Readers treat that row as "none".
  */
-function selectionRecordOf(resolved: ResolvedDraftConnection): MissionConnectionRecord {
+function setInputOf(resolved: ResolvedDraftSet): MissionResourceSetInput {
   const trustLevels =
     Object.keys(resolved.trust_levels).length > 0 ? { trustLevels: resolved.trust_levels } : {};
+  const policy = resolved.policy.map(policyLineInputOf);
   if (resolved.resources.scope === 'connection') {
-    return {
-      connectionId: resolved.connection_id,
-      resourceScope: 'connection',
-      resourceIds: [],
-      ...trustLevels,
-    };
+    return { resourceScope: 'connection', resourceIds: [], ...trustLevels, policy };
   }
   const resourceIds = resolved.resources.resource_ids;
   return {
-    connectionId: resolved.connection_id,
     resourceScope: resourceIds.length > 0 ? 'selected' : 'all',
     resourceIds,
     ...trustLevels,
+    policy,
   };
 }
 
-/** The trust levels an edited draft records per connection, kept to the macro-actions each connection has. */
-function trustLevelsOfDraft(
-  context: readonly IssuanceConnection[],
-  draft: MissionDraft,
-): Map<string, MacroActionTrustLevels> {
-  const trustLevels = new Map<string, MacroActionTrustLevels>();
-  for (const line of draft.connections) {
-    const connection = context.find(
-      (c) => c.id === line.connection_id || (!line.connection_id && c.provider === line.provider),
-    );
-    if (connection) trustLevels.set(connection.id, knownTrustLevels(connection, line.trust_levels));
-  }
-  return trustLevels;
+/** What a mission stores per connection: its sets, each with its lines. */
+function connectionInputOf(resolved: ResolvedDraftConnection): MissionConnectionInput {
+  return {
+    connectionId: resolved.connection_id,
+    resourceSets: resolved.resource_sets.map(setInputOf),
+  };
+}
+
+/** One connection's reach as one scope, every set together (the audit's and the door's word). */
+function aggregateScopeOf(c: MissionConnectionRecord): ResourceScope {
+  if (reachesLaterResources(c)) return 'connection';
+  return c.resourceSets.some((set) => set.resourceIds.length > 0) ? 'selected' : 'all';
 }
 
 /**
@@ -674,10 +699,19 @@ export interface MissionIssuedAudit {
   readonly name: string;
   readonly connections: readonly {
     readonly connection_id: string;
-    /** `connection`: the whole connection, later resources included; `resource_ids` empty. */
+    /** `connection`: a set reaches the whole connection, later resources included. */
     readonly resource_scope: ResourceScope;
+    /** Every set's explicit ids together. */
     readonly resource_ids: readonly string[];
+    /** The resource sets of the connection (risk model §4.7). */
+    readonly resource_sets: readonly {
+      readonly resource_set_id: string;
+      readonly position: number;
+      readonly resource_scope: ResourceScope;
+      readonly resource_ids: readonly string[];
+    }[];
   }[];
+  /** Every line, naming its set (`resource_set_id`). */
   readonly policy: readonly MissionPolicyEntry[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
@@ -689,8 +723,14 @@ function issuedAuditOf(mission: MissionRecord, tokenPrefix: string): MissionIssu
     name: mission.name,
     connections: mission.connections.map((c) => ({
       connection_id: c.connectionId,
-      resource_scope: c.resourceScope,
-      resource_ids: [...c.resourceIds],
+      resource_scope: aggregateScopeOf(c),
+      resource_ids: c.resourceSets.flatMap((set) => [...set.resourceIds]),
+      resource_sets: c.resourceSets.map((set) => ({
+        resource_set_id: set.id,
+        position: set.position,
+        resource_scope: set.resourceScope,
+        resource_ids: [...set.resourceIds],
+      })),
     })),
     policy: mission.policy.map(policyEntryOf),
     period: statedPeriodOf(mission),
@@ -810,8 +850,7 @@ export class MissionService {
       periodSeconds: draft.period.kind === 'recurring' ? draft.period.length_seconds : null,
       expiresAt: draft.expires_at === null ? null : new Date(draft.expires_at).toISOString(),
       delegationId: options.delegation?.id ?? null,
-      connections: preview.resolved.map(selectionRecordOf),
-      policy: preview.policy.map(policyEntryRecordOf),
+      connections: preview.resolved.map(connectionInputOf),
     });
     // The creator is a member by construction: the mission is born with their own token.
     const token = await this.issueCreatorToken(mission);
@@ -860,22 +899,35 @@ export class MissionService {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return null;
     const connections: DraftConnection[] = [];
+    const policy = mission.policy.map(policyEntryOf);
     for (const c of mission.connections) {
       const connection = await this.deps.store.connections.getById(c.connectionId);
       if (!connection) continue;
       const provider = connection.provider;
-      connections.push({
-        connection_id: c.connectionId,
-        resources:
-          c.resourceScope === 'selected'
-            ? { scope: 'selected', resource_ids: await this.survivingResources(c, provider) }
-            : { scope: c.resourceScope },
-        everything_i_hold: false,
-        policy: mission.policy
-          .map(policyEntryOf)
-          .filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
-        ...(c.trustLevels ? { trust_levels: c.trustLevels } : {}),
-      });
+      const sets: DraftResourceSet[] = [];
+      for (const set of c.resourceSets) {
+        sets.push({
+          resources:
+            set.resourceScope === 'selected'
+              ? {
+                  scope: 'selected',
+                  resource_ids: await this.survivingResources(c.connectionId, set, provider),
+                }
+              : { scope: set.resourceScope },
+          everything_i_hold: false,
+          policy: policy
+            .filter((entry) => entry.resource_set_id === set.id)
+            .map(({ resource_set_id: _set, ...line }) => line),
+          ...(set.trustLevels ? { trust_levels: set.trustLevels } : {}),
+        });
+      }
+      const [only] = sets;
+      // A connection with one set is drafted as before sets existed.
+      connections.push(
+        sets.length === 1 && only
+          ? { connection_id: c.connectionId, ...only }
+          : { connection_id: c.connectionId, resource_sets: sets },
+      );
     }
     return {
       name: `${mission.name}${COPY_SUFFIX}`,
@@ -886,16 +938,17 @@ export class MissionService {
   }
 
   private async survivingResources(
-    c: MissionConnectionRecord,
+    connectionId: string,
+    set: MissionResourceSetRecord,
     provider: string,
   ): Promise<string[]> {
-    const current = await this.deps.store.connections.listResources(c.connectionId);
+    const current = await this.deps.store.connections.listResources(connectionId);
     // A stale resource would refuse the copy: it is dropped like a vanished one.
     // So is one of the instance's own resources, which no mission may reach.
     const known = new Set(
       current.filter((r) => !isStale(r) && !this.isSelf(provider, r)).map((r) => r.id),
     );
-    return c.resourceIds.filter((id) => known.has(id));
+    return set.resourceIds.filter((id) => known.has(id));
   }
 
   /** True when the resource is one of this instance's own (`selfResources`). */
@@ -1057,7 +1110,7 @@ export class MissionService {
         expires_at: mission.expiresAt,
         orphan_cause: orphan?.cause ?? null,
         part_lost: lost.find((part) => part.connectionId === connectionId)?.cause ?? null,
-        resource_ids: selection?.resourceIds ?? [],
+        resource_ids: selection?.resourceSets.flatMap((set) => [...set.resourceIds]) ?? [],
         reaches_later: selection ? reachesLaterResources(selection) : false,
         permissions: accepted.length,
         asks_first: accepted.filter((entry) => entry.gate === 'approval').length,
@@ -1167,6 +1220,8 @@ export class MissionService {
     missionId: string,
     riskId: RiskId,
     gate: string,
+    /** The set of the line; absent when exactly one set of the mission accepts the risk. */
+    resourceSetId?: string,
   ): Promise<SetGateResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
@@ -1183,9 +1238,14 @@ export class MissionService {
     // granted between them is missed. Not reachable while every store call is
     // synchronous in one process; with a second process, decide inside
     // `MissionsRepo.setGate`'s transaction (it owns the session's events).
+    const line = lineOfRisk(mission, riskId, resourceSetId);
+    if (!line) return { ok: false, reason: 'risk-not-in-policy' };
     const openNow =
-      gate === 'approval' && (await this.openGatesIn(mission, this.periodNow(mission))).has(riskId);
-    const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id, {
+      gate === 'approval' &&
+      (await this.openGatesIn(mission, this.periodNow(mission))).has(
+        policyLineKey(line.resourceSetId, riskId),
+      );
+    const changed = await this.deps.store.missions.setGate(mission.id, line, gate, user.id, {
       closeOpening: openNow,
     });
     if (!changed) return { ok: false, reason: 'risk-not-in-policy' };
@@ -1199,10 +1259,16 @@ export class MissionService {
         object: { type: 'mission', id: mission.id },
         before: {
           risk_id: riskId,
+          resource_set_id: line.resourceSetId,
           gate: previous,
           ...(openingClosed ? { open_for_period: true } : {}),
         },
-        after: { risk_id: riskId, gate, ...(openingClosed ? { open_for_period: false } : {}) },
+        after: {
+          risk_id: riskId,
+          resource_set_id: line.resourceSetId,
+          gate,
+          ...(openingClosed ? { open_for_period: false } : {}),
+        },
         delegated_client_id: null,
       });
       this.deps.logger.info('mission gate changed', {
@@ -1257,7 +1323,15 @@ export class MissionService {
       return { ok: false, reason: 'invalid-limits', problem: 'No permission is listed.' };
     }
     const ids = edits.map((edit) => edit.risk_id);
-    const twice = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+    const placed = edits.map((edit) => lineOfRisk(mission, edit.risk_id, edit.resource_set_id));
+    const outside = edits.filter((_, i) => placed[i] === null).map((edit) => edit.risk_id);
+    if (outside.length > 0) return { ok: false, reason: 'risk-not-in-policy', risk_ids: outside };
+    const keys = placed.map((line) =>
+      line ? policyLineKey(line.resourceSetId, line.riskId) : null,
+    );
+    const twice = [
+      ...new Set(edits.filter((_, i) => keys.indexOf(keys[i] ?? null) !== i).map((e) => e.risk_id)),
+    ];
     if (twice.length > 0) {
       return {
         ok: false,
@@ -1265,30 +1339,35 @@ export class MissionService {
         problem: `Listed more than once: ${twice.join(', ')}.`,
       };
     }
-    const stored = new Map(mission.policy.map((entry) => [entry.riskId, entry] as const));
-    const outside = ids.filter((id) => !stored.has(id));
-    if (outside.length > 0) return { ok: false, reason: 'risk-not-in-policy', risk_ids: outside };
+    const stored = new Map(
+      mission.policy.map(
+        (entry) => [policyLineKey(entry.resourceSetId, entry.riskId), entry] as const,
+      ),
+    );
 
     // The lines that move, as issuance would read them: same gate, same window.
     const moving: MissionPolicyEntry[] = [];
-    for (const edit of edits) {
-      const entry = stored.get(edit.risk_id);
+    edits.forEach((edit, i) => {
+      const key = keys[i];
+      const entry = key ? stored.get(key) : undefined;
       if (!entry || (entry.quota === edit.quota && entry.rateLimit === edit.rate_limit_max)) {
-        continue;
+        return;
       }
       moving.push({
+        resource_set_id: entry.resourceSetId,
         risk_id: edit.risk_id,
         quota: edit.quota,
         rate_limit: { max: edit.rate_limit_max, window_seconds: entry.rateWindowSeconds },
         gate: entry.gate,
       });
-    }
+    });
     const issues = await this.limitIssues(user, mission, moving);
     if (issues.length > 0) return { ok: false, reason: 'refused', issues };
 
     const written = await this.deps.store.missions.setLimits(
       mission.id,
-      edits.map((edit) => ({
+      edits.map((edit, i) => ({
+        ...(placed[i] ? { resourceSetId: placed[i].resourceSetId } : {}),
         riskId: edit.risk_id,
         quota: edit.quota,
         rateLimit: edit.rate_limit_max,
@@ -1300,6 +1379,7 @@ export class MissionService {
       .filter((change) => change.changed)
       .map((change) => ({
         risk_id: change.riskId,
+        resource_set_id: change.resourceSetId,
         before: {
           quota: change.before.quota,
           rate_limit: { max: change.before.rateLimit, window_seconds: change.rateWindowSeconds },
@@ -1334,6 +1414,10 @@ export class MissionService {
     const reached = await this.detailConnections(mission);
     const candidates: {
       risk_id: string;
+      /** The set the line would join (risk model §4.7). */
+      resource_set_id: string;
+      /** "Resource set 2" when the account has several; `null` otherwise. */
+      resource_set_label: string | null;
       label: string;
       level: string;
       reason: string;
@@ -1346,23 +1430,27 @@ export class MissionService {
       if (!connection || connection.status === 'revoked') continue;
       const context = await this.issuanceConnection(user, connection);
       if (!context) continue;
-      const resources = reached.find((r) => r.id === connection.id)?.resources ?? [];
-      for (const risk of context.risks) {
-        const line: MissionPolicyEntry = {
-          risk_id: risk.risk_id,
-          quota: 1,
-          rate_limit: { max: 1, window_seconds: 60 },
-          gate: 'approval',
-        };
-        const issues = checkPolicyLines(context, resources, [line], 0).issues;
-        candidates.push({
-          risk_id: risk.risk_id,
-          label: risk.label,
-          level: risk.level,
-          reason: issues.map((i) => i.message).join(' '),
-          available: issues.length === 0,
-          ceiling: risk.rate_ceiling_per_minute,
-        });
+      const sets = reached.find((r) => r.id === connection.id)?.resource_sets ?? [];
+      for (const set of sets) {
+        for (const risk of context.risks) {
+          const line: MissionPolicyEntry = {
+            risk_id: risk.risk_id,
+            quota: 1,
+            rate_limit: { max: 1, window_seconds: 60 },
+            gate: 'approval',
+          };
+          const issues = checkPolicyLines(context, set.resources, [line], 0).issues;
+          candidates.push({
+            risk_id: risk.risk_id,
+            resource_set_id: set.id,
+            resource_set_label: sets.length > 1 ? `Resource set ${set.position}` : null,
+            label: risk.label,
+            level: risk.level,
+            reason: issues.map((i) => i.message).join(' '),
+            available: issues.length === 0,
+            ceiling: risk.rate_ceiling_per_minute,
+          });
+        }
       }
     }
     return {
@@ -1384,35 +1472,42 @@ export class MissionService {
     const blocked = gateEditBlockedBy(mission);
     if (blocked) return { ok: false as const, reason: 'inactive', state: blocked };
     const before = budgetMissionOf(mission).policy;
-    if (policyKey(before) !== policyKey(edit.expected_policy))
+    const asked = edit.request_id
+      ? ((await this.deps.store.requests.getById(edit.request_id))?.lines ?? [])
+      : [];
+    const firstSets = new Map<string, string>();
+    for (const c of mission.connections) {
+      const connection = await this.deps.store.connections.getById(c.connectionId);
+      const first = c.resourceSets[0];
+      if (connection && first) firstSets.set(connection.provider, first.id);
+    }
+    const expected = placeLines(mission, edit.expected_policy, asked, firstSets);
+    const policy = placeLines(mission, edit.policy, asked, firstSets);
+    if (!expected || !policy) return { ok: false as const, reason: 'invalid-edit' };
+    if (policyKey(before) !== policyKey(expected))
       return { ok: false as const, reason: 'conflict' };
-    if (new Set(edit.policy.map((p) => p.risk_id)).size !== edit.policy.length)
+    if (new Set(policy.map(lineKeyOf)).size !== policy.length)
       return { ok: false as const, reason: 'invalid-edit' };
     // Existing lines use the dedicated limits and gate controls; this edit adds/removes.
-    const previous = new Map(before.map((p) => [p.risk_id, p]));
+    const previous = new Map(before.map((p) => [lineKeyOf(p), p]));
     if (
-      edit.policy.some(
-        (p) => previous.has(p.risk_id) && policyKey([p]) !== policyKey([previous.get(p.risk_id)!]),
-      )
+      policy.some((p) => {
+        const was = previous.get(lineKeyOf(p));
+        return was !== undefined && policyKey([p]) !== policyKey([was]);
+      })
     ) {
       return { ok: false as const, reason: 'invalid-edit' };
     }
-    const additions = edit.policy.filter((p) => !previous.has(p.risk_id));
+    const additions = policy.filter((p) => !previous.has(lineKeyOf(p)));
     const issues = await this.limitIssues(user, mission, additions);
     if (issues.length) return { ok: false as const, reason: 'refused', issues };
     const asStored = (lines: readonly MissionPolicyEntry[]) =>
-      lines.map((p) => ({
-        riskId: p.risk_id,
-        quota: p.quota,
-        rateLimit: p.rate_limit.max,
-        rateWindowSeconds: p.rate_limit.window_seconds,
-        gate: p.gate,
-      }));
-    if (policyKey(before) === policyKey(edit.policy) && !edit.request_id)
+      lines.map((p) => policyEntryRecordOf({ ...p, resource_set_id: p.resource_set_id ?? '' }));
+    if (policyKey(before) === policyKey(policy) && !edit.request_id)
       return { ok: true as const, mission };
     const written = await this.deps.store.missions.changePermissions(
       mission.id,
-      asStored(edit.policy),
+      asStored(policy),
       asStored(before),
       user.id,
       edit.request_id,
@@ -1425,7 +1520,7 @@ export class MissionService {
       act: 'permissions-changed',
       object: { type: 'mission', id: mission.id },
       before: { policy: before },
-      after: { policy: edit.policy, request_id: edit.request_id ?? null },
+      after: { policy, request_id: edit.request_id ?? null },
       delegated_client_id: null,
     });
     return { ok: true as const, mission: written };
@@ -1441,15 +1536,19 @@ export class MissionService {
     const connections: MissionSnapshotConnection[] = [];
     for (const c of mission.connections) {
       const connection = await this.deps.store.connections.getById(c.connectionId);
-      const provider = connection?.provider ?? '';
       connections.push({
         connection_id: c.connectionId,
-        provider,
+        provider: connection?.provider ?? '',
         display_name: connection?.displayName ?? c.connectionId,
-        resource_scope: c.resourceScope,
-        resource_ids: [...c.resourceIds],
-        policy: policy.filter((entry) => parseRiskId(entry.risk_id)?.provider === provider),
-        ...(c.trustLevels ? { trust_levels: c.trustLevels } : {}),
+        resource_sets: c.resourceSets.map((set) => ({
+          key: set.id,
+          id: set.id,
+          position: set.position,
+          resource_scope: set.resourceScope,
+          resource_ids: [...set.resourceIds],
+          policy: policy.filter((entry) => entry.resource_set_id === set.id),
+          ...(set.trustLevels ? { trust_levels: set.trustLevels } : {}),
+        })),
       });
     }
     return {
@@ -1470,11 +1569,11 @@ export class MissionService {
     if (!mission) return null;
     const snapshot = await this.snapshotOf(mission);
     const session = await this.deps.store.sessions.getByMission(mission.id);
-    const used: Record<RiskId, number> = {};
+    const used: Record<PolicyLineKey, number> = {};
     if (session) {
       const period = this.periodNow(mission);
       for (const counter of await this.deps.store.sessions.counters(session.id, period.start)) {
-        used[counter.riskId] = counter.consumed;
+        used[policyLineKey(counter.resourceSetId, counter.riskId)] = counter.consumed;
       }
     }
     const open = (await this.deps.store.requests.listForMission(mission.id)).filter(
@@ -1509,7 +1608,6 @@ export class MissionService {
       mission,
       snapshot,
       judgement,
-      trustLevels: trustLevelsOfDraft(connections, body.draft),
       asked: body.revision,
       revision: revisionOfRecord(mission),
     };
@@ -1549,7 +1647,7 @@ export class MissionService {
   async edit(user: Subject, missionId: string, raw: unknown): Promise<EditResult> {
     const judged = await this.judged(user, missionId, raw);
     if (!judged.ok) return judged;
-    const { mission, snapshot, judgement, revision, trustLevels } = judged;
+    const { mission, snapshot, judgement, revision } = judged;
     if (judged.asked !== revision) return { ok: false, reason: 'conflict' };
     if (!judgement.ok) {
       return { ok: false, reason: 'refused', issues: judgement.issues, changes: judgement.changes };
@@ -1566,16 +1664,18 @@ export class MissionService {
       unchanged: (current) => revisionOfRecord(current) === revision,
       name: after.name,
       expiresAt: after.expires_at,
-      connections: after.connections.map((c) => {
-        const recorded = trustLevels.get(c.connection_id);
-        return {
-          connectionId: c.connection_id,
-          resourceScope: c.resource_scope,
-          resourceIds: c.resource_scope === 'connection' ? [] : [...c.resource_ids],
-          ...(recorded && Object.keys(recorded).length > 0 ? { trustLevels: recorded } : {}),
-        };
-      }),
-      policy: after.connections.flatMap((c) => c.policy.map(policyEntryRecordOf)),
+      connections: after.connections.map((c) => ({
+        connectionId: c.connection_id,
+        resourceSets: c.resource_sets.map((set) => ({
+          ...(set.id !== null ? { id: set.id } : {}),
+          resourceScope: set.resource_scope,
+          resourceIds: set.resource_scope === 'connection' ? [] : [...set.resource_ids],
+          ...(set.trust_levels && Object.keys(set.trust_levels).length > 0
+            ? { trustLevels: set.trust_levels }
+            : {}),
+          policy: set.policy.map(policyLineInputOf),
+        })),
+      })),
       summary: (closed) => ({
         kind: 'mission-changed',
         actorUserId: user.id,
@@ -1644,8 +1744,12 @@ export class MissionService {
         });
         continue;
       }
-      const selected = reached.find((r) => r.id === connection.id)?.resources ?? [];
-      issues.push(...checkPolicyLines(context, selected, own, index).issues);
+      const sets = reached.find((r) => r.id === connection.id)?.resource_sets ?? [];
+      for (const set of sets) {
+        const ofSet = own.filter((line) => (line.resource_set_id ?? set.id) === set.id);
+        if (ofSet.length === 0) continue;
+        issues.push(...checkPolicyLines(context, set.resources, ofSet, index).issues);
+      }
     }
     const unplaced = lines.filter((line) => !judged.has(line.risk_id)).map((l) => l.risk_id);
     if (unplaced.length > 0) {
@@ -1803,8 +1907,8 @@ export class MissionService {
         ...entry,
         label: row?.label ?? entry.risk_id,
         level: row?.level ?? null,
-        remaining: remaining ? (remaining[entry.risk_id] ?? null) : null,
-        gate_open_until: openUntil.get(entry.risk_id) ?? null,
+        remaining: remaining ? (remaining[lineKeyOf(entry)] ?? null) : null,
+        gate_open_until: openUntil.get(lineKeyOf(entry)) ?? null,
       };
     });
     const editable = inspected.role === 'creator' && gateEditBlockedBy(overview.mission) === null;
@@ -1829,7 +1933,7 @@ export class MissionService {
   private async openGatesOf(
     mission: MissionRecord,
     state: MissionState,
-  ): Promise<Map<RiskId, Iso8601>> {
+  ): Promise<Map<PolicyLineKey, Iso8601>> {
     // What the page shows: a mission that serves no call has no gate "open" to show.
     return state.kind === 'active' ? this.openGatesIn(mission, state.period) : new Map();
   }
@@ -1843,8 +1947,8 @@ export class MissionService {
   private async openGatesIn(
     mission: MissionRecord,
     period: CurrentPeriod,
-  ): Promise<Map<RiskId, Iso8601>> {
-    const open = new Map<RiskId, Iso8601>();
+  ): Promise<Map<PolicyLineKey, Iso8601>> {
+    const open = new Map<PolicyLineKey, Iso8601>();
     // A one-off mission has no period end: a gate is never opened "for the period" on it.
     if (period.end === null) return open;
     if (!mission.policy.some((entry) => entry.gate === 'approval')) return open;
@@ -1854,7 +1958,7 @@ export class MissionService {
       kinds: GATE_EVENT_KINDS,
       since: period.start,
     });
-    for (const riskId of openedGatesOf(events, period)) open.set(riskId, period.end);
+    for (const line of openedGatesOf(events, period)) open.set(line, period.end);
     return open;
   }
 
@@ -1993,17 +2097,25 @@ export class MissionService {
     for (const c of mission.connections) {
       const connection = await this.deps.store.connections.getById(c.connectionId);
       if (!connection) continue;
-      const reached = reachedResources(
-        c,
-        await this.deps.store.connections.listResources(c.connectionId),
-        (r) => this.isSelf(connection.provider, r),
+      const discovered = await this.deps.store.connections.listResources(c.connectionId);
+      const bySet = reachedResourcesBySet(c, discovered, (r) =>
+        this.isSelf(connection.provider, r),
       );
+      const reachedIds = new Set([...bySet.values()].flat().map((r) => r.id));
+      const reached = discovered.filter((r) => reachedIds.has(r.id));
       details.push({
         ...connectionSummaryOf(connection),
         provider_label:
           this.deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider,
         resources: reached.map((r) => toIssuanceResource(r, false)),
         reaches_later: reachesLaterResources(c),
+        resource_sets: c.resourceSets.map((set) => ({
+          id: set.id,
+          position: set.position,
+          resources: (bySet.get(set.id) ?? []).map((r) => toIssuanceResource(r, false)),
+          reaches_later: set.resourceScope === 'connection',
+          ...(set.trustLevels ? { trust_levels: set.trustLevels } : {}),
+        })),
         lost: lost.find((part) => part.connectionId === c.connectionId)?.cause ?? null,
         ...createdIdsOf(c, reached),
       });
@@ -2036,10 +2148,21 @@ export class MissionService {
       (await this.detailConnections(mission, (await this.deps.grounds.inspect(mission)).lost))
     ).filter((connection) => connection.lost === null);
     const rows = this.catalogRowsOf(connections);
-    const policy: KitPolicyLine[] = mission.policy.map(policyEntryOf).map((entry) => ({
-      ...entry,
-      label: rows.get(entry.risk_id)?.label ?? entry.risk_id,
-    }));
+    const setLabel = new Map(
+      connections.flatMap((c) =>
+        c.resource_sets.length > 1
+          ? c.resource_sets.map((set) => [set.id, `resource set ${set.position}`] as const)
+          : [],
+      ),
+    );
+    const policy: KitPolicyLine[] = mission.policy.map(policyEntryOf).map((entry) => {
+      const label = setLabel.get(entry.resource_set_id ?? '');
+      return {
+        ...entry,
+        label: rows.get(entry.risk_id)?.label ?? entry.risk_id,
+        ...(label ? { resource_set: label } : {}),
+      };
+    });
     return buildBootstrapKit({
       instanceUrl: this.deps.publicUrl.href,
       mission: {
@@ -2052,6 +2175,15 @@ export class MissionService {
         display_name: c.display_name,
         resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
         reaches_later: c.reaches_later,
+        ...(c.resource_sets.length > 1
+          ? {
+              resource_sets: c.resource_sets.map((set) => ({
+                label: `Resource set ${set.position}`,
+                resources: set.resources.map((r) => ({ ref: r.ref, env: r.env })),
+                reaches_later: set.reaches_later,
+              })),
+            }
+          : {}),
       })),
       policy,
       token,
@@ -2089,4 +2221,54 @@ export function tokenHolderOf(
     user_id: token.holder.userId,
     display: user?.email ?? token.holder.userId,
   };
+}
+
+/**
+ * The line of a risk in the mission: in `resourceSetId` when given, else the one set
+ * that accepts the risk. `null` when absent, or when the risk alone names several lines.
+ */
+function lineOfRisk(
+  mission: Pick<MissionRecord, 'policy'>,
+  riskId: RiskId,
+  resourceSetId: string | undefined,
+): RequestLine | null {
+  const lines = mission.policy.filter(
+    (entry) =>
+      entry.riskId === riskId &&
+      (resourceSetId === undefined || entry.resourceSetId === resourceSetId),
+  );
+  const [only] = lines;
+  return lines.length === 1 && only ? { resourceSetId: only.resourceSetId, riskId } : null;
+}
+
+/**
+ * The lines of a permission edit, each in its set: the one it names, else the set of the
+ * mission's line of that risk (when only one set accepts it), else the set the answered
+ * request names for it, else the first set of the account of its provider. `null` when
+ * a line cannot be placed (several sets accept the risk, or no account is for it).
+ */
+function placeLines(
+  mission: Pick<MissionRecord, 'policy'>,
+  lines: readonly MissionPolicyEntry[],
+  asked: readonly RequestLine[],
+  /** The first set of the account of each provider of the mission. */
+  firstSets: ReadonlyMap<string, string>,
+): MissionPolicyEntry[] | null {
+  const placed: MissionPolicyEntry[] = [];
+  for (const line of lines) {
+    if (line.resource_set_id !== undefined) {
+      placed.push(line);
+      continue;
+    }
+    const held = mission.policy.filter((entry) => entry.riskId === line.risk_id);
+    const [only] = held;
+    if (held.length > 1) return null;
+    const setId =
+      only?.resourceSetId ??
+      asked.find((a) => a.riskId === line.risk_id)?.resourceSetId ??
+      firstSets.get(parseRiskId(line.risk_id)?.provider ?? '');
+    if (setId === undefined) return null;
+    placed.push({ ...line, resource_set_id: setId });
+  }
+  return placed;
 }

@@ -370,6 +370,7 @@ export class ExecutionDoor {
           await this.followCall(ctx, {
             tool: name,
             connectionId: outcome.audit.connection_id,
+            resourceSetIds: outcome.audit.resource_set_ids ?? [],
             result: outcome.result,
             args: args ?? {},
           });

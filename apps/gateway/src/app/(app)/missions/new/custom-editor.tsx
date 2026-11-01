@@ -44,7 +44,7 @@ import {
   selectAll,
   toggleRisk,
   updateEntry,
-  type ConnectionState,
+  type SetState,
   type EditorRow,
   type RiskFilter,
 } from './form-state';
@@ -60,14 +60,17 @@ export function CustomEditor({
   limitLabel,
   onChange,
   onReset,
+  setIndex = 0,
 }: {
   connection: IssuanceConnection;
-  state: ConnectionState;
+  state: SetState;
+  /** The resource set edited, from 0: keeps the ids of two sets' rows apart. */
+  setIndex?: number;
   /** The planes of the service's data model, when it has several: the editor can be sliced by one. */
   planes: RiskPlanes | null;
   /** The head of the limit column: "Per day", "Per week", "In total". */
   limitLabel: string;
-  onChange: (next: ConnectionState) => void;
+  onChange: (next: SetState) => void;
   /** "Reset to the trust levels": the screen asks first, then drops the edits. `null`: nothing to reset. */
   onReset: (() => void) | null;
 }) {
@@ -92,7 +95,10 @@ export function CustomEditor({
   const searchable = rows.length > SEARCH_THRESHOLD || planes !== null;
 
   return (
-    <div className={styles.editor} data-testid={`risks-${connection.provider}`}>
+    <div
+      className={styles.editor}
+      data-testid={`risks-${connection.provider}${setIndex > 0 ? `-${setIndex + 1}` : ''}`}
+    >
       <div className={styles.editorTools}>
         {searchable && (
           <SearchField
@@ -212,10 +218,10 @@ function EditorRowView({
 }: {
   row: EditorRow;
   connection: IssuanceConnection;
-  state: ConnectionState;
+  state: SetState;
   ownWindow: boolean;
   onOwnWindow: () => void;
-  onChange: (next: ConnectionState) => void;
+  onChange: (next: SetState) => void;
 }) {
   const { risk, unavailable } = row;
   const entry = state.entries[risk.risk_id];

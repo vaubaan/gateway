@@ -5,7 +5,7 @@
  *
  * Wire shapes are snake_case like the shared domain (`MissionPolicyEntry`),
  * because the same draft and preview are exposed as-is on the management door
- * (spec §4.1 bis). Types only: this file is safe to import from a
+ * (spec §4.1 bis). Types and pure helpers only: this file is safe to import from a
  * client component.
  */
 import type { TrustLevel } from '@vaubaan/policy-engine';
@@ -77,6 +77,14 @@ export type DraftResources =
 export interface DraftConnection {
   readonly connection_id?: string;
   readonly provider?: string;
+  /**
+   * Several resource sets on the connection (risk model §4.7), each with its
+   * resources, trust levels and policy, in order ("Resource set 1", "Resource set
+   * 2"). Given, it replaces `resources`, `everything_i_hold`, `policy` and
+   * `trust_levels`, which then must be absent; absent, those four fields are the
+   * connection's one set.
+   */
+  readonly resource_sets?: readonly DraftResourceSet[];
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
   /**
@@ -91,6 +99,37 @@ export interface DraftConnection {
    * kept with the mission only to redraw the form.
    */
   readonly trust_levels?: Readonly<Record<string, string>>;
+}
+
+/**
+ * One resource set of a draft connection (risk model §4.7): the fields a connection
+ * with one set gives directly. The sets of a connection partition its selection: a
+ * resource in one set only, and at most one set takes "the rest" (`all` or
+ * `connection`: every resource no other set selects).
+ */
+export interface DraftResourceSet {
+  /** The stored set an edit keeps (its counters and requests follow it); ignored at issuance. */
+  readonly id?: string;
+  /** Default: `{ scope: 'all' }`. */
+  readonly resources?: DraftResources;
+  readonly everything_i_hold?: boolean;
+  readonly policy?: readonly DraftPolicyEntry[];
+  readonly trust_levels?: Readonly<Record<string, string>>;
+}
+
+/** The sets of a draft connection: `resource_sets`, or the connection's own fields as one set. */
+export function draftSetsOf(connection: DraftConnection): readonly DraftResourceSet[] {
+  if (connection.resource_sets) return connection.resource_sets;
+  return [
+    {
+      ...(connection.resources ? { resources: connection.resources } : {}),
+      ...(connection.everything_i_hold !== undefined
+        ? { everything_i_hold: connection.everything_i_hold }
+        : {}),
+      ...(connection.policy ? { policy: connection.policy } : {}),
+      ...(connection.trust_levels ? { trust_levels: connection.trust_levels } : {}),
+    },
+  ];
 }
 
 export type DraftPeriod =
@@ -223,6 +262,10 @@ export const PREVIEW_ISSUE_CODES = [
   'resource-stale',
   'resource-self',
   'no-resource-selected',
+  /** Two resource sets of one connection hold the same resource, or both take "the rest". */
+  'resource-sets-overlap',
+  /** `resource_sets` beside the connection's own `resources`, `policy`, `trust_levels`… */
+  'resource-sets-mixed',
   'unknown-macro-action',
   'unknown-risk',
   'duplicate-risk',
@@ -245,6 +288,8 @@ export interface PreviewIssue {
   /** Index of the draft connection the issue is about, when it is about one. */
   readonly connection_index?: number;
   readonly connection_id?: string;
+  /** Index of the resource set of that connection (0 for the first), when it is about one. */
+  readonly resource_set_index?: number;
   /** The offending ids: for `exceeds-authority`, the uncovered list (spec §3.1). */
   readonly risk_ids?: readonly RiskId[];
   readonly resource_refs?: readonly string[];
@@ -281,6 +326,7 @@ export interface PreviewNotice {
   readonly message: string;
   readonly connection_index?: number;
   readonly connection_id?: string;
+  readonly resource_set_index?: number;
   /** The selected resources the notice is about. */
   readonly resource_refs: readonly string[];
   /**
@@ -308,7 +354,31 @@ export interface LeftOutEntry {
   readonly env: string | null;
 }
 
-/** What the draft yields on one connection. */
+/** What the draft yields on one resource set of a connection (risk model §4.7). */
+export interface ResourceSetPreview {
+  /** Its place among the sets of the connection, from 0. */
+  readonly index: number;
+  /** The stored set an edit keeps; `null` for a set the draft adds. */
+  readonly id: string | null;
+  /** The resources of the set as it would be stored; for `connection`, the ones it reaches now. */
+  readonly resources: readonly IssuanceResource[];
+  /** True for scope `connection`: the resources no other set selects, later ones included. */
+  readonly reaches_later: boolean;
+  readonly everything_i_hold: boolean;
+  readonly passes: readonly MissionPolicyEntry[];
+  readonly exceeds: readonly RiskId[];
+  readonly unknown: readonly RiskId[];
+  readonly unresolvable: readonly UnresolvableEntry[];
+  readonly missing_budget: readonly RiskId[];
+  readonly left_out: readonly LeftOutEntry[];
+  readonly trust_levels: Readonly<Record<string, TrustLevel>>;
+}
+
+/**
+ * What the draft yields on one connection. With one resource set, the connection's
+ * fields are that set's; with several, they are the sets' together (`passes` lists
+ * each set's lines) and `resource_sets` tells them apart.
+ */
 export interface ConnectionPreview {
   readonly connection_id: string;
   readonly provider: string;
@@ -340,6 +410,8 @@ export interface ConnectionPreview {
   readonly left_out: readonly LeftOutEntry[];
   /** The draft's trust levels that name a macro-action of the connection (`knownTrustLevels`). */
   readonly trust_levels: Readonly<Record<string, TrustLevel>>;
+  /** Each set of the connection, in order; one for a connection given without sets. */
+  readonly resource_sets: readonly ResourceSetPreview[];
 }
 
 /** The three lines of spec §4.2: what the mission can do, cannot do, in what quantity. */
@@ -355,6 +427,14 @@ export interface MissionSummaryLines {
  */
 export interface ResolvedDraftConnection {
   readonly connection_id: string;
+  /** The sets of the connection, in order. */
+  readonly resource_sets: readonly ResolvedDraftSet[];
+}
+
+/** One set of a resolved draft connection. */
+export interface ResolvedDraftSet {
+  /** The stored set an edit keeps; absent for a new set. */
+  readonly id?: string;
   readonly resources:
     | { readonly scope: 'selected'; readonly resource_ids: readonly string[] }
     | { readonly scope: 'connection' };

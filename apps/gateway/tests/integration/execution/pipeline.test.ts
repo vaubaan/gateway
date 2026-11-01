@@ -319,7 +319,7 @@ describe('execution door: the call pipeline', () => {
       const empty = await executionInstance({ spaces: [] });
       try {
         const mission = await empty.issue({ policy: [line(READ), line('depot.profile')] });
-        expect(mission.mission.connections[0]).toMatchObject({
+        expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
           resourceScope: 'all',
           resourceIds: [],
         });
@@ -344,7 +344,7 @@ describe('execution door: the call pipeline', () => {
       const empty = await executionInstance({ spaces: [] });
       try {
         const mission = await empty.issue({ policy: [line(READ)], wholeConnection: true });
-        expect(mission.mission.connections[0]).toMatchObject({
+        expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
           resourceScope: 'connection',
           resourceIds: [],
         });

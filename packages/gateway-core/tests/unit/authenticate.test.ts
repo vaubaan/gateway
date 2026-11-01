@@ -32,6 +32,7 @@ const missionCtx: MissionContext = {
   },
   connections: [],
   resources: [],
+  resource_sets: [],
   policy: [],
   session: null,
 };

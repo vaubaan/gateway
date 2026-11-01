@@ -8,14 +8,14 @@ describe('nearestLimit', () => {
   it('is the permission whose usage is the largest share of its limit', () => {
     const nearest = nearestLimit(
       [
-        { riskId: 'github.code-read', quota: 5000 },
-        { riskId: 'github.write-feature-branch', quota: 3000 },
-        { riskId: 'github.merge-protected', quota: 50 },
+        { resourceSetId: 's', riskId: 'github.code-read', quota: 5000 },
+        { resourceSetId: 's', riskId: 'github.write-feature-branch', quota: 3000 },
+        { resourceSetId: 's', riskId: 'github.merge-protected', quota: 50 },
       ],
       {
-        'github.code-read': 4000,
-        'github.write-feature-branch': 1140,
-        'github.merge-protected': 49,
+        's::github.code-read': 4000,
+        's::github.write-feature-branch': 1140,
+        's::github.merge-protected': 49,
       },
       label,
     );
@@ -31,8 +31,8 @@ describe('nearestLimit', () => {
     expect(
       nearestLimit(
         [
-          { riskId: 'a.first', quota: 10 },
-          { riskId: 'a.second', quota: 10 },
+          { resourceSetId: 's', riskId: 'a.first', quota: 10 },
+          { resourceSetId: 's', riskId: 'a.second', quota: 10 },
         ],
         {},
         label,
@@ -41,19 +41,23 @@ describe('nearestLimit', () => {
   });
 
   it('never reports more used than the limit, and a limit of zero is reached', () => {
-    expect(nearestLimit([{ riskId: 'a.spent', quota: 2 }], { 'a.spent': -3 }, label)).toMatchObject(
-      {
-        used: 2,
-        limit: 2,
-      },
-    );
+    expect(
+      nearestLimit(
+        [{ resourceSetId: 's', riskId: 'a.spent', quota: 2 }],
+        { 's::a.spent': -3 },
+        label,
+      ),
+    ).toMatchObject({
+      used: 2,
+      limit: 2,
+    });
     expect(
       nearestLimit(
         [
-          { riskId: 'a.half', quota: 10 },
-          { riskId: 'a.none', quota: 0 },
+          { resourceSetId: 's', riskId: 'a.half', quota: 10 },
+          { resourceSetId: 's', riskId: 'a.none', quota: 0 },
         ],
-        { 'a.half': 5 },
+        { 's::a.half': 5 },
         label,
       ),
     ).toMatchObject({ risk_id: 'a.none', used: 0, limit: 0 });

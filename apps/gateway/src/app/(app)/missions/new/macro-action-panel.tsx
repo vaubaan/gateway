@@ -14,6 +14,10 @@
  * Under both, the policy as it stands, counted, with its highest tier, and
  * "Everything I hold on this account". Whatever is chosen, the mission
  * stores the explicit list; the trust levels only redraw this panel.
+ *
+ * The two views are the account's (`MacroActionPanel`); what they show is one
+ * resource set's (`SetPolicy`), once per set when the account has several (risk
+ * model §4.7), each with its own trust levels.
  */
 import { Checkbox, ChoiceChip, ChoiceRow, GateMark, TabList, TabPanel } from '@/components/ui';
 import { TRUST_LEVEL_HINTS, TRUST_LEVEL_LABELS } from '@/lib/vocabulary';
@@ -32,9 +36,9 @@ import {
   explainEverything,
   macroActionRows,
   policyCounts,
-  type ConnectionState,
   type MacroActionRow,
   type PolicyView,
+  type SetState,
 } from './form-state';
 
 const VIEWS = [
@@ -42,20 +46,60 @@ const VIEWS = [
   { id: 'advanced', label: 'Advanced' },
 ] as const;
 
+/** The account's two views, around the policy of its set or sets (`children`). */
 export function MacroActionPanel({
   connection,
-  state,
-  advanced,
+  view,
   onView,
+  children,
+}: {
+  connection: IssuanceConnection;
+  view: PolicyView;
+  onView: (view: PolicyView) => void;
+  /** One `SetPolicy` per resource set, with what goes between them. */
+  children: React.ReactNode;
+}) {
+  const name = `${connection.provider_label} ${connection.display_name}`;
+  const base = `view-${connection.id}`;
+  return (
+    <div className={styles.accountBody} data-testid={`macro-actions-${connection.provider}`}>
+      <TabList
+        base={base}
+        label={`View of the permissions of ${name}`}
+        tabs={VIEWS}
+        active={view}
+        onSelect={onView}
+      />
+      <TabPanel base={base} id={view} className={styles.viewPanel}>
+        {children}
+      </TabPanel>
+    </div>
+  );
+}
+
+/** A suffix that tells the controls of two sets of one account apart; none for the first. */
+export function setSuffix(setIndex: number): string {
+  return setIndex > 0 ? `-set${setIndex + 1}` : '';
+}
+
+/** The policy of one resource set in the account's view: macro-actions or permissions, then its count. */
+export function SetPolicy({
+  connection,
+  state,
+  view,
+  setIndex = 0,
+  advanced,
   onTrustLevel,
   onEverything,
   onLeaveEverything,
 }: {
   connection: IssuanceConnection;
-  state: ConnectionState;
+  state: SetState;
+  view: PolicyView;
+  /** The set, from 0. */
+  setIndex?: number;
   /** The advanced view's content: the permissions one by one. */
   advanced: React.ReactNode;
-  onView: (view: PolicyView) => void;
   /** Ticks a macro-action at a trust level, moves it, or (`null`) unticks it. */
   onTrustLevel: (actionId: string, trustLevel: TrustLevel | null) => void;
   /** "Everything I hold on this account". */
@@ -63,8 +107,7 @@ export function MacroActionPanel({
   /** Back from "Everything I hold" to the macro-actions, none ticked. */
   onLeaveEverything: () => void;
 }) {
-  const name = `${connection.provider_label} ${connection.display_name}`;
-  const base = `view-${connection.id}`;
+  const suffix = setSuffix(setIndex);
   const counts = policyCounts(connection, state);
   const total = counts.free + counts.asks;
   const tier = chosenTier(connection, state);
@@ -74,52 +117,44 @@ export function MacroActionPanel({
   const adjusted = state.edited && !state.everything && total > 0;
 
   return (
-    <div className={styles.accountBody} data-testid={`macro-actions-${connection.provider}`}>
-      <TabList
-        base={base}
-        label={`View of the permissions of ${name}`}
-        tabs={VIEWS}
-        active={state.view}
-        onSelect={onView}
-      />
-      <TabPanel base={base} id={state.view} className={styles.viewPanel}>
-        {state.view === 'advanced' ? (
-          advanced
-        ) : everything ? (
-          <div
-            className={styles.everythingDescription}
-            data-testid={`everything-${connection.provider}`}
-          >
-            {everything.map((sentence) => (
-              <p key={sentence}>{sentence}</p>
+    <>
+      {view === 'advanced' ? (
+        advanced
+      ) : everything ? (
+        <div
+          className={styles.everythingDescription}
+          data-testid={`everything-${connection.provider}${suffix}`}
+        >
+          {everything.map((sentence) => (
+            <p key={sentence}>{sentence}</p>
+          ))}
+          <button type="button" className={styles.link} onClick={onLeaveEverything}>
+            Back to the macro-actions
+          </button>
+        </div>
+      ) : (
+        <>
+          {adjusted && (
+            <p className={styles.skipped} data-testid={`adjusted-${connection.provider}${suffix}`}>
+              Adjusted in the advanced view: the list no longer matches the trust levels. Changing a
+              macro-action here writes it again from the trust levels.
+            </p>
+          )}
+          <div className={styles.macroActions}>
+            {macroActionRows(connection, state).map((row) => (
+              <MacroActionLine
+                key={row.id}
+                connection={connection}
+                row={row}
+                setIndex={setIndex}
+                onTrustLevel={(trustLevel) => onTrustLevel(row.id, trustLevel)}
+              />
             ))}
-            <button type="button" className={styles.link} onClick={onLeaveEverything}>
-              Back to the macro-actions
-            </button>
           </div>
-        ) : (
-          <>
-            {adjusted && (
-              <p className={styles.skipped} data-testid={`adjusted-${connection.provider}`}>
-                Adjusted in the advanced view: the list no longer matches the trust levels. Changing
-                a macro-action here writes it again from the trust levels.
-              </p>
-            )}
-            <div className={styles.macroActions}>
-              {macroActionRows(connection, state).map((row) => (
-                <MacroActionLine
-                  key={row.id}
-                  connection={connection}
-                  row={row}
-                  onTrustLevel={(trustLevel) => onTrustLevel(row.id, trustLevel)}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </TabPanel>
+        </>
+      )}
 
-      <div className={styles.counts} data-testid={`policy-digest-${connection.provider}`}>
+      <div className={styles.counts} data-testid={`policy-digest-${connection.provider}${suffix}`}>
         <span>
           <strong>{total}</strong> {total === 1 ? 'permission' : 'permissions'}
         </span>
@@ -143,21 +178,25 @@ export function MacroActionPanel({
           </button>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
 function MacroActionLine({
   connection,
   row,
+  setIndex,
   onTrustLevel,
 }: {
   connection: IssuanceConnection;
   row: MacroActionRow;
+  setIndex: number;
   onTrustLevel: (trustLevel: TrustLevel | null) => void;
 }) {
   const ticked = row.trustLevel !== null;
-  const id = `macro-${connection.id}-${row.id}`;
+  const suffix = setSuffix(setIndex);
+  const where = setIndex > 0 ? `, resource set ${setIndex + 1}` : '';
+  const id = `macro-${connection.id}-${row.id}${suffix}`;
   const facts: string[] = [];
   if (row.leftOut > 0)
     facts.push(`${row.leftOut} left out at ${TRUST_LEVEL_LABELS[row.shownTrustLevel]}`);
@@ -165,13 +204,13 @@ function MacroActionLine({
   return (
     <div
       className={[styles.macroAction, ticked ? '' : styles.macroActionOff].join(' ')}
-      data-testid={`macro-${connection.provider}-${row.id}`}
+      data-testid={`macro-${connection.provider}-${row.id}${suffix}`}
     >
       <Checkbox
         id={id}
         checked={ticked}
         disabled={row.empty}
-        aria-label={`${row.label} on ${connection.provider_label} ${connection.display_name}`}
+        aria-label={`${row.label} on ${connection.provider_label} ${connection.display_name}${where}`}
         onChange={(event) => onTrustLevel(event.target.checked ? DEFAULT_TRUST_LEVEL : null)}
       />
       <div className={styles.macroActionText}>
@@ -198,12 +237,12 @@ function MacroActionLine({
         )}
       </div>
       <ChoiceRow
-        legend={`Trust level of ${row.label} on ${connection.provider_label} ${connection.display_name}`}
+        legend={`Trust level of ${row.label} on ${connection.provider_label} ${connection.display_name}${where}`}
       >
         {TRUST_LEVELS.map((trustLevel) => (
           <ChoiceChip
             key={trustLevel}
-            name={`trust-level-${connection.id}-${row.id}`}
+            name={`trust-level-${connection.id}-${row.id}${suffix}`}
             value={trustLevel}
             checked={row.trustLevel === trustLevel}
             onChange={() => onTrustLevel(trustLevel)}

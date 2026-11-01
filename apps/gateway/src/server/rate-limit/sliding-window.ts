@@ -133,7 +133,10 @@ export class SlidingWindowRateLimiter implements SlidingWindows, RateLimiter {
   }
 }
 
-/** The window key of one risk of one mission (spec §3.2: one budget per mission). */
-export function rateWindowKey(missionId: string, riskId: string): string {
-  return `mission:${missionId}:risk:${riskId}`;
+/**
+ * The window key of one line of one mission: a risk in one resource set (spec §3.2:
+ * one budget per mission; risk model §4.7: each set keeps its own).
+ */
+export function rateWindowKey(missionId: string, resourceSetId: string, riskId: string): string {
+  return `mission:${missionId}:set:${resourceSetId}:risk:${riskId}`;
 }

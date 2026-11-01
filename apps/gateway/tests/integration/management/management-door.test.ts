@@ -576,12 +576,32 @@ describe('management door — tools of a delegated agent', () => {
       );
       const record = await rig.root.store.missions.getById(issued.mission.mission_id);
       expect(record?.connections).toEqual([
-        { connectionId: github, resourceScope: 'connection', resourceIds: [] },
+        {
+          connectionId: github,
+          resourceSets: [
+            {
+              id: expect.any(String) as string,
+              position: 1,
+              resourceScope: 'connection',
+              resourceIds: [],
+            },
+          ],
+        },
       ]);
 
       const listed = await agent.call<MissionsAnswer>('list_my_missions');
       expect(listed.data.missions[0]?.resource_scopes).toEqual([
-        { connection_id: github, resource_scope: 'connection' },
+        {
+          connection_id: github,
+          resource_scope: 'connection',
+          resource_sets: [
+            {
+              resource_set_id: expect.any(String) as string,
+              position: 1,
+              resource_scope: 'connection',
+            },
+          ],
+        },
       ]);
       const one = await agent.call<MissionsAnswer>('list_my_missions', {
         mission_id: issued.mission.mission_id,
@@ -596,7 +616,7 @@ describe('management door — tools of a delegated agent', () => {
       const again = await agent.call<MissionsAnswer>('list_my_missions');
       expect(
         again.data.missions.find((m) => m.mission_id === known.mission.mission_id)?.resource_scopes,
-      ).toEqual([{ connection_id: github, resource_scope: 'selected' }]);
+      ).toMatchObject([{ connection_id: github, resource_scope: 'selected' }]);
       await agent.close();
     });
 

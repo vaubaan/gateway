@@ -20,12 +20,18 @@ import styles from '../missions.module.css';
 export function GateControl({
   missionId,
   riskId,
+  resourceSetId,
+  setSuffix = '',
   label,
   gate,
 }: {
   missionId: string;
   /** The protocol's id of the permission: what the API takes. */
   riskId: string;
+  /** The resource set of the line (risk model §4.7). */
+  resourceSetId?: string;
+  /** Tells the switches of one risk in two sets apart ("-set2"); none for the first. */
+  setSuffix?: string;
   /** What the permission lets an agent do, for the confirmation. */
   label: string;
   gate: Gate;
@@ -42,6 +48,7 @@ export function GateControl({
     setAsked(next);
     const answer = await run(`/api/missions/${encodeURIComponent(missionId)}/gate`, {
       risk_id: riskId,
+      ...(resourceSetId ? { resource_set_id: resourceSetId } : {}),
       gate: next,
     });
     if (!answer.ok) {
@@ -60,8 +67,8 @@ export function GateControl({
       <Switch
         checked={(asked ?? gate) === 'approval'}
         disabled={busy}
-        aria-label={`${GATE_WORDS.ask}: ${riskId}`}
-        data-testid={`gate-switch-${riskId}`}
+        aria-label={`${GATE_WORDS.ask}: ${riskId}${setSuffix}`}
+        data-testid={`gate-switch-${riskId}${setSuffix}`}
         onChange={(event) => void change(event.target.checked ? 'approval' : 'auto')}
       />
       {error && (

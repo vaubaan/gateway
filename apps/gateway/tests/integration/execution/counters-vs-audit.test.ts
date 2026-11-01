@@ -193,7 +193,15 @@ describe('structural: session counters agree with the audit', () => {
       new Date(),
     );
     expect(report.mismatches).toEqual([]);
-    expect(report.risks).toEqual([{ risk_id: 'depot.read', counted: 7, credited: 0, audited: 7 }]);
+    expect(report.risks).toEqual([
+      {
+        resource_set_id: expect.any(String) as string,
+        risk_id: 'depot.read',
+        counted: 7,
+        credited: 0,
+        audited: 7,
+      },
+    ]);
     const entries = (await store.audit.list({
       missionId: mission.mission.id,
       limit: 100,

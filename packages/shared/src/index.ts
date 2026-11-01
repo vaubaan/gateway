@@ -70,7 +70,9 @@ export {
   isCredentialKind,
   isGate,
   isMissionTokenKind,
+  lineKeyOf,
   MISSION_TOKEN_KINDS,
+  policyLineKey,
 } from './domain.ts';
 export type {
   AuditDecision,
@@ -89,6 +91,7 @@ export type {
   MissionStatus,
   MissionTokenKind,
   Period,
+  PolicyLineKey,
   Principal,
   RateLimit,
   RequestKind,

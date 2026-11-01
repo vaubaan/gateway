@@ -3,8 +3,8 @@
  * creator, one connection, one mission with a three-risk policy, and a `SessionService`
  * over an in-memory sliding window.
  */
-// The store's camelCase policy entry, not the shared domain type of the same name.
-import type { MissionPolicyEntry as MissionPolicyEntryRecord } from '../../../src/server/store/types.ts';
+// The store's camelCase policy line, inside its set: not the shared domain type.
+import type { MissionPolicyLineInput as MissionPolicyEntryRecord } from '../../../src/server/store/types.ts';
 import {
   budgetMissionOf,
   SessionService,
@@ -35,6 +35,8 @@ export interface BudgetFixture extends TestStore {
   readonly creatorId: string;
   readonly connectionId: string;
   readonly mission: BudgetMission;
+  /** The one resource set of the mission's connection. */
+  readonly setId: string;
   readonly service: SessionService;
   readonly rateWindows: SlidingWindowRateLimiter;
   requestUrl(requestId: string): string;
@@ -105,6 +107,7 @@ export async function openBudgetFixture(
     creatorId,
     connectionId,
     mission,
+    setId: mission.policy[0]?.resource_set_id ?? '',
     service,
     rateWindows,
     requestUrl,
@@ -113,3 +116,19 @@ export async function openBudgetFixture(
 }
 
 export const at = (iso: string): Date => new Date(iso);
+
+/**
+ * A map keyed by line (`<set>::<risk>`, a mission with one set per connection) read by
+ * risk: what a test about something else than sets compares.
+ */
+export function byRisk<V>(
+  byLine: Iterable<readonly [string, V]> | Readonly<Record<string, V>>,
+): Record<string, V> {
+  const entries: Iterable<readonly [string, V]> =
+    Symbol.iterator in Object(byLine)
+      ? (byLine as Iterable<readonly [string, V]>)
+      : Object.entries(byLine as Readonly<Record<string, V>>);
+  const out: Record<string, V> = {};
+  for (const [key, value] of entries) out[key.slice(key.indexOf('::') + 2)] = value;
+  return out;
+}

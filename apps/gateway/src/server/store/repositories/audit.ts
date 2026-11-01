@@ -245,7 +245,14 @@ export interface AuditRepo {
    * Allowed call entries touching `riskId` in `[since, until)` — the audit side of the
    * structural check "session counters agree with the audit" (spec §10).
    */
-  countAllowedTouches(missionId: string, riskId: RiskId, since: Iso, until: Iso): Promise<number>;
+  /** Allowed call entries of the mission that touched the risk and were charged on the set. */
+  countAllowedTouches(
+    missionId: string,
+    resourceSetId: string,
+    riskId: RiskId,
+    since: Iso,
+    until: Iso,
+  ): Promise<number>;
   /**
    * Call entries at or after `since`, counted by decision (the `audit_ts` index): the
    * calls of the day of the counters (spec §4.3 bis).
@@ -654,10 +661,18 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   const risksOf = db.prepare<[string], RiskRow>(
     'SELECT risk_id, accepted, touched, remaining FROM audit_risks WHERE audit_id = ? ORDER BY risk_id',
   );
-  const countTouches = db.prepare<[string, string, string, string], { n: number }>(
-    `SELECT COUNT(*) AS n FROM audit a JOIN audit_risks r ON r.audit_id = a.id
+  const insertResourceSet = db.prepare<[string, string]>(
+    'INSERT INTO audit_resource_sets (audit_id, resource_set_id) VALUES (?, ?)',
+  );
+  const resourceSetsOf = db.prepare<[string], { resource_set_id: string }>(
+    'SELECT resource_set_id FROM audit_resource_sets WHERE audit_id = ? ORDER BY resource_set_id',
+  );
+  const countTouches = db.prepare<[string, string, string, string, string], { n: number }>(
+    `SELECT COUNT(*) AS n FROM audit a
+       JOIN audit_risks r ON r.audit_id = a.id
+       JOIN audit_resource_sets s ON s.audit_id = a.id
      WHERE a.kind = 'call' AND a.decision = 'allowed' AND a.mission_id = ?
-       AND r.risk_id = ? AND r.touched = 1 AND a.ts >= ? AND a.ts < ?`,
+       AND s.resource_set_id = ? AND r.risk_id = ? AND r.touched = 1 AND a.ts >= ? AND a.ts < ?`,
   );
   const callsSince = db.prepare<[string], { readonly decision: string; readonly n: number }>(
     `SELECT decision, COUNT(*) AS n FROM audit
@@ -669,6 +684,9 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   const closeWindow = db.prepare<[]>('DELETE FROM audit_purge_guard WHERE id = 1');
   const purgeRisks = db.prepare<[string]>(
     'DELETE FROM audit_risks WHERE audit_id IN (SELECT id FROM audit WHERE ts < ?)',
+  );
+  const purgeResourceSets = db.prepare<[string]>(
+    'DELETE FROM audit_resource_sets WHERE audit_id IN (SELECT id FROM audit WHERE ts < ?)',
   );
   const purge = db.prepare<[string]>('DELETE FROM audit WHERE ts < ?');
   // The sets no remaining entry references, once the old entries are gone (same window).
@@ -837,6 +855,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       upstream_error: row.upstream_error,
       client_ip: row.client_ip,
       client_user_agent: row.client_user_agent,
+      resource_set_ids: resourceSetsOf.all(row.id).map((r) => r.resource_set_id),
       risks,
     };
   }
@@ -850,6 +869,7 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       openWindow.run(cutoff);
       try {
         purgeRisks.run(cutoff);
+        purgeResourceSets.run(cutoff);
         const purged = purge.run(cutoff).changes;
         purgeSetMembers.run();
         purgeSets.run();
@@ -870,6 +890,11 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
             ? callParams(id, entry, storeAcceptedSet(acceptedSetOf(entry.accepted_risks_snapshot)))
             : adminParams(id, entry);
         insert.run(...params);
+        if (entry.kind === 'call') {
+          for (const setId of new Set(entry.resource_set_ids ?? [])) {
+            insertResourceSet.run(id, setId);
+          }
+        }
         for (const r of risks) {
           insertRisk.run(id, r.riskId, r.accepted ? 1 : 0, r.touched ? 1 : 0, r.remaining);
         }
@@ -1000,8 +1025,8 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
             (a.holder ?? '').localeCompare(b.holder ?? ''),
         );
     },
-    async countAllowedTouches(missionId, riskId, since, until) {
-      return countTouches.get(missionId, riskId, since, until)?.n ?? 0;
+    async countAllowedTouches(missionId, resourceSetId, riskId, since, until) {
+      return countTouches.get(missionId, resourceSetId, riskId, since, until)?.n ?? 0;
     },
     async countCallsSince(since) {
       let allowed = 0;

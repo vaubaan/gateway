@@ -11,7 +11,7 @@ tracks:
   - apps/gateway/tests/manual/seed-demo.ts
   - apps/gateway/tests/manual/streaming-check.ts
   - deploy/caddy/Caddyfile
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-01
 ---
 
 # Execution door — handbook
@@ -33,6 +33,7 @@ How an agent holding a mission token lists and calls tools on `/mcp` and reads `
 - **Arguments are JSON values before any stage.** `unfaithfulArgument` rejects a non-finite number (`1e999` → `Infinity`) or a BigInt before the mission state is read, so what is fingerprinted, sealed and handed to the plugin is what JSON carries.
 - **A decision stage that throws refuses the call, audited.** The reason is built from the stage and the error class, never the message, which can quote arguments (threat model, `every-refused-call-audited`).
 - **Git tools only through git.** The resource stage decides a plugin's `gitRemote` fetch/push tools for `channel: 'git'` only, every other tool for `mcp` only, so a push's arguments are always the host's review, never an agent's claim.
+- **The risk step runs per resource set** (risk model §4.7; `risk-stage.ts`, `evaluateCallForResourceSets`). The call is classified once on every mission resource of the connection (environment resolution reads them all); each slice goes to the set of the first identifier equal to a mission resource's ref, and one slice naming none brings every set of the account in. Each touched risk must be accepted in each candidate set: what cannot be placed in one set never gets one set's rights. With several sets the hint names them ("In resource set 2 of this account, …"), the catalog labels resources and budget lines with `resource_set`, and `budget-exhausted` / `rate-limited` carry `resource_set`. A resource a creating call made joins the judged set (the first of several).
 - **The plugin sees what the door allows.** `ctx.resources` is the very array the resource stage checks against; `classify` gets the connection's public fields only (`classifyConnectionOf`), never the credential.
 - **The agent label is attribution only.** No stage reads it, it reserves no budget; a bad value is dropped and logged (`agent label dropped`, never the value), never refused or repaired. Its shape constants live in `missions/bootstrap-kit.ts`, which prints them to agents.
 - **One client-address rule** (`clientIpOf`: right-most `X-Forwarded-For` hop not in `trusted_proxies`, else `unknown`) for the audit's `client_ip` and the request page's rate limit.

@@ -19,6 +19,11 @@ function answer(body: RpcBody): Record<string, unknown> {
   return JSON.parse(content[0].text) as Record<string, unknown>;
 }
 
+/** What a line of `risk` consumed: these missions have one set. */
+function consumedOn(consumed: ReadonlyMap<string, number>, risk: string): number | undefined {
+  return [...consumed].find(([line]) => line.endsWith(`::${risk}`))?.[1];
+}
+
 describe('creator permission edits and deliberate agent requests', () => {
   let rig: ExecutionInstance;
   let mission: IssuedMission;
@@ -112,8 +117,8 @@ describe('creator permission edits and deliberate agent requests', () => {
     ).toBeUndefined();
     const stored = await rig.root.store.missions.getById(mission.mission.id);
     const usage = await rig.root.budget.usageOf(budgetMissionOf(stored!), new Date());
-    expect(usage.consumed.get(READ)).toBe(1);
-    expect(usage.consumed.get(WRITE)).toBe(1);
+    expect(consumedOn(usage.consumed, READ)).toBe(1);
+    expect(consumedOn(usage.consumed, WRITE)).toBe(1);
     const audit = await rig.root.store.audit.list({ kind: 'admin' });
     expect(audit.some((e) => e.kind === 'admin' && e.act === 'permissions-changed')).toBe(true);
   });
@@ -127,7 +132,7 @@ describe('creator permission edits and deliberate agent requests', () => {
     expect(await edit(original)).toMatchObject({ ok: true });
     const stored = await rig.root.store.missions.getById(mission.mission.id);
     const usage = await rig.root.budget.usageOf(budgetMissionOf(stored!), new Date());
-    expect(usage.consumed.get(READ)).toBe(1);
+    expect(consumedOn(usage.consumed, READ)).toBe(1);
   });
   it('retires an unused one-call approval when its permission is removed', async () => {
     const gated = [...(await policy()), line(WRITE, 2, { gate: 'approval' })];

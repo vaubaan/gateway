@@ -49,10 +49,13 @@
  */
 import {
   isMissionTokenKind,
+  lineKeyOf,
   parseEventDetails,
+  policyLineKey,
   type Gate,
   type MissionPolicyEntry,
   type MissionTokenKind,
+  type PolicyLineKey,
   type RequestClosedState,
   type RequestKind,
   type RiskId,
@@ -141,8 +144,8 @@ export interface SessionPeriodRow {
   /** `null` for a one-off mission (its single period never ends). */
   readonly end: string | null;
   readonly current: boolean;
-  /** Actions counted per risk; a risk with no row consumed nothing. */
-  readonly consumed: Readonly<Record<RiskId, number>>;
+  /** Actions counted per line (`lineKeyOf`: a risk in a resource set); a line with no row consumed nothing. */
+  readonly consumed: Readonly<Record<PolicyLineKey, number>>;
 }
 
 export interface SessionEventView {
@@ -509,18 +512,19 @@ function riskRows(
   const consumed = new Map(
     counters
       .filter((c) => active !== null && c.periodStart === active.period.start)
-      .map((c) => [c.riskId, c.consumed] as const),
+      .map((c) => [policyLineKey(c.resourceSetId, c.riskId), c.consumed] as const),
   );
   return detail.policy.map((entry) => ({
     risk_id: entry.risk_id,
+    resource_set_id: entry.resource_set_id ?? '',
     quota: entry.quota,
     rate_limit: entry.rate_limit,
     gate: entry.gate,
     label: entry.label,
     level: entry.level,
-    consumed: active ? (consumed.get(entry.risk_id) ?? 0) : null,
-    remaining: active ? (active.remaining[entry.risk_id] ?? null) : null,
-    exhausted: active ? active.exhausted.includes(entry.risk_id) : false,
+    consumed: active ? (consumed.get(lineKeyOf(entry)) ?? 0) : null,
+    remaining: active ? (active.remaining[lineKeyOf(entry)] ?? null) : null,
+    exhausted: active ? active.exhausted.includes(lineKeyOf(entry)) : false,
     gate_open_until: entry.gate_open_until,
   }));
 }
@@ -531,12 +535,12 @@ function periodRows(
 ): SessionPeriodRow[] {
   const lengthSeconds = detail.mission.periodSeconds;
   const currentStart = detail.state.kind === 'active' ? detail.state.period.start : null;
-  const byStart = new Map<string, Record<RiskId, number>>();
+  const byStart = new Map<string, Record<PolicyLineKey, number>>();
   // The current period is listed even before its first action.
   if (currentStart !== null) byStart.set(currentStart, {});
   for (const counter of counters) {
     const row = byStart.get(counter.periodStart) ?? {};
-    row[counter.riskId] = counter.consumed;
+    row[policyLineKey(counter.resourceSetId, counter.riskId)] = counter.consumed;
     byStart.set(counter.periodStart, row);
   }
   return [...byStart.entries()]

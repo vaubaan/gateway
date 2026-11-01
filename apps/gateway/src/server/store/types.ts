@@ -183,6 +183,8 @@ export interface ShareRecord {
 /** `exhausted` is per risk and derived from counters; it is never a stored status. The
  *  status set and `Gate` are `@vaubaan/shared`'s. */
 export interface MissionPolicyEntry {
+  /** The resource set of its connection the line belongs to (risk model §4.7, migration 0029). */
+  readonly resourceSetId: string;
   readonly riskId: RiskId;
   /** Actions per period. Always a number: no infinite budget (spec §3.2). */
   readonly quota: number;
@@ -191,6 +193,9 @@ export interface MissionPolicyEntry {
   readonly rateWindowSeconds: number;
   readonly gate: Gate;
 }
+
+/** A policy line as a writer gives it, inside the set it belongs to. */
+export type MissionPolicyLineInput = Omit<MissionPolicyEntry, 'resourceSetId'>;
 
 /**
  * How a mission's selection on one connection is stored:
@@ -213,22 +218,61 @@ export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
 export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit'] as const;
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
 
-export interface MissionConnectionRecord {
-  readonly connectionId: string;
+/**
+ * One resource set of a connection of a mission (risk model §4.7, ADR
+ * resource-sets-partition-a-mission-connection, migration 0029): its resources, and the
+ * lines of the mission's policy that name it. A resource is in exactly one set of its
+ * connection; at most one set per connection has scope `connection`, and it reaches the
+ * resources of the connection no other set selects.
+ */
+export interface MissionResourceSetRecord {
+  readonly id: string;
+  /** Its place among the sets of the connection, from 1: "Resource set 1", "Resource set 2". */
+  readonly position: number;
   readonly resourceScope: ResourceScope;
   /** Selected resource ids; empty when `resourceScope` is `all` or `connection`. */
   readonly resourceIds: readonly string[];
   /**
    * The source of each selected id that was not stored at issuance, keyed by resource id;
-   * absent when every id was (the store reads it, writers never pass it).
+   * absent when every id was.
    */
   readonly resourceSources?: Readonly<Record<string, MissionResourceSource>>;
   /**
-   * The trust level of each ticked macro-action, by macro-action id (`trust_levels_json`, migrations
-   * 0025 and 0027): display only, it redraws the form; absent when none was recorded.
+   * The trust level of each ticked macro-action, by macro-action id (`trust_levels_json`):
+   * display only, it redraws the form; absent when none was recorded.
    */
   readonly trustLevels?: Readonly<Record<string, string>>;
 }
+
+export interface MissionConnectionRecord {
+  readonly connectionId: string;
+  /** The sets of the connection, by `position`; never empty. */
+  readonly resourceSets: readonly MissionResourceSetRecord[];
+}
+
+/** One set as a writer gives it: an `id` keeps a stored set (an edit), none makes a new one. */
+export interface MissionResourceSetInput {
+  readonly id?: string;
+  readonly resourceScope: ResourceScope;
+  readonly resourceIds: readonly string[];
+  readonly trustLevels?: Readonly<Record<string, string>>;
+  /** Every line of the set. */
+  readonly policy: readonly MissionPolicyLineInput[];
+}
+
+/**
+ * One connection as a writer gives it: its sets, each with its lines, or — the shape of
+ * a mission with one set per connection — the selection directly, the lines then given
+ * once for the whole mission (`CreateMissionInput.policy`) and placed by provider.
+ */
+export type MissionConnectionInput =
+  | { readonly connectionId: string; readonly resourceSets: readonly MissionResourceSetInput[] }
+  | {
+      readonly connectionId: string;
+      readonly resourceScope: ResourceScope;
+      readonly resourceIds: readonly string[];
+      readonly trustLevels?: Readonly<Record<string, string>>;
+    };
 
 export interface MissionRecord {
   readonly id: string;
@@ -318,6 +362,7 @@ export interface SessionRecord {
 
 export interface SessionCounterRecord {
   readonly sessionId: string;
+  readonly resourceSetId: string;
   readonly riskId: RiskId;
   readonly periodStart: Iso;
   readonly consumed: number;
@@ -329,6 +374,8 @@ export interface EventRecord {
   readonly ts: Iso;
   readonly kind: string;
   readonly riskId: RiskId | null;
+  /** The resource set the event is about, beside its risk (migration 0029); `null` otherwise. */
+  readonly resourceSetId: string | null;
   readonly actorUserId: string | null;
   readonly details: Record<string, unknown> | null;
 }
@@ -341,6 +388,8 @@ export interface EventRecord {
  */
 export type NewEvent = SessionEventDetails & {
   readonly riskId?: RiskId | null;
+  /** The resource set of `riskId`, for an event about one line of the policy. */
+  readonly resourceSetId?: string | null;
   readonly actorUserId?: string | null;
 };
 
@@ -351,6 +400,7 @@ export type NewEvent = SessionEventDetails & {
 export interface UntypedNewEvent {
   readonly kind: string;
   readonly riskId?: RiskId | null;
+  readonly resourceSetId?: string | null;
   readonly actorUserId?: string | null;
   /** A JSON object, stored as text. */
   readonly details?: object | null;
@@ -375,6 +425,13 @@ export interface RequestRecord {
    * request covers the call"). Never empty; `riskId` is its first element.
    */
   readonly riskIds: readonly RiskId[];
+  /**
+   * Every (set, risk) line the request is about (migration 0029): a claim, its one line;
+   * an approval request, the gated line of each set the call was judged against; a
+   * permission request, the missing ones. A row older than 0029 reads its risks in the
+   * set it was attributed to; one attributed to none reads none.
+   */
+  readonly lines: readonly RequestLine[];
   readonly tool: string | null;
   readonly fingerprint: string | null;
   /** True while the encrypted arguments are still held (open approval request). */
@@ -384,6 +441,12 @@ export interface RequestRecord {
   readonly decidedAt: Iso | null;
   readonly decidedByUserId: string | null;
   readonly decision: Record<string, unknown> | null;
+}
+
+/** One line of the policy a request is about: a risk in one resource set. */
+export interface RequestLine {
+  readonly resourceSetId: string;
+  readonly riskId: RiskId;
 }
 
 export interface ApprovalRecord {

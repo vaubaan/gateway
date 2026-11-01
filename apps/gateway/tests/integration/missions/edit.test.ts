@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { budgetMissionOf } from '../../../src/server/budget';
 import { executionInstance, line, type ExecutionInstance } from '../../support/execution/testing';
 import type { MissionDraft } from '../../../src/server/missions';
-import { agePastStaleGrace } from '../../support/store/testing';
+import { agePastStaleGrace, flatConnections } from '../../support/store/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   githubDraft,
@@ -165,7 +165,7 @@ describe('editing a mission after issuance', () => {
       [rig.seeded.github.connection.id, rig.seeded.supabase.connection.id].sort(),
     );
     expect(
-      after.connections.find((c) => c.connectionId === rig.seeded.github.connection.id),
+      flatConnections(after).find((c) => c.connectionId === rig.seeded.github.connection.id),
     ).toEqual({
       connectionId: rig.seeded.github.connection.id,
       resourceScope: 'selected',
@@ -175,6 +175,7 @@ describe('editing a mission after issuance', () => {
     });
     const policy = new Map(budgetMissionOf(after).policy.map((p) => [p.risk_id, p]));
     expect(policy.get(READ)).toEqual({
+      resource_set_id: expect.any(String) as string,
       risk_id: READ,
       quota: 9,
       rate_limit: { max: 20, window_seconds: 120 },
@@ -298,7 +299,7 @@ describe('editing a mission after issuance', () => {
     expect(await service().edit(rig.seeded.ada, mission.id, lower)).toMatchObject({ ok: true });
     const after = await fresh();
     // The stale resource stays where it was: it comes back if discovery returns it.
-    expect(after.connections[0]?.resourceIds).toEqual([resourceId('acme/app')]);
+    expect(after.connections[0]?.resourceSets[0]?.resourceIds).toEqual([resourceId('acme/app')]);
     expect(after.policy.find((p) => p.riskId === READ)?.quota).toBe(3);
 
     // Moved to acme/web; adding the stale acme/app back is judged, with the creation's words.
@@ -362,7 +363,7 @@ describe('editing a mission after issuance', () => {
       }),
     );
     const stored = await rig.root.store.missions.getById(recorded.id);
-    expect(stored?.connections[0]?.trustLevels).toEqual({ read: 'trusting' });
+    expect(stored?.connections[0]?.resourceSets[0]?.trustLevels).toEqual({ read: 'trusting' });
 
     const current = await service().editView(rig.seeded.ada, recorded.id);
     if (!current) throw new Error('no edit view');
@@ -382,7 +383,7 @@ describe('editing a mission after issuance', () => {
       await service().edit(rig.seeded.ada, recorded.id, { draft, revision: current.revision }),
     ).toMatchObject({ ok: true });
     const after = await rig.root.store.missions.getById(recorded.id);
-    expect(after?.connections[0]?.trustLevels).toEqual({ read: 'autonomous' });
+    expect(after?.connections[0]?.resourceSets[0]?.trustLevels).toEqual({ read: 'autonomous' });
   });
 
   it('is the creator’s alone; a revoked mission is not edited, an expired one is and comes back', async () => {

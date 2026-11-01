@@ -30,6 +30,14 @@ export function missionChangeClauses(summary: MissionChangedEventDetails): strin
   if (summary.connections_removed > 0) {
     clauses.push(`${counted(summary.connections_removed, 'account', 'accounts')} removed`);
   }
+  const setsAdded = summary.resource_sets_added ?? 0;
+  if (setsAdded > 0) {
+    clauses.push(`${counted(setsAdded, 'resource set', 'resource sets')} added`);
+  }
+  const setsRemoved = summary.resource_sets_removed ?? 0;
+  if (setsRemoved > 0) {
+    clauses.push(`${counted(setsRemoved, 'resource set', 'resource sets')} removed`);
+  }
   if (summary.resources_added > 0) {
     clauses.push(`${counted(summary.resources_added, 'resource', 'resources')} added`);
   }

@@ -17,7 +17,14 @@ import {
   PermissionRow,
   PermissionTable,
 } from '@/components/ui';
-import { formatNumber, gateWordOf, reachedOnAccount, usage, usedColumn } from '@/lib/vocabulary';
+import {
+  formatNumber,
+  gateWordOf,
+  reachedOnAccount,
+  RESOURCE_SET_WORDS,
+  usage,
+  usedColumn,
+} from '@/lib/vocabulary';
 import type { MissionDetail } from '@/server/missions';
 import type { CatalogRisk } from '@/lib/missions/model';
 import { riskReferencePath } from '@/lib/providers/links';
@@ -42,23 +49,43 @@ export function PermissionsUsage({
   editable: boolean;
 }) {
   const { mission, policy, connections } = detail;
+  // One group per account; per resource set when an account has several (risk model §4.7).
   const groups = connections
-    .map((connection) => ({
-      connection,
-      entries: policy.filter(
-        (entry) => parseRiskId(entry.risk_id)?.provider === connection.provider,
-      ),
-    }))
+    .flatMap((connection) => {
+      const several = connection.resource_sets.length > 1;
+      const sets = several ? connection.resource_sets : [null];
+      return sets.map((set) => ({
+        key: set ? `${connection.id}:${set.id}` : connection.id,
+        title: set
+          ? `${connection.provider_label} · ${connection.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
+          : `${connection.provider_label} · ${connection.display_name}`,
+        note: set
+          ? reachedOnAccount(
+              set.resources.map((r) => r.display_name || r.ref),
+              set.reaches_later,
+            )
+          : reachedOnAccount(
+              connection.resources.map((r) => r.display_name || r.ref),
+              connection.reaches_later,
+            ),
+        suffix: set && set.position > 1 ? `-set${set.position}` : '',
+        entries: policy.filter((entry) =>
+          set
+            ? entry.resource_set_id === set.id
+            : parseRiskId(entry.risk_id)?.provider === connection.provider,
+        ),
+      }));
+    })
     .filter((group) => group.entries.length > 0);
-  const grouped = new Set(groups.flatMap((group) => group.entries.map((e) => e.risk_id)));
-  const orphans = policy.filter((entry) => !grouped.has(entry.risk_id));
+  const grouped = new Set(groups.flatMap((group) => group.entries));
+  const orphans = policy.filter((entry) => !grouped.has(entry));
 
-  const rowOf = (entry: (typeof policy)[number]) => {
+  const rowOf = (entry: (typeof policy)[number], suffix = '') => {
     const risk = explain(entry.risk_id);
     const used = entry.remaining === null ? null : entry.quota - entry.remaining;
     return (
       <PermissionRow
-        key={entry.risk_id}
+        key={`${entry.resource_set_id ?? ''}:${entry.risk_id}`}
         label={entry.label}
         id={entry.risk_id}
         severity={entry.level ?? 'low'}
@@ -67,7 +94,10 @@ export function PermissionsUsage({
             <>
               {risk?.env && <EnvTag env={risk.env} />}
               {entry.gate_open_until && (
-                <span className={styles.openUntil} data-testid={`gate-open-${entry.risk_id}`}>
+                <span
+                  className={styles.openUntil}
+                  data-testid={`gate-open-${entry.risk_id}${suffix}`}
+                >
                   runs freely until <LocalDate ts={entry.gate_open_until} />
                 </span>
               )}
@@ -91,6 +121,8 @@ export function PermissionsUsage({
             <GateControl
               missionId={mission.id}
               riskId={entry.risk_id}
+              {...(entry.resource_set_id ? { resourceSetId: entry.resource_set_id } : {})}
+              setSuffix={suffix}
               label={entry.label}
               gate={entry.gate}
             />
@@ -116,21 +148,14 @@ export function PermissionsUsage({
       labels={{ usage: usedColumn(periodSeconds) }}
       testId="permissions-table"
     >
-      {groups.map(({ connection, entries }) => (
-        <PermissionGroup
-          key={connection.id}
-          title={`${connection.provider_label} · ${connection.display_name}`}
-          note={reachedOnAccount(
-            connection.resources.map((r) => r.display_name || r.ref),
-            connection.reaches_later,
-          )}
-        >
-          {entries.map(rowOf)}
+      {groups.map(({ key, title, note, suffix, entries }) => (
+        <PermissionGroup key={key} title={title} note={note}>
+          {entries.map((entry) => rowOf(entry, suffix))}
         </PermissionGroup>
       ))}
       {orphans.length > 0 && (
         <PermissionGroup title="Other" note="no account of this mission carries them">
-          {orphans.map(rowOf)}
+          {orphans.map((entry) => rowOf(entry))}
         </PermissionGroup>
       )}
     </PermissionTable>

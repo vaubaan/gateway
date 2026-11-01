@@ -62,7 +62,12 @@ describe('mission selections written before migration 0018', () => {
         "INSERT INTO mission_resources (mission_id, connection_id, resource_id) VALUES ('m', 'gh', 'res-app')",
       ).run();
 
-      runMigrations(db, shipped, t.clock);
+      // Up to 0028: 0029 moves the scope to the resource sets (its own test).
+      runMigrations(
+        db,
+        shipped.filter((m) => m.version < 29),
+        t.clock,
+      );
 
       expect(
         db

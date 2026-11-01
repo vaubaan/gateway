@@ -13,12 +13,16 @@ import { DEFAULT_MIGRATIONS_DIR } from '../../../src/server/store/migrate';
 import { StubEncryptor, TEST_RISK_IDS } from '../../support/store/testing';
 
 const MIGRATION = 28;
+const RESOURCE_SETS = 29;
 
 it('revokes the active argon2id tokens, and only them', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'argon2id-migration-'));
   const before = mkdtempSync(join(tmpdir(), 'argon2id-before-'));
   for (const file of readdirSync(DEFAULT_MIGRATIONS_DIR)) {
-    if (/^\d{4}_/.test(file) && Number(file.slice(0, 4)) < MIGRATION) {
+    // 0029 (resource sets) is independent of 0028 and is what the repositories write
+    // through: the store before 0028 is given it so the test can write with them.
+    const version = Number(file.slice(0, 4));
+    if (/^\d{4}_/.test(file) && (version < MIGRATION || version === RESOURCE_SETS)) {
       copyFileSync(join(DEFAULT_MIGRATIONS_DIR, file), join(before, file));
     }
   }

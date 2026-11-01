@@ -584,3 +584,49 @@ p.railRefused {
   overflow-wrap: anywhere;
   min-width: 0;
 }
+
+/* Resource sets (risk model §4.7): one table head per set inside an account. */
+.resourceSet {
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+.resourceSetHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-height: var(--control-sm);
+  font-size: var(--text-sm);
+}
+.resourceSetTitle {
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+.resourceSetScope {
+  width: auto;
+}
+.addResourceSet {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.addResourceSet:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.explicitSet {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  color: var(--ink-2);
+}

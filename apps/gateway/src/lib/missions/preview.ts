@@ -33,6 +33,8 @@ import type {
   DraftConnection,
   DraftPeriod,
   DraftPolicyEntry,
+  DraftResourceSet,
+  DraftResources,
   IssuanceConnection,
   IssuanceResource,
   LeftOutEntry,
@@ -41,8 +43,10 @@ import type {
   PreviewIssue,
   PreviewNotice,
   ResolvedDraftConnection,
+  ResourceSetPreview,
   UnresolvableEntry,
 } from './model';
+import { draftSetsOf } from './model';
 import { summarize } from './summary';
 
 export const MISSION_NAME_MAX_LENGTH = 120;
@@ -127,18 +131,25 @@ function resourcesTotal(
   return defaultResources(connection).length + selected.filter((r) => r.hidden).length;
 }
 
+/**
+ * The resources one set asks for. A set taking "the rest" (`all`, `connection`) gets
+ * every resource of `defaultResources` no other set of the connection selects
+ * (`elsewhere`); with one set, nothing is elsewhere.
+ */
 function resolveResources(
   connection: IssuanceConnection,
-  draft: DraftConnection,
-  index: number,
+  wanted: DraftResources,
+  where: Where,
+  elsewhere: ReadonlySet<string> = new Set(),
 ): ResourceResolution {
-  const wanted = draft.resources ?? { scope: 'all' };
   // `connection` is judged on what it reaches now; later resources join at read time.
   if (wanted.scope === 'all' || wanted.scope === 'connection') {
-    return { selected: defaultResources(connection), issues: [] };
+    return {
+      selected: defaultResources(connection).filter((r) => !elsewhere.has(r.id)),
+      issues: [],
+    };
   }
 
-  const where = { connection_index: index, connection_id: connection.id };
   const byId = new Map(connection.resources.map((r) => [r.id, r]));
   const byRef = new Map(connection.resources.map((r) => [r.ref, r]));
   const selected = new Map<string, IssuanceResource>();
@@ -216,6 +227,8 @@ interface ConnectionOutcome {
 interface Where {
   readonly connection_index: number;
   readonly connection_id: string;
+  /** The resource set of the connection, when the connection has several. */
+  readonly resource_set_index?: number;
 }
 
 function list(ids: readonly string[]): string {
@@ -241,7 +254,7 @@ interface Prefill {
 /** The prefill a draft names on a connection, against the selected resources. */
 function resolvePrefill(
   connection: IssuanceConnection,
-  draft: DraftConnection,
+  draft: DraftResourceSet,
   selected: readonly IssuanceResource[],
   where: Where,
 ): Prefill {
@@ -586,16 +599,29 @@ export function everythingNotice(
   };
 }
 
-/** One connection of a draft against the creator's authority on it. */
-export function previewConnection(
+/** What one set of a connection yields, with the issues and notices about it. */
+interface SetOutcome {
+  readonly preview: ResourceSetPreview;
+  readonly resourcesTotal: number;
+  readonly issues: PreviewIssue[];
+  readonly notices: PreviewNotice[];
+}
+
+/** One set of a draft connection, on the resources it was given. */
+function previewSet(
   connection: IssuanceConnection,
-  draft: DraftConnection,
-  index = 0,
-): ConnectionOutcome {
-  const where: Where = { connection_index: index, connection_id: connection.id };
-  const resources = resolveResources(connection, draft, index);
+  draft: DraftResourceSet,
+  index: number,
+  resources: ResourceResolution,
+  where: Where,
+): SetOutcome {
   const reachesLater = draft.resources?.scope === 'connection';
-  const prefill = resolvePrefill(connection, draft, resources.selected, where);
+  // Several sets: each sentence names its set beside the account ("acme — resource set 2").
+  const named =
+    where.resource_set_index === undefined
+      ? connection
+      : { ...connection, display_name: `${connection.display_name} — resource set ${index + 1}` };
+  const prefill = resolvePrefill(named, draft, resources.selected, where);
 
   // A draft with explicit lines accepts exactly those; a draft without writes
   // its policy from `everything-i-hold` or its trust levels, bounded by what the
@@ -615,23 +641,21 @@ export function previewConnection(
     defaultsOf: (risk) => fills.get(risk.risk_id) ?? null,
   });
 
-  const issues = [...resources.issues, ...prefill.issues, ...issuesOf(buckets, connection, where)];
+  const issues = [...resources.issues, ...prefill.issues, ...issuesOf(buckets, named, where)];
   if (lines.length === 0 || (prefillOnly && buckets.passes.length === 0)) {
     issues.push({
       code: 'no-accepted-risk',
-      message: `Connection "${connection.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
+      message: `Connection "${named.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
       ...where,
     });
   }
 
   return {
     preview: {
-      connection_id: connection.id,
-      provider: connection.provider,
-      display_name: connection.display_name,
+      index,
+      id: draft.id ?? null,
       resources: resources.selected,
       reaches_later: reachesLater,
-      resources_total: resourcesTotal(connection, resources.selected),
       everything_i_hold: prefill.everything,
       passes: buckets.passes,
       exceeds: buckets.exceeds,
@@ -641,12 +665,143 @@ export function previewConnection(
       left_out: prefillOnly ? [...prefill.left_out, ...buckets.leftOut] : [],
       trust_levels: prefill.trustLevels,
     },
+    resourcesTotal: resourcesTotal(connection, resources.selected),
     issues,
     notices: [
-      ...(prefill.everything ? [everythingNotice(connection, buckets.passes, where)] : []),
-      ...envNotices(connection, resources.selected, buckets.passes, where),
-      ...(reachesLater ? laterResourcesNotice(connection, buckets.passes, where) : []),
+      ...(prefill.everything ? [everythingNotice(named, buckets.passes, where)] : []),
+      ...envNotices(named, resources.selected, buckets.passes, where),
+      ...(reachesLater ? laterResourcesNotice(named, buckets.passes, where) : []),
     ],
+  };
+}
+
+/** True when a set takes "the rest" of the connection: every resource no other set selects. */
+function takesTheRest(set: DraftResourceSet): boolean {
+  const scope = set.resources?.scope ?? 'all';
+  return scope === 'all' || scope === 'connection';
+}
+
+/**
+ * The partition of a connection's selection between its sets (risk model §4.7): the
+ * explicit selections first, each resource in one set only; then the one set that
+ * takes the rest, if any. Two sets selecting a resource, or two sets taking the rest,
+ * are `resource-sets-overlap`.
+ */
+function partitionOf(
+  connection: IssuanceConnection,
+  sets: readonly DraftResourceSet[],
+  where: Where,
+): { readonly resolutions: ResourceResolution[]; readonly issues: PreviewIssue[] } {
+  const several = sets.length > 1;
+  const whereOf = (index: number): Where =>
+    several ? { ...where, resource_set_index: index } : where;
+  const explicit = sets.map((set, index) =>
+    takesTheRest(set)
+      ? null
+      : resolveResources(connection, set.resources ?? { scope: 'all' }, whereOf(index)),
+  );
+  const issues: PreviewIssue[] = [];
+  const owner = new Map<string, number>();
+  const twice = new Set<string>();
+  explicit.forEach((resolution, index) => {
+    for (const r of resolution?.selected ?? []) {
+      if (owner.has(r.id) && owner.get(r.id) !== index) twice.add(r.ref);
+      else owner.set(r.id, index);
+    }
+  });
+  if (twice.size > 0) {
+    issues.push({
+      code: 'resource-sets-overlap',
+      message: `On "${connection.display_name}", ${[...twice].join(', ')} ${
+        twice.size === 1 ? 'is' : 'are'
+      } in two resource sets: a resource belongs to one set only.`,
+      resource_refs: [...twice],
+      ...where,
+    });
+  }
+  const rest = sets.filter(takesTheRest);
+  if (rest.length > 1) {
+    issues.push({
+      code: 'resource-sets-overlap',
+      message: `On "${connection.display_name}", ${rest.length} resource sets take every resource no other set selects ("All resources" or "The whole account"): only one set may.`,
+      ...where,
+    });
+  }
+  const elsewhere = new Set(owner.keys());
+  const resolutions = sets.map(
+    (set, index) =>
+      explicit[index] ??
+      resolveResources(connection, set.resources ?? { scope: 'all' }, whereOf(index), elsewhere),
+  );
+  return { resolutions, issues };
+}
+
+/** One connection of a draft against the creator's authority on it. */
+export function previewConnection(
+  connection: IssuanceConnection,
+  draft: DraftConnection,
+  index = 0,
+): ConnectionOutcome {
+  const where: Where = { connection_index: index, connection_id: connection.id };
+  const issues: PreviewIssue[] = [];
+  const mixed =
+    draft.resource_sets !== undefined &&
+    (draft.resources !== undefined ||
+      draft.policy !== undefined ||
+      draft.trust_levels !== undefined ||
+      draft.everything_i_hold !== undefined);
+  if (mixed) {
+    issues.push({
+      code: 'resource-sets-mixed',
+      message: `Connection "${connection.display_name}" gives resource_sets and, beside them, its own resources, policy, trust_levels or everything_i_hold: give each set its own, and nothing beside them.`,
+      ...where,
+    });
+  }
+  const sets = draftSetsOf(draft);
+  if (sets.length === 0) {
+    issues.push({
+      code: 'no-resource-selected',
+      message: `Connection "${connection.display_name}" has no resource set: the mission could touch nothing on it.`,
+      ...where,
+    });
+  }
+  const several = sets.length > 1;
+  const partition = partitionOf(connection, sets, where);
+  issues.push(...partition.issues);
+  const outcomes = sets.map((set, setIndex) =>
+    previewSet(
+      connection,
+      set,
+      setIndex,
+      partition.resolutions[setIndex] ?? { selected: [], issues: [] },
+      several ? { ...where, resource_set_index: setIndex } : where,
+    ),
+  );
+  const previews = outcomes.map((o) => o.preview);
+  const resources = connection.resources.filter((r) =>
+    previews.some((set) => set.resources.some((own) => own.id === r.id)),
+  );
+  const [first] = previews;
+  return {
+    preview: {
+      connection_id: connection.id,
+      provider: connection.provider,
+      display_name: connection.display_name,
+      resources,
+      reaches_later: previews.some((set) => set.reaches_later),
+      resources_total: resourcesTotal(connection, resources),
+      everything_i_hold: previews.some((set) => set.everything_i_hold),
+      passes: previews.flatMap((set) => set.passes),
+      exceeds: [...new Set(previews.flatMap((set) => set.exceeds))],
+      unknown: [...new Set(previews.flatMap((set) => set.unknown))],
+      unresolvable: previews.flatMap((set) => set.unresolvable),
+      missing_budget: [...new Set(previews.flatMap((set) => set.missing_budget))],
+      left_out: previews.flatMap((set) => set.left_out),
+      trust_levels: first?.trust_levels ?? {},
+      resource_sets: previews,
+    },
+    issues: [...issues, ...outcomes.flatMap((o) => o.issues)],
+    notices: outcomes.flatMap((o) => o.notices),
   };
 }
 
@@ -798,12 +953,15 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
 
   const resolved: ResolvedDraftConnection[] = previews.map((p) => ({
     connection_id: p.connection_id,
-    resources: p.reaches_later
-      ? { scope: 'connection' }
-      : { scope: 'selected', resource_ids: p.resources.map((r) => r.id) },
-    everything_i_hold: p.everything_i_hold,
-    policy: p.passes,
-    trust_levels: p.trust_levels,
+    resource_sets: p.resource_sets.map((set) => ({
+      ...(set.id !== null ? { id: set.id } : {}),
+      resources: set.reaches_later
+        ? { scope: 'connection' }
+        : { scope: 'selected', resource_ids: set.resources.map((r) => r.id) },
+      everything_i_hold: set.everything_i_hold,
+      policy: set.passes,
+      trust_levels: set.trust_levels,
+    })),
   }));
 
   return {

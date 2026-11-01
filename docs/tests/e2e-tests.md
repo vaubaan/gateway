@@ -49,6 +49,7 @@ last_reviewed: 2026-10-27
 - ⚠️ **Claude Code against a running instance behind TLS** (spec [§4.4](../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance)) — never done; the official MCP client stands in. Part of the manual run.
 - ⚠️ **Bootstrap, Settings → Sign-in and the instance name in a browser** (spec [§7.1](../spec/vaubaan-gateway.md#71-install-an-instance)) — integration (`FakeIdp`) and by hand only.
 - ⚠️ **Real sign-in providers** (spec [§4.2](../spec/vaubaan-gateway.md#42-human-surface)) — Google, Entra, Microsoft personal, a GitHub org restricting OAuth Apps: by hand only, when the feature changes.
+- ⚠️ **Several resource sets on one account in a browser** ([risk model](../spec/gateway-risk-model.md) §4.7) — the form's set operations are unit-tested (`form-state.test.ts`) and the runtime in integration (`execution/resource-sets.test.ts`); no spec adds a second set and issues.
 - ⚠️ **Giving access to a team, approving a registered app, deactivating a person in a browser** (spec [§7.3](../spec/vaubaan-gateway.md#73-give-access)) — integration only.
 - ⚠️ **OAuth and SSH connect flows in a browser** (spec [§7.2](../spec/vaubaan-gateway.md#72-connect-an-account)) — only the pasted-token flow runs in a browser; the others are integration-only, and real accounts are checked by hand.
 - ⚠️ **The application path inside the image** (spec [§4.3](../spec/vaubaan-gateway.md#43-instance-configuration)) — covered only by the manual run.

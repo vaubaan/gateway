@@ -64,7 +64,8 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
   async function selectionOf(mission: IssuedMission) {
     const stored = await instance.root.store.missions.getById(mission.mission.id);
-    return stored?.connections[0];
+    // One set on the connection: its selection.
+    return stored?.connections[0]?.resourceSets[0];
   }
 
   it('an explicit selection reaches the space it created on its very next call', async () => {
@@ -166,7 +167,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
     const empty = await executionInstance({ spaces: [] });
     try {
       const mission = await empty.issue({ policy: [line(CREATE), line(READ)] });
-      expect(mission.mission.connections[0]).toMatchObject({
+      expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
         resourceScope: 'all',
         resourceIds: [],
       });
@@ -176,8 +177,8 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
       await empty.call(mission, 'depot__create_space', { space: 'first' });
       const stored = await empty.root.store.missions.getById(mission.mission.id);
-      expect(stored?.connections[0]).toMatchObject({ resourceScope: 'selected' });
-      expect(stored?.connections[0]?.resourceIds).toHaveLength(1);
+      expect(stored?.connections[0]?.resourceSets[0]).toMatchObject({ resourceScope: 'selected' });
+      expect(stored?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
 
       empty.depot.script(async () => ({ content: [{ type: 'text', text: 'ok' }] }));
       const read = await empty.call(mission, 'depot__read_item', { space: 'first' });
@@ -314,7 +315,7 @@ describe('execution door: the instance’s own resource never joins', () => {
       const rows = await instance.root.store.connections.listResources(instance.connection.id);
       expect(rows.some((r) => r.ref === 'home')).toBe(false);
       const stored = await instance.root.store.missions.getById(mission.mission.id);
-      expect(stored?.connections[0]?.resourceIds).toHaveLength(1);
+      expect(stored?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
     } finally {
       await instance.close();
     }

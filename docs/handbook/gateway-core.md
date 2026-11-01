@@ -6,7 +6,7 @@ tracks:
   - packages/shared/src/domain.ts
   - packages/shared/src/refusal.ts
   - packages/shared/src/risk.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-01
 ---
 
 # Gateway core — handbook
@@ -22,7 +22,7 @@ and the call pipeline whose stages the application fills
 
 - [`pipeline.ts`](../../packages/gateway-core/src/pipeline.ts) — doors, stage order, `CallOutcome`, what a rejection stores.
 - [`errors.ts`](../../packages/gateway-core/src/errors.ts) — the `Refusal` union and `refuse.*` builders.
-- [`risk-gateway.ts`](../../packages/gateway-core/src/risk-gateway.ts) — classify, intersect with the catalog, allow or deny.
+- [`risk-gateway.ts`](../../packages/gateway-core/src/risk-gateway.ts) — classify, intersect with the catalog, allow or deny; `evaluateCallForResourceSets` runs that risk step once per candidate resource set (`candidateResourceSets`), `evaluateCall` itself unchanged.
 - [`fingerprint.ts`](../../packages/gateway-core/src/fingerprint.ts) — the one argument hash.
 
 ## Invariants

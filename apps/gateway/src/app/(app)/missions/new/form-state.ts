@@ -13,6 +13,7 @@ import type {
   CatalogRisk,
   DraftConnection,
   DraftPeriod,
+  DraftResourceSet,
   DraftResources,
   IssuanceConnection,
   IssuanceResource,
@@ -92,10 +93,18 @@ export const RESOURCE_CHOICES: readonly {
   },
 ];
 
-export interface ConnectionState {
-  readonly included: boolean;
-  readonly view: PolicyView;
-  /** How far the mission reaches on this account; `all` by default. */
+/**
+ * One resource set of an account in the form (risk model §4.7): its resources and
+ * its policy. An account has one set until the person adds another; with one set
+ * the screen shows no set at all.
+ */
+export interface SetState {
+  /** The stored set an edit keeps; absent for a set of a creation, or one the edit adds. */
+  readonly id?: string;
+  /**
+   * How far the set reaches on this account; `all` by default. With several sets,
+   * `all` and `connection` take what no other set picks.
+   */
   readonly resourceScope: ResourceChoice;
   /**
    * Selected resource ids; by default every resource that is neither hidden nor
@@ -110,6 +119,15 @@ export interface ConnectionState {
   readonly entries: Readonly<Record<RiskId, EntryState>>;
   /** True once the lines differ from what the trust levels (or "Everything I hold") wrote. */
   readonly edited: boolean;
+}
+
+/** One account of the form: included or not, its view, and its resource sets. */
+export interface ConnectionState {
+  readonly included: boolean;
+  /** Simple or Advanced, for every set of the account. */
+  readonly view: PolicyView;
+  /** Never empty; the first set is the account's own until another is added. */
+  readonly sets: readonly SetState[];
 }
 
 export const PERIOD_CHOICES = [
@@ -147,10 +165,9 @@ export interface FormState {
 export const DEFAULT_PERIOD: PeriodChoice = 'day';
 export const DEFAULT_EXPIRY: ExpiryChoice = 'never';
 
-export function initialConnectionState(connection: IssuanceConnection): ConnectionState {
+/** A set as a new account starts with: every resource known now, nothing ticked. */
+export function initialSetState(connection: IssuanceConnection): SetState {
   return {
-    included: false,
-    view: 'simple',
     resourceScope: 'all',
     resourceIds: defaultResources(connection).map((r) => r.id),
     trustLevels: {},
@@ -158,6 +175,10 @@ export function initialConnectionState(connection: IssuanceConnection): Connecti
     entries: {},
     edited: false,
   };
+}
+
+export function initialConnectionState(connection: IssuanceConnection): ConnectionState {
+  return { included: false, view: 'simple', sets: [initialSetState(connection)] };
 }
 
 export function initialFormState(context: readonly IssuanceConnection[]): FormState {
@@ -183,7 +204,7 @@ const BLANK_ENTRY: EntryState = { quota: '', rateMax: '', rateWindow: '', gate: 
 
 export function selectedResources(
   connection: IssuanceConnection,
-  state: Pick<ConnectionState, 'resourceIds'>,
+  state: Pick<SetState, 'resourceIds'>,
 ): IssuanceResource[] {
   const selected = new Set(state.resourceIds);
   return connection.resources.filter((r) => selected.has(r.id));
@@ -195,7 +216,7 @@ export function selectedResources(
  * so the confirmation lists exactly what is stored).
  */
 export function draftResourcesOf(
-  state: Pick<ConnectionState, 'resourceScope' | 'resourceIds'>,
+  state: Pick<SetState, 'resourceScope' | 'resourceIds'>,
 ): DraftResources {
   return state.resourceScope === 'connection'
     ? { scope: 'connection' }
@@ -205,7 +226,7 @@ export function draftResourcesOf(
 /** The connection as a draft line that carries only "Everything I hold": what applying it means. */
 function everythingDraft(
   connection: IssuanceConnection,
-  state: Pick<ConnectionState, 'resourceIds'> & Partial<Pick<ConnectionState, 'resourceScope'>>,
+  state: Pick<SetState, 'resourceIds'> & Partial<Pick<SetState, 'resourceScope'>>,
 ): DraftConnection {
   return {
     connection_id: connection.id,
@@ -227,10 +248,7 @@ function entriesOf(
  * "Everything I hold on this account": its explicit lines, in place of the
  * macro-actions, bounded by the authority and the selection.
  */
-export function applyEverything(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): ConnectionState {
+export function applyEverything<S extends SetState>(connection: IssuanceConnection, state: S): S {
   const { preview } = previewConnection(connection, everythingDraft(connection, state));
   return {
     ...state,
@@ -242,10 +260,7 @@ export function applyEverything(
 }
 
 /** Fills the policy from the trust levels: the lines `linesOfTrustLevels` writes, nothing else. */
-export function applyTrustLevels(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): ConnectionState {
+export function applyTrustLevels<S extends SetState>(connection: IssuanceConnection, state: S): S {
   const lines = linesOfTrustLevels(
     connection,
     state.trustLevels,
@@ -259,12 +274,12 @@ export function applyTrustLevels(
  * it; the policy is rewritten from the trust levels. The screen asks first when this
  * would throw edits away (`discardsEdits`).
  */
-export function setMacroAction(
+export function setMacroAction<S extends SetState>(
   connection: IssuanceConnection,
-  state: ConnectionState,
+  state: S,
   actionId: string,
   trustLevel: TrustLevel | null,
-): ConnectionState {
+): S {
   const trustLevels: Record<string, TrustLevel> = { ...state.trustLevels };
   if (trustLevel === null) delete trustLevels[actionId];
   else trustLevels[actionId] = trustLevel;
@@ -272,10 +287,7 @@ export function setMacroAction(
 }
 
 /** The policy as the trust levels (or "Everything I hold") wrote it: what "Reset" goes back to. */
-export function resetEdits(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): ConnectionState {
+export function resetEdits<S extends SetState>(connection: IssuanceConnection, state: S): S {
   return state.everything
     ? applyEverything(connection, state)
     : applyTrustLevels(connection, state);
@@ -285,11 +297,11 @@ export function resetEdits(
  * True when rewriting the policy from the trust levels would throw away something the
  * creator changed line by line: the screen asks before it does.
  */
-export function discardsEdits(state: ConnectionState): boolean {
+export function discardsEdits(state: SetState): boolean {
   return state.edited && Object.keys(state.entries).length > 0;
 }
 
-export function setView(state: ConnectionState, view: PolicyView): ConnectionState {
+export function setView<S extends { readonly view: PolicyView }>(state: S, view: PolicyView): S {
   return { ...state, view };
 }
 
@@ -318,10 +330,7 @@ export interface MacroActionRow {
   readonly empty: boolean;
 }
 
-export function macroActionRows(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): MacroActionRow[] {
+export function macroActionRows(connection: IssuanceConnection, state: SetState): MacroActionRow[] {
   const resources = selectedResources(connection, state);
   return connection.macro_actions.map((action) => {
     const trustLevel = state.trustLevels[action.id] ?? null;
@@ -349,7 +358,7 @@ export function macroActionRows(
 }
 
 /** The highest tier among the chosen lines, or `null` when nothing is chosen. */
-export function chosenTier(connection: IssuanceConnection, state: ConnectionState): Tier | null {
+export function chosenTier(connection: IssuanceConnection, state: SetState): Tier | null {
   return highestTier(connection.risks.filter((risk) => state.entries[risk.risk_id]));
 }
 
@@ -382,7 +391,7 @@ export const OUTSIDE_AUTHORITY = 'outside what you may allow';
  */
 export function explainEverything(
   connection: IssuanceConnection,
-  state: Pick<ConnectionState, 'resourceIds'> & Partial<Pick<ConnectionState, 'resourceScope'>>,
+  state: Pick<SetState, 'resourceIds'> & Partial<Pick<SetState, 'resourceScope'>>,
 ): EverythingExplanation {
   const { preview } = previewConnection(connection, everythingDraft(connection, state));
   const byId = new Map(preview.passes.map((entry) => [entry.risk_id, entry]));
@@ -442,7 +451,7 @@ export interface PolicyCounts {
   readonly notIncluded: number;
 }
 
-export function policyCounts(connection: IssuanceConnection, state: ConnectionState): PolicyCounts {
+export function policyCounts(connection: IssuanceConnection, state: SetState): PolicyCounts {
   const rows = editorRows(connection, state);
   let free = 0;
   let asks = 0;
@@ -481,7 +490,7 @@ export interface EditorRow {
 }
 
 /** Every explicit id of the catalog, catalog order: nothing is hidden, what cannot be ticked says why. */
-export function editorRows(connection: IssuanceConnection, state: ConnectionState): EditorRow[] {
+export function editorRows(connection: IssuanceConnection, state: SetState): EditorRow[] {
   const held = new Set(connection.authority);
   const resources = selectedResources(connection, state);
   return connection.risks.map((risk) => ({
@@ -523,7 +532,10 @@ export function filterRows(
 export const SEARCH_THRESHOLD = 8;
 
 /** Includes or leaves out a connection; including it never ticks a risk by itself. */
-export function setIncluded(state: ConnectionState, included: boolean): ConnectionState {
+export function setIncluded<S extends { readonly included: boolean }>(
+  state: S,
+  included: boolean,
+): S {
   return { ...state, included };
 }
 
@@ -533,13 +545,13 @@ export function setIncluded(state: ConnectionState, included: boolean): Connecti
  * labelled resources); once edited, the creator's entries are kept and the
  * preview flags the ones that no longer resolve.
  */
-export function setResources(
+export function setResources<S extends SetState>(
   connection: IssuanceConnection,
-  state: ConnectionState,
+  state: S,
   resourceIds: readonly string[],
-): ConnectionState {
+): S {
   // Ticking a box is picking: the list is what the mission reaches, no more.
-  const next: ConnectionState = { ...state, resourceScope: 'selected', resourceIds };
+  const next: S = { ...state, resourceScope: 'selected', resourceIds };
   return state.edited ? next : resetEdits(connection, next);
 }
 
@@ -548,16 +560,16 @@ export function setResources(
  * reach the default set now (neither hidden nor stale); `selected` starts from
  * the current ticks. The policy follows as with `setResources`.
  */
-export function setResourceScope(
+export function setResourceScope<S extends SetState>(
   connection: IssuanceConnection,
-  state: ConnectionState,
+  state: S,
   resourceScope: ResourceChoice,
-): ConnectionState {
+): S {
   const resourceIds =
     resourceScope === 'selected'
       ? state.resourceIds
       : defaultResources(connection).map((r) => r.id);
-  const next: ConnectionState = { ...state, resourceScope, resourceIds };
+  const next: S = { ...state, resourceScope, resourceIds };
   return state.edited ? next : resetEdits(connection, next);
 }
 
@@ -576,11 +588,11 @@ export function defaultEntryFor(
   return line ? entryOf(line) : BLANK_ENTRY;
 }
 
-export function toggleRisk(
+export function toggleRisk<S extends SetState>(
   connection: IssuanceConnection,
-  state: ConnectionState,
+  state: S,
   risk: CatalogRisk,
-): ConnectionState {
+): S {
   const entries = { ...state.entries };
   if (entries[risk.risk_id]) delete entries[risk.risk_id];
   else {
@@ -589,11 +601,11 @@ export function toggleRisk(
   return { ...state, entries, edited: true };
 }
 
-export function updateEntry(
-  state: ConnectionState,
+export function updateEntry<S extends SetState>(
+  state: S,
   riskId: RiskId,
   patch: Partial<EntryState>,
-): ConnectionState {
+): S {
   const current = state.entries[riskId];
   if (!current) return state;
   return {
@@ -618,7 +630,7 @@ export function unavailableReason(
 }
 
 /** How many risks the creator could tick with this selection: held and resolvable. */
-export function availableCount(connection: IssuanceConnection, state: ConnectionState): number {
+export function availableCount(connection: IssuanceConnection, state: SetState): number {
   const held = new Set(connection.authority);
   const resources = selectedResources(connection, state);
   return connection.risks.filter(
@@ -632,7 +644,7 @@ export function availableCount(connection: IssuanceConnection, state: Connection
  * fallback are not part of it: the first should not enter a new mission, the
  * second pre-accepts writes nobody reviewed — the creator ticks it knowingly.
  */
-export function selectAll(connection: IssuanceConnection, state: ConnectionState): ConnectionState {
+export function selectAll<S extends SetState>(connection: IssuanceConnection, state: S): S {
   const held = new Set(connection.authority);
   const resources = selectedResources(connection, state);
   const entries: Record<RiskId, EntryState> = { ...state.entries };
@@ -644,15 +656,12 @@ export function selectAll(connection: IssuanceConnection, state: ConnectionState
   return { ...state, entries, edited: true };
 }
 
-export function clearAll(state: ConnectionState): ConnectionState {
+export function clearAll<S extends SetState>(state: S): S {
   return { ...state, entries: {}, edited: true };
 }
 
 /** Drops the accepted entries the current selection cannot resolve. */
-export function dropUnresolvable(
-  connection: IssuanceConnection,
-  state: ConnectionState,
-): ConnectionState {
+export function dropUnresolvable<S extends SetState>(connection: IssuanceConnection, state: S): S {
   const held = new Set(connection.authority);
   const resources = selectedResources(connection, state);
   const byId = new Map(connection.risks.map((r) => [r.risk_id, r]));
@@ -673,9 +682,9 @@ function numberOf(text: string): number | undefined {
   return Number.isFinite(value) ? value : -1;
 }
 
-function draftConnection(connection: IssuanceConnection, state: ConnectionState): DraftConnection {
+/** One set as a draft writes it: its resources, its trust levels beside its lines, its lines. */
+function draftSet(connection: IssuanceConnection, state: SetState): DraftResourceSet {
   return {
-    connection_id: connection.id,
     resources: draftResourcesOf(state),
     // The persisted policy is the explicit enumeration: "Everything I hold" is not sent.
     everything_i_hold: false,
@@ -701,6 +710,24 @@ function draftConnection(connection: IssuanceConnection, state: ConnectionState)
           gate: entry.gate,
         };
       }),
+  };
+}
+
+/**
+ * An account as a draft line: with one set, the set's fields directly, as before sets
+ * existed; with several, `resource_sets`, each with the id of the stored set it keeps.
+ */
+function draftConnection(connection: IssuanceConnection, state: ConnectionState): DraftConnection {
+  const [only] = state.sets;
+  if (state.sets.length === 1 && only) {
+    return { connection_id: connection.id, ...draftSet(connection, only) };
+  }
+  return {
+    connection_id: connection.id,
+    resource_sets: state.sets.map((set) => ({
+      ...(set.id !== undefined ? { id: set.id } : {}),
+      ...draftSet(connection, set),
+    })),
   };
 }
 
@@ -782,30 +809,140 @@ export function loadResolved(
   for (const line of resolved) {
     const connection = context.find((c) => c.id === line.connection_id);
     if (!connection) continue;
-    const resourceIds =
-      line.resources.scope === 'connection'
-        ? defaultResources(connection).map((r) => r.id)
-        : line.resources.resource_ids;
-    const trustLevels = knownTrustLevels(connection, line.trust_levels);
-    const entries = entriesOf(line.policy);
-    const written = linesOfTrustLevels(
-      connection,
-      trustLevels,
-      selectedResources(connection, { resourceIds }),
-    );
-    const matches = Object.keys(trustLevels).length > 0 && sameLines(entries, written);
+    const several = line.resource_sets.length > 1;
+    const sets = line.resource_sets.map((set): SetState => {
+      const resourceIds =
+        set.resources.scope === 'connection'
+          ? defaultResources(connection).map((r) => r.id)
+          : set.resources.resource_ids;
+      const trustLevels = knownTrustLevels(connection, set.trust_levels);
+      const entries = entriesOf(set.policy);
+      const written = linesOfTrustLevels(
+        connection,
+        trustLevels,
+        selectedResources(connection, { resourceIds }),
+      );
+      const matches = Object.keys(trustLevels).length > 0 && sameLines(entries, written);
+      return {
+        ...(set.id !== undefined ? { id: set.id } : {}),
+        resourceScope: set.resources.scope === 'connection' ? 'connection' : 'selected',
+        resourceIds,
+        trustLevels,
+        everything: false,
+        entries,
+        edited: !matches,
+      };
+    });
+    // Simple only when the trust levels of every set write exactly its lines.
+    const simple = sets.every((set) => !set.edited);
     connections[connection.id] = {
       included: true,
-      view: matches ? 'simple' : 'advanced',
-      resourceScope: line.resources.scope === 'connection' ? 'connection' : 'selected',
-      resourceIds,
-      trustLevels,
-      everything: false,
-      entries,
-      edited: !matches,
+      view: simple ? 'simple' : 'advanced',
+      sets: several ? rebalance(connection, sets) : sets,
     };
   }
   return { ...state, connections };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resource sets (risk model §4.7): several on one account
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** True when a set takes what no other set picks: `all` or `connection`. */
+export function takesTheRest(set: Pick<SetState, 'resourceScope'>): boolean {
+  return set.resourceScope !== 'selected';
+}
+
+/** Whether the account may hold several sets: it has two resources at least. */
+export function setsOffered(connection: IssuanceConnection): boolean {
+  return connection.resources.filter((r) => !r.stale && !r.self).length >= 2;
+}
+
+/**
+ * The sets after a change of one of them: a set that takes the rest reaches every
+ * resource of `defaultResources` no picking set holds, and its policy follows its
+ * resources while it was not edited by hand (as `setResources`).
+ */
+export function rebalance(connection: IssuanceConnection, sets: readonly SetState[]): SetState[] {
+  const picked = new Set(
+    sets.filter((set) => !takesTheRest(set)).flatMap((set) => set.resourceIds),
+  );
+  return sets.map((set) => {
+    if (!takesTheRest(set)) return set;
+    const resourceIds = defaultResources(connection)
+      .map((r) => r.id)
+      .filter((id) => !picked.has(id));
+    const same =
+      resourceIds.length === set.resourceIds.length &&
+      resourceIds.every((id, i) => set.resourceIds[i] === id);
+    if (same) return set;
+    const next = { ...set, resourceIds };
+    return set.edited ? next : resetEdits(connection, next);
+  });
+}
+
+/** One set of the account replaced, the others rebalanced. */
+export function updateSet(
+  connection: IssuanceConnection,
+  state: ConnectionState,
+  index: number,
+  next: SetState,
+): ConnectionState {
+  const sets = state.sets.map((set, i) => (i === index ? next : set));
+  return { ...state, sets: rebalance(connection, sets) };
+}
+
+/**
+ * "+ Add a resource set": a set that picks its resources, none yet, nothing ticked.
+ * The resources it picks leave the set that takes the rest.
+ */
+export function addResourceSet(
+  connection: IssuanceConnection,
+  state: ConnectionState,
+): ConnectionState {
+  const added: SetState = {
+    resourceScope: 'selected',
+    resourceIds: [],
+    trustLevels: {},
+    everything: false,
+    entries: {},
+    edited: false,
+  };
+  return { ...state, sets: rebalance(connection, [...state.sets, added]) };
+}
+
+/** Removes one set; the last one stays. */
+export function removeResourceSet(
+  connection: IssuanceConnection,
+  state: ConnectionState,
+  index: number,
+): ConnectionState {
+  if (state.sets.length < 2) return state;
+  return {
+    ...state,
+    sets: rebalance(
+      connection,
+      state.sets.filter((_, i) => i !== index),
+    ),
+  };
+}
+
+/** The set of the account that picks a resource, by index; `null` when none picks it. */
+export function setOfResource(state: ConnectionState, resourceId: string): number | null {
+  const index = state.sets.findIndex(
+    (set) => !takesTheRest(set) && set.resourceIds.includes(resourceId),
+  );
+  return index === -1 ? null : index;
+}
+
+/** Every set's lines of an account, by risk: what the rail reads. */
+export function entriesOfAccount(state: ConnectionState): Readonly<Record<RiskId, EntryState>> {
+  return Object.assign({}, ...state.sets.map((set) => set.entries)) as Record<RiskId, EntryState>;
+}
+
+/** Every resource an account's sets reach now, in the account's order. */
+export function resourceIdsOfAccount(state: ConnectionState): readonly string[] {
+  return [...new Set(state.sets.flatMap((set) => set.resourceIds))];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
