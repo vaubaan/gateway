@@ -9,6 +9,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **vaubaan.com reads plugin health when a page is served.** The plugin pages,
+  their Markdown twins, `plugins.json` and `llms-full.txt` read the collector
+  at request time and are refreshed at most hourly, instead of once per site
+  deploy. Below the published minimum of reports a version shows its count and
+  the minimum ("130 reports of the 200 needed, no rate yet") instead of "not
+  enough reports yet", and every plugin shows its reports over all its
+  versions as history; `validated` stays tied to the exact version.
+  `plugins.json` gains `health_refreshed_every_seconds` and, per plugin,
+  `health.state` `not-read` | `below-threshold` | `measured` with
+  `health.all_versions`. No change to the gateway or the collector.
+
 ## [2.0.0-alpha.12] - 2026-11-01
 
 ### Upgrade notes (from 2.0.0-alpha.11)

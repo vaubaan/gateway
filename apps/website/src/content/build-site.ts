@@ -1,9 +1,13 @@
 /**
  * The whole site as data, built from the repository: every page with its
  * Markdown, the generated docs pages, and the files served from `public/`
- * (Markdown twins, llms.txt, llms-full.txt, plugins.json, sitemap.xml,
- * robots.txt). The generator (`scripts/generate.ts`) writes what this
- * returns; the tests read it without writing anything.
+ * (llms.txt, sitemap.xml, robots.txt). The pages that carry plugin health —
+ * the plugins list, the health page, each plugin page — and what repeats
+ * them (the Markdown twins, llms-full.txt, plugins.json) are rendered at
+ * request time from the same functions (`src/site/live.ts`): here they are
+ * built with nothing read, so that the tests see their shape. The generator
+ * (`scripts/generate.ts`) writes what this returns; the tests read it
+ * without writing anything.
  */
 import { join } from 'node:path';
 
@@ -19,21 +23,12 @@ import {
   splitFrontmatter,
   splitTitle,
 } from './markdown';
-import {
-  llmsFullTxt,
-  llmsTxt,
-  pluginsJson,
-  robotsTxt,
-  sitemapXml,
-  twinPathOf,
-  type SitePage,
-} from './outputs';
+import { llmsTxt, robotsTxt, sitemapXml, type SitePage } from './outputs';
 import {
   connectPageMarkdown,
-  healthPageMarkdown,
-  pluginListMarkdown,
+  PLUGIN_GROUP_PATH,
+  pluginGroupMarkdown,
   pluginPageDescription,
-  pluginPageMarkdown,
   pluginPageTitle,
   withHealth,
   type PluginWithHealth,
@@ -56,20 +51,27 @@ export interface SiteInputs {
   readonly repoRoot: string;
   readonly plugins: readonly PluginInfo[];
   readonly thresholds: ValidationThresholds;
-  readonly snapshot: HealthSnapshot;
   /** The date of the last change of repository paths, or null when unknown. */
   readonly lastModified: (paths: readonly string[]) => string | null;
 }
 
 export interface BuiltSite {
+  /** Every page; those under `/plugins` with their health unread (rendered live). */
   readonly pages: readonly SitePage[];
   readonly generatedDocs: readonly GeneratedDoc[];
   readonly plugins: readonly PluginWithHealth[];
-  /** The files of `public/`, by path from it (`docs/install.md`, `llms.txt`). */
+  /** The files of `public/`, by path from it (`llms.txt`, `sitemap.xml`, `robots.txt`). */
   readonly files: ReadonlyMap<string, string>;
   /** What the pages render (`.generated/site.json`). */
   readonly data: SiteData;
 }
+
+/** The snapshot of a build: nothing read, the pages' shape only. */
+export const UNREAD: HealthSnapshot = {
+  fetchedAt: null,
+  rows: [],
+  problem: 'read at request time',
+};
 
 function generatedDoc(
   file: string,
@@ -159,9 +161,9 @@ export function generatedMdx(doc: GeneratedDoc): string {
 }
 
 export function buildSite(inputs: SiteInputs): BuiltSite {
-  const { repoRoot, plugins, thresholds, snapshot, lastModified } = inputs;
+  const { repoRoot, plugins, thresholds, lastModified } = inputs;
   const docsDir = join(repoRoot, DOCS_DIR_FROM_REPO);
-  const withStatus = withHealth(plugins, snapshot, thresholds);
+  const withStatus = withHealth(plugins, UNREAD, thresholds);
 
   const generatedDocs = [
     configurationKeysDoc(),
@@ -180,17 +182,13 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   const serviceNames = plugins.map((p) => p.name);
   const markdown: Record<string, string> = {
     '/': landingMarkdown(serviceNames),
-    '/plugins': pluginListMarkdown(withStatus),
-    '/plugins/health': healthPageMarkdown(withStatus, thresholds, snapshot),
     '/trust': trustMarkdown({
       acceptedRisks: parseAcceptedRisks(threatModel),
       outOfScope: parseOutOfScope(threatModel),
       thresholds,
     }),
+    ...pluginGroupMarkdown(withStatus, thresholds, UNREAD),
   };
-  for (const plugin of withStatus) {
-    markdown[`/plugins/${plugin.id}`] = pluginPageMarkdown(plugin, thresholds);
-  }
   const md = (path: string): string => markdown[path] ?? '';
 
   const pages: SitePage[] = [
@@ -252,19 +250,17 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   ];
 
   const files = new Map<string, string>();
-  for (const page of pages) files.set(twinPathOf(page.path).slice(1), page.markdown);
-  const listed = pages.filter((p) => p.group !== 'home');
-  files.set('llms.txt', llmsTxt(listed));
-  files.set('llms-full.txt', llmsFullTxt(listed));
-  files.set('plugins.json', pluginsJson(withStatus, thresholds, snapshot.fetchedAt));
+  files.set('llms.txt', llmsTxt(pages.filter((p) => p.group !== 'home')));
   files.set('sitemap.xml', sitemapXml(pages));
   files.set('robots.txt', robotsTxt());
 
   const data: SiteData = {
     thresholds,
-    healthFetchedAt: snapshot.fetchedAt,
-    plugins: withStatus,
-    markdown: Object.fromEntries(Object.entries(markdown).filter(([path]) => path !== '/')),
+    plugins,
+    // The pages under /plugins are rendered at request time with the collector read.
+    markdown: Object.fromEntries(
+      pages.filter((p) => !PLUGIN_GROUP_PATH.test(p.path)).map((p) => [p.path, p.markdown]),
+    ),
     pages: pages.map(({ markdown: _markdown, ...meta }) => meta),
   };
 

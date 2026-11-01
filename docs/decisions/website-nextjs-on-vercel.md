@@ -43,3 +43,18 @@ A plugin change and its page could not land together.
 
 The bundler would pull every plugin and its gateway-only constraints (native addons, YAML beside
 the module).
+
+## Amendment 2026-11-01 — plugin health is read when a page is served
+
+Reading the collector at build time left the plugin pages at the figures of the last deploy: on
+2026-11-01 the site read "not enough reports yet" on all sixteen plugins while the collector held
+274 reports, because the pages were built once and every report sat on versions older than the
+ones displayed. The generator now reads no network. The pages under `/plugins`, every Markdown
+twin, `plugins.json` and `llms-full.txt` are rendered by Next.js with the collector read at
+request time and cached for an hour (`apps/website/src/site/live.ts`); a collector that does not
+answer gives "not read", never an error page. Everything else stays generated at build time from
+the repository. Below the report threshold the pages show the count and the minimum, and beside
+the version the plugin's reports over every version, as history (spec §2.4).
+
+Rejected: an hourly redeploy through a deploy hook. It rebuilds the whole site to refresh one
+number, and the Vercel plan of the project allows a cron once a day.

@@ -5,7 +5,8 @@
  *   the collector's routes exist; the site answers 404 there (ADR
  *   website-nextjs-on-vercel D4), and its robots.txt asks crawlers to stay away;
  * - a page of the docs, the plugins or the trust center asked with
- *   `Accept: text/markdown` is answered with its Markdown twin (website spec §2.6).
+ *   `Accept: text/markdown`, or by its `.md` address, is answered with its
+ *   Markdown twin (website spec §2.6), rendered by the `/twins` route.
  */
 
 /** The collector's routes, the only paths that exist on its host. */
@@ -57,4 +58,20 @@ export function wantsMarkdown(accept: string | null): boolean {
 export function markdownTwinOf(pathname: string): string | null {
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
   return TWINNED.test(path) ? `${path}.md` : null;
+}
+
+/** The route that renders every Markdown twin, the plugin pages with the collector read. */
+export const TWIN_ROUTE_PREFIX = '/twins';
+
+/**
+ * The internal route serving a twin: `/docs/install.md` and `/index.md` are
+ * twins by address, `/docs/install` is one when `Accept` asks for Markdown
+ * (`wantsMarkdown`). `/twins/docs/install` for both, `/twins` for the home
+ * page; null for a path that has no twin.
+ */
+export function twinRouteOf(pathname: string): string | null {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  if (path === '/' || path === '/index.md') return TWIN_ROUTE_PREFIX;
+  const page = path.endsWith('.md') ? path.slice(0, -'.md'.length) : path;
+  return TWINNED.test(page) ? `${TWIN_ROUTE_PREFIX}${page}` : null;
 }

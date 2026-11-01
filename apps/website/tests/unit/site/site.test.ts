@@ -2,20 +2,34 @@
  * The site as data (`buildSite`): every page has its Markdown twin, llms.txt
  * and llms-full.txt carry every docs page, the sitemap every page, robots.txt
  * welcomes every crawler, and every link into the repository names a file
- * that exists. Built offline, without writing anything.
+ * that exists. Built without the collector, without writing anything; the
+ * plugin pages then read "not read", the way a page renders when the
+ * collector does not answer.
  */
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { buildSite, DOCS_DIR_FROM_REPO, type BuiltSite } from '../../../src/content/build-site';
+import {
+  buildSite,
+  DOCS_DIR_FROM_REPO,
+  UNREAD,
+  type BuiltSite,
+} from '../../../src/content/build-site';
 import { docPathOf } from '../../../src/content/docs';
-import { absolute, NAMED_CRAWLERS, robotsTxt, twinPathOf } from '../../../src/content/outputs';
+import {
+  absolute,
+  LIVE_FILES,
+  NAMED_CRAWLERS,
+  robotsTxt,
+  twinPathOf,
+} from '../../../src/content/outputs';
 import { loadPlugins } from '../../../src/content/plugins';
 import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
-import { markdownTwinOf } from '../../../src/site/routing';
+import { liveLlmsFull, livePluginsJson, liveSiteFrom, pageMarkdown } from '../../../src/site/live';
+import { markdownTwinOf, twinRouteOf } from '../../../src/site/routing';
 
 let site: BuiltSite;
 
@@ -24,10 +38,14 @@ beforeAll(async () => {
     repoRoot: REPO_ROOT,
     plugins: await loadPlugins(REPO_ROOT),
     thresholds: parseThresholds(readRepoFile(THRESHOLDS_SOURCE)),
-    snapshot: { fetchedAt: null, rows: [], problem: 'offline' },
     lastModified: () => null,
   });
 }, 60_000);
+
+/** Every path the site answers besides its pages: the public files and the live ones. */
+function servedFiles(): Set<string> {
+  return new Set([...site.files.keys(), ...LIVE_FILES]);
+}
 
 function handwrittenDocPaths(): string[] {
   const dir = join(REPO_ROOT, DOCS_DIR_FROM_REPO);
@@ -57,10 +75,13 @@ describe('the pages of the site', () => {
     expect(new Set(paths).size).toBe(paths.length);
   });
 
-  it('each have a Markdown twin, served at the same path plus .md and when asked for Markdown', () => {
+  it('each have a Markdown twin, rendered by one route from the .md address and from Accept', () => {
+    const live = liveSiteFrom(site.data, UNREAD);
     for (const page of site.pages) {
       const twin = twinPathOf(page.path);
-      expect(site.files.get(twin.slice(1)), twin).toBe(page.markdown);
+      expect(twinRouteOf(twin), twin).toBe(twinRouteOf(page.path));
+      expect(twinRouteOf(twin), twin).not.toBeNull();
+      expect(pageMarkdown(page.path, live, site.data), page.path).toBe(page.markdown);
       expect(page.markdown.startsWith(`# ${page.title}\n`), page.path).toBe(true);
       if (page.group !== 'home') expect(markdownTwinOf(page.path), page.path).toBe(twin);
     }
@@ -87,12 +108,13 @@ describe('llms.txt and llms-full.txt', () => {
   });
 
   it('llms-full.txt carries the whole of every docs, plugin and trust page', () => {
-    const full = site.files.get('llms-full.txt') ?? '';
+    const full = liveLlmsFull(liveSiteFrom(site.data, UNREAD), site.data);
     for (const page of site.pages.filter((p) => p.group !== 'home')) {
       expect(full, page.path).toContain(
         `Source: ${absolute(page.path)}\n\n${page.markdown.trim()}`,
       );
     }
+    expect(full).not.toContain(`Source: ${absolute('/')}\n`);
   });
 });
 
@@ -117,14 +139,18 @@ describe('robots.txt and sitemap.xml', () => {
 });
 
 describe('plugins.json', () => {
-  it('carries every plugin with its version, risks, macro-actions and a health that is never a rate offline', () => {
-    const json = JSON.parse(site.files.get('plugins.json') ?? '{}') as {
+  it('carries every plugin with its version, risks, macro-actions and, unread, a health without rate or history', () => {
+    const json = JSON.parse(livePluginsJson(liveSiteFrom(site.data, UNREAD))) as {
+      health_read_at: string | null;
+      health_refreshed_every_seconds: number;
       plugins: Record<string, unknown>[];
     };
+    expect(json.health_read_at).toBeNull();
+    expect(json.health_refreshed_every_seconds).toBe(3600);
     expect(json.plugins.map((p) => p.id)).toEqual(site.plugins.map((p) => p.id));
     for (const plugin of json.plugins) {
       expect(plugin).not.toHaveProperty('status');
-      expect(plugin.health).toEqual({ state: 'not-enough-reports' });
+      expect(plugin.health).toEqual({ state: 'not-read', all_versions: null });
     }
   });
 });
@@ -145,7 +171,7 @@ describe('links into the repository', () => {
 
   it('inside the site name pages that exist', () => {
     const paths = new Set(site.pages.map((p) => p.path));
-    const files = new Set(site.files.keys());
+    const files = servedFiles();
     const missing = new Set<string>();
     for (const page of site.pages) {
       for (const match of page.markdown.matchAll(/\]\((\/[^)#\s]*)(#[^)\s]*)?\)/g)) {

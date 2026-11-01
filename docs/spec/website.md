@@ -64,9 +64,12 @@ generated from its folder; a plugin is listed because it exists in the repositor
 ### 2.4 Plugin health — `/plugins/health` and on each plugin page
 
 - Per `(plugin, version)` and tool: reports over the window, success rate, **validated** against
-  published thresholds. Below the report threshold: "not enough reports yet", never a rate.
-- Read from the collector's public aggregates, refreshed at most hourly; instances read the same
-  aggregates for their badge. `usage-stats` aggregates are **not** published (§5).
+  published thresholds. Below the report threshold: the number of reports and the minimum, never
+  a rate. Beside the version, the plugin's reports over every version it ever had: a history, not a
+  verdict — **validated** stays tied to the exact version.
+- Read from the collector's public aggregates when a page is served, refreshed at most hourly; a
+  collector that does not answer leaves the pages up and says the figures were not read. Instances
+  read the same aggregates for their badge. `usage-stats` aggregates are **not** published (§5).
 
 ### 2.5 Trust center — `/trust`
 
@@ -82,8 +85,9 @@ A model must find the site, quote it correctly and act on it without a browser.
 
 - **Static, semantic HTML**, complete without scripts.
 - **Markdown beside every page** at its path + `.md` and on `Accept: text/markdown`, from the same
-  source; `/llms.txt` (index) and `/llms-full.txt` (user docs, plugins, trust center), built at
-  build time; `/plugins.json` with the plugin pages' data.
+  source; `/llms.txt` (index) and `/llms-full.txt` (user docs, plugins, trust center);
+  `/plugins.json` with the plugin pages' data. Whatever repeats a plugin page carries the same
+  health figures as the page, refreshed with it (§2.4).
 - **Answers first**: each page opens with a quotable defining sentence; a "How Vaubaan compares"
   page and a Q&A block on the landing.
 - **Structured data** on the landing, docs pages and Q&A; a sitemap with real dates; canonical URLs.

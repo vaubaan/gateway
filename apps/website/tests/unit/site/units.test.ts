@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { loadHandwrittenDocs, proseLines } from '../../../src/content/docs';
 import {
+  allVersionsWords,
   fetchHealth,
   healthOf,
   healthWords,
@@ -22,7 +23,13 @@ import {
 } from '../../../src/content/markdown';
 import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
 import { parseAcceptedRisks, parseOutOfScope, THREAT_MODEL } from '../../../src/content/trust';
-import { hostDecision, hostOf, markdownTwinOf, wantsMarkdown } from '../../../src/site/routing';
+import {
+  hostDecision,
+  hostOf,
+  markdownTwinOf,
+  twinRouteOf,
+  wantsMarkdown,
+} from '../../../src/site/routing';
 
 const THRESHOLDS = { minReports: 200, minSuccessRate: 0.9, windowDays: 90 };
 
@@ -78,24 +85,59 @@ describe('plugin health', () => {
     problem: null,
   };
 
-  it('shows no rate below the minimum of reports, nor without the collector', () => {
-    expect(healthOf(measured, 'fly', '0.1.0', THRESHOLDS).state).toBe('not-enough-reports');
-    expect(healthOf(measured, 'github', '3.0.0', THRESHOLDS).state).toBe('not-enough-reports');
+  it('shows the count and the minimum below the minimum of reports, never a rate', () => {
+    const fly = healthOf(measured, 'fly', '0.1.0', THRESHOLDS);
+    expect(fly.version).toEqual({ state: 'below-threshold', reports: 12 });
+    expect(healthWords(fly, THRESHOLDS)).toBe('12 reports of the 200 needed, no rate yet');
+    const unknownVersion = healthOf(measured, 'github', '3.0.0', THRESHOLDS);
+    expect(unknownVersion.version).toEqual({ state: 'below-threshold', reports: 0 });
+    expect(healthWords(unknownVersion, THRESHOLDS)).toBe('no report yet (200 needed)');
+  });
+
+  it('says so when the collector could not be read, and knows no history then', () => {
     const offline = { fetchedAt: null, rows: [], problem: 'x' };
-    expect(healthWords(healthOf(offline, 'github', '3.1.0', THRESHOLDS))).toBe(
-      'not enough reports yet',
+    const health = healthOf(offline, 'github', '3.1.0', THRESHOLDS);
+    expect(health).toEqual({ version: { state: 'not-read' }, allVersions: null });
+    expect(healthWords(health, THRESHOLDS)).toBe('not read (the collector did not answer)');
+    expect(allVersionsWords(health)).toBe('');
+  });
+
+  it('adds every version of the plugin up as its history, a count without a verdict', () => {
+    const twoVersions: HealthSnapshot = {
+      ...measured,
+      rows: [
+        ...measured.rows,
+        {
+          plugin: 'github',
+          plugin_version: '3.0.0',
+          reports: 73,
+          success_rate: 1,
+          validated: false,
+        },
+      ],
+    };
+    const current = healthOf(twoVersions, 'github', '3.1.0', THRESHOLDS);
+    expect(current.allVersions).toEqual({ reports: 1273, versions: 2 });
+    expect(allVersionsWords(current)).toBe('1273 reports over 2 versions');
+    expect(allVersionsWords(healthOf(measured, 'fly', '0.1.0', THRESHOLDS))).toBe(
+      '12 reports over 1 version',
+    );
+    expect(allVersionsWords(healthOf(measured, 'never-seen', '1.0.0', THRESHOLDS))).toBe(
+      'no report for any version',
     );
   });
 
   it('shows the rate and the status from the minimum on', () => {
     const health = healthOf(measured, 'github', '3.1.0', THRESHOLDS);
-    expect(health).toEqual({
+    expect(health.version).toEqual({
       state: 'measured',
       reports: 1200,
       successRate: 0.95,
       validated: true,
     });
-    expect(healthWords(health)).toBe('validated by the community (95.0 % of 1200 calls worked)');
+    expect(healthWords(health, THRESHOLDS)).toBe(
+      'validated by the community (95.0 % of 1200 calls worked)',
+    );
   });
 
   it('never throws on a failing or odd collector', async () => {
@@ -154,6 +196,19 @@ describe('routing on the collector host and by Accept', () => {
     expect(markdownTwinOf('/')).toBeNull();
     expect(markdownTwinOf('/v1/reports')).toBeNull();
     expect(markdownTwinOf('/docs.md')).toBeNull();
+  });
+
+  it('renders every twin through one route, from the .md address or the page itself', () => {
+    expect(twinRouteOf('/docs/install.md')).toBe('/twins/docs/install');
+    expect(twinRouteOf('/docs/install')).toBe('/twins/docs/install');
+    expect(twinRouteOf('/plugins/github.md')).toBe('/twins/plugins/github');
+    expect(twinRouteOf('/plugins.md')).toBe('/twins/plugins');
+    expect(twinRouteOf('/trust/')).toBe('/twins/trust');
+    expect(twinRouteOf('/index.md')).toBe('/twins');
+    expect(twinRouteOf('/')).toBe('/twins');
+    expect(twinRouteOf('/v1/reports')).toBeNull();
+    expect(twinRouteOf('/plugins.json')).toBeNull();
+    expect(twinRouteOf('/twins/docs')).toBeNull();
   });
 });
 
