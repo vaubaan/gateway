@@ -222,7 +222,7 @@ describe('discovery', () => {
 
   test('a token Google granted fewer scopes than asked is refused before any request', async () => {
     const fetch = mockFetch([]);
-    const granted = [SCOPES.eventsRead, SCOPES.freeBusy, SCOPES.events];
+    const granted = [SCOPES.events];
     const refusal = discoverGoogleCalendarResources(context(fetch, [], granted));
     await expect(refusal).rejects.toBeInstanceOf(CredentialRefusal);
     await expect(refusal).rejects.toThrow(/missing: see the list of calendars\)/);

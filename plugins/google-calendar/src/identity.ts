@@ -40,12 +40,13 @@ export const BROKER_PROVIDER = 'google';
 
 /**
  * The scopes asked: the narrowest that cover the tools offered (ADR D4) —
- * never the full `calendar` scope.
+ * never the full `calendar` scope. `calendar.events` also covers every read
+ * tool and `suggest_time` (Google's per-tool reference: "one of the following
+ * scopes"), so neither `calendar.events.readonly` nor `calendar.events.freebusy`
+ * is asked; `list_calendars` needs the calendar list scope.
  */
 export const SCOPES = {
   calendarListRead: 'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-  eventsRead: 'https://www.googleapis.com/auth/calendar.events.readonly',
-  freeBusy: 'https://www.googleapis.com/auth/calendar.events.freebusy',
   events: 'https://www.googleapis.com/auth/calendar.events',
 } as const;
 

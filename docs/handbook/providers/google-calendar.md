@@ -63,8 +63,11 @@ common to every plugin: [providers README](README.md).
 - The broker keeps no token: the refresh token is the instance's, sealed, presented at each
   refresh. A broker whose measurement the release does not admit fails with "no attested
   broker version admitted by this release" (or declare the broker `attestation: none`).
-- Four scopes, never the full `calendar` scope: `calendar.calendarlist.readonly`,
-  `calendar.events.readonly`, `calendar.events.freebusy`, `calendar.events`.
+- Two scopes, never the full `calendar` scope: `calendar.calendarlist.readonly` and
+  `calendar.events`, which Google's reference accepts for every read tool and `suggest_time`.
+  Connections made before plugin 0.3.0 also hold `calendar.events.readonly` and
+  `calendar.events.freebusy`: a superset, still accepted. The broker keeps both in its allowlist
+  until no gateway in use asks for them.
 - Discovery seeds `internal_domains` with the account's domain unless it is a consumer one; the
   owner edits it on the account page.
 

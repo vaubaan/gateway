@@ -108,11 +108,11 @@ describe('google-calendar plugin — structural kit', () => {
 });
 
 describe('google-calendar credential — a client of the OAuth broker', () => {
-  test('brokered at "google", the four narrow scopes, never the full calendar scope', () => {
+  test('brokered at "google", the two narrow scopes, never the full calendar scope', () => {
     expect(googleCalendarPlugin.credential).toEqual({
       kind: 'oauth2',
       broker: { provider: 'google' },
-      scopes: [SCOPES.calendarListRead, SCOPES.eventsRead, SCOPES.freeBusy, SCOPES.events],
+      scopes: [SCOPES.calendarListRead, SCOPES.events],
     });
     const spec = googleCalendarPlugin.credential;
     if (spec.kind !== 'oauth2') throw new Error('expected oauth2');
