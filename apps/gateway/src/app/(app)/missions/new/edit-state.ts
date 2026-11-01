@@ -5,6 +5,7 @@
  * without a browser. The judgement is `judgeEdit`, the function the server runs
  * again when the edit is saved.
  */
+import { policyLineKey, type PolicyLineKey } from '@vaubaan/shared/domain';
 import type { RiskId } from '@vaubaan/shared';
 
 import type {
@@ -18,42 +19,89 @@ import {
   type MissionSnapshot,
   type StoredResourceScope,
 } from '@/lib/missions/mission-edit';
-import { trustLevelsOf } from '@/lib/missions/macro-actions';
+import { trustLevelsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 
 import {
   draftOf,
   initialFormState,
   loadResolved,
   periodChoiceOf,
+  raiseMacroAction,
   type FormState,
 } from './form-state';
+
+/**
+ * A trust-raise the edit opens with (risk model §4.7): the macro-action of the set,
+ * and the level it goes to. The server checked it is offered.
+ */
+export interface EditRaise {
+  readonly connectionId: string;
+  readonly resourceSetId: string;
+  readonly macroActionId: string;
+  readonly to: TrustLevel;
+}
+
+/**
+ * The edit state with the raise applied, and the hand-edited lines it replaces. A raise
+ * whose set the form does not show leaves the state as it is.
+ */
+export function raisedEditState(
+  context: readonly IssuanceConnection[],
+  state: FormState,
+  raise: EditRaise,
+): { readonly state: FormState; readonly replaced: readonly RiskId[] } {
+  const connection = context.find((c) => c.id === raise.connectionId);
+  const account = state.connections[raise.connectionId];
+  const index = account?.sets.findIndex((set) => set.id === raise.resourceSetId) ?? -1;
+  const set = account?.sets[index];
+  if (!connection || !account || !set) return { state, replaced: [] };
+  const raised = raiseMacroAction(connection, set, raise.macroActionId, raise.to);
+  const sets = account.sets.map((s, i) => (i === index ? raised.state : s));
+  return {
+    state: {
+      ...state,
+      connections: { ...state.connections, [connection.id]: { ...account, sets } },
+    },
+    replaced: raised.replaced,
+  };
+}
 
 /** What the edit form knows of the mission it edits. */
 export interface EditSource {
   readonly missionId: string;
   readonly revision: string;
   readonly snapshot: MissionSnapshot;
-  /** Calls used in the current period, per risk. */
-  readonly used: Readonly<Record<RiskId, number>>;
+  /** Calls used in the current period, per line (a risk in a resource set, `lineKeyOf`). */
+  readonly used: Readonly<Record<PolicyLineKey, number>>;
   /** Open claims and approval requests, with the risks they are about. */
   readonly openRequests: readonly {
     readonly id: string;
     readonly kind: string;
     readonly risk_ids: readonly RiskId[];
   }[];
+  /** "Raise" of a trust-raise proposal: the edit opens at the new level. */
+  readonly raise?: EditRaise & {
+    readonly label: string;
+    readonly from: TrustLevel;
+    /** The account, and its set when it has several. */
+    readonly where: string;
+  };
 }
 
 /** The mission's accounts as the form loads them: their stored selection and lines. */
 export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConnection[] {
   return snapshot.connections.map((c) => ({
     connection_id: c.connection_id,
-    resources:
-      c.resource_scope === 'connection'
-        ? { scope: 'connection' }
-        : { scope: 'selected', resource_ids: [...c.resource_ids] },
-    everything_i_hold: false,
-    policy: c.policy,
-    trust_levels: trustLevelsOf(c.trust_levels),
+    resource_sets: c.resource_sets.map((set) => ({
+      ...(set.id !== null ? { id: set.id } : {}),
+      resources:
+        set.resource_scope === 'connection'
+          ? { scope: 'connection' as const }
+          : { scope: 'selected' as const, resource_ids: [...set.resource_ids] },
+      everything_i_hold: false,
+      policy: set.policy,
+      trust_levels: trustLevelsOf(set.trust_levels),
+    })),
   }));
 }
 
@@ -183,12 +231,42 @@ export function changeLines(
   }
   const added = new Set(changes.connections_added.map((c) => c.connection_id));
   const removed = new Set(changes.connections_removed.map((c) => c.connection_id));
+  // Sets are named only on an account that has several, before or after the edit.
+  const several = new Set(
+    changes.resources
+      .filter(
+        (r) =>
+          changes.resources.some(
+            (o) => o.connection_id === r.connection_id && o.resource_set_id !== r.resource_set_id,
+          ) || r.position > 1,
+      )
+      .map((r) => r.connection_id),
+  );
+  const where = (r: (typeof changes.resources)[number]): string =>
+    several.has(r.connection_id) ? `${r.display_name}, resource set ${r.position}` : r.display_name;
   for (const r of changes.resources) {
     if (added.has(r.connection_id) || removed.has(r.connection_id)) continue;
+    if (r.scope_before === null && r.scope_after !== null) {
+      lines.push({
+        section: 'Resources',
+        text: `${r.display_name}: resource set ${r.position} added`,
+        consequence: 'Its resources are judged by its own permissions from the next call.',
+        warn: false,
+      });
+    }
+    if (r.scope_after === null && r.scope_before !== null) {
+      lines.push({
+        section: 'Resources',
+        text: `${r.display_name}: resource set ${r.position} removed`,
+        consequence: 'Its resources are no longer reached unless another set holds them.',
+        warn: true,
+      });
+      continue;
+    }
     if (r.scope_before !== r.scope_after && r.scope_before !== null && r.scope_after !== null) {
       lines.push({
         section: 'Resources',
-        text: `${r.display_name}: ${SCOPE_WORDS[r.scope_before]} → ${SCOPE_WORDS[r.scope_after]}`,
+        text: `${where(r)}: ${SCOPE_WORDS[r.scope_before]} → ${SCOPE_WORDS[r.scope_after]}`,
         consequence:
           r.scope_after === 'connection'
             ? 'Resources found later on the account are reached too.'
@@ -199,7 +277,7 @@ export function changeLines(
     for (const id of r.added) {
       lines.push({
         section: 'Resources',
-        text: `${r.display_name}: ${naming.resource(r.connection_id, id)} added`,
+        text: `${where(r)}: ${naming.resource(r.connection_id, id)} added`,
         consequence: 'Reached from the next call.',
         warn: false,
       });
@@ -207,7 +285,7 @@ export function changeLines(
     for (const id of r.removed) {
       lines.push({
         section: 'Resources',
-        text: `${r.display_name}: ${naming.resource(r.connection_id, id)} removed`,
+        text: `${where(r)}: ${naming.resource(r.connection_id, id)} removed`,
         consequence: 'No longer reached: a call that cites it is refused from the next one.',
         warn: true,
       });
@@ -248,7 +326,7 @@ export function changeLines(
     }
     if (before.gate !== after.gate)
       parts.push(`${askWords(before.gate)} → ${askWords(after.gate)}`);
-    const used = source.used[c.risk_id] ?? 0;
+    const used = source.used[policyLineKey(c.resource_set_id, c.risk_id)] ?? 0;
     const usedUp = after.quota < before.quota && used >= after.quota;
     lines.push({
       section: 'Permissions',

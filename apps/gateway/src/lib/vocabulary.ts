@@ -1194,6 +1194,51 @@ export const MISSION_ACTIONS = {
   leave: 'Leave the mission',
 } as const;
 
+/** A trust-raise proposal (risk model §4.7), on the mission page and Now. */
+export const TRUST_RAISE_WORDS = {
+  /** "Raise “Change” to Autonomous?" */
+  title: (macroAction: string, to: string): string => `Raise “${macroAction}” to ${to}?`,
+  /** Why it is offered: what was approved, where. */
+  because: (approvals: number, where: string, from: string): string =>
+    `You approved it ${approvals} times on ${where}, with no refusal since it was set to ${from}.`,
+  /** The account, and its set when the account has several ("Acme main, resource set 2"). */
+  where: (accountName: string, setPosition: number | null): string =>
+    setPosition === null ? accountName : `${accountName}, resource set ${setPosition}`,
+  rule: 'Raising is an ordinary edit of the mission, shown before it is saved. Nothing is raised without you.',
+  raise: 'Raise',
+  notNow: 'Not now',
+  /** The toast after "Not now". */
+  hidden: 'Hidden until as many approvals again.',
+  /** The edit form opened by "Raise". */
+  editTitle: (macroAction: string, from: string, to: string, where: string): string =>
+    `Raising “${macroAction}” from ${from} to ${to} on ${where}`,
+  editLede: 'Its lines are rewritten at the new level. Save to apply; nothing changes until then.',
+  /** Lines of the macro-action edited by hand, which the raise replaces. */
+  replaced: 'These lines were edited by hand and are replaced:',
+} as const;
+
+/**
+ * Resource sets (risk model §4.7): the resources of one account split in groups, each
+ * with its own trust levels and limits. Never "Set" alone; nothing is said of sets
+ * while an account has one.
+ */
+export const RESOURCE_SET_WORDS = {
+  /** "Resource set 2". */
+  title: (position: number): string => `Resource set ${position}`,
+  add: '+ Add a resource set',
+  remove: 'Remove this resource set',
+  /** The scope select of a set's head. */
+  scope: 'Resources',
+  /** A resource another set of the account holds. */
+  heldBy: (position: number): string => `in resource set ${position}`,
+  /** Why a set takes no "rest" scope: another set of the account does. */
+  restTaken: 'another resource set of this account already takes the rest',
+  /** What `all` and `connection` mean once an account has several sets. */
+  rest: 'every resource the other resource sets of this account do not pick',
+  explanation:
+    'Each resource set has its own trust levels and limits. A call is judged by the set of the resource it names; a call that names none, or resources of several sets, must be allowed in each.',
+} as const;
+
 /** Sentences the mission pages share. */
 export const MISSION_WORDS = {
   editLede:

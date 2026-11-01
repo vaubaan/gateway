@@ -21,3 +21,9 @@
 .setupNote a {
   color: var(--accent);
 }
+/* Trust-raise proposals, one callout each, under what waits. */
+.trustRaises {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}

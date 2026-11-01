@@ -1,7 +1,8 @@
 /**
  * Structural check: the session counters agree with the audit (spec §3.3 "the two
  * must agree; a structural test checks it", §10 "session counters agree with the
- * audit"). Per `(mission, risk, period)`:
+ * audit"). Per `(mission, resource set, risk, period)` (risk model §4.7: a call charged
+ * on several sets counts once in each):
  *
  *   SUM(session_counters.consumed) + credits given back by granted claims
  *     == COUNT(audit WHERE decision = 'allowed' AND risk touched)
@@ -16,7 +17,14 @@
  * diagnostic may run it on a live store.
  */
 
-import { parseEventDetails, type RiskId, type SessionEventKind } from '@vaubaan/shared';
+import {
+  lineKeyOf,
+  parseEventDetails,
+  policyLineKey,
+  type PolicyLineKey,
+  type RiskId,
+  type SessionEventKind,
+} from '@vaubaan/shared';
 import type { AuditRepo, EventRecord, SessionsRepo } from '../store/index.ts';
 import { sessionCounterOf, type BudgetMission } from './mapping.ts';
 import { consumedInPeriod } from './mission-state.ts';
@@ -26,6 +34,7 @@ import { currentPeriod, type CurrentPeriod } from './period.ts';
 const OPEN_ENDED_UNTIL = '9999-12-31T23:59:59.999Z';
 
 export interface CounterAuditLine {
+  readonly resource_set_id: string;
   readonly risk_id: RiskId;
   /** Sum of the session counters of the period. */
   readonly counted: number;
@@ -45,7 +54,7 @@ export const CREDIT_EVENT_KINDS = [
 export interface CounterAuditReport {
   readonly mission_id: string;
   readonly period: CurrentPeriod;
-  /** One line per accepted risk. */
+  /** One line per accepted line of the policy (a risk in a resource set). */
   readonly risks: readonly CounterAuditLine[];
   readonly mismatches: readonly CounterAuditMismatch[];
 }
@@ -73,14 +82,16 @@ export async function countersAgreeWithAudit(
         }),
         period.start,
       )
-    : new Map<RiskId, number>();
+    : new Map<PolicyLineKey, number>();
   const risks = await Promise.all(
     mission.policy.map(async (entry) => ({
+      resource_set_id: entry.resource_set_id ?? '',
       risk_id: entry.risk_id,
-      counted: counted.get(entry.risk_id) ?? 0,
-      credited: credited.get(entry.risk_id) ?? 0,
+      counted: counted.get(lineKeyOf(entry)) ?? 0,
+      credited: credited.get(lineKeyOf(entry)) ?? 0,
       audited: await deps.audit.countAllowedTouches(
         mission.id,
+        entry.resource_set_id ?? '',
         entry.risk_id,
         period.start,
         period.end ?? OPEN_ENDED_UNTIL,
@@ -95,15 +106,22 @@ export async function countersAgreeWithAudit(
   };
 }
 
-/** Sums `details.credits` of the credit events that concern the period. */
-function creditsOf(events: readonly EventRecord[], periodStart: string): Map<RiskId, number> {
-  const total = new Map<RiskId, number>();
+/**
+ * Sums `details.credits` of the credit events that concern the period, per line: the
+ * credits of an event are in the set the event names (a claim is about one line).
+ */
+function creditsOf(
+  events: readonly EventRecord[],
+  periodStart: string,
+): Map<PolicyLineKey, number> {
+  const total = new Map<PolicyLineKey, number>();
   for (const event of events) {
     const parsed = parseEventDetails(event.kind, event.details);
     if (!parsed || !('credits' in parsed.details)) continue;
-    if (parsed.details.period_start !== periodStart) continue;
+    if (parsed.details.period_start !== periodStart || event.resourceSetId === null) continue;
     for (const [riskId, amount] of Object.entries(parsed.details.credits)) {
-      total.set(riskId, (total.get(riskId) ?? 0) + amount);
+      const key = policyLineKey(event.resourceSetId, riskId);
+      total.set(key, (total.get(key) ?? 0) + amount);
     }
   }
   return total;

@@ -25,6 +25,13 @@ import { heldArguments } from '../../support/store/testing.ts';
 const byRisk = (a: readonly unknown[], b: readonly unknown[]) =>
   String(a[0]).localeCompare(String(b[0]));
 
+/** Counts keyed by line (`<set>::<risk>`) read by risk: these missions have one set. */
+function perRisk(byLine: Readonly<Record<string, number>> | undefined): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(byLine ?? {}).map(([line, n]) => [line.slice(line.indexOf('::') + 2), n]),
+  );
+}
+
 describe('mission session view', () => {
   let rig: OperatorRig;
   let mission: MissionRecord;
@@ -161,7 +168,7 @@ describe('mission session view', () => {
       ].sort(byRisk),
     );
     const current = v.periods.find((p) => p.current);
-    expect(current?.consumed).toEqual({ [READ]: 2, [PR]: 2 });
+    expect(perRisk(current?.consumed)).toEqual({ [READ]: 2, [PR]: 2 });
     expect(Date.parse(current?.end ?? '') - Date.parse(current?.start ?? '')).toBe(
       DAY_SECONDS * 1000,
     );
@@ -187,7 +194,7 @@ describe('mission session view', () => {
     await seedCall(rig, old, { now, risks: [PR] });
 
     const v = await view(rig.seeded.ada, old.id);
-    expect(v.periods.map((p) => [p.current, p.consumed[PR]])).toEqual([
+    expect(v.periods.map((p) => [p.current, perRisk(p.consumed)[PR]])).toEqual([
       [true, 1],
       [false, 2],
     ]);
@@ -204,7 +211,7 @@ describe('mission session view', () => {
     );
     await seedCall(rig, oneOff);
     const v = await view(rig.seeded.ada, oneOff.id);
-    expect(v.periods).toEqual([
+    expect(v.periods.map((p) => ({ ...p, consumed: perRisk(p.consumed) }))).toEqual([
       { start: oneOff.periodAnchor, end: null, current: true, consumed: { [READ]: 1 } },
     ]);
   });
@@ -300,7 +307,7 @@ describe('mission session view', () => {
       exhausted: false,
     });
     expect(v.risks.find((r) => r.risk_id === READ)).toMatchObject({ consumed: 1, remaining: 4 });
-    expect(v.periods[0]?.consumed).toMatchObject({ [PR]: 1 });
+    expect(perRisk(v.periods[0]?.consumed)).toMatchObject({ [PR]: 1 });
     expect(v.open_requests).toEqual([]);
     expect(v.events[0]).toMatchObject({
       kind: 'extension',
@@ -379,7 +386,7 @@ describe('mission session view', () => {
       // risk, one per mission, whoever called.
       expect(v.risks.find((r) => r.risk_id === READ)).toMatchObject({ consumed: 3, remaining: 2 });
       expect(v.risks.find((r) => r.risk_id === PR)).toMatchObject({ consumed: 2, exhausted: true });
-      expect(v.periods[0]?.consumed).toEqual({ [READ]: 3, [PR]: 2 });
+      expect(perRisk(v.periods[0]?.consumed)).toEqual({ [READ]: 3, [PR]: 2 });
     });
 
     it('leaves out the calls of past periods, and has nothing for a mission that is not active', async () => {
@@ -675,7 +682,8 @@ describe('mission session view', () => {
     expect(v.state.kind).toBe('revoked');
     expect(v.risks.every((r) => r.consumed === null && r.remaining === null)).toBe(true);
     expect(v.periods).toHaveLength(1);
-    expect(v.periods[0]).toMatchObject({ current: false, consumed: { [READ]: 1 } });
+    expect(v.periods[0]).toMatchObject({ current: false });
+    expect(perRisk(v.periods[0]?.consumed)).toEqual({ [READ]: 1 });
     expect(v.events[0]).toMatchObject({ kind: 'revocation', actor_email: 'ada@example.com' });
   });
 });
@@ -689,6 +697,7 @@ describe('eventView', () => {
         ts: '2026-10-13T09:00:00.000Z',
         kind: 'call-allowed',
         riskId: MERGE,
+        resourceSetId: null,
         actorUserId: 'u-1',
         details: {
           tool: 'github__merge_pull_request',
@@ -746,6 +755,7 @@ describe('eventView', () => {
           ts: '2026-10-13T09:00:00.000Z',
           kind: 'reset',
           riskId: null,
+          resourceSetId: null,
           actorUserId: null,
           details: null,
         },
@@ -762,6 +772,7 @@ describe('eventView', () => {
         ts: '2026-10-13T09:00:00.000Z',
         kind: 'call-allowed',
         riskId: MERGE,
+        resourceSetId: null,
         actorUserId: 'u-1',
         // A list with a non-text entry, a count that is not a number, missing keys.
         details: {

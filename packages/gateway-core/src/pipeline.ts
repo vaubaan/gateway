@@ -307,6 +307,8 @@ export type BudgetDecision =
       readonly remaining: Readonly<Record<RiskId, number>>;
       /** Approval consumed, when the gate was `approval`. */
       readonly approval_id: string | null;
+      /** The resource sets charged (risk model §4.7); absent: the risk stage's. */
+      readonly resource_set_ids?: readonly string[];
     }
   | { readonly outcome: 'refused'; readonly refusal: Refusal };
 
@@ -315,23 +317,25 @@ export type BudgetDecision =
  * §3.3, §3.5). Refuses `budget-exhausted`,
  * `rate-limited` or `approval-required`; a refusal decrements nothing.
  */
+/** What the budget is asked about a call the risk stage allowed. */
+export interface BudgetInput {
+  readonly risks_touched: readonly RiskId[];
+  /** The resource sets the risk stage judged the call against (risk model §4.7): each
+   *  is checked and charged. Absent: a risk stage that does not judge by set; the
+   *  budget then charges the sets whose policy names a touched risk. */
+  readonly resource_set_ids?: readonly string[];
+  readonly now: Date;
+}
+
 export interface BudgetStage {
-  decide(
-    ctx: MissionContext,
-    call: CallRequest,
-    input: { readonly risks_touched: readonly RiskId[]; readonly now: Date },
-  ): Promise<BudgetDecision>;
+  decide(ctx: MissionContext, call: CallRequest, input: BudgetInput): Promise<BudgetDecision>;
   /**
    * The refusal the call's limits alone would get (`budget-exhausted`,
    * `rate-limited`), recorded as `decide` records it; `null` when they are
    * clear. Counts nothing, consumes no approval. Optional: a stage without it
    * leaves `precheck` to the stages before the budget.
    */
-  preflight?(
-    ctx: MissionContext,
-    call: CallRequest,
-    input: { readonly risks_touched: readonly RiskId[]; readonly now: Date },
-  ): Promise<Refusal | null>;
+  preflight?(ctx: MissionContext, call: CallRequest, input: BudgetInput): Promise<Refusal | null>;
 }
 
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
@@ -521,6 +525,8 @@ export interface CallPipelineDeps {
     ctx: MissionContext,
     call: CallRequest,
     missing: readonly RiskId[],
+    /** Each missing risk in each resource set it is missing from (risk model §4.7). */
+    lines: readonly MissingLine[],
   ) => Promise<string>;
   readonly resources: ResourceStage;
   readonly risks: RiskStage;
@@ -569,10 +575,39 @@ interface TargetedCall {
   readonly entry: CallAuditEntry;
 }
 
+/** A risk a refused call needs, in one resource set it was judged against. */
+export interface MissingLine {
+  readonly resource_set_id: string;
+  readonly risk_id: RiskId;
+}
+
 /** A call the risk stage allowed, with its audit entry so far. */
 interface ClassifiedCall {
   readonly risks_touched: readonly RiskId[];
+  readonly resource_set_ids?: readonly string[];
   readonly entry: CallAuditEntry;
+}
+
+/** The lines a `risk-not-accepted` verdict found missing. */
+function missingLinesOf(verdict: Extract<CallVerdict, { kind: 'deny' }>): MissingLine[] {
+  if (verdict.missing_by_set) {
+    return verdict.missing_by_set.flatMap((set) =>
+      set.missing_risks.map((risk_id) => ({ resource_set_id: set.resource_set_id, risk_id })),
+    );
+  }
+  return (verdict.resource_set_ids ?? []).flatMap((resource_set_id) =>
+    verdict.missing_risks.map((risk_id) => ({ resource_set_id, risk_id })),
+  );
+}
+
+/** What the audit entry learns of the sets a verdict judged the call against. */
+function judgedFields(
+  verdict: Pick<Extract<CallVerdict, { kind: 'allow' }>, 'resource_set_ids' | 'accepted_risks'>,
+): Partial<Pick<CallAuditEntry, 'resource_set_ids' | 'accepted_risks_snapshot'>> {
+  return {
+    ...(verdict.resource_set_ids ? { resource_set_ids: verdict.resource_set_ids } : {}),
+    ...(verdict.accepted_risks ? { accepted_risks_snapshot: verdict.accepted_risks } : {}),
+  };
 }
 
 /** A stage result that ends the call. Every `CallOutcome` carries its `audit` entry; no intermediate value does. */
@@ -667,7 +702,11 @@ export class CallPipeline {
     // the call these updates become touches at least these risks.
     const { classified } = placed;
     const attempt = await this.attempt('budget', call, classified.entry, () =>
-      preflight(ctx, call, { risks_touched: classified.risks_touched, now }),
+      preflight(ctx, call, {
+        risks_touched: classified.risks_touched,
+        ...(classified.resource_set_ids ? { resource_set_ids: classified.resource_set_ids } : {}),
+        now,
+      }),
     );
     if (!attempt.ok) return attempt.outcome;
     return attempt.value ? this.refused(classified.entry, attempt.value) : null;
@@ -793,7 +832,7 @@ export class CallPipeline {
         let reference: string | undefined;
         if (this.deps.permissionRefusal && verdict.missing_risks.length > 0) {
           const saved = await this.attempt('risk', call, entry, () =>
-            this.deps.permissionRefusal!(ctx, call, verdict.missing_risks),
+            this.deps.permissionRefusal!(ctx, call, verdict.missing_risks, missingLinesOf(verdict)),
           );
           if (!saved.ok) return saved.outcome;
           reference = saved.value;
@@ -803,6 +842,7 @@ export class CallPipeline {
             ...entry,
             slices_executed: verdict.executed_slices,
             risks_touched: verdict.risks_touched,
+            ...judgedFields(verdict),
           },
           reference
             ? {
@@ -816,10 +856,12 @@ export class CallPipeline {
       case 'allow':
         return {
           risks_touched: verdict.risks_touched,
+          ...(verdict.resource_set_ids ? { resource_set_ids: verdict.resource_set_ids } : {}),
           entry: {
             ...entry,
             slices_executed: verdict.executed_slices,
             risks_touched: verdict.risks_touched,
+            ...judgedFields(verdict),
           },
         };
     }
@@ -833,7 +875,11 @@ export class CallPipeline {
     now: Date,
   ): Promise<CallOutcome | CallAuditEntry> {
     const attempt = await this.attempt('budget', call, classified.entry, () =>
-      this.deps.budget.decide(ctx, call, { risks_touched: classified.risks_touched, now }),
+      this.deps.budget.decide(ctx, call, {
+        risks_touched: classified.risks_touched,
+        ...(classified.resource_set_ids ? { resource_set_ids: classified.resource_set_ids } : {}),
+        now,
+      }),
     );
     if (!attempt.ok) return attempt.outcome;
     const budget = attempt.value;
@@ -844,6 +890,7 @@ export class CallPipeline {
       decision: 'allowed',
       approval_id: budget.approval_id,
       remaining_budget: budget.remaining,
+      ...(budget.resource_set_ids ? { resource_set_ids: budget.resource_set_ids } : {}),
     };
   }
 

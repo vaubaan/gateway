@@ -14,6 +14,9 @@ import type { TokenToIssue } from '../../../src/server/store/repositories/delega
 import type {
   ApprovalRecord,
   GroupRecord,
+  MissionPolicyEntry,
+  MissionRecord,
+  MissionResourceSetRecord,
   RefreshTokenRecord,
   RequestRecord,
   RiskId,
@@ -216,4 +219,55 @@ export async function heldArguments(
   const request = await store.requests.getById(requestId);
   if (!request) return null;
   return store.requests.getArguments({ missionId: request.missionId, requestId });
+}
+
+/** A connection of a mission with one resource set, in the shape before sets existed. */
+export interface FlatSelection {
+  readonly connectionId: string;
+  readonly resourceScope: MissionResourceSetRecord['resourceScope'];
+  readonly resourceIds: readonly string[];
+  readonly resourceSources?: MissionResourceSetRecord['resourceSources'];
+  readonly trustLevels?: MissionResourceSetRecord['trustLevels'];
+}
+
+/**
+ * The connections of a mission whose connections have one resource set each, read flat
+ * (risk model §4.7): what a test about something else than sets compares. A connection
+ * with several sets is a test error.
+ */
+export function flatConnections(mission: Pick<MissionRecord, 'connections'>): FlatSelection[] {
+  return mission.connections.map((c) => {
+    const [only, ...more] = c.resourceSets;
+    if (!only || more.length > 0) {
+      throw new Error(`connection ${c.connectionId} has ${c.resourceSets.length} resource sets`);
+    }
+    return {
+      connectionId: c.connectionId,
+      resourceScope: only.resourceScope,
+      resourceIds: only.resourceIds,
+      ...(only.resourceSources ? { resourceSources: only.resourceSources } : {}),
+      ...(only.trustLevels ? { trustLevels: only.trustLevels } : {}),
+    };
+  });
+}
+
+/** The policy of a mission without the set of each line: what a one-set test compares. */
+export function flatPolicy(
+  mission: Pick<MissionRecord, 'policy'>,
+): Omit<MissionPolicyEntry, 'resourceSetId'>[] {
+  return mission.policy.map(({ resourceSetId: _set, ...line }) => line);
+}
+
+/** The one resource set of a mission's connection (the first when it has several). */
+export function firstSetOf(
+  mission: Pick<MissionRecord, 'connections'>,
+  connectionId?: string,
+): string {
+  const c =
+    connectionId === undefined
+      ? mission.connections[0]
+      : mission.connections.find((x) => x.connectionId === connectionId);
+  const id = c?.resourceSets[0]?.id;
+  if (!id) throw new Error('the mission has no resource set there');
+  return id;
 }

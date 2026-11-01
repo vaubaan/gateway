@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the twenty-eight migrations 0001 to 0028 in the default directory', () => {
+  it('ships the twenty-nine migrations 0001 to 0029 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -137,6 +137,7 @@ describe('migration runner', () => {
       [26, 'second_factor_lockout'],
       [27, 'mission_connection_trust_levels'],
       [28, 'argon2id_tokens_revoked'],
+      [29, 'resource_sets'],
     ]);
   });
 });
@@ -188,7 +189,12 @@ describe('migration 0027: the trust levels under their English names', () => {
   it('renames the column and keeps every mission, its levels rewritten to the new ids', () => {
     seedAtVersion26();
 
-    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    // Up to 0028: 0029 moves the levels to the resource sets (its own test below).
+    runMigrations(
+      db,
+      loadMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.version < 29),
+      clock,
+    );
 
     expect(
       db
@@ -212,5 +218,200 @@ describe('migration 0027: the trust levels under their English names', () => {
       .prepare('SELECT name FROM pragma_table_info(?)')
       .all('mission_connections') as { name: string }[];
     expect(columns.map((c) => c.name)).not.toContain('crans_json');
+  });
+});
+
+describe('migration 0029: a mission connection is partitioned into resource sets', () => {
+  const AT = '2026-10-31T08:00:00.000Z';
+  const PERIOD = '2026-10-31T00:00:00.000Z';
+  const clock = new ManualClock();
+  let db: StoreDb;
+
+  beforeEach(() => {
+    db = openDb({ path: MEMORY_PATH });
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  /** A mission on two accounts recorded at version 28, with a session, requests and audit. */
+  function seedAtVersion28(): void {
+    runMigrations(
+      db,
+      loadMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.version < 29),
+      clock,
+    );
+    const run = (sql: string, ...params: (string | number | null)[]) =>
+      db.prepare(sql).run(...params);
+    run(
+      "INSERT INTO users (id, subject, identity_key, email, status, created_at) VALUES ('ada', 's', 'k', 'ada@x', 'active', ?)",
+      AT,
+    );
+    const connection = `INSERT INTO connections (id, provider, owner_kind, owner_user_id, display_name, status, created_at, updated_at)
+       VALUES (?, ?, 'user', 'ada', ?, 'active', ?, ?)`;
+    run(connection, 'gh', 'github', 'acme', AT, AT);
+    run(connection, 'sb', 'supabase', 'db', AT, AT);
+    run(
+      `INSERT INTO connection_resources (id, connection_id, ref, display_name, discovered_at)
+       VALUES ('res-app', 'gh', 'acme/app', 'app', ?)`,
+      AT,
+    );
+    run(
+      `INSERT INTO missions (id, name, creator_user_id, status, period_anchor, period_seconds, created_at, updated_at)
+       VALUES ('m', 'M', 'ada', 'active', ?, 86400, ?, ?)`,
+      PERIOD,
+      AT,
+      AT,
+    );
+    run(
+      `INSERT INTO mission_connections (mission_id, connection_id, resource_scope, trust_levels_json)
+       VALUES ('m', 'gh', 'selected', ?)`,
+      JSON.stringify({ read: 'trusting' }),
+    );
+    run(
+      "INSERT INTO mission_connections (mission_id, connection_id, resource_scope) VALUES ('m', 'sb', 'connection')",
+    );
+    run(
+      "INSERT INTO mission_resources (mission_id, connection_id, resource_id, source) VALUES ('m', 'gh', 'res-app', 'created')",
+    );
+    const line = `INSERT INTO mission_policy (mission_id, risk_id, quota, rate_limit, rate_window_seconds, gate)
+       VALUES ('m', ?, ?, 5, 60, ?)`;
+    run(line, 'github.code-read', 10, 'auto');
+    run(line, 'github.merge-protected', 2, 'approval');
+    run(line, 'supabase[staging].row-write', 3, 'auto');
+    // A line of a provider the mission holds no account of: no call could reach it.
+    run(line, 'fly.app-read', 1, 'auto');
+    run("INSERT INTO sessions (id, mission_id, created_at) VALUES ('s', 'm', ?)", AT);
+    const counter = `INSERT INTO session_counters (session_id, risk_id, period_start, consumed)
+       VALUES ('s', ?, ?, ?)`;
+    run(counter, 'github.code-read', PERIOD, 4);
+    run(counter, 'supabase[staging].row-write', PERIOD, 1);
+    run(counter, 'fly.app-read', PERIOD, 1);
+    run(
+      `INSERT INTO events (id, session_id, ts, kind, risk_id, details_json)
+       VALUES ('e1', 's', ?, 'gate-opened', 'github.merge-protected', '{}')`,
+      AT,
+    );
+    run(
+      "INSERT INTO events (id, session_id, ts, kind, risk_id, details_json) VALUES ('e2', 's', ?, 'rotation', NULL, '{}')",
+      AT,
+    );
+    run(
+      `INSERT INTO requests (id, mission_id, session_id, kind, state, risk_id, risk_ids_json, tool, fingerprint, created_at, expires_at)
+       VALUES ('r1', 'm', 's', 'approval', 'open', 'github.merge-protected', ?, 'github__merge', 'fp', ?, ?)`,
+      JSON.stringify(['github.merge-protected', 'github.code-read']),
+      AT,
+      '2026-11-01T08:00:00.000Z',
+    );
+    run(
+      `INSERT INTO audit (id, ts, kind, mission_id, session_id, connection_id, tool, arguments_hash, slices_json, decision)
+       VALUES ('a1', ?, 'call', 'm', 's', 'gh', 'github__get_file', 'h', '[]', 'allowed')`,
+      AT,
+    );
+  }
+
+  it('starts the trust-raise count of every stored trust level at the upgrade', () => {
+    seedAtVersion28();
+    const before = new Date().toISOString();
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    const marks = db
+      .prepare(
+        'SELECT mission_id, resource_set_id, macro_action_id, level_changed_at, snoozed_at FROM mission_trust_marks',
+      )
+      .all() as { level_changed_at: string }[];
+    // One mark per stored trust level (the `sb` set stored none), stamped at the upgrade:
+    // approvals granted before it never lead to an offer.
+    expect(marks).toEqual([
+      {
+        mission_id: 'm',
+        resource_set_id: 'm:gh',
+        macro_action_id: 'read',
+        level_changed_at: expect.any(String) as string,
+        snoozed_at: null,
+      },
+    ]);
+    expect(marks[0]!.level_changed_at >= before.slice(0, 19)).toBe(true);
+    expect(marks[0]!.level_changed_at > AT).toBe(true);
+  });
+
+  it('gives each existing connection one set holding its scope, resources, levels and lines', () => {
+    seedAtVersion28();
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+
+    expect(
+      db
+        .prepare(
+          'SELECT id, connection_id, position, resource_scope, trust_levels_json FROM mission_resource_sets ORDER BY connection_id',
+        )
+        .all(),
+    ).toEqual([
+      {
+        id: 'm:gh',
+        connection_id: 'gh',
+        position: 1,
+        resource_scope: 'selected',
+        trust_levels_json: JSON.stringify({ read: 'trusting' }),
+      },
+      {
+        id: 'm:sb',
+        connection_id: 'sb',
+        position: 1,
+        resource_scope: 'connection',
+        trust_levels_json: null,
+      },
+    ]);
+    expect(
+      db.prepare('SELECT resource_id, resource_set_id, source FROM mission_resources').all(),
+    ).toEqual([{ resource_id: 'res-app', resource_set_id: 'm:gh', source: 'created' }]);
+    expect(
+      db
+        .prepare(
+          'SELECT resource_set_id, risk_id, quota, gate FROM mission_policy ORDER BY risk_id',
+        )
+        .all(),
+    ).toEqual([
+      { resource_set_id: 'm:gh', risk_id: 'github.code-read', quota: 10, gate: 'auto' },
+      { resource_set_id: 'm:gh', risk_id: 'github.merge-protected', quota: 2, gate: 'approval' },
+      { resource_set_id: 'm:sb', risk_id: 'supabase[staging].row-write', quota: 3, gate: 'auto' },
+    ]);
+    expect(
+      db
+        .prepare('SELECT resource_set_id, risk_id, consumed FROM session_counters ORDER BY risk_id')
+        .all(),
+    ).toEqual([
+      { resource_set_id: 'm:gh', risk_id: 'github.code-read', consumed: 4 },
+      { resource_set_id: 'm:sb', risk_id: 'supabase[staging].row-write', consumed: 1 },
+    ]);
+    expect(db.prepare('SELECT id, resource_set_id FROM events ORDER BY id').all()).toEqual([
+      { id: 'e1', resource_set_id: 'm:gh' },
+      { id: 'e2', resource_set_id: null },
+    ]);
+    expect(
+      db.prepare('SELECT request_id, resource_set_id, risk_id FROM request_lines').all(),
+    ).toEqual([{ request_id: 'r1', resource_set_id: 'm:gh', risk_id: 'github.merge-protected' }]);
+    expect(db.prepare('SELECT audit_id, resource_set_id FROM audit_resource_sets').all()).toEqual([
+      { audit_id: 'a1', resource_set_id: 'm:gh' },
+    ]);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+  });
+
+  it('refuses a second whole-connection set on one connection', () => {
+    seedAtVersion28();
+    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO mission_resource_sets (id, mission_id, connection_id, position, resource_scope) VALUES ('x', 'm', 'sb', 2, 'connection')",
+        )
+        .run(),
+    ).toThrow(/UNIQUE/);
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO mission_resource_sets (id, mission_id, connection_id, position, resource_scope) VALUES ('y', 'm', 'sb', 2, 'selected')",
+        )
+        .run(),
+    ).not.toThrow();
   });
 });

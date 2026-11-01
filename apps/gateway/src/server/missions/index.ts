@@ -38,7 +38,8 @@ export interface MissionsModule {
 }
 
 export interface MissionsModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'selfResources'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'selfResources'> &
+    Partial<Pick<InstanceConfig, 'trustRaise'>>;
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
@@ -77,6 +78,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     mint: deps.mint,
     budget: deps.budget,
     ceilings: deps.ceilings,
+    trustRaiseAfterApprovals: deps.config.trustRaise?.afterApprovals,
   });
   const team = new MissionTeamService({
     store: deps.store,
@@ -170,6 +172,7 @@ export {
   withAssumedEnvs,
 } from './mission-service';
 export { createTeamHandlers, type TeamHandlers } from './team-handlers';
+export { nextTrustLevel, trustRaiseOffers, type TrustRaiseOffer } from './trust-raise';
 export {
   MissionTeamService,
   type AddMemberResult,

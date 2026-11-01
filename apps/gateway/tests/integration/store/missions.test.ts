@@ -9,13 +9,19 @@ import {
   InvariantError,
   TokenNotIssuableError,
   UnknownRiskIdError,
-  type MissionPolicyEntry,
+  type MissionPolicyLineInput,
   type Store,
   type TokenHolderRecord,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../support/store/testing.ts';
+import {
+  firstSetOf,
+  flatConnections,
+  flatPolicy,
+  openTestStore,
+  type TestStore,
+} from '../../support/store/testing.ts';
 
-const POLICY: MissionPolicyEntry[] = [
+const POLICY: MissionPolicyLineInput[] = [
   { riskId: 'github.code-read', quota: 100, rateLimit: 30, rateWindowSeconds: 60, gate: 'auto' },
   {
     riskId: 'github.merge-protected',
@@ -90,10 +96,10 @@ describe('missions repository', () => {
       expiresAt: '2026-12-31T00:00:00.000Z',
       delegationId: null,
     });
-    expect(m.connections).toEqual([
+    expect(flatConnections(m)).toEqual([
       { connectionId: connection, resourceScope: 'all', resourceIds: [] },
     ]);
-    expect(m.policy).toEqual(POLICY);
+    expect(flatPolicy(m)).toEqual(POLICY);
     expect(
       store.db
         .prepare<[string], { n: number }>(
@@ -115,7 +121,7 @@ describe('missions repository', () => {
     });
     const byId = (a: { connectionId: string }, b: { connectionId: string }) =>
       a.connectionId.localeCompare(b.connectionId);
-    expect([...m.connections].sort(byId)).toEqual(
+    expect([...flatConnections(m)].sort(byId)).toEqual(
       [
         { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
         { connectionId: otherConnection, resourceScope: 'all', resourceIds: [] },
@@ -127,7 +133,7 @@ describe('missions repository', () => {
     const m = await create({
       connections: [{ connectionId: connection, resourceScope: 'connection', resourceIds: [] }],
     });
-    expect(m.connections).toEqual([
+    expect(flatConnections(m)).toEqual([
       { connectionId: connection, resourceScope: 'connection', resourceIds: [] },
     ]);
     expect(
@@ -161,9 +167,12 @@ describe('missions repository', () => {
         connections: [
           { connectionId: otherConnection, resourceScope: 'selected', resourceIds: [resourceA] },
         ],
+        policy: [],
       }),
     ).rejects.toThrow(/does not belong/);
-    await expect(create({ connections: [] })).rejects.toThrow(/at least one connection/);
+    await expect(create({ connections: [], policy: [] })).rejects.toThrow(
+      /at least one connection/,
+    );
     expect(await store.missions.listForCreator(creator)).toEqual([]);
   });
 
@@ -185,12 +194,16 @@ describe('missions repository', () => {
 
   it('replaces the policy atomically and refuses unknown risks on replacement too', async () => {
     const m = await create();
-    const updated = await store.missions.replacePolicy(m.id, [POLICY[0]!]);
-    expect(updated.policy).toEqual([POLICY[0]]);
+    const updated = await store.missions.replacePolicy(m.id, [
+      { ...POLICY[0]!, resourceSetId: firstSetOf(m) },
+    ]);
+    expect(flatPolicy(updated)).toEqual([POLICY[0]]);
     await expect(
-      store.missions.replacePolicy(m.id, [{ ...POLICY[0]!, riskId: 'nope' }]),
+      store.missions.replacePolicy(m.id, [
+        { ...POLICY[0]!, riskId: 'nope', resourceSetId: firstSetOf(m) },
+      ]),
     ).rejects.toThrow(UnknownRiskIdError);
-    expect((await store.missions.getById(m.id))?.policy).toEqual([POLICY[0]]);
+    expect(flatPolicy((await store.missions.getById(m.id))!)).toEqual([POLICY[0]]);
   });
 
   it('transitions status and expiry', async () => {
@@ -621,6 +634,7 @@ describe('missions repository', () => {
     );
     expect(result?.changes).toEqual([
       {
+        resourceSetId: firstSetOf(m),
         riskId: 'github.code-read',
         before: { quota: 100, rateLimit: 30 },
         after: { quota: 7, rateLimit: 30 },
@@ -628,6 +642,7 @@ describe('missions repository', () => {
         changed: true,
       },
       {
+        resourceSetId: firstSetOf(m),
         riskId: 'github.merge-protected',
         before: { quota: 2, rateLimit: 1 },
         after: { quota: 2, rateLimit: 1 },
@@ -635,7 +650,7 @@ describe('missions repository', () => {
         changed: false,
       },
     ]);
-    expect(result?.mission.policy).toEqual([{ ...POLICY[0], quota: 7 }, POLICY[1]]);
+    expect(flatPolicy(result!.mission)).toEqual([{ ...POLICY[0], quota: 7 }, POLICY[1]]);
     // One event, for the risk that moved.
     expect(await store.sessions.listEvents(session.id)).toMatchObject([
       {
@@ -659,7 +674,7 @@ describe('missions repository', () => {
         creator,
       ),
     ).toBeNull();
-    expect((await store.missions.getById(m.id))?.policy).toEqual(POLICY);
+    expect(flatPolicy((await store.missions.getById(m.id))!)).toEqual(POLICY);
     await expect(
       store.missions.setLimits(
         m.id,
@@ -691,7 +706,10 @@ describe('missions repository', () => {
       (ctx) => ({ allow: false, limits: ctx.limits }),
     );
     expect([...seen.outcome.limits]).toEqual([
-      ['github.code-read', { quota: 3, rateLimit: 4, rateWindowSeconds: 60, gate: 'auto' }],
+      [
+        `${firstSetOf(m)}::github.code-read`,
+        { quota: 3, rateLimit: 4, rateWindowSeconds: 60, gate: 'auto' },
+      ],
     ]);
   });
 
@@ -750,13 +768,13 @@ describe('missions repository', () => {
         summary,
       });
       expect(result?.before.name).toBe('Ship feature X');
-      expect(result?.mission).toMatchObject({
-        name: 'Ship feature Y',
-        connections: [
-          { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
-          { connectionId: otherConnection, resourceScope: 'connection', resourceIds: [] },
-        ],
-      });
+      expect(result?.mission).toMatchObject({ name: 'Ship feature Y' });
+      expect(flatConnections(result!.mission)).toMatchObject([
+        { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
+        { connectionId: otherConnection, resourceScope: 'connection', resourceIds: [] },
+      ]);
+      // The kept connection kept its one set: its counters follow it.
+      expect(firstSetOf(result!.mission, connection)).toBe(firstSetOf(m, connection));
       expect(result?.mission.policy.map((p) => p.riskId).sort()).toEqual([
         'github.code-read',
         'supabase[staging].bulk-row-write',
@@ -788,8 +806,8 @@ describe('missions repository', () => {
         unchanged: () => false,
         name: 'Never',
         expiresAt: null,
-        connections: m.connections,
-        policy: m.policy,
+        connections: flatConnections(m),
+        policy: flatPolicy(m),
         summary,
       };
       expect(await store.missions.edit(m.id, input)).toBeNull();
@@ -813,7 +831,7 @@ describe('missions repository', () => {
           unchanged: () => true,
           name: m.name,
           expiresAt: null,
-          connections: m.connections,
+          connections: flatConnections(m),
           policy: [
             { riskId: 'github.nope', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
           ],

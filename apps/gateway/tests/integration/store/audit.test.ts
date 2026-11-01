@@ -44,6 +44,7 @@ function callEntry(ts: string, decision: 'allowed' | 'refused' = 'allowed'): Cal
     approval_id: null,
     // What the budget stage writes: the remaining budget of the touched risks.
     remaining_budget: { [WRITE]: 4 },
+    resource_set_ids: ['s1'],
     agent_label: 'orchestrator',
     upstream_latency_ms: 120,
     upstream_error: null,
@@ -225,8 +226,10 @@ describe('audit repository', () => {
     await store.audit.append(callEntry('2026-10-13T09:01:00.000Z'));
     await store.audit.append(callEntry('2026-10-13T09:02:00.000Z', 'refused'));
     const day = ['2026-10-13T00:00:00.000Z', '2026-10-14T00:00:00.000Z'] as const;
-    expect(await store.audit.countAllowedTouches('m1', WRITE, ...day)).toBe(2);
-    expect(await store.audit.countAllowedTouches('m1', READ, ...day)).toBe(0);
+    expect(await store.audit.countAllowedTouches('m1', 's1', WRITE, ...day)).toBe(2);
+    // Counted per resource set: another set of the mission charged nothing.
+    expect(await store.audit.countAllowedTouches('m1', 's2', WRITE, ...day)).toBe(0);
+    expect(await store.audit.countAllowedTouches('m1', 's1', READ, ...day)).toBe(0);
   });
 
   it('counts a mission’s calls per agent label over a span, the unlabelled ones apart', async () => {

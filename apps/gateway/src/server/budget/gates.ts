@@ -18,11 +18,17 @@
  *
  * Details are read through `parseEventDetails` only: an event whose stored details do
  * not have the shape of its kind opens nothing.
+ *
+ * An opening is about one line: a risk in one resource set (risk model §4.7, the
+ * event's `resource_set_id` column). An opening that names no set opens nothing; a
+ * change that names no set closes the risk in every set — the strict reading.
  */
 
 import {
   parseEventDetails,
+  policyLineKey,
   type Iso8601,
+  type PolicyLineKey,
   type RiskId,
   type SessionEventKind,
 } from '@vaubaan/shared';
@@ -53,35 +59,61 @@ export interface GateEventLike {
   readonly ts: Iso8601;
   readonly kind: string;
   readonly riskId: RiskId | null;
+  readonly resourceSetId: string | null;
   readonly details: Readonly<Record<string, unknown>> | null;
 }
 
 /**
- * The risks whose gate the creator opened for `period`, from the session's
+ * The lines (set, risk) whose gate the creator opened for `period`, from the session's
  * `GATE_EVENT_KINDS` events of those risks since the period started (any order).
  */
 export function openedGatesOf(
   events: readonly GateEventLike[],
   period: CurrentPeriod,
-): Set<RiskId> {
-  const openedAt = new Map<RiskId, number>();
-  const changedAt = new Map<RiskId, number>();
+): Set<PolicyLineKey> {
+  const openedAt = new Map<PolicyLineKey, { readonly riskId: RiskId; at: number }>();
+  const changedAt = new Map<PolicyLineKey, number>();
+  const changedEverywhereAt = new Map<RiskId, number>();
   for (const event of events) {
     if (event.riskId === null) continue;
     const at = Date.parse(event.ts);
     const parsed = parseEventDetails(event.kind, event.details);
     if (!parsed || Number.isNaN(at)) continue;
     if (parsed.kind === 'gate-opened') {
-      if (parsed.details.period_start !== period.start) continue;
-      openedAt.set(event.riskId, Math.max(at, openedAt.get(event.riskId) ?? at));
+      if (parsed.details.period_start !== period.start || event.resourceSetId === null) continue;
+      const key = policyLineKey(event.resourceSetId, event.riskId);
+      const seen = openedAt.get(key);
+      openedAt.set(key, { riskId: event.riskId, at: Math.max(at, seen?.at ?? at) });
     } else if (parsed.kind === 'gate-changed' || parsed.kind === 'permission-removed') {
-      changedAt.set(event.riskId, Math.max(at, changedAt.get(event.riskId) ?? at));
+      if (event.resourceSetId === null) {
+        changedEverywhereAt.set(
+          event.riskId,
+          Math.max(at, changedEverywhereAt.get(event.riskId) ?? at),
+        );
+        continue;
+      }
+      const key = policyLineKey(event.resourceSetId, event.riskId);
+      changedAt.set(key, Math.max(at, changedAt.get(key) ?? at));
     }
   }
-  const opened = new Set<RiskId>();
-  for (const [riskId, at] of openedAt) {
-    const changed = changedAt.get(riskId);
-    if (changed === undefined || changed < at) opened.add(riskId);
+  const opened = new Set<PolicyLineKey>();
+  for (const [key, { riskId, at }] of openedAt) {
+    const changed = Math.max(
+      changedAt.get(key) ?? -Infinity,
+      changedEverywhereAt.get(riskId) ?? -Infinity,
+    );
+    if (changed < at) opened.add(key);
   }
   return opened;
+}
+
+/** The risks of one set among opened lines: what `decide()` of that set is given. */
+export function openedInSet(
+  opened: ReadonlySet<PolicyLineKey>,
+  resourceSetId: string,
+): Set<RiskId> {
+  const prefix = policyLineKey(resourceSetId, '');
+  const risks = new Set<RiskId>();
+  for (const key of opened) if (key.startsWith(prefix)) risks.add(key.slice(prefix.length));
+  return risks;
 }

@@ -22,6 +22,7 @@ const EXPECTED_TABLES = [
   'approvals',
   'audit',
   'audit_purge_guard',
+  'audit_resource_sets',
   'audit_risk_set_members',
   'audit_risk_sets',
   'audit_risks',
@@ -40,16 +41,20 @@ const EXPECTED_TABLES = [
   'mission_connections',
   'mission_members',
   'mission_policy',
+  'mission_resource_sets',
   'mission_resources',
   'mission_tokens',
+  'mission_trust_marks',
   'missions',
   'oauth_access_tokens',
   'oauth_client_redirect_uris',
   'oauth_clients',
   'oauth_codes',
   'oauth_refresh_tokens',
+  'permission_refusal_lines',
   'permission_refusals',
   'permission_requests',
+  'request_lines',
   'requests',
   'schema_migrations',
   'session_counters',
@@ -100,7 +105,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(28);
+    expect(store.schemaVersion).toBe(29);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -139,10 +144,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(28);
+    expect(second.schemaVersion).toBe(29);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(28);
+    ).toBe(29);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

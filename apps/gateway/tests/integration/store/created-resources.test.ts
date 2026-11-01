@@ -19,12 +19,17 @@ import {
   FRESH_RESOURCE_STALE_GRACE_MS,
   InvariantError,
   NotFoundError,
-  type MissionPolicyEntry,
+  type MissionPolicyLineInput,
   type Store,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../support/store/testing.ts';
+import {
+  firstSetOf,
+  flatConnections,
+  openTestStore,
+  type TestStore,
+} from '../../support/store/testing.ts';
 
-const POLICY: MissionPolicyEntry[] = [
+const POLICY: MissionPolicyLineInput[] = [
   { riskId: 'github.code-read', quota: 100, rateLimit: 30, rateWindowSeconds: 60, gate: 'auto' },
 ];
 const MINUTE = 60_000;
@@ -176,9 +181,13 @@ describe('created resources in the store', () => {
       const m = await mission('selected', [a.id]);
       const fresh = await created();
       const result = await store.missions.addResources(m.id, connection, [fresh.id], 'created');
-      expect(result).toEqual({ scope: 'selected', added: [fresh.id] });
+      expect(result).toEqual({
+        resourceSetId: firstSetOf(m),
+        scope: 'selected',
+        added: [fresh.id],
+      });
       const stored = await store.missions.getById(m.id);
-      expect(stored?.connections[0]).toEqual({
+      expect(flatConnections(stored!)[0]).toEqual({
         connectionId: connection,
         resourceScope: 'selected',
         resourceIds: [a.id, fresh.id].sort(),
@@ -186,11 +195,89 @@ describe('created resources in the store', () => {
       });
       // Again: nothing repeated, the source kept.
       expect(await store.missions.addResources(m.id, connection, [fresh.id], 'edit')).toEqual({
+        resourceSetId: firstSetOf(m),
         scope: 'selected',
         added: [],
       });
-      expect((await store.missions.getById(m.id))?.connections[0]?.resourceSources).toEqual({
+      expect(flatConnections((await store.missions.getById(m.id))!)[0]?.resourceSources).toEqual({
         [fresh.id]: 'created',
+      });
+    });
+
+    describe('with several resource sets (risk model §4.7)', () => {
+      /** Set 1 picks acme/a, set 2 acme/b; `rest` adds a third set taking the rest. */
+      const twoSets = async (rest: 'connection' | null) => {
+        const [a, b] = [(await row('acme/a'))!, (await row('acme/b'))!];
+        const set = (resourceScope: 'selected' | 'connection', resourceIds: string[]) => ({
+          resourceScope,
+          resourceIds,
+          policy: POLICY,
+        });
+        return store.missions.create({
+          name: 'm',
+          creatorUserId: creator,
+          periodSeconds: 86_400,
+          connections: [
+            {
+              connectionId: connection,
+              resourceSets: [
+                set('selected', [a.id]),
+                set('selected', [b.id]),
+                ...(rest ? [set(rest, [])] : []),
+              ],
+            },
+          ],
+        });
+      };
+      const setIds = (m: { connections: readonly { resourceSets: readonly { id: string }[] }[] }) =>
+        m.connections[0]!.resourceSets.map((x) => x.id);
+
+      it('joins the one set the call was judged against', async () => {
+        const m = await twoSets(null);
+        const [, second] = setIds(m);
+        const fresh = await created();
+        expect(
+          await store.missions.addResources(m.id, connection, [fresh.id], 'created', undefined, [
+            second!,
+          ]),
+        ).toMatchObject({ resourceSetId: second, added: [fresh.id] });
+      });
+
+      it('judged against several: the whole-account set when there is one', async () => {
+        const m = await twoSets('connection');
+        const [first, second, whole] = setIds(m);
+        const fresh = await created();
+        expect(
+          await store.missions.addResources(m.id, connection, [fresh.id], 'created', undefined, [
+            first!,
+            second!,
+          ]),
+        ).toEqual({ resourceSetId: whole, scope: 'connection', added: [] });
+      });
+
+      it('judged against several and no whole-account set: the first of them, never another set', async () => {
+        const m = await twoSets(null);
+        const [, second] = setIds(m);
+        const fresh = await created();
+        // Judged against set 2 only once set 1 is out of the candidates: set 2, not set 1.
+        expect(
+          await store.missions.addResources(m.id, connection, [fresh.id], 'created', undefined, [
+            second!,
+            'gone-set',
+          ]),
+        ).toMatchObject({ resourceSetId: second });
+        const other = (
+          await store.connections.upsertDiscoveredResources(connection, [
+            { ref: 'acme/other', displayName: 'Other' },
+          ])
+        )[0]!;
+        const [first] = setIds(m);
+        expect(
+          await store.missions.addResources(m.id, connection, [other.id], 'created', undefined, [
+            second!,
+            first!,
+          ]),
+        ).toMatchObject({ resourceSetId: first });
       });
     });
 
@@ -198,10 +285,11 @@ describe('created resources in the store', () => {
       const m = await mission('all');
       const fresh = await created();
       expect(await store.missions.addResources(m.id, connection, [fresh.id], 'created')).toEqual({
+        resourceSetId: firstSetOf(m),
         scope: 'selected',
         added: [fresh.id],
       });
-      expect((await store.missions.getById(m.id))?.connections[0]).toMatchObject({
+      expect(flatConnections((await store.missions.getById(m.id))!)[0]).toMatchObject({
         resourceScope: 'selected',
         resourceIds: [fresh.id],
       });
@@ -211,10 +299,11 @@ describe('created resources in the store', () => {
       const m = await mission('connection');
       const fresh = await created();
       expect(await store.missions.addResources(m.id, connection, [fresh.id], 'created')).toEqual({
+        resourceSetId: firstSetOf(m),
         scope: 'connection',
         added: [],
       });
-      expect((await store.missions.getById(m.id))?.connections[0]).toEqual({
+      expect(flatConnections((await store.missions.getById(m.id))!)[0]).toEqual({
         connectionId: connection,
         resourceScope: 'connection',
         resourceIds: [],
@@ -251,7 +340,7 @@ describe('created resources in the store', () => {
         store.missions.addResources(m.id, other, [foreign!.id], 'created'),
       ).rejects.toBeInstanceOf(NotFoundError);
       // Nothing written by the refused call.
-      expect((await store.missions.getById(m.id))?.connections[0]).toMatchObject({
+      expect(flatConnections((await store.missions.getById(m.id))!)[0]).toMatchObject({
         resourceScope: 'all',
         resourceIds: [],
       });
@@ -263,9 +352,9 @@ describe('created resources in the store', () => {
       const insert = (source: string) =>
         store.db
           .prepare(
-            'INSERT INTO mission_resources (mission_id, connection_id, resource_id, source) VALUES (?, ?, ?, ?)',
+            'INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source) VALUES (?, ?, ?, ?, ?)',
           )
-          .run(m.id, connection, b.id, source);
+          .run(m.id, connection, b.id, firstSetOf(m), source);
       expect(() => insert('other')).toThrow(/CHECK/);
       expect(() => insert('edit')).not.toThrow();
     });
@@ -310,7 +399,7 @@ describe('created resources in the store', () => {
       });
       expect(edited).not.toBeNull();
       const stored = await store.missions.getById(m.id);
-      expect(stored?.connections.find((c) => c.connectionId === connection)).toEqual({
+      expect(flatConnections(stored!).find((c) => c.connectionId === connection)).toEqual({
         connectionId: connection,
         resourceScope: 'selected',
         resourceIds: [a.id, b.id, fresh.id].sort(),

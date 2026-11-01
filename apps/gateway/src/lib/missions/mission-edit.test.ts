@@ -13,6 +13,8 @@ import {
   judgeEdit,
   missionRevision,
   type MissionSnapshot,
+  type MissionSnapshotConnection,
+  type MissionSnapshotSet,
 } from './mission-edit';
 import type { DraftConnection, MissionDraft } from './model';
 import { previewDraft } from './preview';
@@ -35,19 +37,48 @@ const line = (
   gate,
 });
 
+/** The one resource set of the mission's account. */
+const SET = 'set-1';
+/** An account of the snapshot with one resource set. */
+function account(
+  c: Omit<MissionSnapshotConnection, 'resource_sets'> & {
+    readonly resource_scope: MissionSnapshotSet['resource_scope'];
+    readonly resource_ids: readonly string[];
+    readonly policy: readonly MissionPolicyEntry[];
+    readonly trust_levels?: Readonly<Record<string, string>>;
+    readonly set?: string;
+  },
+): MissionSnapshotConnection {
+  const { resource_scope, resource_ids, policy, trust_levels, set = SET, ...rest } = c;
+  return {
+    ...rest,
+    resource_sets: [
+      {
+        key: set,
+        id: set,
+        position: 1,
+        resource_scope,
+        resource_ids,
+        policy: policy.map((p) => ({ ...p, resource_set_id: set })),
+        ...(trust_levels ? { trust_levels } : {}),
+      },
+    ],
+  };
+}
+
 const BEFORE: MissionSnapshot = {
   name: 'Ship it',
   expires_at: null,
   period: { kind: 'recurring', length_seconds: 86_400 },
   connections: [
-    {
+    account({
       connection_id: 'conn-acme',
       provider: 'acme',
       display_name: 'Acme main',
       resource_scope: 'selected',
       resource_ids: ['res-app-staging'],
       policy: [line('acme.read'), line('acme[staging].write', 5)],
-    },
+    }),
   ],
 };
 
@@ -81,7 +112,9 @@ describe('judgeEdit', () => {
     expect(previewDraft(context, draft).issues.map((i) => i.code)).toContain('resource-stale');
     const judged = judgeEdit(context, BEFORE, draft);
     expect(judged.issues).toEqual([]);
-    expect(judged.after.connections[0]?.resource_ids).toEqual(['res-app-staging']);
+    expect(judged.after.connections[0]?.resource_sets[0]?.resource_ids).toEqual([
+      'res-app-staging',
+    ]);
     expect(judged.changes.permissions_changed.map((c) => c.risk_id)).toEqual(['acme.read']);
   });
 
@@ -135,7 +168,7 @@ describe('judgeEdit', () => {
     // The creator holds nothing any more: a gate is not what a share restricts.
     const judged = judgeEdit(context, BEFORE, draft);
     expect(judged.ok).toBe(true);
-    expect(judged.after.connections[0]?.policy[0]?.gate).toBe('approval');
+    expect(judged.after.connections[0]?.resource_sets[0]?.policy[0]?.gate).toBe('approval');
   });
 
   it('refuses another period, and a past end date only when the end moves', () => {
@@ -169,14 +202,15 @@ describe('judgeEdit', () => {
         ...BEFORE,
         connections: [
           ...BEFORE.connections,
-          {
+          account({
             connection_id: 'conn-gone',
             provider: 'other',
             display_name: 'Gone',
             resource_scope: 'all',
             resource_ids: [],
             policy: [line('other.read')],
-          },
+            set: 'set-gone',
+          }),
         ],
       },
       draftOfSnapshot(BEFORE),
@@ -189,10 +223,14 @@ describe('judgeEdit', () => {
 
 describe('the revision and the words of an edit', () => {
   it('does not depend on the order of rows, and moves with any editable value', () => {
+    const [only] = BEFORE.connections[0]!.resource_sets;
     const reordered: MissionSnapshot = {
       ...BEFORE,
       connections: [
-        { ...BEFORE.connections[0]!, policy: [...BEFORE.connections[0]!.policy].reverse() },
+        {
+          ...BEFORE.connections[0]!,
+          resource_sets: [{ ...only!, policy: [...only!.policy].reverse() }],
+        },
       ],
     };
     expect(missionRevision(reordered)).toBe(missionRevision(BEFORE));
@@ -203,11 +241,14 @@ describe('the revision and the words of an edit', () => {
     const after: MissionSnapshot = {
       ...BEFORE,
       connections: [
-        {
-          ...BEFORE.connections[0]!,
+        account({
+          connection_id: 'conn-acme',
+          provider: 'acme',
+          display_name: 'Acme main',
+          resource_scope: 'selected',
           resource_ids: ['res-app-staging', 'res-scratch'],
           policy: [line('acme.read', 50)],
-        },
+        }),
       ],
     };
     const changes = diffSnapshots(BEFORE, after);

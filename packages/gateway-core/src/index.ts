@@ -17,6 +17,7 @@ export type {
   MissionConnection,
   MissionContext,
   MissionResource,
+  MissionResourceSet,
   TokenHolder,
 } from './types.ts';
 export {
@@ -56,8 +57,13 @@ export type {
 export { canonicalJson, fingerprintArguments } from './fingerprint.ts';
 export { MemoryCacheClient } from './cache.ts';
 export type { CacheClient } from './cache.ts';
-export { evaluateCallForMission } from './risk-gateway.ts';
-export type { CallVerdict } from './risk-gateway.ts';
+export {
+  candidateResourceSets,
+  evaluateCallForMission,
+  evaluateCallForResourceSets,
+  resourceSetsLabel,
+} from './risk-gateway.ts';
+export type { CallVerdict, ResourceSetToJudge } from './risk-gateway.ts';
 export {
   callAuditBase,
   CallPipeline,
@@ -71,6 +77,7 @@ export {
 } from './pipeline.ts';
 export type {
   BudgetDecision,
+  BudgetInput,
   BudgetStage,
   CallOutcome,
   CallPipelineDeps,
@@ -78,6 +85,7 @@ export type {
   CallTarget,
   ClientOrigin,
   CredentialResolver,
+  MissingLine,
   ResolvedCredential,
   ResourceResolution,
   ResourceStage,

@@ -2,7 +2,7 @@
  * The pipeline's `BudgetStage` over the `SessionService`.
  *
  * `@vaubaan/gateway-core`'s `CallPipeline` calls `budget.decide(ctx, call,
- * { risks_touched, now })` after the risk stage allowed the call and expects a
+ * { risks_touched, resource_set_ids, now })` after the risk stage allowed the call and expects a
  * `BudgetDecision`. This adapter maps the cached `MissionContext` to the budget's
  * `BudgetMission` and the service's result back to the pipeline's shape.
  *
@@ -46,6 +46,11 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
       expires_at: ctx.mission.expires_at,
       period: await periodOf(ctx),
       policy: ctx.policy,
+      resource_sets: ctx.resource_sets.map((set) => ({
+        id: set.id,
+        connection_id: set.connection_id,
+        position: set.position,
+      })),
     };
   }
 
@@ -56,6 +61,7 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
         tool: call.tool,
         args: call.args,
         risks_touched: input.risks_touched,
+        ...(input.resource_set_ids ? { resource_set_ids: input.resource_set_ids } : {}),
         agent_label: call.agent_label,
         token: tokenAttributionOf(ctx.token),
         now: input.now,
@@ -68,6 +74,7 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
         tool: call.tool,
         args: call.args,
         risks_touched: input.risks_touched,
+        ...(input.resource_set_ids ? { resource_set_ids: input.resource_set_ids } : {}),
         agent_label: call.agent_label,
         // Who called, from the authenticated context: the event is attributed to
         // the token's holder whatever the caller declares.
@@ -79,6 +86,7 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
         outcome: 'allowed',
         session_id: result.session_id,
         remaining: result.remaining,
+        resource_set_ids: result.resource_set_ids,
         // The audit entry carries one approval id; a call touching several gated
         // risks consumed one per risk, all listed on the session event.
         approval_id: result.approval_ids[0] ?? null,

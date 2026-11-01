@@ -323,6 +323,9 @@ Executor(s)                   same token, same budget, optional agent label
 - **The owner needs no share** to issue missions on their connection.
 - **One connection per provider in a mission**, each checked against the creator's authority there;
   a draft naming two of one provider is refused, naming both.
+- **Resource sets.** Within one connection, a mission can give different resources different
+  policies and budgets. Each resource belongs to one set. A call that cannot be placed in one set is
+  judged by the strictest of its candidate sets (risk model §4.7).
 - **Resource selection.** A mission names, per connection, the resources it may touch: by default
   every resource known at issuance. A call citing a resource outside it is refused
   `resource-not-in-mission` before any risk is evaluated. **What a mission creates, it reaches**: a

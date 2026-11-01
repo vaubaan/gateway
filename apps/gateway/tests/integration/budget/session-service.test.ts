@@ -19,6 +19,7 @@ import {
   ANCHOR,
   APPROVAL_VALIDITY_SECONDS,
   at,
+  byRisk,
   DAY_SECONDS,
   MERGE,
   openBudgetFixture,
@@ -328,11 +329,10 @@ describe('SessionService.stateOf', () => {
   afterEach(() => f.store.close());
 
   it('derives the state with the rollover applied on read', async () => {
-    expect(await f.service.stateOf(f.mission, NOW)).toMatchObject({
-      kind: 'active',
-      exhausted: [],
-      remaining: { [READ]: 10, [WRITE]: 1, [MERGE]: 2 },
-    });
+    const fresh = await f.service.stateOf(f.mission, NOW);
+    expect(fresh).toMatchObject({ kind: 'active', exhausted: [] });
+    if (fresh.kind !== 'active') throw new Error('expected an active mission');
+    expect(byRisk(fresh.remaining)).toEqual({ [READ]: 10, [WRITE]: 1, [MERGE]: 2 });
     await f.service.recordCall({
       mission: f.mission,
       tool: 't',
@@ -340,11 +340,10 @@ describe('SessionService.stateOf', () => {
       risks_touched: [WRITE],
       now: NOW,
     });
-    expect(await f.service.stateOf(f.mission, NOW)).toMatchObject({
-      kind: 'active',
-      exhausted: [WRITE],
-      remaining: { [READ]: 10, [WRITE]: 0, [MERGE]: 2 },
-    });
+    const spent = await f.service.stateOf(f.mission, NOW);
+    expect(spent).toMatchObject({ kind: 'active', exhausted: [`${f.setId}::${WRITE}`] });
+    if (spent.kind !== 'active') throw new Error('expected an active mission');
+    expect(byRisk(spent.remaining)).toEqual({ [READ]: 10, [WRITE]: 0, [MERGE]: 2 });
     expect(await f.service.stateOf(f.mission, at('2026-10-14T00:00:00.000Z'))).toMatchObject({
       kind: 'active',
       period: { index: 1 },
@@ -387,9 +386,9 @@ describe('SessionService.stateOf', () => {
     expect(usage).toMatchObject({
       session_id: session?.id,
       period: { index: 2, start: '2026-10-15T00:00:00.000Z' },
-      state: { kind: 'active', remaining: { [READ]: 9 } },
+      state: { kind: 'active', remaining: { [`${f.setId}::${READ}`]: 9 } },
     });
-    expect([...usage.consumed]).toEqual([[READ, 1]]);
+    expect([...usage.consumed]).toEqual([[`${f.setId}::${READ}`, 1]]);
     expect(reads).toEqual(['2026-10-15T00:00:00.000Z']);
 
     // The Missions pages and the request page use the same read through this reader.

@@ -1,6 +1,7 @@
 import { withImmediateTransaction } from '../db.ts';
 import { nowIso, type RepoContext } from './context.ts';
-import { insertRequestSync } from './requests.ts';
+import type { RequestLine } from '../types.ts';
+import { insertRequestSync, setRisksJsonOf } from './requests.ts';
 import { createSessionPrimitives } from './sessions.ts';
 
 export interface PermissionRefusalInput {
@@ -10,6 +11,8 @@ export interface PermissionRefusalInput {
   readonly tool: string;
   readonly fingerprint: string;
   readonly riskIds: readonly string[];
+  /** The (set, risk) lines found missing: each missing risk in each set the call was judged against. */
+  readonly lines: readonly RequestLine[];
 }
 export interface PermissionRequestDetails {
   readonly holder: string;
@@ -55,6 +58,11 @@ export function createPermissionRequests(ctx: RepoContext) {
         now,
         expires,
       );
+      const line = db.prepare(
+        `INSERT INTO permission_refusal_lines (refusal_id, resource_set_id, risk_id)
+         VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
+      );
+      for (const l of input.lines) line.run(id, l.resourceSetId, l.riskId);
       return id;
     },
     async permissionDetails(requestId: string): Promise<PermissionRequestDetails | null> {
@@ -83,13 +91,22 @@ export function createPermissionRequests(ctx: RepoContext) {
         }
         if (row.request_id) return { ok: true, requestId: row.request_id, created: false };
         if (row.expires_at <= now) return { ok: false, reason: 'invalid-refusal' };
+        const lines: RequestLine[] = db
+          .prepare<[string], { resource_set_id: string; risk_id: string }>(
+            `SELECT resource_set_id, risk_id FROM permission_refusal_lines
+             WHERE refusal_id = ? ORDER BY resource_set_id, risk_id`,
+          )
+          .all(row.id)
+          .map((l) => ({ resourceSetId: l.resource_set_id, riskId: l.risk_id }));
+        // What makes two refusals the same ask: their lines (sets and risks), else their risks.
+        const riskSet = lines.length > 0 ? setRisksJsonOf(lines) : row.risk_ids_json;
         const existing = db
           .prepare<[string, string, string, string], { id: string }>(
             `SELECT r.id FROM requests r JOIN permission_requests p ON p.request_id = r.id
            WHERE r.mission_id = ? AND p.holder = ? AND p.risk_set = ?
            AND r.state = 'open' AND r.expires_at > ? ORDER BY r.created_at LIMIT 1`,
           )
-          .get(input.missionId, row.holder, row.risk_ids_json, now);
+          .get(input.missionId, row.holder, riskSet, now);
         let requestId = existing?.id;
         if (!requestId) {
           const since = new Date(Date.parse(now) - 24 * 60 * 60_000).toISOString();
@@ -114,6 +131,8 @@ export function createPermissionRequests(ctx: RepoContext) {
               kind: 'permission',
               riskId: first,
               riskIds: risks,
+              // A refusal recorded with no line (before 0029): each risk in its one set.
+              ...(lines.length > 0 ? { lines } : {}),
               tool: row.tool,
               fingerprint: row.fingerprint,
               expiresAt: new Date(Date.parse(now) + input.expirySeconds * 1000).toISOString(),
@@ -127,6 +146,7 @@ export function createPermissionRequests(ctx: RepoContext) {
               {
                 kind: 'request',
                 riskId: first,
+                resourceSetId: request.lines[0]?.resourceSetId ?? null,
                 details: {
                   request_id: requestId,
                   request_kind: 'permission',
@@ -138,7 +158,7 @@ export function createPermissionRequests(ctx: RepoContext) {
             );
           db.prepare(
             'INSERT INTO permission_requests (request_id, holder, token_id, reason, risk_set) VALUES (?, ?, ?, ?, ?)',
-          ).run(requestId, row.holder, row.token_id, input.reason, row.risk_ids_json);
+          ).run(requestId, row.holder, row.token_id, input.reason, riskSet);
         }
         db.prepare('UPDATE permission_refusals SET request_id = ? WHERE id = ?').run(
           requestId,

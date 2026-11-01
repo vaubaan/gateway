@@ -171,6 +171,30 @@ export interface Budget {
 export interface MissionPolicyEntry extends Budget {
   readonly risk_id: RiskId;
   readonly gate: Gate;
+  /**
+   * The resource set of its connection the line belongs to (risk model §4.7): every
+   * line of a stored mission names one. Absent on a draft's line, whose set is the one
+   * it is written in.
+   */
+  readonly resource_set_id?: string;
+}
+
+/**
+ * The key of one line of a mission's policy in a map: its resource set and its risk. A
+ * plain `RiskId` is not one, so a map of lines cannot be read by risk alone by mistake.
+ */
+export type PolicyLineKey = `${string}::${string}`;
+
+export function policyLineKey(resourceSetId: string, riskId: RiskId): PolicyLineKey {
+  return `${resourceSetId}::${riskId}`;
+}
+
+/** The key of a line that names its set; a line without one keys under the empty set. */
+export function lineKeyOf(line: {
+  readonly resource_set_id?: string;
+  readonly risk_id: RiskId;
+}): PolicyLineKey {
+  return policyLineKey(line.resource_set_id ?? '', line.risk_id);
 }
 
 /**
@@ -312,9 +336,10 @@ export interface SessionEvent {
   readonly details: Readonly<Record<string, unknown>>;
 }
 
-/** Consumed actions for one risk in one period. */
+/** Consumed actions for one risk of one resource set in one period. */
 export interface SessionCounter {
   readonly session_id: string;
+  readonly resource_set_id: string;
   readonly risk_id: RiskId;
   readonly period_start: Iso8601;
   readonly consumed: number;

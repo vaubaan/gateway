@@ -11,12 +11,14 @@
  * whose period ended reads as un-exhausted without any job (spec §3.3).
  */
 
-import type {
-  Iso8601,
-  MissionPolicy,
-  MissionStatus,
-  RiskId,
-  SessionCounter,
+import {
+  lineKeyOf,
+  policyLineKey,
+  type Iso8601,
+  type MissionPolicy,
+  type MissionStatus,
+  type PolicyLineKey,
+  type SessionCounter,
 } from '@vaubaan/shared';
 import { currentPeriod, type CurrentPeriod, type PeriodSpec } from './period.ts';
 
@@ -27,10 +29,10 @@ export type MissionState =
   | {
       readonly kind: 'active';
       readonly period: CurrentPeriod;
-      /** Accepted risks whose quota is spent for the current period (spec §2.3). */
-      readonly exhausted: readonly RiskId[];
-      /** Remaining actions per accepted risk in the current period. */
-      readonly remaining: Readonly<Record<RiskId, number>>;
+      /** Accepted lines (a risk in a resource set) whose quota is spent for the current period (spec §2.3). */
+      readonly exhausted: readonly PolicyLineKey[];
+      /** Remaining actions per accepted line in the current period (`lineKeyOf`). */
+      readonly remaining: Readonly<Record<PolicyLineKey, number>>;
     };
 
 export interface MissionStateInput {
@@ -40,18 +42,22 @@ export interface MissionStateInput {
   readonly policy: MissionPolicy;
 }
 
-/** A counter row as the derivation needs it: risk, period key, consumed. */
-export type PeriodCounter = Pick<SessionCounter, 'risk_id' | 'period_start' | 'consumed'>;
+/** A counter row as the derivation needs it: set, risk, period key, consumed. */
+export type PeriodCounter = Pick<
+  SessionCounter,
+  'resource_set_id' | 'risk_id' | 'period_start' | 'consumed'
+>;
 
-/** Consumed actions per risk for the period that starts at `periodStart`. */
+/** Consumed actions per line (set, risk) for the period that starts at `periodStart`. */
 export function consumedInPeriod(
   counters: readonly PeriodCounter[],
   periodStart: Iso8601,
-): Map<RiskId, number> {
-  const consumed = new Map<RiskId, number>();
+): Map<PolicyLineKey, number> {
+  const consumed = new Map<PolicyLineKey, number>();
   for (const counter of counters) {
     if (counter.period_start !== periodStart) continue;
-    consumed.set(counter.risk_id, (consumed.get(counter.risk_id) ?? 0) + counter.consumed);
+    const key = policyLineKey(counter.resource_set_id, counter.risk_id);
+    consumed.set(key, (consumed.get(key) ?? 0) + counter.consumed);
   }
   return consumed;
 }
@@ -76,12 +82,13 @@ export function deriveMissionState(
   }
   const period = currentPeriod(mission.period, now);
   const consumed = consumedInPeriod(counters, period.start);
-  const remaining: Record<RiskId, number> = {};
-  const exhausted: RiskId[] = [];
+  const remaining: Record<PolicyLineKey, number> = {};
+  const exhausted: PolicyLineKey[] = [];
   for (const entry of mission.policy) {
-    const left = entry.quota - (consumed.get(entry.risk_id) ?? 0);
-    remaining[entry.risk_id] = Math.max(0, left);
-    if (left <= 0) exhausted.push(entry.risk_id);
+    const key = lineKeyOf(entry);
+    const left = entry.quota - (consumed.get(key) ?? 0);
+    remaining[key] = Math.max(0, left);
+    if (left <= 0) exhausted.push(key);
   }
   return { kind: 'active', period, exhausted, remaining };
 }

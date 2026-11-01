@@ -73,7 +73,10 @@ async function auditOf(mission: IssuedMission) {
 
 async function counters(mission: IssuedMission) {
   const usage = await rig.root.budget.usageOf(budgetMissionOf(mission.mission), new Date());
-  return Object.fromEntries(usage.consumed);
+  // One set on the connection: the counters read by risk.
+  return Object.fromEntries(
+    [...usage.consumed].map(([line, n]) => [line.slice(line.indexOf('::') + 2), n]),
+  );
 }
 
 describe('clone and fetch', () => {

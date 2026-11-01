@@ -19,7 +19,7 @@ tracks:
   - apps/gateway/src/lib/providers/
   - apps/gateway/next.config.ts
   - apps/gateway/tests/unit/app/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-01
 ---
 
 # Web app — handbook
@@ -46,7 +46,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 - **Seven navigation entries is the budget**: a feature adds no entry; a page under none goes in `ALSO_UNDER` (`nav.ts`). Ownerless accounts are an admin-only region of Accounts (`/accounts#without-owner`), shown only when one exists; `/admin/connections` redirects there.
 - **Under 641 px** the navigation is a bottom bar (Now, Waiting, Missions, Accounts, More with the other three), and a `DataTable` draws each row as a block of labelled lines; row actions are never hover-only.
 - **Every date becomes text through `lib/dates.ts`**, locale-independent: no `toLocale*` or `Intl.DateTimeFormat` in a page (`lib/dates.test.ts` reads the sources). The server writes UTC; client components switch to the reader's zone after hydration.
-- **The head of an approval** is the plugin's `toolTitles` and the refused call's `resource_ref`, never an argument. A yes is never given from the home: an approval row leads to its request, where the exact call is shown (`now-and-waiting.test.tsx`).
+- **The head of an approval** is the plugin's `toolTitles` and the refused call's `resource_ref`, never an argument. A yes is never given from the home: an approval row leads to its request, where the exact call is shown (`now-and-waiting.test.tsx`). Likewise a trust-raise proposal (`TrustRaiseOffer`, also on the mission page) never raises from the home: "Raise" opens Edit mission, "Not now" only puts it off.
 - **Words live in `vocabulary.ts`** only, the trust levels' names and hints (`TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`) included: a page never prints a protocol name as prose, it prints an id with `Mono`. Routes follow the words (`/accounts`, `/waiting`); `src/server/` keeps protocol names.
 - **A page is built from `components/ui/`**: a missing component is added there with its specimen in `/design`, never in the page. Colours exist only in `tokens.css` as plain hex (`design-tokens.test.ts`: AA pairs, both dark blocks identical, no raw colour elsewhere). The one exception is a service's brand colour: it comes from its plugin (`ServiceIcon`), never a map in the interface, and reaches `ServiceMark` as `--mark-color`; a near-black brand turns to `--ink` in the dark theme (`darkThemeMarkColor`, WCAG luminance under 0.1).
 - **Every human page carries `BuildFooter`**, including the authorization server's HTML pages; one version source, the root `package.json`.

@@ -34,6 +34,8 @@ export interface ApprovalDecision {
 /** One risk a request covers, as the mission holds it at decision time. */
 export interface ApprovalRiskSituation {
   readonly risk_id: RiskId;
+  /** The resource set of the line (risk model §4.7): a risk gated in two sets is two lines. */
+  readonly resource_set_id: string;
   /** The risk's gate in the mission's policy now; `null` when the risk left the policy. */
   readonly gate: Gate | null;
   /** The gate is already open for the current period. */
@@ -138,10 +140,14 @@ export function quoted(riskIds: readonly RiskId[]): string {
 }
 
 /** The listed risks whose gate would ask again: `approval` on the mission, not open now. */
+/** The lines of the request whose gate is still closed: what "open the gate" opens. */
+export function closedGateLines(situation: ApprovalSituation): ApprovalRiskSituation[] {
+  return situation.risks.filter((risk) => risk.gate === 'approval' && !risk.gate_open);
+}
+
+/** The distinct risks of `closedGateLines`. */
 export function closedGates(situation: ApprovalSituation): RiskId[] {
-  return situation.risks
-    .filter((risk) => risk.gate === 'approval' && !risk.gate_open)
-    .map((risk) => risk.risk_id);
+  return [...new Set(closedGateLines(situation).map((risk) => risk.risk_id))];
 }
 
 function openGateProblem(situation: ApprovalSituation): ApprovalProblem | null {

@@ -11,6 +11,7 @@ import {
 } from '../../../../../tests/support/missions/testing';
 
 import {
+  addResourceSet,
   applyTrustLevels,
   applyEverything,
   availableCount,
@@ -34,19 +35,42 @@ import {
   periodChoiceOf,
   periodOf,
   policyCounts,
+  raiseMacroAction,
   resetEdits,
+  removeResourceSet,
   RESOURCE_CHOICES,
   selectAll,
   setIncluded,
   setMacroAction,
+  setOfResource,
   setResourceScope,
   setResources,
+  setsOffered,
   setView,
   toggleRisk,
   updateEntry,
-  type ConnectionState,
+  updateSet,
+  type ConnectionState as AccountState,
   type FormState,
+  type SetState,
 } from './form-state';
+
+/**
+ * An account with one resource set, read flat: what the tests of everything but sets
+ * handle. `connectionOf` and `withConnection` move between it and the form's state.
+ */
+type ConnectionState = SetState & Pick<AccountState, 'included' | 'view'>;
+
+function flat(account: AccountState): ConnectionState {
+  const [only, ...more] = account.sets;
+  if (!only || more.length > 0) throw new Error('expected an account with one resource set');
+  return { included: account.included, view: account.view, ...only };
+}
+
+function nested(cs: ConnectionState): AccountState {
+  const { included, view, ...set } = cs;
+  return { included, view, sets: [set] };
+}
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 const acme = acmeConnection();
@@ -61,14 +85,14 @@ function riskOf(id: string) {
   return risk;
 }
 
-function connectionOf(state: FormState): ConnectionState {
-  const cs = state.connections[acme.id];
+function connectionOf(state: FormState, id = acme.id): ConnectionState {
+  const cs = state.connections[id];
   if (!cs) throw new Error('connection state missing');
-  return cs;
+  return flat(cs);
 }
 
-function withConnection(state: FormState, cs: ConnectionState): FormState {
-  return { ...state, connections: { ...state.connections, [acme.id]: cs } };
+function withConnection(state: FormState, cs: ConnectionState, id = acme.id): FormState {
+  return { ...state, connections: { ...state.connections, [id]: nested(cs) } };
 }
 
 function included(trustLevels: MacroActionTrustLevels = {}, connection = acme): ConnectionState {
@@ -109,22 +133,22 @@ describe('creation form — curated resources', () => {
   const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
 
   it('starts without the hidden and the stale resources', () => {
-    const cs = initialFormState([curated]).connections[curated.id];
-    expect(cs?.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+    const cs = connectionOf(initialFormState([curated]), curated.id);
+    expect(cs.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
   });
 
   it('issues with a hidden resource the creator ticked', () => {
     const start = initialFormState([curated]);
     const cs = setMacroAction(
       curated,
-      setResources(curated, setIncluded(start.connections[curated.id]!, true), [
+      setResources(curated, setIncluded(connectionOf(start, curated.id), true), [
         'res-app-prod',
         'res-archive',
       ]),
       'read',
       'careful',
     );
-    const state = { ...start, name: 'm', connections: { [curated.id]: cs } };
+    const state = { ...start, name: 'm', connections: { [curated.id]: nested(cs) } };
     const preview = previewDraft(
       { connections: [curated], now: NOW },
       draftOf([curated], state, NOW),
@@ -314,7 +338,13 @@ describe('creation form — Simple and Advanced', () => {
     if (!line) throw new Error('no resolved line');
     const loaded = connectionOf(
       loadResolved(context, initialFormState(context), [
-        { ...line, trust_levels: { ...line.trust_levels, nonsense: 'autonomous' } },
+        {
+          ...line,
+          resource_sets: line.resource_sets.map((set) => ({
+            ...set,
+            trust_levels: { ...set.trust_levels, nonsense: 'autonomous' },
+          })),
+        },
       ]),
     );
     expect(loaded.trustLevels).toEqual(WORKING);
@@ -521,7 +551,7 @@ describe('creation form — how far the mission reaches on an account', () => {
 
     const [connection] = context;
     if (!connection) throw new Error('no connection');
-    const start = initialConnectionState(connection);
+    const start = flat(initialConnectionState(connection));
     expect(draftResourcesOf(start)).toEqual({
       scope: 'selected',
       resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
@@ -548,13 +578,17 @@ describe('creation form — how far the mission reaches on an account', () => {
     const loaded = loadResolved(context, state, [
       {
         connection_id: 'conn-acme',
-        resources: { scope: 'connection' },
-        everything_i_hold: false,
-        policy: [],
-        trust_levels: {},
+        resource_sets: [
+          {
+            resources: { scope: 'connection' },
+            everything_i_hold: false,
+            policy: [],
+            trust_levels: {},
+          },
+        ],
       },
     ]);
-    expect(loaded.connections['conn-acme']?.resourceScope).toBe('connection');
+    expect(connectionOf(loaded, 'conn-acme').resourceScope).toBe('connection');
   });
 });
 
@@ -608,5 +642,63 @@ describe('creation form — "Everything I hold on this account"', () => {
     expect(describeEverything(critical, explainEverything(critical, included()))).toContain(
       'Critical, and running freely: Change account settings.',
     );
+  });
+});
+
+describe('creation form — resource sets', () => {
+  const account = (): AccountState => nested(included(WORKING));
+
+  it('adds a set that picks resources; the set taking the rest lets them go', () => {
+    let state = addResourceSet(acme, account());
+    expect(state.sets).toHaveLength(2);
+    const second = setResources(acme, state.sets[1]!, ['res-app-prod']);
+    state = updateSet(acme, state, 1, applyTrustLevels(acme, { ...second, trustLevels: WORKING }));
+    expect(state.sets[0]?.resourceIds).toEqual(['res-app-staging', 'res-scratch']);
+    expect(setOfResource(state, 'res-app-prod')).toBe(1);
+
+    const form = { ...initialFormState(context), name: 'm', connections: { [acme.id]: state } };
+    const draft = draftOf(context, form, NOW);
+    expect(draft.connections[0]?.resource_sets).toHaveLength(2);
+    expect(previewDraft({ connections: context, now: NOW }, draft).ok).toBe(true);
+  });
+
+  it('removing a set gives its resources back to the set taking the rest; the last one stays', () => {
+    let state = addResourceSet(acme, account());
+    state = updateSet(acme, state, 1, setResources(acme, state.sets[1]!, ['res-scratch']));
+    state = removeResourceSet(acme, state, 1);
+    expect(state.sets).toHaveLength(1);
+    expect(state.sets[0]?.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+    expect(removeResourceSet(acme, state, 0).sets).toHaveLength(1);
+  });
+
+  it('sends one set flat, as before', () => {
+    const form = withConnection({ ...initialFormState(context), name: 'm' }, included(WORKING));
+    expect(draftOf(context, form, NOW).connections[0]).not.toHaveProperty('resource_sets');
+  });
+
+  it('offers sets only on an account with two resources at least', () => {
+    expect(setsOffered(acme)).toBe(true);
+    expect(setsOffered(acmeConnection({ resources: [ACME_RESOURCES[0]!] }))).toBe(false);
+  });
+});
+
+describe('creation form — a trust raise (risk model §4.7)', () => {
+  it('rewrites the macro-action’s lines at the next level, keeps the others, and names the hand edits it replaces', () => {
+    let cs = included({ read: 'careful', change: 'careful' });
+    cs = updateEntry(cs, 'acme.read', { quota: '7' });
+    const writes = Object.keys(cs.entries).filter((id) => id.includes('write'));
+    expect(writes.length).toBeGreaterThan(0);
+    cs = updateEntry(cs, writes[0]!, { quota: '3' });
+    const raised = raiseMacroAction(acme, cs, 'change', 'trusting');
+    expect(raised.state.trustLevels).toEqual({ read: 'careful', change: 'trusting' });
+    // The read line, edited by hand, stays; the write line edited by hand is replaced.
+    expect(raised.state.entries['acme.read']?.quota).toBe('7');
+    expect(raised.state.entries[writes[0]!]?.quota).not.toBe('3');
+    expect(raised.replaced).toEqual([writes[0]]);
+  });
+
+  it('replaces nothing it did not write when no line was edited', () => {
+    const raised = raiseMacroAction(acme, included({ change: 'careful' }), 'change', 'trusting');
+    expect(raised.replaced).toEqual([]);
   });
 });

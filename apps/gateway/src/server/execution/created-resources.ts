@@ -12,9 +12,11 @@
  *   record    `ConnectionsRepo.upsertDiscoveredResources`: the row is inserted (it
  *             reads the connection's default environment) or its stale flag cleared,
  *             owner edits kept, no other row touched
- *   join      `MissionsRepo.addResources(…, 'created')`: added to the mission's
- *             selection when its scope on the connection is an explicit list; a
- *             no-op under scope `connection`, which reaches the row already
+ *   join      `MissionsRepo.addResources(…, 'created')`: added to the selection of
+ *             the resource set the call was judged against (judged against several:
+ *             the `connection` set if any, else the first of them, risk model §4.7) when
+ *             that set's scope is an explicit list; a no-op under scope
+ *             `connection`, which reaches the row already
  *   audit     one `mission-resources-added` entry, cause `created-by-the-mission`,
  *             with the mission, the connection, the tool and the refs; the actor is
  *             the human behind the call's key
@@ -85,12 +87,15 @@ export class CreatedResources {
         connectionId,
         created,
       );
+      // The sets the creating call was judged against: the store places the resource in
+      // the one set, else the `connection` set, else the first candidate (risk model §4.7).
       const joined = await this.deps.store.missions.addResources(
         ctx.mission.id,
         connectionId,
         rows.map((r) => r.id),
         'created',
         { tool: call.tool, actorUserId: callerUserId(ctx) },
+        call.resourceSetIds,
       );
       const refs = rows.map((r) => r.ref);
       await this.deps.audit.write({
@@ -105,6 +110,7 @@ export class CreatedResources {
           connection_id: connectionId,
           tool: call.tool,
           refs,
+          resource_set_id: joined.resourceSetId,
           resource_scope: joined.scope,
           added_to_selection: rows.filter((r) => joined.added.includes(r.id)).map((r) => r.ref),
         },

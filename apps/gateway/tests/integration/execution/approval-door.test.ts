@@ -127,7 +127,10 @@ describe('approve an action through the execution door (GitHub macro-actions at 
 
   const counters = async () => {
     const usage = await rig.root.budget.usageOf(budgetMissionOf(rig.mission.mission), new Date());
-    return Object.fromEntries(usage.consumed);
+    // One set on the connection: the counters read by risk.
+    return Object.fromEntries(
+      [...usage.consumed].map(([line, n]) => [line.slice(line.indexOf('::') + 2), n]),
+    );
   };
 
   it('Trusting gates the workflow write, and nothing else on this call', () => {

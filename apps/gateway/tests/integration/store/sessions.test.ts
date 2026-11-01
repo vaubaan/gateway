@@ -33,6 +33,7 @@ describe('sessions repository', () => {
   let t: TestStore;
   let store: Store;
   let missionId: string;
+  let setId: string;
   let creator: string;
 
   beforeEach(async () => {
@@ -64,13 +65,17 @@ describe('sessions repository', () => {
       ],
     });
     missionId = mission.id;
+    setId = mission.connections[0]?.resourceSets[0]?.id ?? '';
   });
   afterEach(() => store.close());
 
   const quotaDecider =
     (quotas: Record<string, number>) =>
     (ctx: DecideContext): { allow: boolean; event: { kind: string } } => {
-      const allow = [...ctx.counters].every(([risk, consumed]) => consumed < (quotas[risk] ?? 0));
+      // A counter is keyed by its line, `<set>::<risk>`: the quota is the risk's.
+      const allow = [...ctx.counters].every(
+        ([line, consumed]) => consumed < (quotas[line.slice(line.indexOf('::') + 2)] ?? 0),
+      );
       return { allow, event: { kind: allow ? 'allowed-call' : 'refused-call' } };
     };
 
@@ -103,7 +108,13 @@ describe('sessions repository', () => {
     const session = allows[0]?.session;
     if (!session) throw new Error('expected a session');
     expect(await store.sessions.counters(session.id, PERIOD)).toEqual([
-      { sessionId: session.id, riskId: WRITE, periodStart: PERIOD, consumed: 1 },
+      {
+        sessionId: session.id,
+        resourceSetId: setId,
+        riskId: WRITE,
+        periodStart: PERIOD,
+        consumed: 1,
+      },
     ]);
     const events = await store.sessions.listEvents(session.id);
     expect(events.filter((e) => e.kind === 'allowed-call')).toHaveLength(1);
@@ -182,8 +193,8 @@ describe('sessions repository', () => {
     );
     expect(allowed.outcome.allow).toBe(true);
     expect([...allowed.counters]).toEqual([
-      [READ, 1],
-      [WRITE, 1],
+      [`${setId}::${READ}`, 1],
+      [`${setId}::${WRITE}`, 1],
     ]);
 
     const refused = await store.sessions.decideAndDecrement(
@@ -192,8 +203,8 @@ describe('sessions repository', () => {
     );
     expect(refused.outcome.allow).toBe(false);
     expect([...refused.counters]).toEqual([
-      [READ, 1],
-      [WRITE, 1],
+      [`${setId}::${READ}`, 1],
+      [`${setId}::${WRITE}`, 1],
     ]);
   });
 
@@ -276,7 +287,7 @@ describe('sessions repository', () => {
       decide,
     );
     expect(replay.outcome.allow).toBe(false);
-    expect(replay.counters.get(MERGE)).toBe(1);
+    expect(replay.counters.get(`${setId}::${MERGE}`)).toBe(1);
     expect((await store.approvals.getByRequest(request.id))?.consumedAt).toBe(
       t.clock.now().toISOString(),
     );
@@ -331,12 +342,15 @@ describe('sessions repository', () => {
     const decided = await store.requests.decideClaim(claim.id, creator, (ctx) => ({
       state: 'granted' as const,
       decision: { resolution: 'reset-period' },
-      given: ctx.resetCounter(PERIOD, WRITE),
+      given: ctx.resetCounter(PERIOD, { resourceSetId: setId, riskId: WRITE }),
       // Nothing left on that risk: a second reset gives nothing back and writes nothing.
-      again: ctx.resetCounter(PERIOD, WRITE),
+      again: ctx.resetCounter(PERIOD, { resourceSetId: setId, riskId: WRITE }),
       // A risk the session never counted, and a period that does not exist.
-      unknown: ctx.resetCounter(PERIOD, 'github.never-touched'),
-      elsewhere: ctx.resetCounter('2020-01-01T00:00:00.000Z', READ),
+      unknown: ctx.resetCounter(PERIOD, { resourceSetId: setId, riskId: 'github.never-touched' }),
+      elsewhere: ctx.resetCounter('2020-01-01T00:00:00.000Z', {
+        resourceSetId: setId,
+        riskId: READ,
+      }),
     }));
     if (decided.status !== 'decided') throw new Error('expected an open claim');
     expect(decided.outcome).toMatchObject({ given: 1, again: 0, unknown: 0, elsewhere: 0 });
@@ -402,7 +416,8 @@ describe('sessions repository', () => {
         refusal_code: r.outcome.allow ? null : 'budget-exhausted',
         refusal_reason: null,
         approval_id: null,
-        remaining_budget: { [READ]: 3 - (r.counters.get(READ) ?? 0) },
+        remaining_budget: { [READ]: 3 - (r.counters.get(`${setId}::${READ}`) ?? 0) },
+        resource_set_ids: [setId],
         agent_label: null,
         upstream_latency_ms: null,
         upstream_error: null,
@@ -417,6 +432,7 @@ describe('sessions repository', () => {
     );
     const audited = await store.audit.countAllowedTouches(
       missionId,
+      setId,
       READ,
       PERIOD,
       '2026-10-14T00:00:00.000Z',

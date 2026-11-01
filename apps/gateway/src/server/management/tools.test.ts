@@ -758,9 +758,21 @@ describe('views', () => {
         createdAt: NOW.toISOString(),
         updatedAt: NOW.toISOString(),
         closedAt: null,
-        connections: [{ connectionId: 'conn-acme', resourceScope: 'all', resourceIds: [] }],
+        connections: [
+          {
+            connectionId: 'conn-acme',
+            resourceSets: [{ id: 'set-1', position: 1, resourceScope: 'all', resourceIds: [] }],
+          },
+        ],
         policy: [
-          { riskId: 'acme.read', quota: 5, rateLimit: 2, rateWindowSeconds: 60, gate: 'approval' },
+          {
+            resourceSetId: 'set-1',
+            riskId: 'acme.read',
+            quota: 5,
+            rateLimit: 2,
+            rateWindowSeconds: 60,
+            gate: 'approval',
+          },
         ],
       },
       role: 'creator',

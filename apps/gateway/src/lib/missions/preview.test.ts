@@ -17,7 +17,8 @@ import {
 
 /** The explicit ids a resolved line carries; `undefined` for a whole-connection line. */
 function idsOf(line: ResolvedDraftConnection | undefined): readonly string[] | undefined {
-  return line?.resources.scope === 'selected' ? line.resources.resource_ids : undefined;
+  const set = line?.resource_sets[0];
+  return set?.resources.scope === 'selected' ? set.resources.resource_ids : undefined;
 }
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
@@ -239,7 +240,7 @@ describe('previewDraft — partition per connection', () => {
 describe('previewDraft — resource selection', () => {
   it('resolves "all" to the explicit list known now', () => {
     const p = preview([{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }]);
-    expect(p.resolved[0]?.resources).toEqual({
+    expect(p.resolved[0]?.resource_sets[0]?.resources).toEqual({
       scope: 'selected',
       resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
     });
@@ -789,7 +790,7 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
       [curated],
     );
     expect(p.ok).toBe(true);
-    expect(p.resolved[0]?.resources).toEqual({ scope: 'connection' });
+    expect(p.resolved[0]?.resource_sets[0]?.resources).toEqual({ scope: 'connection' });
     expect(p.connections[0]?.reaches_later).toBe(true);
     // What it reaches now: neither hidden nor stale.
     expect(p.connections[0]?.resources.map((r) => r.id)).toEqual([
@@ -813,7 +814,7 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
       [empty],
     );
     expect(p.ok).toBe(true);
-    expect(p.resolved[0]?.resources).toEqual({ scope: 'connection' });
+    expect(p.resolved[0]?.resource_sets[0]?.resources).toEqual({ scope: 'connection' });
   });
 
   it('checks an env-qualified risk against the resources known now, and says later ones need a label', () => {
@@ -863,7 +864,81 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
   it('`all` stays the list known now: no later resource, no notice about one', () => {
     const p = preview([{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }]);
     expect(p.connections[0]?.reaches_later).toBe(false);
-    expect(p.resolved[0]?.resources.scope).toBe('selected');
+    expect(p.resolved[0]?.resource_sets[0]?.resources.scope).toBe('selected');
     expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');
+  });
+});
+
+describe('previewDraft — resource sets (risk model §4.7)', () => {
+  const read = [{ risk_id: 'acme.read', ...BUDGET }];
+
+  it('resolves each set on its own, the set taking the rest without what others select', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        resource_sets: [
+          { resources: { scope: 'all' }, policy: read },
+          { resources: { scope: 'selected', resource_refs: ['app-prod'] }, policy: read },
+        ],
+      },
+    ]);
+    expect(codes(p)).toEqual([]);
+    const sets = p.resolved[0]?.resource_sets ?? [];
+    expect(sets.map((s) => s.resources)).toEqual([
+      { scope: 'selected', resource_ids: ['res-app-staging', 'res-scratch'] },
+      { scope: 'selected', resource_ids: ['res-app-prod'] },
+    ]);
+    expect(p.connections[0]?.resource_sets).toHaveLength(2);
+  });
+
+  it('refuses a resource in two sets, and two sets taking the rest', () => {
+    const twice = preview([
+      {
+        connection_id: 'conn-acme',
+        resource_sets: [
+          { resources: { scope: 'selected', resource_refs: ['scratch'] }, policy: read },
+          { resources: { scope: 'selected', resource_refs: ['scratch'] }, policy: read },
+        ],
+      },
+    ]);
+    expect(codes(twice)).toContain('resource-sets-overlap');
+    const rests = preview([
+      {
+        connection_id: 'conn-acme',
+        resource_sets: [
+          { resources: { scope: 'all' }, policy: read },
+          { resources: { scope: 'connection' }, policy: read },
+        ],
+      },
+    ]);
+    expect(rests.ok).toBe(false);
+    expect(codes(rests)).toContain('resource-sets-overlap');
+  });
+
+  it('refuses sets given beside a connection-level policy', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        policy: read,
+        resource_sets: [{ resources: { scope: 'all' }, policy: read }],
+      },
+    ]);
+    expect(codes(p)).toContain('resource-sets-mixed');
+  });
+
+  it('judges each set against the authority: a risk outside it is refused in any set', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        resource_sets: [
+          { resources: { scope: 'all' }, policy: read },
+          {
+            resources: { scope: 'selected', resource_refs: ['app-prod'] },
+            policy: [{ risk_id: 'acme.nonexistent', ...BUDGET }],
+          },
+        ],
+      },
+    ]);
+    expect(p.ok).toBe(false);
   });
 });

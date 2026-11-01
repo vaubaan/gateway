@@ -726,6 +726,11 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'permissions-changed', object: 'mission', actor: 'alice' },
   },
   'MissionService.editView': READ,
+  'MissionService.trustRaisesFor': READ,
+  'MissionService.trustRaiseOffer': READ,
+  'MissionService.snoozeTrustRaise': exempt(
+    'puts off a trust-raise offer on the creator’s own screens (risk model §4.7): nothing the mission allows moves, and a raise itself is an audited edit',
+  ),
   'MissionService.previewEdit': READ,
   'MissionService.edit': {
     kind: 'mutation',

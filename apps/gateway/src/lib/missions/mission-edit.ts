@@ -10,6 +10,11 @@
  * ADR). What does not move is carried over from the stored mission as it is: a
  * stale resource kept in a selection stays, an unchanged line keeps its values.
  *
+ * Every connection holds one resource set or more (risk model §4.7). A draft set
+ * names the stored set it keeps by `id`; a connection drafted with one set and
+ * stored with one set keeps it without an id. Any other draft set is added, and is
+ * judged as a creation judges it; a stored set no draft set keeps is removed.
+ *
  * Browser-safe, no IO: the edit form judges with it for instant feedback and the
  * server judges again with the store's context; the browser's copy decides
  * nothing.
@@ -20,12 +25,15 @@ import type {
   DraftConnection,
   DraftPeriod,
   DraftPolicyEntry,
+  DraftResourceSet,
   IssuanceConnection,
   MissionDraft,
   MissionPreview,
   PreviewIssue,
   PreviewNotice,
+  ResourceSetPreview,
 } from './model';
+import { draftSetsOf } from './model';
 import { defaultResources, previewDraft, type PreviewContext } from './preview';
 
 export { describeMissionChange, missionChangeClauses } from './change-words';
@@ -33,18 +41,34 @@ export { describeMissionChange, missionChangeClauses } from './change-words';
 /** How far a mission reaches on one account, as stored (spec §3.1). */
 export type StoredResourceScope = 'all' | 'selected' | 'connection';
 
-/** One account of a mission, with its part of the policy. */
+/** One resource set of an account of a mission, with its part of the policy. */
+export interface MissionSnapshotSet {
+  /**
+   * What the set is called in this snapshot: its stored id, or, for a set an edit
+   * adds, `new:<connection id>:<position>` until the store gives it an id.
+   */
+  readonly key: string;
+  /** The stored id; `null` for a set the edit adds. */
+  readonly id: string | null;
+  /** From 1, among the sets of the account. */
+  readonly position: number;
+  /** `all` with no id: none was known at issuance; `connection`: no id, read live. */
+  readonly resource_scope: StoredResourceScope;
+  readonly resource_ids: readonly string[];
+  /** Its lines; each names the set by `resource_set_id` (`key`). */
+  readonly policy: readonly MissionPolicyEntry[];
+  /** The trust levels the form recorded (risk model §4.6): they redraw it, they are no change. */
+  readonly trust_levels?: Readonly<Record<string, string>>;
+}
+
+/** One account of a mission, with its resource sets. */
 export interface MissionSnapshotConnection {
   readonly connection_id: string;
   readonly provider: string;
   /** The account's name, for the words of a change; not part of the revision. */
   readonly display_name: string;
-  /** `all` with no id: none was known at issuance; `connection`: no id, read live. */
-  readonly resource_scope: StoredResourceScope;
-  readonly resource_ids: readonly string[];
-  readonly policy: readonly MissionPolicyEntry[];
-  /** The trust levels the form recorded (risk model §4.6): they redraw it, they are no change. */
-  readonly trust_levels?: Readonly<Record<string, string>>;
+  /** Its sets, by position; never empty. */
+  readonly resource_sets: readonly MissionSnapshotSet[];
 }
 
 /** Everything an edit may move, and the period it may not. */
@@ -53,6 +77,11 @@ export interface MissionSnapshot {
   readonly expires_at: string | null;
   readonly period: DraftPeriod;
   readonly connections: readonly MissionSnapshotConnection[];
+}
+
+/** Every line of an account, all sets together. */
+export function policyOfConnection(c: MissionSnapshotConnection): MissionPolicyEntry[] {
+  return c.resource_sets.flatMap((set) => [...set.policy]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,10 +96,16 @@ export interface RevisionInput {
   readonly name: string;
   readonly expires_at: string | null;
   readonly period: DraftPeriod;
-  readonly connections: readonly Pick<
-    MissionSnapshotConnection,
-    'connection_id' | 'resource_scope' | 'resource_ids'
-  >[];
+  readonly connections: readonly {
+    readonly connection_id: string;
+    readonly resource_sets: readonly {
+      readonly id: string;
+      readonly position: number;
+      readonly resource_scope: StoredResourceScope;
+      readonly resource_ids: readonly string[];
+    }[];
+  }[];
+  /** Every line, naming its set (`resource_set_id`). */
   readonly policy: readonly MissionPolicyEntry[];
 }
 
@@ -82,10 +117,26 @@ function canonical(state: RevisionInput): string {
     state.period.kind === 'one-off' ? null : state.period.length_seconds,
     [...state.connections]
       .sort((a, b) => a.connection_id.localeCompare(b.connection_id))
-      .map((c) => [c.connection_id, c.resource_scope, [...c.resource_ids].sort()]),
+      .map((c) => [
+        c.connection_id,
+        [...c.resource_sets]
+          .sort((a, b) => a.position - b.position)
+          .map((set) => [set.id, set.resource_scope, [...set.resource_ids].sort()]),
+      ]),
     [...state.policy]
-      .sort((a, b) => a.risk_id.localeCompare(b.risk_id))
-      .map((p) => [p.risk_id, p.quota, p.rate_limit.max, p.rate_limit.window_seconds, p.gate]),
+      .sort(
+        (a, b) =>
+          (a.resource_set_id ?? '').localeCompare(b.resource_set_id ?? '') ||
+          a.risk_id.localeCompare(b.risk_id),
+      )
+      .map((p) => [
+        p.resource_set_id ?? '',
+        p.risk_id,
+        p.quota,
+        p.rate_limit.max,
+        p.rate_limit.window_seconds,
+        p.gate,
+      ]),
   ]);
 }
 
@@ -114,7 +165,19 @@ function hash53(text: string): string {
  * the same revision, whatever the order of their rows.
  */
 export function missionRevision(snapshot: MissionSnapshot): string {
-  return revisionOf({ ...snapshot, policy: snapshot.connections.flatMap((c) => c.policy) });
+  return revisionOf({
+    ...snapshot,
+    connections: snapshot.connections.map((c) => ({
+      connection_id: c.connection_id,
+      resource_sets: c.resource_sets.map((set) => ({
+        id: set.id ?? set.key,
+        position: set.position,
+        resource_scope: set.resource_scope,
+        resource_ids: set.resource_ids,
+      })),
+    })),
+    policy: snapshot.connections.flatMap(policyOfConnection),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,8 +187,9 @@ export function missionRevision(snapshot: MissionSnapshot): string {
 /**
  * The mission as a draft, exactly: same name, expiry and period; each account with
  * its stored selection (`selected` with the stored ids, even stale ones — `all`
- * with no id is `selected` with none) and its explicit lines. Sent back unchanged,
- * it is an edit that moves nothing.
+ * with no id is `selected` with none) and its explicit lines. An account with one
+ * resource set is drafted without sets, as before sets existed; one with several
+ * lists them, each with its id. Sent back unchanged, it is an edit that moves nothing.
  */
 export function draftOfSnapshot(snapshot: MissionSnapshot): MissionDraft {
   return {
@@ -137,20 +201,31 @@ export function draftOfSnapshot(snapshot: MissionSnapshot): MissionDraft {
 }
 
 export function draftConnectionOf(c: MissionSnapshotConnection): DraftConnection {
+  const [only] = c.resource_sets;
+  if (c.resource_sets.length === 1 && only) {
+    return { connection_id: c.connection_id, ...draftSetOf(only, false) };
+  }
   return {
     connection_id: c.connection_id,
+    resource_sets: c.resource_sets.map((set) => draftSetOf(set, true)),
+  };
+}
+
+function draftSetOf(set: MissionSnapshotSet, withId: boolean): DraftResourceSet {
+  return {
+    ...(withId && set.id !== null ? { id: set.id } : {}),
     resources:
-      c.resource_scope === 'connection'
+      set.resource_scope === 'connection'
         ? { scope: 'connection' }
-        : { scope: 'selected', resource_ids: [...c.resource_ids] },
+        : { scope: 'selected', resource_ids: [...set.resource_ids] },
     everything_i_hold: false,
-    policy: c.policy.map((p) => ({
+    policy: set.policy.map((p) => ({
       risk_id: p.risk_id,
       quota: p.quota,
       rate_limit: { ...p.rate_limit },
       gate: p.gate,
     })),
-    ...(c.trust_levels ? { trust_levels: { ...c.trust_levels } } : {}),
+    ...(set.trust_levels ? { trust_levels: { ...set.trust_levels } } : {}),
   };
 }
 
@@ -164,8 +239,14 @@ export interface AccountRef {
   readonly display_name: string;
 }
 
-/** The selection of one account that moved. `null` scope: the account was not there. */
+/**
+ * The selection of one resource set that moved. `null` scope: the set (or its
+ * account) was not there.
+ */
 export interface ResourceChange extends AccountRef {
+  /** The set (`MissionSnapshotSet.key`) and its position after the edit (before, when removed). */
+  readonly resource_set_id: string;
+  readonly position: number;
   readonly scope_before: StoredResourceScope | null;
   readonly scope_after: StoredResourceScope | null;
   readonly added: readonly string[];
@@ -174,6 +255,8 @@ export interface ResourceChange extends AccountRef {
 
 export interface PermissionChange {
   readonly risk_id: RiskId;
+  /** The set of the line (`MissionSnapshotSet.key`). */
+  readonly resource_set_id: string;
   readonly before: MissionPolicyEntry;
   readonly after: MissionPolicyEntry;
 }
@@ -184,6 +267,9 @@ export interface MissionChanges {
   readonly expires_at: { readonly before: string | null; readonly after: string | null } | null;
   readonly connections_added: readonly AccountRef[];
   readonly connections_removed: readonly AccountRef[];
+  /** Sets added to, or removed from, an account the edit keeps. */
+  readonly resource_sets_added: number;
+  readonly resource_sets_removed: number;
   readonly resources: readonly ResourceChange[];
   readonly permissions_added: readonly MissionPolicyEntry[];
   readonly permissions_removed: readonly MissionPolicyEntry[];
@@ -213,46 +299,91 @@ function refOf(c: MissionSnapshotConnection): AccountRef {
   return { connection_id: c.connection_id, provider: c.provider, display_name: c.display_name };
 }
 
+/** The key of a line in a diff: its set and its risk. */
+function lineKey(p: MissionPolicyEntry): string {
+  return `${p.resource_set_id ?? ''}\n${p.risk_id}`;
+}
+
 /** What moved from `before` to `after`. Nothing moved: every list empty, both fields `null`. */
 export function diffSnapshots(before: MissionSnapshot, after: MissionSnapshot): MissionChanges {
   const beforeById = new Map(before.connections.map((c) => [c.connection_id, c]));
   const afterById = new Map(after.connections.map((c) => [c.connection_id, c]));
   const resources: ResourceChange[] = [];
+  let setsAdded = 0;
+  let setsRemoved = 0;
   for (const c of after.connections) {
     const was = beforeById.get(c.connection_id);
-    const had = new Set(was?.resource_ids ?? []);
-    const has = new Set(c.resource_ids);
-    const added = c.resource_ids.filter((id) => !had.has(id));
-    const removed = (was?.resource_ids ?? []).filter((id) => !has.has(id));
-    if (!was || was.resource_scope !== c.resource_scope || added.length > 0 || removed.length > 0) {
+    const wasSets = new Map((was?.resource_sets ?? []).map((set) => [set.key, set]));
+    for (const set of c.resource_sets) {
+      const old = wasSets.get(set.key);
+      if (was && !old) setsAdded += 1;
+      const had = new Set(old?.resource_ids ?? []);
+      const has = new Set(set.resource_ids);
+      const added = set.resource_ids.filter((id) => !had.has(id));
+      const removed = (old?.resource_ids ?? []).filter((id) => !has.has(id));
+      if (
+        !old ||
+        old.resource_scope !== set.resource_scope ||
+        added.length > 0 ||
+        removed.length > 0
+      ) {
+        resources.push({
+          ...refOf(c),
+          resource_set_id: set.key,
+          position: set.position,
+          scope_before: old?.resource_scope ?? null,
+          scope_after: set.resource_scope,
+          added,
+          removed,
+        });
+      }
+    }
+    if (!was) continue;
+    const kept = new Set(c.resource_sets.map((set) => set.key));
+    for (const old of was.resource_sets) {
+      if (kept.has(old.key)) continue;
+      setsRemoved += 1;
       resources.push({
-        ...refOf(c),
-        scope_before: was?.resource_scope ?? null,
-        scope_after: c.resource_scope,
-        added,
-        removed,
+        ...refOf(was),
+        resource_set_id: old.key,
+        position: old.position,
+        scope_before: old.resource_scope,
+        scope_after: null,
+        added: [],
+        removed: [...old.resource_ids],
       });
     }
   }
   for (const c of before.connections) {
     if (afterById.has(c.connection_id)) continue;
-    resources.push({
-      ...refOf(c),
-      scope_before: c.resource_scope,
-      scope_after: null,
-      added: [],
-      removed: [...c.resource_ids],
-    });
+    for (const set of c.resource_sets) {
+      resources.push({
+        ...refOf(c),
+        resource_set_id: set.key,
+        position: set.position,
+        scope_before: set.resource_scope,
+        scope_after: null,
+        added: [],
+        removed: [...set.resource_ids],
+      });
+    }
   }
   const linesBefore = new Map(
-    before.connections.flatMap((c) => c.policy.map((p) => [p.risk_id, p])),
+    before.connections.flatMap(policyOfConnection).map((p) => [lineKey(p), p]),
   );
-  const linesAfter = new Map(after.connections.flatMap((c) => c.policy.map((p) => [p.risk_id, p])));
+  const linesAfter = new Map(
+    after.connections.flatMap(policyOfConnection).map((p) => [lineKey(p), p]),
+  );
   const permissionsChanged: PermissionChange[] = [];
-  for (const [riskId, line] of linesAfter) {
-    const was = linesBefore.get(riskId);
+  for (const [key, line] of linesAfter) {
+    const was = linesBefore.get(key);
     if (was && !sameLine(was, line)) {
-      permissionsChanged.push({ risk_id: riskId, before: was, after: line });
+      permissionsChanged.push({
+        risk_id: line.risk_id,
+        resource_set_id: line.resource_set_id ?? '',
+        before: was,
+        after: line,
+      });
     }
   }
   return {
@@ -264,9 +395,15 @@ export function diffSnapshots(before: MissionSnapshot, after: MissionSnapshot): 
     connections_removed: before.connections
       .filter((c) => !afterById.has(c.connection_id))
       .map(refOf),
+    resource_sets_added: setsAdded,
+    resource_sets_removed: setsRemoved,
     resources,
-    permissions_added: [...linesAfter.values()].filter((p) => !linesBefore.has(p.risk_id)),
-    permissions_removed: [...linesBefore.values()].filter((p) => !linesAfter.has(p.risk_id)),
+    permissions_added: [...linesAfter.entries()]
+      .filter(([key]) => !linesBefore.has(key))
+      .map(([, p]) => p),
+    permissions_removed: [...linesBefore.entries()]
+      .filter(([key]) => !linesAfter.has(key))
+      .map(([, p]) => p),
     permissions_changed: permissionsChanged,
   };
 }
@@ -277,6 +414,8 @@ export function hasChanges(changes: MissionChanges): boolean {
     changes.expires_at !== null ||
     changes.connections_added.length > 0 ||
     changes.connections_removed.length > 0 ||
+    changes.resource_sets_added > 0 ||
+    changes.resource_sets_removed > 0 ||
     changes.resources.length > 0 ||
     changes.permissions_added.length > 0 ||
     changes.permissions_removed.length > 0 ||
@@ -312,9 +451,9 @@ const LINE_ISSUES = new Set([
   'invalid-budget',
 ]);
 
-/** What moves on one account the edit keeps, and the account as it would be stored. */
+/** What moves on one set the edit keeps, and the set as it would be stored. */
 interface KeptOutcome {
-  readonly after: MissionSnapshotConnection;
+  readonly after: MissionSnapshotSet;
   /** Ids and refs of what the edit adds to the reach (resource issues naming one count). */
   readonly addedKeys: ReadonlySet<string>;
   readonly selectionChanged: boolean;
@@ -346,10 +485,12 @@ function askedLine(
 }
 
 function keptOutcome(
-  before: MissionSnapshotConnection,
-  draft: DraftConnection,
+  before: MissionSnapshotSet,
+  draft: DraftResourceSet,
+  position: number,
   context: IssuanceConnection | undefined,
-  passes: readonly MissionPolicyEntry[] | null,
+  resolved: ResourceSetPreview | null,
+  several: boolean,
 ): KeptOutcome {
   // ── The selection ──
   const wanted = draft.resources ?? { scope: 'all' };
@@ -360,8 +501,13 @@ function keptOutcome(
     scope = 'connection';
     ids = [];
   } else if (wanted.scope === 'all') {
-    // "Every resource known now", resolved as at issuance; unknowable without the context.
-    ids = context ? defaultResources(context).map((r) => r.id) : [...before.resource_ids];
+    // "Every resource known now", resolved as at issuance (the preview's, which leaves
+    // out what another set selects); unknowable without the context.
+    ids = resolved
+      ? resolved.resources.map((r) => r.id)
+      : context && !several
+        ? defaultResources(context).map((r) => r.id)
+        : [...before.resource_ids];
     scope = ids.length > 0 ? 'selected' : 'all';
   } else {
     const byRef = new Map((context?.resources ?? []).map((r) => [r.ref, r.id]));
@@ -398,27 +544,32 @@ function keptOutcome(
     (scope === 'connection' && before.resource_scope !== 'connection');
 
   // ── The lines ──
+  const passes = resolved?.passes ?? null;
   const stored = new Map(before.policy.map((p) => [p.risk_id, p]));
-  const resolved = new Map((passes ?? []).map((p) => [p.risk_id, p]));
+  const resolvedLines = new Map((passes ?? []).map((p) => [p.risk_id, p]));
   const explicit = draft.policy ?? [];
   const lines: readonly DraftPolicyEntry[] =
-    explicit.length > 0 || passes === null ? explicit : (passes ?? []);
+    explicit.length > 0 || passes === null ? explicit : passes;
   const moving = new Set<RiskId>();
   let linesWiden = false;
   let membershipChanged = false;
   const policy: MissionPolicyEntry[] = [];
   const listed = new Set<RiskId>();
+  const inSet = (entry: MissionPolicyEntry): MissionPolicyEntry => ({
+    ...entry,
+    resource_set_id: before.key,
+  });
   for (const line of lines) {
     if (listed.has(line.risk_id)) continue;
     listed.add(line.risk_id);
     const was = stored.get(line.risk_id);
-    const asked = askedLine(line, resolved.get(line.risk_id));
+    const asked = askedLine(line, resolvedLines.get(line.risk_id));
     if (!was) {
       moving.add(line.risk_id);
       linesWiden = true;
       membershipChanged = true;
-      const entry = resolved.get(line.risk_id);
-      if (entry) policy.push(entry);
+      const entry = resolvedLines.get(line.risk_id);
+      if (entry) policy.push(inSet(entry));
       continue;
     }
     const valuesMove =
@@ -435,17 +586,19 @@ function keptOutcome(
     const rateUp =
       asked.rate_limit !== undefined && rateOf(asked.rate_limit) > rateOf(was.rate_limit);
     if (quotaUp || rateUp) linesWiden = true;
-    const entry = resolved.get(line.risk_id);
-    if (entry) policy.push(entry);
+    const entry = resolvedLines.get(line.risk_id);
+    if (entry) policy.push(inSet(entry));
   }
   if (before.policy.some((p) => !listed.has(p.risk_id))) membershipChanged = true;
 
   return {
     after: {
       ...before,
+      position,
       resource_scope: scope,
       resource_ids: scope === 'connection' ? [] : ids,
       policy,
+      ...trustLevelsOf(draft, context),
     },
     addedKeys,
     selectionChanged,
@@ -456,11 +609,23 @@ function keptOutcome(
   };
 }
 
+/** The trust levels a draft set records, kept to the macro-actions of the connection. */
+function trustLevelsOf(
+  draft: DraftResourceSet,
+  context: IssuanceConnection | undefined,
+): { readonly trust_levels?: Readonly<Record<string, string>> } {
+  const known = new Set((context?.macro_actions ?? []).map((action) => action.id));
+  const levels = Object.fromEntries(
+    Object.entries(draft.trust_levels ?? {}).filter(([id]) => known.has(id)),
+  );
+  return Object.keys(levels).length > 0 ? { trust_levels: levels } : {};
+}
+
 function intersects(values: readonly string[] | undefined, set: ReadonlySet<string>): boolean {
   return (values ?? []).some((v) => set.has(v));
 }
 
-/** Whether an issue about a kept account binds the edit (the ADR's table). */
+/** Whether an issue about a kept set (or its account) binds the edit (the ADR's table). */
 function countsOnKept(issue: PreviewIssue, kept: KeptOutcome): boolean {
   if (RESOURCE_ISSUES.has(issue.code)) return intersects(issue.resource_refs, kept.addedKeys);
   if (LINE_ISSUES.has(issue.code)) return intersects(issue.risk_ids, kept.moving);
@@ -478,6 +643,21 @@ function countsOnKept(issue: PreviewIssue, kept: KeptOutcome): boolean {
   }
 }
 
+/** The outcomes of the kept sets of one account, as one: what the account-wide issues read. */
+function accountOutcome(sets: readonly KeptOutcome[]): KeptOutcome | null {
+  const [first] = sets;
+  if (!first) return null;
+  return {
+    after: first.after,
+    addedKeys: new Set(sets.flatMap((s) => [...s.addedKeys])),
+    selectionChanged: sets.some((s) => s.selectionChanged),
+    reachWidens: sets.some((s) => s.reachWidens),
+    moving: new Set(sets.flatMap((s) => [...s.moving])),
+    linesWiden: sets.some((s) => s.linesWiden),
+    membershipChanged: sets.some((s) => s.membershipChanged),
+  };
+}
+
 /** The connection a draft line names, as the preview resolves it. */
 function connectionIdOf(
   draft: DraftConnection,
@@ -490,17 +670,24 @@ function connectionIdOf(
   return candidates.length === 1 && only ? only.id : null;
 }
 
-function fromPreview(
-  preview: MissionPreview,
+/** The set a creation would store from a preview's set: a new set of the snapshot. */
+function newSetOf(
   connectionId: string,
-): { passes: readonly MissionPolicyEntry[]; resources: StoredResourceScope; ids: string[] } | null {
-  const found = preview.connections.find((c) => c.connection_id === connectionId);
-  if (!found) return null;
-  const ids = found.resources.map((r) => r.id);
+  position: number,
+  set: ResourceSetPreview,
+  draft: DraftResourceSet | undefined,
+  context: IssuanceConnection | undefined,
+): MissionSnapshotSet {
+  const key = `new:${connectionId}:${position}`;
+  const ids = set.resources.map((r) => r.id);
   return {
-    passes: found.passes,
-    resources: found.reaches_later ? 'connection' : ids.length > 0 ? 'selected' : 'all',
-    ids: found.reaches_later ? [] : ids,
+    key,
+    id: null,
+    position,
+    resource_scope: set.reaches_later ? 'connection' : ids.length > 0 ? 'selected' : 'all',
+    resource_ids: set.reaches_later ? [] : ids,
+    policy: set.passes.map((p) => ({ ...p, resource_set_id: key })),
+    ...(draft ? trustLevelsOf(draft, context) : {}),
   };
 }
 
@@ -509,6 +696,18 @@ const PERIOD_NOT_EDITABLE: PreviewIssue = {
   message:
     'The reset period of a mission does not change after issuance: it is the key of its counters. Duplicate the mission to give it another period.',
 };
+
+/** The stored set a draft set keeps, or `undefined` for a set the draft adds. */
+function keptSetOf(
+  stored: readonly MissionSnapshotSet[],
+  drafted: readonly DraftResourceSet[],
+  set: DraftResourceSet,
+): MissionSnapshotSet | undefined {
+  if (set.id !== undefined) return stored.find((s) => s.id === set.id);
+  // A connection with one set, drafted with one set: the same set.
+  const [only] = stored;
+  return drafted.length === 1 && stored.length === 1 ? only : undefined;
+}
 
 /**
  * Judges an edited draft against the mission it edits (`before`), under the
@@ -543,7 +742,8 @@ export function judgeEdit(
     const id = connectionIdOf(line, context.connections);
     const was = id === null ? undefined : beforeById.get(id);
     const ctx = id === null ? undefined : context.connections.find((c) => c.id === id);
-    const resolved = id === null ? null : fromPreview(preview, id);
+    const resolved = id === null ? undefined : previewOf(preview, id);
+    const drafted = draftSetsOf(line);
     if (!was || id === null || placed.has(id)) {
       // An account the edit adds (or names twice): judged as a creation judges it.
       issues.push(...own);
@@ -553,39 +753,70 @@ export function judgeEdit(
           connection_id: id,
           provider: ctx.provider,
           display_name: ctx.display_name,
-          resource_scope: resolved.resources,
-          resource_ids: resolved.ids,
-          policy: [...resolved.passes],
+          resource_sets: resolved.resource_sets.map((set) =>
+            newSetOf(id, set.index + 1, set, drafted[set.index], ctx),
+          ),
         });
       }
       return;
     }
     placed.add(id);
-    const kept = keptOutcome(was, line, ctx, resolved?.passes ?? null);
-    const counting = own.filter((issue) => countsOnKept(issue, kept));
-    // A moving line the preview did not pass is never dropped silently: whatever the
-    // creation said about it binds the edit.
-    const lost = new Set(
-      [...kept.moving].filter((r) => !kept.after.policy.some((p) => p.risk_id === r)),
-    );
-    for (const issue of own) {
-      if (!counting.includes(issue) && intersects(issue.risk_ids, lost)) counting.push(issue);
-    }
-    if (
-      kept.membershipChanged &&
-      kept.after.policy.length === 0 &&
-      !counting.some((i) => i.code === 'no-accepted-risk')
-    ) {
-      // The creation's own words, also where the creator no longer holds the account.
-      counting.push({
-        code: 'no-accepted-risk',
-        message: `Connection "${ctx?.display_name ?? was.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
-        connection_index: index,
-        connection_id: id,
-      });
+    const several = drafted.length > 1;
+    const sets: MissionSnapshotSet[] = [];
+    const keptOutcomes: KeptOutcome[] = [];
+    const counting: PreviewIssue[] = [];
+    const keptIds = new Set<string>();
+    drafted.forEach((set, setIndex) => {
+      const ofSet = own.filter((i) =>
+        several ? i.resource_set_index === setIndex : i.resource_set_index === undefined,
+      );
+      const setPreview = resolved?.resource_sets[setIndex] ?? null;
+      const stored = keptSetOf(was.resource_sets, drafted, set);
+      if (!stored || keptIds.has(stored.key)) {
+        // A set the edit adds: judged as a creation judges it.
+        counting.push(...(several ? ofSet : ofSet.filter((i) => !accountWide(i))));
+        if (setPreview) sets.push(newSetOf(id, setIndex + 1, setPreview, set, ctx));
+        return;
+      }
+      keptIds.add(stored.key);
+      const kept = keptOutcome(stored, set, setIndex + 1, ctx, setPreview, several);
+      keptOutcomes.push(kept);
+      const bound = ofSet.filter((issue) => !accountWide(issue) && countsOnKept(issue, kept));
+      // A moving line the preview did not pass is never dropped silently: whatever the
+      // creation said about it binds the edit.
+      const lost = new Set(
+        [...kept.moving].filter((r) => !kept.after.policy.some((p) => p.risk_id === r)),
+      );
+      for (const issue of ofSet) {
+        if (!bound.includes(issue) && intersects(issue.risk_ids, lost)) bound.push(issue);
+      }
+      if (
+        kept.membershipChanged &&
+        kept.after.policy.length === 0 &&
+        !bound.some((i) => i.code === 'no-accepted-risk')
+      ) {
+        // The creation's own words, also where the creator no longer holds the account.
+        bound.push({
+          code: 'no-accepted-risk',
+          message: `Connection "${ctx?.display_name ?? was.display_name}" accepts no risk: tick a macro-action or accept at least one risk, or leave the connection out.`,
+          connection_index: index,
+          connection_id: id,
+          ...(several ? { resource_set_index: setIndex } : {}),
+        });
+      }
+      counting.push(...bound);
+      sets.push(kept.after);
+    });
+    // The account-wide issues (unavailable, unknown, sets overlapping…), read on what
+    // the kept sets move together; an added or removed set always moves the account.
+    // Removing a set narrows: only an added set widens the account on its own.
+    const account = accountOutcome(keptOutcomes);
+    const setAdded = sets.length !== keptOutcomes.length;
+    for (const issue of own.filter(accountWide)) {
+      if (setAdded || !account || countsOnKept(issue, account)) counting.push(issue);
     }
     issues.push(...counting);
-    connections.push(kept.after);
+    connections.push({ ...was, resource_sets: sets });
   });
 
   const after: MissionSnapshot = {
@@ -607,6 +838,26 @@ export function judgeEdit(
     after: ok ? after : before,
     changes: ok ? diffSnapshots(before, after) : diffSnapshots(before, safeAfter(before, after)),
   };
+}
+
+/** An issue about a whole account, not one of its sets. */
+function accountWide(issue: PreviewIssue): boolean {
+  return (
+    issue.code === 'connection-unavailable' ||
+    issue.code === 'connection-unknown' ||
+    issue.code === 'connection-ambiguous' ||
+    issue.code === 'duplicate-connection' ||
+    issue.code === 'duplicate-provider' ||
+    issue.code === 'resource-sets-overlap' ||
+    issue.code === 'resource-sets-mixed'
+  );
+}
+
+function previewOf(
+  preview: MissionPreview,
+  connectionId: string,
+): MissionPreview['connections'][number] | undefined {
+  return preview.connections.find((c) => c.connection_id === connectionId);
 }
 
 /** A refused edit still lists what it would move, without an unusable date. */
@@ -632,6 +883,12 @@ export function changeSummaryOf(
     ...(changes.expires_at ? { expires_at: changes.expires_at.after } : {}),
     connections_added: changes.connections_added.length,
     connections_removed: changes.connections_removed.length,
+    ...(changes.resource_sets_added > 0
+      ? { resource_sets_added: changes.resource_sets_added }
+      : {}),
+    ...(changes.resource_sets_removed > 0
+      ? { resource_sets_removed: changes.resource_sets_removed }
+      : {}),
     resources_added: changes.resources.reduce((n, r) => n + r.added.length, 0),
     resources_removed: changes.resources.reduce((n, r) => n + r.removed.length, 0),
     scopes_changed: changes.resources.filter(
@@ -668,6 +925,8 @@ export function changeSummaryOf(
 
 interface AuditSelection {
   readonly connection_id: string;
+  readonly resource_set_id: string;
+  readonly position: number;
   readonly resource_scope: StoredResourceScope;
   readonly resource_ids: readonly string[];
 }
@@ -682,18 +941,21 @@ export interface MissionChangeAuditSide {
   readonly permissions?: readonly MissionPolicyEntry[];
 }
 
-function selectionOf(c: MissionSnapshotConnection): AuditSelection {
-  return {
+function selectionsOf(c: MissionSnapshotConnection): AuditSelection[] {
+  return c.resource_sets.map((set) => ({
     connection_id: c.connection_id,
-    resource_scope: c.resource_scope,
-    resource_ids: [...c.resource_ids],
-  };
+    resource_set_id: set.key,
+    position: set.position,
+    resource_scope: set.resource_scope,
+    resource_ids: [...set.resource_ids],
+  }));
 }
 
 /**
  * The `before` and `after` of the `mission-changed` administrative entry (ADR
  * mission-editable-after-issuance, point 7): built field by field from snake_case
  * domain shapes, so a rename in the store's types never changes what the audit keeps.
+ * A set the edit adds is named `new:<connection id>:<position>` there.
  */
 export function auditOfChanges(
   before: MissionSnapshot,
@@ -716,8 +978,10 @@ export function auditOfChanges(
   }
   if (changes.resources.length > 0) {
     const moved = new Set(changes.resources.map((r) => r.connection_id));
-    b.resources = before.connections.filter((c) => moved.has(c.connection_id)).map(selectionOf);
-    a.resources = after.connections.filter((c) => moved.has(c.connection_id)).map(selectionOf);
+    b.resources = before.connections
+      .filter((c) => moved.has(c.connection_id))
+      .flatMap(selectionsOf);
+    a.resources = after.connections.filter((c) => moved.has(c.connection_id)).flatMap(selectionsOf);
   }
   if (
     changes.permissions_added.length > 0 ||

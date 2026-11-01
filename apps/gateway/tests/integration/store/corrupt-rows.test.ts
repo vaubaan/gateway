@@ -120,11 +120,11 @@ describe('store rows with a value outside a closed set', () => {
     await expectLoudFailure(() => store.missions.getById(missionId), 'missions.status');
   });
 
-  it('refuses an unknown mission_connections.resource_scope', async () => {
-    corrupt('mission_connections', 'resource_scope', 'mission_id', missionId);
+  it('refuses an unknown mission_resource_sets.resource_scope', async () => {
+    corrupt('mission_resource_sets', 'resource_scope', 'mission_id', missionId);
     await expectLoudFailure(
       () => store.missions.getById(missionId),
-      'mission_connections.resource_scope',
+      'mission_resource_sets.resource_scope',
     );
   });
 

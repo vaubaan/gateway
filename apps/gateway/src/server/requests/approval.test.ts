@@ -16,14 +16,15 @@ const RISK = 'github.merge-protected';
 const OTHER = 'github.delete-branch';
 
 /** One-risk overrides (`gate`, `gate_open`) apply to the single risk of the request. */
-type Overrides = Partial<ApprovalSituation> & Partial<Omit<ApprovalRiskSituation, 'risk_id'>>;
+type Overrides = Partial<ApprovalSituation> &
+  Partial<Omit<ApprovalRiskSituation, 'risk_id' | 'resource_set_id'>>;
 
 function situation(overrides: Overrides = {}): ApprovalSituation {
   const { gate = 'approval', gate_open = false, ...rest } = overrides;
   return {
     mission_state: 'active',
     period_end: '2026-10-14T00:00:00.000Z',
-    risks: [{ risk_id: RISK, gate, gate_open }],
+    risks: [{ risk_id: RISK, resource_set_id: 'set-1', gate, gate_open }],
     tool: 'github__merge_pull_request',
     approval_valid_seconds: 600,
     request_expires_at: '2026-10-14T09:00:00.000Z',
@@ -38,8 +39,8 @@ function twoRisks(
 ): ApprovalSituation {
   return situation({
     risks: [
-      { risk_id: RISK, gate: 'approval', gate_open: false, ...first },
-      { risk_id: OTHER, gate: 'approval', gate_open: false, ...second },
+      { risk_id: RISK, resource_set_id: 'set-1', gate: 'approval', gate_open: false, ...first },
+      { risk_id: OTHER, resource_set_id: 'set-1', gate: 'approval', gate_open: false, ...second },
     ],
   });
 }

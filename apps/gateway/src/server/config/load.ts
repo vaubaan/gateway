@@ -467,6 +467,7 @@ function validate(
   const retentionDays = r.int(keySpec('retention_days'));
   const requestExpiry = r.duration(keySpec('requests.expiry'));
   const approvalExpiry = r.duration(keySpec('approvals.expiry'));
+  const trustRaiseAfterApprovals = r.int(keySpec('trust_raise.after_approvals'));
   const mcpRateLimit = r.int(keySpec('mcp.rate_limit_per_minute'));
   const callTimeoutSeconds = r.int(keySpec('execution.call_timeout_seconds'));
   const gitMaxPackMb = r.int(keySpec('git.max_pack_mb'));
@@ -504,6 +505,7 @@ function validate(
     retentionDays,
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
+    trustRaise: { afterApprovals: trustRaiseAfterApprovals },
     mcp: { rateLimitPerMinute: mcpRateLimit },
     execution: { callTimeoutSeconds },
     git: {

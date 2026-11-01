@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/server/budget/consistency.ts
   - apps/gateway/src/server/budget/gates.ts
   - apps/gateway/src/app/(app)/waiting/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-01
 ---
 
 # Requests — handbook
@@ -46,6 +46,12 @@ ADR [atomic-budget-accounting](../decisions/atomic-budget-accounting.md).
   event: `countersAgreeWithAudit` checks `counted + credited == audited`.
 - An approval is keyed on tool **and** fingerprint, and is consumed only when
   the whole replayed call is allowed.
+- A request is about `(set, risk)` lines (`request_lines`, migration 0029): a
+  claim, its one line; an approval request, the gated line of each resource set
+  the call was judged against; a permission request, the missing lines
+  (`permission_refusal_lines`). A gate opened or a claim granted acts on those
+  lines only. A caller giving only risk ids (`riskId`/`riskIds`) gets each risk
+  in every set accepting it — the reading of a request made before 0029.
 
 ## Traps
 

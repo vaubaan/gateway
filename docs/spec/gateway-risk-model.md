@@ -189,6 +189,46 @@ What a creator ticks per connection, in the connector's words
 - The result is explicit lines (§5), shown before issuance and editable one by one; the mission
   keeps the trust level per macro-action only to redraw the form.
 
+### 4.7 Resource sets and trust-raise proposals
+
+**Resource sets**
+([ADR](../decisions/resource-sets-partition-a-mission-connection.md)).
+
+- A connection of a mission holds one or more resource sets. Each set has its resources, its
+  macro-actions at their trust levels and its explicit policy, and keeps its own budget counters.
+- A resource belongs to exactly one set of its connection. At most one set per connection reaches
+  the whole connection; resources discovered later join that set.
+- A resource the mission creates joins the set the creating call was judged against. When that call
+  had several candidate sets, it joins the connection's whole-connection set if it has one, else the
+  first of the candidate sets: never a set the call was not judged against.
+- **The set of a call.** A call goes to the sets of the resources each slice names: every identifier
+  or list value equal to a mission resource's ref (the reading of §6, step 2). A slice citing refs of
+  several sets — an org slug equal to an app's ref, a list of two resources — brings each in.
+- **Calls that cannot be placed in one set.** A call that names no mission resource, or resources
+  from several sets, goes to every candidate set: all the sets of the connection in the first case,
+  the named sets in the second. Then:
+  - each touched risk must be accepted in every candidate set;
+  - the most restrictive gate applies;
+  - each set's quota and rate limit are checked and charged.
+- Environment resolution (§6) reads the resources of the whole connection. The set chooses only
+  the policy.
+- With one set, the screen shows no set at all.
+
+**Trust-raise proposals.**
+
+- **When one is offered.** After 10 approvals granted on one macro-action of one set, with no
+  refusal since its trust level last changed, the mission's page and the Now page offer the
+  creator to raise that trust level by one. Any refusal resets the count. The threshold is an
+  instance setting.
+- **Two answers.** "Raise" opens the ordinary mission edit at the new level, with its preview; it is
+  audited like any edit. "Not now" hides the offer until 10 more approvals.
+- There is no timed raise, and nothing is ever raised automatically.
+- A macro-action already at Autonomous is never offered a raise.
+- A raise rewrites the lines of that macro-action at the new level. Lines edited by hand in the
+  advanced view are shown in the preview before they are replaced.
+- A trust-raise proposal and a budget widening (a repeated claim) are two separate offers that are
+  never merged.
+
 ## 4bis. Scope caps — designed, not enforced in v5.0
 
 - Speed and volume are bounded by the mission, per accepted risk (quota and rate limit,
@@ -202,8 +242,8 @@ What a creator ticks per connection, in the connector's words
 ## 5. What a mission carries
 
 Its connections (one provider each); per connection its resources (ref, optional environment label);
-its policy, one explicit entry per accepted risk, env-scoped risks qualified. No slice, pattern,
-explicit deny, macro-action or trust level.
+its resource sets (§4.7), each with its policy, one explicit entry per accepted risk, env-scoped
+risks qualified. No slice, pattern, explicit deny, macro-action or trust level.
 
 ## 6. Environment resolution
 
@@ -211,8 +251,8 @@ Each slice gets at most one environment, in this order:
 
 1. **Derived by the plugin** when the environment is part of the call (an `env[prod]` segment),
    whatever the resource's label. A slice spanning several environments derives none.
-2. **Otherwise the label of the resource the slice names** (the first identifier equal to a mission
-   resource's ref); naming none, the label of the mission's only resource of that provider; with
+2. **Otherwise the label of the resources the slice names** (every identifier or list value equal to
+   a mission resource's ref; labels that disagree give none); naming none, the label of the mission's only resource of that provider; with
    several, none. Resources of one call naming several environments resolve to none.
 3. **Otherwise none.**
 

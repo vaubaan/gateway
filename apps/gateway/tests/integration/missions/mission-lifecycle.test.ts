@@ -20,7 +20,7 @@ import {
 } from '../../../src/server/missions';
 import { catalogEnvs, seedConnection } from '../../support/missions/testing';
 import { ManualClock } from '../../../src/server/store/clock';
-import { agePastStaleGrace } from '../../support/store/testing';
+import { agePastStaleGrace, flatConnections, flatPolicy } from '../../support/store/testing';
 import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
@@ -137,7 +137,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(mission.creatorUserId).toBe(seeded.ada.id);
     expect(mission.periodSeconds).toBe(86_400);
     expect(mission.expiresAt).toBeNull();
-    expect(mission.connections).toEqual([
+    expect(flatConnections(mission)).toEqual([
       {
         connectionId: seeded.github.connection.id,
         resourceScope: 'selected',
@@ -165,7 +165,7 @@ describe('missions: issue, rotate, revoke', () => {
       { ref: 'acme/new-repo', displayName: 'acme/new-repo' },
     ]);
     const reread = await root.store.missions.getById(mission.id);
-    expect(reread?.connections[0]?.resourceIds).toHaveLength(3);
+    expect(reread?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(3);
     const detail = await missions.get(seeded.ada, mission.id);
     expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual([
       'acme/app',
@@ -190,7 +190,7 @@ describe('missions: issue, rotate, revoke', () => {
       },
       seeded.bob,
     );
-    expect(mission.connections).toEqual([
+    expect(flatConnections(mission)).toEqual([
       {
         connectionId: empty.connection.id,
         resourceScope: 'all',
@@ -228,7 +228,7 @@ describe('missions: issue, rotate, revoke', () => {
       await root.store.connections.setResourceHidden(resource.id, true);
     }
     const { mission, kit } = await issued();
-    expect(mission.connections[0]?.resourceIds).toEqual([]);
+    expect(mission.connections[0]?.resourceSets[0]?.resourceIds).toEqual([]);
     for (const resource of seeded.github.resources) {
       expect(kit.agent_instructions).not.toContain(`\`${resource.ref}\``);
     }
@@ -280,7 +280,7 @@ describe('missions: issue, rotate, revoke', () => {
     ]);
 
     const all = await issued();
-    expect(all.mission.connections[0]?.resourceIds).toEqual([idOf('acme/app')]);
+    expect(all.mission.connections[0]?.resourceSets[0]?.resourceIds).toEqual([idOf('acme/app')]);
 
     const withHidden = await issued(
       githubDraft({
@@ -294,9 +294,9 @@ describe('missions: issue, rotate, revoke', () => {
         ],
       }),
     );
-    expect([...(withHidden.mission.connections[0]?.resourceIds ?? [])].sort()).toEqual(
-      [idOf('acme/app'), idOf('acme/infra')].sort(),
-    );
+    expect(
+      [...(withHidden.mission.connections[0]?.resourceSets[0]?.resourceIds ?? [])].sort(),
+    ).toEqual([idOf('acme/app'), idOf('acme/infra')].sort());
 
     const withStale = await missions.issue(
       seeded.ada,
@@ -329,7 +329,7 @@ describe('missions: issue, rotate, revoke', () => {
         ],
       }),
     );
-    expect(mission.connections).toEqual([
+    expect(flatConnections(mission)).toEqual([
       {
         connectionId,
         resourceScope: 'connection',
@@ -347,7 +347,19 @@ describe('missions: issue, rotate, revoke', () => {
         (e) => e.kind === 'admin' && (e.after as { connections: unknown }).connections,
       ),
     ).toContainEqual([
-      { connection_id: connectionId, resource_scope: 'connection', resource_ids: [] },
+      {
+        connection_id: connectionId,
+        resource_scope: 'connection',
+        resource_ids: [],
+        resource_sets: [
+          {
+            resource_set_id: expect.any(String) as string,
+            position: 1,
+            resource_scope: 'connection',
+            resource_ids: [],
+          },
+        ],
+      },
     ]);
 
     // Discovery finds a new repository, the owner hides one, another vanishes.
@@ -388,7 +400,9 @@ describe('missions: issue, rotate, revoke', () => {
     expect(onAccount.find((m) => m.id === before.mission.id)?.reaches_later).toBe(false);
     const copy = await missions.duplicate(seeded.ada, mission.id);
     if (!copy.ok) throw new Error('duplicate refused');
-    expect(copy.mission.connections[0]).toMatchObject({ resourceScope: 'connection' });
+    expect(copy.mission.connections[0]?.resourceSets[0]).toMatchObject({
+      resourceScope: 'connection',
+    });
   });
 
   it('drops a resource that turned stale when duplicating', async () => {
@@ -399,8 +413,8 @@ describe('missions: issue, rotate, revoke', () => {
     ]);
     const copy = await missions.duplicate(seeded.ada, source.mission.id);
     if (!copy.ok) throw new Error('duplicate refused');
-    expect(copy.mission.connections[0]?.resourceIds).toHaveLength(1);
-    expect(source.mission.connections[0]?.resourceIds).toHaveLength(3);
+    expect(copy.mission.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
+    expect(source.mission.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(3);
   });
 
   describe('a token row of another algorithm', () => {
@@ -443,9 +457,18 @@ describe('missions: issue, rotate, revoke', () => {
           connection_id: seeded.github.connection.id,
           resource_scope: 'selected',
           resource_ids: seeded.github.resources.map((r) => r.id).sort(),
+          resource_sets: [
+            {
+              resource_set_id: mission.connections[0]?.resourceSets[0]?.id,
+              position: 1,
+              resource_scope: 'selected',
+              resource_ids: seeded.github.resources.map((r) => r.id).sort(),
+            },
+          ],
         },
       ],
       policy: mission.policy.map((e) => ({
+        resource_set_id: e.resourceSetId,
         risk_id: e.riskId,
         quota: e.quota,
         rate_limit: { max: e.rateLimit, window_seconds: e.rateWindowSeconds },
@@ -627,8 +650,9 @@ describe('missions: issue, rotate, revoke', () => {
     if (!copy.ok) throw new Error('duplicate refused');
     expect(copy.mission.id).not.toBe(source.mission.id);
     expect(copy.mission.name).toBe('Ship the billing page (copy)');
-    expect(copy.mission.policy).toEqual(source.mission.policy);
-    expect(copy.mission.connections).toEqual(source.mission.connections);
+    // Same lines, in the copy's own set: the copy counts on its own.
+    expect(flatPolicy(copy.mission)).toEqual(flatPolicy(source.mission));
+    expect(flatConnections(copy.mission)).toEqual(flatConnections(source.mission));
     expect(copy.mission.periodSeconds).toBe(source.mission.periodSeconds);
     expect(copy.mission.expiresAt).toBeNull();
     expect(copy.token.prefix).not.toBe(source.token.prefix);

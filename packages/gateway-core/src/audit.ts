@@ -64,9 +64,13 @@ export interface CallAuditEntry {
   readonly refusal_reason: string | null;
   /** The approval consumed by this call, if any (spec §3.5). */
   readonly approval_id: string | null;
-  /** Remaining quota per risk after the call, for the risks the call touched.
-   *  Null when the budget was not consulted. */
+  /** Remaining quota per risk after the call, for the risks the call touched:
+   *  the least left in the resource sets it was charged on. Null when the budget
+   *  was not consulted. */
   readonly remaining_budget: Readonly<Record<RiskId, number>> | null;
+  /** The resource sets of its connection the call was judged against (risk model
+   *  §4.7) and, when allowed, charged on. Absent or empty: the risk step did not run. */
+  readonly resource_set_ids?: readonly string[];
   /** Free-form attribution label sent by the agent; no effect on
    *  authorization. */
   readonly agent_label: string | null;

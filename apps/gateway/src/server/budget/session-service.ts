@@ -33,12 +33,15 @@
  */
 
 import { refuse, type Refusal } from '@vaubaan/gateway-core';
-import type {
-  CallAllowedEventDetails,
-  Iso8601,
-  MissionPolicy,
-  RiskId,
-  TokenAttribution,
+import {
+  lineKeyOf,
+  policyLineKey,
+  type CallAllowedEventDetails,
+  type Iso8601,
+  type MissionPolicy,
+  type PolicyLineKey,
+  type RiskId,
+  type TokenAttribution,
 } from '@vaubaan/shared';
 import { InvariantError } from '../store/errors.ts';
 import type {
@@ -50,19 +53,22 @@ import type {
   SessionsRepo,
   StoredLimits,
 } from '../store/index.ts';
+import type { RequestLine } from '../store/types.ts';
 import type { PreparedArguments } from '../store/repositories/requests.ts';
 import { rateWindowKey, type SlidingWindows } from '../rate-limit/index.ts';
 import {
+  combineSetDecisions,
   decide,
   distinctRisks,
-  type Allow,
-  type BudgetOutcome,
+  type AllowAcrossSets,
+  type BudgetOutcomeAcrossSets,
   type RateProbe,
-  type Refuse,
+  type RefuseAcrossSets,
 } from './decide.ts';
+import { BudgetInvariantError } from './errors.ts';
 import { fingerprintArguments } from './fingerprint.ts';
-import { GATE_EVENT_KINDS, openedGatesOf } from './gates.ts';
-import type { BudgetMission } from './mapping.ts';
+import { GATE_EVENT_KINDS, openedGatesOf, openedInSet } from './gates.ts';
+import { resourceSetLabelOf, type BudgetMission } from './mapping.ts';
 import type { MissionState } from './mission-state.ts';
 import { readMissionUsage, type MissionUsage } from './mission-usage.ts';
 import { currentPeriod, type CurrentPeriod } from './period.ts';
@@ -75,6 +81,13 @@ export interface RecordCallInput {
   /** Call arguments: fingerprinted here, sealed for an approval request when needed. */
   readonly args: unknown;
   readonly risks_touched: readonly RiskId[];
+  /**
+   * The resource sets the risk stage judged the call against (risk model §4.7): every
+   * touched risk is checked and charged in each. Absent (a caller outside the
+   * pipeline): every set whose policy names a touched risk. Empty: a broken risk stage,
+   * refused.
+   */
+  readonly resource_set_ids?: readonly string[];
   /** Free-form attribution; recorded on the event, no effect on the decision. */
   readonly agent_label?: string | null;
   /**
@@ -91,9 +104,14 @@ export interface RecordCallAllowed {
   readonly session_id: string;
   readonly period: CurrentPeriod;
   readonly fingerprint: string;
-  /** Distinct risks decremented, in call order. */
+  /** Distinct risks decremented, in call order (in each set charged). */
   readonly decrements: readonly RiskId[];
-  /** Remaining quota per touched risk after the decrement (from the stored counters). */
+  /** The sets charged. */
+  readonly resource_set_ids: readonly string[];
+  /**
+   * Remaining quota per touched risk after the decrement (from the stored counters): the
+   * least left among the sets charged.
+   */
   readonly remaining: Readonly<Record<RiskId, number>>;
   /** Approvals consumed by this call: one covers every gated risk it lists. */
   readonly approval_ids: readonly string[];
@@ -136,7 +154,7 @@ interface PreflightPass extends DecisionOutcome {
 interface TransactionOutcome extends DecisionOutcome {
   /** Typed here: the store takes any event, this service writes only known shapes. */
   readonly event: NewEvent;
-  readonly decision: BudgetOutcome;
+  readonly decision: BudgetOutcomeAcrossSets;
   readonly request: RequestRecord | null;
   readonly approvalIds: readonly string[];
   /** The policy the decision was taken with: the caller's, with the limits read now. */
@@ -149,34 +167,19 @@ export class SessionService {
   async recordCall(input: RecordCallInput): Promise<RecordCallResult> {
     const { mission, now } = input;
     const risks = distinctRisks(input.risks_touched);
+    const sets = setsOf(input);
     const period = currentPeriod(mission.period, now);
     const fingerprint = fingerprintArguments(input.args);
     const prepared = await this.prepareApprovalArguments(input, risks);
 
     const result = await this.deps.sessions.decideAndDecrement(
-      { missionId: mission.id, riskIds: risks, periodStart: period.start },
+      { missionId: mission.id, lines: linesOf(sets, risks), periodStart: period.start },
       (ctx): TransactionOutcome => {
         const live: BudgetMission = {
           ...mission,
-          policy: livePolicy(mission.policy, ctx.limits, risks),
+          policy: livePolicy(mission.policy, ctx.limits, linesOf(sets, risks)),
         };
-        const gated = gatedRisks(live, risks);
-        const openedGates = this.openedGates(ctx, gated, period);
-        const decision = decide({
-          policy: live.policy,
-          risks_touched: risks,
-          counters: ctx.counters,
-          rate_windows: this.probeWindows(live, risks, now),
-          period,
-          fingerprint,
-          approvals: this.lookupApprovals(
-            ctx,
-            input.tool,
-            gated.filter((riskId) => !openedGates.has(riskId)),
-            fingerprint,
-          ),
-          opened_gates: openedGates,
-        });
+        const decision = this.decideSets(ctx, input, live, sets, risks, period, fingerprint);
         const decided = { ...input, mission: live };
         return decision.kind === 'allow'
           ? this.applyAllow(ctx, decided, decision, fingerprint, now)
@@ -186,19 +189,14 @@ export class SessionService {
 
     const { decision, request, approvalIds, policy } = result.outcome;
     if (decision.kind === 'allow') {
-      const remaining: Record<RiskId, number> = {};
-      for (const entry of policy) {
-        if (result.counters.has(entry.risk_id)) {
-          remaining[entry.risk_id] = entry.quota - (result.counters.get(entry.risk_id) ?? 0);
-        }
-      }
       return {
         outcome: 'allowed',
         session_id: result.session.id,
         period,
         fingerprint,
-        decrements: decision.decrements,
-        remaining,
+        decrements: risks,
+        resource_set_ids: sets,
+        remaining: leastRemaining(policy, result.counters, sets, risks),
         approval_ids: approvalIds,
       };
     }
@@ -207,9 +205,54 @@ export class SessionService {
       session_id: result.session.id,
       period,
       fingerprint,
-      refusal: this.refusalOf(decision, request),
+      refusal: this.refusalOf(mission, decision, request),
       request_id: request?.id ?? null,
     };
+  }
+
+  /**
+   * The decision of each candidate set over its own lines, counters, rate windows and
+   * opened gates, combined (`combineSetDecisions`). In-transaction, pure apart from the
+   * reads of `ctx`.
+   */
+  private decideSets(
+    ctx: DecideContext,
+    input: RecordCallInput,
+    live: BudgetMission,
+    sets: readonly string[],
+    risks: readonly RiskId[],
+    period: CurrentPeriod,
+    fingerprint: string,
+  ): BudgetOutcomeAcrossSets {
+    const gated = live.policy.filter(
+      (entry) =>
+        entry.gate === 'approval' &&
+        sets.includes(entry.resource_set_id ?? '') &&
+        risks.includes(entry.risk_id),
+    );
+    const opened = this.openedGates(ctx, distinctRisks(gated.map((e) => e.risk_id)), period);
+    const needed = distinctRisks(
+      gated.filter((entry) => !opened.has(lineKeyOf(entry))).map((entry) => entry.risk_id),
+    );
+    const approvals = this.lookupApprovals(ctx, input.tool, needed, fingerprint);
+    return combineSetDecisions(
+      sets.map((resourceSetId) => {
+        const policy = live.policy.filter((entry) => entry.resource_set_id === resourceSetId);
+        return {
+          resource_set_id: resourceSetId,
+          outcome: decide({
+            policy,
+            risks_touched: risks,
+            counters: countersOfSet(ctx.counters, resourceSetId, risks),
+            rate_windows: this.probeWindows(live.id, resourceSetId, policy, risks, input.now),
+            period,
+            fingerprint,
+            approvals,
+            opened_gates: openedInSet(opened, resourceSetId),
+          }),
+        };
+      }),
+    );
   }
 
   /**
@@ -224,26 +267,35 @@ export class SessionService {
   async preflightLimits(input: RecordCallInput): Promise<Refusal | null> {
     const { mission, now } = input;
     const risks = distinctRisks(input.risks_touched);
+    const sets = setsOf(input);
     const period = currentPeriod(mission.period, now);
     const fingerprint = fingerprintArguments(input.args);
     const result = await this.deps.sessions.decideAndDecrement(
-      { missionId: mission.id, riskIds: risks, periodStart: period.start },
+      { missionId: mission.id, lines: linesOf(sets, risks), periodStart: period.start },
       (ctx): TransactionOutcome | PreflightPass => {
         const live: BudgetMission = {
           ...mission,
-          policy: livePolicy(mission.policy, ctx.limits, risks),
+          policy: livePolicy(mission.policy, ctx.limits, linesOf(sets, risks)),
         };
-        const decision = decide({
-          policy: live.policy,
-          risks_touched: risks,
-          counters: ctx.counters,
-          rate_windows: this.probeWindows(live, risks, now),
-          period,
-          fingerprint,
-          // Approvals are not this question: only the limits are.
-          approvals: new Map(),
-          opened_gates: new Set(risks),
-        });
+        const decision = combineSetDecisions(
+          sets.map((resourceSetId) => {
+            const policy = live.policy.filter((entry) => entry.resource_set_id === resourceSetId);
+            return {
+              resource_set_id: resourceSetId,
+              outcome: decide({
+                policy,
+                risks_touched: risks,
+                counters: countersOfSet(ctx.counters, resourceSetId, risks),
+                rate_windows: this.probeWindows(live.id, resourceSetId, policy, risks, now),
+                period,
+                fingerprint,
+                // Approvals are not this question: only the limits are.
+                approvals: new Map(),
+                opened_gates: new Set(risks),
+              }),
+            };
+          }),
+        );
         if (
           decision.kind === 'refuse' &&
           (decision.code === 'budget-exhausted' || decision.code === 'rate-limited')
@@ -263,7 +315,7 @@ export class SessionService {
     const outcome = result.outcome;
     if ('pass' in outcome) return null;
     const { decision, request } = outcome;
-    return decision.kind === 'allow' ? null : this.refusalOf(decision, request);
+    return decision.kind === 'allow' ? null : this.refusalOf(mission, decision, request);
   }
 
   /** Mission state with the rollover applied on read (spec §2.3, §3.3). */
@@ -289,27 +341,30 @@ export class SessionService {
     return risks.length > 0 ? this.deps.requests.prepareArguments(input.args ?? {}) : null;
   }
 
-  /** The gates the creator opened for this period, among the gated risks of the call. */
+  /** The lines the creator opened for this period, among the gated risks of the call. */
   private openedGates(
     ctx: DecideContext,
     gated: readonly RiskId[],
     period: CurrentPeriod,
-  ): Set<RiskId> {
+  ): Set<PolicyLineKey> {
     if (gated.length === 0) return new Set();
     const events = ctx.riskEvents({ kinds: GATE_EVENT_KINDS, riskIds: gated, since: period.start });
     return openedGatesOf(events, period);
   }
 
+  /** The rate windows of one set's lines among the touched risks. */
   private probeWindows(
-    mission: BudgetMission,
+    missionId: string,
+    resourceSetId: string,
+    policy: MissionPolicy,
     risks: readonly RiskId[],
     now: Date,
   ): Map<RiskId, RateProbe> {
     const probes = new Map<RiskId, RateProbe>();
-    for (const entry of mission.policy) {
+    for (const entry of policy) {
       if (!risks.includes(entry.risk_id)) continue;
       const probe = this.deps.rateWindows.peek(
-        rateWindowKey(mission.id, entry.risk_id),
+        rateWindowKey(missionId, resourceSetId, entry.risk_id),
         entry.rate_limit.window_seconds * MS_PER_SECOND,
         now.getTime(),
       );
@@ -348,7 +403,7 @@ export class SessionService {
   private applyAllow(
     ctx: DecideContext,
     input: RecordCallInput,
-    decision: Allow,
+    decision: AllowAcrossSets,
     fingerprint: string,
     now: Date,
   ): TransactionOutcome {
@@ -360,10 +415,13 @@ export class SessionService {
         throw new InvariantError(`approval ${approvalId} vanished mid-transaction`);
       }
     }
+    const charged = new Set(
+      decision.decrements.map((line) => policyLineKey(line.resource_set_id, line.risk_id)),
+    );
     for (const entry of input.mission.policy) {
-      if (!decision.decrements.includes(entry.risk_id)) continue;
+      if (!charged.has(lineKeyOf(entry))) continue;
       this.deps.rateWindows.push(
-        rateWindowKey(input.mission.id, entry.risk_id),
+        rateWindowKey(input.mission.id, entry.resource_set_id ?? '', entry.risk_id),
         entry.rate_limit.window_seconds * MS_PER_SECOND,
         now.getTime(),
       );
@@ -378,7 +436,7 @@ export class SessionService {
         kind: 'call-allowed',
         details: {
           ...callDetails(input, fingerprint),
-          remaining: decision.remaining,
+          remaining: leastOfLines(decision.remaining, setsOf(input), input.risks_touched),
           approval_ids: approvalIds,
         },
       },
@@ -388,7 +446,7 @@ export class SessionService {
   private applyRefusal(
     ctx: DecideContext,
     input: RecordCallInput,
-    decision: Refuse,
+    decision: RefuseAcrossSets,
     fingerprint: string,
     prepared: PreparedArguments | null,
     now: Date,
@@ -403,6 +461,7 @@ export class SessionService {
       event: {
         kind: 'call-refused',
         riskId: decision.risk_id,
+        resourceSetId: decision.resource_set_id,
         details: {
           ...callDetails(input, fingerprint),
           refusal_code: decision.code,
@@ -417,7 +476,7 @@ export class SessionService {
   private requestFor(
     ctx: DecideContext,
     input: RecordCallInput,
-    decision: Refuse,
+    decision: RefuseAcrossSets,
     fingerprint: string,
     prepared: PreparedArguments | null,
     now: Date,
@@ -425,12 +484,23 @@ export class SessionService {
     if (decision.code === 'rate-limited') return null;
     const expiresAt = addSeconds(now, this.deps.requestExpirySeconds);
     if (decision.code === 'budget-exhausted') {
-      const open = ctx.findOpenRequest({ kind: 'claim', riskId: decision.risk_id });
+      // A claim is about one line: the risk in the set whose budget is spent.
+      const line: RequestLine = {
+        resourceSetId: decision.resource_set_id,
+        riskId: decision.risk_id,
+      };
+      const open = ctx.findOpenRequest({ kind: 'claim', line });
       if (open) return open;
-      const claim = ctx.createRequest({ kind: 'claim', riskId: decision.risk_id, expiresAt });
+      const claim = ctx.createRequest({
+        kind: 'claim',
+        riskId: decision.risk_id,
+        lines: [line],
+        expiresAt,
+      });
       ctx.recordEvent({
         kind: 'request',
         riskId: decision.risk_id,
+        resourceSetId: decision.resource_set_id,
         details: { request_id: claim.id, request_kind: 'claim', tool: input.tool, fingerprint },
       } satisfies NewEvent);
       return claim;
@@ -442,18 +512,19 @@ export class SessionService {
     if (firstRisk === undefined) {
       throw new InvariantError('an approval-required refusal names the gated risks of the call');
     }
-    const open = ctx.findOpenRequest({
-      kind: 'approval',
-      tool: input.tool,
-      fingerprint,
-      riskIds: gatedRisks,
-    });
+    // Every gated line of every set the call was judged against (risk model §4.7).
+    const lines: RequestLine[] = decision.gated_lines.map((line) => ({
+      resourceSetId: line.resource_set_id,
+      riskId: line.risk_id,
+    }));
+    const open = ctx.findOpenRequest({ kind: 'approval', tool: input.tool, fingerprint, lines });
     if (open) return open;
     if (!prepared) throw new InvariantError('approval request without sealed arguments');
     const request = ctx.createRequest({
       kind: 'approval',
       riskId: firstRisk,
       riskIds: gatedRisks,
+      lines,
       tool: input.tool,
       fingerprint,
       prepared,
@@ -462,6 +533,7 @@ export class SessionService {
     ctx.recordEvent({
       kind: 'request',
       riskId: firstRisk,
+      resourceSetId: lines[0]?.resourceSetId ?? null,
       details: {
         request_id: request.id,
         request_kind: 'approval',
@@ -473,7 +545,13 @@ export class SessionService {
     return request;
   }
 
-  private refusalOf(decision: Refuse, request: RequestRecord | null): Refusal {
+  private refusalOf(
+    mission: BudgetMission,
+    decision: RefuseAcrossSets,
+    request: RequestRecord | null,
+  ): Refusal {
+    const label = resourceSetLabelOf(mission.resource_sets, decision.resource_set_id);
+    const where = label === null ? {} : { resource_set: label };
     switch (decision.code) {
       case 'budget-exhausted':
         return refuse.budgetExhausted({
@@ -482,12 +560,14 @@ export class SessionService {
           consumed: decision.details.consumed,
           period_end: decision.details.period_end,
           claim_url: this.deps.requestUrl(requireRequest(request, decision.code).id),
+          ...where,
         });
       case 'rate-limited':
         return refuse.rateLimited({
           risk_id: decision.risk_id,
           limit: decision.details.limit,
           retry_after_seconds: decision.details.retry_after_seconds,
+          ...where,
         });
       case 'approval-required': {
         const approvalRequest = requireRequest(request, decision.code);
@@ -506,19 +586,20 @@ export class SessionService {
 }
 
 /**
- * Reread the quota, rate and gate of touched risks inside the decision transaction.
- * A touched risk that was removed is dropped, so the decision fails closed instead
- * of executing with stale authority. Untouched lines stay available to the caller.
+ * Reread the quota, rate and gate of the touched lines inside the decision transaction.
+ * A touched line that was removed is dropped, so the decision fails closed instead of
+ * executing with stale authority. Untouched lines stay available to the caller.
  */
 export function livePolicy(
   policy: MissionPolicy,
-  limits: ReadonlyMap<RiskId, StoredLimits>,
-  touched: readonly RiskId[] = [],
+  limits: ReadonlyMap<PolicyLineKey, StoredLimits>,
+  touched: readonly RequestLine[] = [],
 ): MissionPolicy {
+  const touchedKeys = new Set(touched.map((l) => policyLineKey(l.resourceSetId, l.riskId)));
   return policy
-    .filter((entry) => !touched.includes(entry.risk_id) || limits.has(entry.risk_id))
+    .filter((entry) => !touchedKeys.has(lineKeyOf(entry)) || limits.has(lineKeyOf(entry)))
     .map((entry) => {
-      const stored = limits.get(entry.risk_id);
+      const stored = limits.get(lineKeyOf(entry));
       if (!stored) return entry;
       return {
         ...entry,
@@ -529,11 +610,69 @@ export function livePolicy(
     });
 }
 
-/** The touched risks the mission gates `approval`, in policy order. */
-function gatedRisks(mission: BudgetMission, risks: readonly RiskId[]): RiskId[] {
-  return mission.policy
-    .filter((entry) => entry.gate === 'approval' && risks.includes(entry.risk_id))
-    .map((entry) => entry.risk_id);
+/** The distinct candidate sets of a call; a call judged against none is a broken risk stage. */
+function setsOf(
+  input: Pick<RecordCallInput, 'resource_set_ids' | 'mission' | 'risks_touched'>,
+): string[] {
+  const named =
+    input.resource_set_ids ??
+    input.mission.policy
+      .filter((entry) => input.risks_touched.includes(entry.risk_id))
+      .map((entry) => entry.resource_set_id ?? '');
+  const sets = [...new Set(named)];
+  if (sets.length === 0) {
+    throw new BudgetInvariantError(
+      'a call reached the budget without the resource sets it was judged against',
+    );
+  }
+  return sets;
+}
+
+/** Each touched risk in each set: the lines a call is charged on. */
+function linesOf(sets: readonly string[], risks: readonly RiskId[]): RequestLine[] {
+  return sets.flatMap((resourceSetId) => risks.map((riskId) => ({ resourceSetId, riskId })));
+}
+
+/** One set's consumed counts, by risk, as `decide()` reads them. */
+function countersOfSet(
+  counters: ReadonlyMap<PolicyLineKey, number>,
+  resourceSetId: string,
+  risks: readonly RiskId[],
+): Map<RiskId, number> {
+  return new Map(
+    risks.map((riskId) => [riskId, counters.get(policyLineKey(resourceSetId, riskId)) ?? 0]),
+  );
+}
+
+/** Per risk, the least of the values of its lines in the sets. */
+function leastOfLines(
+  values: Readonly<Record<PolicyLineKey, number>>,
+  sets: readonly string[],
+  risks: readonly RiskId[],
+): Record<RiskId, number> {
+  const least: Record<RiskId, number> = {};
+  for (const riskId of distinctRisks(risks)) {
+    const found = sets
+      .map((set) => values[policyLineKey(set, riskId)])
+      .filter((v): v is number => v !== undefined);
+    if (found.length > 0) least[riskId] = Math.min(...found);
+  }
+  return least;
+}
+
+/** Remaining quota per touched risk after the call: the least left among the sets charged. */
+function leastRemaining(
+  policy: MissionPolicy,
+  counters: ReadonlyMap<PolicyLineKey, number>,
+  sets: readonly string[],
+  risks: readonly RiskId[],
+): Record<RiskId, number> {
+  const left: Record<PolicyLineKey, number> = {};
+  for (const entry of policy) {
+    const key = lineKeyOf(entry);
+    if (counters.has(key)) left[key] = entry.quota - (counters.get(key) ?? 0);
+  }
+  return leastOfLines(left, sets, risks);
 }
 
 function requireRequest(request: RequestRecord | null, code: string): RequestRecord {
@@ -548,7 +687,14 @@ function addSeconds(instant: Date, seconds: number): Iso8601 {
 /** What a call event carries whether the call is allowed or refused. */
 type CallDetails = Pick<
   CallAllowedEventDetails,
-  'tool' | 'fingerprint' | 'risk_ids' | 'agent_label' | 'token_id' | 'token_kind' | 'holder'
+  | 'tool'
+  | 'fingerprint'
+  | 'risk_ids'
+  | 'resource_set_ids'
+  | 'agent_label'
+  | 'token_id'
+  | 'token_kind'
+  | 'holder'
 >;
 
 function callDetails(input: RecordCallInput, fingerprint: string): CallDetails {
@@ -556,6 +702,7 @@ function callDetails(input: RecordCallInput, fingerprint: string): CallDetails {
     tool: input.tool,
     fingerprint,
     risk_ids: distinctRisks(input.risks_touched),
+    resource_set_ids: setsOf(input),
     agent_label: input.agent_label ?? null,
     token_id: input.token?.token_id ?? null,
     token_kind: input.token?.token_kind ?? null,

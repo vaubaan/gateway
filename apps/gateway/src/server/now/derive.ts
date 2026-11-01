@@ -5,6 +5,7 @@
  * closest to its limit in the current period. The page draws it only near the
  * limit (the `Meter`'s threshold); below, the row shows a dash.
  */
+import { policyLineKey, type PolicyLineKey } from '@vaubaan/shared/domain';
 import type { RiskId } from '@vaubaan/shared';
 
 export interface LimitLine {
@@ -16,6 +17,7 @@ export interface LimitLine {
 }
 
 interface PolicyLine {
+  readonly resourceSetId: string;
   readonly riskId: RiskId;
   readonly quota: number;
 }
@@ -27,13 +29,20 @@ interface PolicyLine {
  */
 export function nearestLimit(
   policy: readonly PolicyLine[],
-  remaining: Readonly<Record<RiskId, number>>,
+  /** Per line (`policyLineKey`): a risk in two resource sets is two lines. */
+  remaining: Readonly<Record<PolicyLineKey, number>>,
   labelOf: (riskId: RiskId) => string,
 ): LimitLine | null {
   let nearest: LimitLine | null = null;
   let nearestShare = -1;
   for (const entry of policy) {
-    const left = Math.max(0, Math.min(entry.quota, remaining[entry.riskId] ?? entry.quota));
+    const left = Math.max(
+      0,
+      Math.min(
+        entry.quota,
+        remaining[policyLineKey(entry.resourceSetId, entry.riskId)] ?? entry.quota,
+      ),
+    );
     const used = entry.quota - left;
     const share = entry.quota <= 0 ? 1 : used / entry.quota;
     if (share > nearestShare) {

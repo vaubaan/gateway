@@ -40,6 +40,7 @@ function context(conn: MissionConnection): MissionContext {
     token: { id: 't1', prefix: 'p', holder: { kind: 'named', name: 'agent' } },
     connections: [conn],
     resources: [],
+    resource_sets: [{ id: 'set-1', connection_id: conn.id, position: 1, resource_ids: [] }],
     policy: [],
     session: null,
   } as unknown as MissionContext;

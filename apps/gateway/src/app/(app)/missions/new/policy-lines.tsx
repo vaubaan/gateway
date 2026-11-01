@@ -18,7 +18,15 @@ import { defaultResources } from '@/lib/missions/preview';
 
 import styles from '../missions.module.css';
 import { allowLines } from '../mission-view';
-import { editorRows, selectedResources, type ConnectionState } from './form-state';
+import {
+  editorRows,
+  entriesOfAccount,
+  resourceIdsOfAccount,
+  selectedResources,
+  takesTheRest,
+  type ConnectionState,
+  type SetState,
+} from './form-state';
 
 /** The rail is narrow: a line names two permissions and counts the rest. */
 const NAMED_IN_THE_RAIL = 2;
@@ -33,21 +41,36 @@ export function accountLines(
   connection: IssuanceConnection,
   state: ConnectionState,
 ): { can: string; asks: string | null; cannot: string } {
-  const rows = editorRows(connection, state);
-  const chosen = rows.flatMap((row) => {
-    const entry = state.entries[row.risk.risk_id];
-    return entry ? [{ label: row.risk.label, gate: entry.gate }] : [];
-  });
-  const left = rows
+  // A permission chosen in several resource sets is said once: it asks first if one set asks.
+  const chosenBy = new Map<string, { label: string; gate: 'auto' | 'approval' }>();
+  for (const set of state.sets) {
+    for (const row of editorRows(connection, set)) {
+      const entry = set.entries[row.risk.risk_id];
+      if (!entry) continue;
+      const seen = chosenBy.get(row.risk.risk_id);
+      chosenBy.set(row.risk.risk_id, {
+        label: row.risk.label,
+        gate: seen?.gate === 'approval' || entry.gate === 'approval' ? 'approval' : 'auto',
+      });
+    }
+  }
+  const chosen = [...chosenBy.values()];
+  const held = entriesOfAccount(state);
+  const left = state.sets
+    .flatMap((set) => editorRows(connection, set))
     .filter(
-      (row) =>
-        !row.accepted && row.unavailable === null && !row.risk.deprecated && !row.risk.fallback,
+      (row, i, all) =>
+        held[row.risk.risk_id] === undefined &&
+        row.unavailable === null &&
+        !row.risk.deprecated &&
+        !row.risk.fallback &&
+        all.findIndex((other) => other.risk.risk_id === row.risk.risk_id) === i,
     )
     .map((row) => row.risk)
     .sort((a, b) => b.severity - a.severity);
   const notIncluded = groupVariants(left).map((family) => family.label);
   // The resources left out are said after the permissions, never counted among them.
-  const others = defaultResources(connection).length - state.resourceIds.length;
+  const others = defaultResources(connection).length - resourceIdsOfAccount(state).length;
   const leftOut =
     others > 0 ? ` Nor the other ${others} ${others === 1 ? 'resource' : 'resources'}.` : '';
   const lines = allowLines(chosen, notIncluded, NAMED_IN_THE_RAIL);
@@ -59,8 +82,18 @@ export function accountLines(
 }
 
 function resourceNames(connection: IssuanceConnection, state: ConnectionState): string {
-  const names = selectedResources(connection, state).map((r) => r.display_name || r.ref);
-  return reachedOnAccount(names, state.resourceScope === 'connection');
+  const names = selectedResources(connection, { resourceIds: resourceIdsOfAccount(state) }).map(
+    (r) => r.display_name || r.ref,
+  );
+  return reachedOnAccount(
+    names,
+    state.sets.some((set) => set.resourceScope === 'connection'),
+  );
+}
+
+function setResourceNames(connection: IssuanceConnection, set: SetState): string {
+  const names = selectedResources(connection, set).map((r) => r.display_name || r.ref);
+  return reachedOnAccount(names, set.resourceScope === 'connection' && takesTheRest(set));
 }
 
 export function RailSummary({
@@ -140,7 +173,11 @@ export function ExplicitList({
   return (
     <div className={styles.explicit} data-testid="explicit-list">
       {accounts.map(({ connection, state }) => {
-        const chosen = connection.risks.filter((risk) => state.entries[risk.risk_id]);
+        const several = state.sets.length > 1;
+        const chosenCount = state.sets.reduce(
+          (n, set) => n + connection.risks.filter((risk) => set.entries[risk.risk_id]).length,
+          0,
+        );
         return (
           <section
             key={connection.id}
@@ -149,44 +186,66 @@ export function ExplicitList({
             <h3 className={styles.explicitAccount}>
               {connection.provider_label} · {connection.display_name}
               <span className={styles.explicitNote}>
-                {resourceNames(connection, state)} · {count(chosen.length, TERMS.risk)}
+                {resourceNames(connection, state)} · {count(chosenCount, TERMS.risk)}
               </span>
             </h3>
-            <ul className={styles.explicitRows}>
-              {chosen.map((risk) => {
-                const entry = state.entries[risk.risk_id];
-                if (!entry) return null;
-                return (
-                  <li
-                    key={risk.risk_id}
-                    className={styles.explicitRow}
-                    data-permission={risk.risk_id}
-                  >
-                    <span>
-                      {risk.label}
-                      {risk.env && (
-                        <span className={styles.inlineTag}>
-                          <EnvTag env={risk.env} />
-                        </span>
-                      )}
-                      <span className={styles.sub}>
-                        <Mono quiet>{risk.risk_id}</Mono>
-                      </span>
-                    </span>
-                    <span className={styles.explicitLimits}>
-                      {limitPhrase(entry.quota, periodSeconds)}
-                      <span className={styles.sub}>
-                        {ratePhrase(entry.rateMax, entry.rateWindow)}
-                      </span>
-                    </span>
-                    <GateMark gate={gateWordOf(entry.gate)} />
-                  </li>
-                );
-              })}
-            </ul>
+            {state.sets.map((set, index) => (
+              <div
+                key={set.id ?? `new-${index}`}
+                data-testid={several ? `explicit-set-${index + 1}` : undefined}
+              >
+                {several && (
+                  <h4 className={styles.explicitSet}>
+                    Resource set {index + 1}
+                    <span className={styles.explicitNote}>{setResourceNames(connection, set)}</span>
+                  </h4>
+                )}
+                <ExplicitRows connection={connection} set={set} periodSeconds={periodSeconds} />
+              </div>
+            ))}
           </section>
         );
       })}
     </div>
+  );
+}
+
+function ExplicitRows({
+  connection,
+  set,
+  periodSeconds,
+}: {
+  connection: IssuanceConnection;
+  set: SetState;
+  periodSeconds: number | null;
+}) {
+  const chosen = connection.risks.filter((risk) => set.entries[risk.risk_id]);
+  return (
+    <ul className={styles.explicitRows}>
+      {chosen.map((risk) => {
+        const entry = set.entries[risk.risk_id];
+        if (!entry) return null;
+        return (
+          <li key={risk.risk_id} className={styles.explicitRow} data-permission={risk.risk_id}>
+            <span>
+              {risk.label}
+              {risk.env && (
+                <span className={styles.inlineTag}>
+                  <EnvTag env={risk.env} />
+                </span>
+              )}
+              <span className={styles.sub}>
+                <Mono quiet>{risk.risk_id}</Mono>
+              </span>
+            </span>
+            <span className={styles.explicitLimits}>
+              {limitPhrase(entry.quota, periodSeconds)}
+              <span className={styles.sub}>{ratePhrase(entry.rateMax, entry.rateWindow)}</span>
+            </span>
+            <GateMark gate={gateWordOf(entry.gate)} />
+          </li>
+        );
+      })}
+    </ul>
   );
 }

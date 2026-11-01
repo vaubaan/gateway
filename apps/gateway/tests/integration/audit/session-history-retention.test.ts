@@ -57,6 +57,9 @@ describe('retention of the session history', () => {
   afterEach(() => t.store.close());
 
   /** A mission issued 100 days ago; `periodSeconds: null` is a one-off mission. */
+  /** The one resource set of each session's mission. */
+  const setOf = new Map<string, string>();
+
   async function mission(periodSeconds: number | null) {
     t.clock.set(daysAgo(100));
     const record = await t.store.missions.create({
@@ -71,6 +74,7 @@ describe('retention of the session history', () => {
       ],
     });
     const session = await t.store.sessions.getOrCreate(record.id);
+    setOf.set(session.id, record.connections[0]?.resourceSets[0]?.id ?? '');
     return { record, sessionId: session.id };
   }
 
@@ -83,7 +87,13 @@ describe('retention of the session history', () => {
     details?: Record<string, unknown>,
   ) {
     t.clock.set(daysAgo(days));
-    return t.store.sessions.recordEvent(sessionId, { kind, riskId, details });
+    // About one line: the risk in the mission's one set (risk model §4.7).
+    return t.store.sessions.recordEvent(sessionId, {
+      kind,
+      riskId,
+      resourceSetId: setOf.get(sessionId) ?? null,
+      details,
+    });
   }
 
   /** One allowed call `days` ago: the counter of the period that day falls in. */
@@ -186,7 +196,9 @@ describe('retention of the session history', () => {
       kinds: GATE_EVENT_KINDS,
       since: period.start,
     });
-    expect(openedGatesOf(gateEvents, period).has(MERGE)).toBe(true);
+    expect(openedGatesOf(gateEvents, period).has(`${setOf.get(m.sessionId) ?? ''}::${MERGE}`)).toBe(
+      true,
+    );
   });
 
   it('removes a gate or a credit event once its period is over', async () => {

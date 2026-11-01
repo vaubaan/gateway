@@ -13,6 +13,7 @@ import { NowView } from '@/app/(app)/_now/now-view';
 import { eventWords } from '@/app/(app)/waiting/event-words';
 import { shortTitleOf, titleOf, whoOf } from '@/app/(app)/waiting/parts';
 import { RequestView } from '@/app/(app)/waiting/request-view';
+import { ToastProvider } from '@/components/ui';
 import {
   agoSentence,
   asker,
@@ -37,7 +38,10 @@ import type {
   WaitingItem,
 } from '@/server/requests';
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/',
+  useRouter: () => ({ refresh: () => undefined }),
+}));
 
 const NOW_AT = new Date('2026-10-13T11:02:00.000Z');
 const VIEWER = 'user-alice';
@@ -138,6 +142,7 @@ function approval(overrides: Partial<ApprovalView> = {}): ApprovalView {
       risks: [
         {
           risk_id: MERGE,
+          resource_set_id: 'set-1',
           label: 'Merge to a protected branch',
           quota: 50,
           consumed: 0,
@@ -151,6 +156,7 @@ function approval(overrides: Partial<ApprovalView> = {}): ApprovalView {
     gates: [
       {
         risk_id: MERGE,
+        resource_set_id: 'set-1',
         label: 'Merge to a protected branch',
         policy: 'approval',
         open_until: null,
@@ -214,10 +220,18 @@ function claim(overrides: Partial<ClaimView> = {}): ClaimView {
     },
     asker: NIGHTLY,
     period: PERIOD,
-    risk: { risk_id: READ, label: 'Read code', quota: 5000, consumed: 5000, remaining: 0 },
+    risk: {
+      risk_id: READ,
+      resource_set_id: 'set-1',
+      label: 'Read code',
+      quota: 5000,
+      consumed: 5000,
+      remaining: 0,
+    },
     other_risks: [
       {
         risk_id: 'github.read-meta',
+        resource_set_id: 'set-1',
         label: 'Read metadata',
         quota: 100,
         consumed: 3,
@@ -458,7 +472,11 @@ describe('the page of an approval', () => {
   });
 
   it('says one answer covers the call when it needs several permissions, and what is left of each', () => {
-    const second = { risk_id: 'github.workflow-edit', label: 'Edit a workflow' };
+    const second = {
+      risk_id: 'github.workflow-edit',
+      resource_set_id: 'set-1',
+      label: 'Edit a workflow',
+    };
     const html = page(
       approval({
         request: summary({ risks: [...summary().risks, second] }),
@@ -690,6 +708,7 @@ function model(overrides: Partial<NowModel> = {}): NowModel {
     first_run: false,
     shared_accounts: [],
     shared_missions: [],
+    trust_raises: [],
     ...overrides,
   };
 }
@@ -933,5 +952,44 @@ describe('the titles of what waits', () => {
   it('a request recorded without its call falls back on the permission', () => {
     const item = waitingItem(approval({ request: summary({ call: null }) }));
     expect(titleOf(item)).toBe('Merge to a protected branch');
+  });
+});
+
+describe('the home, with a trust-raise proposal (risk model §4.7)', () => {
+  const offer = {
+    connection_id: 'conn-gh',
+    account_name: 'GitHub main',
+    resource_set_id: 'set-2',
+    resource_set_position: 2,
+    several_sets: true,
+    macro_action_id: 'change',
+    macro_action_label: 'Change',
+    from: 'trusting' as const,
+    to: 'autonomous' as const,
+    approvals: 10,
+  };
+  const html = renderToStaticMarkup(
+    <ToastProvider>
+      <NowView
+        view={model({
+          trust_raises: [{ mission_id: 'm-1', mission_name: 'Ship it', offers: [offer] }],
+        })}
+        viewerId={VIEWER}
+      />
+    </ToastProvider>,
+  );
+
+  it('offers the raise by one level, says why and where, and opens the edit there', () => {
+    const words = text(html);
+    expect(words).toContain('Ship it: Raise “Change” to Autonomous?');
+    expect(words).toContain(
+      'You approved it 10 times on GitHub main, resource set 2, with no refusal since it was set to Trusting.',
+    );
+    expect(html).toContain('href="/missions/m-1/edit?raise=set-2&amp;action=change"');
+    expect(words).toContain('Not now');
+  });
+
+  it('keeps one primary action on the page', () => {
+    expect(html.match(/v_primary/g)?.length ?? 0).toBeLessThanOrEqual(1);
   });
 });

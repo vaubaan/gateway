@@ -19,7 +19,13 @@
  * `explainOrphan` — the functions the interface and the preview use, so the
  * agent's tools and the web pages cannot answer differently.
  */
-import type { Budget, Gate, MissionPolicyEntry, RiskId } from '@vaubaan/shared';
+import {
+  policyLineKey,
+  type Budget,
+  type Gate,
+  type MissionPolicyEntry,
+  type RiskId,
+} from '@vaubaan/shared';
 
 import {
   TRUST_LEVEL_BUDGET_FACTOR,
@@ -378,6 +384,8 @@ export interface LostConnectionView {
 
 export interface MissionPolicyView {
   readonly risk_id: RiskId;
+  /** The resource set of its connection the line belongs to (risk model §4.7). */
+  readonly resource_set_id: string;
   readonly quota: number;
   readonly rate_limit: { readonly max: number; readonly window_seconds: number };
   readonly gate: Gate;
@@ -466,6 +474,15 @@ function issuedViaView(issuer: MissionIssuer | null, viewer: MissionViewer): Iss
 export interface ResourceScopeView {
   readonly connection_id: string;
   readonly resource_scope: 'selected' | 'connection';
+  /**
+   * The resource sets of the connection, in order (risk model §4.7): each with its
+   * scope; a policy line names its set by `resource_set_id`.
+   */
+  readonly resource_sets: readonly {
+    readonly resource_set_id: string;
+    readonly position: number;
+    readonly resource_scope: 'all' | 'selected' | 'connection';
+  }[];
 }
 
 function resourceScopeOf(
@@ -508,15 +525,32 @@ export function missionView(
     resource_scopes: mission.connections.map((c) => ({
       connection_id: c.connectionId,
       resource_scope: resourceScopeOf(c),
+      resource_sets: c.resourceSets.map((set) => ({
+        resource_set_id: set.id,
+        position: set.position,
+        resource_scope: set.resourceScope,
+      })),
     })),
     policy: mission.policy.map((entry) => ({
       risk_id: entry.riskId,
+      resource_set_id: entry.resourceSetId,
       quota: entry.quota,
       rate_limit: { max: entry.rateLimit, window_seconds: entry.rateWindowSeconds },
       gate: entry.gate,
-      remaining: serving ? (serving.remaining[entry.riskId] ?? null) : null,
+      remaining: serving
+        ? (serving.remaining[policyLineKey(entry.resourceSetId, entry.riskId)] ?? null)
+        : null,
     })),
-    exhausted: serving ? serving.exhausted : [],
+    // A risk spent in one of its sets is listed once.
+    exhausted: serving
+      ? [
+          ...new Set(
+            mission.policy
+              .filter((e) => serving.exhausted.includes(policyLineKey(e.resourceSetId, e.riskId)))
+              .map((e) => e.riskId),
+          ),
+        ]
+      : [],
   };
 }
 
@@ -533,10 +567,18 @@ export interface MissionDetailView extends MissionView {
      * exist, or, for `connection`, every resource discovery returns that is not hidden.
      */
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
+    /** Present when the connection has several resource sets (risk model §4.7). */
+    readonly resource_sets?: readonly {
+      readonly resource_set_id: string;
+      readonly position: number;
+      readonly resource_scope: 'selected' | 'connection';
+      readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
+    }[];
   }[];
   /** Risk labels, and until when a gated risk was opened by the creator for the period. */
   readonly policy_details: readonly {
     readonly risk_id: RiskId;
+    readonly resource_set_id: string;
     readonly label: string;
     readonly gate_open_until: string | null;
   }[];
@@ -556,9 +598,20 @@ export function missionDetailView(
       status: c.status,
       resource_scope: c.reaches_later ? 'connection' : 'selected',
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
+      ...(c.resource_sets.length > 1
+        ? {
+            resource_sets: c.resource_sets.map((set) => ({
+              resource_set_id: set.id,
+              position: set.position,
+              resource_scope: set.reaches_later ? ('connection' as const) : ('selected' as const),
+              resources: set.resources.map((r) => ({ ref: r.ref, env: r.env })),
+            })),
+          }
+        : {}),
     })),
     policy_details: detail.policy.map((entry) => ({
       risk_id: entry.risk_id,
+      resource_set_id: entry.resource_set_id ?? '',
       label: entry.label,
       gate_open_until: entry.gate_open_until,
     })),
@@ -611,11 +664,29 @@ export interface PreviewView {
     readonly left_out: MissionPreview['connections'][number]['left_out'];
     /** The trust levels kept with the mission: the ones naming a macro-action of the connection. */
     readonly trust_levels: MissionPreview['connections'][number]['trust_levels'];
+    /**
+     * Present when the draft gives the connection several resource sets (risk model
+     * §4.7): what each set yields, in order. The connection's own fields are then the
+     * sets' together.
+     */
+    readonly resource_sets?: readonly PreviewSetView[];
   }[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
   /** Three lines: what the mission can do, cannot do, in what quantity. */
   readonly summary: MissionPreview['summary'];
+}
+
+/** What one resource set of a draft connection yields, as the door answers it. */
+export interface PreviewSetView {
+  readonly index: number;
+  readonly resource_scope: 'selected' | 'connection';
+  readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
+  readonly everything_i_hold: boolean;
+  readonly passes: MissionPreview['policy'];
+  readonly exceeds: readonly RiskId[];
+  readonly left_out: MissionPreview['connections'][number]['left_out'];
+  readonly trust_levels: MissionPreview['connections'][number]['trust_levels'];
 }
 
 export function previewView(preview: MissionPreview): PreviewView {
@@ -640,6 +711,20 @@ export function previewView(preview: MissionPreview): PreviewView {
       missing_budget: c.missing_budget,
       left_out: c.left_out,
       trust_levels: c.trust_levels,
+      ...(c.resource_sets.length > 1
+        ? {
+            resource_sets: c.resource_sets.map((set) => ({
+              index: set.index,
+              resource_scope: set.reaches_later ? ('connection' as const) : ('selected' as const),
+              resources: set.resources.map((r) => ({ ref: r.ref, env: r.env })),
+              everything_i_hold: set.everything_i_hold,
+              passes: set.passes,
+              exceeds: set.exceeds,
+              left_out: set.left_out,
+              trust_levels: set.trust_levels,
+            })),
+          }
+        : {}),
     })),
     period: preview.period,
     expires_at: preview.expires_at,

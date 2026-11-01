@@ -22,7 +22,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { Iso8601, MissionTokenKind, RiskId } from '@vaubaan/shared';
 
 import type { Actor, ConnectionService } from '../connections';
-import type { MissionOverview, MissionRole, MissionService } from '../missions';
+import type { MissionOverview, MissionRole, MissionService, TrustRaiseOffer } from '../missions';
 import { riskExplainer } from '../../lib/providers/reference';
 import type { RequestService, WaitingItem } from '../requests';
 import { effectiveState } from '../requests/state';
@@ -44,7 +44,7 @@ export interface NowDeps {
     'missions' | 'users' | 'sessions' | 'audit' | 'requests' | 'connections'
   >;
   readonly registry: PluginRegistry;
-  readonly missions: Pick<MissionService, 'list'>;
+  readonly missions: Pick<MissionService, 'list' | 'trustRaisesFor'>;
   readonly requests: Pick<RequestService, 'waiting'>;
   readonly connections: Pick<ConnectionService, 'listFor'>;
   readonly shares: Pick<ShareService, 'received'>;
@@ -136,6 +136,18 @@ export interface NowView {
   readonly first_run: boolean;
   readonly shared_accounts: readonly SharedAccount[];
   readonly shared_missions: readonly SharedMission[];
+  /**
+   * Trust-raise proposals of the running missions the reader created (risk model §4.7),
+   * per mission. A separate offer from a budget widening, which waits as a claim.
+   */
+  readonly trust_raises: readonly NowTrustRaises[];
+}
+
+/** The trust-raise proposals of one mission the reader created. */
+export interface NowTrustRaises {
+  readonly mission_id: string;
+  readonly mission_name: string;
+  readonly offers: readonly TrustRaiseOffer[];
 }
 
 /** The name a page prints for a person: what the identity provider said, else the email. */
@@ -312,5 +324,6 @@ export async function readNow(deps: NowDeps, actor: Actor): Promise<NowView> {
       permissions: sharedPermissions.get(account.connection_id)?.size ?? 0,
     })),
     shared_missions: sharedMissions,
+    trust_raises: await deps.missions.trustRaisesFor(actor.user),
   };
 }

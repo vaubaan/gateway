@@ -81,10 +81,10 @@ describe('the schema persists authorities as explicit rows', () => {
             store.db
               .prepare(
                 `INSERT INTO mission_policy
-                   (mission_id, risk_id, quota, rate_limit, rate_window_seconds, gate)
-                 VALUES (?, ?, 1, 1, 60, 'auto')`,
+                   (mission_id, resource_set_id, risk_id, quota, rate_limit, rate_window_seconds, gate)
+                 VALUES (?, ?, ?, 1, 1, 60, 'auto')`,
               )
-              .run('no-such-mission', riskId);
+              .run('no-such-mission', 'no-such-set', riskId);
     expect(insert).toThrow(/CHECK constraint failed/);
   });
 

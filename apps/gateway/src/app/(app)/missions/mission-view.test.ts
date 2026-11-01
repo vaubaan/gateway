@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import type { PolicyLineKey } from '@vaubaan/shared';
+
 import type { MissionState } from '@/server/budget';
 
 import {
@@ -15,14 +17,14 @@ import {
 
 const PERIOD = { index: 0, start: '2026-10-13T00:00:00.000Z', end: '2026-10-14T00:00:00.000Z' };
 
-function active(exhausted: string[] = []): MissionState {
+function active(exhausted: PolicyLineKey[] = []): MissionState {
   return { kind: 'active', period: PERIOD, exhausted, remaining: {} };
 }
 
 describe('the state of a mission, in words', () => {
   it('writes the normal state plainly and colours only the exception', () => {
     expect(missionMark(active(), 0)).toEqual({ label: 'running', tone: null, over: false });
-    expect(missionMark(active(['acme.read']), 0)).toMatchObject({
+    expect(missionMark(active(['set-1::acme.read']), 0)).toMatchObject({
       label: 'Limit reached',
       tone: 'bad',
     });
@@ -34,7 +36,7 @@ describe('the state of a mission, in words', () => {
   });
 
   it('says a request waits before it says anything else about a running mission', () => {
-    expect(missionMark(active(['acme.read']), 2)).toMatchObject({
+    expect(missionMark(active(['set-1::acme.read']), 2)).toMatchObject({
       label: 'Waiting for you',
       tone: 'warn',
     });

@@ -144,7 +144,7 @@ test('Railway: a workspace token, checked, named by its workspace', async ({ pag
   const guide = page.getByTestId('token-guide');
   await expect(guide).toContainText('a workspace token reaches that workspace only');
   await expect(guide).toContainText('Choose No workspace instead only for an account token');
-  await expect(guide).toContainText('A project token is not accepted');
+  await expect(guide).toContainText('project token is not accepted');
   await captureAll(page, 'connect-railway-token');
 
   const token = randomBytes(16).toString('hex');
