@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.12] - 2026-11-01
+
 ### Upgrade notes (from 2.0.0-alpha.11)
 
 Read these before starting the new image on a running instance:
@@ -2161,7 +2163,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.11...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.12...HEAD
+[2.0.0-alpha.12]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.11...v2.0.0-alpha.12
 [2.0.0-alpha.11]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.10...v2.0.0-alpha.11
 [2.0.0-alpha.10]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.9...v2.0.0-alpha.10
 [2.0.0-alpha.9]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.8...v2.0.0-alpha.9
