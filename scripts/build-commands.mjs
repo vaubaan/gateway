@@ -46,7 +46,7 @@ const COMMANDS = [
 ];
 
 /** Native addons, and imapflow, that the standalone output already carries; never bundled. */
-const EXTERNAL = ['better-sqlite3', 'ssh2', 'cpu-features', 'imapflow'];
+const EXTERNAL = ['better-sqlite3', 'argon2', 'ssh2', 'cpu-features', 'imapflow'];
 
 if (!existsSync(standaloneApp)) {
   console.error(
