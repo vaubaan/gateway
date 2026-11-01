@@ -5,7 +5,6 @@
  *
  *   GET  /auth/login?return_to=          the one provider, or the sign-in page to choose
  *   GET  /auth/login/<id>?return_to=     start a sign-in with provider <id>
- *   GET  /auth/callback                  finish a sign-in of the provider `idp`
  *   GET  /auth/callback/<id>             finish a sign-in of provider <id>
  *   POST /logout                         destroy the session (origin-checked)
  *   POST /api/auth/bootstrap             sign in with the bootstrap token (origin-checked)
@@ -146,7 +145,7 @@ export interface AuthHandlerDeps {
 export interface AuthHandlers {
   /** `providerId` from the path; absent on `/auth/login`. */
   loginStart(request: Request, providerId?: string): Promise<Response>;
-  /** `providerId` from the path; absent on `/auth/callback` (the provider `idp`). */
+  /** `providerId` from the path. */
   loginCallback(request: Request, providerId: string): Promise<Response>;
   logout(request: Request): Promise<Response>;
   bootstrapLogin(request: Request): Promise<Response>;
