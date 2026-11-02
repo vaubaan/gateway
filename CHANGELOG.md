@@ -9,7 +9,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
-## [2.0.0-alpha.14] - 2026-11-02
+## [2.0.0-alpha.15] - 2026-11-02
 
 ### Added
 
@@ -90,6 +90,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
    refreshed. Agents that sent `notificationLevel`, `startTime` / `endTime`
    to `list_events` or `query` to `search_events` are refused with the
    argument named, and use the new names.
+
+## [2.0.0-alpha.14] - 2026-11-02
+
+_Tagged on 2026-11-02 and never published: the release gate failed on browser tests whose GitHub
+permission count was written by hand (#184 fixed the tests). Nothing was pushed to GHCR and no
+GitHub release exists for this tag; its content is released as 2.0.0-alpha.15._
 
 ## [2.0.0-alpha.13] - 2026-11-02
 
@@ -2307,7 +2313,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.14...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.15...HEAD
+[2.0.0-alpha.15]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.14...v2.0.0-alpha.15
 [2.0.0-alpha.14]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.13...v2.0.0-alpha.14
 [2.0.0-alpha.13]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.12...v2.0.0-alpha.13
 [2.0.0-alpha.12]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.11...v2.0.0-alpha.12
