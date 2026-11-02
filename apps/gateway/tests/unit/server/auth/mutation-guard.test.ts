@@ -490,6 +490,28 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'no-such-device',
     ),
   ),
+  // Past the guard, an address of another host is refused before any request leaves (303).
+  'notifications.handlers.addAddress': form('user', 303, (rig, headers) =>
+    rig.root.notifications.handlers.addAddress(
+      post('/api/notifications/addresses', headers, {
+        kind: 'slack',
+        label: 'Team',
+        url: 'https://hooks.example.com/services/x',
+      }),
+    ),
+  ),
+  'notifications.handlers.removeAddress': form('user', 303, (rig, headers) =>
+    rig.root.notifications.handlers.removeAddress(
+      post('/api/notifications/addresses/no-such-address/remove', headers, {}),
+      'no-such-address',
+    ),
+  ),
+  // The rig delivers no mail: the person is sent back with `mail-unavailable`.
+  'notifications.handlers.setMail': form('user', 303, (rig, headers) =>
+    rig.root.notifications.handlers.setMail(
+      post('/api/notifications/mail', headers, { mail: 'on' }),
+    ),
+  ),
   'oauth.handlers.revokeDelegation': form('user', 303, (rig, headers) =>
     rig.root.oauth.handlers.revokeDelegation(
       post(`/settings/connected-apps/${rig.delegationId}/revoke`, headers, {}),

@@ -804,6 +804,9 @@ export const ACT_WORDS = {
   'backup-failed': 'failed to make a backup',
   'device-added': 'received notifications on a device',
   'device-removed': 'removed a device from their notifications',
+  'address-added': 'received notifications at a messaging address',
+  'address-removed': 'removed a messaging address from their notifications',
+  'mail-notifications-changed': 'switched their mail notifications',
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'mission-resources-added': 'added resources to a mission',
@@ -822,7 +825,7 @@ export const ACT_WORDS = {
 export const SETTINGS_PAGES = {
   notifications: {
     title: 'Notifications',
-    lede: 'The devices that tell you when something waits for you or stopped without you. A notification names a mission or an account; you answer in the interface.',
+    lede: 'The devices, messaging addresses and mail that tell you when something waits for you or stopped without you. A notification names a mission or an account; you answer in the interface.',
   },
   connectedApps: {
     title: 'Connected apps',
@@ -866,6 +869,9 @@ export const SETTINGS_PAGES = {
  * Notifications on a device (spec §4.2 bis): the Settings page and the line the home shows
  * the first time something waits. A yes is never given from a notification.
  */
+const MAIL_UNAVAILABLE = 'This instance does not deliver mail.';
+const NO_MAIL_ADDRESS = 'Your account has no mail address this gateway can write to.';
+
 export const NOTIFICATION_WORDS = {
   subscribe: 'Receive notifications on this device',
   notNow: 'Not now',
@@ -894,9 +900,9 @@ export const NOTIFICATION_WORDS = {
   addedOn: 'Added',
   lastDelivered: 'Last delivered',
   never: 'never',
-  /** On Administration → People: how many devices a person has, never which. */
-  receivesOn: (devices: number) =>
-    `notified on ${count(devices, { one: 'device', many: 'devices' })}`,
+  /** On Administration → People: how many channels a person has, never which. */
+  receivesOn: (channels: number) =>
+    `notified on ${count(channels, { one: 'channel', many: 'channels' })}`,
   renamed: 'Device renamed.',
   removed: 'Device removed: it receives no notification any more.',
   listHint:
@@ -908,6 +914,27 @@ export const NOTIFICATION_WORDS = {
     'too-many-devices': 'You have 20 devices already: remove one you no longer use first.',
     'not-found': 'You have no such device.',
   },
+  /** The problems of the addresses and the mail switch, one sentence each, never the URL. */
+  channelProblems: {
+    'invalid-kind': 'Choose the service the address belongs to.',
+    'invalid-label': 'Name the address in one line of 60 characters or fewer.',
+    'invalid-address':
+      'The address must be an https URL without a user name or password (for ntfy, a topic URL).',
+    'wrong-host': 'This is not an incoming webhook address of the service you chose.',
+    'private-destination':
+      'This address leads inside a private network: the gateway posts only to the public internet.',
+    'already-added': 'You have added this address already.',
+    'too-many-addresses': 'You have 10 addresses already: remove one you no longer use first.',
+    'test-failed': 'The test message was not received.',
+    'address-not-found': 'You have no such address.',
+    'mail-unavailable': MAIL_UNAVAILABLE,
+    'no-mail-address': NO_MAIL_ADDRESS,
+  },
+  /** After `test-failed`: what the service answered, never the address. */
+  testFailedWith: (status: number | null) =>
+    status === null
+      ? 'The test message was not received: the service did not answer. The address was not kept.'
+      : `The test message was not received: the service answered ${status}. The address was not kept.`,
   failed: 'This device could not be subscribed. Try again.',
   device: 'Device',
   /** The first name of a device, from its browser and system ("Chrome on Android"). */
@@ -915,6 +942,50 @@ export const NOTIFICATION_WORDS = {
     system ? `${browser ?? 'Browser'} on ${system}` : (browser ?? 'Browser'),
   /** The description of the installed interface (the web app manifest). */
   installed: 'Missions, accounts and what waits for you on this Vaubaan Gateway.',
+  addresses: {
+    title: 'Messaging addresses',
+    lede: 'The incoming address of a channel of your company’s messaging service. The gateway posts a test message before keeping it, and never shows it again.',
+    empty: 'No messaging address receives your notifications.',
+    emptyHint:
+      'In Slack, Teams, Discord or ntfy, make an incoming webhook for a channel only you or your team read, then paste its address here.',
+    address: 'Address',
+    kind: 'Service',
+    label: 'Name',
+    url: 'Incoming webhook address',
+    urlHint:
+      'Treat it as a password: whoever holds it can post to that channel. It is kept sealed and never shown again.',
+    add: 'Add the address',
+    kinds: {
+      slack: 'Slack',
+      teams: 'Microsoft Teams (Workflows)',
+      discord: 'Discord',
+      ntfy: 'ntfy',
+      generic: 'Other (JSON)',
+    },
+    lastFailure: 'Last failure',
+    failedWith: (status: number | null) => (status === null ? 'no answer' : `answered ${status}`),
+    removeTitle: (label: string) => `Remove ${label}?`,
+    removeConsequence:
+      'It receives no notification any more, and its address is forgotten: paste it again to add it back.',
+    added: 'Address added: the test message was received.',
+    removed: 'Address removed: it receives no notification any more.',
+    listHint:
+      'A message names the mission or the account and, for a request, the tool; never an argument. The messaging service reads what it carries.',
+    genericHint:
+      'Other: any https address that accepts a JSON body { title, body, url, kind, instance }.',
+  },
+  mail: {
+    title: 'Mail',
+    unavailable: MAIL_UNAVAILABLE,
+    noAddress: NO_MAIL_ADDRESS,
+    to: (address: string) => `Mail to ${address}`,
+    on: 'On: each notification is also a mail.',
+    off: 'Off.',
+    turnOn: 'Turn mail on',
+    turnOff: 'Turn mail off',
+    switchedOn: 'Mail notifications are on.',
+    switchedOff: 'Mail notifications are off.',
+  },
 } as const;
 
 export const SETTINGS_ACTIONS = {

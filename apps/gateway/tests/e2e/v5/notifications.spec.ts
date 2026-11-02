@@ -198,3 +198,57 @@ test('a browser without push is told so in one sentence', async ({ browser }) =>
   await expect(page.getByTestId('push-subscribe')).toHaveCount(0);
   await context.close();
 });
+
+test('Settings adds a messaging address after its test message, removes it, and switches mail', async ({
+  context,
+  page,
+}) => {
+  // The instance's stand-in for the services answers 200, or the status a path ends with.
+  await routeToInstance(context);
+  const webhook = 'https://hooks.slack.com/services/T0E2E/B0E2E/e2efixturetoken';
+  await signIn(page, '/settings/notifications');
+  const addresses = page.getByTestId('messaging-addresses');
+  await expect(addresses.getByTestId('no-address')).toBeVisible();
+
+  // ── A test message the service refuses: nothing kept, the status said ─
+  const addForm = page.getByTestId('address-add-form');
+  await addForm.getByLabel('Service').selectOption('slack');
+  await addForm.getByLabel('Name').fill('Team channel');
+  await addForm.getByLabel('Incoming webhook address').fill(`${webhook}/status-404`);
+  await addForm.getByRole('button', { name: 'Add the address' }).click();
+  await expect(page.getByTestId('channel-problem')).toContainText('the service answered 404');
+  await expect(page.getByTestId('no-address')).toBeVisible();
+  // Neither the page nor its URL repeats the address.
+  expect(page.url()).not.toContain('e2efixturetoken');
+
+  // ── Taken: kept, listed by name and service, never shown back ─────────
+  await addForm.getByLabel('Service').selectOption('slack');
+  await addForm.getByLabel('Name').fill('Team channel');
+  await addForm.getByLabel('Incoming webhook address').fill(webhook);
+  await addForm.getByRole('button', { name: 'Add the address' }).click();
+  await expect(page.getByTestId('address-added')).toBeVisible();
+  const list = page.getByTestId('addresses');
+  await expect(list).toContainText('Team channel');
+  await expect(list).toContainText('Slack');
+  expect(await page.content()).not.toContain('e2efixturetoken');
+  await snap(page, 'notifications-settings-address');
+
+  // ── Removed, asked first ────────────────────────────────────────────────
+  await page.getByRole('button', { name: 'Remove Team channel' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Remove Team channel?');
+  await dialog.getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByTestId('address-removed')).toBeVisible();
+  await expect(page.getByTestId('no-address')).toBeVisible();
+
+  // ── Mail: the person's own address, switched on, then off ──────────────
+  const mail = page.getByTestId('mail-channel');
+  await expect(mail).toContainText(`Mail to ${E2E_USER.email}`);
+  await expect(mail.getByTestId('mail-state')).toHaveText('Off.');
+  await mail.getByRole('button', { name: 'Turn mail on' }).click();
+  await expect(page.getByTestId('mail-on')).toBeVisible();
+  await expect(mail.getByTestId('mail-state')).toContainText('On');
+  await mail.getByRole('button', { name: 'Turn mail off' }).click();
+  await expect(page.getByTestId('mail-off')).toBeVisible();
+  await expect(mail.getByTestId('mail-state')).toHaveText('Off.');
+});

@@ -3,7 +3,8 @@
  * a request opened in the creator's inbox reaches their device after the refusal is
  * answered and without being awaited by it; a request found open notifies nobody again; a
  * `410` drops the device; an act that orphans a mission tells its creator; whatever the
- * arguments of the refused call, no payload carries one of them. The device routes refuse a
+ * arguments of the refused call, no payload carries one of them — on any channel: the push
+ * payload, the body posted to each kind of messaging address, the mail. The device routes refuse a
  * bearer and a foreign origin, and the audit names the device, never its subscription.
  */
 import fc from 'fast-check';
@@ -23,7 +24,12 @@ import {
 } from '../missions/support';
 import {
   browserSubscription,
+  fakeMessagingFetch,
+  fakeNoticeMailer,
   fakePushTransport,
+  fakeResolver,
+  WEBHOOKS,
+  type FakeMessagingFetch,
   type FakePushTransport,
 } from '../../support/notifications/testing';
 
@@ -32,15 +38,46 @@ const READ = 'github.read-code';
 const MERGE = 'github.merge-protected';
 const DEVICES = 'https://gateway.example.com/api/notifications/devices';
 
+/**
+ * Every string of a posted body with the services' escaping undone (Slack's `&lt;`,
+ * Discord's backslashes): an escaped argument must not slip past the check.
+ */
+function plainStrings(value: unknown): string[] {
+  if (typeof value === 'string') {
+    return [
+      value
+        .replace(/\\([\\*_~`|>[\]()#<@-])/g, '$1')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&'),
+    ];
+  }
+  if (Array.isArray(value)) return value.flatMap(plainStrings);
+  if (typeof value === 'object' && value !== null)
+    return Object.values(value).flatMap(plainStrings);
+  return [];
+}
+
 describe('notifications', () => {
   let root: GatewayRoot;
   let seeded: SeededInstance;
   let push: FakePushTransport;
+  let web: FakeMessagingFetch;
+  let mailer: ReturnType<typeof fakeNoticeMailer>;
   let mission: BudgetMission;
 
   beforeEach(async () => {
     push = fakePushTransport();
-    root = await buildTestRoot({ deps: { notificationTransport: push } });
+    web = fakeMessagingFetch();
+    mailer = fakeNoticeMailer();
+    root = await buildTestRoot({
+      deps: {
+        notificationTransport: push,
+        notificationFetch: web.fetch,
+        notificationResolve: fakeResolver(),
+        notificationMailer: mailer,
+      },
+    });
     seeded = await seedInstance(root);
     const record = await root.store.missions.create({
       name: 'Release train',
@@ -164,8 +201,17 @@ describe('notifications', () => {
     expect(payloads().map((p) => p.url)).toEqual([`/missions/${bobs.id}`]);
   });
 
-  it('never carries an argument of the call, whatever the arguments', async () => {
+  it('never carries an argument of the call, on any channel, whatever the arguments', async () => {
     await addDevice(seeded.ada);
+    for (const kind of ['slack', 'teams', 'discord', 'ntfy', 'generic'] as const) {
+      const added = await root.notifications.addresses.add(seeded.ada, {
+        kind,
+        label: kind,
+        url: WEBHOOKS[kind],
+      });
+      expect(added.ok).toBe(true);
+    }
+    await root.notifications.mail.set(seeded.ada, true);
     // Every value is marked: the mark appears in no word of a notification.
     const marked = fc.string({ minLength: 1, maxLength: 40 }).map((s) => `ARG-${s}`);
     await fc.assert(
@@ -176,12 +222,21 @@ describe('notifications', () => {
         }),
         async (args) => {
           push.sent.length = 0;
+          web.sent.length = 0;
+          mailer.sent.length = 0;
           await refusedMerge(args);
           await root.notifications.idle();
           expect(push.sent).toHaveLength(1);
-          for (const { payload } of push.sent) {
-            expect(payload).not.toContain('ARG-');
-            for (const value of Object.values(args)) expect(payload).not.toContain(value);
+          expect(web.sent).toHaveLength(5);
+          expect(mailer.sent).toHaveLength(1);
+          const outgoing = [
+            ...push.sent.map((s) => s.payload),
+            ...web.sent.flatMap((s) => plainStrings(s.json)),
+            ...mailer.sent.map((m) => `${m.subject}\n${m.text}`),
+          ];
+          for (const text of outgoing) {
+            expect(text).not.toContain('ARG-');
+            for (const value of Object.values(args)) expect(text).not.toContain(value);
           }
         },
       ),

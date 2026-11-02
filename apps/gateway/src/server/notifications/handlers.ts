@@ -37,19 +37,43 @@ export const LABEL_FIELD = 'label';
 export const DONE_PARAM = 'done';
 export const PROBLEM_PARAM = 'problem';
 
+/** Every `?done=` a form of Settings → Notifications sends back. */
+export const DONE_ACTS = [
+  'renamed',
+  'removed',
+  'address-added',
+  'address-removed',
+  'mail-on',
+  'mail-off',
+] as const;
+export type DoneAct = (typeof DONE_ACTS)[number];
+
+export function isDoneAct(value: string | null): value is DoneAct {
+  return value !== null && (DONE_ACTS as readonly string[]).includes(value);
+}
+
+/** 303 back to the page with `?done=<act>`. */
+export function done(act: DoneAct): Response {
+  return backToPage(`${DONE_PARAM}=${act}`);
+}
+
 const REFUSALS: RefusalWording = {
   field: 'message',
   noSession: 'Sign in first.',
-  forbidden: 'Devices belong to a person who signed in.',
+  forbidden: 'Notification channels belong to a person who signed in.',
 };
 
 /** A subscription is a URL and two keys: a few hundred bytes; anything far larger is refused. */
 export const MAX_ADD_BODY_BYTES = 8 * 1024;
 
-export interface DeviceHandlerDeps {
+/** What every handler of the notifications needs to know who is asking. */
+export interface SignInDeps {
   readonly publicUrl: URL;
   /** Read at each request: the root builds the authentication after this module. */
   readonly authenticator: () => Authenticator;
+}
+
+export interface DeviceHandlerDeps extends SignInDeps {
   readonly service: DeviceService;
 }
 
@@ -59,7 +83,7 @@ export interface DeviceHandlers {
   remove(request: Request, deviceId: string): Promise<Response>;
 }
 
-type SignedIn =
+export type SignedIn =
   | { readonly ok: true; readonly user: UserRecord }
   | { readonly ok: false; readonly response: Response };
 
@@ -72,7 +96,8 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-function backToPage(query: string): Response {
+/** 303 back to Settings → Notifications with `?<query>` (codes, never a message). */
+export function backToPage(query: string): Response {
   return new Response(null, {
     status: 303,
     headers: { Location: `${NOTIFICATIONS_PAGE}?${query}`, ...NO_STORE },
@@ -85,8 +110,21 @@ function bearerRefusal(request: Request): Response | null {
   return json(403, {
     error: 'wrong-credential-kind',
     expected,
-    message: 'A device is added and removed by its person, in a human session.',
+    message: 'A notification channel is added and removed by its person, in a human session.',
   });
+}
+
+/** Steps 1 and 2: the person behind the request, or the answer that refuses it. */
+export async function signedIn(request: Request, deps: SignInDeps): Promise<SignedIn> {
+  const refused = bearerRefusal(request);
+  if (refused) return { ok: false, response: refused };
+  const guard = await guardMutation(
+    request,
+    { publicUrl: deps.publicUrl, authenticator: deps.authenticator() },
+    'user',
+  );
+  if (!guard.ok) return { ok: false, response: refusalResponse(guard, REFUSALS) };
+  return { ok: true, user: guard.principal.user };
 }
 
 async function formField(request: Request, name: string): Promise<string | null> {
@@ -99,22 +137,9 @@ async function formField(request: Request, name: string): Promise<string | null>
 }
 
 export function createDeviceHandlers(deps: DeviceHandlerDeps): DeviceHandlers {
-  /** Steps 1 and 2: the person behind the request, or the answer that refuses it. */
-  async function signedIn(request: Request): Promise<SignedIn> {
-    const refused = bearerRefusal(request);
-    if (refused) return { ok: false, response: refused };
-    const guard = await guardMutation(
-      request,
-      { publicUrl: deps.publicUrl, authenticator: deps.authenticator() },
-      'user',
-    );
-    if (!guard.ok) return { ok: false, response: refusalResponse(guard, REFUSALS) };
-    return { ok: true, user: guard.principal.user };
-  }
-
   return {
     async add(request) {
-      const session = await signedIn(request);
+      const session = await signedIn(request, deps);
       if (!session.ok) return session.response;
       const text = await readBoundedText(request, MAX_ADD_BODY_BYTES);
       if (text === null) return json(413, { error: 'too-large' });
@@ -137,21 +162,21 @@ export function createDeviceHandlers(deps: DeviceHandlerDeps): DeviceHandlers {
     },
 
     async rename(request, deviceId) {
-      const session = await signedIn(request);
+      const session = await signedIn(request, deps);
       if (!session.ok) return session.response;
       const result = await deps.service.rename(
         session.user,
         deviceId,
         await formField(request, LABEL_FIELD),
       );
-      return backToPage(result.ok ? `${DONE_PARAM}=renamed` : `${PROBLEM_PARAM}=${result.problem}`);
+      return result.ok ? done('renamed') : backToPage(`${PROBLEM_PARAM}=${result.problem}`);
     },
 
     async remove(request, deviceId) {
-      const session = await signedIn(request);
+      const session = await signedIn(request, deps);
       if (!session.ok) return session.response;
       const result = await deps.service.remove(session.user, deviceId);
-      return backToPage(result.ok ? `${DONE_PARAM}=removed` : `${PROBLEM_PARAM}=${result.problem}`);
+      return result.ok ? done('removed') : backToPage(`${PROBLEM_PARAM}=${result.problem}`);
     },
   };
 }

@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the thirty migrations 0001 to 0030 in the default directory', () => {
+  it('ships the thirty-two migrations 0001 to 0032 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -139,6 +139,8 @@ describe('migration runner', () => {
       [28, 'argon2id_tokens_revoked'],
       [29, 'resource_sets'],
       [30, 'notification_devices'],
+      [31, 'notification_addresses'],
+      [32, 'notification_mail'],
     ]);
   });
 });

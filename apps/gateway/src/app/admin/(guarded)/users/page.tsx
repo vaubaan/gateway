@@ -68,14 +68,14 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
   const { root, principal } = await requireOperator();
   const params = await searchParams;
   const notice = await takeNotice(root, principal.sessionId, params);
-  const [users, invitations, providers, administrators, drift, devices] = await Promise.all([
+  const [users, invitations, providers, administrators, drift, channels] = await Promise.all([
     root.users.service.list(),
     root.users.invitations.list(),
     root.auth.providers.views(),
     root.auth.administrators.current(),
     root.auth.administrators.configurationDrift(),
-    // How many devices each person receives notifications on, never which (spec §4.2 bis).
-    root.notifications.devices.countsByUser(),
+    // How many channels each person receives notifications on, never which (spec §4.2 bis).
+    root.notifications.channelCounts(),
   ]);
   const emailOfUser = new Map(users.map((view) => [view.user.id, view.user.email]));
   const groupProviders = providers.filter((p) => p.kind !== 'local');
@@ -127,9 +127,9 @@ export default async function PeoplePage({ searchParams }: { searchParams: PageS
                 {words && <span className={styles.quiet}> {words}</span>}
               </span>
               {view.user.displayName && <span className={styles.sub}>{view.user.email}</span>}
-              {(devices.get(view.user.id) ?? 0) > 0 && (
-                <span className={styles.sub} data-testid="person-devices">
-                  {NOTIFICATION_WORDS.receivesOn(devices.get(view.user.id) ?? 0)}
+              {(channels.get(view.user.id) ?? 0) > 0 && (
+                <span className={styles.sub} data-testid="person-channels">
+                  {NOTIFICATION_WORDS.receivesOn(channels.get(view.user.id) ?? 0)}
                 </span>
               )}
             </span>

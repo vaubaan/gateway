@@ -1,6 +1,6 @@
 ---
 title: Notifications on your phone
-description: Install the interface from the browser and receive a notification when a mission asks you something or an account stops serving.
+description: Install the interface from the browser, or add a messaging channel or your mail, and be told when a mission asks you something or an account stops serving.
 ---
 
 The instance can tell you, on your phone's lock screen or your computer, that something waits for you: an approval, a claim for more budget, a permission an agent asks for. It also tells you when an account of yours needs reconnecting or a mission of yours stopped without you. There is no app to download: the interface itself is installed from the browser.
@@ -15,6 +15,12 @@ On an **iPhone or iPad**, add the page to the Home Screen first (Share, then **A
 
 The home page also offers it the first time something waits for you; **Not now** is remembered by that browser.
 
+## In a messaging channel or by mail
+
+Under **Messaging addresses**, paste the incoming webhook of a channel you read: **Slack**, **Microsoft Teams** (a Workflows webhook), **Discord**, **ntfy**, or **Other** — any https address that accepts a JSON body `{ title, body, url, kind, instance }`. The instance posts a test message first and keeps the address only if the service took it. The address is kept sealed and never shown again: treat it as a password. You can add up to ten, and remove any.
+
+Under **Mail**, turn mail on to receive each notification at your account's address too, when the instance delivers mail.
+
 ## What a notification says
 
 - The instance's name, what happened, the mission's or account's name and, for a request, the tool.
@@ -23,4 +29,4 @@ The home page also offers it the first time something waits for you; **Not now**
 
 ## What the operator needs
 
-Nothing to configure. The instance must be served over https, and reach the push services of the browser vendors (Google, Mozilla, Apple, Microsoft) on port 443. An instance that cannot reach them works the same; only the alerts are missing. The home and the inbox always show what waits.
+Nothing to configure for devices and messaging addresses. The instance must be served over https, and reach the push services of the browser vendors (Google, Mozilla, Apple, Microsoft) and the messaging services people use on port 443; an address inside a private network is refused. Mail needs the instance's mail relay. An instance that cannot reach them works the same; only the alerts are missing. The home and the inbox always show what waits.

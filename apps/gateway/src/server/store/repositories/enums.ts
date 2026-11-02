@@ -136,6 +136,9 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'backup-failed': true,
   'device-added': true,
   'device-removed': true,
+  'address-added': true,
+  'address-removed': true,
+  'mail-notifications-changed': true,
   'config-changed': true,
 });
 
