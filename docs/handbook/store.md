@@ -42,6 +42,9 @@ repositories. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2, §3, §6,
   request is decided only by `decideClaim` / `decideApproval`, a counter lowered only in a claim.
 - Derived, never stored: a mission's `orphaned` ([authority](authority.md); type, read and `0007`
   triggers refuse it) and a resource's inherited `default_env` (applied at every read).
+- Sealed columns are listed in `SEALED_COLUMNS` (`sealed-blobs.ts`), the push subscriptions of
+  `notification_devices` (0030) included: a new sealed column joins that list, or `reseal`, the
+  boot probe and the restore check never see it.
 - Audit tables are immutable by trigger; `purgeOlderThan` is the only path that opens the delete
   window. The audit writer throws: audit is not best-effort.
 

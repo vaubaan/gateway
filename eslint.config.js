@@ -121,5 +121,15 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
     },
   },
+  // The service worker of notifications (`apps/gateway/public/sw.js`) is served as is: plain
+  // JavaScript in a worker scope, outside every tsconfig, linted without type information.
+  {
+    files: ['apps/gateway/public/**/*.js'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: { ...globals.serviceworker },
+    },
+  },
   prettier,
 );

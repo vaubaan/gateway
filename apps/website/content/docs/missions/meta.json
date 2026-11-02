@@ -1,1 +1,4 @@
-{ "title": "Missions and agents", "pages": ["mcp-clients", "management-door", "git-remote"] }
+{
+  "title": "Missions and agents",
+  "pages": ["mcp-clients", "management-door", "git-remote", "notifications"]
+}

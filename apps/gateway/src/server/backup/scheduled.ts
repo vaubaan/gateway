@@ -32,6 +32,7 @@ import { CopyWriteError, writeStoreCopy } from './copy';
 import { S3Client, S3Error } from './s3/client';
 import { amzDate } from './s3/sigv4';
 import type { BackupRecord, BackupStage, BackupStatus, BackupStatusStore } from './status';
+import type { NotificationEvents } from '../notifications/events';
 
 /** Up to this size the object goes in one PUT; above, a multipart upload. */
 export const SINGLE_PUT_MAX_BYTES = 64 * 1024 * 1024;
@@ -133,6 +134,8 @@ export interface BackupServiceDeps {
   readonly timers?: BackupTimers;
   /** Tests: the sizes that decide a multipart upload. */
   readonly upload?: { readonly singlePutMaxBytes: number; readonly partBytes: number };
+  /** Told of a failed run, after it is recorded (spec §4.2 bis); default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'backupFailed'>;
 }
 
 class BackupFailure extends Error {
@@ -385,6 +388,7 @@ export class BackupService {
       const after = { stage: failure.stage, message: failure.message, uploaded: false };
       this.deps.logger.error('scheduled backup failed: nothing was uploaded', after);
       await this.audit('backup-failed', after);
+      this.deps.notifications?.backupFailed();
       return status;
     } finally {
       for (const file of [plain, encrypted]) {

@@ -31,7 +31,9 @@ ADR [atomic-budget-accounting](../decisions/atomic-budget-accounting.md).
 - Claims and approval requests are created by the budget's
   `SessionService.recordCall` inside the refusal transaction
   ([budget-and-sessions](budget-and-sessions.md)); permission requests only by
-  `vaubaan__request_permission`. This module starts from the row.
+  `vaubaan__request_permission`. This module starts from the row. Both tell the
+  creator's devices after commit, only for a request they created, never one
+  found open ([notifications](notifications.md)).
 - `RequestService.own()` is the only access check, for every read and
   decision: anyone but the creator gets `forbidden`, existing or not.
 - `approvalView()` is the only caller of `RequestsRepo.getArguments`, after

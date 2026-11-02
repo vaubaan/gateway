@@ -128,6 +128,7 @@ import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } fro
 import { reissueMemberToken } from './member-token';
 import { issueTokenTo, type IssuedSecret } from './token-issuer';
 import { trustRaiseOffers, type TrustRaiseOffer } from './trust-raise';
+import type { NotificationEvents } from '../notifications/events';
 
 const COPY_SUFFIX = ' (copy)';
 
@@ -171,6 +172,8 @@ export interface MissionServiceDeps {
    * macro-action of one set before a raise is offered. Default 10.
    */
   readonly trustRaiseAfterApprovals?: number;
+  /** Told of a revocation, after it is written; the creator hears of one by someone else. */
+  readonly notifications?: Pick<NotificationEvents, 'missionRevoked'>;
 }
 
 /** The default of `trust_raise.after_approvals`. */
@@ -1186,6 +1189,7 @@ export class MissionService {
       closed_as: closer.as,
       delegated_client_id: options.delegation?.clientId ?? null,
     });
+    this.deps.notifications?.missionRevoked(mission.id, user.id);
     return { ok: true, mission: revoked, tokensRevoked };
   }
 

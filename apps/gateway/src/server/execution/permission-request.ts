@@ -6,6 +6,7 @@ import type { InstanceConfig } from '../config';
 import type { Clock } from '../store/clock';
 import { requestUrl } from '../requests/url';
 import { effectiveState } from '../requests/state';
+import { NO_NOTIFICATIONS, type NotificationEvents } from '../notifications/events';
 
 export const permissionRequestTool: ListToolsResult['tools'][number] = {
   name: 'vaubaan__request_permission',
@@ -34,6 +35,7 @@ export async function requestPermission(
   ctx: MissionContext,
   raw: unknown,
   clock: Clock,
+  notifications: Pick<NotificationEvents, 'requestOpened'> = NO_NOTIFICATIONS,
 ): Promise<CallToolResult> {
   const parsed = schema.safeParse(raw);
   if (!parsed.success)
@@ -72,6 +74,15 @@ export async function requestPermission(
       },
       delegated_client_id: null,
     });
+  // After the request and its audit entry are written; the creator hears of a new one only.
+  if (asked.created) {
+    notifications.requestOpened({
+      requestId: request.id,
+      missionId: ctx.mission.id,
+      request: 'permission',
+      tool: request.tool,
+    });
+  }
   return result({
     request_id: request.id,
     state: effectiveState(request, clock.now()),

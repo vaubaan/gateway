@@ -11,6 +11,7 @@ import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { BackupService, type BackupTimers } from './scheduled';
 import { backupStatusStore } from './status';
+import type { NotificationEvents } from '../notifications/events';
 
 export {
   BACKUP_OBJECT_NAME,
@@ -37,6 +38,7 @@ export interface BackupModuleDeps {
   readonly fetch?: typeof fetch;
   readonly now?: () => Date;
   readonly timers?: BackupTimers;
+  readonly notifications?: Pick<NotificationEvents, 'backupFailed'>;
 }
 
 /** The scheduled backup over the instance's store; `start()` arms it when configured. */
@@ -52,5 +54,6 @@ export function createBackupModule(deps: BackupModuleDeps): BackupService {
     fetch: deps.fetch,
     now: deps.now,
     timers: deps.timers,
+    notifications: deps.notifications,
   });
 }

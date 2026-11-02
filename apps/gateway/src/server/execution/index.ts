@@ -1,4 +1,5 @@
 import { fingerprintArguments } from '@vaubaan/gateway-core';
+import type { NotificationEvents } from '../notifications/events';
 import { permissionRequestTool, requestPermission } from './permission-request';
 /**
  * Execution MCP door (spec §4.1, §2.4, §6, §7.5): the pipeline
@@ -66,6 +67,8 @@ export interface ExecutionModuleDeps {
   readonly delegations?: DelegatedTokenResolver;
   /** Receives each `plugin.execute` outcome (community telemetry); default: nothing. */
   readonly telemetry?: TelemetrySink;
+  /** Told of a permission request the agent opened (spec §4.2 bis); default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'requestOpened'>;
 }
 
 export interface ExecutionHandlers {
@@ -153,7 +156,8 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   const door = new ExecutionDoor({
     permissionTool: permissionRequestTool,
     permissionAudit: deps.store.auditWriter,
-    requestPermission: (ctx, args) => requestPermission(deps.store, deps.config, ctx, args, clock),
+    requestPermission: (ctx, args) =>
+      requestPermission(deps.store, deps.config, ctx, args, clock, deps.notifications),
     config: deps.config,
     store: deps.store,
     registry: deps.registry,

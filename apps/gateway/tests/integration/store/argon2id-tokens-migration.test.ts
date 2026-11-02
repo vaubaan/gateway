@@ -19,10 +19,10 @@ it('revokes the active argon2id tokens, and only them', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'argon2id-migration-'));
   const before = mkdtempSync(join(tmpdir(), 'argon2id-before-'));
   for (const file of readdirSync(DEFAULT_MIGRATIONS_DIR)) {
-    // 0029 (resource sets) is independent of 0028 and is what the repositories write
-    // through: the store before 0028 is given it so the test can write with them.
+    // 0029 (resource sets) and later are independent of 0028 and are what the repositories
+    // write through (or prepare their statements on): the store before 0028 is given them.
     const version = Number(file.slice(0, 4));
-    if (/^\d{4}_/.test(file) && (version < MIGRATION || version === RESOURCE_SETS)) {
+    if (/^\d{4}_/.test(file) && (version < MIGRATION || version >= RESOURCE_SETS)) {
       copyFileSync(join(DEFAULT_MIGRATIONS_DIR, file), join(before, file));
     }
   }

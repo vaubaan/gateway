@@ -2,11 +2,14 @@
  * Every sealed column of the store, in one place, and the re-seal that moves them to the
  * current master key (ADR master-key-rotation-reseals-every-blob).
  *
- * Three columns hold AEAD blobs, each bound to its row by associated data:
+ * Each column holds AEAD blobs, bound to its row by associated data:
  *
- *   connections.credential_blob   the connection id
- *   instance_config.secret_blob   `instance_config:<key>`
- *   requests.args_blob            `request:<id>`
+ *   connections.credential_blob              the connection id
+ *   instance_config.secret_blob              `instance_config:<key>` (the VAPID key pair too)
+ *   requests.args_blob                       `request:<id>`
+ *   local_secrets.blob                       `local-secret:<id>`
+ *   user_second_factor_secrets.blob          `user-second-factor:<id>`
+ *   notification_devices.subscription_blob   `notification-device:<id>`
  *
  * A blob opens only with the key of its `key_version`. After a rotation the instance
  * keeps the previous key until every blob is sealed again under the current one;
@@ -27,6 +30,7 @@ import type { RepoContext } from './context.ts';
 import { requestAd } from './requests.ts';
 import { localSecretAd } from './local-accounts.ts';
 import { secondFactorSecretAd } from './second-factors.ts';
+import { deviceSubscriptionAd } from './notification-devices.ts';
 
 export const SEALED_COLUMNS = [
   {
@@ -58,6 +62,12 @@ export const SEALED_COLUMNS = [
     idColumn: 'id',
     blobColumn: 'blob',
     associatedData: secondFactorSecretAd,
+  },
+  {
+    table: 'notification_devices',
+    idColumn: 'id',
+    blobColumn: 'subscription_blob',
+    associatedData: deviceSubscriptionAd,
   },
 ] as const;
 

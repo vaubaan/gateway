@@ -269,6 +269,12 @@ export type AdminAct =
   /** A scheduled backup failed and nothing was uploaded: `after` carries the stage and the
    *  reason (never a URL or a secret). Object: `instance-config` / `backup`. */
   | 'backup-failed'
+  /** A person subscribed one of their devices to notifications (spec §4.2 bis). Object: the
+   *  user; `after` carries the device id, its label and whether it took over a subscription
+   *  stored before. Never the endpoint or the keys of the subscription. */
+  | 'device-added'
+  /** A person removed one of their devices: `before` carries its id and label. */
+  | 'device-removed'
   | 'config-changed';
 
 export type AdminObjectType =

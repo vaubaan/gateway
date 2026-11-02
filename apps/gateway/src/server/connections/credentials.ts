@@ -68,6 +68,7 @@ import {
 } from './oauth2';
 import { OAuth2ClientMissing, type OAuth2Clients } from './oauth2-clients';
 import { ATTESTED_CALL_BUDGET_MS, OAuthBrokerError, type OAuthBrokers } from './oauth-broker';
+import type { NotificationEvents } from '../notifications/events';
 
 /** An access token that expires within this delay is refreshed before use. */
 export const REFRESH_SKEW_MS = 60_000;
@@ -95,6 +96,8 @@ export interface CredentialBrokerDeps {
   readonly fetch: typeof fetch;
   readonly clock: Clock;
   readonly logger: Logger;
+  /** Told when a rejected credential turns a connection `expired` (spec §4.2 bis). */
+  readonly notifications?: Pick<NotificationEvents, 'accountNeedsReconnecting'>;
 }
 
 /**
@@ -408,6 +411,8 @@ export class CredentialBroker {
         marked_expired: expired,
         failure: providerFailureReason(err),
       });
+      // Only the call that made the transition tells the owners: once, after the write.
+      if (expired) this.deps.notifications?.accountNeedsReconnecting(connectionId);
       throw new UpstreamAuthError(
         `${plugin.displayName} rejected the credential of this connection and it could not be refreshed: ${errorMessage(err)}`,
         status,

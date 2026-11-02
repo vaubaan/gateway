@@ -19,6 +19,7 @@
  * is the budget.
  */
 import { RecoveryBanner } from './RecoveryBanner';
+import { ServiceWorkerRegistration } from '@/components/notifications/ServiceWorkerRegistration';
 import Link from 'next/link';
 
 import { isOperatorPrincipal } from '@/components/auth/principal';
@@ -145,6 +146,7 @@ export async function AppShell({
               <RecoveryBanner />
               {children}
             </main>
+            <ServiceWorkerRegistration />
             <BuildFooter />
           </div>
         </div>

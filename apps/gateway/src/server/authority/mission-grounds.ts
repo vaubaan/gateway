@@ -68,6 +68,7 @@ import type { ConnectionsRepo } from '../store/repositories/connections';
 import type { MissionsRepo } from '../store/repositories/missions';
 import { toIso, type Clock } from '../store/clock';
 import type { MissionRecord } from '../store/types';
+import type { NotificationEvents } from '../notifications/events';
 import type { AuthorityQuestion, AuthorityRecheck, SupposedShare } from './authority-service';
 
 export const ORPHAN_CAUSES = [
@@ -148,6 +149,8 @@ export interface MissionGroundsDeps {
   readonly audit: Pick<AuditRepo, 'appendUnlessLatest'>;
   readonly clock: Clock;
   readonly logger: Logger;
+  /** Told of each mission this act orphaned, once its entry is written (spec §4.2 bis). */
+  readonly notifications?: Pick<NotificationEvents, 'missionOrphaned'>;
 }
 
 /** The two acts that alternate on a mission; the idempotent write compares within them. */
@@ -326,7 +329,10 @@ export class MissionGrounds {
             // recorded since the watch was taken is theirs, in the trail and in the notice.
             if (!(await this.record(mission, act, GROUNDS_ACTS, actorId, entry, since))) continue;
             if (now.grounded) restored.push(mission);
-            else orphaned.push({ ...mission, status: 'orphaned' });
+            else {
+              orphaned.push({ ...mission, status: 'orphaned' });
+              this.deps.notifications?.missionOrphaned(mission.id, actorId);
+            }
             continue;
           }
           // Orphaned before and after: nothing serves either way, the parts are not followed.

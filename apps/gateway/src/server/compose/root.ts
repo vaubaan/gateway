@@ -46,6 +46,12 @@ import type { OpsStatsDeps } from '../http/ops-stats';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { createMissionsModule, type MissionsModule } from '../missions';
+import {
+  createNotificationsModule,
+  type NotificationsModule,
+  type PushTransport,
+} from '../notifications';
+import { toolTitleOf } from '../providers/tool-titles';
 import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } from '../oauth-as';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
@@ -115,6 +121,8 @@ export interface GatewayRoot {
   readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
   readonly users: UsersModule;
+  /** A person's devices, the events that notify them, the web push that reaches them. */
+  readonly notifications: NotificationsModule;
   /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools. */
   readonly management: ManagementDoorModule;
   /** The ceilings of the configuration over the counts of the store (spec §4.3 bis). */
@@ -158,6 +166,10 @@ export interface RootDeps {
   readonly backupFetch?: typeof fetch;
   /** The scheduled backup's timers (tests drive them by hand). */
   readonly backupTimers?: BackupTimers;
+  /** Outbound HTTP to the browsers' push services (tests inject a fake; default: `fetch`). */
+  readonly notificationFetch?: typeof fetch;
+  /** Replaces the web push transport (tests assert on what would leave). */
+  readonly notificationTransport?: PushTransport;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
   /** Where the key file and the store sit (tests inject mounts of their own). */
@@ -405,6 +417,7 @@ type RootModules = Pick<
   | 'backup'
   | 'oauth'
   | 'users'
+  | 'notifications'
   | 'management'
   | 'limits'
   | 'opsStats'
@@ -424,9 +437,37 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   const sessions: SessionStore = deps.sessions ?? store.webSessions;
   // One count per item, read by the ceilings, the settings, `/ops/stats` and telemetry.
   const limits = createInstanceLimits(config.limits, store);
+  // Before every module whose acts notify: each is handed `notifications.events`. What it
+  // reads from `auth` and `instance`, built below, is read when a notification is sent.
+  const notifications = createNotificationsModule({
+    publicUrl: config.publicUrl,
+    store,
+    lookups: {
+      missions: store.missions,
+      connections: store.connections,
+      users: store.users,
+      groups: store.groups,
+      administrators: async () =>
+        (await auth.administrators.withAWayIn({ anyWay: true })).map((user) => user.id),
+      instanceName: async () => (await instance.name.identity()).label,
+      toolTitle: (tool) => toolTitleOf(registry, tool),
+    },
+    authenticator: () => auth.authenticator,
+    logger,
+    fetch: deps.notificationFetch,
+    transport: deps.notificationTransport,
+    clock: deps.clock,
+  });
+  // Stopped after the timers, before the store: a delivery under way writes its outcome.
+  opened.push(() => notifications.stop());
   // Authority reads the store only, so it is built first: the sign-in settles what a
   // changed membership did, and every module below checks, derives or watches through it.
-  const authority = createAuthorityModule({ store, registry, logger });
+  const authority = createAuthorityModule({
+    store,
+    registry,
+    logger,
+    notifications: notifications.events,
+  });
   // One sliding-window limiter, two faces: the budget's per-risk windows
   // (`mission:<id>:risk:<id>`, probed and recorded inside the decision) and the
   // surface limits (`mcp:mission:<id>`, `connect:<user>`, `auth:*`), on disjoint keys.
@@ -459,6 +500,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     oidc: deps.oidc,
     rateLimiter,
     ceilings: limits,
+    notifications: notifications.events,
     // The user themselves is the human behind a sign-in that changes their groups.
     membershipsChanging: async (user) => {
       const watch = await authority.membership.watch(user.id);
@@ -477,6 +519,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     grounds: authority.grounds,
     logger,
     ceilings: limits,
+    notifications: notifications.events,
   });
 
   const cache = deps.cache ?? new MemoryCacheClient();
@@ -491,6 +534,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     fetch: deps.providerFetch,
     ceilings: limits,
+    notifications: notifications.events,
   });
   const shares = createSharesModule({
     config,
@@ -539,6 +583,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     requestUrl: requests.requestUrl,
     requestExpirySeconds: config.requests.expirySeconds,
     approvalValiditySeconds: config.approvals.expirySeconds,
+    notifications: notifications.events,
   });
   // Off unless the operator turned it on and a real collector is configured.
   const telemetry = await createTelemetryModule({
@@ -581,6 +626,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     fetch: deps.backupFetch,
     timers: deps.backupTimers,
+    notifications: notifications.events,
   });
   opened.push(() => backup.stop());
   await backup.start();
@@ -639,6 +685,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     build,
     delegations: deps.delegatedTokens ?? oauth.verifier,
     telemetry: telemetry.sink,
+    notifications: notifications.events,
   });
   // A discovery the door scheduled after a creating call finishes before the store closes.
   opened.push(() => connections.discoveryAfterCall.stop());
@@ -684,6 +731,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     backup,
     oauth,
     users,
+    notifications,
     management,
     limits,
     opsStats: {

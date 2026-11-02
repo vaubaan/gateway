@@ -38,6 +38,7 @@ import {
 } from '@/components/ui';
 import { LocalDate } from '@/components/LocalDate';
 import { TrustRaiseOffer } from '@/components/missions/TrustRaiseOffer';
+import { PushOffer } from '@/components/notifications/PushOffer';
 import {
   ACTIONS,
   ago,
@@ -312,7 +313,19 @@ function TrustRaisesSection({ view }: { view: View }) {
   );
 }
 
-export function NowView({ view, viewerId }: { view: View; viewerId: string }) {
+export function NowView({
+  view,
+  viewerId,
+  push = null,
+}: {
+  view: View;
+  viewerId: string;
+  /**
+   * When something waits: the instance's public push key and the digests of the person's
+   * live devices, for the proposal to be notified on this one.
+   */
+  push?: { readonly key: string | null; readonly knownDigests: readonly string[] } | null;
+}) {
   const now = new Date(view.at);
   const somethingWaits = view.waiting.length > 0;
   return (
@@ -326,6 +339,7 @@ export function NowView({ view, viewerId }: { view: View; viewerId: string }) {
       {somethingWaits ? (
         <>
           <WaitingSection view={view} viewerId={viewerId} now={now} />
+          {push?.key && <PushOffer publicKey={push.key} knownDigests={push.knownDigests} />}
           <TrustRaisesSection view={view} />
           <RunningSection view={view} now={now} />
           <Section testId="now-totals">

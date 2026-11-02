@@ -40,6 +40,7 @@ last_reviewed: 2026-10-27
 - Every executor call is HTTP on `/mcp` with a mission token through `agent.ts`, so it crosses the real door and budget. Only the `seed-day` control endpoint records below the door (a day of calls no mock answers).
 - No spec creates state in a real cloud: there is no dedicated test org and no sweeper; the state dies with the `:memory:` store.
 - `E2E_V5_SCREENSHOT_DIR=<folder>` keeps a screenshot per step.
+- Push in a browser is stubbed at the service worker container (`notifications.spec.ts`): a headless browser on a closed network reaches no push service, so the spec checks the pages and the subscription they post; Chromium is granted the `notifications` permission. The service worker itself is a unit test.
 - The container smoke takes `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT`, `SMOKE_EXPECT_ARCH`; the release sets all three, per architecture, on the built image and again on the pushed digest.
 - Manual acceptance: an expected refusal is a limit answered or waited out, a permission a daily-work mission should not hold unattended, an `approval-required` on a gated permission, or a resource left out on purpose. Unexpected (blocks the cutover): a refusal on an action the day needs, an unplaceable call, `risk-not-accepted` on `uncategorized-write`, `connection-unavailable` or `mission-inactive` on a healthy connection, a v4 tool v5 does not list. Each is fixed in the macro-actions, catalog or code, and the day is run again.
 
@@ -52,4 +53,5 @@ last_reviewed: 2026-10-27
 - ⚠️ **Several resource sets on one account in a browser** ([risk model](../spec/gateway-risk-model.md) §4.7) — the form's set operations are unit-tested (`form-state.test.ts`) and the runtime in integration (`execution/resource-sets.test.ts`); no spec adds a second set and issues.
 - ⚠️ **Giving access to a team, approving a registered app, deactivating a person in a browser** (spec [§7.3](../spec/vaubaan-gateway.md#73-give-access)) — integration only.
 - ⚠️ **OAuth and SSH connect flows in a browser** (spec [§7.2](../spec/vaubaan-gateway.md#72-connect-an-account)) — only the pasted-token flow runs in a browser; the others are integration-only, and real accounts are checked by hand.
+- ⚠️ **A notification on a real phone** (spec [§4.2 bis](../spec/vaubaan-gateway.md#42-bis-notifications)) — installing the interface on an iPhone or Android, the lock-screen notification and its click: by hand only, behind TLS.
 - ⚠️ **The application path inside the image** (spec [§4.3](../spec/vaubaan-gateway.md#43-instance-configuration)) — covered only by the manual run.

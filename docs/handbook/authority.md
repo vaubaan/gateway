@@ -57,7 +57,8 @@ when the answer changes. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2
   and settles in a `finally` after its write. A forgotten watch loses an audit entry, never the
   state. Classify the act in `tests/integration/audit/admin-mutations.test.ts`.
 - Two settlers may see the same change: `settle` writes through `appendUnlessLatest`, so the
-  first one is named and the other writes nothing.
+  first one is named and the other writes nothing. Only the settler whose entry was written
+  tells the creator's devices that the mission is orphaned ([notifications](notifications.md)).
 - Known gap (`// single-process only` above `watch()`): an act undone by another before it settles
   leaves a `mission-restored` with no `mission-orphaned` before it. A change no service watched (a
   database repair) has no entry.

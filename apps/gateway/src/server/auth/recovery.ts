@@ -30,6 +30,7 @@ import {
   type AdministratorsService,
 } from './administrators';
 import type { LinkMailer } from './local-handlers';
+import type { NotificationEvents } from '../notifications/events';
 
 export const CHALLENGE_COOKIE = `${HOST_PREFIX}vbn_recover`;
 export const RECOVERY_COOKIE = `${HOST_PREFIX}vbn_recovery`;
@@ -72,6 +73,8 @@ export interface RecoveryDeps {
   readonly clock: Clock;
   readonly logger: Logger;
   readonly mailer?: LinkMailer;
+  /** Told once the naming is recorded: every administrator's devices hear of it. */
+  readonly notifications?: Pick<NotificationEvents, 'masterKeyRecovered'>;
 }
 
 export class RecoveryService {
@@ -191,6 +194,7 @@ export class RecoveryService {
       kind: String(named.kind ?? request.kind),
     });
     await this.tellAdministrators(record);
+    this.deps.notifications?.masterKeyRecovered();
     return { named, clearCookie: clearCookie(RECOVERY_COOKIE) };
   }
 

@@ -53,6 +53,13 @@ async function seeded(): Promise<{ store: Store; encryptor: SwitchableEncryptor;
   if (!account) throw new Error('no account');
   await store.localAccounts.writeSecret(account.id, 'password', '$argon2id$stand-in');
   ids.push(account.id);
+  // A device's push subscription (migration 0030): its endpoint is a capability URL.
+  const { device } = await store.notificationDevices.add({
+    userId: user.id,
+    label: 'Phone',
+    subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh: 'BA', auth: 'AA' },
+  });
+  ids.push(user.id, device.id);
   return { store, encryptor, ids };
 }
 
@@ -67,6 +74,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       'connections@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
+      'notification_devices@1=1',
     ]);
   });
 
@@ -116,11 +124,20 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'notification_devices',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 1,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
+      'notification_devices@1=1',
     ]);
   });
 
@@ -128,11 +145,12 @@ describe('sealed blobs: the master-key re-seal', () => {
     const { store, encryptor, ids } = await seeded();
     encryptor.inner = await v2WithPrevious();
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1, 0]);
+    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1, 0, 1]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@2=2',
       'instance_config@2=1',
       'local_secrets@2=1',
+      'notification_devices@2=1',
     ]);
 
     // Without the previous key, everything still opens: it was sealed again.
@@ -143,6 +161,8 @@ describe('sealed blobs: the master-key re-seal', () => {
     expect(await store.localAccounts.readSecret(ids[2] ?? '', 'password')).toBe(
       '$argon2id$stand-in',
     );
+    const [subscription] = await store.notificationDevices.subscriptionsOf(ids[3] ?? '');
+    expect(subscription?.subscription.endpoint).toBe('https://fcm.googleapis.com/fcm/send/abc');
   });
 
   it('is idempotent: a second run finds the blobs current', async () => {
@@ -191,6 +211,14 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'notification_devices',
+        current: 1,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
   });
 
@@ -204,11 +232,13 @@ describe('sealed blobs: the master-key re-seal', () => {
       [0, 0],
       [0, 1],
       [0, 0],
+      [0, 1],
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
+      'notification_devices@1=1',
     ]);
   });
 
@@ -220,7 +250,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       previousKeys: new Map([[1, new Uint8Array(randomBytes(32))]]),
     });
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1, 0]);
+    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1, 0, 1]);
   });
 
   it('a row the gateway rewrites during the run is left as the gateway wrote it', async () => {

@@ -46,6 +46,7 @@ const EXPECTED_TABLES = [
   'mission_tokens',
   'mission_trust_marks',
   'missions',
+  'notification_devices',
   'oauth_access_tokens',
   'oauth_client_redirect_uris',
   'oauth_clients',
@@ -105,7 +106,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(29);
+    expect(store.schemaVersion).toBe(30);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -144,10 +145,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(29);
+    expect(second.schemaVersion).toBe(30);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(29);
+    ).toBe(30);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {
