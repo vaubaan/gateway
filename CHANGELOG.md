@@ -48,6 +48,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   (macro-action `own`); no new risk. It answers `{ ok: true, projectId }`:
   Vercel's project object (environment values, deploy-hook URLs) is dropped.
 
+### Security
+
+- **Vercel: the `vercel__update_project_settings` answer no longer carries
+  environment variable values nor deploy-hook URLs** (`@vaubaan/plugin-vercel`
+  4.1.0). Vercel answers the PATCH with the whole project; it now goes through
+  the project redaction of `get_project` (allow-list: the settings fields,
+  `framework`, `buildCommand`, `rootDirectory`, `nodeVersion`…, come back as
+  they are). The risk `vercel.project-settings-write` is `data: metadata`.
+
 ## [2.0.0-alpha.13] - 2026-11-02
 
 ### Upgrade notes

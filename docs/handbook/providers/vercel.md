@@ -56,7 +56,8 @@ Resource: the project; the environment is a slice segment, not a resource label.
   (`encodeURIComponent` leaves `..`;
   [ADR](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 - Metadata reads are redacted by allow-list: env-var values without `decrypt=true`, and project
-  answers (they carry `env[]` values and deploy-hook URLs, which trigger deploys). Non-JSON text is
+  answers (they carry `env[]` values and deploy-hook URLs, which trigger deploys), the PATCH answer
+  of `update_project_settings` included (`PROJECT_TOOLS`). Non-JSON text is
   replaced whole.
 
 ## Traps
