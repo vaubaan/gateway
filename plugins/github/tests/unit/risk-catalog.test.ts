@@ -198,6 +198,14 @@ const OTHER_WRITES: readonly Row[] = [
     ['create-pr', FALLBACK],
   ],
   ['add_issue_comment', 'on an issue', { ...repo, issue_number: 1, body: 'b' }, ['comment-write']],
+  ['add_labels', 'one label', { ...repo, issue_number: 1, labels: ['e2e'] }, ['label-write']],
+  // A label is not a comment : neither risk covers the other's slice.
+  [
+    'add_labels',
+    'a name the slice grammar cannot carry',
+    { ...repo, issue_number: 1, labels: ['good first issue', 'e2e'] },
+    ['label-write'],
+  ],
   // Publishing and deleting are two risks with two patterns : neither requires the other.
   ['create_release', 'release and tag', { ...repo, tag_name: 'v1.0.0' }, ['create-release']],
   ['delete_release', 'one', { ...repo, release_id: 1 }, ['delete-release']],

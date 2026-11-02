@@ -13,6 +13,7 @@
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
+import { MAX_LABEL_LENGTH, MAX_LABELS_PER_CALL } from './call.ts';
 import { TOOL } from './identity.ts';
 
 const repoArgs = {
@@ -154,7 +155,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo', 'branch', 'message', 'files'],
     },
   },
-  // Write - pull requests
+  // Write - pull requests, comments, labels
   {
     name: TOOL.createPullRequest,
     description: 'Open a pull request from head to base.',
@@ -182,6 +183,26 @@ export const githubTools: readonly McpToolDeclaration[] = [
         body: { type: 'string' },
       },
       required: ['owner', 'repo', 'issue_number', 'body'],
+    },
+  },
+  {
+    name: TOOL.addLabels,
+    description:
+      "Add labels to an issue or pull request (a pull request's number is an issue number). A label the repository does not have is created. Returns the names of every label the issue now carries.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        issue_number: { type: 'number' },
+        labels: {
+          type: 'array',
+          items: { type: 'string', minLength: 1, maxLength: MAX_LABEL_LENGTH },
+          minItems: 1,
+          maxItems: MAX_LABELS_PER_CALL,
+          description: `1 to ${MAX_LABELS_PER_CALL} label names, each at most ${MAX_LABEL_LENGTH} characters; blanks around a name are trimmed.`,
+        },
+      },
+      required: ['owner', 'repo', 'issue_number', 'labels'],
     },
   },
   // Read - ci (workflows + their runs)

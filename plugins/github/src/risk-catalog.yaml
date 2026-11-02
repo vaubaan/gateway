@@ -3,7 +3,7 @@
 # Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
 # Handbook : docs/handbook/providers/github.md.
 #
-# 16 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
+# 17 fine-grained risks, 2 deprecated ones + 1 fallback (`github.uncategorized-write`). Each
 # `matches` is one slice pattern or a list ; the risk is touched when at
 # least one pattern intersects the concrete slice the classifier emitted.
 # Bracket lists mix exact names and globs (`[main,master,release-*]`).
@@ -26,9 +26,11 @@
 # pattern or preset changed.
 # catalog_version 11 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 12 (2026-11-02) : `github.label-write` (tool `add_labels`), in
+# the macro-action `propose`.
 provider: github
-catalog_version: 11
-catalog_date: 2026-10-31
+catalog_version: 12
+catalog_date: 2026-11-02
 
 risks:
   # ---------------------------------------------------------------
@@ -191,7 +193,7 @@ risks:
       persistence: session
 
   # ---------------------------------------------------------------
-  # WRITES — pull requests & comments
+  # WRITES — pull requests, comments & labels
   # ---------------------------------------------------------------
   - id: github.create-pr
     label: 'Open a pull request'
@@ -217,6 +219,23 @@ risks:
     matches:
       - 'github.repo[**].issue[**].comment[**].W'
       - 'github.repo[**].pull_request[**].comment[**].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: github.label-write
+    label: 'Add labels to an issue or PR'
+    reason: >-
+      Subscribers see the label ; a workflow listening for `labeled` runs
+      (a CI suite gated by a label). A label the repository does not have
+      is created. One slice per label, so a mission can be narrowed to
+      named labels.
+    matches:
+      - 'github.repo[**].issue[**].label[**].W'
     vector:
       reversibility: reversible
       blast: single
@@ -449,7 +468,7 @@ macro_actions:
         rate_limit: { max: 30, window_seconds: 60 }
   - id: propose
     label: 'Propose'
-    description: 'Work branches, push, pull requests and comments.'
+    description: 'Work branches, push, pull requests, comments and labels.'
     entries:
       - risk_id: github.feature-branch-write
         quota: 500
@@ -464,6 +483,9 @@ macro_actions:
         quota: 100
         rate_limit: { max: 10, window_seconds: 60 }
       - risk_id: github.comment-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: github.label-write
         quota: 200
         rate_limit: { max: 10, window_seconds: 60 }
       - risk_id: github.branch-delete

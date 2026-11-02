@@ -202,6 +202,43 @@ export function workflowRef(value: unknown): string | number | null {
   return /[/\\]/.test(value) || UNPRINTABLE.test(value) ? null : value;
 }
 
+/** Longest label name accepted (characters), GitHub's own limit. */
+export const MAX_LABEL_LENGTH = 50;
+/** Most labels one `add_labels` call puts. */
+export const MAX_LABELS_PER_CALL = 20;
+
+/** What `add_labels` requires of its `labels` argument, as worded in refusals. */
+export const LABELS_SHAPE = `'labels' to be 1 to ${MAX_LABELS_PER_CALL} label names, each 1 to ${MAX_LABEL_LENGTH} printable characters once trimmed`;
+
+/**
+ * A label name, trimmed : 1 to `MAX_LABEL_LENGTH` characters, no control
+ * character or line separator. The trimmed name is the one the slice names
+ * and the one GitHub receives. A label is sent in the request body, never in
+ * a path, so `/`, `.` and `%` are ordinary characters of a name.
+ */
+export function labelName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const name = value.trim();
+  if (name.length === 0 || name.length > MAX_LABEL_LENGTH) return null;
+  return UNPRINTABLE.test(name) ? null : name;
+}
+
+/**
+ * The `labels` argument of `add_labels`, or `null` unless it is a list of 1
+ * to `MAX_LABELS_PER_CALL` label names. An empty list is refused : GitHub
+ * reads `labels: []` as "remove every label".
+ */
+function readLabels(value: unknown): string[] | null {
+  if (!isList(value) || value.length === 0 || value.length > MAX_LABELS_PER_CALL) return null;
+  const out: string[] = [];
+  for (const item of value) {
+    const name = labelName(item);
+    if (name === null) return null;
+    out.push(name);
+  }
+  return out;
+}
+
 /** Default of `max_bytes` on `get_job_logs` : 64 KiB, enough for the end of a failed step. */
 export const JOB_LOG_DEFAULT_BYTES = 64 * 1024;
 /** Most bytes of a job log one call returns (1 MiB). */
@@ -280,6 +317,12 @@ export type RepoCall = { readonly target: RepoTarget } & (
   | {
       readonly tool: typeof TOOL.getIssue | typeof TOOL.addIssueComment;
       readonly issueNumber: number;
+    }
+  | {
+      readonly tool: typeof TOOL.addLabels;
+      readonly issueNumber: number;
+      /** Trimmed names : one slice each, and the body GitHub receives. */
+      readonly labels: readonly string[];
     }
   | {
       readonly tool: typeof TOOL.listWorkflowRuns;
@@ -428,6 +471,13 @@ export function readGithubCall(
       const issueNumber = positiveInteger(args.issue_number);
       if (issueNumber === null) return denied(tool, "requires 'issue_number'");
       return { tool, target, issueNumber };
+    }
+    case TOOL.addLabels: {
+      const issueNumber = positiveInteger(args.issue_number);
+      if (issueNumber === null) return denied(tool, "requires 'issue_number'");
+      const labels = readLabels(args.labels);
+      if (labels === null) return denied(tool, `requires ${LABELS_SHAPE}`);
+      return { tool, target, issueNumber, labels };
     }
     case TOOL.listWorkflowRuns: {
       const workflowId = optional(args.workflow_id, workflowRef);

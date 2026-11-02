@@ -81,6 +81,10 @@ const samples = {
   ],
   github__create_pull_request: [{ args: { ...repo, title: 't', head: feature, base: 'main' } }],
   github__add_issue_comment: [{ args: { ...repo, issue_number: 1, body: 'b' } }],
+  github__add_labels: [
+    { args: { ...repo, issue_number: 1, labels: ['e2e'] } },
+    { args: { ...repo, issue_number: 1, labels: ['bug', 'needs review'] } },
+  ],
   github__list_workflows: [{ args: { ...repo } }],
   github__list_workflow_runs: [{ args: { ...repo } }, { args: { ...repo, workflow_id: 'ci.yml' } }],
   github__list_workflow_jobs: [
@@ -149,12 +153,12 @@ describe('github plugin — structural kit', () => {
     assertNoWildcard(githubPlugin);
   });
 
-  test('27 tools declared, all prefixed ; the names are those of identity.ts', () => {
+  test('28 tools declared, all prefixed ; the names are those of identity.ts', () => {
     expect(TOOL_PREFIX).toBe(toolPrefixFor(PROVIDER_ID));
     expect(githubPlugin.id).toBe(PROVIDER_ID);
-    expect(githubPlugin.tools).toHaveLength(27);
+    expect(githubPlugin.tools).toHaveLength(28);
     for (const t of githubPlugin.tools) expect(t.name.startsWith(TOOL_PREFIX)).toBe(true);
-    // The 27 MCP tools, then the git remote's two.
+    // The 28 MCP tools, then the git remote's two.
     expect([
       ...githubPlugin.tools.map((t) => t.name),
       githubPlugin.gitRemote.fetchTool,
@@ -170,9 +174,9 @@ describe('github plugin — structural kit', () => {
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin, samples, { resources });
-    // The 25 MCP tools and the git remote's two.
-    expect(report.toolsChecked).toBe(29);
-    // The 16 named risks, in catalog order ; the fallback is not among them.
+    // The 28 MCP tools and the git remote's two.
+    expect(report.toolsChecked).toBe(30);
+    // The 17 named risks, in catalog order ; the fallback is not among them.
     expect(report.risksTouched).toEqual([
       'github.read-code',
       'github.read-meta',
@@ -183,6 +187,7 @@ describe('github plugin — structural kit', () => {
       'github.bulk-file-write',
       'github.create-pr',
       'github.comment-write',
+      'github.label-write',
       'github.create-release',
       'github.delete-release',
       'github.branch-protection-write',
@@ -207,7 +212,7 @@ describe('github plugin — structural kit', () => {
       resources,
       context: (fetch, missionResources) => executeCtx(fetch, missionResources),
     });
-    expect(report.toolsChecked).toBe(27);
+    expect(report.toolsChecked).toBe(28);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'branch',
@@ -224,7 +229,7 @@ describe('github plugin — structural kit', () => {
 
   test('the fallback is the one catalog risk the samples leave out', () => {
     const named = githubCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
-    expect(named).toHaveLength(18);
+    expect(named).toHaveLength(19);
     expect(githubCatalog.catalog.risks.filter((r) => r.fallback).map((r) => r.id)).toEqual([
       'github.uncategorized-write',
     ]);
@@ -256,14 +261,14 @@ describe('github catalog — macro-actions at a trust level', () => {
       policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('read, propose, ship, administer ; catalog version 11', () => {
+  test('read, propose, ship, administer ; catalog version 12', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
       'read',
       'propose',
       'ship',
       'administer',
     ]);
-    expect(githubCatalog.catalog.catalog_version).toBe(11);
+    expect(githubCatalog.catalog.catalog_version).toBe(12);
   });
 
   test('read at Careful : code and metadata run freely, the global search asks first', () => {
@@ -282,6 +287,7 @@ describe('github catalog — macro-actions at a trust level', () => {
       'github.bulk-file-write',
       'github.create-pr',
       'github.comment-write',
+      'github.label-write',
     ]) {
       expect(propose[id], id).toBe('auto');
     }

@@ -48,7 +48,13 @@ export const GITHUB_TOKEN_PERMISSIONS: readonly TokenPermission[] = [
   {
     name: 'Issues',
     access: 'read-write',
-    tools: [TOOL.listIssues, TOOL.getIssue, TOOL.searchIssues, TOOL.addIssueComment],
+    tools: [
+      TOOL.listIssues,
+      TOOL.getIssue,
+      TOOL.searchIssues,
+      TOOL.addIssueComment,
+      TOOL.addLabels,
+    ],
   },
   {
     name: 'Actions',

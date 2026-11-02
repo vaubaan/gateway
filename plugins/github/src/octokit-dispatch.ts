@@ -177,6 +177,14 @@ export async function dispatchGithubTool(
       });
       return data;
     }
+    case TOOL.addLabels: {
+      const { data } = await octokit.rest.issues.addLabels({
+        ...repo,
+        issue_number: call.issueNumber,
+        labels: [...call.labels],
+      });
+      return labelNames(data);
+    }
     case TOOL.mergePullRequest: {
       await assertPullRequestTargetsDeclaredBase(octokit, call);
       const { data } = await octokit.rest.pulls.merge({
@@ -365,6 +373,17 @@ function jobListing(data: unknown): unknown {
       })),
     })),
   };
+}
+
+/**
+ * GitHub's answer to `add_labels` — every label the issue now carries, with
+ * colours, ids and URLs — cut down to their names.
+ */
+function labelNames(data: unknown): unknown {
+  const names = recordsOf(data)
+    .map((label) => label.name)
+    .filter((name) => typeof name === 'string');
+  return { labels: names };
 }
 
 /** The objects of a list, or none when `value` is not a list. */

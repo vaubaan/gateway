@@ -390,6 +390,45 @@ describe('classifyGithub — PRs, comments, releases', () => {
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].issue[142].comment.W`]);
   });
 
+  test('add_labels → one issue[N].label[<name>].W per label, trimmed, deduplicated', () => {
+    const r = classifyGithub(
+      'github__add_labels',
+      { ...baseArgs, issue_number: 142, labels: [' e2e ', 'bug', 'e2e'] },
+      resources,
+    );
+    expect(expectSlices(r)).toEqual([
+      `github.repo[${repoRef}].issue[142].label[e2e].W`,
+      `github.repo[${repoRef}].issue[142].label[bug].W`,
+    ]);
+  });
+
+  test('add_labels : a name the slice grammar cannot carry is "any", never repaired', () => {
+    const r = classifyGithub(
+      'github__add_labels',
+      { ...baseArgs, issue_number: 3, labels: ['good first issue'] },
+      resources,
+    );
+    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].issue[3].label[*].W`]);
+  });
+
+  test.each([
+    ['no labels', undefined],
+    ['an empty list (GitHub would remove every label)', []],
+    ['a string, not a list', 'e2e'],
+    ['a blank name', ['e2e', '  ']],
+    ['a name over 50 characters', ['x'.repeat(51)]],
+    ['a multi-line name', ['a\nb']],
+    ['a name that is not a string', [7]],
+    ['21 names', Array.from({ length: 21 }, (_, i) => `l${i}`)],
+  ])('add_labels refuses %s', (_label, labels) => {
+    const r = classifyGithub(
+      'github__add_labels',
+      { ...baseArgs, issue_number: 1, labels },
+      resources,
+    );
+    expect(r).toHaveProperty('denied');
+  });
+
   test('create_release → release.W + tag[name].W', () => {
     const r = classifyGithub(
       'github__create_release',

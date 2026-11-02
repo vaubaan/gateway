@@ -53,6 +53,7 @@ type Kind =
   | 'branch'
   | 'optBranch'
   | 'segment'
+  | 'label'
   | 'number';
 
 /** The hostile values that are legitimate at a position of each kind ; every other one must be refused. */
@@ -69,6 +70,8 @@ const ACCEPTED: Readonly<Record<Kind, readonly string[]>> = {
   optBranch: ['a/b', '%2e%2e', '%2f', ''],
   // One path segment (a workflow file name) ; an empty value is "not given".
   segment: ['%2e%2e', '%2f', '..%2f', 'a?x=1#y', ''],
+  // A label name : sent in the body, never in a path ; blank, overlong or multi-line refused.
+  label: ['..', '.', 'a/../b', 'a/b', '%2e%2e', '%2f', '..%2f', 'a?x=1#y'],
   number: [],
 };
 
@@ -301,12 +304,21 @@ const POSITIONS: readonly Position[] = [
     sent: (v, requests) =>
       expect(lastJson(requests).target_commitish).toBe(v === '' ? undefined : v),
   },
+  {
+    name: 'add_labels.labels',
+    kind: 'label',
+    tool: 'github__add_labels',
+    args: (v) => ({ ...base, issue_number: 1, labels: [v] }),
+    paths: () => [`${R}/issues/1/labels`],
+    sent: (v, requests) => expect(lastJson(requests).labels).toEqual([v]),
+  },
   ...(
     [
       ['github__get_pull_request', 'pull_number', {}],
       ['github__merge_pull_request', 'pull_number', {}],
       ['github__get_issue', 'issue_number', {}],
       ['github__add_issue_comment', 'issue_number', { body: 'hi' }],
+      ['github__add_labels', 'issue_number', { labels: ['e2e'] }],
       ['github__delete_release', 'release_id', {}],
     ] as const
   ).map(([tool, key, extra]): Position => ({
