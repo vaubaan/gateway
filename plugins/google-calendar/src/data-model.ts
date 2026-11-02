@@ -6,7 +6,7 @@
  * Handbook : docs/handbook/providers/google-calendar.md.
  *
  * One plane, `calendar`. The resource is one calendar of the account (ADR
- * google-calendar-through-an-oauth-broker D4). `guests` is a synthetic marker
+ * google-calendar-through-an-oauth-broker). `guests` is a synthetic marker
  * the classifier emits when a call invites people: its identifier is the
  * zone of the people (`internal`, `external`), decided from the addresses
  * against the calendar's `internal_domains` — the way Gmail zones recipients.

@@ -1,217 +1,279 @@
 /**
- * MCP tools of the `google-calendar` provider — a rewrap of Google's official
- * Calendar MCP server (`https://calendarmcp.googleapis.com/mcp/v1`).
+ * MCP tools of the `google-calendar` provider — the plugin's own, each
+ * implemented on Google's Calendar REST API v3 (`execute.ts`).
  *
- * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4 ;
- *            docs/decisions/rewrap-official-mcps.md.
- * Handbook : docs/handbook/providers/google-calendar.md, Procedures.
+ * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
+ * Handbook : docs/handbook/providers/google-calendar.md.
  *
- * `upstream-tools.json` is Google's nine tools, modelled from Google's
- * published reference on 2026-10-27 (its `source` says how): the endpoint
- * answers 401 without a token, so no `tools/list` was captured yet.
- *
- * The gateway's declaration of a tool is Google's, with these changes:
- *   - `list_calendars` takes nothing: the gateway answers it from the
- *     mission's calendars (Google's lists the whole account);
- *   - `calendarId` names a calendar of the mission (its ref or its id) and is
- *     rewritten to the id by the executor;
- *   - the deprecated arguments and the paging of `list_calendars` are not
- *     declared (`WITHHELD_ARGUMENTS`), so never sent;
- *   - a note appended to Google's description where the gateway differs.
- *
- * The module refuses to load when the upstream file lists a tool that is not
- * modelled (`LOCATOR`, `ANSWERED_BY_THE_GATEWAY`) — a new Google tool is
- * neither listed nor callable until it is — or gives an offered tool an
- * argument whose name looks like it locates something (`…Id`, `…Url`,
- * `…Email(s)`, `attendees`) that the model does not know.
+ * Every tool but `list_calendars` and `suggest_time` takes `calendarId`, a
+ * calendar of the mission (its ref or its id), the primary one when omitted.
+ * Arguments are Google's REST names where they map one to one (`timeMin`,
+ * `q`, `maxResults`, `sendUpdates`…), flattened where Google nests (an
+ * event's start and end are `startTime` / `endTime` with `allDay`). `call.ts`
+ * reads every call against these schemas: an undeclared argument is refused,
+ * types, enums and integer bounds are checked.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 
-import {
-  ANSWERED_BY_THE_GATEWAY,
-  CALENDAR_ARGUMENT,
-  CALENDAR_NOTE,
-  DESCRIPTION_NOTES,
-  LOCATOR,
-  PROVIDER_ID,
-  TOOL,
-  TOOL_PREFIX,
-  UPSTREAM_TOOL,
-  WITHHELD_ARGUMENTS,
-} from './identity.ts';
-import upstream from './upstream-tools.json' with { type: 'json' };
+import { RESPONSE_STATUSES, SEND_UPDATES, TOOL } from './identity.ts';
 
-/** One tool as `tools/list` declares it, reduced to what the gateway reads. */
-export interface UpstreamTool {
-  readonly name: string;
-  readonly description: string;
-  readonly inputSchema: {
-    readonly type: 'object';
-    readonly properties: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-    readonly required?: readonly string[];
-  };
-}
+/** The most events one page of `list_events` / `search_events` returns (Google allows 2500). */
+export const MAX_EVENTS_PER_PAGE = 250;
+/** The most people `suggest_time` asks about (freeBusy's `calendarExpansionMax` is 50, the account takes one). */
+export const MAX_FREE_BUSY_PEOPLE = 49;
 
-/** Where the upstream list comes from; `capturedAt` is `null` while it is modelled from the reference. */
-export interface UpstreamToolList {
-  readonly source: string;
-  readonly capturedAt: string | null;
-  readonly tools: readonly UpstreamTool[];
-}
-
-function isUpstreamTool(x: unknown): x is UpstreamTool {
-  if (typeof x !== 'object' || x === null) return false;
-  const t = x as Record<string, unknown>;
-  const schema = t.inputSchema as Record<string, unknown> | null | undefined;
-  return (
-    typeof t.name === 'string' &&
-    typeof t.description === 'string' &&
-    typeof schema === 'object' &&
-    schema !== null &&
-    schema.type === 'object' &&
-    typeof schema.properties === 'object' &&
-    schema.properties !== null &&
-    Object.values(schema.properties).every((p) => typeof p === 'object' && p !== null) &&
-    (schema.required === undefined ||
-      (Array.isArray(schema.required) && schema.required.every((r) => typeof r === 'string')))
-  );
-}
-
-/** The upstream file, checked. */
-export function readUpstreamToolList(raw: unknown): UpstreamToolList {
-  const file = raw as Record<string, unknown> | null;
-  if (
-    typeof file !== 'object' ||
-    file === null ||
-    typeof file.source !== 'string' ||
-    !(file.captured_at === null || typeof file.captured_at === 'string') ||
-    !Array.isArray(file.tools) ||
-    !file.tools.every(isUpstreamTool)
-  ) {
-    throw new Error(`${PROVIDER_ID}: upstream-tools.json is not a list of MCP tool declarations`);
-  }
-  return { source: file.source, capturedAt: file.captured_at, tools: file.tools };
-}
-
-/** A name that may locate something: an id, a URL, an address, people. */
-const LOOKS_LOCATING = /(Id|Ids|Url|Urls|Email|Emails)$|attendee/i;
-
-/**
- * The arguments whose name looks locating that the classifier reads itself
- * (`call.ts`), or that point at nothing of the mission: the color of an
- * event, a Meet link, an attachment link to remove.
- */
-export const MODELLED_LOCATING_ARGUMENTS: ReadonlySet<string> = new Set([
-  'calendarId',
-  'eventId',
-  'attendees',
-  'addedAttendees',
-  'removedAttendeeEmails',
-  'attendeeEmails',
-  'colorId',
-  'googleMeetUrl',
-  'addGoogleMeetUrl',
-  'removedAttachmentFileUrls',
-]);
-
-/** Whether the gateway offers an argument of an upstream tool: not withheld. */
-export function isOfferedArgument(upstreamName: string, name: string): boolean {
-  if (ANSWERED_BY_THE_GATEWAY.has(upstreamName)) return false;
-  return WITHHELD_ARGUMENTS[upstreamName]?.[name] === undefined;
-}
-
-/** The offered arguments of a tool that look locating and that the model does not know. */
-export function unmodelledLocators(tool: UpstreamTool): string[] {
-  return Object.keys(tool.inputSchema.properties).filter(
-    (name) =>
-      isOfferedArgument(tool.name, name) &&
-      LOOKS_LOCATING.test(name) &&
-      !MODELLED_LOCATING_ARGUMENTS.has(name),
-  );
-}
-
-const CALENDAR_PROPERTY = {
-  type: 'string',
-  description:
-    'A calendar of this mission: its ref (alice~acme.com) or its id (alice@acme.com). Omitted: the primary calendar.',
+const CALENDAR = {
+  calendarId: {
+    type: 'string',
+    description:
+      'A calendar of this mission: its ref (alice~acme.com, the calendar id with @ written ~) or its id (alice@acme.com). Omitted: the primary calendar, which must be in the mission. google_calendar__list_calendars names them.',
+  },
 } as const;
 
-function gatewaySchema(tool: UpstreamTool): McpToolDeclaration['inputSchema'] {
-  const properties: Record<string, unknown> = {};
-  for (const [name, schema] of Object.entries(tool.inputSchema.properties)) {
-    if (!isOfferedArgument(tool.name, name)) continue;
-    properties[name] = name === CALENDAR_ARGUMENT ? CALENDAR_PROPERTY : { ...schema };
-  }
-  const required = (tool.inputSchema.required ?? []).filter((name) => {
-    if (!isOfferedArgument(tool.name, name)) return false;
-    if (!(name in properties)) {
-      throw new Error(
-        `${PROVIDER_ID}: upstream tool '${tool.name}' requires '${name}', not declared`,
-      );
-    }
-    return true;
-  });
-  return { type: 'object', properties, ...(required.length > 0 ? { required } : {}) };
-}
+const EVENT_ID = {
+  eventId: {
+    type: 'string',
+    description: 'The event id (an instance of a recurring event included).',
+  },
+} as const;
 
-function descriptionOf(tool: UpstreamTool): string {
-  if (ANSWERED_BY_THE_GATEWAY.has(tool.name)) {
-    return 'List the Google calendars of this mission: for each, its ref (what calendarId of the other tools takes), its id, its name and whether it is the primary calendar. Answered by the gateway, without a call to Google.';
-  }
-  const notes = [
-    ...(CALENDAR_ARGUMENT in tool.inputSchema.properties ? [CALENDAR_NOTE] : []),
-    ...(DESCRIPTION_NOTES[tool.name] === undefined ? [] : [DESCRIPTION_NOTES[tool.name]]),
-  ];
-  return notes.length === 0 ? tool.description : `${tool.description}\n\n${notes.join(' ')}`;
-}
+const TIME_RANGE = {
+  timeMin: {
+    type: 'string',
+    description:
+      'Lower bound (exclusive) of an event’s end time, RFC3339 with an offset (2026-11-03T00:00:00Z).',
+  },
+  timeMax: {
+    type: 'string',
+    description:
+      'Upper bound (exclusive) of an event’s start time, RFC3339 with an offset; greater than timeMin.',
+  },
+} as const;
 
-/** The declarations the gateway offers, built from the upstream list (refused when it is not modelled). */
-export function declarationsOf(list: UpstreamToolList): {
-  readonly offered: readonly McpToolDeclaration[];
-  readonly upstreamOf: ReadonlyMap<string, UpstreamTool>;
-} {
-  const byName = new Map(list.tools.map((tool) => [tool.name, tool] as const));
-  for (const tool of list.tools) {
-    const locator = LOCATOR[tool.name];
-    if (locator === undefined && !ANSWERED_BY_THE_GATEWAY.has(tool.name)) {
-      throw new Error(`${PROVIDER_ID}: upstream tool '${tool.name}' is not modelled`);
-    }
-    const unknown = unmodelledLocators(tool);
-    if (unknown.length > 0) {
-      throw new Error(
-        `${PROVIDER_ID}: upstream tool '${tool.name}' takes ${unknown.join(', ')}, which may name something outside the mission: model it first`,
-      );
-    }
-    if (locator === 'calendar' && !(CALENDAR_ARGUMENT in tool.inputSchema.properties)) {
-      throw new Error(
-        `${PROVIDER_ID}: upstream tool '${tool.name}' has no '${CALENDAR_ARGUMENT}' argument: model its locator first`,
-      );
-    }
-  }
-  const offered: McpToolDeclaration[] = [];
-  const upstreamOf = new Map<string, UpstreamTool>();
-  for (const name of Object.values(TOOL)) {
-    const upstreamName = name.slice(TOOL_PREFIX.length);
-    const tool = byName.get(upstreamName);
-    if (!tool)
-      throw new Error(`${PROVIDER_ID}: upstream tool '${upstreamName}' is missing from the list`);
-    offered.push({ name, description: descriptionOf(tool), inputSchema: gatewaySchema(tool) });
-    upstreamOf.set(name, tool);
-  }
-  return { offered, upstreamOf };
-}
+const PAGING = {
+  maxResults: {
+    type: 'integer',
+    minimum: 1,
+    maximum: MAX_EVENTS_PER_PAGE,
+    description: `Events per page, 1 to ${MAX_EVENTS_PER_PAGE}. Default 50.`,
+  },
+  pageToken: { type: 'string', description: 'The nextPageToken of the previous page.' },
+} as const;
 
-export const UPSTREAM_TOOL_LIST: UpstreamToolList = readUpstreamToolList(upstream);
+const TIME_ZONE = {
+  timeZone: {
+    type: 'string',
+    description: 'IANA time zone (Europe/Paris) of the answer’s times. Default: the calendar’s.',
+  },
+} as const;
 
-const declared = declarationsOf(UPSTREAM_TOOL_LIST);
+const SEND_UPDATES_ARG = (what: string, byDefault: string) => ({
+  sendUpdates: {
+    type: 'string',
+    enum: [...SEND_UPDATES],
+    description: `${what} all: every guest; externalOnly: guests without Google Calendar; none: nobody. Default: ${byDefault}.`,
+  },
+});
 
-/** Every tool the plugin declares. */
-export const googleCalendarTools: readonly McpToolDeclaration[] = declared.offered;
+const ATTENDEE = {
+  type: 'object',
+  properties: {
+    email: { type: 'string', description: 'Exactly one email address, nothing else.' },
+    displayName: { type: 'string' },
+    optional: { type: 'boolean' },
+  },
+  required: ['email'],
+} as const;
 
-/** The upstream declaration behind a gateway tool name, or `undefined`. */
-export function upstreamToolOf(name: string): UpstreamTool | undefined {
-  return declared.upstreamOf.get(name);
-}
+const EVENT_FIELDS = {
+  summary: { type: 'string', description: 'Title.' },
+  description: { type: 'string', description: 'Description; may contain HTML.' },
+  location: { type: 'string', description: 'Free-text place.' },
+  startTime: {
+    type: 'string',
+    description:
+      'Start: RFC3339 (2026-11-03T10:00:00+01:00), or a date (2026-11-03) when allDay is true.',
+  },
+  endTime: {
+    type: 'string',
+    description:
+      'End (exclusive): RFC3339, or a date when allDay is true (the day after the last day).',
+  },
+  allDay: { type: 'boolean', description: 'startTime and endTime are dates.' },
+  ...TIME_ZONE,
+  recurrence: {
+    type: 'array',
+    items: { type: 'string' },
+    description:
+      'RRULE, EXRULE, RDATE or EXDATE lines (RFC 5545); a recurring event needs timeZone.',
+  },
+  visibility: { type: 'string', enum: ['default', 'public', 'private', 'confidential'] },
+  transparency: {
+    type: 'string',
+    enum: ['opaque', 'transparent'],
+    description: 'opaque blocks time (busy), transparent does not.',
+  },
+  colorId: { type: 'string', description: 'An event colour id (1 to 11).' },
+  addGoogleMeet: {
+    type: 'boolean',
+    description: 'true: Google creates a Meet link for the event.',
+  },
+} as const;
 
-export { UPSTREAM_TOOL };
+export const googleCalendarTools: readonly McpToolDeclaration[] = [
+  {
+    name: TOOL.listCalendars,
+    description:
+      'List the Google calendars of this mission: for each, its ref (what calendarId of the other tools takes), its id, its name and whether it is the primary calendar. Answered by the gateway, without a call to Google.',
+    inputSchema: { type: 'object', properties: {} },
+  },
+  {
+    name: TOOL.listEvents,
+    description:
+      'List the events of a calendar, in a time range. Recurring events are expanded into their instances and ordered by start time unless singleEvents is false.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...CALENDAR,
+        ...TIME_RANGE,
+        q: {
+          type: 'string',
+          description: 'Free text matched against title, description, location, guests.',
+        },
+        singleEvents: {
+          type: 'boolean',
+          description:
+            'Expand recurring events into instances (default true). false lists the recurring events themselves.',
+        },
+        orderBy: {
+          type: 'string',
+          enum: ['startTime', 'updated'],
+          description: 'startTime (default; needs singleEvents) or updated.',
+        },
+        ...PAGING,
+        ...TIME_ZONE,
+      },
+    },
+  },
+  {
+    name: TOOL.searchEvents,
+    description:
+      'Search the events of a calendar (the primary one when calendarId is omitted) by free text: title, description, location, guests. Text matching, not semantic search.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...CALENDAR,
+        q: { type: 'string', description: 'The text to look for.' },
+        ...TIME_RANGE,
+        ...PAGING,
+        ...TIME_ZONE,
+      },
+      required: ['q'],
+    },
+  },
+  {
+    name: TOOL.getEvent,
+    description: 'Read one event of a calendar.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...CALENDAR, ...EVENT_ID, ...TIME_ZONE },
+      required: ['eventId'],
+    },
+  },
+  {
+    name: TOOL.suggestTime,
+    description:
+      'Suggest times when this account and the people named are all free, from their busy slots (never their events) as far as their calendars share them. Returns the free slots of at least durationMinutes inside the window, and the people whose availability Google could not tell.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        attendeeEmails: {
+          type: 'array',
+          items: { type: 'string' },
+          description: `Up to ${MAX_FREE_BUSY_PEOPLE} email addresses; this account is always included.`,
+        },
+        ...TIME_RANGE,
+        durationMinutes: {
+          type: 'integer',
+          minimum: 5,
+          maximum: 1440,
+          description: 'Length of the meeting, 5 to 1440 minutes. Default 30.',
+        },
+        maxSuggestions: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50,
+          description: 'How many slots to return, 1 to 50. Default 10.',
+        },
+      },
+      required: ['attendeeEmails', 'timeMin', 'timeMax'],
+    },
+  },
+  {
+    name: TOOL.createEvent,
+    description:
+      'Create an event on a calendar. Every attendee is one email address; inviting people inside or outside the company are separate permissions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...CALENDAR,
+        ...EVENT_FIELDS,
+        attendees: { type: 'array', items: ATTENDEE, description: 'The people to invite.' },
+        ...SEND_UPDATES_ARG('Who Google emails the invitation to:', 'all'),
+      },
+      required: ['summary', 'startTime', 'endTime'],
+    },
+  },
+  {
+    name: TOOL.updateEvent,
+    description:
+      'Change an event: only the fields given change. startTime and endTime go together. Unless sendUpdates is none, Google emails the current guests about the change: a permission of its own.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...CALENDAR,
+        ...EVENT_ID,
+        ...EVENT_FIELDS,
+        addedAttendees: { type: 'array', items: ATTENDEE, description: 'People to invite.' },
+        removedAttendeeEmails: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Guests to remove, by email address.',
+        },
+        ...SEND_UPDATES_ARG('Who Google emails the change to:', 'all'),
+      },
+      required: ['eventId'],
+    },
+  },
+  {
+    name: TOOL.deleteEvent,
+    description:
+      'Delete an event. Unless sendUpdates is none, Google emails the guests a cancellation: a permission of its own.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...CALENDAR,
+        ...EVENT_ID,
+        ...SEND_UPDATES_ARG('Who Google emails the cancellation to:', 'all'),
+      },
+      required: ['eventId'],
+    },
+  },
+  {
+    name: TOOL.respondToEvent,
+    description:
+      'Answer an invitation this account received: accepted, tentative or declined, with an optional comment. Only this account’s answer changes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...CALENDAR,
+        ...EVENT_ID,
+        responseStatus: { type: 'string', enum: [...RESPONSE_STATUSES] },
+        responseComment: { type: 'string', description: 'A comment the organizer reads.' },
+        ...SEND_UPDATES_ARG('Who Google emails the answer to:', 'none'),
+      },
+      required: ['eventId', 'responseStatus'],
+    },
+  },
+];

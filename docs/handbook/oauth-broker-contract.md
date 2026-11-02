@@ -105,8 +105,7 @@ JSON `{ "error": "<[a-z_]{1,40}>", "message"? }`; the message is never shown or 
 ## Outside the repo — what a broker operator provides
 
 - Per enrolled instance: base URL, key, the recorded return URLs (one per plugin using the broker).
-- For `google`: a Google Cloud project with the Calendar API and the Calendar MCP service
-  (`calendarmcp.googleapis.com`) enabled; a **Web application** OAuth client whose one redirect
+- For `google`: a Google Cloud project with the Calendar API enabled; a **Web application** OAuth client whose one redirect
   URI is the broker's callback; an external consent screen with the plugin's scopes and Google's
   app verification for sensitive scopes (no CASA: restricted scopes only).
 - An enclave run and a measurement published in a gateway release ([oauth-broker](oauth-broker.md)).

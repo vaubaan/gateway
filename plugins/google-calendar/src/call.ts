@@ -4,35 +4,37 @@
  *
  * Handbook : docs/handbook/providers/google-calendar.md.
  * ADR      : docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md ;
- *            docs/decisions/google-calendar-through-an-oauth-broker.md D4.
+ *            docs/decisions/google-calendar-through-an-oauth-broker.md.
  *
  * `readCalendarCall(tool, args, resources)` checks the tool, the closed
  * argument surface, the calendar (one of the mission), the event id through
- * its grammar, every attendee address, the type of every other argument, and
- * returns what to send — the upstream tool and its arguments, `calendarId`
- * written as the calendar's id — with what the classifier needs: the zones
- * of the people invited and whether Google will email the guests. Or the
- * sentence refusing the call. Pure: no network, no credential, no clock.
+ * its grammar, every attendee address, the type, enum and bounds of every
+ * other argument, and the rules that tie arguments together; it returns what
+ * the executor sends — the arguments it read, `calendarId` written as the
+ * calendar's id — with what the classifier needs: the zones of the people
+ * invited and whether Google will email the guests. Or the sentence refusing
+ * the call. Pure: no network, no credential, no clock.
  */
 
 import { declaredArgumentsOf, undeclaredArgumentDenial, type Resource } from '@vaubaan/plugin-sdk';
 
 import { calendarIdOf, calendarRefFromArgument, eventId, parseAddress } from './identifiers.ts';
 import {
+  ADDRESS_LIST_ARGUMENTS,
   ATTENDEE_FIELDS,
   ATTENDEE_OBJECTS_ARGUMENT,
+  BARE_TOOL,
   CALENDAR_ARGUMENT,
+  DEFAULT_SEND_UPDATES,
   EVENT_ARGUMENT,
-  LOCATOR,
   NO_NOTIFICATION,
   NOTIFICATION_ARGUMENT,
   PRIMARY_KEYWORD,
   PROVIDER_ID,
   TOOL,
   TOOL_PREFIX,
-  UPSTREAM_TOOL,
 } from './identity.ts';
-import { googleCalendarTools, upstreamToolOf } from './tools.ts';
+import { MAX_FREE_BUSY_PEOPLE, googleCalendarTools } from './tools.ts';
 
 type Args = Readonly<Record<string, unknown>>;
 
@@ -45,8 +47,9 @@ export type CalendarCall =
   | {
       readonly kind: 'forward';
       readonly tool: string;
-      readonly upstream: string;
-      /** The calendar ref, `null` for a tool that names no calendar. */
+      /** The tool name without its prefix (`get_event`). */
+      readonly bare: string;
+      /** The calendar ref, `null` for a tool that names no calendar (`suggest_time`). */
       readonly calendar: string | null;
       /** The event the call names, `null` when it names none. */
       readonly event: string | null;
@@ -54,7 +57,11 @@ export type CalendarCall =
       readonly guests: readonly GuestZone[];
       /** Whether Google will email the event's current guests (a change or a deletion). */
       readonly notifiesGuests: boolean;
-      /** What leaves for Google. */
+      /**
+       * The arguments read: attendee addresses lower-cased, `calendarId` the
+       * calendar's id (absent for `suggest_time`), `sendUpdates` filled with
+       * its default where the tool takes one.
+       */
       readonly arguments: Readonly<Record<string, unknown>>;
     };
 
@@ -67,6 +74,9 @@ export const NO_CALENDAR = 'no Google calendar in this mission';
 
 /** Domains whose addresses are the company's own meeting rooms and resources. */
 const RESOURCE_DOMAIN = 'resource.calendar.google.com';
+
+/** A date of an all-day event (`2026-11-03`). */
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** The mission's Google calendars, in mission order. */
 export function calendarsOf(resources: readonly Resource[]): Resource[] {
@@ -169,45 +179,114 @@ function readAttendees(
   return { attendees, zones };
 }
 
-/** A list of addresses, each exactly one (`removedAttendeeEmails`, `attendeeEmails` of suggest_time). */
+/** A list of addresses, each exactly one (`removedAttendeeEmails`, `attendeeEmails`). */
 function readAddresses(name: string, value: unknown): string[] | { readonly denied: string } {
   if (!Array.isArray(value)) return { denied: `${name}: expected a list of email addresses.` };
   const out: string[] = [];
   for (const [i, raw] of value.entries()) {
     const parsed = parseAddress(raw);
     if (!parsed) return { denied: `${name}[${i}]: expected exactly one email address.` };
-    out.push(parsed.address);
+    if (!out.includes(parsed.address)) out.push(parsed.address);
   }
   return out;
 }
 
-/** The JSON type an argument's schema names, checked loosely, and its enum when it has one. */
-function typeIssue(name: string, schema: unknown, value: unknown): string | null {
-  const declared = schema as { readonly type?: unknown; readonly enum?: unknown } | null;
-  const type = declared?.type;
-  const ok = (() => {
-    switch (type) {
-      case 'string':
-        return typeof value === 'string';
-      case 'integer':
-        return typeof value === 'number' && Number.isInteger(value);
-      case 'number':
-        return typeof value === 'number' && Number.isFinite(value);
-      case 'boolean':
-        return typeof value === 'boolean';
-      case 'array':
-        return Array.isArray(value);
-      case 'object':
-        return typeof value === 'object' && value !== null && !Array.isArray(value);
-      default:
-        return true;
+interface ArgumentSchema {
+  readonly type?: unknown;
+  readonly enum?: unknown;
+  readonly minimum?: unknown;
+  readonly maximum?: unknown;
+  readonly items?: { readonly type?: unknown };
+}
+
+function hasType(type: unknown, value: unknown): boolean {
+  switch (type) {
+    case 'string':
+      return typeof value === 'string';
+    case 'integer':
+      return typeof value === 'number' && Number.isInteger(value);
+    case 'boolean':
+      return typeof value === 'boolean';
+    case 'array':
+      return Array.isArray(value);
+    case 'object':
+      return typeof value === 'object' && value !== null && !Array.isArray(value);
+    default:
+      return true;
+  }
+}
+
+/** The JSON type, enum, integer bounds and item type a schema names, checked. */
+function typeIssue(name: string, schema: ArgumentSchema, value: unknown): string | null {
+  if (!hasType(schema.type, value)) return `${name}: expected ${String(schema.type)}.`;
+  if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
+    return `${name}: expected one of ${schema.enum.join(', ')}.`;
+  }
+  if (typeof value === 'number') {
+    if (typeof schema.minimum === 'number' && value < schema.minimum) {
+      return `${name}: at least ${schema.minimum}.`;
     }
-  })();
-  if (!ok) return `${name}: expected ${String(type)}.`;
-  if (Array.isArray(declared?.enum) && !declared.enum.includes(value)) {
-    return `${name}: expected one of ${declared.enum.join(', ')}.`;
+    if (typeof schema.maximum === 'number' && value > schema.maximum) {
+      return `${name}: at most ${schema.maximum}.`;
+    }
+  }
+  if (Array.isArray(value) && schema.items?.type !== undefined) {
+    const bad = value.findIndex((v) => !hasType(schema.items?.type, v));
+    if (bad >= 0) return `${name}[${bad}]: expected ${String(schema.items.type)}.`;
   }
   return null;
+}
+
+/** An instant of RFC3339 with an offset, as milliseconds, or `null`. */
+export function instantOf(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+    return null;
+  }
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/** The rules that tie arguments of one tool together; `null` when they hold. */
+function crossIssue(bare: string, args: Args): string | null {
+  switch (bare) {
+    case BARE_TOOL.listEvents:
+      if (args.singleEvents === false && args.orderBy === 'startTime') {
+        return 'orderBy: startTime needs singleEvents; with singleEvents false, give orderBy updated or no order.';
+      }
+      return null;
+    case BARE_TOOL.suggestTime: {
+      const from = instantOf(args.timeMin);
+      const to = instantOf(args.timeMax);
+      if (from === null || to === null) {
+        return 'timeMin, timeMax: expected RFC3339 instants with an offset (2026-11-03T09:00:00Z).';
+      }
+      if (to <= from) return 'timeMax: must be after timeMin.';
+      const people = Array.isArray(args.attendeeEmails) ? args.attendeeEmails.length : 0;
+      if (people === 0 || people > MAX_FREE_BUSY_PEOPLE) {
+        return `attendeeEmails: 1 to ${MAX_FREE_BUSY_PEOPLE} addresses.`;
+      }
+      return null;
+    }
+    case BARE_TOOL.createEvent:
+    case BARE_TOOL.updateEvent: {
+      const hasStart = args.startTime !== undefined;
+      if (hasStart !== (args.endTime !== undefined)) {
+        return 'startTime, endTime: give both or neither.';
+      }
+      if (args.allDay !== undefined && !hasStart) {
+        return 'allDay: give startTime and endTime with it.';
+      }
+      if (hasStart && args.allDay === true) {
+        if (!DATE.test(String(args.startTime)) || !DATE.test(String(args.endTime))) {
+          return 'startTime, endTime: dates (2026-11-03) for an all-day event.';
+        }
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
 }
 
 /** The one reader of a call. Every refusal is a sentence the agent can act on. */
@@ -227,16 +306,13 @@ export function readCalendarCall(
     return { call: { kind: 'list-calendars', calendars } };
   }
 
-  const upstream = tool.slice(TOOL_PREFIX.length);
-  const locator = LOCATOR[upstream];
-  if (!upstreamToolOf(tool) || !locator) return { denied: `unknown tool '${tool}'` };
+  const bare = tool.slice(TOOL_PREFIX.length);
+  const properties = declaration.inputSchema.properties ?? {};
+  const locatesCalendar = CALENDAR_ARGUMENT in properties;
 
   let calendar: Resource | null = null;
-  if (locator !== 'none') {
-    const resolved = resolveCalendar(
-      locator === 'primary' ? undefined : args[CALENDAR_ARGUMENT],
-      resources,
-    );
+  if (locatesCalendar) {
+    const resolved = resolveCalendar(args[CALENDAR_ARGUMENT], resources);
     if ('denied' in resolved) return resolved;
     calendar = resolved.calendar;
   }
@@ -245,7 +321,7 @@ export function readCalendarCall(
   const forwarded: Record<string, unknown> = {};
   let event: string | null = null;
   const guests = new Set<GuestZone>();
-  for (const [name, schema] of Object.entries(declaration.inputSchema.properties ?? {})) {
+  for (const [name, schema] of Object.entries(properties)) {
     const value = args[name];
     if (value === undefined) {
       if (declaration.inputSchema.required?.includes(name)) {
@@ -257,39 +333,47 @@ export function readCalendarCall(
     if (name === EVENT_ARGUMENT) {
       event = eventId(value);
       if (event === null) return { denied: `${EVENT_ARGUMENT}: expected a Google event id.` };
+      forwarded[name] = event;
+      continue;
     }
-    if (name === ATTENDEE_OBJECTS_ARGUMENT[upstream]) {
+    if (name === ATTENDEE_OBJECTS_ARGUMENT[bare]) {
       const read = readAttendees(name, value, zoning);
       if ('denied' in read) return read;
       read.zones.forEach((z) => guests.add(z));
       forwarded[name] = read.attendees;
       continue;
     }
-    if (name === 'removedAttendeeEmails' || name === 'attendeeEmails') {
+    if (ADDRESS_LIST_ARGUMENTS.has(name)) {
       const read = readAddresses(name, value);
       if (!Array.isArray(read)) return read;
       forwarded[name] = read;
       continue;
     }
-    const issue = typeIssue(name, schema, value);
+    const issue = typeIssue(name, schema as ArgumentSchema, value);
     if (issue !== null) return { denied: issue };
     forwarded[name] = value;
   }
-  if (calendar !== null && locator === 'calendar') {
+  const cross = crossIssue(bare, forwarded);
+  if (cross !== null) return { denied: cross };
+
+  if (calendar !== null) {
     const id = calendarIdOf(calendar.ref);
     if (id === null) return { denied: `${CALENDAR_ARGUMENT}: the calendar ref is malformed.` };
     forwarded[CALENDAR_ARGUMENT] = id;
   }
+  const byDefault = DEFAULT_SEND_UPDATES[bare];
+  if (byDefault !== undefined && forwarded[NOTIFICATION_ARGUMENT] === undefined) {
+    forwarded[NOTIFICATION_ARGUMENT] = byDefault;
+  }
 
-  const changesOrDeletes =
-    upstream === UPSTREAM_TOOL.updateEvent || upstream === UPSTREAM_TOOL.deleteEvent;
-  const notifiesGuests = changesOrDeletes && args[NOTIFICATION_ARGUMENT] !== NO_NOTIFICATION;
+  const changesOrDeletes = bare === BARE_TOOL.updateEvent || bare === BARE_TOOL.deleteEvent;
+  const notifiesGuests = changesOrDeletes && forwarded[NOTIFICATION_ARGUMENT] !== NO_NOTIFICATION;
 
   return {
     call: {
       kind: 'forward',
       tool,
-      upstream,
+      bare,
       calendar: calendar?.ref ?? null,
       event,
       guests: [...guests].sort(),

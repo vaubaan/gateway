@@ -53,6 +53,19 @@ export function eventId(value: unknown): string | null {
   return typeof value === 'string' && EVENT_ID.test(value) ? value : null;
 }
 
+/**
+ * One path segment of a request URL from a value its grammar already
+ * accepted: refused (`null`) when it is empty, a dot segment, or holds `/`,
+ * `?`, `#`, `%`, `\` or a control character — never repaired — then
+ * percent-encoded (`alice@acme.com` → `alice%40acme.com`).
+ */
+export function pathSegment(value: string): string | null {
+  if (value === '' || value === '.' || value === '..') return null;
+  // eslint-disable-next-line no-control-regex -- control characters are what this refuses
+  if (/[/?#%\\\u0000-\u001f\u007f]/.test(value)) return null;
+  return encodeURIComponent(value);
+}
+
 /** One e-mail address, lower-cased, parsed strictly: a dot-atom local part and a domain. */
 export interface EmailAddress {
   readonly address: string;

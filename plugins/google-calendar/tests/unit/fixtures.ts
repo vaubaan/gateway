@@ -1,14 +1,14 @@
 /**
  * Shared fixtures of the `google-calendar` tests: two calendars (the primary
  * one of a Workspace account and a team calendar), an execution context with
- * a brokered access token, a mock of Google's Calendar MCP server, and one
+ * a brokered access token, routes of Google's Calendar REST API, and one
  * realistic sample per tool (the coverage kit and the identifier proof both
  * run on them). Ids follow the shapes of Google's documentation.
  */
 import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockFetch, MockRoute, RecordedCall, ToolSamples } from '@vaubaan/plugin-sdk/testing';
 
-import { CALENDAR_MCP_URL, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import { CALENDAR_API_BASE, PROVIDER_ID, TOOL } from '../../src/identity.ts';
 
 export const PRIMARY_ID = 'alice@acme.example';
 export const PRIMARY = 'alice~acme.example';
@@ -53,45 +53,54 @@ export function context(
   };
 }
 
-/** The JSON-RPC request a recorded call carried. */
-export function rpcOf(call: RecordedCall): {
-  readonly id?: number;
-  readonly method: string;
-  readonly params?: { readonly name?: string; readonly arguments?: Record<string, unknown> };
-} {
-  return call.json as ReturnType<typeof rpcOf>;
+/** The URL of a path of the API, the calendar id percent-encoded as the executor writes it. */
+export function api(path: string): string {
+  return `${CALENDAR_API_BASE}${path}`;
 }
 
-/** A route of Google's MCP server answering every request with `result`. */
-export function mcpRoute(
-  result: (call: RecordedCall) => unknown,
-  options: { readonly times?: number } = {},
-): MockRoute {
+/** The path and the query of a recorded call, the query as an object. */
+export function requestOf(call: RecordedCall): {
+  readonly method: string;
+  readonly path: string;
+  readonly query: Record<string, string>;
+} {
+  const url = new URL(call.url);
   return {
-    method: 'POST',
-    url: CALENDAR_MCP_URL,
-    ...(options.times !== undefined ? { times: options.times } : {}),
-    respond: (call) => ({ jsonrpc: '2.0', id: rpcOf(call).id ?? null, result: result(call) }),
+    method: call.method,
+    path: url.pathname.replace('/calendar/v3', ''),
+    query: Object.fromEntries(url.searchParams.entries()),
   };
 }
 
-export function textResult(text: string): { content: { type: 'text'; text: string }[] } {
-  return { content: [{ type: 'text', text }] };
-}
+/** One event as Google answers it to `maxAttendees=1`, this account's entry marked `self`. */
+export const INVITATION = {
+  id: EVENT,
+  summary: 'Quarterly review',
+  attendeesOmitted: true,
+  attendees: [{ email: PRIMARY_ID, self: true, responseStatus: 'needsAction' }],
+};
+
+/** A GET of one event answers `INVITATION`. */
+export const EVENT_GET: MockRoute = {
+  method: 'GET',
+  url: (url) => /\/events\/[^/?]+(\?|$)/.test(url),
+  body: INVITATION,
+};
 
 const at = { startTime: '2026-11-03T10:00:00Z', endTime: '2026-11-03T11:00:00Z' };
+const range = { timeMin: '2026-11-03T08:00:00Z', timeMax: '2026-11-03T18:00:00Z' };
 
 /** One table for the catalog coverage and the identifier proof. */
 export const SAMPLES: ToolSamples = {
   [TOOL.listCalendars]: [{ args: {} }],
   [TOOL.listEvents]: [
-    { args: { calendarId: TEAM, ...at, orderBy: 'startTime', pageSize: 10 } },
+    { args: { calendarId: TEAM, ...range, orderBy: 'startTime', maxResults: 10 } },
     { args: { calendarId: OTHER }, expectDenied: true },
   ],
-  [TOOL.searchEvents]: [{ args: { query: 'quarterly review' } }],
+  [TOOL.searchEvents]: [{ args: { q: 'quarterly review' } }],
   [TOOL.getEvent]: [{ args: { calendarId: PRIMARY_ID, eventId: EVENT } }],
   [TOOL.suggestTime]: [
-    { args: { attendeeEmails: ['bob@acme.example'], ...at, durationMinutes: 30 } },
+    { args: { attendeeEmails: ['bob@acme.example'], ...range, durationMinutes: 30 } },
   ],
   [TOOL.createEvent]: [
     { args: { summary: 'Focus', ...at } },
@@ -105,8 +114,8 @@ export const SAMPLES: ToolSamples = {
   ],
   [TOOL.updateEvent]: [
     { args: { eventId: EVENT, summary: 'Sync (moved)', ...at } },
-    { args: { eventId: EVENT, calendarId: TEAM, location: 'Room 2', notificationLevel: 'NONE' } },
+    { args: { eventId: EVENT, calendarId: TEAM, location: 'Room 2', sendUpdates: 'none' } },
   ],
-  [TOOL.deleteEvent]: [{ args: { eventId: EVENT, notificationLevel: 'NONE' } }],
+  [TOOL.deleteEvent]: [{ args: { eventId: EVENT, sendUpdates: 'none' } }],
   [TOOL.respondToEvent]: [{ args: { eventId: EVENT, responseStatus: 'accepted' } }],
 };
