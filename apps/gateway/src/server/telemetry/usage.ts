@@ -5,13 +5,11 @@
  * vetted by the constructors of `@vaubaan/telemetry`, which drop anything that
  * does not fit.
  *
- * The day identifier is drawn once per UTC day, kept in this object only, and
- * put on the profile and nowhere else: it counts the instances that reported a
- * day, never follows one from a day to the next, never joins a profile to a
- * call. A restart draws a new one; the count of a day is an upper bound.
+ * The instance identifier (`instance-id.ts`) is put on the profile and
+ * nowhere else: it counts the gateways running a plugin version over the
+ * collector's window, and never joins a profile to a call.
  */
 import { existsSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
 
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { baseRiskId, isRiskId } from '@vaubaan/shared/risk-id';
@@ -86,9 +84,9 @@ export interface InstanceProfilerDeps {
   readonly gatewayVersion: string;
   readonly signInKinds: readonly SignInKind[];
   readonly source: ProfileSource;
+  /** The stored instance identifier, drawn on first use (`InstanceIdentifier.current`). */
+  readonly instanceId: () => Promise<string>;
   readonly env?: Readonly<Record<string, string | undefined>>;
-  /** 16 random bytes (tests). */
-  readonly randomBytes?: () => Buffer;
   /** `/.dockerenv` exists (tests). */
   readonly inDocker?: () => boolean;
 }
@@ -113,10 +111,10 @@ export function utcDayOf(now: Date): string {
 }
 
 export class InstanceProfiler {
-  // single-process only: the day identifier lives in this process's memory by
-  // design (spec §9: never stored); each replica of a hosted deployment would
-  // count as one instance, which is what it is.
-  private day: { readonly utcDay: string; readonly id: string } | null = null;
+  // single-process only: the count of calls since the last profile lives in
+  // this process's memory. Replicas share the stored identifier, so the
+  // collector counts the deployment once; each replica's profile carries the
+  // calls it decided itself.
   private calls = 0;
 
   constructor(private readonly deps: InstanceProfilerDeps) {}
@@ -126,23 +124,14 @@ export class InstanceProfiler {
     this.calls += 1;
   }
 
-  /** The day identifier of `now`'s UTC day, drawn on the first use of that day. */
-  dayIdFor(now: Date): string {
-    const utcDay = utcDayOf(now);
-    if (this.day?.utcDay !== utcDay) {
-      const bytes = (this.deps.randomBytes ?? (() => randomBytes(16)))();
-      this.day = { utcDay, id: bytes.toString('hex') };
-    }
-    return this.day.id;
-  }
-
   /** The profile of `now`; the call counter starts again from zero. */
   async profile(now: Date): Promise<InstanceProfile | null> {
     const { registry, source } = this.deps;
-    const [users, missions, accounts] = await Promise.all([
+    const [users, missions, accounts, instanceId] = await Promise.all([
       source.users(),
       source.activeMissions(now),
       source.accountsByProvider(),
+      this.deps.instanceId(),
     ]);
     const calls = this.calls;
     this.calls = 0;
@@ -159,7 +148,7 @@ export class InstanceProfiler {
         : [];
     });
     return createInstanceProfile({
-      day_id: this.dayIdFor(now),
+      instance_id: instanceId,
       gateway_version: this.deps.gatewayVersion,
       deployment: deploymentKindOf(
         this.deps.env ?? process.env,

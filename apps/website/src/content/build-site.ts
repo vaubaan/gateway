@@ -15,7 +15,7 @@ import type { SiteData } from '../site/data';
 import { LANDING_LEDE, landingMarkdown } from '../site/landing';
 import { configKeysMarkdown, CONFIG_HANDBOOK, parseConfigKeys } from './config-keys';
 import { loadHandwrittenDocs, orderDocs, withSectionLists, type DocPage } from './docs';
-import type { HealthSnapshot } from './health';
+import { unreadSnapshot, type HealthSnapshot } from './health';
 import {
   escapeMdx,
   rewriteRelativeLinks,
@@ -67,11 +67,7 @@ export interface BuiltSite {
 }
 
 /** The snapshot of a build: nothing read, the pages' shape only. */
-export const UNREAD: HealthSnapshot = {
-  fetchedAt: null,
-  rows: [],
-  problem: 'read at request time',
-};
+export const UNREAD: HealthSnapshot = unreadSnapshot('read at request time');
 
 function generatedDoc(
   file: string,
@@ -163,7 +159,7 @@ export function generatedMdx(doc: GeneratedDoc): string {
 export function buildSite(inputs: SiteInputs): BuiltSite {
   const { repoRoot, plugins, thresholds, lastModified } = inputs;
   const docsDir = join(repoRoot, DOCS_DIR_FROM_REPO);
-  const withStatus = withHealth(plugins, UNREAD, thresholds);
+  const withStatus = withHealth(plugins, UNREAD);
 
   const generatedDocs = [
     configurationKeysDoc(),

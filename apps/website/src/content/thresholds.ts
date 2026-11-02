@@ -34,7 +34,7 @@ export function percent(rate: number): string {
   return `${Math.round(rate * 100)} %`;
 }
 
-/** "200 reports, 90 % success, over the last 90 days" */
+/** "at least 200 reports and a success rate of at least 90 %, over the last 90 days" */
 export function thresholdsSentence(t: ValidationThresholds): string {
-  return `at least ${t.minReports} reports and ${percent(t.minSuccessRate)} of them successful, over the last ${t.windowDays} days`;
+  return `at least ${t.minReports} reports and a success rate of at least ${percent(t.minSuccessRate)}, over the last ${t.windowDays} days`;
 }

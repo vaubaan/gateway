@@ -32,6 +32,7 @@ import type { Logger } from '../logging';
 import { systemClock, type Clock } from '../store/clock';
 import type { ConfigRepo } from '../store/repositories/config';
 import { createTelemetryHandlers, type TelemetryHandlers } from './handlers';
+import { InstanceIdentifier, type InstanceIdentifierDeps } from './instance-id';
 import { reportOf } from './outcome';
 import { TelemetrySettingsService, type TelemetryState } from './settings';
 import { PluginStatsReader } from './stats';
@@ -60,7 +61,9 @@ export interface TelemetryModuleDeps {
   readonly queue?: Omit<ReportQueueOptions, 'send'>;
   /** The profile check's timer (tests pass `null` and call `profileNow`). Default: every hour. */
   readonly profileIntervalMs?: number | null;
-  readonly profiler?: Partial<Pick<InstanceProfilerDeps, 'env' | 'randomBytes' | 'inDocker'>>;
+  readonly profiler?: Partial<
+    Pick<InstanceProfilerDeps, 'env' | 'inDocker'> & Pick<InstanceIdentifierDeps, 'randomBytes'>
+  >;
 }
 
 /** What Admin → Telemetry shows. */
@@ -79,12 +82,18 @@ export interface TelemetryOverview {
   /** The exact request body of one report of each kind the level sends, as this instance would send it. */
   readonly samplePayload: string;
   readonly queue: QueueStats;
+  /**
+   * The identifier the daily profile carries (level `usage-stats`), or null
+   * when none was drawn yet. Read only: the page never draws one.
+   */
+  readonly instanceId: string | null;
 }
 
 export interface TelemetryModule {
   /** The sink the execution module hands to the upstream stage. */
   readonly sink: TelemetrySink;
   readonly settings: TelemetrySettingsService;
+  readonly instanceId: InstanceIdentifier;
   readonly stats: PluginStatsReader;
   readonly handlers: TelemetryHandlers;
   overview(): Promise<TelemetryOverview>;
@@ -98,7 +107,7 @@ export interface TelemetryModule {
 /**
  * Reports of this instance's own shape, for the Admin page: the first tool of
  * the first registered plugin, reported as an allowed success; with
- * `usage-stats`, its decision and a profile with a placeholder day identifier.
+ * `usage-stats`, its decision.
  */
 function sampleReports(
   registry: PluginRegistry,
@@ -179,12 +188,15 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
 
   const { level } = deps.config.telemetry;
   const usage = level === 'usage-stats';
+  const { randomBytes, ...profilerOverrides } = deps.profiler ?? {};
+  const instanceId = new InstanceIdentifier({ store: deps.store.config, randomBytes });
   const profiler = new InstanceProfiler({
     registry: deps.registry,
     gatewayVersion: deps.build.version,
     signInKinds: [...new Set(deps.config.signIn.map((provider) => provider.kind))],
     source: deps.profileSource,
-    ...deps.profiler,
+    instanceId: () => instanceId.current(),
+    ...profilerOverrides,
   });
 
   const sink: TelemetrySink = {
@@ -254,6 +266,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     settings,
+    instanceId,
     audit: deps.store.auditWriter,
     logger,
     clock,
@@ -265,6 +278,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
   return {
     sink,
     settings,
+    instanceId,
     stats,
     handlers,
     async overview() {
@@ -278,6 +292,7 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
         level,
         samplePayload,
         queue: client.stats,
+        instanceId: await instanceId.peek(),
       };
     },
     flush: () => client.flush(),
@@ -291,12 +306,19 @@ export async function createTelemetryModule(deps: TelemetryModuleDeps): Promise<
 
 export {
   ENABLED_FIELD,
+  INSTANCE_ID_ACTION,
   PROBLEM_PARAM,
   TELEMETRY_ACTION,
   TELEMETRY_PAGE,
   type TelemetryHandlers,
   type TelemetryProblem,
 } from './handlers';
+export {
+  INSTANCE_ID_CONFIG_OBJECT_ID,
+  InstanceIdentifier,
+  TELEMETRY_INSTANCE_ID_KEY,
+  type InstanceIdentifierDeps,
+} from './instance-id';
 export { classifyOutcome, reportOf } from './outcome';
 export {
   decisionReportOf,

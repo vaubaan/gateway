@@ -869,6 +869,7 @@ export const SETTINGS_ACTIONS = {
   connectApp: 'Connect an app',
   turnOn: 'Turn telemetry on',
   turnOff: 'Turn telemetry off',
+  regenerateInstanceId: 'Regenerate identifier',
   testSignIn: 'Test the sign-in',
   addTeam: 'Add a local team',
   addMember: 'Add',

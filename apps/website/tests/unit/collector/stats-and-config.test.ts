@@ -5,7 +5,12 @@ import {
   isCollectorHost,
   readCollectorConfig,
 } from '../../../src/collector/config';
-import { handleStats, statsParams } from '../../../src/collector/stats';
+import {
+  handleInstances,
+  handleStats,
+  instancesParams,
+  statsParams,
+} from '../../../src/collector/stats';
 import { createSupabaseRest, type SupabaseRest } from '../../../src/collector/supabase';
 
 const ENV = {
@@ -81,6 +86,68 @@ describe('collector: GET /v1/plugin_stats', () => {
     const down = await handleStats(new Request('https://telemetry.vaubaan.com/v1/plugin_stats'), {
       store: store(null),
     });
+    expect(down.status).toBe(503);
+  });
+});
+
+describe('collector: GET /v1/plugin_stats, the site read', () => {
+  it('passes on the credential rejections the success rate leaves out', () => {
+    expect(
+      statsParams(
+        new URLSearchParams({ select: 'plugin,reports,credential_rejections', tool: 'is.null' }),
+      )?.get('select'),
+    ).toBe('plugin,reports,credential_rejections');
+  });
+});
+
+describe('collector: GET /v1/plugin_instances', () => {
+  it('passes on a select among its columns and a plugin list, every column by default', () => {
+    expect(instancesParams(new URLSearchParams())?.toString()).toBe(
+      'select=plugin%2Cplugin_version%2Cplugin_minor%2Cinstances',
+    );
+    expect(
+      instancesParams(
+        new URLSearchParams({ select: 'plugin,plugin_minor,instances', plugin: 'in.(github)' }),
+      )?.toString(),
+    ).toBe('select=plugin%2Cplugin_minor%2Cinstances&plugin=in.%28github%29');
+  });
+
+  it.each([
+    ['a tool filter, which the view has no column for', { tool: 'is.null' }],
+    ['a column of plugin_stats', { select: 'plugin,reports' }],
+    ['an unknown parameter', { order: 'instances.desc' }],
+    ['a plugin id that is not one', { plugin: 'in.(github,DROP)' }],
+  ])('refuses %s', (_name, query) => {
+    expect(instancesParams(new URLSearchParams(query))).toBeNull();
+  });
+
+  it('reads the plugin_instances view, with an hour of edge cache, and 503 when the store does not answer', async () => {
+    const rows = [{ plugin: 'github', plugin_version: null, plugin_minor: '4.0', instances: 3 }];
+    const views: string[] = [];
+    const store = (answer: unknown): SupabaseRest => ({
+      insert: () => Promise.resolve('stored'),
+      select: (view) => {
+        views.push(view);
+        return Promise.resolve(answer);
+      },
+    });
+    const ok = await handleInstances(
+      new Request('https://telemetry.vaubaan.com/v1/plugin_instances'),
+      { store: store(rows) },
+    );
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('cache-control')).toContain('s-maxage=3600');
+    expect(await ok.json()).toEqual(rows);
+    expect(views).toEqual(['plugin_instances']);
+    const bad = await handleInstances(
+      new Request('https://telemetry.vaubaan.com/v1/plugin_instances?tool=is.null'),
+      { store: store(rows) },
+    );
+    expect(bad.status).toBe(400);
+    const down = await handleInstances(
+      new Request('https://telemetry.vaubaan.com/v1/plugin_instances'),
+      { store: store(null) },
+    );
     expect(down.status).toBe(503);
   });
 });

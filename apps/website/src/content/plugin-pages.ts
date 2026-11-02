@@ -5,11 +5,16 @@
  */
 import { githubBlob, githubTree } from '../site/constants';
 import {
-  allVersionsWords,
-  type Health,
-  type HealthSnapshot,
+  callsWords,
+  countWords,
+  gatewaysSentence,
+  healthFootnote,
   healthOf,
-  healthWords,
+  type HealthSnapshot,
+  type LineFigures,
+  NOT_READ,
+  type PluginHealth,
+  rateWords,
 } from './health';
 import { code, markdownTable, text } from './markdown';
 import type { GuideStep, TokenExpiry } from '@vaubaan/plugin-sdk';
@@ -18,15 +23,14 @@ import type { CredentialInfo, MacroActionEntryInfo, PluginInfo } from './plugins
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
 export interface PluginWithHealth extends PluginInfo {
-  readonly health: Health;
+  readonly health: PluginHealth;
 }
 
 export function withHealth(
   plugins: readonly PluginInfo[],
   snapshot: HealthSnapshot,
-  thresholds: ValidationThresholds,
 ): PluginWithHealth[] {
-  return plugins.map((p) => ({ ...p, health: healthOf(snapshot, p.id, p.version, thresholds) }));
+  return plugins.map((p) => ({ ...p, health: healthOf(snapshot, p.id, p.version) }));
 }
 
 /** `/plugins`, `/plugins/health`, `/plugins/<id>`: the pages that carry health. */
@@ -44,7 +48,7 @@ export function pluginGroupMarkdown(
 ): Record<string, string> {
   const markdown: Record<string, string> = {
     '/plugins': pluginListMarkdown(plugins, thresholds),
-    '/plugins/health': healthPageMarkdown(plugins, thresholds, snapshot),
+    '/plugins/health': healthPageMarkdown(thresholds, snapshot),
   };
   for (const plugin of plugins) {
     markdown[`/plugins/${plugin.id}`] = pluginPageMarkdown(plugin, thresholds);
@@ -91,8 +95,7 @@ export function pluginPageMarkdown(
     `The ${plugin.name} plugin lets a Vaubaan Gateway mission use ${plugin.name} without handing the agent a credential. ${text(plugin.description)}`,
     '',
     `- Version: ${code(plugin.version)} (package ${code(plugin.packageName)})`,
-    `- Health of this version: ${healthWords(plugin.health, thresholds)} — [what this means](/plugins/health)`,
-    ...(plugin.health.allVersions ? [`- All versions: ${allVersionsWords(plugin.health)}`] : []),
+    `- Gateways: ${gatewaysSentence(plugin.health, thresholds.windowDays)} [Health per version](#health)`,
     `- Source: [${plugin.dir}](${githubTree(plugin.dir)}), catalog [risk-catalog.yaml](${githubBlob(`${plugin.dir}/src/risk-catalog.yaml`)})${plugin.catalogVersion !== null ? ` version ${plugin.catalogVersion}` : ''}${plugin.catalogDate ? ` of ${plugin.catalogDate}` : ''}`,
     `- How to connect an account: [Connect ${plugin.name}](/docs/providers/${plugin.id})`,
   ];
@@ -164,13 +167,16 @@ export function pluginPageMarkdown(
     );
   }
 
-  const history = plugin.health.allVersions
-    ? ` Over every version the collector knows: ${allVersionsWords(plugin.health)}.`
-    : '';
   lines.push(
     '## Health',
     '',
-    `Version ${code(plugin.version)}: ${healthWords(plugin.health, thresholds)}.${history} A plugin version is deemed validated by the community with ${thresholdsSentence(thresholds)}, as reported by the instances whose operators turned community telemetry on; the figures are refreshed at most hourly. It is a community signal, not a security guarantee.`,
+    gatewaysSentence(plugin.health, thresholds.windowDays),
+    '',
+    versionsTable(plugin.health),
+    '',
+    `A version is marked validated by the community with ${thresholdsSentence(thresholds)}; a gateway shows that mark on the accounts of this service. The figures are refreshed at most hourly ([what they mean](/plugins/health)). It is a community signal, not a security guarantee.`,
+    '',
+    healthFootnote(thresholds.windowDays),
     '',
   );
   return lines.join('\n').trimEnd() + '\n';
@@ -282,7 +288,30 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
   return lines.join('\n').trimEnd() + '\n';
 }
 
-/** `/plugins`: every plugin, with its version, its health and its history. */
+/** The figures of a line, in the columns Gateways | Calls | Success. */
+function figureCells(line: LineFigures): string[] {
+  return [countWords(line.gateways), callsWords(line.calls), rateWords(line.successRate)];
+}
+
+/** The last versions the collector knows, newest first, or why there is none. */
+function versionsTable(health: PluginHealth): string {
+  if (health.versions.length === 0) {
+    const unread = health.minors[0]?.calls === NOT_READ && health.gateways === NOT_READ;
+    return unread
+      ? 'No figure: the collector did not answer when this page was rendered; the site tries again within the hour.'
+      : 'No version of this plugin has reported a call or a gateway yet.';
+  }
+  return markdownTable(
+    ['Version', 'Gateways', 'Calls', 'Success', 'Validated'],
+    health.versions.map((line) => [
+      code(line.label),
+      ...figureCells(line),
+      line.validated ? 'validated' : '',
+    ]),
+  );
+}
+
+/** `/plugins`: every plugin, two rows each: the minor of this release, then the latest other one. */
 export function pluginListMarkdown(
   plugins: readonly PluginWithHealth[],
   thresholds: ValidationThresholds,
@@ -292,18 +321,20 @@ export function pluginListMarkdown(
     '',
     `A plugin teaches Vaubaan Gateway one service: how to classify a call into permissions, how to execute it, how to connect an account. ${plugins.length} plugins ship with the gateway; this list is generated from the repository's \`plugins/\` folder.`,
     '',
+    'Each plugin has a row for the minor version it ships at in this release, then one for the most recent other minor the community collector knows, if any; a minor adds up its patch versions.',
+    '',
     markdownTable(
-      ['Plugin', 'Version', 'Permissions', 'Health of this version', 'All versions'],
-      plugins.map((p) => [
-        `[${p.name}](/plugins/${p.id})`,
-        code(p.version),
-        String(p.risks.length),
-        healthWords(p.health, thresholds),
-        allVersionsWords(p.health),
-      ]),
+      ['Plugin', 'Version', 'Gateways', 'Calls', 'Success'],
+      plugins.flatMap((p) =>
+        p.health.minors.map((line, index) => [
+          `[${p.name}](/plugins/${p.id})`,
+          index === 0 ? `${code(line.label)} (this release)` : code(line.label),
+          ...figureCells(line),
+        ]),
+      ),
     ),
     '',
-    `Health is read from the community collector and refreshed at most hourly: [how it is measured](/plugins/health).`,
+    `${healthFootnote(thresholds.windowDays)} Refreshed at most hourly: [how it is measured](/plugins/health).`,
     '',
     `Write a plugin for another service: the [plugin guide](${githubBlob('plugins/README.md')}) and the kit in [plugins/_template](${githubTree('plugins/_template')}). Every plugin as data: [/plugins.json](/plugins.json).`,
     '',
@@ -315,38 +346,37 @@ function utcMinute(iso: string): string {
   return `${iso.slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-/** `/plugins/health`: the thresholds and every plugin version's status. */
+/** `/plugins/health`: what the figures mean, and when they were read. */
 export function healthPageMarkdown(
-  plugins: readonly PluginWithHealth[],
   thresholds: ValidationThresholds,
   snapshot: HealthSnapshot,
 ): string {
   const when = snapshot.fetchedAt
-    ? `The figures below were read from the collector at ${utcMinute(snapshot.fetchedAt)}; they are read again at most once an hour.`
-    : 'The collector could not be read, so no figure is shown; the site tries again within the hour.';
+    ? `The figures on the plugin pages were read from the collector at ${utcMinute(snapshot.fetchedAt)}; they are read again at most once an hour.`
+    : 'The collector could not be read, so the plugin pages show "not read"; the site tries again within the hour.';
   return [
     '# Plugin health',
     '',
-    `Plugin health says, per plugin version, how many calls the instances that opted in to community telemetry reported, and how many worked. A version is deemed validated with ${thresholdsSentence(thresholds)}; below the minimum of reports the site shows the count and the minimum, never a rate. "All versions" adds up every version of the plugin the collector knows: a history, not a verdict.`,
+    `Plugin health says, per plugin version, how many gateways run it, how many calls they reported and how many of those worked, as sent by the instances whose operators turned community telemetry on. The figures are on the [plugin list](/plugins) and on each plugin's page.`,
     '',
     when,
     '',
-    markdownTable(
-      ['Plugin', 'Version', 'Health of this version', 'All versions'],
-      plugins.map((p) => [
-        `[${p.name}](/plugins/${p.id})`,
-        code(p.version),
-        healthWords(p.health, thresholds),
-        allVersionsWords(p.health),
-      ]),
-    ),
+    '## What the figures are',
     '',
-    '## How it is measured',
+    `- **Calls**: the calls a plugin executed, over the last ${thresholds.windowDays} days, as reported by the instances that share plugin health (one report per call, nothing of the call itself).`,
+    `- **Gateways**: the distinct gateways whose daily profile listed the plugin version, over the same window. Only instances that also share usage statistics send a profile, so the figure is a lower bound. A gateway is counted by a random identifier it keeps, sent with that profile only and never with a call, which its administrator can regenerate.`,
+    "- **Success**: the share of calls that worked, leaving out calls refused because the service rejected the credential: a revoked or expired token is the user's configuration, not the plugin. Every other failure counts against it, including a service refusing a call the agent got wrong: the rate measures calls that worked, not the plugin's code alone.",
+    `- **Validated**: a version with ${thresholdsSentence(thresholds)}. It is the collector's verdict, and what a gateway shows as "validated by the community" on the accounts of that service. The site shows every version's figures whatever their number; validated is only a mark.`,
+    '- A minor version (`4.0`) adds up the calls of its patch versions (`4.0.1`, `4.0.2`); its gateways are counted once each, even one that moved from one patch to the next.',
     '',
+    '## How it is read',
+    '',
+    '- The site reads the collector when a page is served and keeps what it read for an hour. When the collector does not answer, a figure reads "not read" — never a guess — and the next render tries again; calls and gateways come from two separate reads, so one can be read without the other.',
     `- Telemetry is off on every instance unless its operator turns it on; what an instance sends is listed on the [trust center](/trust#what-leaves-an-instance).`,
-    `- Every outcome that is not a success counts against the rate, including a provider refusing a call the agent got wrong: the rate measures calls that worked, not the plugin's code alone.`,
-    `- Anyone can send reports, so a determined party could skew a plugin's figures; the thresholds and a global ingestion limit raise the cost, they do not remove it. The status is a community signal, not a security guarantee.`,
+    "- Anyone can send reports, so a determined party could skew a plugin's figures; the thresholds and a global ingestion limit raise the cost, they do not remove it. The status is a community signal, not a security guarantee.",
     `- The thresholds live in one SQL function of the collector, [\`plugin_validation_thresholds()\`](${githubBlob('deploy/collector/schema.sql')}), published in the [collector's README](${githubBlob('deploy/collector/README.md')}#published-thresholds).`,
+    '',
+    healthFootnote(thresholds.windowDays),
     '',
   ].join('\n');
 }

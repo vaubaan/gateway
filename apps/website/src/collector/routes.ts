@@ -6,7 +6,7 @@
  */
 import { isCollectorHost, readCollectorConfig, type CollectorConfig } from './config';
 import { handleReports } from './reports';
-import { handleStats } from './stats';
+import { handleInstances, handleStats } from './stats';
 import { createSupabaseRest, type SupabaseRest } from './supabase';
 
 interface Collector {
@@ -42,4 +42,10 @@ export async function statsRoute(request: Request): Promise<Response> {
   const { config, store } = collectorOf();
   if (!isCollectorHost(request, config)) return NOT_FOUND();
   return handleStats(request, { store });
+}
+
+export async function instancesRoute(request: Request): Promise<Response> {
+  const { config, store } = collectorOf();
+  if (!isCollectorHost(request, config)) return NOT_FOUND();
+  return handleInstances(request, { store });
 }

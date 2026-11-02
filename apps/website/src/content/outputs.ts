@@ -8,7 +8,13 @@
  * renders them with the collector read (`src/site/live.ts`).
  */
 import { GITHUB_REPO, SITE_DESCRIPTION, SITE_NAME, SITE_ORIGIN } from '../site/constants';
-import type { Health } from './health';
+import {
+  healthFootnote,
+  NOT_READ,
+  type HealthSnapshot,
+  type LineFigures,
+  type PluginHealth,
+} from './health';
 import type { PluginWithHealth } from './plugin-pages';
 import type { ValidationThresholds } from './thresholds';
 
@@ -78,37 +84,41 @@ export function llmsFullTxt(pages: readonly SitePage[]): string {
   return parts.join('\n');
 }
 
-/** The `health` of one plugin in `plugins.json`: the version's state, then the history. */
-function healthJson(health: Health): Record<string, unknown> {
-  const v = health.version;
-  const version: Record<string, unknown> =
-    v.state === 'measured'
-      ? {
-          state: v.state,
-          reports: v.reports,
-          success_rate: v.successRate,
-          validated: v.validated,
-        }
-      : v.state === 'below-threshold'
-        ? { state: v.state, reports: v.reports }
-        : { state: v.state };
+/** A figure of `plugins.json`: null when its aggregate was not read (see `health_read`). */
+function figure<T>(value: T | typeof NOT_READ): T | null {
+  return value === NOT_READ ? null : value;
+}
+
+function lineJson(line: LineFigures, key: 'minor' | 'version'): Record<string, unknown> {
   return {
-    ...version,
-    all_versions: health.allVersions
-      ? { reports: health.allVersions.reports, versions: health.allVersions.versions }
-      : null,
+    [key]: line.label,
+    gateways: figure(line.gateways),
+    calls: figure(line.calls),
+    success_rate: figure(line.successRate),
+    ...(key === 'version' ? { validated: line.validated } : {}),
+  };
+}
+
+/** The `health` of one plugin in `plugins.json`: the same figures as its pages. */
+function healthJson(health: PluginHealth): Record<string, unknown> {
+  return {
+    gateways: figure(health.gateways),
+    minors: health.minors.map((line) => lineJson(line, 'minor')),
+    versions: health.versions.map((line) => lineJson(line, 'version')),
   };
 }
 
 /**
  * `/plugins.json`: the data the plugin pages show, with the health read at
  * `health_read_at` (null when the collector could not be read) and refreshed
- * at most every `health_refreshed_every_seconds`.
+ * at most every `health_refreshed_every_seconds`. `health_read` says which of
+ * the two aggregates were read: a figure of one that was not is null (a
+ * `success_rate` is also null when no call counts).
  */
 export function pluginsJson(
   plugins: readonly PluginWithHealth[],
   thresholds: ValidationThresholds,
-  healthFetchedAt: string | null,
+  snapshot: HealthSnapshot,
   healthRefreshedEverySeconds: number,
 ): string {
   return `${JSON.stringify(
@@ -119,8 +129,13 @@ export function pluginsJson(
         min_success_rate: thresholds.minSuccessRate,
         window_days: thresholds.windowDays,
       },
-      health_read_at: healthFetchedAt,
+      health_read_at: snapshot.fetchedAt,
       health_refreshed_every_seconds: healthRefreshedEverySeconds,
+      health_read: {
+        calls: snapshot.stats.rows !== null,
+        gateways: snapshot.instances.rows !== null,
+      },
+      health_footnote: healthFootnote(thresholds.windowDays),
       plugins: plugins.map((p) => ({
         id: p.id,
         name: p.name,

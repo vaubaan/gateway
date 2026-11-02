@@ -569,7 +569,7 @@ describe('community telemetry', () => {
       expect(r.bodies().flatMap((body) => Object.keys(body))).toEqual(['plugin_health']);
     });
 
-    it('queues one profile a day, bucketed, with a day identifier and nothing that names the instance', async () => {
+    it('queues one profile a day, bucketed, with the stored instance identifier and nothing that names the instance', async () => {
       const { r, mission } = await usage();
       const { instance } = r;
       await instance.call(mission, 'depot__read_item', { space: 'scratch' });
@@ -581,7 +581,8 @@ describe('community telemetry', () => {
       const profiles = profilesOf(r);
       expect(profiles).toHaveLength(1);
       const [profile] = profiles;
-      expect(profile?.day_id).toMatch(/^[0-9a-f]{32}$/);
+      expect(profile?.instance_id).toMatch(/^[0-9a-f]{32}$/);
+      expect(profile?.instance_id).toBe(await instance.root.telemetry.instanceId.peek());
       expect(profile).toMatchObject({ calls: '2-5', active_missions: '1' });
       expect(profile?.plugins).toEqual([
         expect.objectContaining({ plugin: 'depot', accounts: '1' }),
@@ -596,11 +597,11 @@ describe('community telemetry', () => {
       ]) {
         expect(wire, forbidden).not.toContain(forbidden);
       }
-      // The day identifier travels with the profile only.
+      // The instance identifier travels with the profile only.
       const others = r
         .bodies()
         .flatMap((body) => [...(body.plugin_health ?? []), ...(body.decisions ?? [])]);
-      expect(JSON.stringify(others)).not.toContain(String(profile?.day_id));
+      expect(JSON.stringify(others)).not.toContain(String(profile?.instance_id));
     });
 
     it('shows the exact body of each kind on the Admin overview', async () => {

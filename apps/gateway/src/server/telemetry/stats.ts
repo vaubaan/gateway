@@ -47,8 +47,11 @@ export interface ValidationStatus {
   /** Above both published thresholds (success rate, number of reports). */
   readonly validated: boolean;
   readonly reports: number;
-  /** 0 to 1. */
-  readonly successRate: number;
+  /**
+   * 0 to 1, rejected credentials left out; null when every report was one (a
+   * revoked token is the user's configuration, not the plugin): not validated.
+   */
+  readonly successRate: number | null;
 }
 
 /** What is cached: the rows by `plugin@version`, or the memory of a failure. */
@@ -99,10 +102,16 @@ function parseRow(row: unknown): [string, ValidationStatus] | null {
   }
   // PostgREST serializes `numeric` as a JSON number and `bigint` as a number too.
   const count = Number(reports);
-  const rate = Number(success_rate);
   if (!Number.isInteger(count) || count < 0) return null;
-  if (!Number.isFinite(rate) || rate < 0 || rate > 1) return null;
   if (typeof validated !== 'boolean') return null;
+  if (success_rate === null) {
+    return [
+      statusKey(plugin, plugin_version),
+      { validated: false, reports: count, successRate: null },
+    ];
+  }
+  const rate = Number(success_rate);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 1) return null;
   return [statusKey(plugin, plugin_version), { validated, reports: count, successRate: rate }];
 }
 

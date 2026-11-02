@@ -136,6 +136,26 @@ function buildProfile(item: Record<string, unknown>): InstanceProfile | null {
   return createInstanceProfile(item as unknown as InstanceProfileInput);
 }
 
+/**
+ * LEGACY — gateways up to 2.0.0-alpha.12 name the profile's identifier
+ * `day_id` (then drawn again every UTC day). The collector reads it as the
+ * `instance_id` it has become, so that their batches, plugin health included,
+ * are not refused whole. Remove once no supported release sends it.
+ */
+export const LEGACY_PROFILE_ID_KEY = 'day_id';
+
+function withLegacyProfileIds(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  return value.map((item: unknown) => {
+    if (!isPlainObject(item)) return item;
+    if (!Object.hasOwn(item, LEGACY_PROFILE_ID_KEY) || Object.hasOwn(item, 'instance_id')) {
+      return item;
+    }
+    const { [LEGACY_PROFILE_ID_KEY]: legacy, ...rest } = item;
+    return { ...rest, instance_id: legacy };
+  });
+}
+
 /** The batch a collector may store, or `null` when anything in `value` is not one. */
 export function parseBatch(value: unknown): ReportBatch | null {
   if (!isPlainObject(value)) return null;
@@ -148,7 +168,11 @@ export function parseBatch(value: unknown): ReportBatch | null {
   const decisions = parseList(value.decisions, DECISION_REPORT_KEYS, (item) =>
     createDecisionReport(item as unknown as DecisionReportInput),
   );
-  const instance_profiles = parseList(value.instance_profiles, INSTANCE_PROFILE_KEYS, buildProfile);
+  const instance_profiles = parseList(
+    withLegacyProfileIds(value.instance_profiles),
+    INSTANCE_PROFILE_KEYS,
+    buildProfile,
+  );
   if (plugin_health === null || decisions === null || instance_profiles === null) return null;
   const batch: ReportBatch = { plugin_health, decisions, instance_profiles };
   const size = batchSize(batch);

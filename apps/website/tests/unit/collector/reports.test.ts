@@ -38,7 +38,7 @@ const decision = must(
 );
 const profile = must(
   createInstanceProfile({
-    day_id: 'abcdefabcdefabcdefabcdefabcdefab',
+    instance_id: 'abcdefabcdefabcdefabcdefabcdefab',
     gateway_version: '2.0.0',
     deployment: 'railway',
     runtime: 'node-22',
@@ -99,8 +99,18 @@ describe('collector: POST /v1/reports', () => {
     ]);
     expect(inserts[2]?.rows[0]).not.toHaveProperty('plugins');
     expect(inserts[3]?.rows).toEqual([
-      { day_id: profile.day_id, plugin: 'github', plugin_version: '3.0.0', accounts: '1' },
-      { day_id: profile.day_id, plugin: 'supabase', plugin_version: '4.1.0', accounts: '1' },
+      {
+        instance_id: profile.instance_id,
+        plugin: 'github',
+        plugin_version: '3.0.0',
+        accounts: '1',
+      },
+      {
+        instance_id: profile.instance_id,
+        plugin: 'supabase',
+        plugin_version: '4.1.0',
+        accounts: '1',
+      },
     ]);
   });
 

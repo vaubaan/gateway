@@ -1579,6 +1579,24 @@ const RULES: Readonly<Record<string, Rule>> = {
       actor: 'operator',
     },
   },
+  'InstanceIdentifier.peek': READ,
+  'InstanceIdentifier.current': exempt(
+    'draws and stores the telemetry instance identifier the first time a profile needs one: no administrator acted, and the identifier leaves only if usage statistics are on',
+  ),
+  'InstanceIdentifier.regenerate': {
+    kind: 'mutation',
+    target: (root) => root.telemetry.instanceId,
+    drive: async (rig) =>
+      rig.root.telemetry.handlers.regenerateInstanceId(
+        await rig.operatorPost('/api/admin/telemetry/instance-id', {}),
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'telemetry-instance-id',
+      actor: 'operator',
+    },
+  },
   // ── instance name (the entry is written by the Administration handler) ───
   'InstanceNameService.isLocked': READ,
   'InstanceNameService.identity': READ,
@@ -1602,9 +1620,6 @@ const RULES: Readonly<Record<string, Rule>> = {
   ),
   'InstanceProfiler.countCall': exempt(
     'counts, in memory, the calls decided since the last telemetry profile: nothing of the instance is stored, changed or revoked',
-  ),
-  'InstanceProfiler.dayIdFor': exempt(
-    'draws, in memory, the telemetry day identifier of a UTC day: never stored, nothing of the instance changes',
   ),
   'InstanceProfiler.profile': READ,
   // ── authorization server of the management door ───────────────────────────
@@ -1765,6 +1780,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'administrator-granted',
       'administrator-revoked',
       'approval-granted',
+      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

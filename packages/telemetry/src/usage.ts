@@ -1,6 +1,8 @@
 /**
  * The reports of the `usage-stats` level (spec §9): one decision report per
- * call the gateway decided, and one instance profile per UTC day.
+ * call the gateway decided, and one instance profile per UTC day. The profile
+ * is the only report that carries the instance identifier; a decision report
+ * never does, so no call is attributable to an instance.
  *
  * FROZEN SHAPES, like the plugin-health report (`report.ts`). Every value is a
  * word of a closed vocabulary, a shape bounded by a plugin's own declaration,
@@ -109,7 +111,7 @@ export function createDecisionReport(input: DecisionReportInput): DecisionReport
 // ---------------------------------------------------------------------------
 
 export const INSTANCE_PROFILE_KEYS = [
-  'day_id',
+  'instance_id',
   'gateway_version',
   'deployment',
   'runtime',
@@ -154,8 +156,11 @@ export function countBucket(count: number): CountBucket {
 
 /** The runtime's major version only: `node-22`. */
 export const RUNTIME_PATTERN = /^node-[0-9]{1,3}$/;
-/** 128 random bits, hex. Drawn again each UTC day, held in memory only. */
-export const DAY_ID_PATTERN = /^[0-9a-f]{32}$/;
+/**
+ * 128 random bits, hex. Drawn once by the instance and kept in its store,
+ * regenerable by its administrator; sent with the profile only.
+ */
+export const INSTANCE_ID_PATTERN = /^[0-9a-f]{32}$/;
 /** As many plugins as an instance can ship; more is not an instance. */
 export const MAX_PROFILE_PLUGINS = 64;
 
@@ -166,7 +171,7 @@ export interface ProfilePlugin {
 }
 
 export interface InstanceProfile {
-  readonly day_id: string;
+  readonly instance_id: string;
   readonly gateway_version: string;
   readonly deployment: DeploymentKind;
   readonly runtime: string;
@@ -182,7 +187,7 @@ export interface InstanceProfile {
 }
 
 export interface InstanceProfileInput {
-  readonly day_id: string;
+  readonly instance_id: string;
   readonly gateway_version: string;
   readonly deployment: string;
   readonly runtime: string;
@@ -218,7 +223,9 @@ function createProfilePlugin(input: InstanceProfileInput['plugins'][number]): Pr
 }
 
 export function createInstanceProfile(input: InstanceProfileInput): InstanceProfile | null {
-  if (typeof input.day_id !== 'string' || !DAY_ID_PATTERN.test(input.day_id)) return null;
+  if (typeof input.instance_id !== 'string' || !INSTANCE_ID_PATTERN.test(input.instance_id)) {
+    return null;
+  }
   if (!isGatewayVersion(input.gateway_version)) return null;
   if (!isOneOf(DEPLOYMENT_KINDS, input.deployment)) return null;
   if (typeof input.runtime !== 'string' || !RUNTIME_PATTERN.test(input.runtime)) return null;
@@ -238,7 +245,7 @@ export function createInstanceProfile(input: InstanceProfileInput): InstanceProf
   if (new Set(plugins.map((p) => p.plugin)).size !== plugins.length) return null;
   plugins.sort((a, b) => (a.plugin < b.plugin ? -1 : a.plugin > b.plugin ? 1 : 0));
   return Object.freeze({
-    day_id: input.day_id,
+    instance_id: input.instance_id,
     gateway_version: input.gateway_version,
     deployment: input.deployment,
     runtime: input.runtime,

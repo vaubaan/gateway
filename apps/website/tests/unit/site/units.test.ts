@@ -8,11 +8,16 @@ import { describe, expect, it } from 'vitest';
 
 import { loadHandwrittenDocs, proseLines } from '../../../src/content/docs';
 import {
-  allVersionsWords,
+  callsWords,
   fetchHealth,
+  gatewaysSentence,
   healthOf,
-  healthWords,
   type HealthSnapshot,
+  NOT_READ,
+  newestFirst,
+  rateWords,
+  type StatsRow,
+  unreadSnapshot,
 } from '../../../src/content/health';
 import {
   escapeMdx,
@@ -30,8 +35,6 @@ import {
   twinRouteOf,
   wantsMarkdown,
 } from '../../../src/site/routing';
-
-const THRESHOLDS = { minReports: 200, minSuccessRate: 0.9, windowDays: 90 };
 
 describe('Markdown helpers', () => {
   it('escape MDX outside code only', () => {
@@ -70,98 +73,156 @@ describe('Markdown helpers', () => {
 });
 
 describe('plugin health', () => {
-  const measured: HealthSnapshot = {
-    fetchedAt: '2026-10-16T00:00:00.000Z',
-    rows: [
-      {
-        plugin: 'github',
-        plugin_version: '3.1.0',
-        reports: 1200,
-        success_rate: 0.95,
-        validated: true,
-      },
-      { plugin: 'fly', plugin_version: '0.1.0', reports: 12, success_rate: 1, validated: false },
-    ],
-    problem: null,
+  function stats(version: string, reports: number, successes: number, rejected = 0): StatsRow {
+    const counted = reports - rejected;
+    return {
+      plugin: 'github',
+      plugin_version: version,
+      reports,
+      successes,
+      credential_rejections: rejected,
+      success_rate: counted > 0 ? successes / counted : null,
+      validated: reports >= 200 && counted > 0 && successes / counted >= 0.9,
+    };
+  }
+
+  const snapshot: HealthSnapshot = {
+    fetchedAt: '2026-11-02T10:00:00.000Z',
+    stats: {
+      rows: [
+        stats('4.0.2', 120, 110, 10),
+        stats('4.0.1', 300, 290),
+        stats('3.2.0', 50, 40),
+        stats('3.1.0', 10, 10),
+        { ...stats('0.1.0', 5, 5), plugin: 'fly' },
+      ],
+      problem: null,
+    },
+    instances: {
+      rows: [
+        { plugin: 'github', plugin_version: '4.0.2', plugin_minor: null, instances: 3 },
+        { plugin: 'github', plugin_version: '4.0.1', plugin_minor: null, instances: 4 },
+        { plugin: 'github', plugin_version: '4.1.0', plugin_minor: null, instances: 1 },
+        { plugin: 'github', plugin_version: null, plugin_minor: '4.0', instances: 5 },
+        { plugin: 'github', plugin_version: null, plugin_minor: '4.1', instances: 1 },
+        { plugin: 'github', plugin_version: null, plugin_minor: '3.2', instances: 2 },
+        { plugin: 'github', plugin_version: null, plugin_minor: null, instances: 7 },
+      ],
+      problem: null,
+    },
   };
 
-  it('shows the count and the minimum below the minimum of reports, never a rate', () => {
-    const fly = healthOf(measured, 'fly', '0.1.0', THRESHOLDS);
-    expect(fly.version).toEqual({ state: 'below-threshold', reports: 12 });
-    expect(healthWords(fly, THRESHOLDS)).toBe('12 reports of the 200 needed, no rate yet');
-    const unknownVersion = healthOf(measured, 'github', '3.0.0', THRESHOLDS);
-    expect(unknownVersion.version).toEqual({ state: 'below-threshold', reports: 0 });
-    expect(healthWords(unknownVersion, THRESHOLDS)).toBe('no report yet (200 needed)');
+  it('shows every version the collector knows, newest first, whatever its number of calls', () => {
+    const health = healthOf(snapshot, 'github', '4.0.2');
+    expect(health.versions.map((v) => v.label)).toEqual([
+      '4.1.0',
+      '4.0.2',
+      '4.0.1',
+      '3.2.0',
+      '3.1.0',
+    ]);
+    expect(health.versions[1]).toEqual({
+      label: '4.0.2',
+      gateways: 3,
+      calls: 120,
+      successRate: 1,
+      validated: false,
+    });
+    // Known by a profile only: gateways, no call yet.
+    expect(health.versions[0]).toMatchObject({ gateways: 1, calls: 0, successRate: null });
+    expect(health.versions[2]?.validated).toBe(true);
+    expect(health.gateways).toBe(7);
   });
 
-  it('says so when the collector could not be read, and knows no history then', () => {
-    const offline = { fetchedAt: null, rows: [], problem: 'x' };
-    const health = healthOf(offline, 'github', '3.1.0', THRESHOLDS);
-    expect(health).toEqual({ version: { state: 'not-read' }, allVersions: null });
-    expect(healthWords(health, THRESHOLDS)).toBe('not read (the collector did not answer)');
-    expect(allVersionsWords(health)).toBe('');
+  it('adds the patch versions of a minor up, with its gateways counted once by the collector', () => {
+    const health = healthOf(snapshot, 'github', '4.0.2');
+    expect(health.minors).toEqual([
+      // 400 successes of 420 calls, 10 rejected credentials left out.
+      { label: '4.0', gateways: 5, calls: 420, successRate: 0.9756, validated: false },
+      { label: '4.1', gateways: 1, calls: 0, successRate: null, validated: false },
+    ]);
+    expect(callsWords(health.minors[1]?.calls ?? 0)).toBe('no call yet');
+    expect(rateWords(health.minors[0]?.successRate ?? null)).toBe('97.6 %');
+    expect(rateWords(null)).toBe('—');
   });
 
-  it('adds every version of the plugin up as its history, a count without a verdict', () => {
-    const twoVersions: HealthSnapshot = {
-      ...measured,
-      rows: [
-        ...measured.rows,
+  it('shows one row for a plugin with no other minor, and "no call yet" for one never reported', () => {
+    const fly = healthOf(snapshot, 'fly', '0.1.0');
+    expect(fly.minors.map((m) => m.label)).toEqual(['0.1']);
+    const never = healthOf(snapshot, 'never-seen', '1.0.0');
+    expect(never.minors).toEqual([
+      { label: '1.0', gateways: 0, calls: 0, successRate: null, validated: false },
+    ]);
+    expect(never.versions).toEqual([]);
+    expect(gatewaysSentence(never, 90)).toBe('0 gateways run this plugin (over the last 90 days).');
+    expect(gatewaysSentence(healthOf(snapshot, 'github', '4.0.2'), 90)).toBe(
+      '7 gateways run this plugin (over the last 90 days).',
+    );
+  });
+
+  it('says "not read" for the figures of an aggregate that was not read, and only those', () => {
+    const noInstances: HealthSnapshot = {
+      ...snapshot,
+      instances: { rows: null, problem: 'HTTP 503' },
+    };
+    const health = healthOf(noInstances, 'github', '4.0.2');
+    expect(health.gateways).toBe(NOT_READ);
+    expect(health.minors[0]).toMatchObject({ gateways: NOT_READ, calls: 420 });
+    expect(gatewaysSentence(health, 90)).toContain('not read');
+
+    const nothing = healthOf(unreadSnapshot('x'), 'github', '4.0.2');
+    expect(nothing).toEqual({
+      gateways: NOT_READ,
+      minors: [
         {
-          plugin: 'github',
-          plugin_version: '3.0.0',
-          reports: 73,
-          success_rate: 1,
+          label: '4.0',
+          gateways: NOT_READ,
+          calls: NOT_READ,
+          successRate: NOT_READ,
           validated: false,
         },
       ],
-    };
-    const current = healthOf(twoVersions, 'github', '3.1.0', THRESHOLDS);
-    expect(current.allVersions).toEqual({ reports: 1273, versions: 2 });
-    expect(allVersionsWords(current)).toBe('1273 reports over 2 versions');
-    expect(allVersionsWords(healthOf(measured, 'fly', '0.1.0', THRESHOLDS))).toBe(
-      '12 reports over 1 version',
-    );
-    expect(allVersionsWords(healthOf(measured, 'never-seen', '1.0.0', THRESHOLDS))).toBe(
-      'no report for any version',
-    );
-  });
-
-  it('shows the rate and the status from the minimum on', () => {
-    const health = healthOf(measured, 'github', '3.1.0', THRESHOLDS);
-    expect(health.version).toEqual({
-      state: 'measured',
-      reports: 1200,
-      successRate: 0.95,
-      validated: true,
+      versions: [],
     });
-    expect(healthWords(health, THRESHOLDS)).toBe(
-      'validated by the community (95.0 % of 1200 calls worked)',
-    );
+    expect(callsWords(NOT_READ)).toBe('not read');
   });
 
-  it('never throws on a failing or odd collector', async () => {
+  it('orders versions and minors by semver, a pre-release below its release', () => {
+    expect(['1.10.0', '1.2.0', '2.0.0-rc.1', '2.0.0', '1.2.0-beta'].sort(newestFirst)).toEqual([
+      '2.0.0',
+      '2.0.0-rc.1',
+      '1.10.0',
+      '1.2.0',
+      '1.2.0-beta',
+    ]);
+    expect(['3.9', '3.10', '4.0'].sort(newestFirst)).toEqual(['4.0', '3.10', '3.9']);
+  });
+
+  it('reads both aggregates, each on its own, and never throws', async () => {
+    const urls = { stats: 'https://c.example/stats', instances: 'https://c.example/instances' };
     const failing = (() => Promise.reject(new TypeError('fetch failed'))) as typeof fetch;
-    expect((await fetchHealth('https://c.example', failing)).rows).toEqual([]);
-    const odd = (() => Promise.resolve(new Response('{"no":"list"}'))) as typeof fetch;
-    expect((await fetchHealth('https://c.example', odd)).problem).toBe('not a list');
-    const status = (() => Promise.resolve(new Response('', { status: 503 }))) as typeof fetch;
-    expect((await fetchHealth('https://c.example', status)).problem).toBe('HTTP 503');
-    const rows = (() =>
+    const down = await fetchHealth(urls, failing);
+    expect(down.fetchedAt).toBeNull();
+    expect(down.stats.rows).toBeNull();
+    expect(down.instances.problem).toBe('unreachable (TypeError)');
+
+    const half = ((url: string) =>
       Promise.resolve(
-        Response.json([
-          {
-            plugin: 'a',
-            plugin_version: '1.0.0',
-            tool: null,
-            reports: 3,
-            success_rate: 1,
-            validated: false,
-          },
-          { plugin: 'b', plugin_version: '1.0.0', reports: 'x' },
-        ]),
-      )) as typeof fetch;
-    expect((await fetchHealth('https://c.example', rows)).rows.map((r) => r.plugin)).toEqual(['a']);
+        url.endsWith('stats')
+          ? Response.json([
+              { ...stats('1.0.0', 3, 3), plugin: 'a', tool: null },
+              { plugin: 'b', plugin_version: '1.0.0', reports: 'x' },
+              { ...stats('1.0.0', 3, 3), plugin: 'c', credential_rejections: undefined },
+            ])
+          : new Response('', { status: 503 }),
+      )) as unknown as typeof fetch;
+    const read = await fetchHealth(urls, half, () => new Date('2026-11-02T10:00:00Z'));
+    expect(read.fetchedAt).toBe('2026-11-02T10:00:00.000Z');
+    expect(read.stats.rows?.map((r) => r.plugin)).toEqual(['a']);
+    expect(read.instances).toEqual({ rows: null, problem: 'HTTP 503' });
+
+    const odd = (() => Promise.resolve(new Response('{"no":"list"}'))) as typeof fetch;
+    expect((await fetchHealth(urls, odd)).stats.problem).toBe('not a list');
   });
 });
 
@@ -171,6 +232,7 @@ describe('routing on the collector host and by Accept', () => {
   it('serves only the collector on its host, and the site everywhere else', () => {
     expect(hostDecision(HOST, '/v1/reports', HOST)).toBe('collector-route');
     expect(hostDecision(HOST, '/v1/plugin_stats', HOST)).toBe('collector-route');
+    expect(hostDecision(HOST, '/v1/plugin_instances', HOST)).toBe('collector-route');
     expect(hostDecision(HOST, '/robots.txt', HOST)).toBe('collector-robots');
     expect(hostDecision(HOST, '/', HOST)).toBe('not-found');
     expect(hostDecision(HOST, '/docs', HOST)).toBe('not-found');

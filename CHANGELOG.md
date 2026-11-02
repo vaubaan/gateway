@@ -11,16 +11,34 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
-- **vaubaan.com reads plugin health when a page is served.** The plugin pages,
-  their Markdown twins, `plugins.json` and `llms-full.txt` read the collector
-  at request time and are refreshed at most hourly, instead of once per site
-  deploy. Below the published minimum of reports a version shows its count and
-  the minimum ("130 reports of the 200 needed, no rate yet") instead of "not
-  enough reports yet", and every plugin shows its reports over all its
-  versions as history; `validated` stays tied to the exact version.
-  `plugins.json` gains `health_refreshed_every_seconds` and, per plugin,
-  `health.state` `not-read` | `below-threshold` | `measured` with
-  `health.all_versions`. No change to the gateway or the collector.
+- **Telemetry: a stable, framed instance identifier replaces the daily one.**
+  The instance profile (level `usage-stats` only) carries `instance_id`, 128
+  random bits the gateway draws once and keeps in its store, instead of a
+  `day_id` drawn again every UTC day. It is never sent with a call report or a
+  decision. Settings → Administration → Telemetry shows it and has a
+  **Regenerate identifier** button (audited as `config-changed` on
+  `instance-config:telemetry-instance-id`). A restore from a backup keeps it.
+  The collector still accepts `day_id` from earlier gateways.
+- **Telemetry: the community success rate leaves out rejected credentials.**
+  `plugin_stats` gains `credential_rejections`; `success_rate` is
+  `successes / (reports - credential_rejections)`, null when nothing is left,
+  and `validated` uses it. The badge shows no rate for a null one.
+- **Collector**: new public view and endpoint `GET /v1/plugin_instances`
+  (distinct gateways per plugin, version and minor over 90 days); `day_id`
+  renamed `instance_id` in `deploy/collector/schema.sql` (apply it before
+  deploying the site). Rows stored before 2026-11-02 over-count gateways until
+  the window rolls past them.
+- **vaubaan.com plugin pages show the figures of every version.** The plugin
+  pages, their Markdown twins, `plugins.json` and `llms-full.txt` read the
+  collector when a page is served, refreshed at most hourly. `/plugins` lists
+  `Plugin | Version | Gateways | Calls | Success` with two rows per plugin (the
+  minor of this release, then the latest other minor known; the Permissions
+  column is gone); each plugin page says how many gateways run it and lists its
+  last ten versions with `Validated`; `/plugins/health` explains the figures.
+  Nothing is hidden below the report threshold any more: `validated` is a mark,
+  not a gate. `plugins.json` gains `health_refreshed_every_seconds`,
+  `health_read` and `health_footnote`; per plugin, `health` is `gateways`,
+  `minors[]` and `versions[]`.
 
 ## [2.0.0-alpha.12] - 2026-11-01
 

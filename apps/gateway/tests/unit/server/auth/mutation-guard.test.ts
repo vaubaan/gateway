@@ -442,6 +442,11 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/admin/telemetry', headers, { enabled: 'true' }),
     ),
   ),
+  'telemetry.handlers.regenerateInstanceId': form('operator', 303, (rig, headers) =>
+    rig.root.telemetry.handlers.regenerateInstanceId(
+      post('/api/admin/telemetry/instance-id', headers, {}),
+    ),
+  ),
   'instance.handlers.setName': form('operator', 303, (rig, headers) =>
     rig.root.instance.handlers.setName(
       post('/api/admin/instance-name', headers, { name: 'Acme prod' }),

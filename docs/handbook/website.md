@@ -10,7 +10,7 @@ tracks:
   - apps/website/next.config.ts
   - apps/website/package.json
   - apps/website/tests/unit/site/
-last_reviewed: 2026-11-01
+last_reviewed: 2026-11-02
 ---
 
 # The public site — handbook
@@ -30,7 +30,9 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 - **The site reads the repository, not a copy.** Plugins are loaded through their `exports["."]` and validated by `definePlugin` and the catalog loader as at gateway boot; the configuration key table, [known-limitations](known-limitations.md), the [threat model](threat-model.md) (`trust.ts`) and the thresholds of `deploy/collector/schema.sql` are parsed from their files. Reshaping one of those docs can break the site: grep `apps/website/src/content/` first.
 - **`sources-agree.test.ts`** checks the key page against `KEYS`, the thresholds against the collector README, and the severity word against the gateway's over every vector.
 - **Every page has a Markdown twin** (`/index.md`, `/docs/….md`), listed in `llms.txt`; the proxy serves the twin when `Accept` ranks `text/markdown` above `text/html`.
-- **Health is never invented, and never a rate below the threshold**: a failed or skipped collector read (`VAUBAAN_SITE_OFFLINE=1`) gives no row and the pages say "not read"; below `min_reports` they show the count and the minimum; the "all versions" figure is a sum of reports, never a verdict. `healthOf()` is the one place that decides.
+- **Health is never invented, and never gated**: the site reads two aggregates in parallel, `/v1/plugin_stats?tool=is.null` (calls, successes, rejected credentials, rate, `validated`) and `/v1/plugin_instances` (distinct gateways per version, minor and plugin). Each that fails, or is skipped (`VAUBAAN_SITE_OFFLINE=1`), turns its own figures into "not read" (`null` in `plugins.json`, with `health_read` saying which). Every version with data shows its figures; `validated` is a word when true, never a threshold on the display. `healthOf()` is the one place that decides; it is pure and takes a snapshot.
+- **A minor's gateways come from the collector, never from a sum**: `plugin_instances` groups by minor in SQL so a gateway that moved 4.0.1 → 4.0.2 counts once. Calls and the rate of a minor are sums of its versions' rows (rate = successes / (reports − rejected credentials)).
+- **The footnote** (`healthFootnote()`) is on `/plugins`, `/plugins/<id>` and `/plugins/health`, and in `plugins.json`: calls over the window from instances sharing plugin health; gateways among those also sharing usage statistics, a lower bound; rejected credentials left out of the rate.
 - **Health is read when a page is served, once an hour for the whole site**: every route that imports `src/site/live.ts` exports `revalidate = 3600` (`live.test.ts` keeps the literal equal to `HEALTH_REVALIDATE_SECONDS`), and the collector fetch sits in the Next.js data cache for the same hour. What repeats a plugin page (its twin, `plugins.json`, `llms-full.txt`) is rendered by the same functions, so it shows the same figures.
 
 ## Traps
@@ -54,5 +56,6 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 - **`site.json is missing`** → `npm run generate --workspace @vaubaan/website`.
 - **"not plain Markdown"** → a `<`, `{` or component in prose: use a code span.
 - **MDX error in a generated page** → `escapeMdx()` missed a construct: add it to `markdown.ts` and `units.test.ts`.
-- **Every plugin reads "not read"** → the collector did not answer within 4 s when the page was last rendered (`https://telemetry.vaubaan.com/v1/plugin_stats?tool=is.null`); the next render, within the hour, tries again. `/plugins/health` names the time of the last successful read.
-- **A new plugin version reads "no report yet"** while the old one had hundreds → expected: the rate is per exact version; "all versions" keeps the history.
+- **Every plugin reads "not read"** → the collector did not answer within 4 s when the page was last rendered (`https://telemetry.vaubaan.com/v1/plugin_stats?tool=is.null`, `…/v1/plugin_instances`); the next render, within the hour, tries again. `/plugins/health` names the time of the last successful read.
+- **Gateways "not read", calls fine** → `plugin_instances` is missing on the collector's store: apply `deploy/collector/schema.sql`.
+- **A new release's minor reads "no call yet"** while the previous one had hundreds → expected: the list's second row keeps the previous minor; the plugin page lists the last ten versions.
