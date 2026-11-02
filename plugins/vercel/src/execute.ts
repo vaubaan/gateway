@@ -10,7 +10,7 @@
  *   - the 18 rewrapped tools are one `tools/call` to the official Vercel MCP
  *     server through the SDK's client (`callUpstreamTool`) ; Vercel's tool
  *     result is passed through, its own `isError` included ;
- *   - the 13 custom tools hit the REST API directly (`httpJson`).
+ *   - the 14 custom tools hit the REST API directly (`httpJson`).
  *
  * Rules :
  *   - `fetch` and the signal come from the context, never from the global ;
@@ -474,6 +474,12 @@ async function executeCustom(
   if (tool === TOOL.updateProjectSettings) {
     const body = pickDefined(args, PROJECT_SETTINGS_FIELDS);
     return customRest(call, 'PATCH', `/v9/projects/${project}`, query, body);
+  }
+  if (tool === TOOL.disconnectGit) {
+    // Vercel answers with the project object (env values, deploy-hook URLs) :
+    // it is read, then dropped, never shown to the agent.
+    await customRest(call, 'DELETE', `/v9/projects/${project}/link`, query);
+    return { ok: true, projectId: project };
   }
   if (tool === TOOL.upsertEnvVar) {
     query.upsert = 'true';

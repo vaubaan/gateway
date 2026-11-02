@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'vitest';
 import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
+import { VERCEL_API_BASE } from '../../src/identity.ts';
 import { VERCEL_MCP_URL, vercelPlugin } from '../../src/index.ts';
 import { redactProjectPayload, redactProjectResult } from '../../src/project-redact.ts';
 import { REDACTED_VALUE } from '../../src/redact.ts';
@@ -110,5 +111,41 @@ describe('executeVercel — project reads', () => {
     const serialized = JSON.stringify(result);
     expect(serialized).toContain('prj_abc');
     expectNoLeak(serialized);
+  });
+});
+
+describe('executeVercel — update_project_settings answers the project redacted', () => {
+  test('env values and deploy-hook URLs are redacted, the settings come back as they are', async () => {
+    const settings = {
+      framework: 'vite',
+      rootDirectory: 'app',
+      buildCommand: 'npm run build',
+      devCommand: 'npm run dev',
+      installCommand: 'npm ci',
+      outputDirectory: 'dist',
+      nodeVersion: '22.x',
+    };
+    const fetch = mockFetch([
+      {
+        method: 'PATCH',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc?teamId=team_abc`,
+        body: { ...PROJECT, ...settings },
+      },
+    ]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__update_project_settings', {
+      projectId: 'prj_abc',
+      ...settings,
+    });
+    expect(result.isError).toBeFalsy();
+    expectNoLeak(JSON.stringify(result));
+    const answer = JSON.parse(text(result)) as Record<string, unknown>;
+    expect(answer).toMatchObject({ id: 'prj_abc', name: 'app', ...settings });
+    expect((answer.env as { value: unknown }[]).map((e) => e.value)).toEqual([
+      REDACTED_VALUE,
+      REDACTED_VALUE,
+    ]);
+    expect(answer.link).toMatchObject({
+      deployHooks: [{ id: 'h1', name: 'cms', ref: 'main', url: REDACTED_VALUE }],
+    });
   });
 });

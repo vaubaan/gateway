@@ -44,6 +44,7 @@ const SAMPLES: Readonly<Record<string, Record<string, unknown>>> = {
   vercel__edit_toolbar_message: { threadId: 'thr_1', messageId: 'msg_1', markdown: 'x' },
   vercel__add_toolbar_reaction: { threadId: 'thr_1', messageId: 'msg_1', emoji: '+1' },
   vercel__update_project_settings: { framework: 'nextjs' },
+  vercel__disconnect_git: {},
   vercel__upsert_env_var: { key: 'K', value: 'v', target: ['preview'] },
   vercel__list_env_vars: {},
   vercel__delete_env_var: { id: 'env_1' },

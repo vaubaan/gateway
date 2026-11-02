@@ -55,7 +55,7 @@ export const vercelPlugin = definePlugin({
   displayName: 'Vercel',
   icon: VERCEL_ICON,
   iconColor: VERCEL_ICON_COLOR,
-  version: '4.0.0',
+  version: '4.1.0',
   description:
     'Runtime hosting plane — projects, deployments, logs, env vars, custom domains, firewall, preview comments.',
   summary:

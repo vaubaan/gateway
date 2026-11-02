@@ -79,6 +79,19 @@ export const customTools: readonly McpToolDeclaration[] = [
     },
   },
   {
+    name: TOOL.disconnectGit,
+    description:
+      'Disconnect the Git repository linked to a Vercel project : pushes to the repository no longer trigger deployments. Existing deployments are kept. Backed by DELETE /v9/projects/{projectId}/link. Returns `{ ok: true, projectId }`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectIdArg,
+        ...teamIdArg,
+      },
+      required: ['projectId'],
+    },
+  },
+  {
     name: TOOL.upsertEnvVar,
     description:
       'Create or update an environment variable on a Vercel project. Backed by POST /v10/projects/{projectId}/env?upsert=true. Omitting `target` applies the variable to all three environments (production included) — a fan-out the catalog treats as its own risk.',

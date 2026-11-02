@@ -16,10 +16,10 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 | File                    | Role                                                                                                                                                          |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                                                                        |
-| `src/identity.ts`       | `PROVIDER_ID`, `TOOL` (the 31 tool names), the REST base and the MCP server: every name written once.                                                         |
+| `src/identity.ts`       | `PROVIDER_ID`, `TOOL` (the 32 tool names), the REST base and the MCP server: every name written once.                                                         |
 | `src/risk-catalog.yaml` | 16 risks + fallback, five macro-actions. Loaded at boot by the SDK; the only catalog artefact.                                                                |
 | `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                           |
-| `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).                                                    |
+| `src/tools.ts`          | 32 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 14 custom REST (`custom-tools.ts`).                                                    |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources; denies the five thread-addressed tools (`UNBOUND_TOOLS`).       |
 | `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                                                                    |
 | `src/execute.ts`        | Team and project pinning, deployment binding, `tools/call` to the Vercel MCP server (SDK client), REST for custom tools, `discoverResources` (paged listing). |

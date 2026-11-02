@@ -1,6 +1,6 @@
 /**
- * Redaction of the project object returned by `vercel__get_project` and
- * `vercel__list_projects`.
+ * Redaction of the project object returned by `vercel__get_project`,
+ * `vercel__list_projects` and `vercel__update_project_settings`.
  *
  * Handbook : docs/handbook/providers/vercel.md (projects).
  *
@@ -19,8 +19,17 @@ import { isList, isRecord, type McpToolResult } from '@vaubaan/plugin-sdk';
 import { TOOL } from './identity.ts';
 import { isEmpty, REDACTED_VALUE, redactEntry } from './redact.ts';
 
-/** The tools whose answer is a project object. */
-export const PROJECT_TOOLS: ReadonlySet<string> = new Set([TOOL.getProject, TOOL.listProjects]);
+/**
+ * The tools whose answer is a project object. `update_project_settings` is
+ * priced `vercel.project-settings-write` (`data: metadata`) and Vercel's PATCH
+ * answers with the whole project: the same redaction applies. The settings it
+ * writes are all in `PROJECT_PUBLIC_FIELDS`, so the agent reads them back.
+ */
+export const PROJECT_TOOLS: ReadonlySet<string> = new Set([
+  TOOL.getProject,
+  TOOL.listProjects,
+  TOOL.updateProjectSettings,
+]);
 
 /** Fields of a project that describe it. `env` and `link` are filtered on their own. */
 export const PROJECT_PUBLIC_FIELDS: ReadonlySet<string> = new Set([

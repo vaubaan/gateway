@@ -39,7 +39,7 @@ export const VERCEL_MCP_SERVER: UpstreamMcpServer = {
 
 /**
  * The MCP tool names of the plugin : the 18 rewrapped tools of
- * `upstream-tools.json`, then the 13 custom REST tools of `custom-tools.ts`.
+ * `upstream-tools.json`, then the 14 custom REST tools of `custom-tools.ts`.
  */
 export const TOOL = {
   // Rewrapped from mcp.vercel.com.
@@ -63,6 +63,7 @@ export const TOOL = {
   addToolbarReaction: `${TOOL_PREFIX}add_toolbar_reaction`,
   // Custom, on api.vercel.com.
   updateProjectSettings: `${TOOL_PREFIX}update_project_settings`,
+  disconnectGit: `${TOOL_PREFIX}disconnect_git`,
   upsertEnvVar: `${TOOL_PREFIX}upsert_env_var`,
   listEnvVars: `${TOOL_PREFIX}list_env_vars`,
   deleteEnvVar: `${TOOL_PREFIX}delete_env_var`,
