@@ -1,7 +1,7 @@
 # `@vaubaan/plugin-google-calendar`
 
-Google Calendar for Vaubaan Gateway, through **Google's official Calendar MCP
-server** (`https://calendarmcp.googleapis.com/mcp/v1`). The access token comes
+Google Calendar for Vaubaan Gateway, through **Google's Calendar REST API v3**
+(`https://www.googleapis.com/calendar/v3`), with tools of its own. The access token comes
 from the **OAuth broker** the instance is enrolled with: the broker owns the
 Google OAuth client and keeps no token; the instance keeps the refresh token
 and the current access token, and verifies the broker's attestation before
@@ -14,19 +14,19 @@ Broker contract: [`docs/handbook/oauth-broker-contract.md`](../../docs/handbook/
 
 ## Files
 
-| File                      | What                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin`, the default export                                              |
-| `src/identity.ts`         | ids, Google's tool and argument names, `GOOGLE_CALENDAR_MCP_SERVER`, the scopes |
-| `src/identifiers.ts`      | calendar id ↔ ref (`@` ↔ `~`), event id, strict address parsing                 |
-| `src/data-model.ts`       | the `calendar` plane                                                            |
-| `src/risk-catalog.yaml`   | 10 risks + fallback, macro-actions `read`, `schedule`, `invite`                 |
-| `src/credential.ts`       | the brokered `oauth2` spec                                                      |
-| `src/tools.ts`            | the gateway's declarations, built from `upstream-tools.json`                    |
-| `src/upstream-tools.json` | Google's nine tools, modelled from the reference (source and date inside)       |
-| `src/call.ts`             | the one reader of a call, for classify and execute                              |
-| `src/classify.ts`         | slices                                                                          |
-| `src/execute.ts`          | execution and discovery through the SDK's MCP client, the schema check          |
+| File                    | What                                                                  |
+| ----------------------- | --------------------------------------------------------------------- |
+| `src/index.ts`          | `definePlugin`, the default export                                    |
+| `src/identity.ts`       | ids, the API base URL, the scopes, `sendUpdates` and its defaults     |
+| `src/identifiers.ts`    | calendar id ↔ ref (`@` ↔ `~`), event id, path segment, strict address |
+| `src/data-model.ts`     | the `calendar` plane                                                  |
+| `src/risk-catalog.yaml` | 10 risks + fallback, macro-actions `read`, `schedule`, `invite`       |
+| `src/credential.ts`     | the brokered `oauth2` spec, the granted-scope check                   |
+| `src/tools.ts`          | the nine tool declarations                                            |
+| `src/call.ts`           | the one reader of a call, for classify and execute                    |
+| `src/classify.ts`       | slices                                                                |
+| `src/execute.ts`        | REST requests through the SDK's `httpJson`, discovery                 |
+| `src/free-slots.ts`     | the free slots of `suggest_time`, from freeBusy's busy blocks         |
 
 ## Credential and resources
 
@@ -41,7 +41,8 @@ resource per calendar of the account (ref `alice~acme.example`), with
 `google_calendar__list_calendars` (answered by the gateway),
 `list_events`, `search_events`, `get_event`, `suggest_time`, `create_event`,
 `update_event`, `delete_event`, `respond_to_event`. `calendarId` is a calendar
-of the mission (ref or id), the primary one when omitted.
+of the mission (ref or id), the primary one when omitted; `sendUpdates`
+(`all`, `externalOnly`, `none`) says whom Google emails.
 
 ## Risks and macro-actions
 
@@ -56,10 +57,3 @@ risk model §4.6); the trust level sets each risk's gate from its vector and
 multiplies the base budget. The mission stores the explicit list. Deleting an event asks
 first below Autonomous; inviting outside the company and notifying guests are
 irreversible and never run freely.
-
-## Refreshing the tool list
-
-The list is modelled, not captured (the server answers 401 without a token).
-With a connected account, discovery logs any difference with `tools/list`;
-replace `src/upstream-tools.json` with the captured list and set
-`captured_at`, then run `npx vitest run plugins/google-calendar`.

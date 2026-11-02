@@ -1,8 +1,8 @@
 /**
  * Mandatory suite of the `google-calendar` plugin: the SDK kit (definition,
  * macro-actions, no wildcard, catalog coverage, identifier proof), the identity,
- * the version, the catalog path, the credential, the tool surface built from
- * the upstream list and its schema check. No network.
+ * the version, the catalog path, the credential, the tool surface declared
+ * in code. No network.
  */
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -19,16 +19,9 @@ import {
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-import { toolDrift } from '../../src/execute.ts';
-import { PROVIDER_ID, SCOPES, TOOL, UPSTREAM_TOOL } from '../../src/identity.ts';
+import { PROVIDER_ID, SCOPES, TOOL } from '../../src/identity.ts';
 import defaultExport, { googleCalendarCatalog, googleCalendarPlugin } from '../../src/index.ts';
-import {
-  UPSTREAM_TOOL_LIST,
-  declarationsOf,
-  readUpstreamToolList,
-  type UpstreamTool,
-} from '../../src/tools.ts';
-import { SAMPLES, context, mcpRoute, primary, team, textResult } from './fixtures.ts';
+import { EVENT_GET, SAMPLES, context, primary, team } from './fixtures.ts';
 
 describe('google-calendar plugin — structural kit', () => {
   test('well-formed, no wildcard', () => {
@@ -56,13 +49,15 @@ describe('google-calendar plugin — structural kit', () => {
     const report = await assertIdentifiersRefused(googleCalendarPlugin, SAMPLES, {
       resources: [primary, team],
       context: (fetch, resources) => context(fetch, resources),
-      routes: [mcpRoute(() => textResult('ok'))],
-      pathIdentifiers: {
-        none: "every call is a JSON-RPC body to the one URL of Google's Calendar MCP server",
-      },
+      routes: [EVENT_GET],
     });
     expect(report.toolsChecked).toBe(googleCalendarPlugin.tools.length);
-    expect(report.pathIdentifiers).toEqual([]);
+    // Found by running the samples: the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'calendarId',
+      'eventId',
+    ]);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 
   test('the catalog is read from a filesystem path next to the plugin module', () => {
@@ -120,86 +115,46 @@ describe('google-calendar credential — a client of the OAuth broker', () => {
   });
 });
 
-describe('google-calendar tools — built from the upstream list', () => {
-  test("Google's nine tools, modelled from the reference, with its source and date: no drift against itself", () => {
-    expect(UPSTREAM_TOOL_LIST.capturedAt).toBeNull();
-    expect(UPSTREAM_TOOL_LIST.source).toMatch(/developers\.google\.com.*2026-10-27/);
-    expect(UPSTREAM_TOOL_LIST.tools.map((t) => t.name).sort()).toEqual(
-      Object.values(UPSTREAM_TOOL).sort(),
+describe('google-calendar tools — declared in code', () => {
+  const props = (name: string) =>
+    Object.keys(
+      googleCalendarPlugin.tools.find((t) => t.name === name)?.inputSchema.properties ?? {},
     );
-    expect(toolDrift({ tools: UPSTREAM_TOOL_LIST.tools })).toEqual({
-      gone: [],
-      unmodelled: [],
-      arguments: {},
-    });
-  });
 
-  test('the schema check: a live list that drops a tool, adds one or changes arguments is reported', () => {
-    const live = UPSTREAM_TOOL_LIST.tools
-      .filter((t) => t.name !== 'suggest_time')
-      .map((t) =>
-        t.name === 'get_event'
-          ? { ...t, inputSchema: { ...t.inputSchema, properties: { eventId: {}, fields: {} } } }
-          : t,
-      );
-    expect(toolDrift({ tools: [...live, { name: 'create_calendar' }] })).toEqual({
-      gone: ['suggest_time'],
-      unmodelled: ['create_calendar'],
-      arguments: { get_event: ['+fields', '-calendarId'] },
-    });
-  });
-
-  test('the schema check reads an untrusted answer: what is not a named tool is ignored', () => {
-    const everyToolGone = UPSTREAM_TOOL_LIST.tools.map((t) => t.name);
-    expect(toolDrift(null).gone).toEqual(everyToolGone);
-    expect(toolDrift({ tools: 'none' }).gone).toEqual(everyToolGone);
-    expect(toolDrift({ tools: [null, 7, { name: 3 }, { name: 'x', inputSchema: 'y' }] })).toEqual({
-      gone: everyToolGone,
-      unmodelled: ['x'],
-      arguments: {},
-    });
-  });
-
-  test('an upstream tool the model does not know is neither listed nor callable: the module refuses it', () => {
-    const extra: UpstreamTool = {
-      name: 'delete_calendar',
-      description: 'Deletes a calendar.',
-      inputSchema: { type: 'object', properties: { calendarId: { type: 'string' } } },
-    };
-    expect(() =>
-      declarationsOf({ ...UPSTREAM_TOOL_LIST, tools: [...UPSTREAM_TOOL_LIST.tools, extra] }),
-    ).toThrow(/'delete_calendar' is not modelled/);
-  });
-
-  test('an unknown locating argument of an offered tool stops the module until it is modelled', () => {
-    const tools = UPSTREAM_TOOL_LIST.tools.map((t) =>
-      t.name === 'get_event'
-        ? {
-            ...t,
-            inputSchema: {
-              ...t.inputSchema,
-              properties: { ...t.inputSchema.properties, organizerEmail: { type: 'string' } },
-            },
-          }
-        : t,
-    );
-    expect(() => declarationsOf({ ...UPSTREAM_TOOL_LIST, tools })).toThrow(/takes organizerEmail/);
-  });
-
-  test('the deprecated arguments and the paging of list_calendars are not offered', () => {
-    const props = (name: string) =>
-      Object.keys(
-        googleCalendarPlugin.tools.find((t) => t.name === name)?.inputSchema.properties ?? {},
-      );
+  test('every tool but list_calendars and suggest_time names its calendar', () => {
+    for (const tool of googleCalendarPlugin.tools) {
+      const locates = !([TOOL.listCalendars, TOOL.suggestTime] as string[]).includes(tool.name);
+      expect(props(tool.name).includes('calendarId'), tool.name).toBe(locates);
+    }
     expect(props(TOOL.listCalendars)).toEqual([]);
-    expect(props(TOOL.createEvent)).not.toContain('attendeeEmails');
-    expect(props(TOOL.updateEvent)).not.toContain('addedAttendeeEmails');
-    expect(props(TOOL.listEvents)).not.toContain('eventTypeFilter');
   });
 
-  test('the upstream file is checked', () => {
-    expect(() => readUpstreamToolList({ source: 'x', captured_at: null, tools: [{}] })).toThrow(
-      /not a list of MCP tool declarations/,
-    );
+  test('the MCP-only and deprecated arguments are gone; sendUpdates replaces notificationLevel', () => {
+    const all = googleCalendarPlugin.tools.flatMap((t) => props(t.name));
+    for (const gone of [
+      'notificationLevel',
+      'eventTypeFilter',
+      'addedAttendeeEmails',
+      'pageSize',
+      'fullText',
+      'query',
+    ]) {
+      expect(all, gone).not.toContain(gone);
+    }
+    expect(props(TOOL.createEvent)).not.toContain('attendeeEmails');
+    for (const tool of [
+      TOOL.createEvent,
+      TOOL.updateEvent,
+      TOOL.deleteEvent,
+      TOOL.respondToEvent,
+    ]) {
+      expect(props(tool)).toContain('sendUpdates');
+    }
+  });
+
+  test('every required argument is declared', () => {
+    for (const tool of googleCalendarPlugin.tools) {
+      for (const name of tool.inputSchema.required ?? []) expect(props(tool.name)).toContain(name);
+    }
   });
 });

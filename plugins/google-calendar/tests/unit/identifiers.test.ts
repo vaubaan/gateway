@@ -15,6 +15,7 @@ import {
   calendarRefOf,
   eventId,
   parseAddress,
+  pathSegment,
 } from '../../src/identifiers.ts';
 import { TOOL } from '../../src/identity.ts';
 import { context, primary, team } from './fixtures.ts';
@@ -41,6 +42,14 @@ describe('grammars', () => {
   test('an event id is letters, digits, _ and -', () => {
     expect(eventId('7kd8h3j2l1_20261103T100000Z')).toBe('7kd8h3j2l1_20261103T100000Z');
     for (const bad of HOSTILE) expect(eventId(bad), bad).toBeNull();
+  });
+
+  test('a path segment is percent-encoded, never repaired: separators and dot segments are refused', () => {
+    expect(pathSegment('alice@acme.example')).toBe('alice%40acme.example');
+    expect(pathSegment('7kd8h3j2l1_20261103T100000Z')).toBe('7kd8h3j2l1_20261103T100000Z');
+    for (const bad of ['', '.', '..', 'a/b', 'a?b', 'a#b', '%2e%2e', 'a\\b', 'a\nb']) {
+      expect(pathSegment(bad), bad).toBeNull();
+    }
   });
 
   test('an address is exactly one address', () => {

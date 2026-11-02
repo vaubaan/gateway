@@ -2,7 +2,7 @@
 # (`loadCatalogFile`) at gateway boot.
 #
 # Spec     : docs/spec/gateway-risk-model.md §4 ; docs/spec/vaubaan-gateway.md §3.2.
-# ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md D4.
+# ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
 # Handbook : docs/handbook/providers/google-calendar.md.
 #
 # 10 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
@@ -16,16 +16,20 @@
 #     addresses against the calendar's `internal_domains`, as Gmail zones
 #     recipients) — Google emails them an invitation that carries the event;
 #   - `event[e].notify.W` when a change or a deletion lets Google email the
-#     event's current guests (any `notificationLevel` but `NONE`): the guests
+#     event's current guests (any `sendUpdates` but `none`): the guests
 #     are not known before the call, so this is its own decision.
 # catalog_version 2 (2026-10-30) : macro-actions, each entry with its base
 # budget (ADR macro-actions-and-trust-levels-prefill-the-policy). No risk,
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 4 (2026-11-02) : the plugin calls Google's Calendar REST API;
+# the notification argument is `sendUpdates` (was the MCP's
+# `notificationLevel`) in the wording of notify-guests. No risk, pattern or
+# macro-action changed.
 provider: google-calendar
-catalog_version: 3
-catalog_date: 2026-10-31
+catalog_version: 4
+catalog_date: 2026-11-02
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -175,11 +179,11 @@ risks:
   - id: google-calendar.notify-guests
     label: 'Let Google email the guests about a change or a cancellation'
     reason: >-
-      A change or a deletion sent with any notification level but NONE:
-      Google emails the event's current guests, who may be outside the
-      company, the new version of the event. Who they are is not known
-      before the call. An agent that sets notificationLevel to NONE does not
-      need this permission.
+      A change or a deletion sent with sendUpdates other than none (all is
+      the default): Google emails the event's current guests, who may be
+      outside the company, the new version of the event. Who they are is
+      not known before the call. An agent that sets sendUpdates to none does
+      not need this permission.
     matches: 'google-calendar.calendar[*].event[*].notify.W'
     vector:
       reversibility: irreversible

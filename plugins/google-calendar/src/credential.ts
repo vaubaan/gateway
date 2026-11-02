@@ -1,7 +1,7 @@
 /**
  * How a Google Calendar connection is made: the person signs in at Google
  * through the OAuth broker this instance is enrolled with (`oauth2`, client
- * source `broker`; ADR google-calendar-through-an-oauth-broker D1–D3). Google
+ * source `broker`; ADR google-calendar-through-an-oauth-broker). Google
  * offers neither a key a person can make for Calendar nor dynamic client
  * registration; the broker owns one verified client with one redirect URI.
  *

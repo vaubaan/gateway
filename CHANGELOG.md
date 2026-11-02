@@ -57,6 +57,38 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `framework`, `buildCommand`, `rootDirectory`, `nodeVersion`…, come back as
   they are). The risk `vercel.project-settings-write` is `data: metadata`.
 
+### Changed
+
+- **Google Calendar calls Google's Calendar REST API v3** (plugin 0.4.0; ADR
+  google-calendar-through-an-oauth-broker, rewritten 2026-11-02). Google's
+  hosted Calendar MCP server is open to Google Workspace Developer Preview
+  members only, and Google refused the application: plugin 0.3.0 could not
+  work for us nor for any customer outside the Preview. The nine tools keep
+  their names and are now the plugin's own, each on the REST API
+  (`calendarList`, `events.list / get / insert / patch / delete`,
+  `freeBusy.query`): no Developer Preview membership and no "AI-powered
+  agent" client flag are needed any more. `sendUpdates` (`all`,
+  `externalOnly`, `none`) replaces the MCP's `notificationLevel`; time ranges
+  are `timeMin` / `timeMax`, text search `q`, paging `maxResults` /
+  `pageToken`; `search_events` now honours `calendarId` (it searched the
+  primary calendar only); `suggest_time` computes free slots from the
+  free/busy of the account and the people named; `create_event` /
+  `update_event` take `addGoogleMeet`. The deprecated `eventTypeFilter`,
+  `attendeeEmails` (of `create_event`) and `addedAttendeeEmails` are gone.
+  Same two scopes, same risks, same macro-actions (catalog version 4: the
+  wording of `notify-guests` names `sendUpdates`).
+
+### Upgrade notes
+
+1. **Google Calendar connections keep working**: the sealed refresh token,
+   the broker and the two scopes are unchanged, and an access token for them
+   is valid on the REST API. The broker's Google Cloud project needs the
+   Calendar API enabled (it already did); an account whose discovery failed
+   under 0.3.0 for want of the Developer Preview only needs its calendars
+   refreshed. Agents that sent `notificationLevel`, `startTime` / `endTime`
+   to `list_events` or `query` to `search_events` are refused with the
+   argument named, and use the new names.
+
 ## [2.0.0-alpha.13] - 2026-11-02
 
 ### Upgrade notes

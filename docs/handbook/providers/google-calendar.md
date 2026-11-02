@@ -3,14 +3,14 @@ title: Google Calendar provider plugin
 tracks:
   - plugins/google-calendar/src/
   - plugins/google-calendar/package.json
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 # Google Calendar provider plugin — handbook
 
-`@vaubaan/plugin-google-calendar`: a rewrap of Google's Calendar MCP server
-(`https://calendarmcp.googleapis.com/mcp/v1`, Developer Preview), called with an access token from
-the OAuth broker the instance is enrolled with
+`@vaubaan/plugin-google-calendar`: its own nine tools on Google's Calendar REST API v3
+(`https://www.googleapis.com/calendar/v3`), called with an access token from the OAuth broker the
+instance is enrolled with
 ([google-calendar-through-an-oauth-broker](../../decisions/google-calendar-through-an-oauth-broker.md),
 [oauth-broker-stateless-in-an-attested-enclave](../../decisions/oauth-broker-stateless-in-an-attested-enclave.md),
 [broker contract](../oauth-broker-contract.md)). One resource per calendar; no environment. Rules
@@ -19,13 +19,10 @@ common to every plugin: [providers README](README.md).
 ## Start here
 
 - [`src/call.ts`](../../../plugins/google-calendar/src/call.ts) — `readCalendarCall`, shared by
-  classify and execute.
-- [`src/classify.ts`](../../../plugins/google-calendar/src/classify.ts) — guest zoning, the
-  notification marker.
-- [`src/execute.ts`](../../../plugins/google-calendar/src/execute.ts) — one `tools/call` per call
-  through the SDK's MCP client (`GOOGLE_CALENDAR_MCP_SERVER`); discovery and the drift check.
-- [`src/upstream-tools.json`](../../../plugins/google-calendar/src/upstream-tools.json) — the
-  modelled tool list.
+  classify and execute: calendar, event id, attendee zones, argument rules, `sendUpdates` default.
+- [`src/execute.ts`](../../../plugins/google-calendar/src/execute.ts) — one REST request per tool
+  (two for `update_event` with guests and `respond_to_event`), discovery.
+- [`src/tools.ts`](../../../plugins/google-calendar/src/tools.ts) — the tool schemas, ours.
 
 ## Invariants
 
@@ -33,56 +30,51 @@ common to every plugin: [providers README](README.md).
   rules); each zone present emits its marker, so a colleague and a customer need both
   `invite-internal` and `invite-external`. Rooms (`…@resource.calendar.google.com`) are internal; a
   calendar without `internal_domains` treats everyone as external.
-- **An update or delete emails the current guests** unless `notificationLevel: NONE`
-  (`NOTIFICATION_LEVEL_UNSPECIFIED` means `ALL`, `EXTERNAL_ONLY` still emails outsiders). The guests
-  are unknown before the call, so without `NONE` it adds `notify-guests`.
+- **An update or delete emails the current guests** unless `sendUpdates: none`; the gateway
+  sends `all` when the agent says nothing (`externalOnly` still emails outsiders). The guests are
+  unknown before the call, so without `none` it adds `notify-guests`. A response defaults to `none`.
 - One risk per write slice, not layered: deleting does not need `event-change`.
-- `list_calendars` is answered by the gateway from the mission's calendars; Google's (every calendar
-  of the account) serves discovery only.
+- `list_calendars` is answered by the gateway from the mission's calendars; Google's calendarList
+  (every calendar of the account) serves discovery only.
 - A calendar ref is its id with `@` written `~`; calendars whose id holds a `#` (holidays,
-  birthdays, contacts) are not discovered. The executor sends the id, never the ref.
-- A tool Google adds is not offered: `tools.ts` refuses to load an unmodelled tool.
+  birthdays, contacts) are not discovered. The path carries the id, percent-encoded, after
+  `pathSegment` refused `/ ? # %`.
 
 ## Traps
 
-- **The tool list is modelled, not captured** (`captured_at: null`): the endpoint answers 401
-  without a token. Read from Google's "MCP Reference: calendarmcp.googleapis.com" via Context7
-  (2026-10-27). Discovery compares the live `tools/list` and logs the drift.
-- `search_events` searches the primary calendar only, whatever `calendarId` says.
-- A session is initialized only if Google answers 400 or 404 to a bare request (not observed yet;
-  the SDK client's default session mode). A JSON-RPC error frame, or `list_calendars` answering
-  `isError` at discovery, is an `UpstreamProtocolError` (HTTP 502 for the host), never a plain
-  `Error`.
-- Google's deprecated `eventTypeFilter`, `attendeeEmails`, `addedAttendeeEmails` are not offered.
+- `respond_to_event` reads the event with `maxAttendees=1` (Google then returns only this
+  account's entry), then patches `attendeesOmitted: true` with the `self` entry alone: Google's way
+  to change only the participant's answer. Not a guest (an event it organises) → refused.
+- `update_event` with `addedAttendees` / `removedAttendeeEmails` reads the event and patches the
+  merged list (a patch replaces the whole array); a shortened list (`attendeesOmitted`) is refused.
+  A patch of times clears the other form (`date: null` / `dateTime: null`).
+- `suggest_time` is computed here ([`free-slots.ts`](../../../plugins/google-calendar/src/free-slots.ts))
+  from `POST /freeBusy` for the account (its `account_email`, else `primary`) and up to 49 people
+  (`calendarExpansionMax` is 50). A person whose free/busy Google cannot tell (`errors[]`) is
+  listed in `availabilityUnknown`, not counted busy. No working-hours preference: narrow the window.
+- `search_events` honours `calendarId` (the MCP searched the primary one only); `q` is text match.
+- Google's 403 also means a rate limit or `forbiddenForNonOrganizer`: discovery maps those reasons
+  to `UpstreamHttpError`, any other 403 to the refusal below (execute never expires on a 403).
 
 ## Outside the repo
 
-- Nothing to paste and no Google Cloud project per instance: the broker serving `google`
-  (`oauth_brokers`, [configuration](../configuration.md)) holds the client. Without one the plugin
-  is listed as not configured, with the reason.
-- The broker keeps no token: the refresh token is the instance's, sealed, presented at each
-  refresh. A broker whose measurement the release does not admit fails with "no attested
-  broker version admitted by this release" (or declare the broker `attestation: none`).
+- No Google Cloud project per instance: the broker serving `google` ([configuration](../configuration.md))
+  holds the client, whose project must have the **Calendar API** enabled.
+- No Google Workspace Developer Preview membership and no "Use this client for an AI-powered
+  agent" flag on the client: both were for the hosted MCP server (0.3.0), no longer prerequisites.
 - Two scopes, never the full `calendar` scope: `calendar.calendarlist.readonly` and
-  `calendar.events`, which Google's reference accepts for every read tool and `suggest_time`.
-  The broker's allowlist holds these two only (broker 0.2.2): a gateway with a plugin older than
-  0.3.0 gets `invalid_scope` and must upgrade; its connections are reconnected.
-- Discovery seeds `internal_domains` with the account's domain unless it is a consumer one; the
-  owner edits it on the account page.
-
-## Procedures
-
-- **Capture the tool list** once an account is connected: replace `src/upstream-tools.json` with a
-  captured `tools/list`, set `captured_at`, run the tests, bump the version.
+  `calendar.events` (which covers events and freeBusy). The broker's allowlist holds these two only
+  (broker 0.2.2).
+- Discovery seeds `internal_domains` with the account's domain unless it is a consumer one.
+- Provider facts read through Context7 (`/websites/developers_google_workspace_calendar_api`,
+  2026-11-02): reference pages `calendarList/list`, `events/list`, `events/get`, `events/insert`,
+  `events/patch`, `events/delete`, `freebusy/query`, the `events` resource (attendees, `self`,
+  `responseStatus`, `attendeesOmitted`), guide `errors`.
 
 ## Debug
 
-- 403 at discovery, "A Google Workspace administrator may have to allow the app or the Calendar MCP
-  server" → the Workspace admin allows them.
+- "Google refused the Calendar API to this account" at discovery → the Calendar API is off in the
+  broker's Google Cloud project, or a Workspace admin blocks the app.
 - "Google did not grant every access asked for (missing: …)" at discovery → with granular consent
   the person unticked a box; Google still issued the token. Reconnect and tick every box. Checked
   against the scopes the broker reports at redeem; an empty list is "not reported", never refused.
-- "Connected, but … failed (Error)" with every scope granted → Google answered `isError` to
-  `list_calendars`; its text stays with the agent (ADR provider-error-text-stays-with-the-agent),
-  so read the `calendarmcp.googleapis.com` metrics of the broker's Google Cloud project.
-- A call refused for an attendee → one bare address per element, no display name in the string.

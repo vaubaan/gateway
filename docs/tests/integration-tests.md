@@ -49,7 +49,7 @@ last_reviewed: 2026-10-27
 
 ## Known gaps
 
-- ⚠️ **Miro, Google Calendar, CalDAV, Gmail against real accounts** (spec [§5](../spec/vaubaan-gateway.md#5-composition)) — fakes and captured tool lists only; Miro's `board_create` ran live once (its answer is the fixture), "create a board then draw on it" through a mission is still to run live.
+- ⚠️ **Miro, Google Calendar, CalDAV, Gmail against real accounts** (spec [§5](../spec/vaubaan-gateway.md#5-composition)) — fakes and captured or modelled tool lists only (Google Calendar: a mock of the REST API v3); Miro's `board_create` ran live once (its answer is the fixture), "create a board then draw on it" through a mission is still to run live.
 - ⚠️ **Telemetry classes of the shipped plugins** (spec [§9](../spec/vaubaan-gateway.md#9-community-telemetry)) — the reduction is tested on a fixture, not on each plugin's failures.
 - ⚠️ **The collector's SQL against PostgREST** (spec [§9](../spec/vaubaan-gateway.md#9-community-telemetry)) — `schema.sql` is checked as text and was applied by hand once; the `PT429` → 429 mapping comes from documentation.
 - ⚠️ **Group shares through the management door** (spec [§4.1 bis](../spec/vaubaan-gateway.md#41-bis-management-surface-over-mcp)) — tested in `AuthorityService`, not again over MCP.

@@ -1,10 +1,10 @@
 /**
  * `@vaubaan/plugin-google-calendar` — Google Calendar, through Google's
- * official Calendar MCP server, with an access token from the OAuth broker
+ * public Calendar REST API v3, with an access token from the OAuth broker
  * the instance is enrolled with.
  *
  * Spec     : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
- * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md (D3, D4).
+ * ADR      : docs/decisions/google-calendar-through-an-oauth-broker.md.
  * Handbook : docs/handbook/providers/google-calendar.md ; guide : plugins/google-calendar/README.md.
  *
  * Credential : `oauth2` whose client is the broker's (`broker: { provider:
@@ -33,9 +33,9 @@ export const googleCalendarPlugin = definePlugin({
   icon: GOOGLE_CALENDAR_ICON,
   iconColor: GOOGLE_CALENDAR_ICON_COLOR,
   // Always equal to `version` in this plugin's package.json (a test checks it).
-  version: '0.3.0',
+  version: '0.4.0',
   description:
-    "Google Calendar through Google's own Calendar MCP server: read the agenda, suggest a time, create, change and delete events, answer invitations — one resource per calendar.",
+    "Google Calendar through Google's Calendar API: read the agenda, suggest a time, create, change and delete events, answer invitations — one resource per calendar.",
   summary:
     "One account is one Google account: you sign in at Google through the OAuth broker this gateway is enrolled with, with nothing to create or paste. One resource is one calendar of that account; a mission touches only the calendars it was given. Inviting people of the company and people outside it are separate permissions, decided by each calendar's internal domains, and so are letting Google email the guests of a change, and deleting.",
   manualRevocation:
@@ -60,6 +60,7 @@ export { googleCalendarToolTitles };
 export {
   NO_CALENDAR,
   calendarsOf,
+  instantOf,
   readCalendarCall,
   resolveCalendar,
   zoneOf,
@@ -69,17 +70,19 @@ export {
 export { slicesOf } from './classify.ts';
 export { REQUIRED_SCOPES, googleCalendarCredential } from './credential.ts';
 export {
+  CALENDAR_API_REFUSED,
+  DEFAULT_EVENTS_PER_PAGE,
   DISCOVERY_PAGE_SIZE,
   MAX_DISCOVERED_CALENDARS,
-  MCP_SERVER_REFUSED,
   calendarsIn,
   discoverGoogleCalendarResources,
   executeGoogleCalendar,
+  googleErrorReason,
+  mergedAttendees,
   resourcesOf,
-  toolDrift,
   type FoundCalendar,
-  type ToolDrift,
 } from './execute.ts';
+export { freeSlots, mergedBusy, type Span } from './free-slots.ts';
 export {
   CALENDAR_ID,
   CALENDAR_REF,
@@ -89,23 +92,15 @@ export {
   calendarRefOf,
   eventId,
   parseAddress,
+  pathSegment,
 } from './identifiers.ts';
 export {
+  BARE_TOOL,
   BROKER_PROVIDER,
-  CALENDAR_MCP_URL,
-  GOOGLE_CALENDAR_MCP_SERVER,
-  LOCATOR,
+  CALENDAR_API_BASE,
   PROVIDER_ID,
   SCOPES,
+  SEND_UPDATES,
   TOOL,
-  UPSTREAM_TOOL,
-  WITHHELD_ARGUMENTS,
 } from './identity.ts';
-export {
-  MODELLED_LOCATING_ARGUMENTS,
-  UPSTREAM_TOOL_LIST,
-  declarationsOf,
-  readUpstreamToolList,
-  unmodelledLocators,
-  upstreamToolOf,
-} from './tools.ts';
+export { MAX_EVENTS_PER_PAGE, MAX_FREE_BUSY_PEOPLE } from './tools.ts';
