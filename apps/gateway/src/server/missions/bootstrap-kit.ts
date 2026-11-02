@@ -12,11 +12,12 @@
  *      risks, budget, what to do on each structured refusal and when the
  *      token itself stops working, and a short "management door" section — the other MCP door of the instance,
  *      which this token does not open;
- *   4. when the mission holds an account of the provider the instance is the
+ *   4. when the mission holds repositories of a provider the instance is a
  *      git remote of (spec §4.1 ter): git's configuration — a credential
  *      helper that reads the variable (never `store` or `cache`, never the
- *      key in a URL) and the recommended `insteadOf` rewrite of the
- *      provider's URLs — and the remote of each repository;
+ *      key in a URL) and, per provider, the recommended `insteadOf` rewrite
+ *      of its URLs to `<instance>/git/<provider>/` — and the remote of each
+ *      repository;
  *   +  `curl … tools/list`.
  *
  * Pure: the instance URL comes from the configuration (`public_url`), nothing
@@ -92,12 +93,13 @@ export interface BootstrapKitInput {
   readonly policy: readonly KitPolicyLine[];
   /** The secret right after issuance or rotation; the prefix on a revisited page. */
   readonly token: { readonly secret: string } | { readonly prefix: string };
-  /** The git remote, when the mission has repositories it serves; absent otherwise. */
-  readonly git?: KitGitRemote | null;
+  /** The git remotes, one per provider whose repositories the mission holds; absent or empty: none. */
+  readonly git?: readonly KitGitRemote[] | null;
 }
 
+/** The git remote of one provider. */
 export interface KitGitRemote {
-  /** `<public_url>/git/`. */
+  /** `<public_url>/git/<provider>/`. */
   readonly base: string;
   /** The provider's own git URL prefix the kit rewrites to `base` (from the plugin), or none. */
   readonly insteadOf: string | null;
@@ -256,29 +258,43 @@ export function gitCredentialHelper(): string {
   return `!f() { echo username=mission; echo "password=$${MISSION_TOKEN_ENV}"; }; f`;
 }
 
-function gitSnippet(git: KitGitRemote): string {
-  const origin = new URL(git.base).origin;
+function gitSnippet(remotes: readonly KitGitRemote[]): string {
+  const origins = [...new Set(remotes.map((git) => new URL(git.base).origin))];
   const lines = [
     '# The gateway is your git remote and the mission key is the password.',
     '# The helper reads the variable each time: the key is never written to disk.',
-    `git config --global ${shellQuote(`credential.${origin}.helper`)} \\`,
-    `  ${shellQuote(gitCredentialHelper())}`,
+    ...origins.flatMap((origin) => [
+      `git config --global ${shellQuote(`credential.${origin}.helper`)} \\`,
+      `  ${shellQuote(gitCredentialHelper())}`,
+    ]),
   ];
-  if (git.insteadOf) {
+  for (const git of remotes) {
+    if (git.insteadOf) {
+      lines.push(
+        `# Recommended: ${git.insteadOf} URLs (submodules, scripts) go through the gateway too.`,
+        `git config --global ${shellQuote(`url.${git.base}.insteadOf`)} ${shellQuote(git.insteadOf)}`,
+      );
+    }
+  }
+  for (const git of remotes) {
     lines.push(
-      `# Recommended: ${git.insteadOf} URLs (submodules, scripts) go through the gateway too.`,
-      `git config --global ${shellQuote(`url.${git.base}.insteadOf`)} ${shellQuote(git.insteadOf)}`,
+      ...git.repositories.map((ref) => `git clone ${shellQuote(`${git.base}${ref}.git`)}`),
     );
   }
-  lines.push(...git.repositories.map((ref) => `git clone ${shellQuote(`${git.base}${ref}.git`)}`));
   return lines.join('\n');
 }
 
+/** The remotes that serve at least one repository of the mission. */
+function servedRemotes(git: readonly KitGitRemote[] | null | undefined): readonly KitGitRemote[] {
+  return (git ?? []).filter((remote) => remote.repositories.length > 0);
+}
+
 /** The "Git" section of the instruction block. */
-function gitSection(git: KitGitRemote): string[] {
+function gitSection(remotes: readonly KitGitRemote[]): string[] {
+  const urls = remotes.flatMap((git) => git.repositories.map((ref) => `\`${git.base}${ref}.git\``));
   return [
     '### Git',
-    `- This gateway is your git remote: ${git.repositories.map((ref) => `\`${git.base}${ref}.git\``).join(', ')}. Clone, fetch and push there with plain git; the mission key is the password (any user name). You need no other credential, and must not look for one.`,
+    `- This gateway is your git remote: ${urls.join(', ')}. Clone, fetch and push there with plain git; the mission key is the password (any user name). You need no other credential, and must not look for one.`,
     '- A push is decided ref by ref, every ref of it, with the permissions above: which branches and tags, deletions, rewrites (force-push), and changes to CI workflow files. One push is one action: if one ref is refused, the whole push is.',
     '- A refused push prints the reason on `remote: Vaubaan:` lines. When the reason carries a URL (an approval, a limit to raise), hand it to the human, wait, then push exactly the same commits again: an approval covers those commits only; a changed commit asks again.',
     '- If git says a ref is stale or not a fast-forward, someone pushed first: fetch, rebase or merge, push again.',
@@ -292,6 +308,7 @@ function agentInstructions(
   managementEndpoint: string,
 ): string {
   const { mission } = input;
+  const gitRemotes = servedRemotes(input.git);
   const connections = input.connections.flatMap((c) => {
     if (c.resource_sets && c.resource_sets.length > 1) {
       return [
@@ -344,7 +361,7 @@ function agentInstructions(
     'An HTTP 401 whose `error.data.reason` is set means this key authenticated before and no longer does. It says nothing about the mission:',
     ...stopped,
     '',
-    ...(input.git ? [...gitSection(input.git), ''] : []),
+    ...(gitRemotes.length > 0 ? [...gitSection(gitRemotes), ''] : []),
     ...managementDoorSection(managementEndpoint),
   ].join('\n');
 }
@@ -355,6 +372,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
   const managementEndpoint = `${instance}${MANAGEMENT_DOOR_PATH}`;
   const revealsSecret = 'secret' in input.token;
   const tokenValue = 'secret' in input.token ? input.token.secret : maskedToken(input.token.prefix);
+  const gitRemotes = servedRemotes(input.git);
 
   const mcpConfig = {
     mcpServers: {
@@ -371,7 +389,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
     agent_instructions: agentInstructions(input, endpoint, managementEndpoint),
-    git: input.git && input.git.repositories.length > 0 ? gitSnippet(input.git) : null,
+    git: gitRemotes.length > 0 ? gitSnippet(gitRemotes) : null,
     verify: [
       `curl -sS ${shellQuote(endpoint)} \\`,
       `  -H "Authorization: Bearer $${MISSION_TOKEN_ENV}" \\`,

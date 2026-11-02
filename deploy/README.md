@@ -360,7 +360,7 @@ apps/gateway/restore.mjs …`.
   the address it is limited and audited under). The request page keys its
   window on the signed-in user when there is one, so an anonymous flood never
   holds a creator out of an approval link.
-- **Git remote**: `https://<public_url>/git/<owner>/<repo>.git` is the agents'
+- **Git remote**: `https://<public_url>/git/<provider>/<owner>/<repo>.git` is the agents'
   git remote (handbook [git-remote](../docs/handbook/git-remote.md)). A push
   body is the pack itself, streamed and never stored: the reverse proxy must
   not cap or buffer request bodies under `/git/` (the reference Caddyfile

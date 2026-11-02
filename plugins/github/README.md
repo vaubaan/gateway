@@ -121,7 +121,7 @@ URL or the log.
 
 The instance is its agents' git remote (`src/git-remote.ts`,
 [handbook](../../docs/handbook/git-remote.md)):
-`https://<instance>/git/<owner>/<repo>.git`, the mission key as the
+`https://<instance>/git/github/<owner>/<repo>.git`, the mission key as the
 password. Two host-built tools are decided and audited like any call:
 
 | Tool                | When                                    | Arguments (built by the host)                                                               |

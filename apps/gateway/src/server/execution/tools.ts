@@ -35,6 +35,7 @@ import { lineKeyOf } from '@vaubaan/shared/domain';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 import type { CurrentPeriod, MissionState } from '../budget';
+import { gitRemoteUrl } from '../git/paths';
 
 /**
  * Providers for which the mission holds a connection that still serves it (not lost:
@@ -95,14 +96,12 @@ export interface CatalogResource {
   readonly resource_set?: string;
 }
 
-/** Where the instance's git remote lives (`<public_url>/git/`). */
+/**
+ * Where the instance's git remotes live: under `<public_url>/git/<provider>/`
+ * for every provider whose plugin declares one.
+ */
 export interface GitRemoteView {
-  readonly base: string;
-}
-
-/** The remote URL of one repository: `<public_url>/git/<ref>.git`. */
-export function gitRemoteUrl(view: GitRemoteView, ref: string): string {
-  return `${view.base}${ref}.git`;
+  readonly publicUrl: URL;
 }
 
 export interface CatalogConnection {
@@ -167,7 +166,6 @@ export function buildCatalog(
   people: { readonly creator: string | null } = { creator: null },
   gitRemote: GitRemoteView | null = null,
 ): MissionCatalog {
-  const gitProvider = gitRemote ? registry.gitRemote()?.plugin.id : undefined;
   const callable = new Set(callableTools(ctx, registry).map((t) => t.name));
   const tools: CatalogTool[] = [];
   for (const { plugin } of registry.all()) {
@@ -211,8 +209,8 @@ export function buildCatalog(
           ref: r.ref,
           env: r.env ?? null,
           display_name: r.displayName,
-          ...(gitRemote && connection.provider === gitProvider
-            ? { git_remote: gitRemoteUrl(gitRemote, r.ref) }
+          ...(gitRemote && registry.gitRemoteOf(connection.provider)
+            ? { git_remote: gitRemoteUrl(gitRemote.publicUrl, connection.provider, r.ref) }
             : {}),
           ...setLabelOfResource(ctx, r.id),
         })),

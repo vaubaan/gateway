@@ -10,7 +10,7 @@ tracks:
   - packages/shared/src/risk.ts
   - plugins/_template/
   - apps/gateway/next.config.ts
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 # Plugin SDK — handbook
@@ -40,7 +40,10 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
 - [`testing/`](../../packages/plugin-sdk/src/testing/index.ts) (`@vaubaan/plugin-sdk/testing`) — the
   assertions every plugin runs, `policyFromMacroActions`, `decideCall` and what tests need of the
   policy engine. [`git/`](../../packages/plugin-sdk/src/git/index.ts) (`@vaubaan/plugin-sdk/git`) —
-  the git wire code, for GitHub and the host's git door.
+  the git wire code, for GitHub and the host's git door. A protocol other than MCP opens to plugins
+  this way only: a capability of `ProviderPlugin` (`gitRemote`), any number of plugins declaring
+  it, the door in the host under `/<protocol>/<provider id>/` (ADR
+  [protocol-doors-belong-to-the-host](../decisions/protocol-doors-belong-to-the-host.md)).
 - [`plugins/_template`](../../plugins/_template/src/index.ts) — a complete plugin to copy;
   [`plugins/miro`](../../plugins/miro/src/execute.ts) — a rewrap on the SDK's MCP client.
 
@@ -70,7 +73,7 @@ Contributor guide: [`plugins/README.md`](../../plugins/README.md).
 | Catalog                 | Exactly one fallback `<provider>.uncategorized-*` matching `<provider>.**.W`, in no macro-action; every other live entry in exactly one macro-action (`macroActionIssues`); every key known; a `presets` key refused (retired). A rule for TS catalogs goes in `semanticIssues`.                                                                                                   |
 | `envOf`                 | A label, `undefined` (use the resource label) or `NO_SINGLE_ENV` for a wildcard or list: then the label is not consulted and env-scoped risks are refused.                                                                                                                                                                                                                         |
 | Plugin versions         | Semver; below `1.0.0` while young. A stricter classification is a major (minor before 1.0). A wording-only catalog change bumps `catalog_version`, not the plugin version. `definePlugin`'s `version` equals `package.json`'s; the README states neither version (`plugin-versions.test.ts`).                                                                                      |
-| Shipping                | No hidden plugin state: a plugin not ready is not in `SHIPPED_PLUGINS`. At most one plugin declares `gitRemote`.                                                                                                                                                                                                                                                                   |
+| Shipping                | No hidden plugin state: a plugin not ready is not in `SHIPPED_PLUGINS`.                                                                                                                                                                                                                                                                                                            |
 
 ## Versions of the SDK
 

@@ -6,6 +6,7 @@ import {
   createRegistry,
   serviceIconOf,
 } from '../../src/registry.ts';
+import type { GitRemoteCapability } from '../../src/git/remote.ts';
 import type { ProviderPlugin } from '../../src/plugin.ts';
 import { acmePlugin, acmeTools } from '../fixtures/acme/acme-plugin.ts';
 
@@ -134,6 +135,27 @@ describe('PluginRegistry — derivations', () => {
     expect(withBrokers.brokerProviderOf('gamma')).toBe('google');
     expect(withBrokers.brokerProviders()).toEqual(['google']);
     expect(registry.brokerProviders()).toEqual([]);
+  });
+
+  test('gitRemoteOf / gitRemotes: any number of plugins declare a git remote, each reached by its own id', () => {
+    const remoteOf = (id: string): GitRemoteCapability => ({
+      fetchTool: `${id}__git_fetch`,
+      pushTool: `${id}__git_push`,
+      pushRisk: `${id}.thing-write`,
+      repositoryOf: (path) => path,
+      upstream: () => Promise.reject(new Error('not called')),
+      review: () => Promise.reject(new Error('not called')),
+    });
+    const withRemotes = createRegistry([
+      cloneAs('gamma', { gitRemote: remoteOf('gamma') }),
+      acmePlugin,
+      cloneAs('delta', { gitRemote: remoteOf('delta') }),
+    ]);
+    expect(withRemotes.gitRemotes().map((r) => r.plugin.id)).toEqual(['gamma', 'delta']);
+    expect(withRemotes.gitRemoteOf('delta')?.plugin.gitRemote?.pushTool).toBe('delta__git_push');
+    expect(withRemotes.gitRemoteOf('acme')).toBeNull();
+    expect(withRemotes.gitRemoteOf('nope')).toBeNull();
+    expect(registry.gitRemotes()).toEqual([]);
   });
 });
 

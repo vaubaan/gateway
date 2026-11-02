@@ -18,7 +18,7 @@ and "ask me first" ([README, Words](../README.md#words)).
       ▼                          ▼                                ▼
  EXECUTION DOOR            MANAGEMENT DOOR                  WEB INTERFACE
  POST /mcp, /mcp/catalog,  POST /mcp/manage                 pages under apps/gateway/src/app
- /git/<owner>/<repo>.git   prepares and issues missions     answers requests, edits missions
+ /git/<provider>/…        prepares and issues missions     answers requests, edits missions
       │                          │                                │
       ▼                          └───────────────┬────────────────┘
  CALL PIPELINE (packages/gateway-core)           │

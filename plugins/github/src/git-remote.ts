@@ -1,5 +1,5 @@
 /**
- * The GitHub git remote : the provider side of `https://<instance>/git/<owner>/<repo>.git`.
+ * The GitHub git remote : the provider side of `https://<instance>/git/github/<owner>/<repo>.git`.
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote", §2.4 ;
  *        docs/spec/gateway-risk-model.md §7.

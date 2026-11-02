@@ -95,12 +95,6 @@ export class PluginRegistry {
       // prefix rule (checked per plugin) is a bijection on ids.
       for (const tool of plugin.tools) byToolName.set(tool.name, registered);
     }
-    const gitRemotes = [...byId.values()].filter((r) => r.plugin.gitRemote !== undefined);
-    if (gitRemotes.length > 1) {
-      issues.push(
-        `only one plugin may declare a git remote (the /git/ path is shared): ${gitRemotes.map((r) => r.plugin.id).join(', ')}`,
-      );
-    }
     if (issues.length > 0) throw new PluginRegistryError(issues);
     this.byId = byId;
     this.byToolName = byToolName;
@@ -149,12 +143,19 @@ export class PluginRegistry {
   }
 
   /**
-   * The plugin whose provider the instance is the git remote of
-   * (`ProviderPlugin.gitRemote`), or `null` when no registered plugin
-   * declares one. At most one does (checked at construction).
+   * The plugin `id` names when it declares a git remote
+   * (`ProviderPlugin.gitRemote`), or `null`: an unknown id, or a plugin
+   * without one. The git door resolves the `<provider>` segment of its path
+   * here (ADR protocol-doors-belong-to-the-host).
    */
-  gitRemote(): RegisteredPlugin | null {
-    return this.all().find((r) => r.plugin.gitRemote !== undefined) ?? null;
+  gitRemoteOf(id: string): RegisteredPlugin | null {
+    const registered = this.byId.get(id);
+    return registered?.plugin.gitRemote !== undefined ? registered : null;
+  }
+
+  /** Every plugin that declares a git remote, in registration order; any number may. */
+  gitRemotes(): readonly RegisteredPlugin[] {
+    return this.all().filter((r) => r.plugin.gitRemote !== undefined);
   }
 
   /**

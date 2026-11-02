@@ -1,16 +1,22 @@
 /**
  * The git remote — the second door of the execution surface (spec §4.1 ter;
- * ADR gateway-as-git-remote). Host-agnostic `Request → Response`;
- * `src/app/git/[...path]/route.ts` is a one-line adapter.
+ * ADR gateway-as-git-remote, protocol-doors-belong-to-the-host).
+ * Host-agnostic `Request → Response`; `src/app/git/[...path]/route.ts` is a
+ * one-line adapter.
  *
- *   GET  /git/<repo>.git/info/refs?service=git-upload-pack    refs of a fetch   (fetch.ts)
- *   POST /git/<repo>.git/git-upload-pack                       a fetch           (fetch.ts)
- *   GET  /git/<repo>.git/info/refs?service=git-receive-pack   refs before a push (push-side.ts)
- *   POST /git/<repo>.git/git-receive-pack                      a push            (push-side.ts, push.ts)
+ *   GET  /git/<provider>/<repo>.git/info/refs?service=git-upload-pack    refs of a fetch    (fetch.ts)
+ *   POST /git/<provider>/<repo>.git/git-upload-pack                       a fetch            (fetch.ts)
+ *   GET  /git/<provider>/<repo>.git/info/refs?service=git-receive-pack   refs before a push (push-side.ts)
+ *   POST /git/<provider>/<repo>.git/git-receive-pack                      a push             (push-side.ts, push.ts)
  *
  * Order of a request, here:
  *
- *   path        the repository and the endpoint; LFS is answered "not supported"
+ *   path        the provider, the repository and the endpoint; LFS is
+ *               answered "not supported"
+ *   provider    the plugin the `<provider>` segment names, if it declares a
+ *               git remote (`PluginRegistry.gitRemoteOf`); else 404. Whether
+ *               the mission holds a connection on it is the resource stage's
+ *               call, decided and audited like any call
  *   key         HTTP Basic, the mission key as the password (the user name is
  *               ignored); none → 401 with a Basic challenge, so git asks its
  *               credential helper
@@ -41,12 +47,12 @@ import {
 } from './constants';
 import { FetchSide } from './fetch';
 import type { InFlightPushes } from './in-flight';
-import { parseGitPath, type GitPath } from './paths';
+import { GIT_DOOR_SEGMENT, parseGitPath, type GitPath } from './paths';
 import { PushSide } from './push-side';
 import type { Scope } from './scope';
 import type { RelayJobs, UpstreamDeps } from './upstream';
 import { gitText, lfsUnsupported, unauthorized } from './wire';
-import { refusalLine } from './words';
+import { oneLine, refusalLine } from './words';
 
 export interface GitDoorDeps extends UpstreamDeps {
   readonly config: Pick<InstanceConfig, 'git'>;
@@ -68,8 +74,19 @@ const TEXT = {
     'The mission key was not recognised, or it stopped working. Check VAUBAAN_MISSION_TOKEN; GET <instance>/mcp/catalog with the key tells why it stopped.',
   smartOnly:
     'This git remote speaks the smart HTTP protocol only; use a git client of 2005 or later.',
-  noRemote: 'This instance is not a git remote: no provider of it declares one.',
+  noProvider:
+    'A git remote path names its provider first: <instance>/git/<provider>/<owner>/<repo>.git. Take the setup kit of your mission again.',
 } as const;
+
+/** The 404 of a `<provider>` segment that names no plugin of this instance serving git. */
+function noRemoteFor(provider: string, registry: PluginRegistry): string {
+  const known = registry.get(provider);
+  const what = known
+    ? `${known.plugin.displayName} is not served as a git remote by this instance`
+    : `'${oneLine(provider.slice(0, 60))}' is not a provider of this instance`;
+  const served = registry.gitRemotes().map((r) => `${GIT_DOOR_SEGMENT}${r.plugin.id}/`);
+  return `${what}. Git remotes here: ${served.length > 0 ? served.join(', ') : 'none'}. ${TEXT.noProvider}`;
+}
 
 export class GitDoor {
   private readonly fetchSide: FetchSide;
@@ -89,8 +106,11 @@ export class GitDoor {
     const path = parseGitPath(new URL(request.url));
     if (!path) return gitText(HTTP_NOT_FOUND, 'Not a git path.');
     if (path.endpoint.kind === 'lfs') return lfsUnsupported();
-    const registered = this.deps.registry.gitRemote();
-    if (!registered) return gitText(HTTP_NOT_FOUND, TEXT.noRemote);
+    if (path.provider === '') return gitText(HTTP_NOT_FOUND, TEXT.noProvider);
+    const registered = this.deps.registry.gitRemoteOf(path.provider);
+    if (!registered) {
+      return gitText(HTTP_NOT_FOUND, noRemoteFor(path.provider, this.deps.registry));
+    }
 
     const wrong = wrongMethodOrEndpoint(request.method, path);
     if (wrong) return wrong;

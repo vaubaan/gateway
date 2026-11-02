@@ -16,8 +16,9 @@ without `workflow-write-via-file`).
 
 ## Decision
 
-The instance speaks git smart HTTP at `/git/<owner>/<repo>.git` with the mission key as the Basic
-password, admitted by the execution door's own code. A push is read whole, its objects
+The instance speaks git smart HTTP at `/git/<provider>/<owner>/<repo>.git` with the mission key as
+the Basic password, admitted by the execution door's own code; the door is the host's, the plugin
+declares a capability ([protocol-doors-belong-to-the-host](protocol-doors-belong-to-the-host.md)). A push is read whole, its objects
 authenticated by their hash, and the CI workflows of each pushed tip compared with the current
 ones before anything is sent; it is then one call `github__git_push`: one decision, one approval,
 one audit entry, every ref refused when one is. The provider credential is used by the instance

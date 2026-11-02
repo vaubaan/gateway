@@ -27,7 +27,7 @@ import { controlUrl, E2E_APPROVER_USER, E2E_GIT, localOrigin, PUBLIC_URL } from 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TRANSCRIPT = resolve(HERE, '../../../../../test-results/v5/git-session.txt');
 const MISSION = 'Develop acme-git/app with git';
-const REMOTE = `${PUBLIC_URL}/git/${E2E_GIT.repository}.git`;
+const REMOTE = `${PUBLIC_URL}/git/github/${E2E_GIT.repository}.git`;
 /** The kit's credential helper, verbatim: the key is read from the variable. */
 const KIT_HELPER = '!f() { echo username=mission; echo "password=$VAUBAAN_MISSION_TOKEN"; }; f';
 

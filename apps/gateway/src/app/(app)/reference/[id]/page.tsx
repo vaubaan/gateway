@@ -125,9 +125,9 @@ export default async function ServiceReferencePage({ params }: Props) {
           <div className={styles.wrapAnywhere}>
             <p>
               This gateway is the git remote of the repositories a mission holds:{' '}
-              <Mono>{`${gitRemoteBase(root.config.publicUrl)}<owner>/<repo>.git`}</Mono>, the
-              mission key as the password. Clone and fetch are relayed to {reference.name} as they
-              are; a push is decided ref by ref, every ref of it, like a call of the tool{' '}
+              <Mono>{`${gitRemoteBase(root.config.publicUrl, reference.id)}<owner>/<repo>.git`}</Mono>
+              , the mission key as the password. Clone and fetch are relayed to {reference.name} as
+              they are; a push is decided ref by ref, every ref of it, like a call of the tool{' '}
               <Mono>{gitRemote.pushTool}</Mono>, and a clone or fetch like{' '}
               <Mono>{gitRemote.fetchTool}</Mono>.
             </p>

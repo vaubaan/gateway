@@ -530,8 +530,12 @@ providers to identify the user at consent
 ### 4.1 ter Git remote — the second door of the execution surface
 
 For a provider whose plugin declares it, the instance is the agent's git remote:
-`https://<instance>/git/<owner>/<repo>.git`
-([gateway-as-git-remote](../decisions/gateway-as-git-remote.md)).
+`https://<instance>/git/<provider>/<owner>/<repo>.git`, the path naming the provider by its plugin
+id; any number of plugins may declare one
+([gateway-as-git-remote](../decisions/gateway-as-git-remote.md),
+[protocol-doors-belong-to-the-host](../decisions/protocol-doors-belong-to-the-host.md)). A
+`<provider>` that is not a plugin declaring a git remote is answered not found; a mission without a
+connection on it is refused.
 
 - **Authentication**: the mission token is the HTTP password, read by a credential helper from the
   kit's variable (§4.4), never in a URL or file. Admission is the execution door's own: same
@@ -738,8 +742,8 @@ command, in the interface's words (commands, variable, tool names and codes keep
    refusal (hand the request URL to the human, never work around it) and when the key itself stops
    working.
 4. When the mission holds repositories served by the git remote: a credential helper reading the
-   variable, the recommended rewrite of the provider's git URLs to the instance, and each
-   repository's remote. The mission page shows the same remotes and what git may do.
+   variable, the recommended rewrite of each provider's git URLs to its path on the instance
+   (`<instance>/git/<provider>/`), and each repository's remote. The mission page shows the same remotes and what git may do.
 
 A generic page served without authentication documents the same for any agent, with no mission's
 values.

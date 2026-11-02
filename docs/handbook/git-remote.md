@@ -7,19 +7,20 @@ tracks:
   - packages/plugin-sdk/src/git/
   - plugins/github/src/
   - apps/gateway/src/server/store/repositories/pending-refs.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-02
 ---
 
 # Git remote — handbook
 
-`/git/<owner>/<repo>.git`, the second door of the execution surface: plain git
-with a mission key. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.4,
-§4.1 ter; ADR [gateway-as-git-remote](../decisions/gateway-as-git-remote.md);
+`/git/<provider>/<owner>/<repo>.git`, the second door of the execution surface:
+plain git with a mission key. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md)
+§2.4, §4.1 ter; ADRs [gateway-as-git-remote](../decisions/gateway-as-git-remote.md),
+[protocol-doors-belong-to-the-host](../decisions/protocol-doors-belong-to-the-host.md);
 plugin: [providers/github](providers/github.md).
 
 ## Start here
 
-- [`git/door.ts`](../../apps/gateway/src/server/git/door.ts) — path, Basic key, admission, dispatch.
+- [`git/door.ts`](../../apps/gateway/src/server/git/door.ts) — path, provider, Basic key, admission, dispatch.
 - [`git/push.ts`](../../apps/gateway/src/server/git/push.ts) — the push steps, in order.
 - [`plugin-sdk/src/git/`](../../packages/plugin-sdk/src/git/) — pkt-line, advertisement, bounded pack reader.
 - [`github/src/git-review.ts`](../../plugins/github/src/git-review.ts), [`git-moves.ts`](../../plugins/github/src/git-moves.ts) — what GitHub is asked.
@@ -40,11 +41,23 @@ plugin: [providers/github](providers/github.md).
   advertised. Never advertised: `atomic`, `push-options`, `push-cert`,
   `report-status-v2`.
 - Admission is the MCP door's `MissionAdmission`, sharing its surface window
-  `mcp:mission:<id>`. One plugin at most declares a remote.
+  `mcp:mission:<id>`.
+- The door is the host's; any number of plugins declare `gitRemote`, each
+  reached only under its own id (`PluginRegistry.gitRemoteOf`). An unknown
+  `<provider>`, or one without `gitRemote`, is a `404` before the key is read;
+  a mission without a connection on it is refused by the resource stage,
+  audited like any call. `repositoryOf` receives the path after the provider
+  segment, `.git` removed.
 
 ## Traps
 
 - The Next proxy's matcher excludes `/git/`: it would buffer and cut packs.
+- Every URL the instance gives (catalog `git_remote`, kit, mission page,
+  Reference) comes from `gitRemoteBase` / `gitRemoteUrl` in `git/paths.ts`;
+  the kit's `insteadOf` maps the plugin's prefix to `<instance>/git/<provider>/`.
+  A kit taken before the provider segment (2026-11-02) points at
+  `/git/<owner>/…` and gets a `404` naming the remotes served: take the kit
+  again.
 - A POST whose body is a lone flush packet is git's credential probe: `200`
   after admission, not audited.
 - `no-thin` is advertised so the inspection reads every object; a thin pack

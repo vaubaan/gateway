@@ -216,15 +216,17 @@ describe('buildBootstrapKit', () => {
 });
 
 describe('the git step of the kit', () => {
-  const git = {
-    base: 'https://gateway.acme.example/git/',
+  const github = {
+    base: 'https://gateway.acme.example/git/github/',
     insteadOf: 'https://github.com/',
     repositories: ['acme/app', 'acme/web'],
   };
+  const git = [github];
 
   it('is absent without a repository the instance serves', () => {
     expect(buildBootstrapKit(INPUT).git).toBeNull();
-    expect(buildBootstrapKit({ ...INPUT, git: { ...git, repositories: [] } }).git).toBeNull();
+    expect(buildBootstrapKit({ ...INPUT, git: [] }).git).toBeNull();
+    expect(buildBootstrapKit({ ...INPUT, git: [{ ...github, repositories: [] }] }).git).toBeNull();
     expect(buildBootstrapKit(INPUT).agent_instructions).not.toContain('### Git');
   });
 
@@ -237,21 +239,43 @@ describe('the git step of the kit', () => {
     expect(kit.git).not.toContain(SECRET);
     expect(kit.git).not.toMatch(/helper (store|cache)|@gateway/);
     expect(kit.git).toContain(
-      `git config --global 'url.https://gateway.acme.example/git/.insteadOf' 'https://github.com/'`,
+      `git config --global 'url.https://gateway.acme.example/git/github/.insteadOf' 'https://github.com/'`,
     );
-    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/acme/app.git'`);
-    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/acme/web.git'`);
+    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/github/acme/app.git'`);
+    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/github/acme/web.git'`);
   });
 
   it('offers no rewrite when the plugin names no provider prefix', () => {
-    const kit = buildBootstrapKit({ ...INPUT, git: { ...git, insteadOf: null } });
+    const kit = buildBootstrapKit({ ...INPUT, git: [{ ...github, insteadOf: null }] });
     expect(kit.git).not.toContain('insteadOf');
+  });
+
+  it('rewrites each provider to its own path, with one credential helper for the instance', () => {
+    const kit = buildBootstrapKit({
+      ...INPUT,
+      git: [
+        github,
+        {
+          base: 'https://gateway.acme.example/git/gitea/',
+          insteadOf: 'https://gitea.acme.example/',
+          repositories: ['ops/infra'],
+        },
+      ],
+    });
+    expect(kit.git?.match(/credential\./g)).toHaveLength(1);
+    expect(kit.git).toContain(
+      `git config --global 'url.https://gateway.acme.example/git/gitea/.insteadOf' 'https://gitea.acme.example/'`,
+    );
+    expect(kit.git).toContain(`git clone 'https://gateway.acme.example/git/gitea/ops/infra.git'`);
+    expect(kit.agent_instructions).toContain(
+      '`https://gateway.acme.example/git/gitea/ops/infra.git`',
+    );
   });
 
   it('tells the agent how git is decided and what to do with a refusal', () => {
     const text = buildBootstrapKit({ ...INPUT, git }).agent_instructions;
     expect(text).toContain('### Git');
-    expect(text).toContain('`https://gateway.acme.example/git/acme/app.git`');
+    expect(text).toContain('`https://gateway.acme.example/git/github/acme/app.git`');
     expect(text).toContain('every ref of it');
     expect(text).toContain('push exactly the same commits again');
   });

@@ -173,7 +173,10 @@ describe('git door path — properties', () => {
           url.pathname = `/${segments.join('/')}`;
           url.searchParams.set('service', query);
           const path = parseGitPath(url);
-          if (path !== null) expect(typeof path.repositoryPath).toBe('string');
+          if (path !== null) {
+            expect(typeof path.repositoryPath).toBe('string');
+            expect(path.provider).not.toContain('/');
+          }
         },
       ),
       propertyRuns(),

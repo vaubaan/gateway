@@ -195,10 +195,12 @@ export interface ProviderPlugin {
 
   /**
    * The instance as this provider's git remote (spec vaubaan-gateway §4.1 ter) :
-   * `git clone` / `git push` against `https://<instance>/git/<repository>.git`
-   * with the mission key as the password, decided and audited like a tool
-   * call. Absent for a provider whose agents have no git to speak. At most
-   * one registered plugin declares it : the `/git/` path is shared.
+   * `git clone` / `git push` against
+   * `https://<instance>/git/<provider id>/<repository>.git` with the mission key
+   * as the password, decided and audited like a tool call. Absent for a
+   * provider whose agents have no git to speak. Any number of plugins may
+   * declare it : the path names the provider (ADR
+   * protocol-doors-belong-to-the-host).
    */
   readonly gitRemote?: GitRemoteCapability;
 
