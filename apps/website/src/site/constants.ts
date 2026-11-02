@@ -18,8 +18,10 @@ export function githubTree(path: string): string {
   return `${GITHUB_REPO}/tree/main/${path.replace(/^\/+/, '').replace(/\/+$/, '')}`;
 }
 
-/** The collector's public aggregates (website spec §2.4), read at build time. */
-export const PLUGIN_STATS_URL = 'https://telemetry.vaubaan.com/v1/plugin_stats?tool=is.null';
+/** The collector's public aggregates (website spec §2.4), read when a plugin page is served. */
+export const PLUGIN_STATS_URL =
+  'https://telemetry.vaubaan.com/v1/plugin_stats?select=plugin,plugin_version,reports,successes,credential_rejections,success_rate,validated&tool=is.null';
+export const PLUGIN_INSTANCES_URL = 'https://telemetry.vaubaan.com/v1/plugin_instances';
 
 export const SITE_NAME = 'Vaubaan Gateway';
 

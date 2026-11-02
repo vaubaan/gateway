@@ -139,18 +139,25 @@ describe('robots.txt and sitemap.xml', () => {
 });
 
 describe('plugins.json', () => {
-  it('carries every plugin with its version, risks, macro-actions and, unread, a health without rate or history', () => {
+  it('carries every plugin with its version, risks, macro-actions and, unread, figures that say so', () => {
     const json = JSON.parse(livePluginsJson(liveSiteFrom(site.data, UNREAD))) as {
       health_read_at: string | null;
       health_refreshed_every_seconds: number;
-      plugins: Record<string, unknown>[];
+      health_read: Record<string, boolean>;
+      plugins: (Record<string, unknown> & { version: string })[];
     };
     expect(json.health_read_at).toBeNull();
     expect(json.health_refreshed_every_seconds).toBe(3600);
+    expect(json.health_read).toEqual({ calls: false, gateways: false });
     expect(json.plugins.map((p) => p.id)).toEqual(site.plugins.map((p) => p.id));
     for (const plugin of json.plugins) {
       expect(plugin).not.toHaveProperty('status');
-      expect(plugin.health).toEqual({ state: 'not-read', all_versions: null });
+      const minor = plugin.version.split('.').slice(0, 2).join('.');
+      expect(plugin.health).toEqual({
+        gateways: null,
+        minors: [{ minor, gateways: null, calls: null, success_rate: null }],
+        versions: [],
+      });
     }
   });
 });

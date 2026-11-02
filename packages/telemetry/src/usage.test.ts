@@ -21,7 +21,7 @@ const DECISION: DecisionReportInput = {
 };
 
 const PROFILE: InstanceProfileInput = {
-  day_id: '0123456789abcdef0123456789abcdef',
+  instance_id: '0123456789abcdef0123456789abcdef',
   gateway_version: '2.0.0',
   deployment: 'railway',
   runtime: 'node-22',
@@ -95,7 +95,7 @@ describe('InstanceProfile', () => {
   });
 
   it.each([
-    ['day id that is not 128 bits of hex', { day_id: 'acme-prod' }],
+    ['instance id that is not 128 bits of hex', { instance_id: 'acme-prod' }],
     ['exact count', { users: '3' }],
     ['unknown deployment', { deployment: 'acme-k8s' }],
     ['runtime with a minor version', { runtime: 'node-22.4.1' }],

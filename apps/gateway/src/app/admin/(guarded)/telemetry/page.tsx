@@ -1,8 +1,10 @@
 /**
  * `/admin/telemetry` — community telemetry (spec §9, §4.2 "Administration"):
- * the administrator's switch, where reports go, and the exact payload of a
- * report as this gateway would send it. Off at installation. Read-only when
- * the mounted configuration sets `telemetry.enabled` (the file wins).
+ * the administrator's switch, where reports go, the exact payload of a
+ * report as this gateway would send it and, with usage statistics, the
+ * instance identifier of the daily profile and its regeneration. Off at
+ * installation. The switch is read-only when the mounted configuration sets
+ * `telemetry.enabled` (the file wins).
  */
 import { PLUGIN_REPORT_KEYS } from '@vaubaan/telemetry';
 
@@ -22,6 +24,7 @@ import { requireOperator } from '@/lib/auth/session';
 import { CONFIG_WORDS, formatNumber, SETTINGS_ACTIONS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
   ENABLED_FIELD,
+  INSTANCE_ID_ACTION,
   PROBLEM_PARAM,
   TELEMETRY_ACTION,
   type TelemetryProblem,
@@ -140,9 +143,9 @@ export default async function TelemetryPage({ searchParams }: Props) {
               With usage statistics, the gateway also sends one decision per call it decides
               (allowed, or the refusal code; the permissions it touched, without their environment;
               whether it asked first), and once a day a profile of this gateway: its version, where
-              it runs, the runtime, the kinds of sign-in, and counts of people, missions, accounts
-              and calls as ranges (“2-5”, never 3). The profile carries an identifier drawn again
-              every day and sent with nothing else.
+              it runs, the runtime, the kinds of sign-in, its plugins and their versions, and counts
+              of people, missions, accounts and calls as ranges (“2-5”, never 3). The profile
+              carries this gateway’s instance identifier, below; no call report does.
             </p>
           )}
         </div>
@@ -155,10 +158,39 @@ export default async function TelemetryPage({ searchParams }: Props) {
           <Mono>outcome</Mono> is one of success, upstream-error, classification-error,
           execution-error; <Mono>error_class</Mono> is a fixed keyword or an HTTP status, never a
           message. Never sent: the arguments of a call or a hash of them, resource references,
-          mission identifiers, user identifiers, environment labels, any lasting identifier of this
-          gateway, its address or its host name, the text of a service’s error.
+          mission identifiers, user identifiers, environment labels, any identifier of this gateway
+          on a call, its address or its host name, the text of a service’s error.
         </Hint>
       </Section>
+
+      {overview.level === 'usage-stats' && (
+        <Section title="Instance identifier">
+          <KeyValue
+            items={[
+              {
+                term: 'Identifier',
+                value:
+                  overview.instanceId === null ? (
+                    'not drawn yet: it is drawn with the first daily profile'
+                  ) : (
+                    <Mono>{overview.instanceId}</Mono>
+                  ),
+              },
+            ]}
+          />
+          <form method="post" action={INSTANCE_ID_ACTION} className={styles.formActions}>
+            <Button type="submit" variant="secondary">
+              {SETTINGS_ACTIONS.regenerateInstanceId}
+            </Button>
+          </form>
+          <Hint>
+            A random identifier, stable from one day to the next, sent with the daily profile only
+            and never with a call. It lets the community count the gateways that run each plugin
+            version over 90 days. Regenerating it here makes this gateway count as a new one; a
+            restore from a backup brings back the identifier of the backup.
+          </Hint>
+        </Section>
+      )}
     </>
   );
 }

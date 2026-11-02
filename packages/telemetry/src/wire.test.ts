@@ -32,7 +32,7 @@ function decision(): DecisionReport {
 }
 
 const profile = createInstanceProfile({
-  day_id: 'ffffffffffffffffffffffffffffffff',
+  instance_id: 'ffffffffffffffffffffffffffffffff',
   gateway_version: '2.0.0',
   deployment: 'docker',
   runtime: 'node-22',
@@ -101,6 +101,19 @@ describe('wire: parseBatch, the collector side', () => {
     if (!profile) throw new Error('fixture refused');
     const entry = { ...profile.plugins[0], org: 'acme' };
     expect(parseBatch({ instance_profiles: [{ ...profile, plugins: [entry] }] })).toBeNull();
+  });
+
+  it('reads the day_id of a gateway up to 2.0.0-alpha.12 as its instance_id', () => {
+    if (!profile) throw new Error('fixture refused');
+    const { instance_id: id, ...rest } = profile;
+    const legacy = { ...rest, day_id: id };
+    expect(parseBatch({ plugin_health: [health()], instance_profiles: [legacy] })).toEqual({
+      plugin_health: [health()],
+      decisions: [],
+      instance_profiles: [profile],
+    });
+    // Both keys at once is not a client of this project.
+    expect(parseBatch({ instance_profiles: [{ ...profile, day_id: id }] })).toBeNull();
   });
 
   it('refuses an empty batch and one larger than the bound', () => {

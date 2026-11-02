@@ -63,13 +63,24 @@ generated from its folder; a plugin is listed because it exists in the repositor
 
 ### 2.4 Plugin health — `/plugins/health` and on each plugin page
 
-- Per `(plugin, version)` and tool: reports over the window, success rate, **validated** against
-  published thresholds. Below the report threshold: the number of reports and the minimum, never
-  a rate. Beside the version, the plugin's reports over every version it ever had: a history, not a
-  verdict — **validated** stays tied to the exact version.
+- Every version with data shows its figures, whatever their number: **gateways** (distinct
+  instances running it), **calls** and **success rate**; **validated** (the published thresholds,
+  which drive the gateway's badge) is a plain mark when true, never a gate on what is shown.
+- `/plugins`: `Plugin | Version | Gateways | Calls | Success`, two rows per plugin: the minor
+  (`major.minor`) of the version in the repository, then the most recent other minor the collector
+  knows, if any. A minor adds up its patch versions; its gateways are counted distinct over the
+  minor. A minor with no call reads "no call yet".
+- `/plugins/<id>`: "N gateways run this plugin" over the window, and the last ten versions the
+  collector knows, newest first: `Version | Gateways | Calls | Success | Validated`.
+- `/plugins/health`: what calls, gateways, success rate and validated mean, the hourly refresh, and
+  "not read" when the collector does not answer.
+- A footnote on the three pages: calls are counted over the window from instances sharing plugin
+  health; gateways among instances that also share usage statistics, over the same window, so a
+  lower bound; the success rate leaves out calls refused for a rejected credential.
 - Read from the collector's public aggregates when a page is served, refreshed at most hourly; a
-  collector that does not answer leaves the pages up and says the figures were not read. Instances
-  read the same aggregates for their badge. `usage-stats` aggregates are **not** published (§5).
+  collector that does not answer leaves the pages up and says the figures were not read, each
+  figure on its own. Instances read the same aggregates for their badge. Of the `usage-stats`
+  aggregates only gateways per plugin version are published (§5).
 
 ### 2.5 Trust center — `/trust`
 
@@ -118,8 +129,8 @@ A model must find the site, quote it correctly and act on it without a browser.
 
 ## 5. Open questions
 
-1. **Publishing usage statistics** (`usage-stats` aggregates) or keeping them for maintainers. Not
-   in the first version.
+1. **Publishing more usage statistics** (`usage-stats` aggregates beyond gateways per plugin
+   version) or keeping them for maintainers.
 2. **Languages**: English only; French for landing and trust center is a candidate.
 3. **Versioned docs**: the latest release only, until a second release line.
 4. **A docs MCP server**, if `llms.txt` and the Markdown pages prove insufficient.

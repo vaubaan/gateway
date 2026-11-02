@@ -2,7 +2,7 @@
 title: Community telemetry collector
 status: current
 date: 2026-10-13
-last_synced: 2026-10-16
+last_synced: 2026-11-02
 tracks:
   - deploy/collector/schema.sql
   - packages/telemetry/src/report.ts
@@ -67,7 +67,7 @@ per request, of which at most two instance profiles:
   ],
   "instance_profiles": [
     {
-      "day_id": "3f0c9a7e5b1d4c2a8e6f0b9d7c5a3e1f",
+      "instance_id": "3f0c9a7e5b1d4c2a8e6f0b9d7c5a3e1f",
       "gateway_version": "2.0.0",
       "deployment": "docker",
       "runtime": "node-22",
@@ -101,15 +101,19 @@ success and otherwise a fixed keyword (`network`, `timeout`,
   plugin does not declare.
 - `instance_profiles`: one per instance and UTC day. Counts are buckets (`0`,
   `1`, `2-5`, `6-20`, `21-100`, `101-1000`, `>1000`), never exact;
-  `deployment` is `docker`, `railway`, `fly` or `other`. `day_id` is
-  128 random bits the instance draws again every UTC day and keeps in memory
-  only: it counts the instances of a day, it cannot follow one from a day to
-  the next, and it is never attached to a plugin-health or decision report.
+  `deployment` is `docker`, `railway`, `fly` or `other`. `instance_id` is
+  128 random bits the instance draws once and keeps in its store; its
+  administrator sees it and can regenerate it on Admin → Telemetry. It travels
+  on the profile only, never on a plugin-health or decision report, so no call
+  is attributable to an instance; it lets the collector count the gateways
+  running a plugin version over the window. Gateways up to 2.0.0-alpha.12 send
+  the same field as `day_id`, drawn again every UTC day; the endpoint stores it
+  as `instance_id`.
 
 Never sent, and impossible to store here: the arguments of a call or a hash
 of them, payloads, provider answers or error text, resource references,
 environment labels, mission, user or connection identifiers, emails, account
-names, host names, URLs, a stable identifier of the instance, a network
+names, host names, URLs, an identifier of the instance on a call, a network
 address. Every column is constrained to a closed vocabulary, a bounded shape
 or a bucket (`CHECK` constraints in `schema.sql`), so a client that tried to
 send free text would be refused twice: by the endpoint and by the database.
@@ -145,10 +149,13 @@ Both numbers and the window live in one SQL function,
 `schema.sql` and this table together (a test of the repository compares the
 two), then apply the file again.
 
-Every outcome that is not `success` counts against the rate, including a
-provider answering 404 to a call the agent got wrong: the rate measures calls
-that worked, not the plugin's code alone. The threshold is set with that in
-mind.
+The success rate is `successes / (reports - credential_rejections)`: a call
+refused because the provider rejected the credential (`credential_rejected`)
+is left out, since a revoked or expired token is the user's configuration,
+not the plugin. Every other outcome that is not `success` counts against the
+rate, including a provider answering 404 to a call the agent got wrong: the
+rate measures calls that worked, not the plugin's code alone. The threshold
+is set with that in mind.
 
 ## The public aggregates
 
@@ -156,25 +163,46 @@ mind.
 `public.plugin_stats`, cached for an hour at the edge. It accepts the query a
 gateway builds (`select`, `tool=is.null`, `plugin=in.(…)`) and nothing else:
 
-| Column           | Meaning                                                             |
-| ---------------- | ------------------------------------------------------------------- |
-| `plugin`         | plugin identifier                                                   |
-| `plugin_version` | plugin version                                                      |
-| `tool`           | tool name, or **null** for the row of the plugin version as a whole |
-| `reports`        | reports in the window                                               |
-| `successes`      | of which successes                                                  |
-| `success_rate`   | `successes / reports`, 0 to 1, four decimals                        |
-| `validated`      | both thresholds are met for this row                                |
+| Column                  | Meaning                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `plugin`                | plugin identifier                                                                           |
+| `plugin_version`        | plugin version                                                                              |
+| `tool`                  | tool name, or **null** for the row of the plugin version as a whole                         |
+| `reports`               | reports in the window                                                                       |
+| `successes`             | of which successes                                                                          |
+| `credential_rejections` | of which refused for a rejected credential                                                  |
+| `success_rate`          | `successes / (reports - credential_rejections)`, 0 to 1, four decimals; null when that is 0 |
+| `validated`             | both thresholds are met for this row                                                        |
 
 A gateway reads the rows whose `tool` is null for the plugins it registers
 and shows the status of the version it runs on the page of each account and
 in Reference. It does so only while its own telemetry is enabled, caches the
 answer for six hours and shows nothing when the collector does not answer.
 
+`GET https://telemetry.vaubaan.com/v1/plugin_instances` serves the view
+`public.plugin_instances`, cached for an hour at the edge: the number of
+distinct `instance_id`s whose profile listed a plugin over the window. It
+accepts `select` (among its columns) and `plugin=in.(…)`, nothing else:
+
+| Column           | Meaning                                                           |
+| ---------------- | ----------------------------------------------------------------- |
+| `plugin`         | plugin identifier                                                 |
+| `plugin_version` | plugin version, or **null** on a minor row and on the plugin row  |
+| `plugin_minor`   | `major.minor`, or **null** on a version row and on the plugin row |
+| `instances`      | distinct instances in the window                                  |
+
+The minor is grouped by the view, not summed by a reader: an instance that
+moved from 4.0.1 to 4.0.2 counts once in 4.0. Only instances at level
+`usage-stats` send a profile, so these counts are a lower bound of the
+gateways running a plugin. **Historic over-count**: rows stored before
+2026-11-02 hold an identifier drawn again every day, so each of those
+instances counts once per day it reported until the 90-day window has rolled
+past them (early 2027).
+
 `public.reporting_instances` gives, per UTC day, the number of distinct
-`day_id`s that sent a profile. Usage statistics stay in two views of the
-unexposed schema `collector_private` (`decisions_by_day`, `risks_by_day`),
-readable by the maintainers only.
+`instance_id`s that sent a profile. Other usage statistics stay in two views
+of the unexposed schema `collector_private` (`decisions_by_day`,
+`risks_by_day`), readable by the maintainers only.
 
 ## Setting the collector up
 
@@ -185,8 +213,9 @@ readable by the maintainers only.
    with `psql "$COLLECTOR_DATABASE_URL" -v ON_ERROR_STOP=1 -f
 deploy/collector/schema.sql` (the connection string in your shell, never in
    a file of this repository), or as a migration through a Vaubaan mission on
-   that project. The file is idempotent and migrates the earlier one-table
-   schema.
+   that project. The file is idempotent and migrates the earlier schemas
+   (the one-table one, and `day_id` renamed `instance_id` on 2026-11-02).
+   Apply it **before** deploying a site whose endpoint writes a new column.
 3. Take the project's **publishable** key (the anonymous, public one — never
    the secret key, which the endpoint refuses at startup). It is public by
    design: row level security and column privileges are the control.
@@ -205,6 +234,7 @@ deploy/collector/schema.sql` (the connection string in your shell, never in
      -d '{"plugin_health":[{"plugin":"x","instance":"acme"}]}'
    # aggregates: 200
    curl -s 'https://telemetry.vaubaan.com/v1/plugin_stats?tool=is.null'
+   curl -s 'https://telemetry.vaubaan.com/v1/plugin_instances'
    ```
 
    Then delete the test rows (`delete from public.plugin_reports where plugin
@@ -256,8 +286,8 @@ guarantee, and the gateway's interface presents it as such.
   dead weight. Delete them on a schedule (`delete from public.plugin_reports
 where received_hour < now() - interval '180 days'`, and the same on the
   three other tables), by hand or with the project's scheduler.
-- **Database advisors.** Supabase's linter flags `plugin_stats` and
-  `reporting_instances` as views that run with their owner's rights. That is
+- **Database advisors.** Supabase's linter flags `plugin_stats`,
+  `plugin_instances` and `reporting_instances` as views that run with their owner's rights. That is
   the design: the views are the only way `anon` reaches the aggregates, and
   they expose no row.
 - **Changing a report shape.** The fields are fixed by spec §9. A new value

@@ -203,4 +203,18 @@ describe('pluginStatsUrl / parsePluginStats', () => {
       ]),
     ).toEqual({ 'github@1.0.0': { validated: false, reports: 10, successRate: 0.5 } });
   });
+
+  it('reads a null rate (every report a rejected credential) as no rate, never validated', () => {
+    expect(
+      parsePluginStats([
+        {
+          plugin: 'github',
+          plugin_version: '1.0.0',
+          reports: 3,
+          success_rate: null,
+          validated: true,
+        },
+      ]),
+    ).toEqual({ 'github@1.0.0': { validated: false, reports: 3, successRate: null } });
+  });
 });

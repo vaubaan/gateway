@@ -15,6 +15,7 @@
 --   public.instance_profile_plugins       the plugins of a profile, one row each
 --   public.plugin_validation_thresholds() the published thresholds, in one place
 --   public.plugin_stats                   public aggregation of plugin health, readable by `anon`
+--   public.plugin_instances               public count of instances per plugin, version and minor
 --   public.reporting_instances            public count of reporting instances per UTC day
 --   collector_private.*                   the ingestion limit and the maintainers' views
 --                                         (not exposed by the API)
@@ -24,10 +25,10 @@
 -- closed vocabularies and narrow shapes of `@vaubaan/telemetry`, so free text
 -- cannot be stored even by a client that tries.
 --
--- What it deliberately does NOT store: any network address, any stable
--- identifier of an instance (the day identifier of a profile is drawn again
--- every UTC day), the time of a report (only the UTC hour it arrived, set by
--- the database).
+-- What it deliberately does NOT store: any network address, any identifier of
+-- an instance on a plugin-health or decision report (the instance identifier
+-- travels with the daily profile only), the time of a report (only the UTC
+-- hour it arrived, set by the database).
 --
 -- The column lists, vocabularies and shapes below are the ones of
 -- `packages/telemetry/src/`; a test of the repository compares the two.
@@ -185,9 +186,10 @@ create index if not exists decision_reports_by_plugin
 create table if not exists public.instance_profiles (
   id bigint generated always as identity primary key,
   received_hour timestamptz not null default date_trunc('hour', now()),
-  -- 128 random bits drawn again by the instance every UTC day. Counts the
-  -- instances of a day; cannot follow one from a day to the next.
-  day_id text not null,
+  -- 128 random bits drawn once by the instance, kept in its store and
+  -- regenerable by its administrator. Only ever on a profile: no call row
+  -- carries it. Rows stored before 2026-11-02 hold a daily identifier.
+  instance_id text not null,
   gateway_version text not null,
   deployment text not null,
   runtime text not null,
@@ -198,9 +200,29 @@ create table if not exists public.instance_profiles (
   calls text not null
 );
 
+-- A collector created before 2026-11-02 names the identifier `day_id` (then
+-- drawn again every UTC day): the column is renamed, its rows kept.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'instance_profiles' and column_name = 'day_id'
+  ) then
+    alter table public.instance_profiles rename column day_id to instance_id;
+  end if;
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'instance_profile_plugins' and column_name = 'day_id'
+  ) then
+    alter table public.instance_profile_plugins rename column day_id to instance_id;
+  end if;
+end;
+$$;
+
 alter table public.instance_profiles
   drop constraint if exists instance_profiles_received_hour_truncated,
   drop constraint if exists instance_profiles_day_id_shape,
+  drop constraint if exists instance_profiles_instance_id_shape,
   drop constraint if exists instance_profiles_gateway_version_shape,
   drop constraint if exists instance_profiles_deployment_known,
   drop constraint if exists instance_profiles_runtime_shape,
@@ -211,8 +233,8 @@ alter table public.instance_profiles
 alter table public.instance_profiles
   add constraint instance_profiles_received_hour_truncated
     check (received_hour = date_trunc('hour', received_hour)),
-  add constraint instance_profiles_day_id_shape
-    check (day_id ~ '^[0-9a-f]{32}$'),
+  add constraint instance_profiles_instance_id_shape
+    check (instance_id ~ '^[0-9a-f]{32}$'),
   add constraint instance_profiles_gateway_version_shape
     check (
       gateway_version = 'dev'
@@ -235,11 +257,13 @@ alter table public.instance_profiles
 
 create index if not exists instance_profiles_by_hour
   on public.instance_profiles (received_hour);
+create index if not exists instance_profile_plugins_by_plugin
+  on public.instance_profile_plugins (plugin, plugin_version, received_hour);
 
 create table if not exists public.instance_profile_plugins (
   id bigint generated always as identity primary key,
   received_hour timestamptz not null default date_trunc('hour', now()),
-  day_id text not null,
+  instance_id text not null,
   plugin text not null,
   plugin_version text not null,
   accounts text not null
@@ -248,6 +272,7 @@ create table if not exists public.instance_profile_plugins (
 alter table public.instance_profile_plugins
   drop constraint if exists instance_profile_plugins_received_hour_truncated,
   drop constraint if exists instance_profile_plugins_day_id_shape,
+  drop constraint if exists instance_profile_plugins_instance_id_shape,
   drop constraint if exists instance_profile_plugins_plugin_shape,
   drop constraint if exists instance_profile_plugins_plugin_version_shape,
   drop constraint if exists instance_profile_plugins_accounts_bucketed;
@@ -255,8 +280,8 @@ alter table public.instance_profile_plugins
 alter table public.instance_profile_plugins
   add constraint instance_profile_plugins_received_hour_truncated
     check (received_hour = date_trunc('hour', received_hour)),
-  add constraint instance_profile_plugins_day_id_shape
-    check (day_id ~ '^[0-9a-f]{32}$'),
+  add constraint instance_profile_plugins_instance_id_shape
+    check (instance_id ~ '^[0-9a-f]{32}$'),
   add constraint instance_profile_plugins_plugin_shape
     check (plugin ~ '^[a-z][a-z0-9-]{0,62}$'),
   add constraint instance_profile_plugins_plugin_version_shape
@@ -286,9 +311,9 @@ grant insert (plugin, plugin_version, gateway_version, tool, outcome, error_clas
   on table public.plugin_reports to anon;
 grant insert (plugin, tool, gateway_version, decision, risks, gate)
   on table public.decision_reports to anon;
-grant insert (day_id, gateway_version, deployment, runtime, arch, sign_in_kinds, users, active_missions, calls)
+grant insert (instance_id, gateway_version, deployment, runtime, arch, sign_in_kinds, users, active_missions, calls)
   on table public.instance_profiles to anon;
-grant insert (day_id, plugin, plugin_version, accounts)
+grant insert (instance_id, plugin, plugin_version, accounts)
   on table public.instance_profile_plugins to anon;
 
 drop policy if exists plugin_reports_anon_insert on public.plugin_reports;
@@ -416,9 +441,11 @@ create trigger instance_profile_plugins_ingest_limit
 -- Published thresholds
 -- ---------------------------------------------------------------------------
 -- A plugin version is deemed validated when, over the last `window_days`
--- days, it has at least `min_reports` reports and at least
--- `min_success_rate` of them are successes. The same numbers are published
--- in `deploy/collector/README.md`; a test of the repository compares them.
+-- days, it has at least `min_reports` reports and a success rate of at least
+-- `min_success_rate`. The rate leaves out the calls refused for a rejected
+-- credential (`credential_rejected`): a revoked token is the user's
+-- configuration, not the plugin. The same numbers are published in
+-- `deploy/collector/README.md`; a test of the repository compares them.
 
 create or replace function public.plugin_validation_thresholds()
 returns table (min_reports integer, min_success_rate numeric, window_days integer)
@@ -441,28 +468,72 @@ grant execute on function public.plugin_validation_thresholds() to anon, authent
 -- The views run with their owner's rights on purpose (`security_invoker =
 -- false`): `anon` cannot read a table, only these aggregates.
 
+-- `success_rate` is null when every report of the row is a rejected
+-- credential; such a row is not validated.
 create or replace view public.plugin_stats
 with (security_invoker = false)
 as
 select
-  r.plugin,
-  r.plugin_version,
-  r.tool,
-  count(*)::bigint as reports,
-  (count(*) filter (where r.outcome = 'success'))::bigint as successes,
-  round((count(*) filter (where r.outcome = 'success'))::numeric / count(*), 4) as success_rate,
-  (
-    count(*) >= (select t.min_reports from public.plugin_validation_thresholds() t)
-    and (count(*) filter (where r.outcome = 'success'))::numeric / count(*)
-      >= (select t.min_success_rate from public.plugin_validation_thresholds() t)
+  s.plugin,
+  s.plugin_version,
+  s.tool,
+  s.reports,
+  s.successes,
+  s.credential_rejections,
+  round(s.successes::numeric / nullif(s.reports - s.credential_rejections, 0), 4) as success_rate,
+  coalesce(
+    s.reports >= (select t.min_reports from public.plugin_validation_thresholds() t)
+    and s.successes::numeric / nullif(s.reports - s.credential_rejections, 0)
+      >= (select t.min_success_rate from public.plugin_validation_thresholds() t),
+    false
   ) as validated
-from public.plugin_reports r
-where r.received_hour
-  >= now() - make_interval(days => (select t.window_days from public.plugin_validation_thresholds() t))
-group by grouping sets ((r.plugin, r.plugin_version, r.tool), (r.plugin, r.plugin_version));
+from (
+  select
+    r.plugin,
+    r.plugin_version,
+    r.tool,
+    count(*)::bigint as reports,
+    (count(*) filter (where r.outcome = 'success'))::bigint as successes,
+    (count(*) filter (where r.error_class = 'credential_rejected'))::bigint as credential_rejections
+  from public.plugin_reports r
+  where r.received_hour
+    >= now() - make_interval(days => (select t.window_days from public.plugin_validation_thresholds() t))
+  group by grouping sets ((r.plugin, r.plugin_version, r.tool), (r.plugin, r.plugin_version))
+) s;
 
 revoke all on table public.plugin_stats from public, anon, authenticated;
 grant select on table public.plugin_stats to anon, authenticated;
+
+-- Instances running a plugin over the window: distinct instance identifiers
+-- per (plugin, plugin_version), per (plugin, plugin_minor) and per plugin
+-- (both version columns null on that row; `plugin_minor` is null on a
+-- version row). The minor is grouped here, not summed by a reader: an
+-- instance that moved from 4.0.1 to 4.0.2 counts once in 4.0. Rows stored
+-- before 2026-11-02 hold a daily identifier and over-count until the window
+-- has rolled past them.
+drop view if exists public.plugin_instances;
+create view public.plugin_instances
+with (security_invoker = false)
+as
+select
+  v.plugin,
+  v.plugin_version,
+  v.plugin_minor,
+  count(distinct v.instance_id)::bigint as instances
+from (
+  select
+    p.plugin,
+    p.plugin_version,
+    split_part(p.plugin_version, '.', 1) || '.' || split_part(p.plugin_version, '.', 2) as plugin_minor,
+    p.instance_id
+  from public.instance_profile_plugins p
+  where p.received_hour
+    >= now() - make_interval(days => (select t.window_days from public.plugin_validation_thresholds() t))
+) v
+group by grouping sets ((v.plugin, v.plugin_version), (v.plugin, v.plugin_minor), (v.plugin));
+
+revoke all on table public.plugin_instances from public, anon, authenticated;
+grant select on table public.plugin_instances to anon, authenticated;
 
 -- Instances that sent a profile, per UTC day of arrival, over the window.
 create or replace view public.reporting_instances
@@ -470,7 +541,7 @@ with (security_invoker = false)
 as
 select
   (p.received_hour at time zone 'utc')::date as day,
-  count(distinct p.day_id)::bigint as instances
+  count(distinct p.instance_id)::bigint as instances
 from public.instance_profiles p
 where p.received_hour
   >= now() - make_interval(days => (select t.window_days from public.plugin_validation_thresholds() t))

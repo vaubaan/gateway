@@ -963,18 +963,24 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
   name if the plugin declares it, gateway version, decision, the `RiskId`s touched without their
   environment qualifier, whether a gate applied); one **instance profile** per UTC day (gateway
   version, deployment kind, runtime version and architecture, enabled plugins and versions, kinds of
-  sign-in providers, bucketed counts), carrying a random **day identifier** redrawn each UTC day,
-  sent with the profile only: it counts reporting instances per day and cannot follow an instance
-  across days or join a profile to a call.
+  sign-in providers, bucketed counts), carrying the **instance identifier**.
+- **Instance identifier** — 128 random bits (32 hex characters) the gateway draws the first time it
+  needs one and keeps in its store; an administrator sees it and can regenerate it in
+  Administration → Telemetry. It travels in the instance profile only, so only at `usage-stats`,
+  never in a plugin-health or decision report: no call is attributable to an instance. It lets the
+  community count the gateways running a plugin version over the window.
 - **No report carries a time.** The collector stamps arrival, truncated to the UTC hour.
 - **Never**, at any level: arguments or their hashes, payloads, provider responses, error text,
   resource refs, environment labels, mission or user identifiers, emails, account or host names,
-  URLs, a stable instance identifier, a network address. Every field is a closed-vocabulary value, a
-  shape bounded by the plugin's declaration, or a bucket.
-- **Public aggregation**: success rate per `(plugin, version, tool)` and reporting instances per
-  day. A plugin is **deemed validated** above a published success threshold and minimum report
-  count; the interface shows the status on each account and in Reference. Usage statistics are for
-  the maintainers ([website](./website.md) §5).
+  URLs, a network address, any identifier of the instance on a call. Every field is a
+  closed-vocabulary value, a shape bounded by the plugin's declaration, a bucket, or the instance
+  identifier of the profile.
+- **Public aggregation**: calls and success rate per `(plugin, version, tool)` — the rate leaves out
+  calls refused for a rejected credential, which are the user's configuration, not the plugin —;
+  gateways per plugin, plugin version and minor over the window (distinct instance identifiers);
+  reporting instances per day. A plugin is **deemed validated** above a published success threshold
+  and minimum report count; the interface shows the status on each account and in Reference. Other
+  usage statistics are for the maintainers ([website](./website.md) §5).
 - The collector never stores a network address nor a field a report does not define. Each level's
   content is published word for word on the trust center.
 
@@ -1025,8 +1031,8 @@ Mechanics and decisions: [telemetry handbook](../handbook/telemetry.md); receivi
   one mission per code project, run the daily workflow with a coding agent with no unexpected
   refusal ([e2e-tests](../tests/e2e-tests.md)); by hand, outside the automated suite.
 - **Structural**:
-  - no telemetry report, of either level, contains a forbidden field (§9), and the day identifier
-    travels with the instance profile only;
+  - no telemetry report, of either level, contains a forbidden field (§9), and the instance
+    identifier travels with the instance profile only;
   - session counters agree with the audit;
   - no configuration value is hard-coded;
   - every persisted restriction and `accepted_risks` is an enumerated list, never a wildcard, never

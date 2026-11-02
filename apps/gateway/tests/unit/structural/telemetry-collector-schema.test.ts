@@ -21,14 +21,15 @@ import { fileURLToPath } from 'node:url';
 import {
   ARCHES,
   COUNT_BUCKETS,
-  DAY_ID_PATTERN,
   DECISION_GATES,
   DECISION_OUTCOMES,
   DECISION_REPORT_KEYS,
   DEPLOYMENT_KINDS,
   DURATION_BUCKETS,
   ERROR_CLASSES_BY_OUTCOME,
+  INSTANCE_ID_PATTERN,
   INSTANCE_PROFILE_KEYS,
+  LEGACY_PROFILE_ID_KEY,
   MAX_PROFILE_PLUGINS,
   MAX_PROFILES_PER_BATCH,
   MAX_REPORTS_PER_BATCH,
@@ -61,7 +62,7 @@ const TABLES: readonly (readonly [string, readonly string[]])[] = [
   ['plugin_reports', PLUGIN_REPORT_KEYS],
   ['decision_reports', DECISION_REPORT_KEYS],
   ['instance_profiles', INSTANCE_PROFILE_KEYS.filter((key) => key !== 'plugins')],
-  ['instance_profile_plugins', ['day_id', ...PROFILE_PLUGIN_KEYS]],
+  ['instance_profile_plugins', ['instance_id', ...PROFILE_PLUGIN_KEYS]],
 ];
 
 describe('structural: the collector schema matches the reports', () => {
@@ -111,10 +112,10 @@ describe('structural: the collector schema matches the reports', () => {
   });
 
   it('publishes aggregates only: anon reads the views, which run with their owner rights', () => {
-    for (const view of ['plugin_stats', 'reporting_instances']) {
+    for (const view of ['plugin_stats', 'plugin_instances', 'reporting_instances']) {
       expect(statements).toMatch(
         new RegExp(
-          `create or replace view public\\.${view}\\s+with \\(security_invoker = false\\)`,
+          `create (or replace )?view public\\.${view}\\s+with \\(security_invoker = false\\)`,
         ),
       );
       expect(statements).toContain(`grant select on table public.${view} to anon, authenticated;`);
@@ -151,10 +152,49 @@ describe('structural: the collector schema matches the reports', () => {
     expect(statements).toContain(`arch in (${quotedList(ARCHES)})`);
     expect(statements).toContain(`sign_in_kinds <@ array[${quotedList(SIGN_IN_KINDS)}]::text[]`);
     expect(statements).toContain(`runtime ~ '${RUNTIME_PATTERN.source}'`);
-    expect(statements).toContain(`day_id ~ '${DAY_ID_PATTERN.source}'`);
+    for (const table of ['instance_profiles', 'instance_profile_plugins']) {
+      expect(statements, table).toContain(
+        `add constraint ${table}_instance_id_shape\n    check (instance_id ~ '${INSTANCE_ID_PATTERN.source}')`,
+      );
+    }
     for (const column of ['users', 'active_missions', 'calls', 'accounts']) {
       expect(statements, column).toContain(`${column} in (${quotedList(COUNT_BUCKETS)})`);
     }
+  });
+
+  it('excludes rejected credentials from the success rate, and never validates without a rate', () => {
+    expect(statements).toContain(
+      "(count(*) filter (where r.error_class = 'credential_rejected'))::bigint as credential_rejections",
+    );
+    expect(statements).toContain(
+      'round(s.successes::numeric / nullif(s.reports - s.credential_rejections, 0), 4) as success_rate',
+    );
+    expect(statements).toMatch(/coalesce\(\s+s\.reports >= [\s\S]*?,\s+false\s+\) as validated/);
+  });
+
+  it('counts distinct instances per plugin version, per minor and per plugin over the window', () => {
+    const view = /create view public\.plugin_instances[\s\S]*?;/.exec(statements)?.[0] ?? '';
+    expect(view).toContain('count(distinct v.instance_id)::bigint as instances');
+    expect(view).toContain(
+      "split_part(p.plugin_version, '.', 1) || '.' || split_part(p.plugin_version, '.', 2) as plugin_minor",
+    );
+    expect(view).toContain('from public.instance_profile_plugins p');
+    expect(view).toContain('select t.window_days from public.plugin_validation_thresholds() t');
+    expect(view).toContain(
+      'group by grouping sets ((v.plugin, v.plugin_version), (v.plugin, v.plugin_minor), (v.plugin))',
+    );
+  });
+
+  it('renames the former daily identifier on a collector created before it, and nowhere else', () => {
+    for (const table of ['instance_profiles', 'instance_profile_plugins']) {
+      expect(statements, table).toContain(
+        `alter table public.${table} rename column ${LEGACY_PROFILE_ID_KEY} to instance_id;`,
+      );
+    }
+    const rest = statements.replace(/do \$\$[\s\S]*?rename column[\s\S]*?\$\$;/, '');
+    expect(rest.replace(/drop constraint if exists \w+_day_id_shape/g, '')).not.toMatch(
+      /\bday_id\b/,
+    );
   });
 
   it('accepts a full batch of the client in one request', () => {

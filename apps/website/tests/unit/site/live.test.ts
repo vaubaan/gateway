@@ -1,8 +1,8 @@
 /**
  * What the site renders at request time (`src/site/live.ts`): the plugin
  * pages, their twins, plugins.json and llms-full.txt carry the collector's
- * figures — the count and the minimum below the threshold, the history over
- * every version, the rate from the threshold on — and every route that
+ * figures — gateways, calls and success rate per minor on the list, per
+ * version on the plugin page, whatever their number — and every route that
  * renders them is cached for the same hour.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -34,77 +34,144 @@ beforeAll(async () => {
   });
 }, 60_000);
 
-/** The collector as it stood on 2026-11-01: every report on versions older than the shipped ones. */
-function snapshotOf(githubVersion: string, githubReports: number): HealthSnapshot {
+/** A collector that knows two minors of GitHub: the shipped one and an older one. */
+function snapshotOf(githubVersion: string): HealthSnapshot {
+  const [major, minor] = githubVersion.split('.');
+  const shipped = `${major}.${minor}`;
   return {
     fetchedAt: '2026-11-01T15:00:00.000Z',
-    rows: [
-      {
-        plugin: 'github',
-        plugin_version: githubVersion,
-        reports: githubReports,
-        success_rate: 0.9846,
-        validated: githubReports >= 200,
-      },
-      { plugin: 'github', plugin_version: '4.0.1', reports: 73, success_rate: 1, validated: false },
-      { plugin: 'vercel', plugin_version: '3.0.2', reports: 15, success_rate: 1, validated: false },
-    ],
-    problem: null,
+    stats: {
+      rows: [
+        {
+          plugin: 'github',
+          plugin_version: githubVersion,
+          reports: 130,
+          successes: 128,
+          credential_rejections: 0,
+          success_rate: 0.9846,
+          validated: false,
+        },
+        {
+          plugin: 'github',
+          plugin_version: '0.9.1',
+          reports: 73,
+          successes: 60,
+          credential_rejections: 13,
+          success_rate: 1,
+          validated: false,
+        },
+      ],
+      problem: null,
+    },
+    instances: {
+      rows: [
+        { plugin: 'github', plugin_version: githubVersion, plugin_minor: null, instances: 4 },
+        { plugin: 'github', plugin_version: '0.9.1', plugin_minor: null, instances: 2 },
+        { plugin: 'github', plugin_version: null, plugin_minor: shipped, instances: 4 },
+        { plugin: 'github', plugin_version: null, plugin_minor: '0.9', instances: 2 },
+        { plugin: 'github', plugin_version: null, plugin_minor: null, instances: 5 },
+      ],
+      problem: null,
+    },
   };
 }
 
-describe('the plugin pages rendered with the collector read', () => {
-  it('show the count and the minimum for a version below the threshold, and the history beside', () => {
-    const github = site.data.plugins.find((p) => p.id === 'github');
-    expect(github).toBeDefined();
-    const live = liveSiteFrom(site.data, snapshotOf(github?.version ?? '', 130));
-    const page = pageMarkdown('/plugins/github', live, site.data) ?? '';
-    expect(page).toContain('Health of this version: 130 reports of the 200 needed, no rate yet');
-    expect(page).toContain('All versions: 203 reports over 2 versions');
-    expect(page).not.toMatch(/% of 130 calls/);
+function plugin(id: string) {
+  const found = site.data.plugins.find((p) => p.id === id);
+  if (!found) throw new Error(`no plugin ${id}`);
+  return found;
+}
 
+const minorOf = (version: string): string => version.split('.').slice(0, 2).join('.');
+
+describe('the plugin pages rendered with the collector read', () => {
+  it('list two minors per plugin with gateways, calls and success, and "no call yet" for a minor without any', () => {
+    const github = plugin('github');
+    const live = liveSiteFrom(site.data, snapshotOf(github.version));
+    const list = pageMarkdown('/plugins', live, site.data) ?? '';
+    expect(list).toContain('| Plugin | Version | Gateways | Calls | Success |');
+    expect(list).not.toContain('Permissions');
+    expect(list).toContain(
+      `| [${github.name}](/plugins/github) | \`${minorOf(github.version)}\` (this release) | 4 | 130 | 98.5 % |`,
+    );
+    expect(list).toContain(`| [${github.name}](/plugins/github) | \`0.9\` | 2 | 73 | 100.0 % |`);
+    const fly = plugin('fly');
+    expect(list).toContain(
+      `| [${fly.name}](/plugins/fly) | \`${minorOf(fly.version)}\` (this release) | 0 | no call yet | — |`,
+    );
+    expect(list).toContain('so they are a lower bound');
+    expect(list).toContain('leaves out calls refused for a rejected credential');
+    expect(list).not.toMatch(/needed|no rate yet/);
+  });
+
+  it('give each plugin its gateways and its last versions, newest first', () => {
+    const github = plugin('github');
+    const live = liveSiteFrom(site.data, snapshotOf(github.version));
+    const page = pageMarkdown('/plugins/github', live, site.data) ?? '';
+    expect(page).toContain('5 gateways run this plugin (over the last 90 days).');
+    expect(page).toContain('| Version | Gateways | Calls | Success | Validated |');
+    const shipped = page.indexOf(`| \`${github.version}\` | 4 | 130 | 98.5 % |  |`);
+    const older = page.indexOf('| `0.9.1` | 2 | 73 | 100.0 % |  |');
+    expect(shipped).toBeGreaterThan(-1);
+    expect(older).toBeGreaterThan(shipped);
+    expect(page).not.toMatch(/Health of this version|All versions/);
+  });
+
+  it('say "not read" for the figures of the aggregate that did not answer only', () => {
+    const github = plugin('github');
+    const snapshot = snapshotOf(github.version);
+    const live = liveSiteFrom(site.data, {
+      ...snapshot,
+      instances: { rows: null, problem: 'HTTP 503' },
+    });
     const list = pageMarkdown('/plugins', live, site.data) ?? '';
     expect(list).toContain(
-      '| 130 reports of the 200 needed, no rate yet | 203 reports over 2 versions |',
-    );
-    const fly = site.data.plugins.find((p) => p.id === 'fly');
-    expect(list).toContain(
-      `| [${fly?.name}](/plugins/fly) | \`${fly?.version}\` | ${fly?.risks.length} | no report yet (200 needed) | no report for any version |`,
+      `| [${github.name}](/plugins/github) | \`${minorOf(github.version)}\` (this release) | not read | 130 | 98.5 % |`,
     );
   });
 
-  it('show the rate and the verdict from the threshold on, for the exact version only', () => {
-    const github = site.data.plugins.find((p) => p.id === 'github');
-    const live = liveSiteFrom(site.data, snapshotOf(github?.version ?? '', 250));
-    const page = pageMarkdown('/plugins/github', live, site.data) ?? '';
-    expect(page).toContain('validated by the community (98.5 % of 250 calls worked)');
-    expect(page).toContain('All versions: 323 reports over 2 versions');
-  });
-
-  it('name the time the collector was read on the health page', () => {
-    const live = liveSiteFrom(site.data, snapshotOf('0.0.1', 1));
-    expect(pageMarkdown('/plugins/health', live, site.data)).toContain(
-      'read from the collector at 2026-11-01 15:00 UTC',
-    );
+  it('explain the figures on the health page and name the time the collector was read', () => {
+    const live = liveSiteFrom(site.data, snapshotOf('0.0.1'));
+    const page = pageMarkdown('/plugins/health', live, site.data) ?? '';
+    expect(page).toContain('read from the collector at 2026-11-01 15:00 UTC');
+    expect(page).toContain('**Validated**');
+    expect(page).toContain('"not read"');
+    expect(page).toContain('so they are a lower bound');
   });
 
   it('carry the same figures in plugins.json and llms-full.txt', () => {
-    const github = site.data.plugins.find((p) => p.id === 'github');
-    const live = liveSiteFrom(site.data, snapshotOf(github?.version ?? '', 130));
+    const github = plugin('github');
+    const live = liveSiteFrom(site.data, snapshotOf(github.version));
     const json = JSON.parse(livePluginsJson(live)) as {
       health_read_at: string;
+      health_read: Record<string, boolean>;
       plugins: { id: string; health: Record<string, unknown> }[];
     };
     expect(json.health_read_at).toBe('2026-11-01T15:00:00.000Z');
+    expect(json.health_read).toEqual({ calls: true, gateways: true });
     expect(json.plugins.find((p) => p.id === 'github')?.health).toEqual({
-      state: 'below-threshold',
-      reports: 130,
-      all_versions: { reports: 203, versions: 2 },
+      gateways: 5,
+      minors: [
+        { minor: minorOf(github.version), gateways: 4, calls: 130, success_rate: 0.9846 },
+        { minor: '0.9', gateways: 2, calls: 73, success_rate: 1 },
+      ],
+      versions: [
+        {
+          version: github.version,
+          gateways: 4,
+          calls: 130,
+          success_rate: 0.9846,
+          validated: false,
+        },
+        { version: '0.9.1', gateways: 2, calls: 73, success_rate: 1, validated: false },
+      ],
     });
     expect(json.plugins.find((p) => p.id === 'fly')?.health).toEqual({
-      state: 'below-threshold',
-      reports: 0,
-      all_versions: { reports: 0, versions: 0 },
+      gateways: 0,
+      minors: [
+        { minor: minorOf(plugin('fly').version), gateways: 0, calls: 0, success_rate: null },
+      ],
+      versions: [],
     });
     expect(liveLlmsFull(live, site.data)).toContain(
       pageMarkdown('/plugins/github', live, site.data),
@@ -112,7 +179,7 @@ describe('the plugin pages rendered with the collector read', () => {
   });
 
   it('render a docs page from the generated Markdown and nothing for an unknown path', () => {
-    const live = liveSiteFrom(site.data, snapshotOf('0.0.1', 1));
+    const live = liveSiteFrom(site.data, snapshotOf('0.0.1'));
     expect(pageMarkdown('/docs', live, site.data)).toBe(site.data.markdown['/docs']);
     expect(pageMarkdown('/plugins/no-such-plugin', live, site.data)).toBeNull();
     expect(pageMarkdown('/nowhere', live, site.data)).toBeNull();

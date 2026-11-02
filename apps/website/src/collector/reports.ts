@@ -58,7 +58,7 @@ export function rowsOf(batch: ReportBatch): Readonly<Record<string, readonly obj
     decision_reports: batch.decisions,
     instance_profiles: batch.instance_profiles.map(({ plugins: _plugins, ...profile }) => profile),
     instance_profile_plugins: batch.instance_profiles.flatMap((profile) =>
-      profile.plugins.map((plugin) => ({ day_id: profile.day_id, ...plugin })),
+      profile.plugins.map((plugin) => ({ instance_id: profile.instance_id, ...plugin })),
     ),
   };
 }

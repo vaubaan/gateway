@@ -82,21 +82,19 @@ describe('InstanceProfiler', () => {
     accountsByProvider: () => Promise.resolve({ 'cloudflare-dns': 2 }),
   };
 
-  it('keeps one day identifier per UTC day and draws a new one the next day', () => {
-    let draws = 0;
+  it('puts the stored instance identifier on every profile, whatever the day', async () => {
+    const id = '0123456789abcdef0123456789abcdef';
     const profiler = new InstanceProfiler({
       registry,
       gatewayVersion: 'dev',
       signInKinds: ['github'],
       source,
-      randomBytes: () => Buffer.alloc(16, (draws += 1)),
+      instanceId: () => Promise.resolve(id),
     });
-    const morning = profiler.dayIdFor(new Date('2026-10-16T01:00:00Z'));
-    const evening = profiler.dayIdFor(new Date('2026-10-16T23:59:59Z'));
-    const tomorrow = profiler.dayIdFor(new Date('2026-10-17T00:00:00Z'));
-    expect(morning).toMatch(/^[0-9a-f]{32}$/);
-    expect(evening).toBe(morning);
-    expect(tomorrow).not.toBe(morning);
+    const today = await profiler.profile(new Date('2026-10-16T23:59:59Z'));
+    const tomorrow = await profiler.profile(new Date('2026-10-17T00:00:00Z'));
+    expect(today?.instance_id).toBe(id);
+    expect(tomorrow?.instance_id).toBe(id);
     expect(utcDayOf(new Date('2026-10-16T23:59:59Z'))).toBe('2026-10-16');
   });
 
@@ -106,6 +104,7 @@ describe('InstanceProfiler', () => {
       gatewayVersion: 'dev',
       signInKinds: ['oidc', 'github'],
       source,
+      instanceId: () => Promise.resolve('f'.repeat(32)),
       env: {},
       inDocker: () => true,
     });

@@ -14,7 +14,10 @@ const PERCENT = 100;
 
 export function ValidationBadge({ status }: { status: ValidationStatus | null }) {
   if (!status) return null;
-  const detail = `${Math.round(status.successRate * PERCENT)}% of ${status.reports} community reports succeeded`;
+  const detail =
+    status.successRate === null
+      ? `${status.reports} community reports, all refused for a rejected credential: no rate`
+      : `${Math.round(status.successRate * PERCENT)}% of ${status.reports} community reports succeeded, rejected credentials left out`;
   return (
     <span title={detail} data-testid="validation-status">
       <Tag dashed={!status.validated}>

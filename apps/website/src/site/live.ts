@@ -7,10 +7,11 @@
  * `health-revalidate.test.ts` keeps them equal). Everything else on those
  * pages comes from the generated `site.json`.
  *
- * A collector that does not answer gives "not read" on every plugin, never
- * an error page; the next revalidation tries again.
+ * The two aggregates (`plugin_stats`, `plugin_instances`) are read in
+ * parallel and each on its own: one that does not answer gives "not read" on
+ * its figures only, never an error page; the next revalidation tries again.
  */
-import { fetchHealth, type HealthSnapshot } from '../content/health';
+import { fetchHealth, unreadSnapshot, type HealthSnapshot } from '../content/health';
 import { llmsFullTxt, pluginsJson, type SitePage } from '../content/outputs';
 import {
   PLUGIN_GROUP_PATH,
@@ -19,7 +20,7 @@ import {
   type PluginWithHealth,
 } from '../content/plugin-pages';
 import type { ValidationThresholds } from '../content/thresholds';
-import { PLUGIN_STATS_URL } from './constants';
+import { PLUGIN_INSTANCES_URL, PLUGIN_STATS_URL } from './constants';
 import { siteData, type SiteData } from './data';
 
 /** How long a rendered page or file is served before the collector is read again. */
@@ -35,17 +36,17 @@ export interface LiveSite {
 
 async function readHealth(): Promise<HealthSnapshot> {
   if (process.env.VAUBAAN_SITE_OFFLINE === '1') {
-    return { fetchedAt: null, rows: [], problem: 'offline (VAUBAAN_SITE_OFFLINE=1)' };
+    return unreadSnapshot('offline (VAUBAAN_SITE_OFFLINE=1)');
   }
-  // One read an hour for the whole site: every route shares the entry of the data cache.
-  return fetchHealth(PLUGIN_STATS_URL, (url, init) =>
+  // One read an hour for the whole site: every route shares the entries of the data cache.
+  return fetchHealth({ stats: PLUGIN_STATS_URL, instances: PLUGIN_INSTANCES_URL }, (url, init) =>
     fetch(url, { ...init, next: { revalidate: HEALTH_REVALIDATE_SECONDS } }),
   );
 }
 
 /** The generated site joined with a snapshot of the collector; pure, for the tests. */
 export function liveSiteFrom(data: SiteData, snapshot: HealthSnapshot): LiveSite {
-  const plugins = withHealth(data.plugins, snapshot, data.thresholds);
+  const plugins = withHealth(data.plugins, snapshot);
   return {
     plugins,
     thresholds: data.thresholds,
@@ -82,10 +83,5 @@ export function liveLlmsFull(live: LiveSite, data: SiteData = siteData()): strin
 }
 
 export function livePluginsJson(live: LiveSite): string {
-  return pluginsJson(
-    live.plugins,
-    live.thresholds,
-    live.snapshot.fetchedAt,
-    HEALTH_REVALIDATE_SECONDS,
-  );
+  return pluginsJson(live.plugins, live.thresholds, live.snapshot, HEALTH_REVALIDATE_SECONDS);
 }
