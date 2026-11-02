@@ -43,7 +43,7 @@ tracks:
   - .trivyignore.yaml
   - .gitleaks.toml
   - .github/audit-allowlist.json
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 # Threat model — who can do what to an instance, and what answers it
@@ -201,13 +201,15 @@ Handbook [import-from-v4](import-from-v4.md).
 
 ### The git remote
 
-The second door of the execution surface (`/git/<owner>/<repo>.git`,
-[git-remote](git-remote.md), ADR [gateway-as-git-remote](../decisions/gateway-as-git-remote.md)); the agent never sees the GitHub credential.
+The second door of the execution surface (`/git/<provider>/<owner>/<repo>.git`,
+[git-remote](git-remote.md), ADRs [gateway-as-git-remote](../decisions/gateway-as-git-remote.md),
+[protocol-doors-belong-to-the-host](../decisions/protocol-doors-belong-to-the-host.md)); the agent never sees the GitHub credential.
 
 | Threat                                                              | Control                                                                                                                                                                       | Proof                                                                              |
 | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | The git door bypasses the MCP door's admission                      | one `MissionAdmission` serves both                                                                                                                                            | `git-remote-limits.test.ts`                                                        |
 | Git tools over MCP, or an MCP tool via `/git/`                      | a tool belongs to one door; a push's arguments are always the host's review                                                                                                   | `git-remote.test.ts`                                                               |
+| A path names another provider than the mission's                    | the `<provider>` segment resolves only a plugin declaring `gitRemote` (else `404`); the resource stage refuses a mission without a connection on it, audited                  | `git-remote.test.ts`, `paths.test.ts`                                              |
 | A multi-ref push hides a forbidden ref (CVE-2025-54583 class)       | every command classified, one call carries every ref, one refused ref refuses the push                                                                                        | `git-remote-security.test.ts`                                                      |
 | The client lies in its old ids to skip a review                     | each ref read at GitHub first; force and delete go through receive-pack with the reviewed `old` (compare-and-swap)                                                            | `git-remote-security.test.ts`; `git-moves.test.ts`                                 |
 | Tricky ref names, duplicates, too many refs                         | bytes git never writes, duplicates and > 50 refs refused; only heads and tags; `refs/vaubaan/` reserved                                                                       | `git-remote-security.test.ts`                                                      |

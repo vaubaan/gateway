@@ -324,7 +324,7 @@
 # execution:
 #   call_timeout_seconds: 120
 
-# The git remote (https://<public_url>/git/<owner>/<repo>.git, spec §4.1 ter).
+# The git remote (https://<public_url>/git/<provider>/<owner>/<repo>.git, spec §4.1 ter).
 # max_pack_mb: the largest push accepted, in MiB (1 to 4096); a larger push is
 #   refused, and git prints why.
 # request_timeout: how long one git request may last (at most 1h). Behind

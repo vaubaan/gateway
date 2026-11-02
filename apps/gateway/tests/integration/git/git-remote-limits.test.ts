@@ -254,7 +254,7 @@ describe('one execution surface', () => {
     expect(github?.resources).toEqual([
       expect.objectContaining({
         ref: REPOSITORY,
-        git_remote: `${TEST_PUBLIC_URL}/git/${REPOSITORY}.git`,
+        git_remote: `${TEST_PUBLIC_URL}/git/github/${REPOSITORY}.git`,
       }),
     ]);
   });

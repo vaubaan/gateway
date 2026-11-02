@@ -408,6 +408,55 @@ describe('keys', () => {
   });
 });
 
+describe('the provider segment', () => {
+  const doorPath = (path: string) => new URL(`/git/${path}`, rig.remoteBase).href;
+
+  it('answers 404 to a provider that is unknown, or serves no git remote, before any key', async () => {
+    const unknown = await fetch(doorPath('acme/app.git/info/refs?service=git-upload-pack'));
+    expect(unknown.status).toBe(404);
+    const unknownText = await unknown.text();
+    expect(unknownText).toContain("'acme' is not a provider of this instance");
+    expect(unknownText).toContain('Git remotes here: /git/github/');
+    expect(unknownText).toContain('Take the setup kit of your mission again');
+
+    const noRemote = await fetch(doorPath('depot/acme/app.git/info/refs?service=git-upload-pack'));
+    expect(noRemote.status).toBe(404);
+    expect(await noRemote.text()).toContain('is not served as a git remote by this instance');
+
+    const bare = await fetch(doorPath(''));
+    expect(bare.status).toBe(404);
+  });
+
+  it('refuses, and audits, a mission that holds no connection on the provider the path names', async () => {
+    const issued = await rig.root.missions.service.issue(rig.ada, {
+      name: 'No GitHub',
+      connections: [
+        {
+          connection_id: rig.connection.id,
+          resources: { scope: 'all' },
+          policy: [line('depot.read')],
+        },
+      ],
+      period: { kind: 'recurring', length_seconds: 86_400 },
+      expires_at: null,
+    });
+    if (!issued.ok) throw new Error(`issue refused: ${JSON.stringify(issued)}`);
+    const result = await rig.git(
+      rig.workdir(),
+      ['clone', '-q', rig.remote(), 'a'],
+      issued.token.secret,
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('this mission holds no GitHub connection');
+    const audit = await auditOf({
+      mission: issued.mission,
+      token: issued.token.secret,
+      prefix: issued.token.prefix,
+    });
+    expect(audit.some((e) => e.tool === FETCH && e.decision === 'refused')).toBe(true);
+  });
+});
+
 describe('the other door', () => {
   it('refuses the git tools over MCP, and answers Git LFS that it is not served', async () => {
     const body = await rig.call(developer, PUSH, { repository: REPOSITORY, updates: [] });

@@ -56,7 +56,7 @@ export interface GitResult {
 export interface GitRig extends ExecutionInstance {
   readonly host: FakeGithubHost;
   readonly github: ConnectionRecord;
-  /** `http://127.0.0.1:<port>/git/` — the remote base the agent uses. */
+  /** `http://127.0.0.1:<port>/git/github/` — the remote base the agent uses. */
   readonly remoteBase: string;
   readonly logs: string[];
   remote(repository?: string): string;
@@ -143,7 +143,7 @@ export async function openGitRig(options: GitRigOptions = {}): Promise<GitRig> {
 
   const server = await serve(instance.root.git.handle);
   const port = (server.address() as AddressInfo).port;
-  const remoteBase = `http://127.0.0.1:${port}/git/`;
+  const remoteBase = `http://127.0.0.1:${port}/git/github/`;
   const scratch: string[] = [];
   const home = mkdtempSync(join(tmpdir(), 'vaubaan-git-agent-home-'));
   scratch.push(home);

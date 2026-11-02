@@ -22,7 +22,6 @@ import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
 import type { ConnectionsModule } from '../connections';
-import { gitRemoteBase } from '../git/paths';
 import { stackFramesOf, type Logger } from '../logging';
 import type { MissionsModule } from '../missions';
 import type { Store } from '../store';
@@ -176,8 +175,8 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     build: deps.build,
     clock,
     delegations: deps.delegations,
-    ...(deps.registry.gitRemote()
-      ? { gitRemote: { base: gitRemoteBase(deps.config.publicUrl) } }
+    ...(deps.registry.gitRemotes().length > 0
+      ? { gitRemote: { publicUrl: deps.config.publicUrl } }
       : {}),
   });
 
@@ -241,7 +240,6 @@ export {
   buildCatalog,
   callableProviders,
   callableTools,
-  gitRemoteUrl,
   type GitRemoteView,
   type CatalogBudgetLine,
   type CatalogConnection,

@@ -2290,23 +2290,28 @@ export class MissionService {
       })),
       policy,
       token,
-      git: this.gitRemoteOf(connections),
+      git: this.gitRemotesOf(connections),
     });
   }
 
-  /** The git remote of the kit: the repositories of the provider the instance serves as a remote. */
-  private gitRemoteOf(connections: readonly MissionDetailConnection[]): KitGitRemote | null {
-    const remote = this.deps.registry.gitRemote();
-    if (!remote) return null;
-    const repositories = connections
-      .filter((c) => c.provider === remote.plugin.id)
-      .flatMap((c) => c.resources.map((r) => r.ref));
-    if (repositories.length === 0) return null;
-    return {
-      base: gitRemoteBase(this.deps.publicUrl),
-      insteadOf: remote.plugin.gitRemote?.insteadOf ?? null,
-      repositories: [...new Set(repositories)],
-    };
+  /** The git remotes of the kit: per provider whose plugin declares one, the mission's repositories there. */
+  private gitRemotesOf(connections: readonly MissionDetailConnection[]): readonly KitGitRemote[] {
+    const providers = [...new Set(connections.map((c) => c.provider))];
+    return providers.flatMap((providerId) => {
+      const remote = this.deps.registry.gitRemoteOf(providerId)?.plugin.gitRemote;
+      if (!remote) return [];
+      const repositories = connections
+        .filter((c) => c.provider === providerId)
+        .flatMap((c) => c.resources.map((r) => r.ref));
+      if (repositories.length === 0) return [];
+      return [
+        {
+          base: gitRemoteBase(this.deps.publicUrl, providerId),
+          insteadOf: remote.insteadOf ?? null,
+          repositories: [...new Set(repositories)],
+        },
+      ];
+    });
   }
 }
 

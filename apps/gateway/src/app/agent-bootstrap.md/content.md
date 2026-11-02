@@ -304,7 +304,9 @@ What the door changes and what it does not:
 ## 8. Git
 
 When your mission holds repositories of a service this gateway serves as a
-git remote (GitHub), the gateway is your remote: `<instance>/git/<owner>/<repo>.git`.
+git remote (GitHub), the gateway is your remote:
+`<instance>/git/<provider>/<owner>/<repo>.git`, `<provider>` the service's id
+(`github`).
 The catalog (`GET <instance>/mcp/catalog`) gives it per repository as
 `git_remote`, and your setup kit has the configuration. Plain git, nothing
 else to install:
@@ -312,8 +314,8 @@ else to install:
 ```sh
 git config --global credential.<instance origin>.helper \
   '!f() { echo username=mission; echo "password=$VAUBAAN_MISSION_TOKEN"; }; f'
-git config --global url.<instance>/git/.insteadOf <the service's own git URL prefix>
-git clone <instance>/git/<owner>/<repo>.git
+git config --global url.<instance>/git/<provider>/.insteadOf <the service's own git URL prefix>
+git clone <instance>/git/<provider>/<owner>/<repo>.git
 ```
 
 The mission key is the password, read from the variable each time git asks.

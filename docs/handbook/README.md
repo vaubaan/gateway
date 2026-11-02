@@ -2,7 +2,7 @@
 title: Handbook — index
 tracks:
   - docs/handbook/
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 # Handbook — index
@@ -41,7 +41,7 @@ minutes.
 ## Agents
 
 - [execution-door](execution-door.md) — `/mcp`: the call pipeline, agent label, streaming, catalog.
-- [git-remote](git-remote.md) — `/git/<owner>/<repo>.git`: fetch relayed, push decided ref by ref.
+- [git-remote](git-remote.md) — `/git/<provider>/<owner>/<repo>.git`: fetch relayed, push decided ref by ref.
 - [management-door](management-door.md) — the authorization server and the tools of `/mcp/manage`.
 - [budget-and-sessions](budget-and-sessions.md) — how an allowed call is counted against its budget.
 

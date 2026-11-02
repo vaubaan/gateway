@@ -202,7 +202,7 @@ would still leave your machine; the clean archive above is the procedure.
 
 ## 7. The git remote
 
-Agents clone and push through `https://<your domain>/git/<owner>/<repo>.git`.
+Agents clone and push through `https://<your domain>/git/<provider>/<owner>/<repo>.git`.
 Railway's edge limits (docs.railway.com, "Public networking — specs and
 limits", read on 2026-10-14): a request may last up to 15 minutes while data
 flows and is closed after 5 minutes without any; **a request body must finish

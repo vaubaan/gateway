@@ -9,8 +9,27 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Upgrade notes
+
+1. **The git remote's path names the provider.** It is now
+   `<public_url>/git/<provider>/<owner>/<repo>.git` (`/git/github/acme/app.git`),
+   and the kit's rewrite maps `https://github.com/` to `<public_url>/git/github/`.
+   Agents configured from a kit taken before this version must take their
+   mission's kit again (or replace `/git/` with `/git/github/` in their remotes
+   and `insteadOf` rule): the old path answers `404` with the remotes the
+   instance serves.
+
 ### Changed
 
+- **A git remote per provider, any number of them** (ADR
+  protocol-doors-belong-to-the-host). The git door resolves the plugin from
+  the `<provider>` segment of its path and serves it only if it declares
+  `gitRemote`; an unknown provider, or one without a git remote, is answered
+  `404` before the key is read, and a mission without a connection on that
+  provider is refused and audited by the resource stage. The registry no
+  longer refuses a second plugin declaring `gitRemote`. The catalog's
+  `git_remote`, the kit (one `insteadOf` rule per provider), the mission page
+  and the Reference give the new URLs.
 - **Telemetry: a stable, framed instance identifier replaces the daily one.**
   The instance profile (level `usage-stats` only) carries `instance_id`, 128
   random bits the gateway draws once and keeps in its store, instead of a
@@ -39,6 +58,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   not a gate. `plugins.json` gains `health_refreshed_every_seconds`,
   `health_read` and `health_footnote`; per plugin, `health` is `gateways`,
   `minors[]` and `versions[]`.
+
+### Plugin SDK
+
+- **0.5.0 — any number of plugins declare `gitRemote`.** `PluginRegistry`
+  loses `gitRemote()` (the single plugin declaring one) and gains
+  `gitRemoteOf(id)` (the plugin `id` names, if it declares a git remote) and
+  `gitRemotes()` (all of them); the registry no longer refuses two plugins
+  declaring `gitRemote`. `GitRemoteCapability` is unchanged:
+  `repositoryOf(path)` still receives the path after the provider segment,
+  `.git` removed.
 
 ## [2.0.0-alpha.12] - 2026-11-01
 

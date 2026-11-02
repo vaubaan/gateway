@@ -72,7 +72,7 @@ import {
   WAITING,
 } from '@/lib/vocabulary';
 import { enumerateCatalog, groupVariants } from '@/lib/missions/catalog-view';
-import { missionGitView } from '@/server/missions/git-view';
+import { missionGitViews } from '@/server/missions/git-view';
 import { shortId } from '@/server/missions/short-id';
 import { explainLost, explainOrphan } from '@/server/missions/orphan-reason';
 import { riskExplainer } from '@/lib/providers/reference';
@@ -193,7 +193,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
   const lines = allowLines(detail.policy, notIncluded);
   const near = state.kind === 'active' ? nearestLimit(detail.policy) : null;
   const explain = riskExplainer(root.registry);
-  const git = missionGitView({
+  const gitViews = missionGitViews({
     registry: root.registry,
     publicUrl: root.config.publicUrl,
     connections: detail.connections,
@@ -534,42 +534,49 @@ export default async function MissionPage({ params, searchParams }: Props) {
 
       <TeamSection team={team} calls={calls} period={period} me={user.id} now={now.toISOString()} />
 
-      {git && (
+      {gitViews.length > 0 && (
         <Section
           id="git"
           title="Git"
           note="The key is the password; nothing else is needed."
           testId="mission-git"
         >
-          <div className={styles.wrapAnywhere}>
-            <p>
-              {git.remotes.length === 1 ? 'Git remote' : 'Git remotes'}:{' '}
-              {git.remotes.map((url, i) => (
-                <span key={url}>
-                  {i > 0 && ' · '}
-                  <Mono>{url}</Mono>
-                </span>
-              ))}
-            </p>
-            <p data-testid="git-can">
-              <strong>With git, the agent can:</strong>{' '}
-              {git.can.length > 0 ? git.can.join(' · ') : 'nothing yet'}.
-            </p>
-            {git.asks.length > 0 && (
-              <p data-testid="git-asks">
-                <strong>{asksFirst(creatorName)}:</strong> {git.asks.join(' · ')}.
+          {gitViews.map((git) => (
+            <div key={git.provider} className={styles.wrapAnywhere}>
+              {gitViews.length > 1 && (
+                <p>
+                  <strong>{git.provider}</strong>
+                </p>
+              )}
+              <p>
+                {git.remotes.length === 1 ? 'Git remote' : 'Git remotes'}:{' '}
+                {git.remotes.map((url, i) => (
+                  <span key={url}>
+                    {i > 0 && ' · '}
+                    <Mono>{url}</Mono>
+                  </span>
+                ))}
               </p>
-            )}
-            {git.cannot.length > 0 && (
-              <p data-testid="git-cannot">
-                <strong>It cannot:</strong> {git.cannot.join(' · ')}.
+              <p data-testid="git-can">
+                <strong>With git, the agent can:</strong>{' '}
+                {git.can.length > 0 ? git.can.join(' · ') : 'nothing yet'}.
               </p>
-            )}
-            <Hint>
-              Every ref of a push is decided; one refused ref refuses the push. A refused push tells
-              the agent why, with the link to hand you when you can say yes.
-            </Hint>
-          </div>
+              {git.asks.length > 0 && (
+                <p data-testid="git-asks">
+                  <strong>{asksFirst(creatorName)}:</strong> {git.asks.join(' · ')}.
+                </p>
+              )}
+              {git.cannot.length > 0 && (
+                <p data-testid="git-cannot">
+                  <strong>It cannot:</strong> {git.cannot.join(' · ')}.
+                </p>
+              )}
+            </div>
+          ))}
+          <Hint>
+            Every ref of a push is decided; one refused ref refuses the push. A refused push tells
+            the agent why, with the link to hand you when you can say yes.
+          </Hint>
         </Section>
       )}
 

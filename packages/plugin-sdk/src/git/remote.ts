@@ -1,10 +1,11 @@
 /**
  * `GitRemoteCapability` — what a plugin declares so that the instance can be
- * its agents' git remote (`https://<instance>/git/<repository>.git`).
+ * its agents' git remote (`https://<instance>/git/<provider id>/<repository>.git`).
  *
  * Spec : docs/spec/vaubaan-gateway.md §4.1 ter "Git remote" (the second door
  *        of the execution surface), §2.4.
- * ADR  : docs/decisions/gateway-as-git-remote.md.
+ * ADR  : docs/decisions/gateway-as-git-remote.md,
+ *        docs/decisions/protocol-doors-belong-to-the-host.md.
  * Handbook : docs/handbook/git-remote.md.
  *
  * The host owns the transport : it authenticates the mission key, relays
@@ -131,7 +132,8 @@ export interface GitRemoteCapability {
   readonly pushRisk: string;
   /**
    * The resource ref of the repository a URL path names (`acme/app` for
-   * `/git/acme/app.git`, the `.git` suffix already removed), or `null` when
+   * `/git/github/acme/app.git`: the provider segment and the `.git` suffix
+   * already removed), or `null` when
    * the path names no repository of this provider. Pure.
    */
   repositoryOf(path: string): string | null;
@@ -178,7 +180,7 @@ export interface GitRemoteCapability {
   ): Promise<string | null>;
   /**
    * The prefix of the provider's own git URLs (`https://github.com/`). The
-   * setup kit rewrites it to the instance (`url.<instance>/git/.insteadOf`),
+   * setup kit rewrites it to the instance (`url.<instance>/git/<provider id>/.insteadOf`),
    * so a hard-coded provider URL, a submodule or a script goes through the
    * mission too. Absent: the kit offers no rewrite.
    */

@@ -283,7 +283,7 @@ risks:
       persistence: posture
 
   # ---------------------------------------------------------------
-  # GIT REMOTE — pushes through https://<instance>/git/<owner>/<repo>.git
+  # GIT REMOTE — pushes through https://<instance>/git/github/<owner>/<repo>.git
   # ---------------------------------------------------------------
   # Every push touches `git-push` (one virtual `push` leaf per ref), together
   # with the risk of the branch it lands on (`feature-branch-write`,

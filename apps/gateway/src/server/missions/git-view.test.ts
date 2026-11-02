@@ -2,29 +2,29 @@ import { githubPlugin } from '@vaubaan/plugin-github';
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { missionGitView } from './git-view';
+import { missionGitViews } from './git-view';
 
 const registry = new PluginRegistry([githubPlugin]);
 const publicUrl = new URL('https://gateway.acme.example');
 const connections = [{ provider: 'github', resources: [{ ref: 'acme/app' }, { ref: 'acme/app' }] }];
 
-describe('missionGitView', () => {
-  it('is absent without a repository of the provider the instance serves', () => {
+describe('missionGitViews', () => {
+  it('is empty without a repository on a provider the instance serves as a git remote', () => {
     expect(
-      missionGitView({
+      missionGitViews({
         registry,
         publicUrl,
         connections: [{ provider: 'github', resources: [] }],
         policy: [],
       }),
-    ).toBeNull();
+    ).toEqual([]);
     expect(
-      missionGitView({ registry: new PluginRegistry([]), publicUrl, connections, policy: [] }),
-    ).toBeNull();
+      missionGitViews({ registry: new PluginRegistry([]), publicUrl, connections, policy: [] }),
+    ).toEqual([]);
   });
 
   it('gives each repository its remote and sorts the abilities by the policy', () => {
-    const view = missionGitView({
+    const [view, ...others] = missionGitViews({
       registry,
       publicUrl,
       connections,
@@ -36,7 +36,8 @@ describe('missionGitView', () => {
         { risk_id: 'github.workflow-write-via-file', gate: 'approval' },
       ],
     });
-    expect(view?.remotes).toEqual(['https://gateway.acme.example/git/acme/app.git']);
+    expect(others).toEqual([]);
+    expect(view?.remotes).toEqual(['https://gateway.acme.example/git/github/acme/app.git']);
     expect(view?.can).toContain('clone and fetch');
     expect(view?.asks).toEqual([
       'force-push (rewrite a branch)',
