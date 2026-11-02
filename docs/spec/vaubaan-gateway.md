@@ -160,6 +160,12 @@ callback registered at a provider).
   (raised by an agent after a missing-permission refusal, §3.3 bis).
 - **Approval** — the grant of an approval request, bound to the mission, the tool and the exact
   fingerprint of the arguments, covering every gated risk of that call; single-use, short-lived.
+- **Notification** — a short message the instance sends a person outside the interface, saying that
+  something waits for them or stopped without them. It names, never decides: a yes is given in the
+  interface only.
+- **Channel** — where a person receives notifications: a **device** (a copy of the interface
+  installed on their phone or computer, subscribed from that device), a **messaging address** (the
+  incoming address of a company messaging service, pasted by the person) or their **mail**.
 
 **Cross-cutting**
 
@@ -202,8 +208,12 @@ without ever holding a credential, within a declared objective.
 - **No policy composed by the instance from a natural-language task**: that is the client's job;
   macro-actions and their trust levels are the instance-side help.
 - **No call held waiting.** The gateway always answers at once; a human steps in outside the call
-  (structured refusal, decision in the inbox, replay). No `pending` state, no polling, no mandatory
-  notification ([unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)).
+  (structured refusal, decision in the inbox, replay). No `pending` state, no polling, and no
+  notification a mission depends on (§4.2 bis)
+  ([unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)).
+- **No native mobile application**, and **no notification through a network the instance must
+  register at** — a consumer messaging platform with a business account and a fee per message, or
+  text messages. The interface installed from the browser is the mobile client (§4.2 bis).
 - **No integration tests against real providers**, and **no telemetry by default** (§9).
 
 ## 2. Domain
@@ -621,8 +631,8 @@ stands in without one.
   what: §8.
 - **Settings** — for everyone: theme; the second factor (enrol, replace, remove after a fresh
   sign-in — never an administrator's); a local account's password; **Connected apps** (until when
-  each consent runs, the missions it prepared, disconnect). For an administrator,
-  **Administration**:
+  each consent runs, the missions it prepared, disconnect); **Notifications** (my devices, messaging
+  addresses and mail, §4.2 bis). For an administrator, **Administration**:
   - a setup checklist of what the instance still needs, with no step per service;
   - **sign-in providers**: kind, admission rule, the callback to register, whether on, and, after a
     restore on another address, that it was set up for the former one. An administrator adds, edits,
@@ -645,6 +655,35 @@ stands in without one.
 
 Styling follows [style-guide](./style-guide.md).
 
+### 4.2 bis Notifications
+
+The interface is installable from the browser on a phone or a computer; installed, it is the mobile
+client and receives notifications while closed. Notifications are optional and belong to the
+person: nothing in a mission depends on one
+([notifications-reach-the-persons-own-channels](../decisions/notifications-reach-the-persons-own-channels.md)).
+
+- **What notifies**, each to the one person concerned, at once when the event happens, once.
+  _Something waits for you_: a request opened in my inbox as creator (claim, approval request,
+  permission request). _Something stopped without you_: an account of mine that needs reconnecting
+  (credential rejected or expired), a mission of mine orphaned, or revoked by someone else; for an
+  administrator, a failed backup and a master-key recovery. Nothing is batched, nothing repeated.
+- **What a notification says.** The instance's name, the kind, the mission's or account's name and,
+  for a request, the tool by name; nothing else. Never an argument, a fingerprint, a secret value, a
+  resource name or a person's name. Opening it leads to the request page, the mission or the
+  account. **No answer is given from a notification**, not even a refusal.
+- **Channels are the person's.** In Settings, a person sees their devices and messaging addresses,
+  names them and removes any; a device is subscribed only by the person's act on that device, and
+  the interface proposes it the first time something waits. A messaging address is a secret of the
+  person, sealed, never shown back, checked on entry by a test notification. Mail is a channel when
+  the instance delivers mail (§4.3), switched on by the person. An administrator sees how many
+  channels a person has, never which.
+- **Delivery is best effort.** The instance posts to a channel and moves on: a failure is logged,
+  never retried in a loop, never visible to the executor. A device whose push service refuses it
+  for good is dropped and the person's Settings say so. The home and the inbox stay the reference: a
+  person without a channel misses nothing but the alert.
+- **Live when open.** The home and the inbox refresh themselves while the interface is open; that
+  is not a notification and needs no channel.
+
 ### 4.3 Instance configuration
 
 The operator provides, through environment variables or a mounted file (the file wins), never
@@ -659,8 +698,10 @@ committed:
 - the **sign-in providers**: zero or more, each with id, name, kind, issuer, client id and secret,
   claim mapping for OpenID Connect, allowed email domains and whether invited-only. An open provider
   with neither allowed domains nor invited-only is refused at startup and in the interface;
-- optionally, **mail delivery** for account-creation and password reset links; without it the links
-  are shown to the administrator to hand over;
+- optionally, **mail delivery** for account-creation and password reset links and for mail
+  notifications (§4.2 bis); without it the links are shown to the administrator to hand over;
+- **nothing per channel**: the key pair that signs device notifications is generated at first start
+  and sealed under the master key; a messaging address belongs to a person (§4.2 bis);
 - **nothing per provider**: people connect with a key they make at the service; a provider that
   connects only through its own sign-in gets an OAuth client the gateway registers itself (dynamic
   client registration) the first time someone connects, one per instance, secret sealed, registered
@@ -760,6 +801,9 @@ values.
   [plugins/README](../../plugins/README.md).
 - **Sign-in providers** — authenticate humans with subject, verified email and, for a directory,
   groups. Trusted for their own issuer's identities only, never for authorization.
+- **Push services and messaging services** — reached outbound, without an account: a push service
+  relays a sealed envelope it cannot read to the person's device; a messaging service receives what
+  the person's address accepts. The instance holds the subscription or the address, nothing more.
 - **Providers** — the connection flow runs between user, provider and instance, no third party. A
   mailbox plugin may sign in with an app password; nothing is ever sent by mail.
 - **Community collector** — receives consenting instances' reports, publishes aggregates (§9).
@@ -838,6 +882,10 @@ values.
 - **A pasted token is checked at the service before it is stored**; a call the service refuses for a
   permission the token lacks is reported naming what it needs. The gateway narrows nothing itself:
   the mission's decision narrows a call.
+- **Notifications carry no decision and no secret.** A yes is given in a human session only; a
+  notification names a mission and a tool, never an argument (§4.2 bis). Device subscriptions,
+  messaging addresses and the signing key pair are sealed under the master key and reach no log,
+  audit or telemetry.
 - **Surface rate limits** per mission on the MCP endpoint (shared by its tokens), per user on
   connection flows (ten attempts a minute), per address on the request page and every anonymous
   surface.
@@ -891,13 +939,13 @@ audited.
 
 ### 7.6 Exhaust and claim
 
-`budget-exhausted` carries the claim URL; the creator decides and the agent replays. A wrong limit
-is changed on the mission, not answered each period.
+`budget-exhausted` carries the claim URL; the creator, notified on their channels, decides and the
+agent replays. A wrong limit is changed on the mission, not answered each period.
 
 ### 7.7 Approve an action
 
-`approval-required` carries the request URL; the creator reads tool and arguments and grants; the
-agent replays the same call.
+`approval-required` carries the request URL; the creator, notified on their channels, opens the
+request page, reads tool and arguments and grants; the agent replays the same call.
 
 ### 7.8 Revoke and rotate
 
@@ -1064,8 +1112,9 @@ Not decided, or a v1 assumption usage may overturn.
 - **Quantities in shares.** Should a share carry a budget ceiling per risk? v1: no; revisit if
   beneficiaries grant themselves unreasonable budgets.
 - **Transitive sharing.** v1: no, only the owner shares.
-- **Notifying the creator.** v1: "Waiting for you" plus the URL the executor hands over. An optional
-  outbound channel (webhook, company mail)?
+- **Answering from a notification.** v1: none, not even a refusal. Revisit if creators ask to
+  refuse from the lock screen without opening the interface.
+- **Notification digest.** v1: one notification per event. A daily mail digest for alerts?
 - **Gate in shares**, approved by the connection owner? v1: no, the gate lives in the mission.
 - **Resources in shares.** v1: no; a beneficiary may touch any resource within the shared risks.
 - **Agent label.** How a client transmits it, and whether an orchestrator imposes it on sub-agents.
