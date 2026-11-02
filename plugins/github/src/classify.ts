@@ -7,7 +7,8 @@
  *
  * Pure : no IO, no credential, no `Date`. A call returns one OR MORE slices
  * (multi-slice tools : `merge_pull_request`, `create_pull_request`,
- * `create_release`, `push_files`, file writes under `.github/workflows/`).
+ * `create_release`, `push_files`, `add_labels` — one per label —, file
+ * writes under `.github/workflows/`).
  * A call the plugin cannot place on the data model is `denied`, never
  * mapped to a broad slice.
  *
@@ -201,7 +202,7 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
       return dedup(out);
     }
 
-    // ── Writes — PRs / comments ────────────────────────────────────────────
+    // ── Writes — PRs / comments / labels ───────────────────────────────────
     case TOOL.createPullRequest:
       return [
         build(`${repo}.pull_request.W`),
@@ -215,6 +216,13 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
     case TOOL.addIssueComment:
       // Trailing `comment` name — no leaf id (unknown before posting).
       return [build(`${repo}.issue[${call.issueNumber}].comment.W`)];
+    case TOOL.addLabels:
+      // One slice per label, named : a mission can be narrowed to `label[e2e]`.
+      return dedup(
+        call.labels.map((name) =>
+          build(`${repo}.issue[${call.issueNumber}].label[${identOrAny(name)}].W`),
+        ),
+      );
 
     // ── Writes — releases ──────────────────────────────────────────────────
     case TOOL.createRelease:

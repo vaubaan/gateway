@@ -131,6 +131,15 @@ export const githubDataModel: DataModel = {
           description: 'A comment on an issue or PR (union space — see `issue`).',
         },
         {
+          name: 'label',
+          parent: 'issue',
+          // `[*]` : a name the slice grammar cannot carry.
+          cardinalities: ['one', 'unbounded'],
+          description:
+            'A label put on an issue or PR (`add_labels`, slice `issue[N].label[<name>].W`, ' +
+            'one per label). GitHub creates a label the repository does not have.',
+        },
+        {
           name: 'workflow',
           parent: 'repo',
           // `[*]` : the workflow of a run or a job, which their tools do not name.

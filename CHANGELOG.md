@@ -32,6 +32,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `worker-src 'self'` and `manifest-src 'self'`. Audit acts `device-added`,
   `device-removed`.
 
+- **GitHub: `github__add_labels` puts labels on an issue or a pull request**
+  (1 to 20 names, each at most 50 characters, trimmed; a label the repository
+  lacks is created) and answers the names the issue now carries. New risk
+  `github.label-write`, one slice per label (`issue[N].label[<name>].W`) so a
+  mission can be narrowed to named labels, in the macro-action `propose`
+  (catalog version 12). Token permission: Issues (read and write), already
+  asked. An agent can now put the `e2e` label that runs a pull request's
+  browser tests.
+
 ## [2.0.0-alpha.13] - 2026-11-02
 
 ### Upgrade notes

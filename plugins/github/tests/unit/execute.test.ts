@@ -160,6 +160,33 @@ describe('execute — rules and release tools', () => {
       release_id: 999,
     });
   });
+
+  test('add_labels POSTs the trimmed names and answers the names the issue now carries', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: 'https://api.github.com/repos/acme/app/issues/7/labels',
+        body: [
+          { id: 1, name: 'bug', color: 'd73a4a', url: 'https://api.github.com/x/1', default: true },
+          {
+            id: 2,
+            name: 'e2e',
+            color: 'ededed',
+            url: 'https://api.github.com/x/2',
+            default: false,
+          },
+        ],
+      },
+    ]);
+    const result = await githubPlugin.execute(executeCtx(fetch), 'github__add_labels', {
+      owner: 'acme',
+      repo: 'app',
+      issue_number: 7,
+      labels: [' e2e '],
+    });
+    expect(JSON.parse(text(result))).toEqual({ labels: ['bug', 'e2e'] });
+    expect(fetch.calls[0]!.json).toEqual({ labels: ['e2e'] });
+  });
 });
 
 describe('execute — merge_pull_request is bound to the declared base', () => {
