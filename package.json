@@ -2,7 +2,7 @@
   "name": "@vaubaan/gateway",
   "private": true,
   "type": "module",
-  "version": "2.0.0-alpha.12",
+  "version": "2.0.0-alpha.13",
   "description": "Vaubaan Gateway v5 — open source, on-prem MCP gateway that gives coding agents risk-budgeted missions instead of cloud credentials",
   "license": "Apache-2.0",
   "homepage": "https://vaubaan.com",
