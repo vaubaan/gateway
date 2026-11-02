@@ -257,8 +257,6 @@ alter table public.instance_profiles
 
 create index if not exists instance_profiles_by_hour
   on public.instance_profiles (received_hour);
-create index if not exists instance_profile_plugins_by_plugin
-  on public.instance_profile_plugins (plugin, plugin_version, received_hour);
 
 create table if not exists public.instance_profile_plugins (
   id bigint generated always as identity primary key,
@@ -288,6 +286,9 @@ alter table public.instance_profile_plugins
     check (plugin_version ~ '^[0-9]{1,5}\.[0-9]{1,5}\.[0-9]{1,5}(-[0-9A-Za-z.-]{1,32})?(\+[0-9A-Za-z.-]{1,32})?$'),
   add constraint instance_profile_plugins_accounts_bucketed
     check (accounts in ('0', '1', '2-5', '6-20', '21-100', '101-1000', '>1000'));
+
+create index if not exists instance_profile_plugins_by_plugin
+  on public.instance_profile_plugins (plugin, plugin_version, received_hour);
 
 -- ---------------------------------------------------------------------------
 -- Insert-only and anonymous
