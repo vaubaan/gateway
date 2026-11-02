@@ -28,6 +28,14 @@ import { connectAgent, type Agent } from './agent';
 import { passSecondFactor, routeToInstance, seedShareScenario, signInAs } from './browser';
 import { controlUrl, E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
 import { createMission, permissionRow, showView } from './mission-pages';
+import { githubPlugin } from '@vaubaan/plugin-github';
+
+/** Every permission of the GitHub catalog: what an owner holds, the share dialog's denominator. */
+const GITHUB_PERMISSIONS = githubPlugin.catalog.risks.length;
+/** What "Select all" ticks: every permission but the retired ones and "anything not named". */
+const GITHUB_SELECT_ALL = githubPlugin.catalog.risks.filter(
+  (risk) => !risk.deprecated && risk.id !== 'github.uncategorized-write',
+).length;
 
 const READ_CODE = 'github.read-code';
 const READ_META = 'github.read-meta';
@@ -89,10 +97,10 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── The owner shares ────────────────────────────────────────────────────
   const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${connectionId}`);
   await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
-  // Nobody but its owner holds it yet: one line, "all 19".
+  // Nobody but its owner holds it yet: one line, "all <every permission>".
   const access = ines.getByTestId('who-has-access');
   await expect(access.getByRole('row')).toHaveCount(2);
-  await expect(access).toContainText('all 19');
+  await expect(access).toContainText(`all ${GITHUB_PERMISSIONS}`);
   await ines.getByRole('link', { name: 'Give access', exact: true }).click();
   const dialog = ines.getByTestId('give-access-dialog');
   await expect(
@@ -129,8 +137,8 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   await dialog.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
   // "Select all" ticks the boxes one by one: every permission but "anything not named".
-  await dialog.getByRole('button', { name: 'Select all 16' }).click();
-  await expect(summary).toContainText('16 of 19 permissions');
+  await dialog.getByRole('button', { name: `Select all ${GITHUB_SELECT_ALL}` }).click();
+  await expect(summary).toContainText(`${GITHUB_SELECT_ALL} of ${GITHUB_PERMISSIONS} permissions`);
   await expect(dialog.getByLabel('Give github.uncategorized-write')).not.toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).toBeChecked();
   await snap(ines, 'share-dialog-select-all');
@@ -147,11 +155,11 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(dialog.getByLabel(`Give ${READ_META}`)).toBeChecked();
   await expect(dialog.getByLabel('Give github.search-global')).toBeChecked();
   await expect(dialog.getByLabel('Give github.merge-protected')).not.toBeChecked();
-  await expect(summary).toContainText('3 of 19 permissions');
+  await expect(summary).toContainText(`3 of ${GITHUB_PERMISSIONS} permissions`);
   // One box unticked by hand: Read is no longer whole, and the list posted is the one ticked.
   await dialog.getByLabel('Give github.search-global').uncheck();
   await expect(readAction).toHaveAttribute('aria-pressed', 'false');
-  await expect(summary).toContainText('2 of 19 permissions');
+  await expect(summary).toContainText(`2 of ${GITHUB_PERMISSIONS} permissions`);
   await expect(submit).toHaveText('Give access · 2 permissions');
   await submit.click();
 
@@ -162,9 +170,9 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   ).toBeVisible();
   // "Who has access" lists her; the count unfolds the explicit list.
   const shareRow = access.getByRole('row').filter({ hasText: E2E_SHARE_TARGET.name });
-  await expect(shareRow).toContainText('2 of 19');
+  await expect(shareRow).toContainText(`2 of ${GITHUB_PERMISSIONS}`);
   await expect(shareRow).toContainText('read only');
-  await shareRow.getByRole('link', { name: '2 of 19' }).click();
+  await shareRow.getByRole('link', { name: `2 of ${GITHUB_PERMISSIONS}` }).click();
   const held = ines.getByTestId('access-permissions');
   await expect(held).toContainText(READ_CODE);
   await expect(held).toContainText(READ_META);
@@ -179,10 +187,10 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   const shared = joan.getByTestId('shared-with-you');
   const received = shared.getByRole('row').filter({ hasText: connectionName });
   await expect(received).toContainText(E2E_SHARE_OWNER.email);
-  await expect(received).toContainText('2 of 19');
+  await expect(received).toContainText(`2 of ${GITHUB_PERMISSIONS}`);
   // The exact list, on demand.
   await expect(joan.getByTestId('allowed-permissions')).toHaveCount(0);
-  await received.getByRole('link', { name: '2 of 19' }).click();
+  await received.getByRole('link', { name: `2 of ${GITHUB_PERMISSIONS}` }).click();
   await expect(joan.getByTestId('allowed-permissions')).toContainText(READ_CODE);
   await expect(joan.getByTestId('allowed-permissions')).toContainText(READ_META);
   await snap(joan, 'shares-received');

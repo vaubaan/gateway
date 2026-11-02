@@ -176,7 +176,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   const editor = page.getByTestId('risks-github');
   await expect(editor).toBeVisible();
   // By default it lists what the person may allow here: on an account they own, everything.
-  await expect(editor.locator('[data-permission]')).toHaveCount(19);
+  await expect(editor.locator('[data-permission]')).toHaveCount(GITHUB.permissions);
   const merge = permissionRow(editor, 'github.merge-protected');
   await expect(merge).toContainText('Write on main / master / release-*');
   // The id is printed as the protocol spells it; the severity is one word.
@@ -200,7 +200,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
   await expect(page.getByLabel('Limit for github.read-code')).not.toHaveValue('');
   await expect(page.getByTestId('risks-count-github')).toHaveText(
-    /^\d+ chosen of 19 you may allow here$/,
+    new RegExp(`^\\d+ chosen of ${GITHUB.permissions} you may allow here$`),
   );
   // Adjust one limit and one "ask me first": the Simple view says the list was adjusted.
   const counted = (await digest.textContent()) ?? '';
@@ -744,7 +744,7 @@ test('the reference explains each service: permissions against the trust levels,
     'aria-selected',
     'true',
   );
-  await expect(page.locator('tr[data-testid^="risk-github."]')).toHaveCount(19);
+  await expect(page.locator('tr[data-testid^="risk-github."]')).toHaveCount(GITHUB.permissions);
   const first = await page.getByTestId('risk-github.read-code').boundingBox();
   const last = await page.getByTestId('risk-github.delete-release').boundingBox();
   const viewport = page.viewportSize();
