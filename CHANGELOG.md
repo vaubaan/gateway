@@ -41,6 +41,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   asked. An agent can now put the `e2e` label that runs a pull request's
   browser tests.
 
+- **Vercel: `vercel__disconnect_git` removes the Git repository link of a
+  project** (`@vaubaan/plugin-vercel` 4.1.0, `DELETE /v9/projects/{id}/link`
+  under the connection's team): pushes no longer trigger deployments. It is
+  priced like the other build-pipeline writes, `vercel.project-settings-write`
+  (macro-action `own`); no new risk. It answers `{ ok: true, projectId }`:
+  Vercel's project object (environment values, deploy-hook URLs) is dropped.
+
 ## [2.0.0-alpha.13] - 2026-11-02
 
 ### Upgrade notes

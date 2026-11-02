@@ -31,6 +31,7 @@ export const vercelToolTitles: Readonly<Record<string, string>> = {
   [TOOL.editToolbarMessage]: 'Edit a toolbar message',
   [TOOL.addToolbarReaction]: 'React to a toolbar message',
   [TOOL.updateProjectSettings]: 'Change the settings of a project',
+  [TOOL.disconnectGit]: 'Disconnect the Git repository of a project',
   [TOOL.upsertEnvVar]: 'Set an environment variable',
   [TOOL.listEnvVars]: 'List environment variables',
   [TOOL.deleteEnvVar]: 'Delete an environment variable',

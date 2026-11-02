@@ -257,6 +257,12 @@ describe('classifyVercel — custom REST tools (project settings, domains, prote
     ).toEqual(['vercel.project[prj_abc].project-settings.W']);
   });
 
+  test('disconnect_git → project[prj_abc].project-settings.W (the build pipeline)', () => {
+    expect(classify('vercel__disconnect_git', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].project-settings.W',
+    ]);
+  });
+
   test('add_project_domain with ident-safe name → domain[NAME].W', () => {
     expect(
       classify('vercel__add_project_domain', { projectId: 'prj_abc', name: 'staging' }),

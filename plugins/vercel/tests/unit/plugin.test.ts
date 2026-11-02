@@ -170,6 +170,7 @@ describe('vercel plugin — structural kit', () => {
     ],
     vercel__delete_env_var: [{ args: { ...p, id: 'env_1' } }],
     vercel__update_project_settings: [{ args: { ...p, framework: 'nextjs' } }],
+    vercel__disconnect_git: [{ args: p }],
     vercel__add_project_domain: [{ args: { ...p, name: 'www.example.com' } }],
     vercel__verify_project_domain: [{ args: { ...p, domain: 'www.example.com' } }],
     vercel__remove_project_domain: [{ args: { ...p, domain: 'www.example.com' } }],
@@ -203,7 +204,7 @@ describe('vercel plugin — structural kit', () => {
 
   test('every tool classifies to slices the catalog covers', () => {
     const report = assertCatalogCoverage(vercelPlugin, SAMPLES, { resources: [app, foreign] });
-    expect(report.toolsChecked).toBe(31);
+    expect(report.toolsChecked).toBe(32);
     // Every named risk but one is reached by at least one tool ; no sample
     // lands on the fallback (ADR fallback-risk-only-when-uncategorized).
     // `vercel.toolbar-write` stays in the catalog (risk ids are stable) but no
@@ -263,8 +264,8 @@ describe('vercel plugin — structural kit', () => {
       resources: [app, foreign],
       context: (fetch, resources) => ctx(fetch, resources),
     });
-    // 26 of 31 : the five thread-addressed tools are refused whatever they are given.
-    expect(report.toolsChecked).toBe(26);
+    // 27 of 32 : the five thread-addressed tools are refused whatever they are given.
+    expect(report.toolsChecked).toBe(27);
     // Found by running the samples : the arguments that are a segment of a request path.
     expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
       'deploymentId',
@@ -715,6 +716,38 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
     const call = fetch.calls[0]!;
     expect(call.headers.authorization).toBe('Bearer vcp_secret');
     expect(call.json).toEqual({ rootDirectory: 'app', framework: 'nextjs' });
+  });
+
+  test('disconnect_git DELETEs /v9/projects/{id}/link under the team and drops the project answer', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'DELETE',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc/link?teamId=team_abc`,
+        body: { id: 'prj_abc', env: [{ key: 'K', value: 'secret' }] },
+      },
+    ]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__disconnect_git', {
+      projectId: 'prj_abc',
+    });
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(text(result))).toEqual({ ok: true, projectId: 'prj_abc' });
+    expect(text(result)).not.toContain('secret');
+    expect(fetch.calls).toHaveLength(1);
+    expect(fetch.calls[0]!.headers.authorization).toBe('Bearer vcp_secret');
+  });
+
+  test('disconnect_git accepts an answer without content', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'DELETE',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc/link?teamId=team_abc`,
+        status: 204,
+      },
+    ]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__disconnect_git', {
+      projectId: 'prj_abc',
+    });
+    expect(JSON.parse(text(result))).toEqual({ ok: true, projectId: 'prj_abc' });
   });
 
   test('a custom tool without a resolvable projectId fails before any network call', async () => {

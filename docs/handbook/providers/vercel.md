@@ -3,7 +3,7 @@ title: Vercel provider plugin
 tracks:
   - plugins/vercel/src/
   - plugins/vercel/README.md
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-02
 ---
 
 # Vercel provider plugin — handbook
@@ -67,6 +67,10 @@ Resource: the project; the environment is a slice segment, not a resource label.
 - `vercel.toolbar-write` and the non-prod qualifications of `vercel.deploy` are reached by no tool;
   risk ids are stable, so they stay.
 - Deployment Protection (SSO / password) cannot be changed with an API token.
+- `disconnect_git` (`DELETE /v9/projects/{id}/link`) is classified `project-settings.W`, like
+  `update_project_settings`: no Git-triggered build afterwards. Vercel answers with the project
+  object; the tool drops it and answers `{ ok: true, projectId }`. Relinking has no tool: the
+  Vercel dashboard.
 - `next build` fails with `The "path" argument must be of type string … Received an instance of URL`
   → Turbopack rewrites `new URL(…, import.meta.url)`; keep `catalogPathNextTo`.
 

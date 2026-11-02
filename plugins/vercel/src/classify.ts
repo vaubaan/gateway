@@ -317,6 +317,7 @@ const PROJECT_TOOLS: ReadonlySet<string> = new Set([
   TOOL.upsertEnvVar,
   TOOL.deleteEnvVar,
   TOOL.updateProjectSettings,
+  TOOL.disconnectGit,
   TOOL.addProjectDomain,
   TOOL.verifyProjectDomain,
   TOOL.removeProjectDomain,
@@ -588,7 +589,10 @@ function classifyDeclaredArguments(
 
     // ─── Writes — project settings ───────────────────────────────────
 
+    // Unlinking the repository changes how every future deployment is built
+    // (no more Git-triggered builds) : the same build-pipeline posture.
     case TOOL.updateProjectSettings:
+    case TOOL.disconnectGit:
       return { slices: [slice('W', [name('project'), projectSeg, name('project-settings')])] };
 
     // ─── Writes — domains ────────────────────────────────────────────

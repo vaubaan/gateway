@@ -1,7 +1,7 @@
 /**
  * MCP tools of the `vercel` provider — rewrap of the official Vercel MCP
  * server at mcp.vercel.com (18 tools, frozen in `upstream-tools.json`), plus
- * 13 custom REST-backed tools (`custom-tools.ts`).
+ * 14 custom REST-backed tools (`custom-tools.ts`).
  *
  * ADR  : docs/decisions/rewrap-official-mcps.md (upstream forward, custom tools).
  *
