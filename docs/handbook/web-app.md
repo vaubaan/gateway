@@ -18,6 +18,9 @@ tracks:
   - apps/gateway/src/server/providers/
   - apps/gateway/src/lib/providers/
   - apps/gateway/next.config.ts
+  - apps/gateway/src/app/manifest.ts
+  - apps/gateway/public/sw.js
+  - apps/gateway/src/components/notifications/
   - apps/gateway/tests/unit/app/
 last_reviewed: 2026-11-01
 ---
@@ -50,13 +53,15 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 - **Words live in `vocabulary.ts`** only, the trust levels' names and hints (`TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`) included: a page never prints a protocol name as prose, it prints an id with `Mono`. Routes follow the words (`/accounts`, `/waiting`); `src/server/` keeps protocol names.
 - **A page is built from `components/ui/`**: a missing component is added there with its specimen in `/design`, never in the page. Colours exist only in `tokens.css` as plain hex (`design-tokens.test.ts`: AA pairs, both dark blocks identical, no raw colour elsewhere). The one exception is a service's brand colour: it comes from its plugin (`ServiceIcon`), never a map in the interface, and reaches `ServiceMark` as `--mark-color`; a near-black brand turns to `--ink` in the dark theme (`darkThemeMarkColor`, WCAG luminance under 0.1).
 - **Every human page carries `BuildFooter`**, including the authorization server's HTML pages; one version source, the root `package.json`.
+- **The interface is installable** (`app/manifest.ts`, named after the instance) and the shell registers `/sw.js` (`ServiceWorkerRegistration`); the worker shows notifications and opens pages, nothing else ([notifications](notifications.md)). A yes is never given from a notification either: it opens `/r/<id>`, the mission or the account.
 - **The reference is generated** from the plugin registry (`lib/providers/reference.ts`): a registered plugin has its page; reference URLs and anchors are built only by `lib/providers/links.ts`.
 
 ## Traps
 
 - **A page recognises a service error by shape** (`isShareError(err, code)`, `isConnectError`), never `instanceof`: the page is bundled apart from the root that threw it, so `instanceof` can be false and the page answers 500 instead of "not found".
 - **Self-contained documents** (consent screen, refusals of the forwarded request URL) are served under `default-src 'none'` by `server/http/document.ts`, which repeats the theme tokens (`document.test.ts` keeps them equal to `tokens.css`). Never relax that CSP to load the style sheet.
-- The theme lives in the `vaubaan_theme` cookie, deliberately not `HttpOnly` and not `localStorage`: the server renders the right theme with no inline script, so nothing flashes.
+- The theme lives in the `vaubaan_theme` cookie, deliberately not `HttpOnly` and not `localStorage`: the server renders the right theme with no inline script, so nothing flashes. The home's "Not now" to notifications is the opposite case: one browser's convenience the server never needs, so it is `localStorage` (`vaubaan_push_not_now`).
+- The CSP carries `worker-src 'self'` and `manifest-src 'self'`: with `'strict-dynamic'`, `script-src` no longer admits `'self'`, and a worker falling back to it would be blocked. Never add a `fetch` listener or a cache to `public/sw.js`.
 - `LEGACY_REDIRECTS` never touches protocol paths: `/connections/callback/<provider>` (registered at providers), `/r/<id>` (handed to agents), `/mcp`, `/api`, `/oauth`, `/auth`, `/.well-known`.
 - The bootstrap operator has a session but no user: a page needing a user renders `<NeedsUser />`, never a redirect.
 - `catalogPathNextTo` joins a run-time path, so Turbopack traces the whole app directory (tests included) into every entry reaching it. Guards: `/* turbopackIgnore: true */` on the join (the only guard for the boot hook's trace) and `outputFileTracingExcludes` with `NEVER_SHIPPED` for routes; `tests/integration/standalone-plugin-catalogs.test.ts` checks it after a build.

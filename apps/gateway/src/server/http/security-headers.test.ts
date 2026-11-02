@@ -52,6 +52,14 @@ describe('security headers set by the application', () => {
     );
   });
 
+  it('admits the service worker and the manifest of the instance, from its own origin only', () => {
+    // `'strict-dynamic'` drops `'self'` from `script-src`: a worker falling back to it
+    // would be blocked, so `worker-src` must say `'self'` on its own (spec §4.2 bis).
+    const csp = directives(contentSecurityPolicy('n0nce'));
+    expect(csp.get('worker-src')).toBe("'self'");
+    expect(csp.get('manifest-src')).toBe("'self'");
+  });
+
   it('leaves the OAuth consent documents to their own, stricter policy', () => {
     expect(ownsItsPolicy('/oauth/authorize')).toBe(true);
     expect(ownsItsPolicy('/oauth/authorize/decision')).toBe(true);

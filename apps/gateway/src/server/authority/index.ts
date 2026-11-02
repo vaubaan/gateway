@@ -14,12 +14,15 @@ import { systemClock, type Clock } from '../store/clock';
 import { ConnectionAuthorityService } from './authority-service';
 import { MembershipSettler } from './membership';
 import { MissionGrounds } from './mission-grounds';
+import type { NotificationEvents } from '../notifications/events';
 
 export interface AuthorityModuleDeps {
   readonly store: Pick<Store, 'users' | 'groups' | 'connections' | 'shares' | 'missions' | 'audit'>;
   readonly registry: PluginRegistry;
   readonly logger: Logger;
   readonly clock?: Clock;
+  /** Told of each mission an act orphaned (spec §4.2 bis); default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'missionOrphaned'>;
 }
 
 export interface AuthorityModule {
@@ -44,6 +47,7 @@ export function createAuthorityModule(deps: AuthorityModuleDeps): AuthorityModul
     audit: deps.store.audit,
     clock: deps.clock ?? systemClock,
     logger,
+    notifications: deps.notifications,
   });
   const membership = new MembershipSettler({
     connections: deps.store.connections,

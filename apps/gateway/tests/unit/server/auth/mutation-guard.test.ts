@@ -32,6 +32,7 @@ import {
   type AuditRig,
 } from '../../../integration/audit/support';
 import { buildTestRoot, PUBLIC_URL, seedInstance } from '../../../integration/missions/support';
+import { browserSubscription } from '../../../support/notifications/testing';
 
 const APP = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../src/app');
 const FOREIGN_ORIGIN = 'https://evil.example';
@@ -468,6 +469,27 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/oauth/authorize/decision', headers, { consent: rig.consentId, decision: 'approve' }),
     ),
   ),
+  'notifications.handlers.add': json('user', 201, (rig, headers) =>
+    rig.root.notifications.handlers.add(
+      post('/api/notifications/devices', headers, {
+        subscription: browserSubscription(),
+        label: 'Phone',
+      }),
+    ),
+  ),
+  // No device: the person is sent back with `not-found`, past the guard.
+  'notifications.handlers.rename': form('user', 303, (rig, headers) =>
+    rig.root.notifications.handlers.rename(
+      post('/api/notifications/devices/no-such-device/rename', headers, { label: 'Phone' }),
+      'no-such-device',
+    ),
+  ),
+  'notifications.handlers.remove': form('user', 303, (rig, headers) =>
+    rig.root.notifications.handlers.remove(
+      post('/api/notifications/devices/no-such-device/remove', headers, {}),
+      'no-such-device',
+    ),
+  ),
   'oauth.handlers.revokeDelegation': form('user', 303, (rig, headers) =>
     rig.root.oauth.handlers.revokeDelegation(
       post(`/settings/connected-apps/${rig.delegationId}/revoke`, headers, {}),
@@ -613,6 +635,7 @@ const SURFACES = [
   'groups',
   'users',
   'oauth',
+  'notifications',
 ] as const;
 const GUARDED = Object.entries(MUTATIONS);
 const SESSION_GUARDED = GUARDED.filter(([, m]) => m.role !== 'origin-only');

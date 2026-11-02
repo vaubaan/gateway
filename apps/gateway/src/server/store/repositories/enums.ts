@@ -134,6 +134,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'administrator-recovered': true,
   'backup-made': true,
   'backup-failed': true,
+  'device-added': true,
+  'device-removed': true,
   'config-changed': true,
 });
 

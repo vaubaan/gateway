@@ -9,6 +9,29 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Notifications on your devices** (spec §4.2 bis; ADR
+  notifications-reach-the-persons-own-channels), wave 1: the interface is
+  installable from the browser (`/manifest.webmanifest`, a service worker
+  `/sw.js` that shows notifications and caches nothing), and Settings →
+  **Notifications** subscribes this device, lists, renames and removes a
+  person's devices. A device is told when a request opens in its person's
+  inbox (claim, approval request, permission request), when an account of
+  theirs needs reconnecting, when a mission of theirs is orphaned or revoked by
+  someone else, and an administrator's when a scheduled backup fails or the
+  master key names an administrator. A notification names the mission or
+  account and the tool, never an argument, and leads to the page where the
+  person answers. The home proposes it once when something waits ("Not now"
+  remembered by the browser); Administration → People shows how many devices
+  each person has. Web Push (RFC 8291 / RFC 8292) is built on `node:crypto` and
+  `jose`, with a VAPID key pair the instance generates and seals: nothing to
+  configure. Migration `0030_notification_devices` (subscriptions sealed under
+  the master key, resealed by `reseal`). Outbound: the push services of the
+  browser vendors, over 443 (handbook configuration). CSP gains
+  `worker-src 'self'` and `manifest-src 'self'`. Audit acts `device-added`,
+  `device-removed`.
+
 ## [2.0.0-alpha.13] - 2026-11-02
 
 ### Upgrade notes

@@ -16,6 +16,12 @@
  *                                       attributes React renders (a nonce cannot
  *                                       cover an attribute)
  *   img-src 'self' data: blob:, font-src 'self' data:, connect-src 'self'
+ *   worker-src 'self'                   the service worker `/sw.js` (notifications,
+ *                                       spec §4.2 bis). Without it the worker falls back
+ *                                       to `script-src`, where `'strict-dynamic'` drops
+ *                                       `'self'`: the registration would be blocked
+ *   manifest-src 'self'                 the web app manifest, explicitly rather than by
+ *                                       the `default-src` fallback
  *   object-src 'none', base-uri 'none', frame-src 'none'
  *   frame-ancestors 'none'              no page of the gateway in a frame
  *
@@ -56,6 +62,8 @@ export function contentSecurityPolicy(nonce: string, development = false): strin
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
     "frame-src 'none'",

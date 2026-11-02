@@ -36,5 +36,13 @@ export default async function HomePage() {
     const setup = principal.isOperator ? await readSetup(setupDepsOf(root)) : null;
     return <FirstRun view={view} name={firstName(user.displayName)} setup={setup} />;
   }
-  return <NowView view={view} viewerId={user.id} />;
+  // The proposal to receive notifications needs the key a browser subscribes with.
+  const push =
+    view.waiting.length > 0
+      ? {
+          key: await root.notifications.vapid.publicKey(),
+          knownDigests: await root.notifications.devices.liveEndpointDigests(user),
+        }
+      : null;
+  return <NowView view={view} viewerId={user.id} push={push} />;
 }

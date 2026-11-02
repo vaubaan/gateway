@@ -1,0 +1,26 @@
+---
+title: Notifications on your phone
+description: Install the interface from the browser and receive a notification when a mission asks you something or an account stops serving.
+---
+
+The instance can tell you, on your phone's lock screen or your computer, that something waits for you: an approval, a claim for more budget, a permission an agent asks for. It also tells you when an account of yours needs reconnecting or a mission of yours stopped without you. There is no app to download: the interface itself is installed from the browser.
+
+## Turn it on
+
+1. Open **Settings → Notifications** on the device that should receive them.
+2. Choose **Receive notifications on this device** and allow notifications when the browser asks.
+3. Do the same on each phone or computer you use. Each one is listed, and you can rename or remove it.
+
+On an **iPhone or iPad**, add the page to the Home Screen first (Share, then **Add to Home Screen**), open it from there, then subscribe: Safari sends notifications only to an installed interface.
+
+The home page also offers it the first time something waits for you; **Not now** is remembered by that browser.
+
+## What a notification says
+
+- The instance's name, what happened, the mission's or account's name and, for a request, the tool.
+- Never the arguments of a call, a secret, a resource or a person's name.
+- Opening it leads to the request, the mission or the account. You answer in the interface, signed in, never from the notification.
+
+## What the operator needs
+
+Nothing to configure. The instance must be served over https, and reach the push services of the browser vendors (Google, Mozilla, Apple, Microsoft) on port 443. An instance that cannot reach them works the same; only the alerts are missing. The home and the inbox always show what waits.

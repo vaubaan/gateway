@@ -34,6 +34,7 @@ export const ROUTES = {
   reference: '/reference',
   settings: '/settings',
   connectedApps: '/settings/connected-apps',
+  notifications: '/settings/notifications',
   administration: '/admin',
   design: '/design',
 } as const;
@@ -199,6 +200,7 @@ export const SECTIONS = {
   peopleAndKeys: 'People and keys',
   permissionsAndUsage: 'Permissions and usage',
   connectedApps: 'Connected apps',
+  notifications: 'Notifications',
   administrators: 'Administrators',
   peopleAndTeams: 'People and teams',
   setup: 'Setup',
@@ -800,6 +802,8 @@ export const ACT_WORDS = {
   'administrator-recovered': 'named an administrator with the master key',
   'backup-made': 'made a backup',
   'backup-failed': 'failed to make a backup',
+  'device-added': 'received notifications on a device',
+  'device-removed': 'removed a device from their notifications',
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'mission-resources-added': 'added resources to a mission',
@@ -816,6 +820,10 @@ export const ACT_WORDS = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SETTINGS_PAGES = {
+  notifications: {
+    title: 'Notifications',
+    lede: 'The devices that tell you when something waits for you or stopped without you. A notification names a mission or an account; you answer in the interface.',
+  },
   connectedApps: {
     title: 'Connected apps',
     lede: 'Apps you allowed to prepare missions in your name. They can never execute a call or answer a request.',
@@ -852,6 +860,61 @@ export const SETTINGS_PAGES = {
     title: 'Registered apps',
     lede: 'The apps that may ask people to connect them. Whatever is decided here, each person still consents on a screen that names the app.',
   },
+} as const;
+
+/**
+ * Notifications on a device (spec §4.2 bis): the Settings page and the line the home shows
+ * the first time something waits. A yes is never given from a notification.
+ */
+export const NOTIFICATION_WORDS = {
+  subscribe: 'Receive notifications on this device',
+  notNow: 'Not now',
+  thisDevice: 'This device',
+  yourDevices: 'Your devices',
+  rename: 'Rename',
+  remove: 'Remove',
+  label: 'Name of the device',
+  noDevice: 'No device receives your notifications.',
+  noDeviceHint:
+    'Subscribe this device above, then any other phone or computer you use: the home and the inbox stay the reference either way.',
+  subscribed: 'This device receives your notifications.',
+  unsupported: 'This browser cannot receive notifications.',
+  installFirst:
+    'On an iPhone or iPad, add this page to the Home Screen first (Share, then Add to Home Screen), open it from there, and come back here.',
+  denied:
+    'This browser refuses notifications from this gateway. Allow them in its site settings, then come back here.',
+  offerTitle: 'Be told when something waits for you',
+  offer:
+    'This device can show a notification as soon as a mission asks you something. It names the mission and the tool, never the arguments.',
+  added: 'This device will receive your notifications.',
+  removeTitle: (label: string) => `Remove ${label}?`,
+  removeConsequence:
+    'It receives no notification any more. Nothing else changes; you can subscribe it again from that device.',
+  dropped: { gone: 'dropped: its browser no longer accepts them' },
+  addedOn: 'Added',
+  lastDelivered: 'Last delivered',
+  never: 'never',
+  /** On Administration → People: how many devices a person has, never which. */
+  receivesOn: (devices: number) =>
+    `notified on ${count(devices, { one: 'device', many: 'devices' })}`,
+  renamed: 'Device renamed.',
+  removed: 'Device removed: it receives no notification any more.',
+  listHint:
+    'A notification names the mission or the account and, for a request, the tool; never an argument. Opening it leads to the page where you answer.',
+  problems: {
+    'invalid-subscription': 'The browser gave a subscription this gateway cannot read.',
+    'unsupported-push-service': 'This browser’s push service is not one this gateway posts to.',
+    'invalid-label': 'Name the device in one line of 60 characters or fewer.',
+    'too-many-devices': 'You have 20 devices already: remove one you no longer use first.',
+    'not-found': 'You have no such device.',
+  },
+  failed: 'This device could not be subscribed. Try again.',
+  device: 'Device',
+  /** The first name of a device, from its browser and system ("Chrome on Android"). */
+  deviceLabel: (browser: string | null, system: string | null) =>
+    system ? `${browser ?? 'Browser'} on ${system}` : (browser ?? 'Browser'),
+  /** The description of the installed interface (the web app manifest). */
+  installed: 'Missions, accounts and what waits for you on this Vaubaan Gateway.',
 } as const;
 
 export const SETTINGS_ACTIONS = {

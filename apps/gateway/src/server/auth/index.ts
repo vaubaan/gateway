@@ -29,6 +29,7 @@ import {
   type RelyingPartyFactory,
 } from './relying-party';
 import { SessionService } from './session-service';
+import type { NotificationEvents } from '../notifications/events';
 
 export interface OidcOptions {
   /**
@@ -56,6 +57,8 @@ export interface AuthModuleDeps {
   readonly mailer?: LinkMailer;
   /** The `limits.users` ceiling (`root.limits`); absent, none. */
   readonly ceilings?: CeilingCheck;
+  /** Told of a recovery by the master key (spec §4.2 bis); default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'masterKeyRecovered'>;
 }
 
 export interface AuthModule {
@@ -197,6 +200,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     clock,
     logger: logger.child({ component: 'recovery' }),
     mailer: deps.mailer,
+    notifications: deps.notifications,
   });
   const recoveryHandlers = createRecoveryHandlers({
     publicUrl: deps.config.publicUrl,

@@ -28,6 +28,7 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
       label: 'You',
       items: [
         { label: 'Preferences', href: ROUTES.settings, exact: true },
+        { label: SECTIONS.notifications, href: ROUTES.notifications },
         { label: SECTIONS.connectedApps, href: ROUTES.connectedApps },
       ],
     },

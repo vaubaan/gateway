@@ -37,6 +37,10 @@ import { createInvitationsRepo, type InvitationsRepo } from './repositories/invi
 import { createLocalAccountsRepo, type LocalAccountsRepo } from './repositories/local-accounts.ts';
 import { createPendingRefsRepo, type PendingRefsRepo } from './repositories/pending-refs.ts';
 import { createMissionsRepo, type MissionsRepo } from './repositories/missions.ts';
+import {
+  createNotificationDevicesRepo,
+  type NotificationDevicesRepo,
+} from './repositories/notification-devices.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSealedBlobsRepo, type SealedBlobsRepo } from './repositories/sealed-blobs.ts';
 import { createSecondFactorsRepo, type SecondFactorsRepo } from './repositories/second-factors.ts';
@@ -72,6 +76,8 @@ export interface Store {
   readonly localAccounts: LocalAccountsRepo;
   /** The second factor of every person, whatever their provider (migration 0021). */
   readonly secondFactors: SecondFactorsRepo;
+  /** The devices a person receives notifications on, subscriptions sealed (migration 0030). */
+  readonly notificationDevices: NotificationDevicesRepo;
   /** Temporary refs of pushes waiting for an approval (migration 0015). */
   readonly pendingRefs: PendingRefsRepo;
   readonly connections: ConnectionsRepo;
@@ -132,6 +138,7 @@ export function openStore(options: StoreOptions): Store {
     administrators: createAdministratorsRepo(ctx),
     localAccounts: createLocalAccountsRepo(ctx),
     secondFactors: createSecondFactorsRepo(ctx),
+    notificationDevices: createNotificationDevicesRepo(ctx),
     pendingRefs: createPendingRefsRepo(ctx),
     connections: createConnectionsRepo(ctx),
     shares: createSharesRepo(ctx),

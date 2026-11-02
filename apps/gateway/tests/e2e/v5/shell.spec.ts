@@ -322,7 +322,11 @@ test('Settings leads a person to their own pages and an administrator to the gat
   await signIn(page, '/settings');
   await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
   const local = page.getByRole('navigation', { name: 'Settings' });
-  await expect(local.getByRole('link')).toHaveText(['Preferences', 'Connected apps']);
+  await expect(local.getByRole('link')).toHaveText([
+    'Preferences',
+    'Notifications',
+    'Connected apps',
+  ]);
   await expect(page.getByText('Administration')).toHaveCount(0);
   // The component gallery is not offered to someone who does not administer…
   await expect(page.getByTestId('settings-interface-reference')).toHaveCount(0);
@@ -358,6 +362,7 @@ test('Settings leads a person to their own pages and an administrator to the gat
   const admin = ops.getByRole('navigation', { name: 'Settings' });
   await expect(admin.getByRole('link')).toHaveText([
     'Preferences',
+    'Notifications',
     'Connected apps',
     'Setup',
     'Sign-in',

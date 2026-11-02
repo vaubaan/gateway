@@ -40,6 +40,7 @@ regexes = [
   '''^vbn_live_Ab12Cd34_$''',                                   # a prefix in logging.test.ts
   '''^upstash_key_123$''',                                      # upstash-redis plugin tests
   '''^ARGUMENT-IN-CLEAR-91c4$''',                               # a marker the approval test looks for in the audit
+  '''^BTBZMqHH6r4Tts7J_aSIgg$''',                               # the published auth secret of RFC 8291 Appendix A (crypto/web-push-message.test.ts)
   '''^encryption\.previous_keys\.1$''',                         # a configuration key path, not a value
   '''^sk_(test|live)_demoAcmeBilling$''',                       # the demo seed (tests/demo/seed.ts)
   '''^sk_test_(abc123def456|fakekey123)$''',                    # v4 Stripe tests, deleted

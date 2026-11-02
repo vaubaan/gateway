@@ -54,6 +54,7 @@ import type {
   StoredLimits,
 } from '../store/index.ts';
 import type { RequestLine } from '../store/types.ts';
+import type { NotificationEvents } from '../notifications/events.ts';
 import type { PreparedArguments } from '../store/repositories/requests.ts';
 import { rateWindowKey, type SlidingWindows } from '../rate-limit/index.ts';
 import {
@@ -143,6 +144,17 @@ export interface SessionServiceDeps {
    * service applies it when the creator grants.
    */
   readonly approvalValiditySeconds: number;
+  /**
+   * Told of a claim or an approval request this service opened, after the transaction
+   * committed and without waiting (spec §4.2 bis); never told of one already open.
+   */
+  readonly notifications?: Pick<NotificationEvents, 'requestOpened'>;
+}
+
+/** The request a refusal points to, and whether this call opened it. */
+interface AskedRequest {
+  readonly record: RequestRecord;
+  readonly opened: boolean;
 }
 
 /** A preflight that found the limits clear: nothing written. */
@@ -156,6 +168,8 @@ interface TransactionOutcome extends DecisionOutcome {
   readonly event: NewEvent;
   readonly decision: BudgetOutcomeAcrossSets;
   readonly request: RequestRecord | null;
+  /** The request was created by this call, not found open. */
+  readonly opened: boolean;
   readonly approvalIds: readonly string[];
   /** The policy the decision was taken with: the caller's, with the limits read now. */
   readonly policy: MissionPolicy;
@@ -188,6 +202,7 @@ export class SessionService {
     );
 
     const { decision, request, approvalIds, policy } = result.outcome;
+    this.notifyOpened(result.outcome, mission.id, input.tool);
     if (decision.kind === 'allow') {
       return {
         outcome: 'allowed',
@@ -314,6 +329,7 @@ export class SessionService {
     );
     const outcome = result.outcome;
     if ('pass' in outcome) return null;
+    this.notifyOpened(outcome, mission.id, input.tool);
     const { decision, request } = outcome;
     return decision.kind === 'allow' ? null : this.refusalOf(mission, decision, request);
   }
@@ -430,6 +446,7 @@ export class SessionService {
       allow: true,
       decision,
       request: null,
+      opened: false,
       approvalIds,
       policy: input.mission.policy,
       event: {
@@ -451,11 +468,13 @@ export class SessionService {
     prepared: PreparedArguments | null,
     now: Date,
   ): TransactionOutcome {
-    const request = this.requestFor(ctx, input, decision, fingerprint, prepared, now);
+    const asked = this.requestFor(ctx, input, decision, fingerprint, prepared, now);
+    const request = asked?.record ?? null;
     return {
       allow: false,
       decision,
       request,
+      opened: asked?.opened ?? false,
       approvalIds: [],
       policy: input.mission.policy,
       event: {
@@ -480,7 +499,7 @@ export class SessionService {
     fingerprint: string,
     prepared: PreparedArguments | null,
     now: Date,
-  ): RequestRecord | null {
+  ): AskedRequest | null {
     if (decision.code === 'rate-limited') return null;
     const expiresAt = addSeconds(now, this.deps.requestExpirySeconds);
     if (decision.code === 'budget-exhausted') {
@@ -490,7 +509,7 @@ export class SessionService {
         riskId: decision.risk_id,
       };
       const open = ctx.findOpenRequest({ kind: 'claim', line });
-      if (open) return open;
+      if (open) return { record: open, opened: false };
       const claim = ctx.createRequest({
         kind: 'claim',
         riskId: decision.risk_id,
@@ -503,7 +522,7 @@ export class SessionService {
         resourceSetId: decision.resource_set_id,
         details: { request_id: claim.id, request_kind: 'claim', tool: input.tool, fingerprint },
       } satisfies NewEvent);
-      return claim;
+      return { record: claim, opened: true };
     }
 
     // One request covers the call: every gated risk it touches, not only the first.
@@ -518,7 +537,7 @@ export class SessionService {
       riskId: line.risk_id,
     }));
     const open = ctx.findOpenRequest({ kind: 'approval', tool: input.tool, fingerprint, lines });
-    if (open) return open;
+    if (open) return { record: open, opened: false };
     if (!prepared) throw new InvariantError('approval request without sealed arguments');
     const request = ctx.createRequest({
       kind: 'approval',
@@ -542,7 +561,22 @@ export class SessionService {
         risk_ids: gatedRisks,
       },
     } satisfies NewEvent);
-    return request;
+    return { record: request, opened: true };
+  }
+
+  /** After commit: the creator hears of a request this call opened; nothing is awaited. */
+  private notifyOpened(
+    outcome: Pick<TransactionOutcome, 'request' | 'opened'>,
+    missionId: string,
+    tool: string,
+  ): void {
+    if (!outcome.opened || outcome.request === null) return;
+    this.deps.notifications?.requestOpened({
+      requestId: outcome.request.id,
+      missionId,
+      request: outcome.request.kind,
+      tool,
+    });
   }
 
   private refusalOf(

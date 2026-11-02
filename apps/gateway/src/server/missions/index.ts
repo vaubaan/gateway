@@ -27,6 +27,7 @@ import { MissionService } from './mission-service';
 import { createTeamHandlers, type TeamHandlers } from './team-handlers';
 import { MissionTeamService } from './team-service';
 import type { TokenMinter } from './token';
+import type { NotificationEvents } from '../notifications/events';
 
 export interface MissionsModule {
   readonly authority: AuthorityService;
@@ -54,6 +55,8 @@ export interface MissionsModuleDeps {
   readonly budget?: Pick<SessionService, 'stateOf'>;
   /** The `limits.active_missions` ceiling (`root.limits`); absent, none. */
   readonly ceilings?: CeilingCheck;
+  /** Told of a mission revoked by someone other than its creator; default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'missionRevoked'>;
 }
 
 export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
@@ -79,6 +82,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     budget: deps.budget,
     ceilings: deps.ceilings,
     trustRaiseAfterApprovals: deps.config.trustRaise?.afterApprovals,
+    notifications: deps.notifications,
   });
   const team = new MissionTeamService({
     store: deps.store,

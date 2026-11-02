@@ -23,6 +23,7 @@ import { productionAttestationKit } from './attestation-kit';
 import { OAuthBrokers } from './oauth-broker';
 import { NoticeStore, PendingConnectStore } from './pending';
 import { ConnectionService } from './service';
+import type { NotificationEvents } from '../notifications/events';
 
 export interface ConnectionsModuleDeps {
   readonly config: InstanceConfig;
@@ -39,6 +40,8 @@ export interface ConnectionsModuleDeps {
   readonly clock?: Clock;
   /** The `limits.connections` ceiling (`root.limits`); absent, none. */
   readonly ceilings?: CeilingCheck;
+  /** Told when a connection needs reconnecting (spec §4.2 bis); default: nobody. */
+  readonly notifications?: Pick<NotificationEvents, 'accountNeedsReconnecting'>;
 }
 
 export interface ConnectionsModule {
@@ -78,6 +81,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     fetch: outbound,
     clock,
     logger,
+    notifications: deps.notifications,
   });
   const service = new ConnectionService({
     store: deps.store,

@@ -71,6 +71,6 @@ discovering and curating its resources. Spec:
 - **"OAuth broker '<name>' is not attested (…)"** → nothing was sent: "no attested broker version admitted by this release" (measurement not on the allowlist: upgrade, or declare your own broker `attestation: none`), "a version this release does not admit" (newer or modified broker), "not bound to this connection’s key" (someone else answers on its address).
 - **"not configured on this gateway"** → no `oauth_brokers` entry serves the plugin; the boot log names it.
 - **A resource an agent created is not listed** → is the tool in `resourceCreatingTools`? Then the log `resource discovery after a creating call`. Resources created elsewhere appear on "Refresh" only.
-- **A connection turned `expired`** → log `credential refresh rejected`; "Reconnect" keeps id and missions. Calls failing while `active` → `ProviderUnreachableError`.
+- **A connection turned `expired`** → log `credential refresh rejected`; "Reconnect" keeps id and missions. Its owners' devices are told once, by the call that made the transition ([notifications](notifications.md)). Calls failing while `active` → `ProviderUnreachableError`.
 - **An owner's label disappeared** → the plugin started returning `env`.
 - **`ssh-key` discovery refused** → public key not in `authorized_keys`, or the host key differs from the pinned fingerprint.
