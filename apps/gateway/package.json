@@ -10,7 +10,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/server": "2.4.0",
     "@vaubaan/gateway-core": "*",
     "@vaubaan/plugin-caldav": "*",
     "@vaubaan/plugin-cloudflare-dns": "*",
@@ -34,11 +34,11 @@
     "@vaubaan/telemetry": "*",
     "argon2": "^0.45.1",
     "better-sqlite3": "13.0.3",
-    "geist": "^1.8.1",
-    "jose": "6.2.12",
+    "geist": "^1.8.2",
+    "jose": "6.2.13",
     "libsodium-wrappers-sumo": "^0.8.4",
-    "next": "16.4.2",
-    "nodemailer": "^10.1.4",
+    "next": "16.4.3",
+    "nodemailer": "^10.2.1",
     "openid-client": "^6.8.8",
     "react": "19.3.1",
     "react-dom": "19.3.1",
@@ -47,7 +47,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/client": "2.4.0",
     "@types/better-sqlite3": "9.6.0",
     "@types/libsodium-wrappers-sumo": "^0.8.2",
     "@types/nodemailer": "^8.0.2",

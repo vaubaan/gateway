@@ -15,6 +15,6 @@
     "@vaubaan/plugin-sdk": "*"
   },
   "devDependencies": {
-    "js-yaml": "^5.4.3"
+    "js-yaml": "^5.5.0"
   }
 }

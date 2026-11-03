@@ -59,6 +59,6 @@
   "dependencies": {
     "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
-    "js-yaml": "^5.4.3"
+    "js-yaml": "^5.5.0"
   }
 }
