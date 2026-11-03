@@ -90,30 +90,30 @@ describe('command line', () => {
     expect(
       parseArgs([
         '--org',
-        'fidi',
+        'acme',
         '--ssh-host',
-        'vps-fidi',
+        'vps-acme',
         '--ssh-host-key',
-        `vps-fidi=${FINGERPRINT}=`,
+        `vps-acme=${FINGERPRINT}=`,
       ]),
     ).toEqual({
       kind: 'run',
       args: {
-        org: 'fidi',
-        sshHosts: ['vps-fidi'],
-        sshHostKeys: new Map([['vps-fidi', FINGERPRINT]]),
+        org: 'acme',
+        sshHosts: ['vps-acme'],
+        sshHostKeys: new Map([['vps-acme', FINGERPRINT]]),
       },
     });
   });
 
   it('refuses a host without its fingerprint, a fingerprint without its host, a bad slug', () => {
-    expect(() => parseArgs(['--org', 'fidi', '--ssh-host', 'vps-fidi'])).toThrow(UsageError);
-    expect(() => parseArgs(['--org', 'fidi', '--ssh-host-key', `vps=${FINGERPRINT}`])).toThrow(
+    expect(() => parseArgs(['--org', 'acme', '--ssh-host', 'vps-acme'])).toThrow(UsageError);
+    expect(() => parseArgs(['--org', 'acme', '--ssh-host-key', `vps=${FINGERPRINT}`])).toThrow(
       'names no --ssh-host',
     );
-    expect(() => parseArgs(['--org', 'Fidi; drop table'])).toThrow(UsageError);
+    expect(() => parseArgs(['--org', 'Acme; drop table'])).toThrow(UsageError);
     expect(() =>
-      parseArgs(['--org', 'fidi', '--ssh-host', 'a', '--ssh-host-key', 'a=nope']),
+      parseArgs(['--org', 'acme', '--ssh-host', 'a', '--ssh-host-key', 'a=nope']),
     ).toThrow('SHA256');
     expect(() => parseArgs([])).toThrow('--org <slug> is required');
   });
@@ -121,7 +121,7 @@ describe('command line', () => {
   it('never echoes an unknown argument', () => {
     const secret = randomBytes(16).toString('hex');
     try {
-      parseArgs(['--org', 'fidi', secret]);
+      parseArgs(['--org', 'acme', secret]);
       throw new Error('accepted');
     } catch (error) {
       expect(error).toBeInstanceOf(UsageError);

@@ -2,8 +2,8 @@
 // Exports one organization of the v4 SaaS as the bundle the v5 importer reads
 // (handbook docs/handbook/import-from-v4.md).
 //
-//   node scripts/export-v4.mjs --org fidi --ssh-host vps-fidi \
-//     --ssh-host-key vps-fidi=SHA256:… | <importer in the container> --owner … [--apply]
+//   node scripts/export-v4.mjs --org acme --ssh-host vps-acme \
+//     --ssh-host-key vps-acme=SHA256:… | <importer in the container> --owner … [--apply]
 //
 // Runs on the operator's machine, from the repository. One read-only psql
 // session; the database password goes to psql through its environment, never
