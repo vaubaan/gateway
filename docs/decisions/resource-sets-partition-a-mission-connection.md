@@ -30,8 +30,9 @@ gate applies, and each set's budget is charged.
 - What cannot be placed in one set never gets the wider set's rights: the strictest candidate wins.
 - Environment resolution still reads the resources of the whole connection; the set only picks the
   policy.
-- A set is a partition of the mission's selection; `scope: connection` (resources discovered later)
-  is allowed on one set per connection at most, and new resources join that set.
+- A set is a partition of the mission's selection: one environment, an explicit list, and
+  optionally the resources that appear there later
+  ([resource-set-is-one-environment-with-optional-future-resources](resource-set-is-one-environment-with-optional-future-resources.md)).
 
 ## Rejected alternatives
 

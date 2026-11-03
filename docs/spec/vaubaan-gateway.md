@@ -101,8 +101,9 @@ callback registered at a provider).
   a group they belong to. Every member of an owner group is an owner, with the full catalog: share,
   reconnect, transfer, revoke.
 - **Resource** — one thing reachable through a connection (a repository, a database project…).
-  Discovered by the plugin at connection, on the owner's demand, and right after a gateway call that
-  created one (the plugin declares which calls create; the refresh never delays the answer). The
+  Discovered by the plugin at connection, on demand, right after a gateway call that created one
+  (the plugin declares which calls create; the refresh never delays the answer), and every hour for
+  a connection that a mission's future resources depend on (§4.2 Resource selection). The
   owner labels each with an **environment** (`prod`, `staging`…) and may give the connection a
   **default environment**, carried by every resource without its own label, later ones included; a
   resource's own label wins; setting or clearing the default is an audited owner act.
@@ -336,20 +337,22 @@ Executor(s)                   same token, same budget, optional agent label
 - **Resource sets.** Within one connection, a mission can give different resources different
   policies and budgets. Each resource belongs to one set. A call that cannot be placed in one set is
   judged by the strictest of its candidate sets (risk model §4.7).
-- **Resource selection.** A mission names, per connection, the resources it may touch: by default
-  every resource known at issuance. A call citing a resource outside it is refused
+- **Resource selection.** A mission names, per connection and per set, the resources it may touch:
+  an explicit list, all of one environment (a label, or none). A call citing a resource outside it is refused
   `resource-not-in-mission` before any risk is evaluated. **What a mission creates, it reaches**: a
   resource it creates through the gateway with a declared creating tool joins its selection right
   after that call, marked "created by this mission" and audited
   ([created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md)). One
   first seen less than 15 minutes ago is not dropped by a discovery that does not list it yet. Any
-  other later resource is not covered until the creator edits the mission — unless the creator
-  chose, explicitly, **the whole connection**: then the mission reaches every resource discovery
-  returns at call time, except hidden ones and the instance's own
-  ([mission-reaches-the-whole-connection-on-request](../decisions/mission-reaches-the-whole-connection-on-request.md)).
-  The whole connection is never a default; the mission page and the kit state it.
-  Environment-qualified risks are checked at issuance against the resources known then; a later
-  resource reaches them once labelled.
+  other later resource is not covered until the creator edits the mission — unless the set has
+  **future resources** on, chosen explicitly and never a default: then a resource that later
+  appears with the set's environment (discovered, or relabelled into it), neither hidden nor the
+  instance's own nor held by another set of the mission, is written into the set's list and audited
+  on the mission. A resource relabelled out of a set's environment leaves the set; it joins the set
+  of its new environment with future on, else it leaves the mission
+  ([resource-set-is-one-environment-with-optional-future-resources](../decisions/resource-set-is-one-environment-with-optional-future-resources.md)).
+  An unlabelled resource enters a set only on a provider whose catalog has no env-qualified risk.
+  Environment-qualified risks are checked at issuance against the resources known then.
 - **The instance's own resources** — what hosts or runs the instance (where the plugin can tell, or
   as the operator lists in the configuration) — are never mission resources: not offered, a draft
   selecting one refused, a call citing one refused `resource-not-in-mission`, and the account page
@@ -597,19 +600,22 @@ stands in without one.
   the mission. A closed request shows its outcome; anyone but the creator reads one sentence and
   nothing of it.
 - **Missions** — mine and those I am a teammate of; a row says when it waits for my answer and names
-  the connected app that prepared it. **Creating**, on one screen: a name (or a copy of a mission,
-  or a pasted agent proposal); the accounts and their resources (every resource known now, the whole
-  account including later ones, or a pick); per account its macro-actions, each ticked at a trust level
-  and saying what it yields within what I may allow ([risk model](gateway-risk-model.md) §4.6), or
-  `everything-i-hold`, which says how many permissions it writes out, the most severe, which critical
-  ones run freely and that it includes uncategorized writes; the permissions one by one in an
-  Advanced view; the view is never sent, the trust levels only to redraw the screen; the period and the end; a
-  summary (can do, asks first, cannot). **Creating confirms the explicit list** (every permission by
-  account, with limits and gate), which is what is sent and checked again; then the key, shown once,
-  with the setup kit. **On a mission**: its state, a waiting request (the way to answer for the
-  creator; whose answer it waits for, for a teammate), its people and keys with what each did this
-  period, its permissions with used and left, its activity. **Edit mission** opens the creation
-  screen prefilled (period fixed) and confirms every change before/after with its consequences.
+  the connected app that prepared it; stopped missions are behind a filter. **Creating**, on one
+  screen: a name (or a copy of a mission, or a pasted agent proposal), the period and the end, and
+  one **card** per resource set. "Add an account" picks an account, then its resources grouped by
+  environment (one environment per card), plus "future" ones; only the cards of the mission are
+  shown. A card lists the account's macro-actions, each ticked at a trust level — Careful, Trusting,
+  Autonomous, or Custom when its lines were edited by hand ([risk model](gateway-risk-model.md)
+  §4.6); Custom opens the macro-action's permissions one by one (behaviour and limits, filterable by
+  plane), and hovering the line shows the same content read-only. The trust levels are sent only to
+  redraw the screen. **Creating confirms the explicit list** (every permission by account, with
+  limits and gate), which is what is sent and checked again; then the key, shown once, with the setup
+  kit. **On a mission**: the creation screen, read-only, with one more column: today's use per
+  macro-action (the permission closest to its limit), each permission's use on hover; its state, a
+  waiting request (the way to answer for the creator; whose answer it waits for, for a teammate),
+  its people and keys with what each did this period, its activity; stop, duplicate and replace key
+  in its menu. **Edit mission** opens the creation screen prefilled (period fixed) and confirms every
+  change before saving.
   **Replace key**: the old key stops at once, no grace period; a machine key is replaced in one act.
   A teammate never sees a pending approval's arguments nor their fingerprint, and their home does
   not list the creator's requests.
