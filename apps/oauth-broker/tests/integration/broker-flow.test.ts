@@ -118,10 +118,11 @@ interface Enrolled {
 }
 
 /** A broker with these instances, the test's sealing key and client secret. */
-async function launch(instances: Enrolled[]): Promise<RunningBroker> {
+async function launch(instances: Enrolled[], refreshPerHour?: number): Promise<RunningBroker> {
   const config = parseConfig(
     JSON.stringify({
       public_url: 'https://broker.example.com',
+      refresh_per_hour: refreshPerHour,
       providers: { google: { client_id: 'cid.example' } },
       instances: instances.map((i) => ({
         id: i.id,
@@ -197,6 +198,7 @@ interface Answer {
   status: number;
   json: Record<string, unknown> | undefined;
   peerKeySha256: string;
+  retryAfter: string | undefined;
 }
 
 function api(
@@ -235,6 +237,7 @@ function api(
             json: text === '' ? undefined : (JSON.parse(text) as Record<string, unknown>),
             peerKeySha256:
               spki === undefined ? '' : createHash('sha256').update(spki).digest('base64url'),
+            retryAfter: res.headers['retry-after'],
           }),
         );
       },
@@ -586,6 +589,41 @@ describe('a refresh token works for its own instance only', () => {
       expect([res.status, res.json?.error]).toEqual([401, 'invalid_key']);
     } finally {
       await gone.close();
+    }
+  });
+});
+
+describe('refreshes per instance and per hour', () => {
+  it('caps one instance before the provider is called, and leaves the others free', async () => {
+    const capped = await launch(
+      [
+        { id: ID_A, key: KEY_A, returnUrl: RETURN_A },
+        { id: ID_B, key: KEY_B, returnUrl: RETURN_B },
+      ],
+      2,
+    );
+    const refresh = (key: string, id: string): Promise<Answer> =>
+      api(
+        '/token',
+        { provider: 'google', refresh_token: sealed('rt_alive', id) },
+        key,
+        undefined,
+        capped,
+      );
+    try {
+      expect((await refresh(KEY_A, ID_A)).status).toBe(200);
+      expect((await refresh(KEY_A, ID_A)).status).toBe(200);
+      const refused = await refresh(KEY_A, ID_A);
+      expect([refused.status, refused.json?.error, refused.retryAfter]).toEqual([
+        429,
+        'rate_limited',
+        '1800',
+      ]);
+      expect(provider.calls).toHaveLength(2);
+      expect(logLines.at(-1)).toContain('"reason":"refresh_limit"');
+      expect((await refresh(KEY_B, ID_B)).status).toBe(200);
+    } finally {
+      await capped.close();
     }
   });
 });

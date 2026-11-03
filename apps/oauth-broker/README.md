@@ -32,6 +32,8 @@ secrets come from `OAUTH_BROKER_SECRET_<NAME>` variables.
 - No dependency outside Node 26; Node runs the TypeScript in `src/` as is.
 - Flows live ten minutes, in memory, at most 500 per instance. Nothing is
   written to disk.
+- Each instance may refresh `refresh_per_hour` times an hour (600 unless
+  configured): the instances share one client and its quota.
 - `/attest` takes no key and no body: it answers a cached attestation bound
   to the API's TLS key.
 - The configuration holds digests only: Confidential Space puts it in the

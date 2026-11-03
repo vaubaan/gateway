@@ -65,3 +65,35 @@ function refill(bucket: Bucket, rate: { burst: number; perSecond: number }, now:
   bucket.tokens = Math.min(rate.burst, bucket.tokens + ((now - bucket.at) / 1000) * rate.perSecond);
   bucket.at = now;
 }
+
+/**
+ * Refreshes per instance (spec oauth-broker §2): every instance shares the
+ * provider's client and its quota, so one instance in a loop must not spend
+ * it for the others. A bucket per enrolled instance holding an hour's
+ * allowance, refilled evenly over the hour; the enrolled instances are few
+ * and fixed until the next restart, so nothing is evicted.
+ */
+export class RefreshLimit {
+  readonly #now: () => number;
+  readonly #rate: { readonly burst: number; readonly perSecond: number };
+  readonly #buckets = new Map<string, Bucket>();
+
+  constructor(perHour: number, now: () => number = Date.now) {
+    this.#now = now;
+    this.#rate = { burst: perHour, perSecond: perHour / 3600 };
+  }
+
+  /** `0` when the refresh may go on (it then counts), else the seconds to wait. */
+  take(instanceId: string): number {
+    const now = this.#now();
+    let bucket = this.#buckets.get(instanceId);
+    if (bucket === undefined) {
+      bucket = { tokens: this.#rate.burst, at: now };
+      this.#buckets.set(instanceId, bucket);
+    }
+    refill(bucket, this.#rate, now);
+    if (bucket.tokens < 1) return Math.ceil((1 - bucket.tokens) / this.#rate.perSecond);
+    bucket.tokens -= 1;
+    return 0;
+  }
+}

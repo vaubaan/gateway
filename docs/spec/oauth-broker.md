@@ -47,7 +47,8 @@ operator.
   the client secret, call the provider. Another instance's or an altered token is an invalid grant.
 - **Attest**: one evidence for everyone, recent, bound to the key of the TLS connection the instance
   is on, renewed every few minutes; no key or body needed to ask, and rate-limited.
-- An instance may have at most 500 flows in progress, beside a bound for the whole broker.
+- An instance may have at most 500 flows in progress, beside a bound for the whole broker, and a
+  number of refreshes per hour set by the operator: the instances share one client and its quota.
 
 ## 3. What it keeps, and never keeps
 
@@ -103,7 +104,6 @@ release naming it; no data moves. A development adapter's evidence says "no encl
 3. After a client-secret rotation, a provider refusal that is not `invalid_grant` reads as a broker
    failure, not an expiry.
 4. Whether the enclave may send its non-sensitive logs to the operator (today: yes).
-5. Per-instance limits beyond flows in progress.
-6. Rotating the sealing key (tokens carry a key id) without disconnecting every instance.
-7. Whether the provider's verification of the shared client accepts a broker that keeps no token.
-8. Whether the client secret can be created inside the enclave, so no person ever sees one.
+5. Rotating the sealing key (tokens carry a key id) without disconnecting every instance.
+6. Whether the provider's verification of the shared client accepts a broker that keeps no token.
+7. Whether the client secret can be created inside the enclave, so no person ever sees one.

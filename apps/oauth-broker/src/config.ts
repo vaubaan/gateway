@@ -33,6 +33,8 @@ export interface BrokerConfig {
   readonly httpPort: number;
   readonly clients: ReadonlyMap<string, ProviderClient>;
   readonly instances: readonly Enrollment[];
+  /** Refreshes each instance may ask for per hour (`/token`), all providers together. */
+  readonly refreshPerHour: number;
   /** The settings of the platform adapter, read by that adapter only. */
   readonly platform: Readonly<Record<string, unknown>>;
 }
@@ -67,6 +69,17 @@ function record(value: unknown, where: string): Record<string, unknown> {
 
 function text(value: unknown, where: string): string {
   if (typeof value !== 'string' || value === '') throw new ConfigError(`${where} must be a string`);
+  return value;
+}
+
+/** Each instance's refreshes per hour unless configured: ample for a plan's accounts, each refreshed hourly. */
+export const DEFAULT_REFRESH_PER_HOUR = 600;
+
+function positiveInteger(value: unknown, fallback: number, where: string): number {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 1_000_000) {
+    throw new ConfigError(`${where} must be a whole number from 1 to 1000000`);
+  }
   return value;
 }
 
@@ -140,6 +153,11 @@ export function parseConfig(json: string, providers: ProviderTable): BrokerConfi
     httpPort: port(root.http_port, 8080, 'http_port'),
     clients,
     instances,
+    refreshPerHour: positiveInteger(
+      root.refresh_per_hour,
+      DEFAULT_REFRESH_PER_HOUR,
+      'refresh_per_hour',
+    ),
     platform: root.platform === undefined ? {} : record(root.platform, 'platform'),
   };
 }

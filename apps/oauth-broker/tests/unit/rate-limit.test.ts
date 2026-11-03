@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AttestRateLimit } from '../../src/rate-limit.ts';
+import { AttestRateLimit, RefreshLimit } from '../../src/rate-limit.ts';
 
 describe('attestation rate limit', () => {
   it('lets a burst through per address, then refills', () => {
@@ -54,5 +54,21 @@ describe('attestation rate limit', () => {
     limit.allow('c'); // forgets 'b'
     expect(limit.allow('a')).toBe(false); // remembered, still empty
     expect(limit.allow('b')).toBe(true); // forgotten, so a fresh bucket
+  });
+});
+
+describe('refresh limit per instance', () => {
+  it('lets an hour’s allowance through, then refills evenly, each instance apart', () => {
+    let now = 0;
+    const limit = new RefreshLimit(3, () => now);
+    expect([limit.take('i_a'), limit.take('i_a'), limit.take('i_a')]).toEqual([0, 0, 0]);
+    // Empty: one refresh comes back every 1200 s.
+    expect(limit.take('i_a')).toBe(1200);
+    expect(limit.take('i_b')).toBe(0);
+    now = 600_000;
+    expect(limit.take('i_a')).toBe(600);
+    now = 1_200_000;
+    expect(limit.take('i_a')).toBe(0);
+    expect(limit.take('i_a')).toBe(1200);
   });
 });

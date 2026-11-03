@@ -1,0 +1,64 @@
+---
+title: Your own OAuth broker
+description: Google Calendar signs in through an OAuth broker; a self-hosted instance runs its own, with its own Google client.
+---
+
+Google takes no client registered on the fly, so a Google Calendar account is connected through an **OAuth broker**: a small service that holds one Google OAuth client and keeps no token. The instance keeps the refresh token, sealed so that only its broker can open it; the broker adds the client secret when the instance refreshes. Without a broker, the Google Calendar plugin is listed as not configured and no Google Calendar account can be connected (Google offers no other way, CalDAV included).
+
+A self-hosted instance runs its own broker from the same repository (`apps/oauth-broker`, image `ghcr.io/vaubaan/oauth-broker`). The full procedure, including the attested variant in Google Confidential Space, is in the [broker handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/oauth-broker.md); here is the short path, without an enclave.
+
+## What you need
+
+- A host that ends TLS for one public name, e.g. `https://broker.example.com`, and runs a container (any Docker host behind a reverse proxy, Fly, Railway…). One machine: flows in progress live in its memory.
+- A Google Cloud project where you can create an OAuth client and enable the Calendar API.
+
+## Steps
+
+1. **The Google client.** In the project: enable the **Google Calendar API**; on the consent screen, an external app with the scopes the broker may ask (`openid`, `email`, `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/calendar.events`); then an OAuth client of type **Web application** whose redirect URI is `https://broker.example.com/oauth/callback/google`. Keep the client id; paste the client secret straight into the next step, no copy kept.
+2. **Two secrets** in the host's secret store, never in a file or the configuration:
+   - `OAUTH_BROKER_SECRET_GOOGLE_CLIENT_SECRET`: the client secret;
+   - `OAUTH_BROKER_SECRET_REFRESH_TOKEN_SEALING_KEY`: `openssl rand -base64 32`. Never change it while an instance is enrolled: every token that instance holds would stop opening.
+3. **Enrol your instance.** Draw its key and an opaque id, and keep their digests:
+
+   ```bash
+   key="bk_$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+   id="i_$(openssl rand -hex 6)"
+   printf %s "$key" | sha256sum                                   # key_sha256
+   printf %s "https://gateway.example.com/connections/callback/google-calendar" | sha256sum   # return_url_sha256
+   ```
+
+   The return URL is your instance's `public_url` followed by `/connections/callback/google-calendar`, hashed exactly as written.
+
+4. **Run the broker** with `OAUTH_BROKER_PLATFORM=unattested` and `OAUTH_BROKER_CONFIG`, one JSON document of digests only:
+
+   ```json
+   {
+     "public_url": "https://broker.example.com",
+     "http_port": 8080,
+     "providers": { "google": { "client_id": "123-abc.apps.googleusercontent.com" } },
+     "instances": [{ "id": "i_3f9a1c7e2b4d", "key_sha256": "…", "return_url_sha256": ["…"] }],
+     "refresh_per_hour": 600
+   }
+   ```
+
+   Take the image by digest from the [broker releases](https://github.com/vaubaan/gateway/releases?q=oauth-broker). One listener on `http_port` serves the API, Google's callback and `/healthz` in plain HTTP; route the host's TLS front to it. `refresh_per_hour` (600 unless set) caps the refreshes of each instance. Its log reads `started` with `attested: false`.
+
+5. **Point the instance at it**, in its configuration or environment, then restart it:
+
+   ```yaml
+   oauth_brokers:
+     google:
+       url: https://broker.example.com
+       key: ${file:/run/secrets/oauth-broker-key}
+       attestation: none
+   ```
+
+   (`VAUBAAN_OAUTH_BROKER_GOOGLE_URL`, `…_KEY_FILE`, `…_ATTESTATION=none` in the environment.) `attestation: none` says the broker runs without an enclave; the connect page then says "not attested".
+
+6. **Check**: Accounts → Connect an account → Google Calendar sends you to Google and back, and the account's calendars appear.
+
+## What it costs you
+
+Whoever operates the broker's host can read the client secret and the sealing key, and could run other code in the image's place, seeing each access token that passes. On your own host that person is you. To remove that trust, run the same image in Google Confidential Space and enrol it with `attestation: required` ([handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/oauth-broker.md#running-it-in-confidential-space)): the instances then check what code runs before they send anything.
+
+Adding an instance or changing the configuration is a restart of the broker: sign-ins in progress (ten minutes at most) are lost, never a token.

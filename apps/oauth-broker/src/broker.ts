@@ -20,7 +20,7 @@ import {
 } from './http-util.ts';
 import { type ClientCredentials, type OAuthClient } from './oauth-client.ts';
 import { type ProviderDefinition, type ProviderTable } from './providers.ts';
-import { type AttestRateLimit } from './rate-limit.ts';
+import { type AttestRateLimit, type RefreshLimit } from './rate-limit.ts';
 import { type TokenSealer } from './sealing.ts';
 
 export interface BrokerDeps {
@@ -33,6 +33,8 @@ export interface BrokerDeps {
   readonly flows: FlowStore;
   readonly oauth: OAuthClient;
   readonly attestLimit: AttestRateLimit;
+  /** Refreshes per instance and per hour, so one instance cannot spend the shared client's quota. */
+  readonly refreshLimit: RefreshLimit;
   /** Seals the refresh tokens of the redeem to their instance. */
   readonly sealer: TokenSealer;
 }
@@ -128,8 +130,19 @@ export class Broker {
         return sendJson(res, 201, this.#startFlow(instance, body));
       case '/grants/redeem':
         return sendJson(res, 200, await this.#redeem(instance, body));
-      case '/token':
+      case '/token': {
+        const wait = this.#deps.refreshLimit.take(instance.id);
+        if (wait > 0) {
+          res.setHeader('retry-after', String(wait));
+          throw new HttpError(
+            429,
+            'rate_limited',
+            'too many refreshes for this instance this hour',
+            'refresh_limit',
+          );
+        }
         return sendJson(res, 200, await this.#refresh(instance, body));
+      }
       case '/revoke':
         await this.#revoke(instance, body);
         return sendEmpty(res, 204);

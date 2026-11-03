@@ -185,7 +185,9 @@ export function pluginPageMarkdown(
 function credentialKindWords(c: CredentialInfo): string {
   switch (c.kind) {
     case 'oauth2':
-      return 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)';
+      return c.brokered
+        ? 'by signing in at the service through the OAuth broker the instance is enrolled with (nothing to create or paste; a self-hosted instance runs its own broker: [Your own OAuth broker](/docs/operations/oauth-broker))'
+        : 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)';
     case 'api-key':
       return `with a ${c.label ?? 'key'} pasted by hand`;
     case 'ssh-key':
@@ -267,7 +269,7 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
     '',
     '## How to connect',
     '',
-    'On the instance: Accounts → Connect an account, then pick the service. Most services take a key the person creates at the service and pastes (a token, or for Gmail an app password); nobody declares anything beforehand. A service that signs people in through its own authorization (Miro) needs nothing either: the gateway registers its own client there the first time someone connects. Every instance has its own client: this gateway never uses one shared with another instance.',
+    'On the instance: Accounts → Connect an account, then pick the service. Most services take a key the person creates at the service and pastes (a token, or for Gmail an app password); nobody declares anything beforehand. A service that signs people in through its own authorization (Miro) needs nothing either: the gateway registers its own client there the first time someone connects. Every instance has its own client: this gateway never uses one shared with another instance. Google takes no client registered that way: Google Calendar signs in through an OAuth broker the instance is enrolled with, which holds one client and keeps no token ([Your own OAuth broker](/docs/operations/oauth-broker)).',
     '',
   );
   plugin.credentials.forEach((c) => lines.push(...credentialMarkdown(c)));

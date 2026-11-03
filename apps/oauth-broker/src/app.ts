@@ -10,7 +10,7 @@ import { AttestationCache, type AttestationCacheOptions } from './attestation.ts
 import { Broker } from './broker.ts';
 import { type BrokerConfig } from './config.ts';
 import { FlowStore } from './flows.ts';
-import { AttestRateLimit } from './rate-limit.ts';
+import { AttestRateLimit, RefreshLimit } from './rate-limit.ts';
 import { type Logger } from './log.ts';
 import { type Fetch, OAuthClient } from './oauth-client.ts';
 import { type PlatformAdapter } from './platform/types.ts';
@@ -76,6 +76,7 @@ export async function startBroker(options: StartOptions): Promise<RunningBroker>
     flows,
     oauth: new OAuthClient(options.fetch ?? fetch, now),
     attestLimit: options.attestLimit ?? new AttestRateLimit({ now }),
+    refreshLimit: new RefreshLimit(config.refreshPerHour, now),
     sealer,
   };
   const host = options.host ?? '0.0.0.0';

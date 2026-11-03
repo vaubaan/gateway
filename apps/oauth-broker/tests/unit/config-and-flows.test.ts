@@ -23,6 +23,11 @@ describe('configuration', () => {
     const config = parse(valid);
     expect(config.publicUrl).toBe('https://broker.example.com');
     expect([config.apiPort, config.httpPort]).toEqual([8443, 8080]);
+    expect(config.refreshPerHour).toBe(600);
+    expect(parse({ ...valid, refresh_per_hour: 50 }).refreshPerHour).toBe(50);
+    for (const bad of [0, -1, 1.5, '50']) {
+      expect(() => parse({ ...valid, refresh_per_hour: bad })).toThrow(ConfigError);
+    }
     expect(config.clients.get('google')).toEqual({
       clientId: 'cid.apps.googleusercontent.com',
       secretName: 'google-client-secret',

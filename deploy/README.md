@@ -142,6 +142,20 @@ Invalid instance configuration (1 problem):
   - encryption.master_key: missing required key (env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE)
 ```
 
+## Google Calendar: your own OAuth broker
+
+Google Calendar signs in through an OAuth broker, not a client the gateway
+registers itself: without one, the plugin is listed as not configured. A
+self-hosted instance runs its own broker from this repository
+(`apps/oauth-broker`, image `ghcr.io/vaubaan/oauth-broker`, by digest) with
+its own Google OAuth client: `OAUTH_BROKER_PLATFORM=unattested` behind your
+TLS front, the client secret and a sealing key as two secrets, the instance
+enrolled by digest in `OAUTH_BROKER_CONFIG`; then `oauth_brokers.<name>.url`,
+`.key` and `attestation: none` on the gateway. Step by step:
+[Your own OAuth broker](../apps/website/content/docs/operations/oauth-broker.mdx);
+the attested variant in Confidential Space and the image's verification:
+handbook [oauth-broker](../docs/handbook/oauth-broker.md).
+
 ## Released images
 
 Every release publishes one image for `linux/amd64` and `linux/arm64` on the
