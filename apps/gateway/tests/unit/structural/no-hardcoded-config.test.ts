@@ -33,6 +33,8 @@ const ALLOWED: Record<string, string> = {
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (docs/handbook/authentication.md)',
   'apps/gateway/src/server/connections/attestation-gcp.ts':
     "Google Cloud Attestation's issuer, the fixed root of trust a broker's Confidential Space attestation is checked against (ADR oauth-broker-stateless-in-an-attested-enclave D4, D7)",
+  'apps/gateway/src/server/notifications/messaging/messages.ts':
+    'the `$schema` identifier of an Adaptive Card, a name inside the Teams message format, never fetched',
   'deploy/config/gateway.example.yaml': 'documented placeholders',
   'deploy/config/.env.example': 'documented placeholders',
   'scripts/fetch-tool.sh':

@@ -43,6 +43,7 @@ import { createInstanceModule, type InstanceModule } from '../instance';
 import { collectOpsStats, createInstanceLimits, type InstanceLimits } from '../limits';
 import { createMasterKeyModule, type MasterKeyModule } from '../master-key';
 import type { OpsStatsDeps } from '../http/ops-stats';
+import type { Resolver } from '../http/public-address';
 import { publishHttps } from '../http/security-headers';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { createMissionsModule, type MissionsModule } from '../missions';
@@ -121,7 +122,7 @@ export interface GatewayRoot {
   readonly oauth: OAuthAsModule;
   /** Administration → Users: the operator's deactivation and reactivation of a user. */
   readonly users: UsersModule;
-  /** A person's devices, the events that notify them, the web push that reaches them. */
+  /** A person's channels (devices, addresses, mail), the events that notify them, the transports. */
   readonly notifications: NotificationsModule;
   /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools. */
   readonly management: ManagementDoorModule;
@@ -170,6 +171,13 @@ export interface RootDeps {
   readonly notificationFetch?: typeof fetch;
   /** Replaces the web push transport (tests assert on what would leave). */
   readonly notificationTransport?: PushTransport;
+  /** Name resolution of the messaging addresses whose host is free (tests: no network). */
+  readonly notificationResolve?: Resolver;
+  /**
+   * The mail transport of mail notifications only (the e2e instance: a recording fake, while
+   * the local accounts keep handing their links to the administrator). Default: `mailer`.
+   */
+  readonly notificationMailer?: LinkMailer;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
   /** Where the key file and the store sit (tests inject mounts of their own). */
@@ -437,6 +445,15 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   const sessions: SessionStore = deps.sessions ?? store.webSessions;
   // One count per item, read by the ceilings, the settings, `/ops/stats` and telemetry.
   const limits = createInstanceLimits(config.limits, store);
+  const mailer =
+    deps.mailer ??
+    (config.mail
+      ? createLinkMailer({
+          config: config.mail,
+          logger,
+          instanceLabel: config.instanceName ?? config.publicUrl.host,
+        })
+      : undefined);
   // Before every module whose acts notify: each is handed `notifications.events`. What it
   // reads from `auth` and `instance`, built below, is read when a notification is sent.
   const notifications = createNotificationsModule({
@@ -456,6 +473,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     fetch: deps.notificationFetch,
     transport: deps.notificationTransport,
+    resolve: deps.notificationResolve,
+    // Mail is a channel when the instance delivers mail (spec §4.2 bis, §4.3).
+    mailer: deps.notificationMailer ?? mailer,
     clock: deps.clock,
   });
   // Stopped after the timers, before the store: a delivery under way writes its outcome.
@@ -473,15 +493,6 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // surface limits (`mcp:mission:<id>`, `connect:<user>`, `auth:*`), on disjoint keys.
   const windows = new SlidingWindowRateLimiter();
   const rateLimiter = deps.rateLimiter ?? windows;
-  const mailer =
-    deps.mailer ??
-    (config.mail
-      ? createLinkMailer({
-          config: config.mail,
-          logger,
-          instanceLabel: config.instanceName ?? config.publicUrl.host,
-        })
-      : undefined);
   // Before anything reads the sign-in providers: the `idp.*` settings of earlier builds
   // become the saved provider `idp` (a no-op once done).
   await upgradeSingleProviderSettings({

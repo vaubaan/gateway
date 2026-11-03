@@ -75,6 +75,15 @@ How the process starts from configuration alone and wires its modules. Spec:
   (Safari), `*.notify.windows.com` (Edge on Windows) — `PUSH_SERVICE_HOSTS`. Closed, the
   instance runs the same and every delivery fails, logged only. Push also needs an https
   `public_url`.
+- **Messaging addresses need no key either** (a person pastes their own webhook). An egress
+  allowlist opens, over 443, the services people use: `hooks.slack.com` (Slack),
+  `*.logic.azure.com` and `*.environment.api.powerplatform.com` (Teams Workflows),
+  `*.webhook.office.com` (the retired Teams connectors), `discord.com` (Discord, with
+  `ptb.`, `canary.` and `discordapp.com`), `ntfy.sh` or the company's public ntfy server — and,
+  for the kind "Other", whatever host is pasted (`VENDOR_HOSTS` in
+  `notifications/messaging/address-rules.ts`). A private destination is refused whatever the
+  allowlist says. **Mail notifications** use the `mail.*` relay; without it Settings says the
+  instance does not deliver mail.
 
 ## Procedures
 

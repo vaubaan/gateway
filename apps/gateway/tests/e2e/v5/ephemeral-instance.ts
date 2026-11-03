@@ -442,6 +442,23 @@ async function main(): Promise<void> {
           }),
         },
         providerFetch: github,
+        // Messaging addresses (the notifications spec): a stand-in for the services'
+        // incoming webhooks, which answers the status a path ends with (`…/status-404`), 200
+        // otherwise; nothing leaves the machine and no name is resolved.
+        notificationFetch: async (input) => {
+          const url = new URL(input instanceof Request ? input.url : String(input));
+          const status = /\/status-(\d{3})$/.exec(url.pathname)?.[1];
+          return new Response(null, { status: status ? Number(status) : 200 });
+        },
+        notificationResolve: async () => [{ address: '93.184.215.14', family: 4 }],
+        // Mail is a channel of notifications here, while the local accounts keep handing
+        // their links to the administrator (no `mail.*` configured): a notice goes nowhere.
+        notificationMailer: {
+          sendLink: async () => {
+            throw new Error('the e2e instance mails no link');
+          },
+          sendNotice: async () => undefined,
+        },
       },
     }),
   );

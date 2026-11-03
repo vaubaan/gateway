@@ -41,6 +41,14 @@ import {
   createNotificationDevicesRepo,
   type NotificationDevicesRepo,
 } from './repositories/notification-devices.ts';
+import {
+  createNotificationAddressesRepo,
+  type NotificationAddressesRepo,
+} from './repositories/notification-addresses.ts';
+import {
+  createNotificationMailRepo,
+  type NotificationMailRepo,
+} from './repositories/notification-mail.ts';
 import { createRequestsRepo, type RequestsRepo } from './repositories/requests.ts';
 import { createSealedBlobsRepo, type SealedBlobsRepo } from './repositories/sealed-blobs.ts';
 import { createSecondFactorsRepo, type SecondFactorsRepo } from './repositories/second-factors.ts';
@@ -78,6 +86,10 @@ export interface Store {
   readonly secondFactors: SecondFactorsRepo;
   /** The devices a person receives notifications on, subscriptions sealed (migration 0030). */
   readonly notificationDevices: NotificationDevicesRepo;
+  /** The messaging addresses a person receives notifications at, URLs sealed (migration 0031). */
+  readonly notificationAddresses: NotificationAddressesRepo;
+  /** Who switched mail notifications on (migration 0032). */
+  readonly notificationMail: NotificationMailRepo;
   /** Temporary refs of pushes waiting for an approval (migration 0015). */
   readonly pendingRefs: PendingRefsRepo;
   readonly connections: ConnectionsRepo;
@@ -139,6 +151,8 @@ export function openStore(options: StoreOptions): Store {
     localAccounts: createLocalAccountsRepo(ctx),
     secondFactors: createSecondFactorsRepo(ctx),
     notificationDevices: createNotificationDevicesRepo(ctx),
+    notificationAddresses: createNotificationAddressesRepo(ctx),
+    notificationMail: createNotificationMailRepo(ctx),
     pendingRefs: createPendingRefsRepo(ctx),
     connections: createConnectionsRepo(ctx),
     shares: createSharesRepo(ctx),

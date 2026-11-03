@@ -1,14 +1,18 @@
 /**
  * The notifier contract (ADR notifications-reach-the-persons-own-channels): one method,
- * `notify(userId, notification)`, implemented once per channel kind. Wave 1 has the kind
- * "device" (web push); a messaging address or mail is another `Notifier` added to
- * `fanOut`, with no change to what notifies or what a notification says.
+ * `notify(userId, notification)`, implemented once per channel kind: "device" (web push,
+ * here), "address" (a messaging service's incoming webhook, here) and "mail"
+ * (`mail-channel.ts`), joined by `fanOut`. A new kind changes neither what notifies nor
+ * what a notification says.
  *
  * A notifier delivers to the person's own channels only, best effort: a failure is
  * recorded on the channel and logged, never retried and never thrown at the caller.
  */
 import type { Logger } from '../logging';
+import type { NotificationAddressesRepo } from '../store/repositories/notification-addresses';
 import type { NotificationDevicesRepo } from '../store/repositories/notification-devices';
+import { messageOf } from './messaging/messages';
+import type { MessagingTransport } from './messaging/transport';
 import { serializePayload, type Notification } from './notification';
 import type { PushTransport } from './web-push/transport';
 
@@ -66,6 +70,41 @@ export function createDeviceNotifier(deps: DeviceNotifierDeps): Notifier {
             status: outcome.status ?? 'no answer',
           });
         }
+      }
+    },
+  };
+}
+
+export interface AddressNotifierDeps {
+  readonly addresses: Pick<NotificationAddressesRepo, 'destinationsOf' | 'recordDelivery'>;
+  readonly transport: MessagingTransport;
+  readonly publicUrl: URL;
+  readonly logger: Logger;
+}
+
+/** The kind "address": one post to every messaging address of the person. */
+export function createAddressNotifier(deps: AddressNotifierDeps): Notifier {
+  const { addresses, transport, logger } = deps;
+  return {
+    async notify(userId, notification) {
+      const message = messageOf(notification, deps.publicUrl);
+      for (const { addressId, kind, url } of await addresses.destinationsOf(userId)) {
+        const outcome = await transport.send(kind, url, message);
+        const key = { userId, addressId };
+        // Never the URL: it is a secret of the person (spec §6).
+        if (outcome.kind === 'delivered') {
+          await addresses.recordDelivery(key, { kind: 'delivered' });
+          continue;
+        }
+        const status = outcome.kind === 'failed' ? outcome.status : null;
+        await addresses.recordDelivery(key, { kind: 'failed', status });
+        logger.warn('notification not delivered', {
+          address_id: addressId,
+          address_kind: kind,
+          kind: notification.kind,
+          status:
+            outcome.kind === 'refused' ? `refused: ${outcome.refusal}` : (status ?? 'no answer'),
+        });
       }
     },
   };

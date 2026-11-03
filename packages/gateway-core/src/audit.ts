@@ -275,6 +275,15 @@ export type AdminAct =
   | 'device-added'
   /** A person removed one of their devices: `before` carries its id and label. */
   | 'device-removed'
+  /** A person added a messaging address to their notifications, after its test message was
+   *  taken (spec §4.2 bis). Object: the user; `after` carries the address id, its kind and
+   *  its label. Never the URL. */
+  | 'address-added'
+  /** A person removed one of their messaging addresses: `before` carries its id, kind, label. */
+  | 'address-removed'
+  /** A person switched mail notifications on or off: `before` / `after` carry `{ on }`.
+   *  Never the address. */
+  | 'mail-notifications-changed'
   | 'config-changed';
 
 export type AdminObjectType =

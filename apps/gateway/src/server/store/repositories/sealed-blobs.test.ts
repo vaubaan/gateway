@@ -60,6 +60,13 @@ async function seeded(): Promise<{ store: Store; encryptor: SwitchableEncryptor;
     subscription: { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh: 'BA', auth: 'AA' },
   });
   ids.push(user.id, device.id);
+  // A messaging address (migration 0031): its URL is a secret of the person.
+  await store.notificationAddresses.add({
+    userId: user.id,
+    kind: 'slack',
+    label: 'Team',
+    url: 'https://hooks.slack.com/services/T0/B0/sealed',
+  });
   return { store, encryptor, ids };
 }
 
@@ -75,6 +82,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       'instance_config@1=1',
       'local_secrets@1=1',
       'notification_devices@1=1',
+      'notification_addresses@1=1',
     ]);
   });
 
@@ -132,12 +140,21 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'notification_addresses',
+        current: 0,
+        currentUnreadable: 0,
+        resealed: 1,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
       'notification_devices@1=1',
+      'notification_addresses@1=1',
     ]);
   });
 
@@ -145,12 +162,13 @@ describe('sealed blobs: the master-key re-seal', () => {
     const { store, encryptor, ids } = await seeded();
     encryptor.inner = await v2WithPrevious();
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1, 0, 1]);
+    expect(report.tables.map((t) => t.resealed)).toEqual([2, 1, 0, 1, 0, 1, 1]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@2=2',
       'instance_config@2=1',
       'local_secrets@2=1',
       'notification_devices@2=1',
+      'notification_addresses@2=1',
     ]);
 
     // Without the previous key, everything still opens: it was sealed again.
@@ -163,6 +181,8 @@ describe('sealed blobs: the master-key re-seal', () => {
     );
     const [subscription] = await store.notificationDevices.subscriptionsOf(ids[3] ?? '');
     expect(subscription?.subscription.endpoint).toBe('https://fcm.googleapis.com/fcm/send/abc');
+    const [address] = await store.notificationAddresses.destinationsOf(ids[3] ?? '');
+    expect(address?.url).toBe('https://hooks.slack.com/services/T0/B0/sealed');
   });
 
   it('is idempotent: a second run finds the blobs current', async () => {
@@ -219,6 +239,14 @@ describe('sealed blobs: the master-key re-seal', () => {
         unreadable: 0,
         changed: 0,
       },
+      {
+        table: 'notification_addresses',
+        current: 1,
+        currentUnreadable: 0,
+        resealed: 0,
+        unreadable: 0,
+        changed: 0,
+      },
     ]);
   });
 
@@ -233,12 +261,14 @@ describe('sealed blobs: the master-key re-seal', () => {
       [0, 1],
       [0, 0],
       [0, 1],
+      [0, 1],
     ]);
     expect(versionsOf(await store.sealedBlobs.versions())).toEqual([
       'connections@1=2',
       'instance_config@1=1',
       'local_secrets@1=1',
       'notification_devices@1=1',
+      'notification_addresses@1=1',
     ]);
   });
 
@@ -250,7 +280,7 @@ describe('sealed blobs: the master-key re-seal', () => {
       previousKeys: new Map([[1, new Uint8Array(randomBytes(32))]]),
     });
     const report = await store.sealedBlobs.reseal({ apply: true });
-    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1, 0, 1]);
+    expect(report.tables.map((t) => t.unreadable)).toEqual([2, 1, 0, 1, 0, 1, 1]);
   });
 
   it('a row the gateway rewrites during the run is left as the gateway wrote it', async () => {

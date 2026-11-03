@@ -9,6 +9,24 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Notifications reach messaging addresses and mail** (spec §4.2 bis), wave 2:
+  in Settings → **Notifications** a person adds the incoming webhook of a
+  Slack, Microsoft Teams (Workflows), Discord or ntfy channel, or any https URL
+  that takes a JSON body, and switches mail to their own address on or off when
+  the instance delivers mail. An address is kept only after a test message got
+  a 2xx (the page says the status otherwise, never the URL), sealed under the
+  master key, never shown back, at most 10 per person; each notification is
+  posted to every address and recorded as delivered or failed, never retried.
+  Slack, Teams and Discord must be on the vendor's hosts; ntfy and "Other"
+  refuse `localhost`, private and reserved addresses, at add and before each
+  send. A channel receives the notification's title, body and link only.
+  Administration → People shows how many channels a person has. Migrations
+  `0031_notification_addresses` (sealed, resealed by `reseal`) and
+  `0032_notification_mail`. Audit acts `address-added`, `address-removed`,
+  `mail-notifications-changed`. Outbound hosts in handbook configuration.
+
 ## [2.0.0-alpha.15] - 2026-11-02
 
 ### Added

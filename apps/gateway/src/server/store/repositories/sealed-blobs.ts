@@ -10,6 +10,7 @@
  *   local_secrets.blob                       `local-secret:<id>`
  *   user_second_factor_secrets.blob          `user-second-factor:<id>`
  *   notification_devices.subscription_blob   `notification-device:<id>`
+ *   notification_addresses.url_blob          `notification-address:<id>`
  *
  * A blob opens only with the key of its `key_version`. After a rotation the instance
  * keeps the previous key until every blob is sealed again under the current one;
@@ -31,6 +32,7 @@ import { requestAd } from './requests.ts';
 import { localSecretAd } from './local-accounts.ts';
 import { secondFactorSecretAd } from './second-factors.ts';
 import { deviceSubscriptionAd } from './notification-devices.ts';
+import { addressUrlAd } from './notification-addresses.ts';
 
 export const SEALED_COLUMNS = [
   {
@@ -68,6 +70,12 @@ export const SEALED_COLUMNS = [
     idColumn: 'id',
     blobColumn: 'subscription_blob',
     associatedData: deviceSubscriptionAd,
+  },
+  {
+    table: 'notification_addresses',
+    idColumn: 'id',
+    blobColumn: 'url_blob',
+    associatedData: addressUrlAd,
   },
 ] as const;
 

@@ -1,16 +1,21 @@
 /**
- * `/settings/notifications` — the devices that receive my notifications (spec §4.2 bis):
+ * `/settings/notifications` — the channels that receive my notifications (spec §4.2 bis):
  * this device first (subscribe it, or why it cannot be), then every device I subscribed,
  * with when it was added and last delivered to, or that it was dropped and why; rename and
- * remove, asked first. Nothing here answers a request: a notification only leads to one.
+ * remove, asked first. Then my messaging addresses (added after a test message, never shown
+ * back) and mail (a switch, when the instance delivers mail). Nothing here answers a
+ * request: a notification only leads to one.
  *
- * `?rename=<id>` unfolds the rename form of one device; `?done=` and `?problem=` report the
- * outcome of a form (codes, never a message in the URL).
+ * `?rename=<id>` unfolds the rename form of one device; `?done=` and `?problem=` (with
+ * `&status=` after a refused test message) report the outcome of a form (codes, never a
+ * message or an address in the URL).
  */
 import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
+import { MailSwitch } from '@/components/notifications/MailSwitch';
+import { MessagingAddresses } from '@/components/notifications/MessagingAddresses';
 import { ThisDevice } from '@/components/notifications/ThisDevice';
 import styles from '@/components/settings/settings.module.css';
 import {
@@ -31,15 +36,22 @@ import { currentUser } from '@/lib/auth/session';
 import { firstParam, type PageSearchParams } from '@/lib/connections/session';
 import { NOTIFICATION_WORDS, SETTINGS_PAGES } from '@/lib/vocabulary';
 import {
+  ADDRESS_PROBLEMS,
   DONE_PARAM,
   LABEL_FIELD,
+  MAIL_PROBLEMS,
+  STATUS_PARAM,
   LABEL_MAX,
   NOTIFICATIONS_PAGE,
   PROBLEM_PARAM,
   deviceActionPath,
   isDeviceProblem,
+  isDoneAct,
+  type DoneAct,
+  type AddressProblem,
   type DeviceProblem,
   type DeviceView,
+  type MailProblem,
 } from '@/server/notifications';
 
 export const dynamic = 'force-dynamic';
@@ -47,6 +59,30 @@ export const dynamic = 'force-dynamic';
 const RENAME_PARAM = 'rename';
 
 const PROBLEMS: Readonly<Record<DeviceProblem, string>> = NOTIFICATION_WORDS.problems;
+type ChannelProblem = AddressProblem | MailProblem;
+const CHANNEL_PROBLEMS: Readonly<Record<ChannelProblem, string>> =
+  NOTIFICATION_WORDS.channelProblems;
+
+function isChannelProblem(value: string | null): value is ChannelProblem {
+  return (
+    value !== null && ([...ADDRESS_PROBLEMS, ...MAIL_PROBLEMS] as readonly string[]).includes(value)
+  );
+}
+
+/** `?status=` of a refused test message: an HTTP status, or `null` (no answer). */
+function statusOf(raw: string | null): number | null {
+  if (raw === null || !/^\d{3}$/.test(raw)) return null;
+  return Number(raw);
+}
+
+const DONE_WORDS: Readonly<Record<DoneAct, { testId: string; words: string }>> = {
+  renamed: { testId: 'device-renamed', words: NOTIFICATION_WORDS.renamed },
+  removed: { testId: 'device-removed', words: NOTIFICATION_WORDS.removed },
+  'address-added': { testId: 'address-added', words: NOTIFICATION_WORDS.addresses.added },
+  'address-removed': { testId: 'address-removed', words: NOTIFICATION_WORDS.addresses.removed },
+  'mail-on': { testId: 'mail-on', words: NOTIFICATION_WORDS.mail.switchedOn },
+  'mail-off': { testId: 'mail-off', words: NOTIFICATION_WORDS.mail.switchedOff },
+};
 
 function RenameForm({ device }: { device: DeviceView }) {
   const id = `rename-${device.id}`;
@@ -80,14 +116,18 @@ export default async function NotificationsPage({
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const params = await searchParams;
-  const [devices, publicKey, knownDigests] = await Promise.all([
+  const [devices, publicKey, knownDigests, addresses, mail] = await Promise.all([
     session.root.notifications.devices.list(session.user),
     session.root.notifications.vapid.publicKey(),
     session.root.notifications.devices.liveEndpointDigests(session.user),
+    session.root.notifications.addresses.list(session.user),
+    session.root.notifications.mail.status(session.user),
   ]);
   const unfolded = firstParam(params[RENAME_PARAM]);
-  const done = firstParam(params[DONE_PARAM]);
+  const doneParam = firstParam(params[DONE_PARAM]);
+  const done = isDoneAct(doneParam) ? DONE_WORDS[doneParam] : undefined;
   const problem = firstParam(params[PROBLEM_PARAM]);
+  const channelProblem = isChannelProblem(problem) ? problem : null;
 
   const columns: readonly Column<DeviceView>[] = [
     {
@@ -124,21 +164,23 @@ export default async function NotificationsPage({
         lede={SETTINGS_PAGES.notifications.lede}
       />
 
-      {(done !== null || isDeviceProblem(problem)) && (
+      {(done !== undefined || isDeviceProblem(problem) || channelProblem !== null) && (
         <div className={styles.notes}>
-          {done === 'renamed' && (
-            <Callout tone="ok" testId="device-renamed">
-              {NOTIFICATION_WORDS.renamed}
-            </Callout>
-          )}
-          {done === 'removed' && (
-            <Callout tone="ok" testId="device-removed">
-              {NOTIFICATION_WORDS.removed}
+          {done !== undefined && (
+            <Callout tone="ok" testId={done.testId}>
+              {done.words}
             </Callout>
           )}
           {isDeviceProblem(problem) && (
             <Callout tone="warn" testId="device-problem">
               {PROBLEMS[problem]}
+            </Callout>
+          )}
+          {channelProblem !== null && (
+            <Callout tone="warn" testId="channel-problem">
+              {channelProblem === 'test-failed'
+                ? NOTIFICATION_WORDS.testFailedWith(statusOf(firstParam(params[STATUS_PARAM])))
+                : CHANNEL_PROBLEMS[channelProblem]}
             </Callout>
           )}
         </div>
@@ -199,6 +241,10 @@ export default async function NotificationsPage({
           </>
         )}
       </Section>
+
+      <MessagingAddresses addresses={addresses} />
+
+      <MailSwitch status={mail} />
     </>
   );
 }

@@ -62,7 +62,8 @@ export interface PushPayload {
 /** A name shown in a notification: one line, and short enough for a lock screen. */
 export const NAME_MAX = 80;
 
-function line(text: string): string {
+/** A name on one line, cut to `NAME_MAX`. */
+export function line(text: string): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return flat.length > NAME_MAX ? `${flat.slice(0, NAME_MAX - 1)}…` : flat;
 }
