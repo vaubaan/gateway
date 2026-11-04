@@ -148,17 +148,23 @@ describe('the human surface authenticates in every page and route', () => {
       expect(await outcomeOf(currentUser)).toEqual({ kind: 'redirect', to: '/login' });
     });
 
-    it('return the user, with the actor of the connection service', async () => {
-      await signInUser('ada');
-      expect(await outcomeOf(currentUser)).toMatchObject({
-        kind: 'returned',
-        value: { root, principal: { kind: 'user' }, user: { email: 'ada@example.com' } },
-      });
-      expect(await outcomeOf(currentActor)).toMatchObject({
-        kind: 'returned',
-        value: { root, actor: { user: { email: 'ada@example.com' }, groups: [] } },
-      });
-    });
+    // The first `currentActor()` loads the connection service and its plugins cold: about 5 s
+    // already on main, so the default 5 s timeout made this test flaky in CI.
+    it(
+      'return the user, with the actor of the connection service',
+      { timeout: 30_000 },
+      async () => {
+        await signInUser('ada');
+        expect(await outcomeOf(currentUser)).toMatchObject({
+          kind: 'returned',
+          value: { root, principal: { kind: 'user' }, user: { email: 'ada@example.com' } },
+        });
+        expect(await outcomeOf(currentActor)).toMatchObject({
+          kind: 'returned',
+          value: { root, actor: { user: { email: 'ada@example.com' }, groups: [] } },
+        });
+      },
+    );
   });
 
   it('finds the pages and the routes of the surface', () => {
