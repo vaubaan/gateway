@@ -57,7 +57,7 @@ describe('sessions repository', () => {
       creatorUserId: creator,
       periodAnchor: PERIOD,
       periodSeconds: 86_400,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         { riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
         { riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
@@ -162,7 +162,7 @@ describe('sessions repository', () => {
         creatorUserId: user,
         periodAnchor: PERIOD,
         periodSeconds: 86_400,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [{ riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' }],
       });
       // A holds the write lock; B's decision cannot even read the counters until A commits.

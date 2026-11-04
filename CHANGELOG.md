@@ -26,6 +26,30 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `0031_notification_addresses` (sealed, resealed by `reseal`) and
   `0032_notification_mail`. Audit acts `address-added`, `address-removed`,
   `mail-notifications-changed`. Outbound hosts in handbook configuration.
+- **A resource set is one environment, with optional future resources** (ADR
+  resource-set-is-one-environment-with-optional-future-resources): a set is an
+  explicit list whose resources all carry one environment, plus `future`: a resource
+  that later appears there (discovered, or relabelled into it) is written into the
+  list, and one relabelled out of it leaves it, each audited on the mission
+  (`mission-resource-joined`, `mission-resource-left`). What a mission reaches is its
+  lists only, never the connection resolved at call time. Discovery runs every hour
+  for the connections a future set depends on, and on demand from a mission card
+  (`POST /api/missions/<id>/resources/check`); the mission detail says when each
+  account was last checked. Drafts gain `future` and `env`; `{ scope: 'all' }`,
+  `{ scope: 'connection' }` (now `all` + `future`) and a selection given on the
+  connection are split into one set per environment. New issues
+  `resource-set-mixed-env`, `resource-unlabelled` (an unlabelled resource enters a
+  set only where no permission depends on the environment); notices
+  `split-by-environment`, `unlabelled-resources-left-out` replace
+  `later-resources-need-env-label`. Migration `0033_resource_set_future_and_env`
+  writes whole-connection sets out as their lists with future on; a set spanning
+  environments keeps working until its next edit splits it.
+
+### Changed
+
+- The management door's mission views carry `resource_selections` (`future` and
+  `env` per set) instead of `resource_scopes`; the `resource-not-in-mission` hint
+  field is `takes_future_resources`.
 
 ### Plugin SDK
 

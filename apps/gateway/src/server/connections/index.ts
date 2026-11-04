@@ -17,6 +17,8 @@ import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
 import { DiscoveryAfterCall } from './discovery-after-call';
+import { FutureResources } from './future-resources';
+import { HourlyDiscovery, type DiscoveryTimers } from './hourly-discovery';
 import { createConnectionHandlers, type ConnectionHandlers } from './handlers';
 import { OAuth2Clients } from './oauth2-clients';
 import { productionAttestationKit } from './attestation-kit';
@@ -42,6 +44,8 @@ export interface ConnectionsModuleDeps {
   readonly ceilings?: CeilingCheck;
   /** Told when a connection needs reconnecting (spec §4.2 bis); default: nobody. */
   readonly notifications?: Pick<NotificationEvents, 'accountNeedsReconnecting'>;
+  /** The hourly discovery's timers (tests drive them by hand). */
+  readonly discoveryTimers?: DiscoveryTimers;
 }
 
 export interface ConnectionsModule {
@@ -56,6 +60,14 @@ export interface ConnectionsModule {
    * hook, stopped by `root.close()`.
    */
   readonly discoveryAfterCall: DiscoveryAfterCall;
+  /**
+   * Joins and leaves of the running missions' future resources after a discovery, a
+   * relabel or a resource a call created (ADR
+   * resource-set-is-one-environment-with-optional-future-resources).
+   */
+  readonly futureResources: FutureResources;
+  /** The hourly discovery of the connections future resources depend on; `start()` by the root. */
+  readonly hourlyDiscovery: HourlyDiscovery;
 }
 
 export function createConnectionsModule(deps: ConnectionsModuleDeps): ConnectionsModule {
@@ -83,6 +95,13 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     logger,
     notifications: deps.notifications,
   });
+  const futureResources = new FutureResources({
+    store: deps.store,
+    audit: deps.store.auditWriter,
+    selfResources: deps.config.selfResources,
+    logger,
+    clock,
+  });
   const service = new ConnectionService({
     store: deps.store,
     registry: deps.registry,
@@ -98,6 +117,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     clock,
     logger,
     ceilings: deps.ceilings,
+    futureResources,
   });
   const notices = new NoticeStore(deps.sessions);
   const handlers = createConnectionHandlers({
@@ -120,7 +140,22 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
       broker_providers: unserved,
     });
   }
-  return { service, credentials, notices, handlers, discoveryAfterCall };
+  const hourlyDiscovery = new HourlyDiscovery({
+    missions: deps.store.missions,
+    service,
+    logger,
+    clock,
+    timers: deps.discoveryTimers,
+  });
+  return {
+    service,
+    credentials,
+    notices,
+    handlers,
+    discoveryAfterCall,
+    futureResources,
+    hourlyDiscovery,
+  };
 }
 
 export {
@@ -144,6 +179,18 @@ export {
   REGISTERED_CLIENT_NAME,
   registeredClientKey,
 } from './oauth2-clients';
+export {
+  FutureResources,
+  type FutureResourcesDeps,
+  type ResourceSnapshot,
+} from './future-resources';
+export {
+  HOURLY_DISCOVERY_INTERVAL_MS,
+  HourlyDiscovery,
+  type DiscoveryTimers,
+  type HourlyDiscoveryDeps,
+  type HourlyDiscoveryRun,
+} from './hourly-discovery';
 export {
   DISCOVERY_AFTER_CALL_RETRY_DELAYS_MS,
   DiscoveryAfterCall,
@@ -241,6 +288,8 @@ export {
   type ImportedFrom,
   type ImportPastedInput,
   type ImportSshInput,
+  type MissionResourceCheck,
+  type MissionResourceMoves,
   type NewOwner,
   type ResourcePatch,
   type StartInput,

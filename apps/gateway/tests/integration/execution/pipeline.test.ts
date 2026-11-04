@@ -144,26 +144,34 @@ describe('execution door: the call pipeline', () => {
     });
 
     it("reads an unlabelled resource under the connection's default environment, and only while it is set", async () => {
-      const mission = await instance.issue({ policy: [line(READ), line(WRITE_STAGING, 3)] });
-      const { connections } = instance.root.store;
+      // `scratch` carries no label of its own: it enters the mission through the default.
+      const labelled = await executionInstance({
+        spaces: [
+          { ref: 'app-staging', env: 'staging' },
+          { ref: 'app-prod', env: 'prod' },
+          { ref: 'scratch' },
+        ],
+      });
+      try {
+        const { connections } = labelled.root.store;
+        await connections.setDefaultEnv(labelled.connection.id, 'staging');
+        const mission = await labelled.issue({ policy: [line(READ), line(WRITE_STAGING, 3)] });
 
-      // `scratch` carries no label: an env-qualified risk is refused on it.
-      const before = await instance.call(mission, 'depot__write_item', { space: 'scratch' });
-      refusalOf(before, 'risk-not-accepted');
+        // The same call matches `depot[staging].write` under the default.
+        const after = await labelled.call(mission, 'depot__write_item', { space: 'scratch' });
+        expect(after.error).toBeUndefined();
+        // A resource's own label still wins over the default.
+        const prod = await labelled.call(mission, 'depot__write_item', { space: 'app-prod' });
+        expect(refusalOf(prod, 'risk-not-accepted').missing_risks).toEqual(['depot[prod].write']);
 
-      // The owner gives the account a default: the same call matches `depot[staging].write`.
-      await connections.setDefaultEnv(instance.connection.id, 'staging');
-      const after = await instance.call(mission, 'depot__write_item', { space: 'scratch' });
-      expect(after.error).toBeUndefined();
-      expect(await consumed(mission, WRITE_STAGING)).toBe(1);
-      // A resource's own label still wins over the default.
-      const prod = await instance.call(mission, 'depot__write_item', { space: 'app-prod' });
-      expect(refusalOf(prod, 'risk-not-accepted').missing_risks).toEqual(['depot[prod].write']);
-
-      // Cleared: refused again.
-      await connections.setDefaultEnv(instance.connection.id, null);
-      const cleared = await instance.call(mission, 'depot__write_item', { space: 'scratch' });
-      refusalOf(cleared, 'risk-not-accepted');
+        // Cleared in the store (no owner act, so nothing leaves the mission): the door
+        // reads the label at the call, and an env-qualified risk is refused on it.
+        await connections.setDefaultEnv(labelled.connection.id, null);
+        const cleared = await labelled.call(mission, 'depot__write_item', { space: 'scratch' });
+        refusalOf(cleared, 'risk-not-accepted');
+      } finally {
+        await labelled.close();
+      }
     });
 
     it('records the agent label from the header, and prefers the per-call `_meta.agent`', async () => {
@@ -279,7 +287,7 @@ describe('execution door: the call pipeline', () => {
       expect(refusal.cited_ref).toBe('app-prod');
       expect(refusal.connection).toEqual({ id: instance.connection.id, name: 'Depot main' });
       expect(refusal.allowed_resources).toEqual([
-        { ref: 'scratch', env: null, display_name: 'scratch' },
+        { ref: 'scratch', env: 'staging', display_name: 'scratch' },
       ]);
       expect(instance.depot.calls).toHaveLength(0);
       const [entry] = await callEntries(mission);
@@ -320,7 +328,6 @@ describe('execution door: the call pipeline', () => {
       try {
         const mission = await empty.issue({ policy: [line(READ), line('depot.profile')] });
         expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
-          resourceScope: 'all',
           resourceIds: [],
         });
         await empty.root.store.connections.syncDiscoveredResources(empty.connection.id, [
@@ -340,33 +347,40 @@ describe('execution door: the call pipeline', () => {
       }
     });
 
-    it('the whole connection: a resource discovered after issuance is reached, a hidden or vanished one is not', async () => {
+    it('future resources: one discovered after issuance is written in and reached, a hidden or vanished one is not', async () => {
       const empty = await executionInstance({ spaces: [] });
       try {
+        const { connections } = empty.root.store;
+        // A set of future resources only takes the environment later ones inherit.
+        await connections.setDefaultEnv(empty.connection.id, 'staging');
         const mission = await empty.issue({ policy: [line(READ)], wholeConnection: true });
         expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
-          resourceScope: 'connection',
+          future: true,
+          env: 'staging',
           resourceIds: [],
         });
-        const { connections } = empty.root.store;
-        const found = await connections.syncDiscoveredResources(empty.connection.id, [
+        const { futureResources } = empty.root.connections;
+        const before = await futureResources.snapshot(empty.connection.id);
+        await connections.syncDiscoveredResources(empty.connection.id, [
           { ref: 'late', displayName: 'late' },
           { ref: 'kept-out', displayName: 'kept-out' },
         ]);
-        await connections.setResourceHidden(
-          found.find((r) => r.ref === 'kept-out')?.id ?? '',
-          true,
+        // Hidden by the owner before anything joined (the ordinary discovery settles at once).
+        const keptOut = (await connections.listResources(empty.connection.id)).find(
+          (r) => r.ref === 'kept-out',
         );
+        await connections.setResourceHidden(keptOut?.id ?? '', true);
+        await futureResources.settle(empty.connection.id, before, empty.ada.id);
 
         const late = await empty.call(mission, 'depot__read_item', { space: 'late' });
         expect(late.error).toBeUndefined();
-        // The plugin sees the live list, so a "list" tool filtered to the mission shows it.
+        // The plugin sees the mission's lists, so a "list" tool filtered to the mission shows it.
         expect(empty.depot.calls.at(-1)?.ctx.resources.map((r) => r.ref)).toEqual(['late']);
 
         const hidden = await empty.call(mission, 'depot__read_item', { space: 'kept-out' });
         expect(hidden.error?.data).toMatchObject({
           code: 'resource-not-in-mission',
-          allowed_resources: [{ ref: 'late', env: null, display_name: 'late' }],
+          allowed_resources: [{ ref: 'late', env: 'staging', display_name: 'late' }],
         });
 
         // The next discovery no longer returns `late`: the mission no longer reaches it

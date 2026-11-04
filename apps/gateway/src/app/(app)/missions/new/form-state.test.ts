@@ -102,6 +102,11 @@ function included(trustLevels: MacroActionTrustLevels = {}, connection = acme): 
     : cs;
 }
 
+/** The account narrowed to its staging resource: one environment, so one resource set. */
+function stagingOnly(cs: ConnectionState): ConnectionState {
+  return setResources(acme, cs, ['res-app-staging']);
+}
+
 function previewOf(cs: ConnectionState, name = 'Mission') {
   const state = withConnection({ ...initialFormState(context), name }, cs);
   return previewDraft({ connections: context, now: NOW }, draftOf(context, state, NOW));
@@ -114,7 +119,8 @@ describe('creation form — initial state', () => {
       included: false,
       view: 'simple',
       resourceScope: 'all',
-      resourceIds: ['res-app-staging', 'res-app-prod', 'res-scratch'],
+      // Every resource that may enter: `scratch` has no label where Acme needs one.
+      resourceIds: ['res-app-staging', 'res-app-prod'],
       trustLevels: {},
       everything: false,
       entries: {},
@@ -134,7 +140,7 @@ describe('creation form — curated resources', () => {
 
   it('starts without the hidden and the stale resources', () => {
     const cs = connectionOf(initialFormState([curated]), curated.id);
-    expect(cs.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+    expect(cs.resourceIds).toEqual(['res-app-staging', 'res-app-prod']);
   });
 
   it('issues with a hidden resource the creator ticked', () => {
@@ -307,7 +313,7 @@ describe('creation form — Simple and Advanced', () => {
   });
 
   it('redraws a loaded mission in the simple view when its trust levels write its lines', () => {
-    const source = previewOf(included(WORKING));
+    const source = previewOf(stagingOnly(included(WORKING)));
     const loaded = connectionOf(loadResolved(context, initialFormState(context), source.resolved));
     expect(loaded).toMatchObject({
       view: 'simple',
@@ -318,7 +324,9 @@ describe('creation form — Simple and Advanced', () => {
   });
 
   it('opens a loaded mission in the advanced view when its lines differ from its trust levels', () => {
-    const adjusted = previewOf(updateEntry(included(WORKING), 'acme.read', { quota: '9' }));
+    const adjusted = previewOf(
+      updateEntry(stagingOnly(included(WORKING)), 'acme.read', { quota: '9' }),
+    );
     const loaded = connectionOf(
       loadResolved(context, initialFormState(context), adjusted.resolved),
     );
@@ -326,14 +334,14 @@ describe('creation form — Simple and Advanced', () => {
     expect(loaded.entries['acme.read']?.quota).toBe('9');
     expect(previewOf(loaded).policy).toEqual(adjusted.policy);
     // No trust levels recorded (an older mission, a proposal): the advanced view too.
-    const bare = previewOf(toggleRisk(acme, included(), riskOf('acme.read')));
+    const bare = previewOf(toggleRisk(acme, stagingOnly(included()), riskOf('acme.read')));
     expect(connectionOf(loadResolved(context, initialFormState(context), bare.resolved)).view).toBe(
       'advanced',
     );
   });
 
   it('drops the trust levels of a macro-action the connection does not have', () => {
-    const source = previewOf(included(WORKING));
+    const source = previewOf(stagingOnly(included(WORKING)));
     const [line] = source.resolved;
     if (!line) throw new Error('no resolved line');
     const loaded = connectionOf(
@@ -371,7 +379,7 @@ describe('creation form — per-risk detail', () => {
   });
 
   it('blocks issuance while a ticked risk has no budget, until the creator types one', () => {
-    let cs = toggleRisk(acme, included({ read: 'careful' }), riskOf('acme.admin'));
+    let cs = toggleRisk(acme, stagingOnly(included({ read: 'careful' })), riskOf('acme.admin'));
     cs = updateEntry(cs, 'acme.admin', { quota: '' });
     expect(previewOf(cs).issues.map((i) => i.code)).toEqual(['missing-budget']);
     cs = updateEntry(cs, 'acme.admin', { quota: '2', rateMax: '1', rateWindow: '60' });
@@ -451,7 +459,9 @@ describe('creation form — period, expiry, loading a draft', () => {
   });
 
   it('loads a resolved draft: included, ticked with its values, protected from the trust levels', () => {
-    const source = previewOf(updateEntry(included(WORKING), 'acme.read', { quota: '9' }));
+    const source = previewOf(
+      updateEntry(stagingOnly(included(WORKING)), 'acme.read', { quota: '9' }),
+    );
     const loaded = loadResolved(context, initialFormState(context), source.resolved);
     const cs = connectionOf(loaded);
     expect(cs.included).toBe(true);
@@ -545,7 +555,7 @@ describe('creation form — what stands in the way, in the words of the interfac
 });
 
 describe('creation form — how far the mission reaches on an account', () => {
-  it('offers three choices; the whole account is sent as its scope, the others as the ticked list', () => {
+  it('offers three choices; each is sent as the ticked list, the whole account with future on', () => {
     expect(RESOURCE_CHOICES.map((c) => c.id)).toEqual(['all', 'connection', 'selected']);
     for (const choice of RESOURCE_CHOICES) expect(choice.explanation.length).toBeGreaterThan(20);
 
@@ -554,7 +564,7 @@ describe('creation form — how far the mission reaches on an account', () => {
     const start = flat(initialConnectionState(connection));
     expect(draftResourcesOf(start)).toEqual({
       scope: 'selected',
-      resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
+      resource_ids: ['res-app-staging', 'res-app-prod'],
     });
 
     const picked = setResources(connection, start, ['res-app-prod']);
@@ -562,25 +572,36 @@ describe('creation form — how far the mission reaches on an account', () => {
 
     const whole = setResourceScope(connection, picked, 'connection');
     expect(whole.resourceScope).toBe('connection');
-    // What it reaches now is the default set again; later resources join at read time.
-    expect(whole.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
-    expect(draftResourcesOf(whole)).toEqual({ scope: 'connection' });
+    // What it reaches now is the default set again; later resources join its lists.
+    expect(whole.resourceIds).toEqual(['res-app-staging', 'res-app-prod']);
+    expect(draftResourcesOf(whole)).toEqual({
+      scope: 'selected',
+      resource_ids: ['res-app-staging', 'res-app-prod'],
+    });
+    const sent = draftOf(
+      context,
+      withConnection({ ...initialFormState(context), name: 'm' }, setIncluded(whole, true)),
+      NOW,
+    );
+    expect(sent.connections[0]?.future).toBe(true);
 
     const back = setResourceScope(connection, whole, 'all');
     expect(draftResourcesOf(back)).toEqual({
       scope: 'selected',
-      resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
+      resource_ids: ['res-app-staging', 'res-app-prod'],
     });
   });
 
-  it('loads a whole-connection proposal as such', () => {
+  it('loads a set with future resources as the whole account', () => {
     const state = initialFormState(context);
     const loaded = loadResolved(context, state, [
       {
         connection_id: 'conn-acme',
         resource_sets: [
           {
-            resources: { scope: 'connection' },
+            resources: { scope: 'selected', resource_ids: ['res-app-prod'] },
+            future: true,
+            env: 'prod',
             everything_i_hold: false,
             policy: [],
             trust_levels: {},
@@ -596,8 +617,10 @@ describe('creation form — "Everything I hold on this account"', () => {
   it('is offered on every account, and fills the explicit list in place of the trust levels', () => {
     const cs = applyEverything(acme, included(WORKING));
     expect(cs.trustLevels).toEqual({});
-    const expected = everythingIHold(acme, ACME_RESOURCES).entries;
-    expect(Object.keys(cs.entries)).toEqual(expected.map((e) => e.risk_id));
+    // The resources that may enter: the labelled ones (Acme needs a label).
+    const labelled = ACME_RESOURCES.filter((r) => r.env !== null);
+    const expected = everythingIHold(acme, labelled).entries;
+    expect(Object.keys(cs.entries).sort()).toEqual(expected.map((e) => e.risk_id).sort());
     expect(cs.entries['acme.admin']).toEqual({
       quota: String(expected.find((e) => e.risk_id === 'acme.admin')?.quota),
       rateMax: '10',
@@ -607,7 +630,10 @@ describe('creation form — "Everything I hold on this account"', () => {
     // What is sent is the explicit list, not "everything I hold"; the server accepts it.
     const preview = previewOf(cs);
     expect(preview.ok).toBe(true);
-    expect(preview.policy.map((l) => l.risk_id)).toEqual(expected.map((e) => e.risk_id));
+    // One set per environment: a risk of the account is in both.
+    expect(new Set(preview.policy.map((l) => l.risk_id))).toEqual(
+      new Set(expected.map((e) => e.risk_id)),
+    );
     const state = withConnection(initialFormState(context), cs);
     expect(draftOf(context, state, NOW).connections[0]?.everything_i_hold).toBe(false);
   });
@@ -653,7 +679,7 @@ describe('creation form — resource sets', () => {
     expect(state.sets).toHaveLength(2);
     const second = setResources(acme, state.sets[1]!, ['res-app-prod']);
     state = updateSet(acme, state, 1, applyTrustLevels(acme, { ...second, trustLevels: WORKING }));
-    expect(state.sets[0]?.resourceIds).toEqual(['res-app-staging', 'res-scratch']);
+    expect(state.sets[0]?.resourceIds).toEqual(['res-app-staging']);
     expect(setOfResource(state, 'res-app-prod')).toBe(1);
 
     const form = { ...initialFormState(context), name: 'm', connections: { [acme.id]: state } };
@@ -667,7 +693,7 @@ describe('creation form — resource sets', () => {
     state = updateSet(acme, state, 1, setResources(acme, state.sets[1]!, ['res-scratch']));
     state = removeResourceSet(acme, state, 1);
     expect(state.sets).toHaveLength(1);
-    expect(state.sets[0]?.resourceIds).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+    expect(state.sets[0]?.resourceIds).toEqual(['res-app-staging', 'res-app-prod']);
     expect(removeResourceSet(acme, state, 0).sets).toHaveLength(1);
   });
 

@@ -12,14 +12,16 @@
  *   record    `ConnectionsRepo.upsertDiscoveredResources`: the row is inserted (it
  *             reads the connection's default environment) or its stale flag cleared,
  *             owner edits kept, no other row touched
- *   join      `MissionsRepo.addResources(…, 'created')`: added to the selection of
- *             the resource set the call was judged against (judged against several:
- *             the `connection` set if any, else the first of them, risk model §4.7) when
- *             that set's scope is an explicit list; a no-op under scope
- *             `connection`, which reaches the row already
+ *   join      `MissionsRepo.addResources(…, 'created')`: added to the list of the
+ *             resource set the call was judged against (judged against several: the
+ *             candidate with future on in its environment, else one in its
+ *             environment, else the first of them, risk model §4.7)
  *   audit     one `mission-resources-added` entry, cause `created-by-the-mission`,
  *             with the mission, the connection, the tool and the refs; the actor is
  *             the human behind the call's key
+ *   future    the other running missions' sets with future on in the new resource's
+ *             environment take it (`FutureResources.settle`, ADR
+ *             resource-set-is-one-environment-with-optional-future-resources)
  *
  * It returns the refs it recorded, for the discovery after the call (which looks
  * again while the provider does not list them). A failure is logged — connection,
@@ -31,6 +33,7 @@ import type { McpToolResult, PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { isSelfResource, type SelfResource } from '../config';
 import { callerUserId, type AnsweredCall } from '../connections/discovery-after-call';
+import type { FutureResources } from '../connections/future-resources';
 import { usableResourcesOf } from '../connections/input';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -46,6 +49,8 @@ export interface CreatedResourcesDeps {
   readonly selfResources: readonly Pick<SelfResource, 'provider' | 'ref'>[];
   readonly logger: Logger;
   readonly clock: Clock;
+  /** The other missions' future resources; absent, only the creating mission reaches it. */
+  readonly futureResources?: Pick<FutureResources, 'snapshot' | 'settle'>;
 }
 
 export class CreatedResources {
@@ -83,12 +88,14 @@ export class CreatedResources {
         });
       }
       if (created.length === 0) return [];
+      const before = await this.deps.futureResources?.snapshot(connectionId);
       const rows = await this.deps.store.connections.upsertDiscoveredResources(
         connectionId,
         created,
       );
       // The sets the creating call was judged against: the store places the resource in
-      // the one set, else the `connection` set, else the first candidate (risk model §4.7).
+      // the one set, else the candidate in its environment (future first), else the
+      // first candidate (risk model §4.7).
       const joined = await this.deps.store.missions.addResources(
         ctx.mission.id,
         connectionId,
@@ -110,12 +117,14 @@ export class CreatedResources {
           connection_id: connectionId,
           tool: call.tool,
           refs,
-          resource_set_id: joined.resourceSetId,
-          resource_scope: joined.scope,
+          resource_set_ids: [...new Set(joined.placed.map((p) => p.resourceSetId))],
           added_to_selection: rows.filter((r) => joined.added.includes(r.id)).map((r) => r.ref),
         },
         delegated_client_id: null,
       });
+      if (before) {
+        await this.deps.futureResources?.settle(connectionId, before, callerUserId(ctx));
+      }
       this.deps.logger.info('created resources reached by the mission', {
         ...context,
         refs: refs.length,

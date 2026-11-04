@@ -5,13 +5,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { judgeEdit, type MissionSnapshot } from '@/lib/missions/mission-edit';
-import { acmeConnection } from '../../../../../tests/support/missions/testing';
+import { ACME_RESOURCES, acmeConnection } from '../../../../../tests/support/missions/testing';
 
 import { changeLines, editDraftOf, initialEditState, raisedEditState } from './edit-state';
 import { expiryOf, RESOURCE_CHOICES, toggleRisk, type FormState } from './form-state';
 
 const NOW = new Date('2026-10-24T09:00:00.000Z');
-const acme = acmeConnection();
+// `scratch` labelled staging: it may join the staging set (a set holds one environment).
+const acme = acmeConnection({
+  resources: ACME_RESOURCES.map((r) => (r.id === 'res-scratch' ? { ...r, env: 'staging' } : r)),
+});
 const context = [acme];
 
 const SNAPSHOT: MissionSnapshot = {
@@ -28,8 +31,9 @@ const SNAPSHOT: MissionSnapshot = {
           key: 'set-1',
           id: 'set-1',
           position: 1,
-          resource_scope: 'selected',
           resource_ids: ['res-app-staging'],
+          future: false,
+          env: 'staging',
           policy: [
             {
               resource_set_id: 'set-1',
@@ -81,8 +85,9 @@ describe('the creation form in edit mode', () => {
               key: 'set-lost',
               id: 'set-lost',
               position: 1,
-              resource_scope: 'all',
               resource_ids: [],
+              future: false,
+              env: null,
               policy: [],
             },
           ],

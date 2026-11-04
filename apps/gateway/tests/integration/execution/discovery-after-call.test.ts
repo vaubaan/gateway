@@ -85,12 +85,13 @@ describe('execution door: discovery after a creating call', () => {
     });
   });
 
-  it('a whole-account mission reaches the new resource on its next call', async () => {
+  it('a mission with future resources reaches the new resource of its environment on its next call', async () => {
     const mission = await instance.issue({
       policy: [line(CREATE), line(READ)],
       wholeConnection: true,
     });
-    instance.depot.scriptDiscovery(async () => [...SEEDED, space('fresh')]);
+    // Discovered in staging: it joins the staging set, whose future is on.
+    instance.depot.scriptDiscovery(async () => [...SEEDED, { ...space('fresh'), env: 'staging' }]);
 
     // Never discovered: the classifier's own reason, nothing executed.
     const before = await instance.call(mission, 'depot__read_item', { space: 'fresh' });
@@ -105,10 +106,11 @@ describe('execution door: discovery after a creating call', () => {
     expect(instance.depot.calls.at(-1)?.ctx.resources.map((r) => r.ref)).toContain('fresh');
   });
 
-  it('a resource a whole-account mission does not reach is refused with a hint that says when one is', async () => {
-    const mission = await instance.issue({ policy: [line(READ)], wholeConnection: true });
+  it('a resource a mission with future resources does not reach is refused with a hint that says when one is', async () => {
+    // Hidden before issuance: not in the lists the mission was issued with.
     const scratch = instance.resources.find((r) => r.ref === 'scratch')!;
     await instance.root.store.connections.setResourceHidden(scratch.id, true);
+    const mission = await instance.issue({ policy: [line(READ)], wholeConnection: true });
 
     const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
     expect(body.error?.data?.code).toBe('resource-not-in-mission');

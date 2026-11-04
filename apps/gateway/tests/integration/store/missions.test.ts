@@ -79,7 +79,7 @@ describe('missions repository', () => {
       name: 'Ship feature X',
       creatorUserId: creator,
       periodSeconds: 7 * 86_400,
-      connections: [{ connectionId: connection, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection, resourceIds: [] }],
       policy: POLICY,
       ...overrides,
     });
@@ -96,9 +96,7 @@ describe('missions repository', () => {
       expiresAt: '2026-12-31T00:00:00.000Z',
       delegationId: null,
     });
-    expect(flatConnections(m)).toEqual([
-      { connectionId: connection, resourceScope: 'all', resourceIds: [] },
-    ]);
+    expect(flatConnections(m)).toEqual([{ connectionId: connection, resourceIds: [] }]);
     expect(flatPolicy(m)).toEqual(POLICY);
     expect(
       store.db
@@ -115,58 +113,65 @@ describe('missions repository', () => {
   it('records a resource selection per connection', async () => {
     const m = await create({
       connections: [
-        { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
-        { connectionId: otherConnection, resourceScope: 'all', resourceIds: [] },
+        { connectionId: connection, resourceIds: [resourceA] },
+        { connectionId: otherConnection, resourceIds: [] },
       ],
     });
     const byId = (a: { connectionId: string }, b: { connectionId: string }) =>
       a.connectionId.localeCompare(b.connectionId);
     expect([...flatConnections(m)].sort(byId)).toEqual(
       [
-        { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
-        { connectionId: otherConnection, resourceScope: 'all', resourceIds: [] },
+        { connectionId: connection, resourceIds: [resourceA] },
+        { connectionId: otherConnection, resourceIds: [] },
       ].sort(byId),
     );
   });
 
-  it('stores a whole-connection selection as its scope, with no resource row', async () => {
+  it('stores a set with future on and its environment, an explicit list like any other', async () => {
     const m = await create({
-      connections: [{ connectionId: connection, resourceScope: 'connection', resourceIds: [] }],
+      connections: [{ connectionId: connection, resourceIds: [resourceA], future: true }],
     });
     expect(flatConnections(m)).toEqual([
-      { connectionId: connection, resourceScope: 'connection', resourceIds: [] },
+      { connectionId: connection, resourceIds: [resourceA], future: true },
     ]);
     expect(
       store.db
         .prepare('SELECT COUNT(*) AS n FROM mission_resources WHERE mission_id = ?')
         .get(m.id),
-    ).toEqual({ n: 0 });
+    ).toEqual({ n: 1 });
     expect((await store.missions.getById(m.id))?.connections).toEqual(m.connections);
+    // A set of future resources only names its environment.
+    const empty = await create({
+      connections: [{ connectionId: connection, resourceIds: [], future: true, env: 'prod' }],
+    });
+    expect(flatConnections(empty)).toEqual([
+      { connectionId: connection, resourceIds: [], future: true, env: 'prod' },
+    ]);
   });
 
   it('rejects inconsistent resource selections', async () => {
     await expect(
       create({
-        connections: [{ connectionId: connection, resourceScope: 'selected', resourceIds: [] }],
+        connections: [{ connectionId: connection, resourceIds: [resourceA], env: 'prod' }],
       }),
-    ).rejects.toThrow(InvariantError);
-    await expect(
-      create({
-        connections: [{ connectionId: connection, resourceScope: 'all', resourceIds: [resourceA] }],
-      }),
-    ).rejects.toThrow(InvariantError);
+    ).rejects.toThrow(/several environments/);
     await expect(
       create({
         connections: [
-          { connectionId: connection, resourceScope: 'connection', resourceIds: [resourceA] },
+          {
+            connectionId: connection,
+            resourceSets: [
+              { resourceIds: [resourceA], future: true, policy: [] },
+              { resourceIds: [], future: true, policy: [] },
+            ],
+          },
         ],
+        policy: [],
       }),
-    ).rejects.toThrow(/'connection' scope lists resources/);
+    ).rejects.toThrow(/two resource sets take the future resources of one environment/);
     await expect(
       create({
-        connections: [
-          { connectionId: otherConnection, resourceScope: 'selected', resourceIds: [resourceA] },
-        ],
+        connections: [{ connectionId: otherConnection, resourceIds: [resourceA] }],
         policy: [],
       }),
     ).rejects.toThrow(/does not belong/);
@@ -746,8 +751,8 @@ describe('missions repository', () => {
         name: 'Ship feature Y',
         expiresAt: null,
         connections: [
-          { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
-          { connectionId: otherConnection, resourceScope: 'connection', resourceIds: [] },
+          { connectionId: connection, resourceIds: [resourceA] },
+          { connectionId: otherConnection, resourceIds: [], future: true, env: 'staging' },
         ],
         policy: [
           {
@@ -770,8 +775,8 @@ describe('missions repository', () => {
       expect(result?.before.name).toBe('Ship feature X');
       expect(result?.mission).toMatchObject({ name: 'Ship feature Y' });
       expect(flatConnections(result!.mission)).toMatchObject([
-        { connectionId: connection, resourceScope: 'selected', resourceIds: [resourceA] },
-        { connectionId: otherConnection, resourceScope: 'connection', resourceIds: [] },
+        { connectionId: connection, resourceIds: [resourceA] },
+        { connectionId: otherConnection, resourceIds: [], future: true, env: 'staging' },
       ]);
       // The kept connection kept its one set: its counters follow it.
       expect(firstSetOf(result!.mission, connection)).toBe(firstSetOf(m, connection));

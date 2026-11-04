@@ -221,11 +221,15 @@ export async function heldArguments(
   return store.requests.getArguments({ missionId: request.missionId, requestId });
 }
 
-/** A connection of a mission with one resource set, in the shape before sets existed. */
+/**
+ * A connection of a mission with one resource set, in the shape before sets existed;
+ * `future` and `env` only when set, so that a test about something else compares lists.
+ */
 export interface FlatSelection {
   readonly connectionId: string;
-  readonly resourceScope: MissionResourceSetRecord['resourceScope'];
   readonly resourceIds: readonly string[];
+  readonly future?: true;
+  readonly env?: string;
   readonly resourceSources?: MissionResourceSetRecord['resourceSources'];
   readonly trustLevels?: MissionResourceSetRecord['trustLevels'];
 }
@@ -243,8 +247,9 @@ export function flatConnections(mission: Pick<MissionRecord, 'connections'>): Fl
     }
     return {
       connectionId: c.connectionId,
-      resourceScope: only.resourceScope,
       resourceIds: only.resourceIds,
+      ...(only.future ? { future: true as const } : {}),
+      ...(only.env !== null ? { env: only.env } : {}),
       ...(only.resourceSources ? { resourceSources: only.resourceSources } : {}),
       ...(only.trustLevels ? { trustLevels: only.trustLevels } : {}),
     };

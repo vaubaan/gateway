@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/components/connections/
   - apps/gateway/tests/integration/connections/
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-04
 ---
 
 # Connections — handbook
@@ -28,6 +28,7 @@ discovering and curating its resources. Spec:
 - [`oauth2-clients.ts`](../../apps/gateway/src/server/connections/oauth2-clients.ts), [`oauth-broker.ts`](../../apps/gateway/src/server/connections/oauth-broker.ts) — the two client sources of an `oauth2` plugin (registered by the gateway, or a broker's: [oauth-broker-contract](oauth-broker-contract.md)).
 - [`shipped-plugins.ts`](../../apps/gateway/src/server/compose/shipped-plugins.ts) — the one provider list; picker, catalog index and tool list derive from it.
 - [`discovery-after-call.ts`](../../apps/gateway/src/server/connections/discovery-after-call.ts) — discovery after a creating call (ADR [created-resources-join-the-mission](../decisions/created-resources-join-the-mission.md)).
+- [`future-resources.ts`](../../apps/gateway/src/server/connections/future-resources.ts), [`hourly-discovery.ts`](../../apps/gateway/src/server/connections/hourly-discovery.ts) — what a discovery or a relabel does to the missions' future resources, and the hourly discovery (ADR [resource-set-is-one-environment-with-optional-future-resources](../decisions/resource-set-is-one-environment-with-optional-future-resources.md); the rule is in [missions](missions.md)).
 
 ## Invariants
 
@@ -43,6 +44,10 @@ discovering and curating its resources. Spec:
 - **A connection of another owner reads exactly like a missing one** (`not-found`).
 - **Views are snake_case, records camelCase**: `ConnectionView` and `ConnectionDetail` cross into pages and the management door (`provider_label`, `way_retired`, `token_expires_at`, `owner_label`, `default_env_choices`…); the `connection` they carry is the store's camelCase `ConnectionRecord`.
 - **The effective environment label is computed on read** (`resource-env.ts`: own label, else the connection default); the default is never written to a resource row, so clearing it un-labels inheriting resources.
+- **Every write that adds resources or moves a label settles the missions.** `storeDiscovery` (connect, Refresh, after a call, hourly, "check now"), `updateResource` (an owner's label), `setDefaultEnv` and `CreatedResources.record` take a `FutureResources.snapshot` before the write and `settle` after it, in the name of the human who acted, or `DISCOVERY_ACTOR_ID` (`discovery`) for the gateway's own discoveries. A write through the store alone (tests, the importer) moves nothing. `settle` never throws.
+- **Discovery runs every hour** for the connections a running mission's set with `future` on depends on (`MissionsRepo.connectionsWithFutureSets`), one after the other, the first run one hour after boot, never two runs at once. Not audited itself (the joins are); a failure is recorded on the connection and logged by connection only.
+- **"Check now"** (`POST /api/missions/<id>/resources/check`, `{ connection_id }`, `ConnectionService.checkForMission`): the mission's creator or an owner of the connection; anyone else, or a connection the mission does not carry, is `not-found` (404). Rate-limited per user (`CHECK_NOW_RATE_LIMIT`), audited `resources-discovered` with `cause: check-now`. Answers the discovery record, `last_checked_at` and what joined or left THIS mission, by set.
+- **"Last checked"** is `metadata.discovery.at` (`lastDiscoveryAt`), written by every discovery whatever its outcome; the mission detail and the door's mission view carry it per connection (`last_checked_at`).
 
 ## Traps
 
@@ -70,7 +75,7 @@ discovering and curating its resources. Spec:
 - **"OAuth broker '<name>' answered …"** → the broker's failure, never the connection's: `401 (invalid_key)` wrong key, `403 (return_url_not_registered)` the callback is missing at the broker, `503` down; "could not be attested" is the same outage on `/attest`.
 - **"OAuth broker '<name>' is not attested (…)"** → nothing was sent: "no attested broker version admitted by this release" (measurement not on the allowlist: upgrade, or declare your own broker `attestation: none`), "a version this release does not admit" (newer or modified broker), "not bound to this connection’s key" (someone else answers on its address).
 - **"not configured on this gateway"** → no `oauth_brokers` entry serves the plugin; the boot log names it.
-- **A resource an agent created is not listed** → is the tool in `resourceCreatingTools`? Then the log `resource discovery after a creating call`. Resources created elsewhere appear on "Refresh" only.
+- **A resource an agent created is not listed** → is the tool in `resourceCreatingTools`? Then the log `resource discovery after a creating call`. Resources created elsewhere appear on "Refresh", "check now", or within the hour when a running mission takes future resources on the connection (log `hourly discovery ran`).
 - **A connection turned `expired`** → log `credential refresh rejected`; "Reconnect" keeps id and missions. Its owners' devices are told once, by the call that made the transition ([notifications](notifications.md)). Calls failing while `active` → `ProviderUnreachableError`.
 - **An owner's label disappeared** → the plugin started returning `env`.
 - **`ssh-key` discovery refused** → public key not in `authorized_keys`, or the host key differs from the pinned fingerprint.

@@ -45,7 +45,7 @@ import {
   type MissionOverview,
   type MissionPreview,
   type Tier,
-  reachesLaterResources,
+  takesFutureResources,
   type TrustLevel,
 } from '../missions';
 import type { ProviderCatalog } from './ports';
@@ -451,11 +451,10 @@ export interface MissionView {
   readonly token_prefix: string | null;
   readonly connection_ids: readonly string[];
   /**
-   * Per connection, how far the mission reaches: `selected` — the resources
-   * stored at issuance (a draft's `all` is stored so); `connection` — the whole
-   * connection, resources discovered later included.
+   * Per connection, its resource sets: each an explicit list of one environment,
+   * `future` when the resources that later appear in that environment join it.
    */
-  readonly resource_scopes: readonly ResourceScopeView[];
+  readonly resource_selections: readonly ResourceSelectionView[];
   readonly policy: readonly MissionPolicyView[];
   /** Accepted risks whose quota is spent for the period: calls on them are refused with a claim URL. */
   readonly exhausted: readonly RiskId[];
@@ -471,24 +470,20 @@ function issuedViaView(issuer: MissionIssuer | null, viewer: MissionViewer): Iss
   };
 }
 
-export interface ResourceScopeView {
+export interface ResourceSelectionView {
   readonly connection_id: string;
-  readonly resource_scope: 'selected' | 'connection';
+  /** A set of the connection takes future resources. */
+  readonly future: boolean;
   /**
    * The resource sets of the connection, in order (risk model §4.7): each with its
-   * scope; a policy line names its set by `resource_set_id`.
+   * environment and `future`; a policy line names its set by `resource_set_id`.
    */
   readonly resource_sets: readonly {
     readonly resource_set_id: string;
     readonly position: number;
-    readonly resource_scope: 'all' | 'selected' | 'connection';
+    readonly future: boolean;
+    readonly env: string | null;
   }[];
-}
-
-function resourceScopeOf(
-  c: MissionOverview['mission']['connections'][number],
-): ResourceScopeView['resource_scope'] {
-  return reachesLaterResources(c) ? 'connection' : 'selected';
 }
 
 export function missionView(
@@ -522,13 +517,14 @@ export function missionView(
     issued_via: issuedViaView(overview.issued_via, viewer),
     token_prefix: overview.token ? maskToken(overview.token.prefix) : null,
     connection_ids: mission.connections.map((c) => c.connectionId),
-    resource_scopes: mission.connections.map((c) => ({
+    resource_selections: mission.connections.map((c) => ({
       connection_id: c.connectionId,
-      resource_scope: resourceScopeOf(c),
+      future: takesFutureResources(c),
       resource_sets: c.resourceSets.map((set) => ({
         resource_set_id: set.id,
         position: set.position,
-        resource_scope: set.resourceScope,
+        future: set.future,
+        env: set.env,
       })),
     })),
     policy: mission.policy.map((entry) => ({
@@ -560,18 +556,18 @@ export interface MissionDetailView extends MissionView {
     readonly provider: string;
     readonly display_name: string;
     readonly status: string;
-    /** `connection`: issued whole, resources discovered later are reached too. */
-    readonly resource_scope: 'selected' | 'connection';
-    /**
-     * The resources the mission reaches now: the ones selected at issuance that still
-     * exist, or, for `connection`, every resource discovery returns that is not hidden.
-     */
+    /** A set takes the resources that later appear in its environment. */
+    readonly future: boolean;
+    /** When discovery last ran on the connection; `null` when never. */
+    readonly last_checked_at: string | null;
+    /** The resources the mission reaches now: its lists, less what discovery no longer finds. */
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
     /** Present when the connection has several resource sets (risk model §4.7). */
     readonly resource_sets?: readonly {
       readonly resource_set_id: string;
       readonly position: number;
-      readonly resource_scope: 'selected' | 'connection';
+      readonly future: boolean;
+      readonly env: string | null;
       readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
     }[];
   }[];
@@ -596,14 +592,16 @@ export function missionDetailView(
       provider: c.provider,
       display_name: c.display_name,
       status: c.status,
-      resource_scope: c.reaches_later ? 'connection' : 'selected',
+      future: c.future,
+      last_checked_at: c.last_checked_at,
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
       ...(c.resource_sets.length > 1
         ? {
             resource_sets: c.resource_sets.map((set) => ({
               resource_set_id: set.id,
               position: set.position,
-              resource_scope: set.reaches_later ? ('connection' as const) : ('selected' as const),
+              future: set.future,
+              env: set.env,
               resources: set.resources.map((r) => ({ ref: r.ref, env: r.env })),
             })),
           }
@@ -651,8 +649,8 @@ export interface PreviewView {
     readonly connection_id: string;
     readonly provider: string;
     readonly display_name: string;
-    /** `connection`: resources discovered later are reached too; `resources` are the ones known now. */
-    readonly resource_scope: 'selected' | 'connection';
+    /** A set takes the resources that later appear in its environment. */
+    readonly future: boolean;
     readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
     /** The built-in everything-i-hold wrote this connection's lines. */
     readonly everything_i_hold: boolean;
@@ -680,7 +678,8 @@ export interface PreviewView {
 /** What one resource set of a draft connection yields, as the door answers it. */
 export interface PreviewSetView {
   readonly index: number;
-  readonly resource_scope: 'selected' | 'connection';
+  readonly future: boolean;
+  readonly env: string | null;
   readonly resources: readonly { readonly ref: string; readonly env: string | null }[];
   readonly everything_i_hold: boolean;
   readonly passes: MissionPreview['policy'];
@@ -701,7 +700,7 @@ export function previewView(preview: MissionPreview): PreviewView {
       connection_id: c.connection_id,
       provider: c.provider,
       display_name: c.display_name,
-      resource_scope: c.reaches_later ? 'connection' : 'selected',
+      future: c.future,
       resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
       everything_i_hold: c.everything_i_hold,
       passes: c.passes,
@@ -715,7 +714,8 @@ export function previewView(preview: MissionPreview): PreviewView {
         ? {
             resource_sets: c.resource_sets.map((set) => ({
               index: set.index,
-              resource_scope: set.reaches_later ? ('connection' as const) : ('selected' as const),
+              future: set.future,
+              env: set.env,
               resources: set.resources.map((r) => ({ ref: r.ref, env: r.env })),
               everything_i_hold: set.everything_i_hold,
               passes: set.passes,

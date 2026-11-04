@@ -140,7 +140,6 @@ describe('missions: issue, rotate, revoke', () => {
     expect(flatConnections(mission)).toEqual([
       {
         connectionId: seeded.github.connection.id,
-        resourceScope: 'selected',
         resourceIds: seeded.github.resources.map((r) => r.id).sort(),
         // Kept only to redraw the form: the policy below is what decides.
         trustLevels: DEVELOPER_TRUST_LEVELS,
@@ -193,7 +192,6 @@ describe('missions: issue, rotate, revoke', () => {
     expect(flatConnections(mission)).toEqual([
       {
         connectionId: empty.connection.id,
-        resourceScope: 'all',
         resourceIds: [],
         trustLevels: { read: 'careful' },
       },
@@ -314,7 +312,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(withStale.preview.issues.map((i) => i.code)).toEqual(['resource-stale']);
   });
 
-  it('the whole connection: the door, the page and the kit read the live list, later resources included', async () => {
+  it('future resources: the whole connection is the known list with future on, and a resource found later is written in', async () => {
     const connectionId = seeded.github.connection.id;
     const before = await issued();
     const { mission, token, kit } = await issued(
@@ -332,15 +330,15 @@ describe('missions: issue, rotate, revoke', () => {
     expect(flatConnections(mission)).toEqual([
       {
         connectionId,
-        resourceScope: 'connection',
-        resourceIds: [],
+        resourceIds: seeded.github.resources.map((r) => r.id).sort(),
+        future: true,
         trustLevels: DEVELOPER_TRUST_LEVELS,
       },
     ]);
     expect(kit.agent_instructions).toContain(
-      'the whole account, including resources discovered later (known now:',
+      'resources found later in the same environment join it.',
     );
-    // The audit of the issuance records the scope, so the width is on record.
+    // The audit of the issuance records the lists and `future`, so the width is on record.
     const issuedEntries = await root.store.audit.list({ kind: 'admin', act: 'mission-issued' });
     expect(
       issuedEntries.map(
@@ -349,14 +347,14 @@ describe('missions: issue, rotate, revoke', () => {
     ).toContainEqual([
       {
         connection_id: connectionId,
-        resource_scope: 'connection',
-        resource_ids: [],
+        resource_ids: seeded.github.resources.map((r) => r.id).sort(),
         resource_sets: [
           {
             resource_set_id: expect.any(String) as string,
             position: 1,
-            resource_scope: 'connection',
-            resource_ids: [],
+            future: true,
+            env: null,
+            resource_ids: seeded.github.resources.map((r) => r.id).sort(),
           },
         ],
       },
@@ -366,43 +364,65 @@ describe('missions: issue, rotate, revoke', () => {
     const idOf = (ref: string) => seeded.github.resources.find((r) => r.ref === ref)?.id ?? '';
     await root.store.connections.setResourceHidden(idOf('acme/infra'), true);
     agePastStaleGrace(root.store, connectionId); // past the grace of a fresh row
+    const snapshot = await root.connections.futureResources.snapshot(connectionId);
     await root.store.connections.syncDiscoveredResources(connectionId, [
       { ref: 'acme/app', displayName: 'acme/app' },
       { ref: 'acme/infra', displayName: 'acme/infra' },
       { ref: 'acme/new', displayName: 'acme/new' },
     ]);
+    const moves = await root.connections.futureResources.settle(
+      connectionId,
+      snapshot,
+      seeded.ada.id,
+    );
+    expect(moves.map((m) => [m.missionId, m.ref, m.change, m.reason])).toEqual([
+      [mission.id, 'acme/new', 'joined', 'discovered'],
+    ]);
 
+    // The door loads the mission again at every request: the join is in its list.
+    const reloaded = await root.store.missions.getById(mission.id);
     const ctx = await loadMissionContext(
       root.store,
-      mission,
+      reloaded!,
       { id: 'token', prefix: token.prefix, holder: { kind: 'named', name: 'test' } },
       [],
     );
-    expect(ctx.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/new']);
+    // The hidden repository stays: it was in the list. The stale one is not reached.
+    expect(ctx.resources.map((r) => r.ref).sort()).toEqual(['acme/app', 'acme/infra', 'acme/new']);
     const detail = await missions.get(seeded.ada, mission.id);
-    expect(detail?.connections[0]?.reaches_later).toBe(true);
+    expect(detail?.connections[0]?.future).toBe(true);
     expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual([
       'acme/app',
+      'acme/infra',
       'acme/new',
     ]);
     expect(detail?.kit?.agent_instructions).toContain('`acme/new`');
-    expect(detail?.kit?.agent_instructions).not.toContain('`acme/infra`');
     expect(detail?.kit?.agent_instructions).not.toContain('`acme/web`');
+    const joined = await root.store.audit.list({ kind: 'admin', act: 'mission-resource-joined' });
+    expect(joined.map((e) => e.kind === 'admin' && [e.object.id, e.after])).toEqual([
+      [
+        mission.id,
+        {
+          connection_id: connectionId,
+          resource_set_id: mission.connections[0]?.resourceSets[0]?.id,
+          refs: ['acme/new'],
+          reason: 'discovered',
+        },
+      ],
+    ]);
 
     // A mission issued on "every resource known now" is not widened by the same discovery.
     const known = await missions.get(seeded.ada, before.mission.id);
-    expect(known?.connections[0]?.reaches_later).toBe(false);
+    expect(known?.connections[0]?.future).toBe(false);
     expect(known?.connections[0]?.resources.map((r) => r.ref)).not.toContain('acme/new');
 
     // The owner's page of the account says it; a copy is as wide as its source.
     const onAccount = await missions.onConnection(seeded.ada, connectionId);
-    expect(onAccount.find((m) => m.id === mission.id)?.reaches_later).toBe(true);
-    expect(onAccount.find((m) => m.id === before.mission.id)?.reaches_later).toBe(false);
+    expect(onAccount.find((m) => m.id === mission.id)?.future).toBe(true);
+    expect(onAccount.find((m) => m.id === before.mission.id)?.future).toBe(false);
     const copy = await missions.duplicate(seeded.ada, mission.id);
     if (!copy.ok) throw new Error('duplicate refused');
-    expect(copy.mission.connections[0]?.resourceSets[0]).toMatchObject({
-      resourceScope: 'connection',
-    });
+    expect(copy.mission.connections[0]?.resourceSets[0]).toMatchObject({ future: true });
   });
 
   it('drops a resource that turned stale when duplicating', async () => {
@@ -455,13 +475,13 @@ describe('missions: issue, rotate, revoke', () => {
       connections: [
         {
           connection_id: seeded.github.connection.id,
-          resource_scope: 'selected',
           resource_ids: seeded.github.resources.map((r) => r.id).sort(),
           resource_sets: [
             {
               resource_set_id: mission.connections[0]?.resourceSets[0]?.id,
               position: 1,
-              resource_scope: 'selected',
+              future: false,
+              env: null,
               resource_ids: seeded.github.resources.map((r) => r.id).sort(),
             },
           ],
@@ -869,7 +889,7 @@ describe('missions: issuance context', () => {
     expect(preview.issues.map((i) => i.code)).toEqual(['connection-unavailable']);
   });
 
-  it('tells the creator when a selected resource carries no environment label on an env-scoped catalog', async () => {
+  it('leaves an unlabelled resource out of "all", and refuses it picked, on an env-scoped catalog', async () => {
     const { service } = root.missions;
     const owner = { kind: 'user', id: seeded.bob.id } as const;
     const { connection } = await seedConnection(root.store, {
@@ -884,14 +904,26 @@ describe('missions: issuance context', () => {
       period: DAILY,
       expires_at: null,
     });
-    // It passes: the label is not required, the creator is told what it costs.
+    // It passes on the labelled one; the creator is told what was left out.
     expect(preview.ok).toBe(true);
     expect(preview.notices.map((n) => [n.code, n.resource_refs, n.connection_id])).toEqual([
-      ['resource-without-env', ['unlabelled'], connection.id],
+      ['unlabelled-resources-left-out', ['unlabelled'], connection.id],
     ]);
-    expect(preview.notices[0]?.risk_ids.length).toBeGreaterThan(0);
-    expect(preview.notices[0]?.risk_ids.every((id) => id.includes('[staging]'))).toBe(true);
-    expect(preview.notices[0]?.message).toContain('risk-not-accepted');
+    expect(preview.resolved[0]?.resource_sets.map((set) => set.env)).toEqual(['staging']);
+    // Picked by name, it is refused: a resource enters a set only labelled.
+    const picked = await service.preview(seeded.bob, {
+      name: 'The unlabelled project',
+      connections: [
+        {
+          connection_id: connection.id,
+          resources: { scope: 'selected', resource_refs: ['unlabelled'] },
+          trust_levels: SUPABASE_STAGING_TRUST_LEVELS,
+        },
+      ],
+      period: DAILY,
+      expires_at: null,
+    });
+    expect(picked.issues.map((i) => i.code)).toContain('resource-unlabelled');
 
     // Vercel derives the environment from the call: nothing to say.
     const vercel = await root.missions.service.preview(seeded.ada, {
@@ -902,7 +934,7 @@ describe('missions: issuance context', () => {
       period: DAILY,
       expires_at: null,
     });
-    expect(vercel.notices).toEqual([]);
+    expect(vercel.notices.filter((n) => n.code !== 'split-by-environment')).toEqual([]);
   });
 
   it("reads unlabelled resources under the connection's default environment at issuance", async () => {
@@ -934,8 +966,8 @@ describe('missions: issuance context', () => {
       expires_at: null,
     };
     const unlabelled = await service.preview(seeded.bob, draft);
-    expect(unlabelled.notices.map((n) => n.code)).toEqual(['resource-without-env']);
-    expect(unlabelled.notices[0]?.message).toContain('default environment');
+    expect(unlabelled.issues.map((n) => n.code)).toEqual(['resource-unlabelled']);
+    expect(unlabelled.issues[0]?.message).toContain('default environment');
 
     await root.store.connections.setDefaultEnv(connection.id, 'staging');
     const context = await service.issuanceContext(seeded.bob);
@@ -982,17 +1014,24 @@ describe('missions: issuance context', () => {
             expires_at: null,
           });
           const leftOut = preview.connections[0]?.left_out ?? [];
-          // The owner holds the whole catalog and every environment is labelled:
-          // only the trust level itself leaves a risk out.
-          expect(
-            leftOut.every((s) => s.reason === 'trust-level'),
-            where,
-          ).toBe(true);
-          if (preview.policy.length === 0) {
+          // The owner holds the whole catalog and every environment is labelled: one set
+          // per environment, and only the trust level itself leaves a risk out of a set —
+          // besides the risks of the other environments.
+          for (const set of preview.connections[0]?.resource_sets ?? []) {
             expect(
-              preview.issues.map((i) => i.code),
+              set.left_out.every(
+                (s) =>
+                  s.reason === 'trust-level' ||
+                  (s.reason === 'unresolvable-env' && s.env !== set.env),
+              ),
               where,
-            ).toEqual(['no-accepted-risk']);
+            ).toBe(true);
+          }
+          if (preview.policy.length === 0) {
+            // Said by each set of the account (one per environment).
+            expect([...new Set(preview.issues.map((i) => i.code))], where).toEqual([
+              'no-accepted-risk',
+            ]);
             continue;
           }
           expect(preview.issues, where).toEqual([]);
@@ -1053,13 +1092,16 @@ describe('missions: issuance context', () => {
       const expected = (issuance?.risks ?? [])
         .filter((r) => !r.deprecated && issuance?.authority.includes(r.risk_id))
         .map((r) => r.risk_id);
-      expect(
-        preview.policy.map((e) => e.risk_id),
-        provider,
-      ).toEqual(expected);
+      // One set per environment: a risk of several sets is listed once here.
+      expect([...new Set(preview.policy.map((e) => e.risk_id))].sort(), provider).toEqual(
+        [...expected].sort(),
+      );
       const fallback = issuance?.risks.filter((r) => r.fallback).map((r) => r.risk_id) ?? [];
-      const notice = preview.notices.find((n) => n.code === 'everything-i-hold-expanded');
-      for (const id of fallback) expect(notice?.risk_ids, provider).toContain(id);
+      // One notice per set: the fallback of each environment in the notice of its set.
+      const noticed = preview.notices
+        .filter((n) => n.code === 'everything-i-hold-expanded')
+        .flatMap((n) => n.risk_ids);
+      for (const id of fallback) expect(noticed, provider).toContain(id);
       const issued = await service.issue(seeded.bob, draft);
       expect(issued.ok, provider).toBe(true);
       if (!issued.ok) continue;

@@ -27,6 +27,18 @@ export function connectionSummaryOf(record: ConnectionRecord): ConnectionSummary
 }
 
 /**
+ * When discovery last ran on the connection, whatever ran it and however it ended
+ * (`metadata.discovery.at`, written by `ConnectionService.recordDiscovery`); `null`
+ * when never.
+ */
+export function lastDiscoveryAt(record: Pick<ConnectionRecord, 'metadata'>): string | null {
+  const discovery = record.metadata?.discovery;
+  if (typeof discovery !== 'object' || discovery === null) return null;
+  const at = (discovery as { at?: unknown }).at;
+  return typeof at === 'string' ? at : null;
+}
+
+/**
  * The owner of a connection with the name a human recognises: the user's
  * email or the group's name. `name` is `null` when the user or the group no
  * longer exists; each caller words that case for its own reader.

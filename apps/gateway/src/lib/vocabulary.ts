@@ -810,6 +810,8 @@ export const ACT_WORDS = {
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'mission-resources-added': 'added resources to a mission',
+  'mission-resource-joined': 'added a resource found later to a mission',
+  'mission-resource-left': 'took a relabelled resource out of a mission',
   'permission-requested': 'requested missing permissions',
   'limits-changed': 'changed the limits of a mission',
   'mission-changed': 'changed a mission',
@@ -1403,6 +1405,8 @@ export const MISSION_WORDS = {
     'Only the accounts you can use. Each macro-action, at its trust level, writes explicit permissions.',
   /** An account a mission was given whole (resource scope `connection`). */
   wholeAccount: 'the whole account, including resources found later',
+  /** A set with future on (ADR resource-set-is-one-environment-with-optional-future-resources). */
+  futureResources: 'resources found later in the same environment',
   /** After a resource the mission created itself (ADR created-resources-join-the-mission). */
   createdByMission: 'created by this mission',
   peopleLater: 'Just you for now; teammates and machine keys are added after creating.',
@@ -1481,11 +1485,11 @@ export function listed(items: readonly string[], max = 4): string {
  * "the account itself, no resource", or — for an account given whole — that later
  * resources join the ones known now.
  */
-export function reachedOnAccount(names: readonly string[], reachesLater: boolean, max = 3): string {
-  if (reachesLater) {
+export function reachedOnAccount(names: readonly string[], future: boolean, max = 3): string {
+  if (future) {
     return names.length === 0
-      ? `${MISSION_WORDS.wholeAccount} (none known yet)`
-      : `${MISSION_WORDS.wholeAccount} (known now: ${listed(names, max)})`;
+      ? `${MISSION_WORDS.futureResources} (none known yet)`
+      : `${listed(names, max)}, and ${MISSION_WORDS.futureResources}`;
   }
   return names.length === 0 ? 'the account itself, no resource' : listed(names, max);
 }

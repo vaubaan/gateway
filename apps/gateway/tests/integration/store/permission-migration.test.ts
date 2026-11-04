@@ -38,7 +38,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
       name: 'Existing mission',
       creatorUserId: user.id,
       periodSeconds: null,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         {
           riskId: 'github.code-read',
@@ -73,7 +73,7 @@ it('upgrades existing requests and approvals without losing encrypted arguments 
     const approvalBefore = store.db.prepare('SELECT * FROM approvals').all();
     await store.close();
     store = openStore(options);
-    expect(store.schemaVersion).toBe(32);
+    expect(store.schemaVersion).toBe(33);
     expect(await store.requests.getById(request.id)).toEqual(request);
     expect(await heldArguments(store, request.id)).toEqual({
       marker: 'preserved encrypted content',

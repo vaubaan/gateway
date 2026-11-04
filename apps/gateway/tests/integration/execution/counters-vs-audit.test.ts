@@ -50,7 +50,7 @@ const MOVES: readonly { tool: string; args: Record<string, unknown>; weight: num
   { tool: 'depot__read_item', args: { space: 'scratch' }, weight: 8 },
   { tool: 'depot__read_item', args: { space: 'app-staging', item: 'a' }, weight: 6 },
   { tool: 'depot__write_item', args: { space: 'app-staging' }, weight: 6 },
-  { tool: 'depot__write_item', args: { space: 'scratch' }, weight: 2 }, // unlabelled: not accepted
+  { tool: 'depot__create_space', args: { space: 'fresh' }, weight: 2 }, // fallback write: not accepted
   { tool: 'depot__read_item', args: { space: 'app-prod' }, weight: 2 }, // outside the mission
   { tool: 'depot__whoami', args: {}, weight: 5 },
   { tool: 'depot__purge', args: { space: 'scratch' }, weight: 2 }, // approval-required
@@ -178,7 +178,7 @@ describe('structural: session counters agree with the audit', () => {
   }
 
   it('reaches budget-exhausted under the same random load when the quota is small', async () => {
-    const mission = await instance.issue({ policy: [line('depot.read', 7)] });
+    const mission = await instance.issue({ policy: [line('depot.read', 7)], spaces: ['scratch'] });
     await Promise.all(
       Array.from({ length: 30 }, () =>
         instance.call(mission, 'depot__read_item', { space: 'scratch' }),

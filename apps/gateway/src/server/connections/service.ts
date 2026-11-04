@@ -37,6 +37,7 @@ import {
   type PluginRegistry,
   type ProviderPlugin,
   type Resource,
+  type ResourceNoun,
   type ServiceIcon,
   type SshKeyCredentialSpec,
   type TokenExpiry,
@@ -45,14 +46,15 @@ import {
   type TokenReach,
   serviceIconOf,
 } from '@vaubaan/plugin-sdk';
-import type { AuditWriter } from '@vaubaan/gateway-core';
+import { DISCOVERY_ACTOR_ID, type AuditWriter } from '@vaubaan/gateway-core';
 
 import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
 import { catalogEnvsOf } from '../../lib/missions/catalog-view';
-import type { Store } from '../store';
+import { resourceNounOf } from '../../lib/providers/resource-noun';
+import type { ResourceMove, ResourceMoveReason, Store } from '../store';
 import { ownResourceEnv } from '../store/resource-env';
 import { toIso, type Clock } from '../store/clock';
 import type {
@@ -104,6 +106,7 @@ import {
 } from './mapping';
 import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';
+import type { FutureResources } from './future-resources';
 
 /** An OAuth `error` code is a token of the protocol (RFC 6749 §4.1.2.1), never free text. */
 const PROTOCOL_ERROR_CODE = /^[a-z_]{1,40}$/;
@@ -113,6 +116,9 @@ export const CONNECT_RATE_LIMIT = 10;
 export const CONNECT_RATE_WINDOW_MS = 60_000;
 /** A discovery that does not finish within this delay is reported as failed. */
 export const DISCOVERY_TIMEOUT_MS = 30_000;
+/** "Check now" on mission cards: this many discoveries per user per window. */
+export const CHECK_NOW_RATE_LIMIT = 10;
+export const CHECK_NOW_RATE_WINDOW_MS = 60_000;
 /** The pages of the accounts a person can use ("connections" in the spec and the store). */
 export const CONNECTIONS_PATH = '/accounts';
 /**
@@ -167,6 +173,8 @@ export interface ConnectableProvider {
   readonly description: string | null;
   /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon. */
   readonly icon: ServiceIcon | null;
+  /** What one resource of this service is called (`resourceNounOf`): "board" / "boards". */
+  readonly resource_noun: ResourceNoun;
   readonly kind: CredentialKind;
   /**
    * The service signs the person in itself (`oauth2`): the connect page sends
@@ -246,6 +254,8 @@ export interface ProviderGrantView {
 export interface ConnectionView {
   readonly connection: ConnectionRecord;
   readonly provider_label: string;
+  /** What one resource of this provider is called (`resourceNounOf`); the fallback when the plugin is gone. */
+  readonly resource_noun: ResourceNoun;
   /** The service's mark, path and colour (`serviceIconOf`); `null` when the plugin declares no icon or is gone. */
   readonly provider_icon: ServiceIcon | null;
   readonly provider_grant: ProviderGrantView;
@@ -369,8 +379,8 @@ export function ownerActRefusal(
 }
 
 export interface ConnectionServiceDeps {
-  /** The three repositories the service reads and writes; never the raw handle. */
-  readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
+  /** The repositories the service reads and writes; never the raw handle. */
+  readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'missions'>;
   readonly registry: PluginRegistry;
   /** The OAuth client of an `oauth2` service, registered by the gateway. */
   readonly clients: OAuth2Clients;
@@ -392,6 +402,30 @@ export interface ConnectionServiceDeps {
    * reconnection. Absent: no ceiling.
    */
   readonly ceilings?: CeilingCheck;
+  /**
+   * Brings the running missions' future resources in line after a discovery, a
+   * relabel or a change of the default environment (ADR
+   * resource-set-is-one-environment-with-optional-future-resources). Absent: nothing
+   * joins or leaves a mission (tests of the connect flows alone).
+   */
+  readonly futureResources?: Pick<FutureResources, 'snapshot' | 'settle'>;
+}
+
+/** What "check now" on a mission found (`ConnectionService.checkForMission`). */
+export interface MissionResourceCheck {
+  readonly connection_id: string;
+  readonly discovery: DiscoveryRecord;
+  /** When discovery last ran on the connection: this one. */
+  readonly last_checked_at: string;
+  /** What joined or left the sets of THIS mission, by set; other missions are audited only. */
+  readonly joined: readonly MissionResourceMoves[];
+  readonly left: readonly MissionResourceMoves[];
+}
+
+export interface MissionResourceMoves {
+  readonly resource_set_id: string;
+  readonly refs: readonly string[];
+  readonly reason: ResourceMoveReason;
 }
 
 /** How a failed first discovery is treated when a credential has just been obtained. */
@@ -465,6 +499,7 @@ export class ConnectionService {
       displayName: plugin.displayName,
       description: plugin.description ?? null,
       icon: serviceIconOf(plugin),
+      resource_noun: resourceNounOf(plugin),
       kind: spec.kind,
       redirects: spec.kind === 'oauth2',
       viaBroker: spec.kind === 'oauth2' && isBrokeredSpec(spec),
@@ -974,7 +1009,9 @@ export class ConnectionService {
 
     let discovery: DiscoveryRecord | null = null;
     if (first.resources) {
-      discovery = await this.storeDiscovery(connection, plugin, first.resources);
+      discovery = await this.storeDiscovery(connection, plugin, first.resources, {
+        actorId: actor.user.id,
+      });
     } else if (first.error) {
       discovery = await this.recordDiscovery(connection.id, 0, first.error);
     }
@@ -1094,9 +1131,70 @@ export class ConnectionService {
   async discover(actor: Actor, connectionId: string): Promise<DiscoveryRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
-    const record = await this.rediscover(connection, null);
+    const record = await this.rediscover(connection, null, { actorId: actor.user.id });
     await this.auditDiscovery(actor.user.id, connection, record, null);
     return record;
+  }
+
+  /**
+   * "Check now" on a mission card (ADR
+   * resource-set-is-one-environment-with-optional-future-resources): runs the discovery
+   * of one connection of the mission and says what joined or left that mission. The
+   * mission's creator, or an owner of the connection, may ask; anyone else, a mission
+   * without that connection, or a missing one reads `not-found`. Rate-limited per user
+   * (`CHECK_NOW_RATE_LIMIT`); audited as a `resources-discovered` entry, cause `check-now`.
+   */
+  async checkForMission(
+    actor: Actor,
+    missionId: string,
+    connectionId: string,
+  ): Promise<MissionResourceCheck> {
+    const mission = await this.deps.store.missions.getById(missionId);
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (
+      !mission ||
+      !connection ||
+      !mission.connections.some((c) => c.connectionId === connectionId) ||
+      (mission.creatorUserId !== actor.user.id && !this.owns(actor, connection))
+    ) {
+      throw new ConnectError('not-found');
+    }
+    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
+    const decision = await this.deps.rateLimiter.take(
+      `check-resources:${actor.user.id}`,
+      CHECK_NOW_RATE_LIMIT,
+      CHECK_NOW_RATE_WINDOW_MS,
+    );
+    if (!decision.allowed) throw new ConnectError('rate-limited', null, decision.retryAfterMs);
+    const moves: ResourceMove[] = [];
+    const record = await this.rediscover(connection, null, { actorId: actor.user.id, moves });
+    await this.auditDiscovery(actor.user.id, connection, record, null, {
+      cause: 'check-now',
+      mission_id: missionId,
+    });
+    const own = moves.filter((m) => m.missionId === missionId);
+    return {
+      connection_id: connectionId,
+      discovery: record,
+      last_checked_at: record.at,
+      joined: movesBySet(own.filter((m) => m.change === 'joined')),
+      left: movesBySet(own.filter((m) => m.change === 'left')),
+    };
+  }
+
+  /**
+   * The hourly discovery of a connection a running mission's future resources depend
+   * on (`HourlyDiscovery`). Not audited itself — the joins and leaves it causes are,
+   * in the name of `DISCOVERY_ACTOR_ID`; a failure is recorded on the connection and
+   * logged without the provider's words. `null` when the connection no longer serves
+   * (gone, revoked, expired).
+   */
+  async discoverOnSchedule(connectionId: string): Promise<DiscoveryRecord | null> {
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (!connection || connection.status === 'revoked' || connection.status === 'expired') {
+      return null;
+    }
+    return this.rediscover(connection, null, { actorId: DISCOVERY_ACTOR_ID });
   }
 
   /**
@@ -1128,7 +1226,10 @@ export class ConnectionService {
       );
     const before = await liveRefs();
     const returned = new Set<string>();
-    const record = await this.rediscover(connection, cause, returned);
+    const record = await this.rediscover(connection, cause, {
+      actorId: DISCOVERY_ACTOR_ID,
+      returned,
+    });
     if (!record.ok) return { record, added: 0, missing: createdRefs.length };
     let added = 0;
     for (const ref of await liveRefs()) if (!before.has(ref)) added += 1;
@@ -1160,8 +1261,7 @@ export class ConnectionService {
   private async rediscover(
     connection: ConnectionRecord,
     afterCall: DiscoveryAfterCallCause | null,
-    /** Filled with the refs the discovery returned, when given. */
-    returned?: Set<string>,
+    sinks: DiscoverySinks,
   ): Promise<DiscoveryRecord> {
     // An account made a way the plugin no longer declares: its stored secret is not
     // what the plugin reads, so the plugin is not called; the owner reconnects it.
@@ -1186,7 +1286,7 @@ export class ConnectionService {
         }
         resources = await this.discoverWith(resolved.plugin, this.discoveryContextOf(resolved));
       }
-      return await this.storeDiscovery(connection, resolved.plugin, resources, afterCall, returned);
+      return await this.storeDiscovery(connection, resolved.plugin, resources, sinks, afterCall);
     } catch (err) {
       this.deps.logger.warn('resource discovery failed', {
         connection_id: connection.id,
@@ -1244,7 +1344,11 @@ export class ConnectionService {
         await connections.setResourceDisplayName(resource.id, name);
       }
     }
-    if (env !== undefined) await connections.setResourceEnv(resource.id, env);
+    if (env !== undefined) {
+      const before = await this.deps.futureResources?.snapshot(connection.id);
+      await connections.setResourceEnv(resource.id, env);
+      if (before) await this.deps.futureResources?.settle(connection.id, before, actor.user.id);
+    }
     if (patch.hidden !== undefined && patch.hidden !== resource.hidden) {
       await connections.setResourceHidden(resource.id, patch.hidden);
     }
@@ -1282,6 +1386,7 @@ export class ConnectionService {
       );
     }
     if (parsed.env === connection.defaultEnv) return connection;
+    const before = await this.deps.futureResources?.snapshot(connection.id);
     const updated = await this.deps.store.connections.setDefaultEnv(connection.id, parsed.env);
     await this.deps.audit.write({
       kind: 'admin',
@@ -1298,6 +1403,8 @@ export class ConnectionService {
       user_id: actor.user.id,
       default_env: updated.defaultEnv,
     });
+    // The resources inheriting the default were relabelled with it.
+    if (before) await this.deps.futureResources?.settle(connection.id, before, actor.user.id);
     return updated;
   }
 
@@ -1601,19 +1708,26 @@ export class ConnectionService {
     connection: ConnectionRecord,
     plugin: ProviderPlugin,
     resources: readonly Resource[],
+    sinks: DiscoverySinks,
     afterCall: DiscoveryAfterCallCause | null = null,
-    returned?: Set<string>,
   ): Promise<DiscoveryRecord> {
     const { usable, unusable } = usableResourcesOf(plugin.id, resources);
-    for (const r of usable) returned?.add(r.ref);
+    for (const r of usable) sinks.returned?.add(r.ref);
     for (let i = 0; i < unusable; i += 1) {
       this.deps.logger.warn('plugin returned an unusable resource; ignored', {
         provider: plugin.id,
         connection_id: connection.id,
       });
     }
+    const before = await this.deps.futureResources?.snapshot(connection.id);
     await this.deps.store.connections.syncDiscoveredResources(connection.id, usable);
-    return this.recordDiscovery(connection.id, usable.length, null, afterCall);
+    const record = await this.recordDiscovery(connection.id, usable.length, null, afterCall);
+    // Recorded first: a mission page reads "last checked" with what joined.
+    if (before) {
+      const moves = await this.deps.futureResources?.settle(connection.id, before, sinks.actorId);
+      sinks.moves?.push(...(moves ?? []));
+    }
+    return record;
   }
 
   private async recordDiscovery(
@@ -1690,6 +1804,7 @@ export class ConnectionService {
     return {
       connection,
       provider_label: registered?.plugin.displayName ?? connection.provider,
+      resource_noun: resourceNounOf(registered?.plugin ?? null),
       provider_icon: registered ? serviceIconOf(registered.plugin) : null,
       provider_grant: this.providerGrantOf(connection).grant,
       credential_kind: kind,
@@ -1765,6 +1880,8 @@ export class ConnectionService {
       readonly added: number;
       readonly attempts: number;
     } | null,
+    /** A discovery asked from a mission card ("check now"). */
+    checkNow?: { readonly cause: 'check-now'; readonly mission_id: string },
   ): Promise<void> {
     await this.deps.audit.write({
       kind: 'admin',
@@ -1777,7 +1894,9 @@ export class ConnectionService {
         ok: record.ok,
         count: record.count,
         error: record.error,
-        ...(afterCall ? { cause: 'after-a-call', ...afterCall } : { cause: 'by-owner' }),
+        ...(afterCall
+          ? { cause: 'after-a-call', ...afterCall }
+          : (checkNow ?? { cause: 'by-owner' })),
       },
       delegated_client_id: null,
     });
@@ -1831,6 +1950,31 @@ function resourceAuditView(resource: ConnectionResourceRecord): ResourceAuditVie
 }
 
 /** The plugin-facing `Resource` of a stored row (what `classify` and `execute` receive). */
+/** Where a discovery reports beyond its record. */
+interface DiscoverySinks {
+  /** The audit's actor of the joins and leaves it causes. */
+  readonly actorId: string;
+  /** Filled with the refs the discovery returned. */
+  readonly returned?: Set<string>;
+  /** Filled with the joins and leaves it caused. */
+  readonly moves?: ResourceMove[];
+}
+
+/** Moves grouped by set and reason, refs in the order they were written. */
+function movesBySet(moves: readonly ResourceMove[]): MissionResourceMoves[] {
+  const groups = new Map<string, MissionResourceMoves>();
+  for (const move of moves) {
+    const key = `${move.resourceSetId}\n${move.reason}`;
+    const group = groups.get(key);
+    groups.set(key, {
+      resource_set_id: move.resourceSetId,
+      reason: move.reason,
+      refs: [...(group?.refs ?? []), move.ref],
+    });
+  }
+  return [...groups.values()];
+}
+
 export function toPluginResource(provider: string, record: ConnectionResourceRecord): Resource {
   return {
     provider,

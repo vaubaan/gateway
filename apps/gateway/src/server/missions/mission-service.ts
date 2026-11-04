@@ -23,7 +23,7 @@ import { permissionEditSchema, policyKey } from './permission-edit';
  * `connections/mapping.ts` only; no record is written into an audit payload.
  */
 import type { TokenHolder } from '@vaubaan/gateway-core';
-import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import type { PluginRegistry, ResourceNoun } from '@vaubaan/plugin-sdk';
 import {
   isGate,
   lineKeyOf,
@@ -65,13 +65,13 @@ import {
   type SessionService,
 } from '../budget';
 import { isSelfResource, type SelfResource } from '../config';
-import { connectionSummaryOf } from '../connections/mapping';
+import { connectionSummaryOf, lastDiscoveryAt } from '../connections/mapping';
 import { revivesEndedMission, type CeilingCheck, type LimitReached } from '../limits';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
 import { TokenNotIssuableError } from '../store/errors';
 import { isOnMission, membershipOf, type Membership } from '../store/membership';
-import { reachedResourcesBySet, reachesLaterResources } from '../store/mission-reach';
+import { reachedResourcesBySet, takesFutureResources } from '../store/mission-reach';
 import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
@@ -83,7 +83,6 @@ import type {
   MissionResourceSetRecord,
   MissionTokenRecord,
   RequestLine,
-  ResourceScope,
   UserRecord,
 } from '../store/types';
 import {
@@ -95,6 +94,7 @@ import {
 import { gitRemoteBase } from '../git/paths';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
+import { resourceNounOf } from '../../lib/providers/resource-noun';
 import type {
   CatalogRisk,
   DraftConnection,
@@ -291,8 +291,8 @@ export interface MissionOnConnection {
   readonly part_lost: PartLossCause | null;
   /** The resources of THIS connection the mission was issued on: explicit ids. */
   readonly resource_ids: readonly string[];
-  /** True when it was issued on the whole connection: every resource, later ones included. */
-  readonly reaches_later: boolean;
+  /** True when a set of it takes the resources that later appear in its environment. */
+  readonly future: boolean;
   /** Accepted risks that belong to this connection's provider. */
   readonly permissions: number;
   /** How many of them wait for the creator's approval. */
@@ -468,7 +468,8 @@ function revisionOfRecord(mission: MissionRecord): string {
       resource_sets: c.resourceSets.map((set) => ({
         id: set.id,
         position: set.position,
-        resource_scope: set.resourceScope,
+        future: set.future,
+        env: set.env,
         resource_ids: set.resourceIds,
       })),
     })),
@@ -571,8 +572,12 @@ export interface MissionDetailSet {
   readonly position: number;
   /** What the set reaches now. */
   readonly resources: readonly IssuanceResource[];
-  /** The set reaches the resources no other set selects, later ones included. */
-  readonly reaches_later: boolean;
+  /** Resources that later appear in `env` join the set. */
+  readonly future: boolean;
+  /** The set's environment; `null` for none (or a legacy set mixing environments). */
+  readonly env: string | null;
+  /** Legacy (migration 0033): the set mixes environments; its next edit must split it. */
+  readonly mixed_env: boolean;
   /** The trust levels the set was composed from; absent when none was recorded. */
   readonly trust_levels?: Readonly<Record<string, string>>;
 }
@@ -581,12 +586,19 @@ export interface MissionDetailConnection {
   readonly id: string;
   readonly provider: string;
   readonly provider_label: string;
+  /** What one resource of this provider is called (`resourceNounOf`): "board" / "boards". */
+  readonly resource_noun: ResourceNoun;
   readonly display_name: string;
   readonly status: string;
   /** What the mission reaches now (`reachedResources`). */
   readonly resources: readonly IssuanceResource[];
-  /** Issued on the whole connection: resources discovered later are reached too. */
-  readonly reaches_later: boolean;
+  /** A set of it takes the resources that later appear in its environment. */
+  readonly future: boolean;
+  /**
+   * When discovery last ran on the connection (any trigger: connect, refresh, after a
+   * creating call, hourly, "check now"); `null` when never.
+   */
+  readonly last_checked_at: Iso8601 | null;
   /** Its resource sets, in order; one for a connection given without sets. */
   readonly resource_sets: readonly MissionDetailSet[];
   /** Why this connection no longer serves the mission; `null` while it serves. */
@@ -668,27 +680,16 @@ function toIssuanceResource(r: ConnectionResourceRecord, self: boolean): Issuanc
   };
 }
 
-/**
- * What a mission stores per resource set. A whole-connection selection is stored
- * as scope `connection` with no id: what it reaches is read when the mission is
- * read (`reachedResources`). Every other selection is an explicit list of ids;
- * a set on which nothing resolved (no resource known, or every resource hidden)
- * stores scope `all` with an empty list, because the store requires a non-empty
- * list for `selected`. Readers treat that row as "none".
- */
+/** What a mission stores per resource set: its explicit list, `future` and environment. */
 function setInputOf(resolved: ResolvedDraftSet): MissionResourceSetInput {
-  const trustLevels =
-    Object.keys(resolved.trust_levels).length > 0 ? { trustLevels: resolved.trust_levels } : {};
-  const policy = resolved.policy.map(policyLineInputOf);
-  if (resolved.resources.scope === 'connection') {
-    return { resourceScope: 'connection', resourceIds: [], ...trustLevels, policy };
-  }
-  const resourceIds = resolved.resources.resource_ids;
   return {
-    resourceScope: resourceIds.length > 0 ? 'selected' : 'all',
-    resourceIds,
-    ...trustLevels,
-    policy,
+    resourceIds: resolved.resources.resource_ids,
+    future: resolved.future,
+    env: resolved.env,
+    ...(Object.keys(resolved.trust_levels).length > 0
+      ? { trustLevels: resolved.trust_levels }
+      : {}),
+    policy: resolved.policy.map(policyLineInputOf),
   };
 }
 
@@ -698,12 +699,6 @@ function connectionInputOf(resolved: ResolvedDraftConnection): MissionConnection
     connectionId: resolved.connection_id,
     resourceSets: resolved.resource_sets.map(setInputOf),
   };
-}
-
-/** One connection's reach as one scope, every set together (the audit's and the door's word). */
-function aggregateScopeOf(c: MissionConnectionRecord): ResourceScope {
-  if (reachesLaterResources(c)) return 'connection';
-  return c.resourceSets.some((set) => set.resourceIds.length > 0) ? 'selected' : 'all';
 }
 
 /**
@@ -716,15 +711,15 @@ export interface MissionIssuedAudit {
   readonly name: string;
   readonly connections: readonly {
     readonly connection_id: string;
-    /** `connection`: a set reaches the whole connection, later resources included. */
-    readonly resource_scope: ResourceScope;
     /** Every set's explicit ids together. */
     readonly resource_ids: readonly string[];
     /** The resource sets of the connection (risk model §4.7). */
     readonly resource_sets: readonly {
       readonly resource_set_id: string;
       readonly position: number;
-      readonly resource_scope: ResourceScope;
+      /** Resources that later appear in `env` join the set. */
+      readonly future: boolean;
+      readonly env: string | null;
       readonly resource_ids: readonly string[];
     }[];
   }[];
@@ -740,12 +735,12 @@ function issuedAuditOf(mission: MissionRecord, tokenPrefix: string): MissionIssu
     name: mission.name,
     connections: mission.connections.map((c) => ({
       connection_id: c.connectionId,
-      resource_scope: aggregateScopeOf(c),
       resource_ids: c.resourceSets.flatMap((set) => [...set.resourceIds]),
       resource_sets: c.resourceSets.map((set) => ({
         resource_set_id: set.id,
         position: set.position,
-        resource_scope: set.resourceScope,
+        future: set.future,
+        env: set.env,
         resource_ids: [...set.resourceIds],
       })),
     })),
@@ -803,6 +798,7 @@ export class MissionService {
     return {
       ...connectionSummaryOf(connection),
       provider_label: plugin.displayName,
+      resource_noun: resourceNounOf(plugin),
       derives_env: typeof plugin.envOf === 'function',
       default_env: connection.defaultEnv,
       basis: authority.basis,
@@ -906,11 +902,12 @@ export class MissionService {
    * no expiry carried over (a past date would refuse the copy). `null` when
    * the mission is not theirs.
    *
-   * A source that stored no resource on a connection (scope `all`, empty
-   * list) is drafted as `{ scope: 'all' }`: the copy is a new issuance and
-   * resolves "all" against the resources known when it is issued. The source
-   * itself keeps reaching none. A whole-connection source is drafted
-   * `{ scope: 'connection' }`: the copy is as wide as its source, no wider.
+   * Each set is drafted as a set: its surviving resources, `future` and, when
+   * it lists none, its environment; a set that lists none and takes nothing later
+   * is drafted `{ scope: 'all' }`, resolved against the resources known at the copy. A legacy set mixing environments (migration
+   * 0033) is drafted the legacy way — `{ scope: 'connection' }` when it took future
+   * resources, its resources otherwise — so that the copy is split by environment
+   * (or refused as mixed, inside `resource_sets`): never wider than its source.
    */
   async draftFrom(user: Subject, missionId: string): Promise<MissionDraft | null> {
     const mission = await this.ownMission(user, missionId);
@@ -923,14 +920,18 @@ export class MissionService {
       const provider = connection.provider;
       const sets: DraftResourceSet[] = [];
       for (const set of c.resourceSets) {
+        const ids = await this.survivingResources(c.connectionId, set, provider);
+        const legacyWhole = set.mixedEnv && set.future;
+        // A set that holds nothing and takes nothing later: "all", resolved at the copy.
+        const nothing = ids.length === 0 && !set.future;
         sets.push({
-          resources:
-            set.resourceScope === 'selected'
-              ? {
-                  scope: 'selected',
-                  resource_ids: await this.survivingResources(c.connectionId, set, provider),
-                }
-              : { scope: set.resourceScope },
+          resources: legacyWhole
+            ? { scope: 'connection' }
+            : nothing
+              ? { scope: 'all' }
+              : { scope: 'selected', resource_ids: ids },
+          ...(set.mixedEnv ? {} : { future: set.future }),
+          ...(!set.mixedEnv && ids.length === 0 ? { env: set.env } : {}),
           everything_i_hold: false,
           policy: policy
             .filter((entry) => entry.resource_set_id === set.id)
@@ -939,12 +940,14 @@ export class MissionService {
         });
       }
       const [only] = sets;
-      // A connection with one set is drafted as before sets existed.
-      connections.push(
-        sets.length === 1 && only
-          ? { connection_id: c.connectionId, ...only }
-          : { connection_id: c.connectionId, resource_sets: sets },
-      );
+      // A legacy mixed set alone is drafted flat, so that it is split by environment.
+      const flat = c.resourceSets.length === 1 && c.resourceSets[0]?.mixedEnv === true && only;
+      if (flat) {
+        const { future: _future, env: _env, ...fields } = only;
+        connections.push({ connection_id: c.connectionId, ...fields });
+      } else {
+        connections.push({ connection_id: c.connectionId, resource_sets: sets });
+      }
     }
     return {
       name: `${mission.name}${COPY_SUFFIX}`,
@@ -1128,7 +1131,7 @@ export class MissionService {
         orphan_cause: orphan?.cause ?? null,
         part_lost: lost.find((part) => part.connectionId === connectionId)?.cause ?? null,
         resource_ids: selection?.resourceSets.flatMap((set) => [...set.resourceIds]) ?? [],
-        reaches_later: selection ? reachesLaterResources(selection) : false,
+        future: selection ? takesFutureResources(selection) : false,
         permissions: accepted.length,
         asks_first: accepted.filter((entry) => entry.gate === 'approval').length,
         readable: membership === 'creator' || membership === 'member',
@@ -1562,7 +1565,8 @@ export class MissionService {
           key: set.id,
           id: set.id,
           position: set.position,
-          resource_scope: set.resourceScope,
+          future: set.future,
+          env: set.env,
           resource_ids: [...set.resourceIds],
           policy: policy.filter((entry) => entry.resource_set_id === set.id),
           ...(set.trustLevels ? { trust_levels: set.trustLevels } : {}),
@@ -1686,8 +1690,9 @@ export class MissionService {
         connectionId: c.connection_id,
         resourceSets: c.resource_sets.map((set) => ({
           ...(set.id !== null ? { id: set.id } : {}),
-          resourceScope: set.resource_scope,
-          resourceIds: set.resource_scope === 'connection' ? [] : [...set.resource_ids],
+          resourceIds: [...set.resource_ids],
+          future: set.future,
+          env: set.env,
           ...(set.trust_levels && Object.keys(set.trust_levels).length > 0
             ? { trustLevels: set.trust_levels }
             : {}),
@@ -2192,9 +2197,9 @@ export class MissionService {
 
   /**
    * The connections of a mission with the resources it reaches — the rule of
-   * `loadMissionContext`, the same function (`reachedResources`): the ids stored
-   * at issuance, or the connection's live list for a whole-connection mission,
-   * never the ones discovery no longer returns nor the instance's own.
+   * `loadMissionContext`, the same function (`reachedResources`): the ids its
+   * resource sets store, never the ones discovery no longer returns nor the
+   * instance's own.
    */
   private async detailConnections(
     mission: MissionRecord,
@@ -2214,13 +2219,17 @@ export class MissionService {
         ...connectionSummaryOf(connection),
         provider_label:
           this.deps.registry.get(connection.provider)?.plugin.displayName ?? connection.provider,
+        resource_noun: resourceNounOf(this.deps.registry.get(connection.provider)?.plugin ?? null),
         resources: reached.map((r) => toIssuanceResource(r, false)),
-        reaches_later: reachesLaterResources(c),
+        future: takesFutureResources(c),
+        last_checked_at: lastDiscoveryAt(connection),
         resource_sets: c.resourceSets.map((set) => ({
           id: set.id,
           position: set.position,
           resources: (bySet.get(set.id) ?? []).map((r) => toIssuanceResource(r, false)),
-          reaches_later: set.resourceScope === 'connection',
+          future: set.future,
+          env: set.env,
+          mixed_env: set.mixedEnv,
           ...(set.trustLevels ? { trust_levels: set.trustLevels } : {}),
         })),
         lost: lost.find((part) => part.connectionId === c.connectionId)?.cause ?? null,
@@ -2281,13 +2290,13 @@ export class MissionService {
         provider_label: c.provider_label,
         display_name: c.display_name,
         resources: c.resources.map((r) => ({ ref: r.ref, env: r.env })),
-        reaches_later: c.reaches_later,
+        future: c.future,
         ...(c.resource_sets.length > 1
           ? {
               resource_sets: c.resource_sets.map((set) => ({
                 label: `Resource set ${set.position}`,
                 resources: set.resources.map((r) => ({ ref: r.ref, env: r.env })),
-                reaches_later: set.reaches_later,
+                future: set.future,
               })),
             }
           : {}),

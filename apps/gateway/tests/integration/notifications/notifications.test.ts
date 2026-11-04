@@ -85,9 +85,7 @@ describe('notifications', () => {
       periodAnchor: '2026-11-01T00:00:00.000Z',
       periodSeconds: 86_400,
       expiresAt: null,
-      connections: [
-        { connectionId: seeded.github.connection.id, resourceScope: 'all', resourceIds: [] },
-      ],
+      connections: [{ connectionId: seeded.github.connection.id, resourceIds: [] }],
       policy: [
         { riskId: READ, quota: 10, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' },
         { riskId: MERGE, quota: 1000, rateLimit: 1000, rateWindowSeconds: 60, gate: 'approval' },
@@ -183,9 +181,7 @@ describe('notifications', () => {
       periodAnchor: '2026-11-01T00:00:00.000Z',
       periodSeconds: 86_400,
       expiresAt: null,
-      connections: [
-        { connectionId: seeded.github.connection.id, resourceScope: 'all', resourceIds: [] },
-      ],
+      connections: [{ connectionId: seeded.github.connection.id, resourceIds: [] }],
       policy: [{ riskId: READ, quota: 10, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
     await addDevice(seeded.ada, 'ada-phone');

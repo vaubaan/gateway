@@ -22,7 +22,11 @@ import { upgradeSingleProviderSettings } from '../auth/single-provider-upgrade';
 import { createLinkMailer } from '../mail';
 import { createAuthorityModule, derivedMissionReads, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
-import { createConnectionsModule, type ConnectionsModule } from '../connections';
+import {
+  createConnectionsModule,
+  type ConnectionsModule,
+  type DiscoveryTimers,
+} from '../connections';
 import {
   buildInfoFromEnv,
   ConfigError,
@@ -167,6 +171,8 @@ export interface RootDeps {
   readonly backupFetch?: typeof fetch;
   /** The scheduled backup's timers (tests drive them by hand). */
   readonly backupTimers?: BackupTimers;
+  /** The hourly discovery's timers (tests drive them by hand). */
+  readonly discoveryTimers?: DiscoveryTimers;
   /** Outbound HTTP to the browsers' push services (tests inject a fake; default: `fetch`). */
   readonly notificationFetch?: typeof fetch;
   /** Replaces the web push transport (tests assert on what would leave). */
@@ -546,7 +552,12 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     fetch: deps.providerFetch,
     ceilings: limits,
     notifications: notifications.events,
+    discoveryTimers: deps.discoveryTimers,
   });
+  // The hourly discovery of the connections future resources depend on; stopped before
+  // the store closes (a run in progress finishes).
+  opened.push(() => connections.hourlyDiscovery.stop());
+  connections.hourlyDiscovery.start();
   const shares = createSharesModule({
     config,
     store,

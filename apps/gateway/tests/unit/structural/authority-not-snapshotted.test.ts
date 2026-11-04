@@ -275,6 +275,8 @@ describe('authority is recomputed, never snapshotted', () => {
         'reads the period anchor and length only, to know which period is the current one',
       'oauth-as/delegations.ts':
         'lists through the reads the composition root hands it (`derivedMissionReads`)',
+      'connections/service.ts':
+        'reads the creator and the connections of a mission only, to authorize "check now" (`checkForMission`); never the status: a discovery of a connection is the owner’s act whatever the mission’s state',
       'import-v4/importer.ts':
         'reads the names of the owner’s missions and the stored `revoked` only, to recognise what an earlier import issued; an orphaned mission is still that mission and is not issued twice',
     };
@@ -313,6 +315,7 @@ describe('authority is recomputed, never snapshotted', () => {
         'budget/budget-stage.ts',
         'budget/retention.ts',
         'missions/token-issuer.ts',
+        'connections/service.ts',
       ]) {
         // `record.status`, `mission.status`, `m.status`: none on a loaded record (the
         // pipeline context `ctx.mission.status` is the door's derived one).

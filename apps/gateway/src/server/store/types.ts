@@ -198,24 +198,13 @@ export interface MissionPolicyEntry {
 export type MissionPolicyLineInput = Omit<MissionPolicyEntry, 'resourceSetId'>;
 
 /**
- * How a mission's selection on one connection is stored:
- *
- *   selected    the explicit ids stored at issuance (a draft's `all` is stored so)
- *   all         an empty list: nothing was known at issuance; reaches none
- *   connection  no ids: the whole connection, resources discovered later included,
- *               resolved at read time (ADR mission-reaches-the-whole-connection-on-request)
- *
- * What a mission reaches is `reachedResources` (`mission-reach.ts`), for every reader.
+ * Where a selected resource came from (`mission_resources.source`, migrations 0024 and
+ * 0033): stored at issuance, created by the mission itself (ADR
+ * created-resources-join-the-mission), added by the creator after issuance ("Edit
+ * mission"), or joined a set with future on after issuance (discovered, or relabelled
+ * into its environment).
  */
-export const RESOURCE_SCOPES = ['all', 'selected', 'connection'] as const;
-export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
-
-/**
- * Where a selected resource came from (`mission_resources.source`, migration 0024): stored
- * at issuance, created by the mission itself (ADR created-resources-join-the-mission), or
- * added by the creator after issuance ("Edit mission").
- */
-export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit'] as const;
+export const MISSION_RESOURCE_SOURCES = ['issuance', 'created', 'edit', 'future'] as const;
 export type MissionResourceSource = (typeof MISSION_RESOURCE_SOURCES)[number];
 
 /**
@@ -231,19 +220,34 @@ export interface MissionTrustMarkRecord {
 }
 
 /**
- * One resource set of a connection of a mission (risk model §4.7, ADR
- * resource-sets-partition-a-mission-connection, migration 0029): its resources, and the
- * lines of the mission's policy that name it. A resource is in exactly one set of its
- * connection; at most one set per connection has scope `connection`, and it reaches the
- * resources of the connection no other set selects.
+ * One resource set of a connection of a mission (risk model §4.7, ADRs
+ * resource-sets-partition-a-mission-connection and
+ * resource-set-is-one-environment-with-optional-future-resources, migrations 0029 and
+ * 0033): an explicit list of resources of one environment, and the lines of the
+ * mission's policy that name it. A resource is in exactly one set of its connection.
+ * What a mission reaches is these lists only (`reachedResources`).
  */
 export interface MissionResourceSetRecord {
   readonly id: string;
   /** Its place among the sets of the connection, from 1: "Resource set 1", "Resource set 2". */
   readonly position: number;
-  readonly resourceScope: ResourceScope;
-  /** Selected resource ids; empty when `resourceScope` is `all` or `connection`. */
+  /** The resource ids of the set; may be empty (none known, or every one left it). */
   readonly resourceIds: readonly string[];
+  /**
+   * True when a resource that later appears on the connection with `env` (discovered,
+   * or relabelled into it) is written into `resourceIds`, unless another set of the
+   * mission holds it.
+   */
+  readonly future: boolean;
+  /** The effective environment every resource of the set carries; `null`: no label. */
+  readonly env: string | null;
+  /**
+   * Legacy (migration 0033): stored before the one-environment rule with resources of
+   * several environments, or as a whole connection with none. `env` is `null`; with
+   * `future`, a later resource of any environment joins it, and a relabel moves nothing
+   * out of it, until the creator's next edit splits it.
+   */
+  readonly mixedEnv: boolean;
   /**
    * The source of each selected id that was not stored at issuance, keyed by resource id;
    * absent when every id was.
@@ -262,11 +266,16 @@ export interface MissionConnectionRecord {
   readonly resourceSets: readonly MissionResourceSetRecord[];
 }
 
-/** One set as a writer gives it: an `id` keeps a stored set (an edit), none makes a new one. */
+/**
+ * One set as a writer gives it: an `id` keeps a stored set (an edit), none makes a new one.
+ * `env` absent: read from the resources (all must carry the same effective label); given,
+ * every resource must carry it — it names the environment of a set with no resource yet.
+ */
 export interface MissionResourceSetInput {
   readonly id?: string;
-  readonly resourceScope: ResourceScope;
   readonly resourceIds: readonly string[];
+  readonly future?: boolean;
+  readonly env?: string | null;
   readonly trustLevels?: Readonly<Record<string, string>>;
   /** Every line of the set. */
   readonly policy: readonly MissionPolicyLineInput[];
@@ -281,8 +290,9 @@ export type MissionConnectionInput =
   | { readonly connectionId: string; readonly resourceSets: readonly MissionResourceSetInput[] }
   | {
       readonly connectionId: string;
-      readonly resourceScope: ResourceScope;
       readonly resourceIds: readonly string[];
+      readonly future?: boolean;
+      readonly env?: string | null;
       readonly trustLevels?: Readonly<Record<string, string>>;
     };
 

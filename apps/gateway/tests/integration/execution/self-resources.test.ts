@@ -24,6 +24,13 @@ import {
 } from '../../support/execution/testing';
 
 const SELF = 'app-prod';
+const READ_LINE = {
+  riskId: 'depot.read',
+  quota: 100,
+  rateLimit: 1000,
+  rateWindowSeconds: 60,
+  gate: 'auto',
+} as const;
 
 describe('self resources: never reachable by a mission', () => {
   let instance: ExecutionInstance;
@@ -42,20 +49,14 @@ describe('self resources: never reachable by a mission', () => {
       name: 'Issued before the instance knew its own project',
       creatorUserId: ada.id,
       periodSeconds: 86_400,
+      // One set per environment: the self one (prod) alone in its own.
       connections: [
         {
           connectionId: connection.id,
-          resourceScope: 'selected',
-          resourceIds: resources.map((r) => r.id),
-        },
-      ],
-      policy: [
-        {
-          riskId: 'depot.read',
-          quota: 100,
-          rateLimit: 1000,
-          rateWindowSeconds: 60,
-          gate: 'auto',
+          resourceSets: ['staging', 'prod'].map((env) => ({
+            resourceIds: resources.filter((r) => r.env === env).map((r) => r.id),
+            policy: [READ_LINE],
+          })),
         },
       ],
     });

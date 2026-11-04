@@ -1172,8 +1172,10 @@ function noticeHeadline(notice: PreviewNotice, connection: IssuanceConnection): 
       return `No environment label on ${refs}: permissions tied to an environment are refused there.`;
     case 'resource-env-not-in-catalog':
       return `The environment label of ${refs} is not one this service knows: permissions tied to an environment are refused there.`;
-    case 'later-resources-need-env-label':
-      return 'A resource found later gets permissions tied to an environment only once it carries its environment label.';
+    case 'unlabelled-resources-left-out':
+      return `Left out, without an environment label: ${refs}.`;
+    case 'split-by-environment':
+      return 'Given as one resource set per environment, each with the permissions that apply there.';
     case 'everything-i-hold-expanded':
       return 'Everything you hold on this account, written out one permission at a time.';
   }

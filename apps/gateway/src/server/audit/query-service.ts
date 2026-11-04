@@ -24,6 +24,8 @@ import {
   RECOVERY_ACTOR_LABEL,
   SCHEDULE_ACTOR_ID,
   SCHEDULE_ACTOR_LABEL,
+  DISCOVERY_ACTOR_ID,
+  DISCOVERY_ACTOR_LABEL,
   type AdminAct,
   type AdminObjectType,
   type AuditDecision,
@@ -644,6 +646,8 @@ async function actorView(userId: string, names: NameCache): Promise<AuditAdminVi
     return { id: userId, email: null, label: CONFIGURATION_ACTOR_LABEL };
   if (userId === RECOVERY_ACTOR_ID) return { id: userId, email: null, label: RECOVERY_ACTOR_LABEL };
   if (userId === SCHEDULE_ACTOR_ID) return { id: userId, email: null, label: SCHEDULE_ACTOR_LABEL };
+  if (userId === DISCOVERY_ACTOR_ID)
+    return { id: userId, email: null, label: DISCOVERY_ACTOR_LABEL };
   const email = await names.email(userId);
   return { id: userId, email, label: email ?? userId };
 }

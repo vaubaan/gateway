@@ -49,7 +49,7 @@ describe('events.agent_label', () => {
       creatorUserId: user.id,
       periodAnchor: AT,
       periodSeconds: 86_400,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         {
           riskId: 'github.code-read',

@@ -84,7 +84,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
     const row = await rowOf('fresh');
     expect(row).toMatchObject({ displayName: 'Space fresh', staleSince: null });
     const selection = await selectionOf(mission);
-    expect(selection).toMatchObject({ resourceScope: 'selected' });
+    expect(selection).toMatchObject({ future: false, env: 'staging' });
     expect(selection?.resourceIds).toContain(row?.id);
     expect(selection?.resourceSources).toEqual({ [row!.id]: 'created' });
 
@@ -112,7 +112,7 @@ describe('execution door: a resource the mission creates joins the mission', () 
         connection_id: instance.connection.id,
         tool: 'depot__create_space',
         refs: ['fresh'],
-        resource_scope: 'selected',
+        resource_set_ids: [selection?.id],
         added_to_selection: ['fresh'],
       },
     });
@@ -168,7 +168,6 @@ describe('execution door: a resource the mission creates joins the mission', () 
     try {
       const mission = await empty.issue({ policy: [line(CREATE), line(READ)] });
       expect(mission.mission.connections[0]?.resourceSets[0]).toMatchObject({
-        resourceScope: 'all',
         resourceIds: [],
       });
       empty.depot.script(async () => ({
@@ -177,7 +176,6 @@ describe('execution door: a resource the mission creates joins the mission', () 
 
       await empty.call(mission, 'depot__create_space', { space: 'first' });
       const stored = await empty.root.store.missions.getById(mission.mission.id);
-      expect(stored?.connections[0]?.resourceSets[0]).toMatchObject({ resourceScope: 'selected' });
       expect(stored?.connections[0]?.resourceSets[0]?.resourceIds).toHaveLength(1);
 
       empty.depot.script(async () => ({ content: [{ type: 'text', text: 'ok' }] }));
@@ -188,7 +186,13 @@ describe('execution door: a resource the mission creates joins the mission', () 
     }
   });
 
-  it('a whole-account mission reaches it at once too, with no selection row', async () => {
+  it('a mission with future resources gets it in its list like any other, and the other missions’ future sets too', async () => {
+    const other = await instance.issue({
+      policy: [line(READ)],
+      wholeConnection: true,
+      name: 'Another mission, future resources',
+    });
+    await instance.root.store.connections.setDefaultEnv(instance.connection.id, 'staging');
     const mission = await instance.issue({
       policy: [line(CREATE), line(READ)],
       wholeConnection: true,
@@ -197,13 +201,37 @@ describe('execution door: a resource the mission creates joins the mission', () 
     createsSpace('fresh');
 
     await instance.call(mission, 'depot__create_space', { space: 'fresh' });
-    const selection = await selectionOf(mission);
-    expect(selection).toMatchObject({ resourceScope: 'connection', resourceIds: [] });
+    const fresh = await rowOf('fresh');
+    // The creating mission: in the set the call was judged against (staging, future on).
+    const sets = (await instance.root.store.missions.getById(mission.mission.id))!.connections[0]!
+      .resourceSets;
+    const holding = sets.find((set) => set.resourceIds.includes(fresh!.id));
+    expect(holding).toMatchObject({ future: true, env: 'staging' });
+    expect(holding?.resourceSources).toEqual({ [fresh!.id]: 'created' });
     expect((await addedEntries())[0]?.after).toMatchObject({
-      resource_scope: 'connection',
-      added_to_selection: [],
+      added_to_selection: ['fresh'],
       refs: ['fresh'],
     });
+    // The other mission's staging set with future on takes it, audited on that mission.
+    const otherSets = (await instance.root.store.missions.getById(other.mission.id))!
+      .connections[0]!.resourceSets;
+    const joinedOther = otherSets.find((set) => set.resourceIds.includes(fresh!.id));
+    expect(joinedOther).toMatchObject({ future: true, env: 'staging' });
+    expect(joinedOther?.resourceSources).toEqual({ [fresh!.id]: 'future' });
+    const joins = (await instance.root.store.audit.list({ kind: 'admin' })).filter(
+      (e) => e.kind === 'admin' && e.act === 'mission-resource-joined',
+    );
+    expect(joins.map((e) => e.kind === 'admin' && [e.object.id, e.after])).toEqual([
+      [
+        other.mission.id,
+        {
+          connection_id: instance.connection.id,
+          resource_set_id: joinedOther?.id,
+          refs: ['fresh'],
+          reason: 'discovered',
+        },
+      ],
+    ]);
     const read = await instance.call(mission, 'depot__read_item', { space: 'fresh' });
     expect(read.error).toBeUndefined();
   });

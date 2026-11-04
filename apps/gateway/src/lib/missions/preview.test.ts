@@ -7,7 +7,14 @@ import type {
   PreviewIssueCode,
   ResolvedDraftConnection,
 } from './model';
-import { budgetProblem, envNotices, previewConnection, previewDraft, uncoveredOf } from './preview';
+import {
+  budgetProblem,
+  envNotices,
+  normalizeDraft,
+  previewConnection,
+  previewDraft,
+  uncoveredOf,
+} from './preview';
 import {
   ACME_HIDDEN,
   ACME_RESOURCES,
@@ -15,14 +22,19 @@ import {
   acmeConnection,
 } from '../../../tests/support/missions/testing';
 
-/** The explicit ids a resolved line carries; `undefined` for a whole-connection line. */
+/** The explicit ids of the first set of a resolved line. */
 function idsOf(line: ResolvedDraftConnection | undefined): readonly string[] | undefined {
-  const set = line?.resource_sets[0];
-  return set?.resources.scope === 'selected' ? set.resources.resource_ids : undefined;
+  return line?.resource_sets[0]?.resources.resource_ids;
 }
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
 const BUDGET = { quota: 10, rate_limit: { max: 5, window_seconds: 60 } } as const;
+/**
+ * One environment of the Acme account: a test about something else than environments
+ * selects it, so that its draft is one resource set (a set holds one environment).
+ */
+const STAGING = { scope: 'selected', resource_ids: ['res-app-staging'] } as const;
+const PROD = { scope: 'selected', resource_ids: ['res-app-prod'] } as const;
 
 function draftOf(
   connections: readonly DraftConnection[],
@@ -52,7 +64,11 @@ function codes(p: { issues: readonly { code: PreviewIssueCode }[] }): PreviewIss
 describe('previewDraft — authority (monotonicity)', () => {
   it('passes a draft whose accepted risks are inside the authority', () => {
     const p = preview([
-      { connection_id: 'conn-acme', policy: [{ risk_id: 'acme.read', ...BUDGET }] },
+      {
+        connection_id: 'conn-acme',
+        resources: STAGING,
+        policy: [{ risk_id: 'acme.read', ...BUDGET }],
+      },
     ]);
     expect(p.ok).toBe(true);
     expect(p.policy).toEqual([{ risk_id: 'acme.read', ...BUDGET, gate: 'auto' }]);
@@ -64,6 +80,7 @@ describe('previewDraft — authority (monotonicity)', () => {
       [
         {
           connection_id: 'conn-acme',
+          resources: PROD,
           policy: [
             { risk_id: 'acme.read', ...BUDGET },
             { risk_id: 'acme.admin', ...BUDGET },
@@ -172,6 +189,7 @@ describe('previewDraft — partition per connection', () => {
       [
         {
           connection_id: 'conn-acme',
+          resources: STAGING,
           policy: [
             { risk_id: 'acme.read', ...BUDGET },
             { risk_id: 'beta.read', ...BUDGET },
@@ -187,7 +205,11 @@ describe('previewDraft — partition per connection', () => {
   it('yields one flat policy out of the partitions', () => {
     const p = preview(
       [
-        { connection_id: 'conn-acme', policy: [{ risk_id: 'acme.read', ...BUDGET }] },
+        {
+          connection_id: 'conn-acme',
+          resources: STAGING,
+          policy: [{ risk_id: 'acme.read', ...BUDGET }],
+        },
         { connection_id: 'conn-beta', policy: [{ risk_id: 'beta.read', ...BUDGET }] },
       ],
       [acmeConnection(), { ...beta, authority: ['beta.read'] }],
@@ -238,12 +260,12 @@ describe('previewDraft — partition per connection', () => {
 });
 
 describe('previewDraft — resource selection', () => {
-  it('resolves "all" to the explicit list known now', () => {
+  it('resolves "all" to the explicit lists known now, one per environment, the unlabelled left out', () => {
     const p = preview([{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }]);
-    expect(p.resolved[0]?.resource_sets[0]?.resources).toEqual({
-      scope: 'selected',
-      resource_ids: ['res-app-staging', 'res-app-prod', 'res-scratch'],
-    });
+    expect(p.resolved[0]?.resource_sets.map((set) => set.resources)).toEqual([
+      { scope: 'selected', resource_ids: ['res-app-staging'] },
+      { scope: 'selected', resource_ids: ['res-app-prod'] },
+    ]);
   });
 
   it('accepts a selection by id or by ref, in the connection order', () => {
@@ -253,13 +275,13 @@ describe('previewDraft — resource selection', () => {
         trust_levels: { read: 'careful' },
         resources: {
           scope: 'selected',
-          resource_ids: ['res-scratch'],
-          resource_refs: ['app-prod'],
+          resource_ids: ['res-app-prod'],
+          resource_refs: ['app-staging'],
         },
       },
     ]);
     expect(p.ok).toBe(true);
-    expect(p.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-prod', 'scratch']);
+    expect(p.connections[0]?.resources.map((r) => r.ref)).toEqual(['app-staging', 'app-prod']);
     expect(p.connections[0]?.resources_total).toBe(3);
   });
 
@@ -293,7 +315,10 @@ describe('previewDraft — resource selection', () => {
       [curated],
     );
     expect(p.ok).toBe(true);
-    expect(idsOf(p.resolved[0])).toEqual(['res-app-staging', 'res-app-prod', 'res-scratch']);
+    expect(p.connections[0]?.resources.map((r) => r.id)).toEqual([
+      'res-app-staging',
+      'res-app-prod',
+    ]);
     expect(p.connections[0]?.resources_total).toBe(3);
   });
 
@@ -408,7 +433,7 @@ describe('previewDraft — env-qualified risks resolve against the selected reso
       {
         connection_id: 'conn-acme',
         policy,
-        resources: { scope: 'selected', resource_refs: ['app-prod', 'scratch'] },
+        resources: { scope: 'selected', resource_refs: ['app-prod'] },
       },
     ]);
     expect(codes(p)).toEqual(['unresolvable-env']);
@@ -439,6 +464,7 @@ describe('previewDraft — budget is mandatory', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
+        resources: STAGING,
         policy: [{ risk_id: 'acme.read', ...BUDGET }, { risk_id: 'acme.admin' }],
       },
     ]);
@@ -479,6 +505,7 @@ describe('previewDraft — budget is mandatory', () => {
     const fast = preview([
       {
         connection_id: 'conn-acme',
+        resources: STAGING,
         policy: [{ risk_id: 'acme.admin', quota: 5, rate_limit: { max: 11, window_seconds: 60 } }],
       },
     ]);
@@ -487,6 +514,7 @@ describe('previewDraft — budget is mandatory', () => {
     const scaled = preview([
       {
         connection_id: 'conn-acme',
+        resources: STAGING,
         policy: [{ risk_id: 'acme.admin', quota: 5, rate_limit: { max: 20, window_seconds: 120 } }],
       },
     ]);
@@ -497,47 +525,67 @@ describe('previewDraft — budget is mandatory', () => {
 describe('previewDraft — macro-actions at a trust level', () => {
   it('writes the explicit lines of the ticked macro-actions, gate from the tier, budget from the trust level', () => {
     const p = preview([
-      { connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
+      {
+        connection_id: 'conn-acme',
+        trust_levels: { read: 'careful', change: 'trusting' },
+        resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
+      },
     ]);
     expect(p.ok).toBe(true);
     expect(p.connections[0]?.everything_i_hold).toBe(false);
     expect(p.connections[0]?.trust_levels).toEqual({ read: 'careful', change: 'trusting' });
-    expect(p.policy).toEqual([
-      {
-        risk_id: 'acme.read',
-        quota: 100,
-        rate_limit: { max: 60, window_seconds: 60 },
-        gate: 'auto',
-      },
-      {
-        risk_id: 'acme[staging].write',
-        quota: 300,
-        rate_limit: { max: 180, window_seconds: 60 },
-        gate: 'approval',
-      },
-      {
-        risk_id: 'acme[prod].write',
-        quota: 300,
-        rate_limit: { max: 180, window_seconds: 60 },
-        gate: 'approval',
-      },
-      {
-        risk_id: 'acme[staging].bulk-delete',
-        quota: 15,
-        rate_limit: { max: 3, window_seconds: 60 },
-        gate: 'approval',
-      },
+    // Split by environment: each set holds the lines its environment resolves.
+    expect(p.connections[0]?.resource_sets.map((set) => set.passes.map((l) => l.risk_id))).toEqual([
+      ['acme.read', 'acme[staging].write', 'acme[staging].bulk-delete'],
+      ['acme.read', 'acme[prod].write'],
     ]);
+    const byRisk = [...new Map(p.policy.map((l) => [l.risk_id, l])).values()];
+    expect(byRisk).toHaveLength(4);
+    expect(byRisk).toEqual(
+      expect.arrayContaining([
+        {
+          risk_id: 'acme.read',
+          quota: 100,
+          rate_limit: { max: 60, window_seconds: 60 },
+          gate: 'auto',
+        },
+        {
+          risk_id: 'acme[staging].write',
+          quota: 300,
+          rate_limit: { max: 180, window_seconds: 60 },
+          gate: 'approval',
+        },
+        {
+          risk_id: 'acme[prod].write',
+          quota: 300,
+          rate_limit: { max: 180, window_seconds: 60 },
+          gate: 'approval',
+        },
+        {
+          risk_id: 'acme[staging].bulk-delete',
+          quota: 15,
+          rate_limit: { max: 3, window_seconds: 60 },
+          gate: 'approval',
+        },
+      ]),
+    );
   });
 
   it('leaves out what the trust level does not accept, and says so', () => {
-    const p = preview([{ connection_id: 'conn-acme', trust_levels: { change: 'careful' } }]);
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        trust_levels: { change: 'careful' },
+        resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
+      },
+    ]);
     expect(p.ok).toBe(true);
     expect(p.policy.map((e) => [e.risk_id, e.gate])).toEqual([
       ['acme[staging].write', 'approval'],
       ['acme[prod].write', 'approval'],
     ]);
-    expect(p.connections[0]?.left_out).toEqual([
+    // Each set also leaves out what the other environment resolves.
+    expect(p.connections[0]?.left_out.filter((l) => l.reason !== 'unresolvable-env')).toEqual([
       { risk_id: 'acme[staging].bulk-delete', reason: 'trust-level', env: 'staging' },
     ]);
   });
@@ -548,11 +596,23 @@ describe('previewDraft — macro-actions at a trust level', () => {
       [acmeConnection({ authority: ['acme.read', 'acme[staging].write'] })],
     );
     expect(p.ok).toBe(true);
-    expect(p.policy.map((e) => e.risk_id)).toEqual(['acme.read', 'acme[staging].write']);
-    expect(p.connections[0]?.left_out).toEqual([
-      { risk_id: 'acme[prod].write', reason: 'outside-authority', env: 'prod' },
-      { risk_id: 'acme[staging].bulk-delete', reason: 'outside-authority', env: 'staging' },
+    expect([...new Set(p.policy.map((e) => e.risk_id))]).toEqual([
+      'acme.read',
+      'acme[staging].write',
     ]);
+    // Each set says what it left out (the same risk in both sets, once here).
+    const leftOut = new Map(
+      (p.connections[0]?.left_out ?? [])
+        .filter((l) => l.reason !== 'unresolvable-env')
+        .map((l) => [l.risk_id, l]),
+    );
+    expect([...leftOut.values()]).toEqual(
+      expect.arrayContaining([
+        { risk_id: 'acme[prod].write', reason: 'outside-authority', env: 'prod' },
+        { risk_id: 'acme[staging].bulk-delete', reason: 'outside-authority', env: 'staging' },
+      ]),
+    );
+    expect(leftOut.size).toBe(2);
   });
 
   it('leaves out the lines no selected resource can resolve', () => {
@@ -577,13 +637,15 @@ describe('previewDraft — macro-actions at a trust level', () => {
         resources: { scope: 'selected', resource_refs: ['scratch'] },
       },
     ]);
-    expect(codes(noLabel)).toEqual(['no-accepted-risk']);
+    // An unlabelled resource cannot enter a set where risks depend on the environment.
+    expect(codes(noLabel)).toEqual(['resource-unlabelled', 'no-accepted-risk']);
   });
 
   it('beside explicit lines the trust levels decide nothing: the lines are the policy, each with its budget', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
+        resources: STAGING,
         trust_levels: { read: 'careful', change: 'trusting' },
         policy: [{ risk_id: 'acme.read', ...BUDGET, gate: 'approval' }, { risk_id: 'acme.admin' }],
       },
@@ -600,7 +662,11 @@ describe('previewDraft — macro-actions at a trust level', () => {
 
   it('refuses an unknown macro-action, a repeated risk and a connection that accepts nothing', () => {
     expect(
-      codes(preview([{ connection_id: 'conn-acme', trust_levels: { deploy: 'careful' } }])),
+      codes(
+        preview([
+          { connection_id: 'conn-acme', resources: STAGING, trust_levels: { deploy: 'careful' } },
+        ]),
+      ),
     ).toEqual(['unknown-macro-action', 'no-accepted-risk']);
     // Beside explicit lines an unknown macro-action only redraws nothing: it is dropped.
     const beside = preview([
@@ -617,6 +683,7 @@ describe('previewDraft — macro-actions at a trust level', () => {
         preview([
           {
             connection_id: 'conn-acme',
+            resources: STAGING,
             policy: [
               { risk_id: 'acme.read', ...BUDGET },
               { risk_id: 'acme.read', ...BUDGET },
@@ -625,11 +692,13 @@ describe('previewDraft — macro-actions at a trust level', () => {
         ]),
       ),
     ).toEqual(['duplicate-risk']);
-    expect(codes(preview([{ connection_id: 'conn-acme' }]))).toEqual(['no-accepted-risk']);
+    expect(codes(preview([{ connection_id: 'conn-acme', resources: STAGING }]))).toEqual([
+      'no-accepted-risk',
+    ]);
     expect(
       codes(
         preview(
-          [{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }],
+          [{ connection_id: 'conn-acme', resources: STAGING, trust_levels: { read: 'careful' } }],
           [acmeConnection({ authority: ['acme.admin'] })],
         ),
       ),
@@ -710,27 +779,24 @@ describe('previewDraft — notices (never blocking)', () => {
     { connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
   ];
 
-  it('names the selected resources that carry no environment label and what it costs', () => {
+  it('names the resources "all" left out for want of an environment label, and the split', () => {
     const p = preview(all);
     expect(p.ok).toBe(true);
     expect(p.issues).toEqual([]);
-    expect(p.notices).toHaveLength(1);
-    expect(p.notices).toMatchObject([
-      {
-        code: 'resource-without-env',
-        resource_refs: ['scratch'],
-        risk_ids: ['acme[staging].write', 'acme[prod].write', 'acme[staging].bulk-delete'],
-        connection_index: 0,
-        connection_id: 'conn-acme',
-      },
+    expect(p.notices.map((n) => n.code)).toEqual([
+      'unlabelled-resources-left-out',
+      'split-by-environment',
     ]);
+    expect(p.notices[0]).toMatchObject({
+      resource_refs: ['scratch'],
+      connection_index: 0,
+      connection_id: 'conn-acme',
+    });
     // Named as the pages name it (its display name); the ref stays in `resource_refs`.
-    expect(p.notices[0]?.message).toContain('No environment label on Scratch ("Acme main").');
-    expect(p.notices[0]?.message).toContain('refused (risk-not-accepted)');
-    expect(p.notices[0]?.message).toContain('(staging, prod)');
+    expect(p.notices[0]?.message).toContain('without an environment label: Scratch.');
   });
 
-  it('says nothing when every selected resource is labelled with an environment of the catalog', () => {
+  it('says nothing about labels when every selected resource is labelled with an environment of the catalog', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',
@@ -738,7 +804,7 @@ describe('previewDraft — notices (never blocking)', () => {
         resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
       },
     ]);
-    expect(p.notices).toEqual([]);
+    expect(p.notices.map((n) => n.code)).toEqual(['split-by-environment']);
   });
 
   it('names a resource labelled with an environment no risk of the catalog is acceptable in', () => {
@@ -776,33 +842,57 @@ describe('previewDraft — notices (never blocking)', () => {
   });
 });
 
-describe('previewDraft — the whole connection (scope `connection`)', () => {
-  it('is judged on the resources known now and resolved as the scope, not as a list', () => {
+describe('previewDraft — one environment per set, future resources', () => {
+  const prodLine = { risk_id: 'acme[prod].write', ...BUDGET };
+  const stagingLine = { risk_id: 'acme[staging].write', ...BUDGET };
+  const readLine = { risk_id: 'acme.read', ...BUDGET };
+  const setsOf = (p: ReturnType<typeof preview>) =>
+    (p.resolved[0]?.resource_sets ?? []).map((set) => ({
+      ids: set.resources.resource_ids,
+      future: set.future,
+      env: set.env,
+      risks: set.policy.map((l) => l.risk_id),
+    }));
+
+  it('`connection` is the known list with future on, split by environment, unlabelled left out', () => {
     const curated = acmeConnection({ resources: [...ACME_RESOURCES, ACME_HIDDEN, ACME_STALE] });
     const p = preview(
       [
         {
           connection_id: 'conn-acme',
-          trust_levels: { read: 'careful' },
           resources: { scope: 'connection' },
+          policy: [readLine, prodLine, stagingLine],
         },
       ],
       [curated],
     );
     expect(p.ok).toBe(true);
-    expect(p.resolved[0]?.resource_sets[0]?.resources).toEqual({ scope: 'connection' });
-    expect(p.connections[0]?.reaches_later).toBe(true);
-    // What it reaches now: neither hidden nor stale.
-    expect(p.connections[0]?.resources.map((r) => r.id)).toEqual([
-      'res-app-staging',
-      'res-app-prod',
-      'res-scratch',
+    expect(setsOf(p)).toEqual([
+      {
+        ids: ['res-app-staging'],
+        future: true,
+        env: 'staging',
+        risks: ['acme.read', 'acme[staging].write'],
+      },
+      {
+        ids: ['res-app-prod'],
+        future: true,
+        env: 'prod',
+        risks: ['acme.read', 'acme[prod].write'],
+      },
     ]);
-    expect(p.summary.can).toContain('the whole account, resources found later included');
+    expect(p.connections[0]?.future).toBe(true);
+    expect(p.notices.map((n) => n.code)).toEqual(
+      expect.arrayContaining(['unlabelled-resources-left-out', 'split-by-environment']),
+    );
+    expect(
+      p.notices.find((n) => n.code === 'unlabelled-resources-left-out')?.resource_refs,
+    ).toEqual(['scratch']);
+    expect(p.summary.can).toContain('resources found later included');
   });
 
-  it('passes on a connection with no resource yet: later ones will be reached', () => {
-    const empty = acmeConnection({ resources: [] });
+  it('on a connection with no resource yet, a future set takes the connection’s default environment', () => {
+    const withDefault = acmeConnection({ resources: [], default_env: 'staging' });
     const p = preview(
       [
         {
@@ -811,61 +901,131 @@ describe('previewDraft — the whole connection (scope `connection`)', () => {
           resources: { scope: 'connection' },
         },
       ],
-      [empty],
+      [withDefault],
     );
     expect(p.ok).toBe(true);
-    expect(p.resolved[0]?.resource_sets[0]?.resources).toEqual({ scope: 'connection' });
-  });
-
-  it('checks an env-qualified risk against the resources known now, and says later ones need a label', () => {
-    const line = {
-      risk_id: 'acme[prod].write',
-      quota: 5,
-      rate_limit: { max: 1, window_seconds: 60 },
-    };
-    const refused = preview(
-      [{ connection_id: 'conn-acme', resources: { scope: 'connection' }, policy: [line] }],
+    expect(setsOf(p)).toEqual([{ ids: [], future: true, env: 'staging', risks: ['acme.read'] }]);
+    // Without a default, future resources would carry no label: refused where labels matter.
+    const bare = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          trust_levels: { read: 'careful' },
+          resources: { scope: 'connection' },
+        },
+      ],
       [acmeConnection({ resources: [] })],
     );
-    expect(codes(refused)).toEqual(['unresolvable-env']);
-
-    const p = preview([
-      { connection_id: 'conn-acme', resources: { scope: 'connection' }, policy: [line] },
-    ]);
-    expect(p.ok).toBe(true);
-    expect(p.notices.filter((n) => n.code === 'later-resources-need-env-label')).toEqual([
-      expect.objectContaining({
-        connection_id: 'conn-acme',
-        resource_refs: [],
-        risk_ids: ['acme[prod].write'],
-      }),
-    ]);
+    expect(codes(bare)).toEqual(['resource-unlabelled']);
+    // A set of future resources names its environment itself.
+    const named = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          resource_sets: [
+            {
+              resources: { scope: 'selected', resource_ids: [] },
+              future: true,
+              env: 'prod',
+              policy: [prodLine],
+            },
+          ],
+        },
+      ],
+      [acmeConnection({ resources: [] })],
+    );
+    expect(codes(named)).toEqual(['unresolvable-env']);
   });
 
-  it('says nothing about later labels when the plugin derives the environment, or the connection has a default', () => {
-    for (const connection of [
-      acmeConnection({ derives_env: true }),
-      acmeConnection({ default_env: 'staging' }),
-    ]) {
-      const p = preview(
-        [
+  it('refuses a set of `resource_sets` that mixes environments', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        resource_sets: [
           {
-            connection_id: 'conn-acme',
-            trust_levels: { read: 'careful' },
-            resources: { scope: 'connection' },
+            resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
+            policy: [readLine],
           },
         ],
-        [connection],
-      );
-      expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');
-    }
+      },
+    ]);
+    expect(codes(p)).toEqual(['resource-set-mixed-env']);
   });
 
-  it('`all` stays the list known now: no later resource, no notice about one', () => {
+  it('splits a selection given on the connection, each set with the lines of its environment', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
+        future: true,
+        policy: [readLine, prodLine],
+      },
+    ]);
+    expect(p.ok).toBe(true);
+    expect(setsOf(p)).toEqual([
+      { ids: ['res-app-staging'], future: true, env: 'staging', risks: ['acme.read'] },
+      {
+        ids: ['res-app-prod'],
+        future: true,
+        env: 'prod',
+        risks: ['acme.read', 'acme[prod].write'],
+      },
+    ]);
+    expect(p.notices.map((n) => n.code)).toContain('split-by-environment');
+  });
+
+  it('refuses an unlabelled resource where the catalog has env-qualified risks, not where the plugin derives it', () => {
+    const draft: DraftConnection = {
+      connection_id: 'conn-acme',
+      resources: { scope: 'selected', resource_ids: ['res-scratch'] },
+      policy: [readLine],
+    };
+    expect(codes(preview([draft]))).toEqual(['resource-unlabelled']);
+    expect(preview([draft], [acmeConnection({ derives_env: true })]).ok).toBe(true);
+  });
+
+  it('refuses two sets taking the future resources of one environment', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        resource_sets: [
+          {
+            resources: { scope: 'selected', resource_ids: ['res-app-prod'] },
+            future: true,
+            policy: [readLine],
+          },
+          {
+            resources: { scope: 'selected', resource_ids: [] },
+            future: true,
+            env: 'prod',
+            policy: [readLine],
+          },
+        ],
+      },
+    ]);
+    expect(codes(p)).toEqual(['resource-sets-overlap']);
+  });
+
+  it('`all` stays the list known now: future off', () => {
     const p = preview([{ connection_id: 'conn-acme', trust_levels: { read: 'careful' } }]);
-    expect(p.connections[0]?.reaches_later).toBe(false);
-    expect(p.resolved[0]?.resource_sets[0]?.resources.scope).toBe('selected');
-    expect(p.notices.map((n) => n.code)).not.toContain('later-resources-need-env-label');
+    expect(p.connections[0]?.future).toBe(false);
+    expect(p.resolved[0]?.resource_sets.every((set) => !set.future)).toBe(true);
+  });
+
+  it('a normalized draft previews to the same sets (what the edit judges)', () => {
+    const context = { connections: [acmeConnection()], now: NOW };
+    const draft = draftOf([
+      {
+        connection_id: 'conn-acme',
+        resources: { scope: 'connection' },
+        policy: [readLine, prodLine],
+      },
+    ]);
+    const normalized = normalizeDraft(context, draft);
+    expect(previewDraft(context, normalized.draft).resolved).toEqual(
+      previewDraft(context, draft).resolved,
+    );
+    expect(normalized.notices.map((n) => n.code)).toContain('split-by-environment');
   });
 });
 
@@ -884,8 +1044,9 @@ describe('previewDraft — resource sets (risk model §4.7)', () => {
     ]);
     expect(codes(p)).toEqual([]);
     const sets = p.resolved[0]?.resource_sets ?? [];
+    // The rest is the staging resource: `scratch` has no label and is left out.
     expect(sets.map((s) => s.resources)).toEqual([
-      { scope: 'selected', resource_ids: ['res-app-staging', 'res-scratch'] },
+      { scope: 'selected', resource_ids: ['res-app-staging'] },
       { scope: 'selected', resource_ids: ['res-app-prod'] },
     ]);
     expect(p.connections[0]?.resource_sets).toHaveLength(2);

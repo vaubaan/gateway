@@ -232,6 +232,14 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       'vercel',
     ),
   ),
+  'connections.handlers.checkMissionResources': json('user', 200, (rig, headers) =>
+    rig.root.connections.handlers.checkMissionResources(
+      post(`/api/missions/${rig.mission.id}/resources/check`, headers, {
+        connection_id: rig.mission.connections[0]?.connectionId ?? 'missing',
+      }),
+      rig.mission.id,
+    ),
+  ),
   'connections.handlers.discover': form('user', 303, (rig, headers) =>
     rig.root.connections.handlers.discover(
       post(`/accounts/${rig.seeded.github.connection.id}/discover`, headers, {}),

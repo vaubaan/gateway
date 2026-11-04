@@ -215,11 +215,11 @@ export default async function MissionPage({ params, searchParams }: Props) {
           note: set
             ? reachedOnAccount(
                 set.resources.map((r) => r.display_name || r.ref),
-                set.reaches_later,
+                set.future,
               )
             : reachedOnAccount(
                 connection.resources.map((r) => r.display_name || r.ref),
-                connection.reaches_later,
+                connection.future,
               ),
           rows: detail.policy
             .filter((entry) =>
@@ -345,9 +345,13 @@ export default async function MissionPage({ params, searchParams }: Props) {
               <span key={connection.id}>
                 {' · '}
                 {connection.provider_label}{' '}
-                {connection.reaches_later ? (
-                  <span data-testid="whole-account">
-                    {connection.display_name}, {MISSION_WORDS.wholeAccount}
+                {connection.future ? (
+                  <span data-testid="future-resources">
+                    {connection.display_name},{' '}
+                    {reachedOnAccount(
+                      connection.resources.map((r) => r.display_name || r.ref),
+                      true,
+                    )}
                   </span>
                 ) : connection.resources.length === 0 ? (
                   connection.display_name

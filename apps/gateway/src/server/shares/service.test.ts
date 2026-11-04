@@ -300,11 +300,11 @@ describe('ShareService', () => {
       expect(context.shares.map((v) => [v.share.id, v.targetLabel])).toEqual([
         [granted.id, 'bob@example.com'],
       ]);
-      // The seeded spaces: app-staging, app-prod, and `scratch` without a label.
+      // The seeded spaces: app-staging, app-prod, and `scratch` (staging).
       expect(context.labelling).toEqual({
         derivesEnv: false,
         labelledEnvs: ['prod', 'staging'],
-        unlabelledResources: 1,
+        unlabelledResources: 0,
       });
     });
 

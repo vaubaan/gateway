@@ -146,7 +146,8 @@ describe('editing a mission after issuance', () => {
           },
           {
             connection_id: rig.seeded.supabase.connection.id,
-            resources: { scope: 'all' },
+            // One environment: a set holds the resources of one (staging here).
+            resources: { scope: 'selected', resource_refs: ['stgprojectref'] },
             policy: [
               { risk_id: SUPABASE_READ, quota: 10, rate_limit: { max: 10, window_seconds: 60 } },
             ],
@@ -168,7 +169,6 @@ describe('editing a mission after issuance', () => {
       flatConnections(after).find((c) => c.connectionId === rig.seeded.github.connection.id),
     ).toEqual({
       connectionId: rig.seeded.github.connection.id,
-      resourceScope: 'selected',
       resourceIds: [resourceId('acme/web')],
       // Added by the edit (ADR created-resources-join-the-mission's `source` column).
       resourceSources: { [resourceId('acme/web')]: 'edit' },
@@ -201,7 +201,7 @@ describe('editing a mission after issuance', () => {
       resources: [
         {
           connection_id: rig.seeded.github.connection.id,
-          resource_scope: 'selected',
+          future: false,
           resource_ids: [resourceId('acme/app')],
         },
       ],
@@ -240,8 +240,8 @@ describe('editing a mission after issuance', () => {
       expect.arrayContaining([
         'renamed',
         '1 account added',
-        // acme/web, and the two projects of the Supabase account added whole.
-        '3 resources added',
+        // acme/web, and the staging project of the Supabase account added.
+        '2 resources added',
         '1 resource removed',
         '2 permissions added',
         '1 permission removed',

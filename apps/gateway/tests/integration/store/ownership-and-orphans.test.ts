@@ -148,7 +148,7 @@ describe('ownership and orphan states in the store', () => {
         name: 'm',
         creatorUserId: ada,
         periodSeconds: null,
-        connections: [{ connectionId: c.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: c.id, resourceIds: [] }],
         policy: [
           {
             riskId: 'github.code-read',

@@ -62,11 +62,11 @@ export function PermissionsUsage({
         note: set
           ? reachedOnAccount(
               set.resources.map((r) => r.display_name || r.ref),
-              set.reaches_later,
+              set.future,
             )
           : reachedOnAccount(
               connection.resources.map((r) => r.display_name || r.ref),
-              connection.reaches_later,
+              connection.future,
             ),
         suffix: set && set.position > 1 ? `-set${set.position}` : '',
         entries: policy.filter((entry) =>

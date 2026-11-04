@@ -207,18 +207,19 @@ describe('refusal fields', () => {
     );
   });
 
-  test('resource-not-in-mission: a whole-account mission says when a new resource is reached', () => {
+  test('resource-not-in-mission: a mission with future resources says when a new resource is reached', () => {
     const r = refuse.resourceNotInMission({
       cited_ref: 'new-app',
       connection: { id: 'con_1', name: 'Fly (acme)' },
       allowed_resources: [{ ref: 'web', env: null, display_name: null }],
-      reaches_later_resources: true,
+      takes_future_resources: true,
     });
     expect(r.code).toBe('resource-not-in-mission');
     expect(r.cited_ref).toBe('new-app');
     expect(r.hint).toContain(
-      'This mission reaches the whole account except the resources its owner hid or that are no longer found: web today.',
+      'This mission reaches web today, and takes the resources that later appear in the environment of its sets',
     );
+    expect(r.hint).toContain('every hour, or when the mission creator checks now');
     expect(r.hint).toContain(
       'A resource created through the gateway is reached right after its creation',
     );

@@ -1,6 +1,8 @@
 /**
  * Migration 0018 — a mission may reach the whole connection (spec §3.1 "Resource
- * selection"; ADR mission-reaches-the-whole-connection-on-request).
+ * selection"; the ADR it applied was superseded by
+ * resource-set-is-one-environment-with-optional-future-resources, and migration 0033
+ * turns those sets into explicit lists with future on).
  *
  * The rebuild of `mission_connections` and `mission_resources` keeps every row an
  * earlier image wrote, with its scope: nothing is widened by the migration. The new

@@ -17,7 +17,6 @@ import {
   draftConnectionOf,
   type MissionChanges,
   type MissionSnapshot,
-  type StoredResourceScope,
 } from '@/lib/missions/mission-edit';
 import { trustLevelsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 
@@ -94,10 +93,9 @@ export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConn
     connection_id: c.connection_id,
     resource_sets: c.resource_sets.map((set) => ({
       ...(set.id !== null ? { id: set.id } : {}),
-      resources:
-        set.resource_scope === 'connection'
-          ? { scope: 'connection' as const }
-          : { scope: 'selected' as const, resource_ids: [...set.resource_ids] },
+      resources: { scope: 'selected' as const, resource_ids: [...set.resource_ids] },
+      future: set.future,
+      env: set.env,
       everything_i_hold: false,
       policy: set.policy,
       trust_levels: trustLevelsOf(set.trust_levels),
@@ -168,11 +166,10 @@ export interface Naming {
   risk(riskId: RiskId): string;
 }
 
-const SCOPE_WORDS: Readonly<Record<StoredResourceScope, string>> = {
-  all: 'no resource',
-  selected: 'the resources picked',
-  connection: 'the whole account, including resources found later',
-};
+/** A set's `future`, in words. */
+function futureWords(future: boolean): string {
+  return future ? 'the resources picked and resources found later' : 'the resources picked';
+}
 
 function endWords(at: string | null): string {
   return at === null ? 'never' : at.slice(0, 16).replace('T', ' ');
@@ -246,7 +243,7 @@ export function changeLines(
     several.has(r.connection_id) ? `${r.display_name}, resource set ${r.position}` : r.display_name;
   for (const r of changes.resources) {
     if (added.has(r.connection_id) || removed.has(r.connection_id)) continue;
-    if (r.scope_before === null && r.scope_after !== null) {
+    if (r.future_before === null && r.future_after !== null) {
       lines.push({
         section: 'Resources',
         text: `${r.display_name}: resource set ${r.position} added`,
@@ -254,7 +251,7 @@ export function changeLines(
         warn: false,
       });
     }
-    if (r.scope_after === null && r.scope_before !== null) {
+    if (r.future_after === null && r.future_before !== null) {
       lines.push({
         section: 'Resources',
         text: `${r.display_name}: resource set ${r.position} removed`,
@@ -263,14 +260,13 @@ export function changeLines(
       });
       continue;
     }
-    if (r.scope_before !== r.scope_after && r.scope_before !== null && r.scope_after !== null) {
+    if (r.future_before !== r.future_after && r.future_before !== null && r.future_after !== null) {
       lines.push({
         section: 'Resources',
-        text: `${where(r)}: ${SCOPE_WORDS[r.scope_before]} → ${SCOPE_WORDS[r.scope_after]}`,
-        consequence:
-          r.scope_after === 'connection'
-            ? 'Resources found later on the account are reached too.'
-            : null,
+        text: `${where(r)}: ${futureWords(r.future_before)} → ${futureWords(r.future_after)}`,
+        consequence: r.future_after
+          ? 'Resources found later in the same environment join the set.'
+          : null,
         warn: false,
       });
     }

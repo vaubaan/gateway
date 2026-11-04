@@ -6,7 +6,7 @@ tracks:
   - scripts/build-commands.mjs
   - apps/gateway/src/server/import-v4/
   - apps/gateway/src/server/connections/service.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-04
 ---
 
 # Import from v4 — handbook
@@ -45,6 +45,12 @@ The rest of the cut-over: [first-install](first-install.md).
   `import.meta.url` to its repository path, so plugins find their catalogs
   and the store its migrations.
 - v4 pinned no SSH host key: `--ssh-host` needs `--ssh-host-key`.
+- v4 kept no environment for an SSH host, and SSH permissions depend on one: an
+  unlabelled host enters no mission (`resource-unlabelled`, ADR
+  resource-set-is-one-environment-with-optional-future-resources). Label it on the
+  account's page (or give the account a default environment), then rerun: the
+  deferred mission is issued. A v4 selection spanning environments is split into one
+  resource set per environment.
 - A bundle older than an hour is refused: export and import in one pipe.
 - A dry run assumes the labels the same run would apply (`withAssumedEnvs`,
   never written), so it previews what `--apply` does.

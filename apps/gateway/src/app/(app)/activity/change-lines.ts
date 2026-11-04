@@ -189,13 +189,15 @@ function accountLines(value: Json, names: ChangeNames): ChangeLine[] {
       label: 'Account',
       value: [
         nameOf(names, entry.connection_id),
-        // `resource_scope` is recorded since the whole-account choice exists; an empty
-        // list without it is "none known when the mission was created".
+        // Entries before migration 0033 record `resource_scope` (`connection`: the whole
+        // account); later ones an explicit list with `future`.
         entry.resource_scope === 'connection'
           ? MISSION_WORDS.wholeAccount
           : resources.length > 0
-            ? listed(resources, 4)
-            : 'no resource',
+            ? `${listed(resources, 4)}${entry.future === true ? `, and ${MISSION_WORDS.futureResources}` : ''}`
+            : entry.future === true
+              ? MISSION_WORDS.futureResources
+              : 'no resource',
       ].join(' · '),
     };
   });

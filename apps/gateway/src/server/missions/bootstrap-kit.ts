@@ -59,8 +59,8 @@ export interface KitConnection {
   readonly display_name: string;
   /** What the mission reaches now. */
   readonly resources: readonly KitResource[];
-  /** Issued on the whole connection: resources discovered later are reached too. */
-  readonly reaches_later?: boolean;
+  /** A set takes the resources that later appear in its environment. */
+  readonly future?: boolean;
   /**
    * The connection's resource sets (risk model §4.7), only when it has several: each
    * with its label ("Resource set 1") and what it reaches. Absent with one set.
@@ -71,8 +71,8 @@ export interface KitConnection {
 export interface KitResourceSet {
   readonly label: string;
   readonly resources: readonly KitResource[];
-  /** The set reaches the resources no other set selects, later ones included. */
-  readonly reaches_later: boolean;
+  /** Resources that later appear in the set's environment join it. */
+  readonly future: boolean;
 }
 
 export interface KitPolicyLine extends MissionPolicyEntry {
@@ -183,12 +183,10 @@ function resourceLine(resource: KitResource): string {
 }
 
 /** A connection issued whole: what it reaches now, and that later resources join. */
-function wholeAccount(c: KitConnection): string {
-  const known =
-    c.resources.length === 0
-      ? 'none known yet'
-      : `known now: ${c.resources.map(resourceLine).join(', ')}`;
-  return `the whole account, including resources discovered later (${known}).`;
+/** A list that takes future resources (ADR resource-set-is-one-environment-with-optional-future-resources). */
+function withFuture(resources: readonly KitResource[]): string {
+  const known = resources.length === 0 ? 'none known yet' : resources.map(resourceLine).join(', ');
+  return `${known}; resources found later in the same environment join it.`;
 }
 
 /**
@@ -212,13 +210,7 @@ export const RESOURCE_SETS_LINE =
 /** The sets of an account, one line each. */
 function setLines(sets: readonly KitResourceSet[]): string[] {
   return sets.map((set) => {
-    if (set.reaches_later) {
-      const known =
-        set.resources.length === 0
-          ? 'none known yet'
-          : `known now: ${set.resources.map(resourceLine).join(', ')}`;
-      return `  - ${set.label}: every resource of the account the other sets do not hold, including resources discovered later (${known}).`;
-    }
+    if (set.future) return `  - ${set.label}: ${withFuture(set.resources)}`;
     const resources =
       set.resources.length === 0 ? 'no resource' : set.resources.map(resourceLine).join(', ');
     return `  - ${set.label}: ${resources}`;
@@ -316,7 +308,7 @@ function agentInstructions(
         ...setLines(c.resource_sets),
       ];
     }
-    if (c.reaches_later) return `- ${c.provider_label} "${c.display_name}" — ${wholeAccount(c)}`;
+    if (c.future) return `- ${c.provider_label} "${c.display_name}" — ${withFuture(c.resources)}`;
     const resources =
       c.resources.length === 0
         ? 'no resource (tools of the account itself only)'

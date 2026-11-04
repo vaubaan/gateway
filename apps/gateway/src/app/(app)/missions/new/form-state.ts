@@ -35,7 +35,7 @@ import {
   type Tier,
   type TrustLevel,
 } from '@/lib/missions/macro-actions';
-import { defaultResources, previewConnection } from '@/lib/missions/preview';
+import { enterableResources, previewConnection } from '@/lib/missions/preview';
 import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 /** The inputs of one accepted risk; strings, as typed. An empty string is "no value yet". */
@@ -56,11 +56,13 @@ export interface EntryState {
 export type PolicyView = 'simple' | 'advanced';
 
 /**
- * How far a mission reaches on one account (spec §3.1 "Resource selection";
- * ADR mission-reaches-the-whole-connection-on-request):
+ * How far a mission reaches on one account (spec §3.1 "Resource selection"; ADR
+ * resource-set-is-one-environment-with-optional-future-resources). Every choice is sent
+ * as the explicit list ticked, which the server splits by environment:
  *
- *   all         every resource known now (the default) — sent as that explicit list
- *   connection  the whole account, resources found later included — sent as the scope
+ *   all         every resource known now that may enter (the default)
+ *   connection  the same list with `future` on: resources found later in each
+ *               environment join it
  *   selected    the ones the creator ticks
  */
 export type ResourceChoice = 'all' | 'connection' | 'selected';
@@ -170,7 +172,7 @@ export const DEFAULT_EXPIRY: ExpiryChoice = 'never';
 export function initialSetState(connection: IssuanceConnection): SetState {
   return {
     resourceScope: 'all',
-    resourceIds: defaultResources(connection).map((r) => r.id),
+    resourceIds: enterableResources(connection).map((r) => r.id),
     trustLevels: {},
     everything: false,
     entries: {},
@@ -212,16 +214,17 @@ export function selectedResources(
 }
 
 /**
- * The resources of a draft line: the scope for the whole account, else the
- * explicit list the creator sees ticked ("every resource known now" included,
- * so the confirmation lists exactly what is stored).
+ * The resources of a draft line: the explicit list the creator sees ticked ("every
+ * resource known now" included, so the confirmation lists exactly what is stored).
+ * "The whole account" is that list with `future` on (`futureOf`).
  */
-export function draftResourcesOf(
-  state: Pick<SetState, 'resourceScope' | 'resourceIds'>,
-): DraftResources {
-  return state.resourceScope === 'connection'
-    ? { scope: 'connection' }
-    : { scope: 'selected', resource_ids: state.resourceIds };
+export function draftResourcesOf(state: Pick<SetState, 'resourceIds'>): DraftResources {
+  return { scope: 'selected', resource_ids: state.resourceIds };
+}
+
+/** `future` of a draft line: on for "the whole account", resources found later included. */
+function futureOf(state: Partial<Pick<SetState, 'resourceScope'>>): { future?: true } {
+  return state.resourceScope === 'connection' ? { future: true } : {};
 }
 
 /** The connection as a draft line that carries only "Everything I hold": what applying it means. */
@@ -232,10 +235,8 @@ function everythingDraft(
   return {
     connection_id: connection.id,
     everything_i_hold: true,
-    resources: draftResourcesOf({
-      resourceScope: state.resourceScope ?? 'selected',
-      resourceIds: state.resourceIds,
-    }),
+    resources: draftResourcesOf({ resourceIds: state.resourceIds }),
+    ...futureOf(state),
   };
 }
 
@@ -631,7 +632,7 @@ export function setResourceScope<S extends SetState>(
   const resourceIds =
     resourceScope === 'selected'
       ? state.resourceIds
-      : defaultResources(connection).map((r) => r.id);
+      : enterableResources(connection).map((r) => r.id);
   const next: S = { ...state, resourceScope, resourceIds };
   return state.edited ? next : resetEdits(connection, next);
 }
@@ -749,6 +750,7 @@ function numberOf(text: string): number | undefined {
 function draftSet(connection: IssuanceConnection, state: SetState): DraftResourceSet {
   return {
     resources: draftResourcesOf(state),
+    ...futureOf(state),
     // The persisted policy is the explicit enumeration: "Everything I hold" is not sent.
     everything_i_hold: false,
     // Kept with the mission to redraw this form. Sent beside lines only: without
@@ -874,10 +876,7 @@ export function loadResolved(
     if (!connection) continue;
     const several = line.resource_sets.length > 1;
     const sets = line.resource_sets.map((set): SetState => {
-      const resourceIds =
-        set.resources.scope === 'connection'
-          ? defaultResources(connection).map((r) => r.id)
-          : set.resources.resource_ids;
+      const resourceIds = set.resources.resource_ids;
       const trustLevels = knownTrustLevels(connection, set.trust_levels);
       const entries = entriesOf(set.policy);
       const written = linesOfTrustLevels(
@@ -888,7 +887,8 @@ export function loadResolved(
       const matches = Object.keys(trustLevels).length > 0 && sameLines(entries, written);
       return {
         ...(set.id !== undefined ? { id: set.id } : {}),
-        resourceScope: set.resources.scope === 'connection' ? 'connection' : 'selected',
+        // A set with future resources reads as "the whole account" until the form has cards.
+        resourceScope: set.future ? 'connection' : 'selected',
         resourceIds,
         trustLevels,
         everything: false,
@@ -932,7 +932,7 @@ export function rebalance(connection: IssuanceConnection, sets: readonly SetStat
   );
   return sets.map((set) => {
     if (!takesTheRest(set)) return set;
-    const resourceIds = defaultResources(connection)
+    const resourceIds = enterableResources(connection)
       .map((r) => r.id)
       .filter((id) => !picked.has(id));
     const same =

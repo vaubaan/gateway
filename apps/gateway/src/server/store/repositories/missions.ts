@@ -7,7 +7,6 @@ import { MISSION_TOKEN_KINDS } from '@vaubaan/shared';
 import {
   MISSION_RESOURCE_SOURCES,
   MISSION_TOKEN_STATUSES,
-  RESOURCE_SCOPES,
   USER_STATUSES,
   type Gate,
   type Iso,
@@ -23,7 +22,6 @@ import {
   type MissionResourceSource,
   type MissionTrustMarkRecord,
   type RequestLine,
-  type ResourceScope,
   type MissionStatus,
   type MissionTokenRecord,
   type NewEvent,
@@ -110,12 +108,30 @@ export interface CreatedBy {
 
 /** What `addResources` did on one connection of a mission. */
 export interface AddedMissionResources {
-  /** The set the resources joined. */
-  readonly resourceSetId: string;
-  /** The set's scope after the write (`all` with an id becomes `selected`). */
-  readonly scope: ResourceScope;
+  /** The set each given resource is in after the write, in the given order. */
+  readonly placed: readonly { readonly resourceId: string; readonly resourceSetId: string }[];
   /** The ids written now, in the given order; an id already selected is not repeated. */
   readonly added: readonly string[];
+}
+
+/** Why a resource joined or left a set of a running mission after issuance. */
+export type ResourceMoveReason = 'discovered' | 'relabelled';
+
+/** A resource of a connection that appeared, or whose effective environment changed. */
+export interface ResourceChange {
+  readonly resourceId: string;
+  readonly reason: ResourceMoveReason;
+}
+
+/** One join or leave `applyResourceChanges` wrote. */
+export interface ResourceMove {
+  readonly missionId: string;
+  readonly connectionId: string;
+  readonly resourceSetId: string;
+  readonly resourceId: string;
+  readonly ref: string;
+  readonly change: 'joined' | 'left';
+  readonly reason: ResourceMoveReason;
 }
 
 /** What the `missions.status` column may hold: every `MissionStatus` but the derived one. */
@@ -164,21 +180,21 @@ export interface MissionsRepo {
   ): Promise<MissionRecord | null>;
   create(input: CreateMissionInput): Promise<MissionRecord>;
   /**
-   * Adds resources of one of the mission's connections to the explicit selection of one
-   * of its sets, each row marked with `source` (ADR created-resources-join-the-mission:
-   * `created` for a resource the mission created). The set follows `judgedSetIds`, the
-   * sets the creating call was judged against (risk model §4.7): exactly one, that set;
-   * several, the connection's `connection` set if it has one, else the first of them by
-   * position — never a set the call was not judged against, so a resource made under a
-   * strict judgement never gets a looser set's rights. Absent (or none of them a set of
-   * that connection any more): the `connection` set if any, else the first set. A set of scope
-   * `connection` already reaches every resource no other set selects: nothing is
-   * written. Scope `all` that stored nothing becomes `selected`. An id already selected,
-   * in any set, keeps its row, its set and its source. One transaction. `NotFoundError`
-   * when the mission does not carry the connection; `InvariantError` when a resource is
-   * not one of that connection's. With `created`, the mission's session (when it has
-   * one) records a `resources-created` event in the same transaction, whatever the
-   * scope: the mission reaches what it created.
+   * Adds resources of one of the mission's connections to the list of one of its sets,
+   * each row marked with `source` (ADR created-resources-join-the-mission: `created` for
+   * a resource the mission created). The set of each resource follows `judgedSetIds`,
+   * the sets the creating call was judged against (risk model §4.7): exactly one, that
+   * set; several, the candidate with future on in the resource's environment, else a
+   * candidate in its environment, else the first candidate by position — never a set the
+   * call was not judged against, so a resource made under a strict judgement never gets
+   * a looser set's rights (it may then sit in a set of another environment: the next
+   * edit refuses the set as mixed until it is relabelled or moved). Absent (or none of
+   * them a set of that connection any more): the same order over every set of the
+   * connection. An id already selected, in any set, keeps its row, its set and its
+   * source. One transaction. `NotFoundError` when the mission does not carry the
+   * connection; `InvariantError` when a resource is not one of that connection's. With
+   * `created`, the mission's session (when it has one) records a `resources-created`
+   * event in the same transaction.
    */
   addResources(
     missionId: string,
@@ -188,6 +204,31 @@ export interface MissionsRepo {
     created?: CreatedBy,
     judgedSetIds?: readonly string[],
   ): Promise<AddedMissionResources>;
+  /**
+   * Future resources (ADR resource-set-is-one-environment-with-optional-future-resources):
+   * for every running mission (stored `active`, not past its expiry at `now`) with a set
+   * on the connection, in one transaction, each changed resource
+   *
+   *   leaves  the set holding it when it was relabelled and its effective environment is
+   *           no longer the set's (a legacy `mixedEnv` set keeps it; a resource that
+   *           appeared and is held already — placed by its creating call — stays);
+   *   joins   the set with future on in its environment (else a legacy `mixedEnv` set
+   *           with future on), unless a set of the mission holds it, it is hidden, or its
+   *           id is in `neverJoin` (the instance's own) — row source `future`.
+   *
+   * Returns every move written, for the caller's audit. A resource of another
+   * connection, or unknown, is ignored.
+   */
+  applyResourceChanges(
+    connectionId: string,
+    changes: readonly ResourceChange[],
+    neverJoin: readonly string[],
+  ): Promise<ResourceMove[]>;
+  /**
+   * The connections a running mission's set with future on depends on (hourly
+   * discovery), in id order.
+   */
+  connectionsWithFutureSets(now: Iso): Promise<string[]>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
   /**
@@ -424,9 +465,13 @@ interface SetRow {
   id: string;
   connection_id: string;
   position: number;
-  resource_scope: string;
+  future: number;
+  env: string | null;
+  mixed_env: number;
   trust_levels_json: string | null;
 }
+
+const SET_COLUMNS = 'id, connection_id, position, future, env, mixed_env, trust_levels_json';
 
 interface SelectedRow {
   resource_id: string;
@@ -529,12 +574,10 @@ function setToRecord(row: SetRow, selected: readonly SelectedRow[]): MissionReso
   return {
     id: row.id,
     position: row.position,
-    resourceScope: parseEnum(
-      RESOURCE_SCOPES,
-      row.resource_scope,
-      'mission_resource_sets.resource_scope',
-    ),
     resourceIds: selected.map((r) => r.resource_id),
+    future: row.future === 1,
+    env: row.env,
+    mixedEnv: row.mixed_env === 1,
     ...(Object.keys(sources).length > 0 ? { resourceSources: sources } : {}),
     ...(row.trust_levels_json === null
       ? {}
@@ -578,6 +621,18 @@ interface ResolvedConnectionInput {
   readonly resourceSets: readonly MissionResourceSetInput[];
 }
 
+/** A set of a write with its environment read from its resources (`assertConnectionSelections`). */
+interface CheckedSetInput extends MissionResourceSetInput {
+  readonly future: boolean;
+  readonly env: string | null;
+}
+
+/** A connection of a write whose sets were checked. */
+interface CheckedConnectionInput {
+  readonly connectionId: string;
+  readonly resourceSets: readonly CheckedSetInput[];
+}
+
 /**
  * The connections of a write with their sets: a connection given with its selection
  * directly becomes one set holding the `policy` lines of its provider. A line no
@@ -602,8 +657,9 @@ function resolveConnectionInputs(
       connectionId: c.connectionId,
       resourceSets: [
         {
-          resourceScope: c.resourceScope,
           resourceIds: c.resourceIds,
+          ...(c.future !== undefined ? { future: c.future } : {}),
+          ...(c.env !== undefined ? { env: c.env } : {}),
           ...(c.trustLevels ? { trustLevels: c.trustLevels } : {}),
           policy: lines,
         },
@@ -620,23 +676,26 @@ function resolveConnectionInputs(
 }
 
 /**
- * Every connection carries at least one set; each set an explicit, consistent selection
- * (`selected`), or no id at all (`all`: none known at issuance; `connection`: what no
- * other set selects, read live). The sets of a connection partition its selection: a
- * resource in one set only, one set at most of scope `connection`.
+ * Every connection carries at least one set; each set an explicit list of resources of
+ * that connection, all of one effective environment (own label, else the connection's
+ * default), which is the set's `env` — or the `env` given, which every resource must
+ * carry (ADR resource-set-is-one-environment-with-optional-future-resources). The sets of
+ * a connection partition its selection: a resource in one set only, and one set at most
+ * with future on per environment. Returns the sets with their environment.
  */
 function assertConnectionSelections(
   ctx: RepoContext,
   connections: readonly ResolvedConnectionInput[],
-): void {
+): CheckedConnectionInput[] {
   if (connections.length === 0) {
     throw new InvariantError('a mission carries at least one connection');
   }
-  const resourceConnection = ctx.db.prepare<[string], { connection_id: string }>(
-    'SELECT connection_id FROM connection_resources WHERE id = ?',
+  const resourceOf = ctx.db.prepare<[string], { connection_id: string; env: string | null }>(
+    `SELECT r.connection_id, COALESCE(r.env, c.default_env) AS env
+     FROM connection_resources r JOIN connections c ON c.id = r.connection_id WHERE r.id = ?`,
   );
   const seenConnections = new Set<string>();
-  for (const c of connections) {
+  return connections.map((c): CheckedConnectionInput => {
     if (seenConnections.has(c.connectionId)) {
       throw new InvariantError(`connection ${c.connectionId} is listed twice`);
     }
@@ -644,28 +703,17 @@ function assertConnectionSelections(
     if (c.resourceSets.length === 0) {
       throw new InvariantError(`connection ${c.connectionId}: no resource set`);
     }
-    if (c.resourceSets.filter((set) => set.resourceScope === 'connection').length > 1) {
-      throw new InvariantError(
-        `connection ${c.connectionId}: two resource sets reach the whole connection`,
-      );
-    }
     const seenResources = new Set<string>();
     const seenSets = new Set<string>();
-    for (const set of c.resourceSets) {
+    const futureEnvs = new Set<string | null>();
+    const resourceSets = c.resourceSets.map((set): CheckedSetInput => {
       if (set.id !== undefined) {
         if (seenSets.has(set.id)) {
           throw new InvariantError(`resource set ${set.id} is listed twice`);
         }
         seenSets.add(set.id);
       }
-      if (set.resourceScope === 'selected' && set.resourceIds.length === 0) {
-        throw new InvariantError(`connection ${c.connectionId}: selected scope with no resource`);
-      }
-      if (set.resourceScope !== 'selected' && set.resourceIds.length > 0) {
-        throw new InvariantError(
-          `connection ${c.connectionId}: '${set.resourceScope}' scope lists resources`,
-        );
-      }
+      const envs = new Set<string | null>();
       for (const resourceId of set.resourceIds) {
         if (seenResources.has(resourceId)) {
           throw new InvariantError(
@@ -673,16 +721,35 @@ function assertConnectionSelections(
           );
         }
         seenResources.add(resourceId);
-        const owner = resourceConnection.get(resourceId);
+        const owner = resourceOf.get(resourceId);
         if (!owner) throw new NotFoundError('connection_resource', resourceId);
         if (owner.connection_id !== c.connectionId) {
           throw new InvariantError(
             `resource ${resourceId} does not belong to connection ${c.connectionId}`,
           );
         }
+        envs.add(owner.env);
       }
-    }
-  }
+      if (set.env !== undefined) envs.add(set.env);
+      if (envs.size > 1) {
+        throw new InvariantError(
+          `connection ${c.connectionId}: a resource set holds several environments`,
+        );
+      }
+      const [env = null] = envs;
+      const future = set.future ?? false;
+      if (future) {
+        if (futureEnvs.has(env)) {
+          throw new InvariantError(
+            `connection ${c.connectionId}: two resource sets take the future resources of one environment`,
+          );
+        }
+        futureEnvs.add(env);
+      }
+      return { ...set, future, env };
+    });
+    return { connectionId: c.connectionId, resourceSets };
+  });
 }
 
 function validateLines(
@@ -749,6 +816,19 @@ function lineKey(line: { readonly resourceSetId: string; readonly riskId: RiskId
   return `${line.resourceSetId}\n${line.riskId}`;
 }
 
+/**
+ * The set a resource joins among `candidates` (by position): the one with future on in
+ * the resource's environment, else one in its environment, else the first (risk model
+ * §4.7). `candidates` is never empty.
+ */
+function placementOf(candidates: readonly SetRow[], env: string | null): SetRow {
+  const sameEnv = candidates.filter((set) => set.mixed_env === 0 && set.env === env);
+  const [first] = candidates;
+  const chosen = sameEnv.find((set) => set.future === 1) ?? sameEnv[0] ?? first;
+  if (!chosen) throw new InvariantError('a mission connection carries at least one resource set');
+  return chosen;
+}
+
 export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const { db } = ctx;
   const byId = db.prepare<[string], MissionRow>(`SELECT ${COLUMNS} FROM missions WHERE id = ?`);
@@ -781,10 +861,12 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const insertConnection = db.prepare<[string, string]>(
     'INSERT INTO mission_connections (mission_id, connection_id) VALUES (?, ?)',
   );
-  const insertSet = db.prepare<[string, string, string, number, string, string | null]>(
+  const insertSet = db.prepare<
+    [string, string, string, number, number, string | null, string | null]
+  >(
     `INSERT INTO mission_resource_sets
-       (id, mission_id, connection_id, position, resource_scope, trust_levels_json)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+       (id, mission_id, connection_id, position, future, env, trust_levels_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertResource = db.prepare<[string, string, string, string, string]>(
     `INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source)
@@ -806,25 +888,43 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     'SELECT connection_id FROM mission_connections WHERE mission_id = ? ORDER BY connection_id',
   );
   const setsOf = db.prepare<[string], SetRow>(
-    `SELECT id, connection_id, position, resource_scope, trust_levels_json
+    `SELECT ${SET_COLUMNS}
      FROM mission_resource_sets WHERE mission_id = ? ORDER BY connection_id, position, id`,
   );
   const setsOfConnection = db.prepare<[string, string], SetRow>(
-    `SELECT id, connection_id, position, resource_scope, trust_levels_json
+    `SELECT ${SET_COLUMNS}
      FROM mission_resource_sets WHERE mission_id = ? AND connection_id = ? ORDER BY position, id`,
   );
   const resourcesOf = db.prepare<[string], SelectedRow>(
     'SELECT resource_id, resource_set_id, source FROM mission_resources WHERE mission_id = ? ORDER BY resource_id',
   );
-  const setScope = db.prepare<[string, string]>(
-    'UPDATE mission_resource_sets SET resource_scope = ? WHERE id = ?',
-  );
   const insertResourceFrom = db.prepare<[string, string, string, string, string]>(
     `INSERT INTO mission_resources (mission_id, connection_id, resource_id, resource_set_id, source)
      VALUES (?, ?, ?, ?, ?) ON CONFLICT (mission_id, resource_id) DO NOTHING`,
   );
-  const resourceConnectionOf = db.prepare<[string], { connection_id: string; ref: string }>(
-    'SELECT connection_id, ref FROM connection_resources WHERE id = ?',
+  const resourceConnectionOf = db.prepare<
+    [string],
+    { connection_id: string; ref: string; env: string | null; hidden: number }
+  >(
+    `SELECT r.connection_id, r.ref, COALESCE(r.env, c.default_env) AS env, r.hidden
+     FROM connection_resources r JOIN connections c ON c.id = r.connection_id WHERE r.id = ?`,
+  );
+  // Running: stored `active` and not past its expiry (an `orphaned` one is derived, still stored active).
+  const runningOnConnection = db.prepare<[string, string], { id: string }>(
+    `SELECT DISTINCT m.id FROM missions m JOIN mission_connections mc ON mc.mission_id = m.id
+     WHERE mc.connection_id = ? AND m.status = 'active' AND (m.expires_at IS NULL OR m.expires_at > ?)
+     ORDER BY m.id`,
+  );
+  const heldOnConnection = db.prepare<
+    [string, string],
+    { resource_id: string; resource_set_id: string }
+  >(
+    'SELECT resource_id, resource_set_id FROM mission_resources WHERE mission_id = ? AND connection_id = ?',
+  );
+  const futureConnections = db.prepare<[string], { connection_id: string }>(
+    `SELECT DISTINCT s.connection_id FROM mission_resource_sets s JOIN missions m ON m.id = s.mission_id
+     WHERE s.future = 1 AND m.status = 'active' AND (m.expires_at IS NULL OR m.expires_at > ?)
+     ORDER BY s.connection_id`,
   );
   const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     'UPDATE missions SET status = ?, closed_at = COALESCE(?, closed_at), updated_at = ? WHERE id = ?',
@@ -1003,8 +1103,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
        closed_at = CASE WHEN status = 'expired' THEN NULL ELSE closed_at END
      WHERE id = ?`,
   );
-  const updateSetStmt = db.prepare<[number, string, string | null, string]>(
-    'UPDATE mission_resource_sets SET position = ?, resource_scope = ?, trust_levels_json = ? WHERE id = ?',
+  // An edit judged the set whole: a legacy mixed set is one environment again.
+  const updateSetStmt = db.prepare<[number, number, string | null, string | null, string]>(
+    `UPDATE mission_resource_sets SET position = ?, future = ?, env = ?, mixed_env = 0,
+       trust_levels_json = ? WHERE id = ?`,
   );
   const deleteSetStmt = db.prepare<[string]>('DELETE FROM mission_resource_sets WHERE id = ?');
   // A trust level an edit changes restarts the count of its raise proposal (§4.7).
@@ -1127,11 +1229,11 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     readonly kept: boolean;
     readonly position: number;
     readonly connectionId: string;
-    readonly input: MissionResourceSetInput;
+    readonly input: CheckedSetInput;
   }
 
   /** Inserts one connection with its sets, resources and lines. In-transaction. */
-  function insertConnectionWithSets(missionId: string, c: ResolvedConnectionInput): void {
+  function insertConnectionWithSets(missionId: string, c: CheckedConnectionInput): void {
     insertConnection.run(missionId, c.connectionId);
     c.resourceSets.forEach((set, index) => {
       const setId = ctx.newId();
@@ -1140,7 +1242,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         missionId,
         c.connectionId,
         index + 1,
-        set.resourceScope,
+        set.future ? 1 : 0,
+        set.env,
         trustLevelsJsonOf(set),
       );
       for (const resourceId of set.resourceIds) {
@@ -1152,16 +1255,16 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
 
   return {
     async edit(id, raw) {
-      const resolved = resolveConnectionInputs(ctx, raw.connections, raw.policy);
-      validateSets(ctx, resolved);
-      assertConnectionSelections(ctx, resolved);
+      const unchecked = resolveConnectionInputs(ctx, raw.connections, raw.policy);
+      validateSets(ctx, unchecked);
+      const resolved = assertConnectionSelections(ctx, unchecked);
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const before = requireMission(id);
         // A connection given flat keeps its one stored set.
         const input = {
           ...raw,
-          connections: resolved.map((c, i): ResolvedConnectionInput => {
+          connections: resolved.map((c, i): CheckedConnectionInput => {
             const given = raw.connections[i];
             const flat = given !== undefined && !('resourceSets' in given);
             const stored = before.connections.find((b) => b.connectionId === c.connectionId);
@@ -1238,26 +1341,13 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           });
         }
 
-        // ── The sets and their resources. Order matters: one `connection` set per
-        // connection at every instant, and a resource row always names a set that exists.
+        // ── The sets and their resources. Order matters: a resource row always names a
+        // set that exists.
         const removedSets = [...stored.entries()].filter(([setId]) => !keptIds.has(setId));
         for (const c of input.connections) {
           if (!before.connections.some((b) => b.connectionId === c.connectionId)) {
             insertConnection.run(id, c.connectionId);
           }
-        }
-        for (const set of planned) {
-          const was = stored.get(set.id)?.set;
-          if (
-            set.kept &&
-            was?.resourceScope === 'connection' &&
-            set.input.resourceScope !== 'connection'
-          ) {
-            setScope.run(set.input.resourceScope, set.id);
-          }
-        }
-        for (const [setId, { set }] of removedSets) {
-          if (set.resourceScope === 'connection') deleteSetStmt.run(setId);
         }
         for (const set of planned) {
           if (set.kept) continue;
@@ -1266,7 +1356,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             id,
             set.connectionId,
             set.position,
-            set.input.resourceScope,
+            set.input.future ? 1 : 0,
+            set.input.env,
             trustLevelsJsonOf(set.input),
           );
         }
@@ -1295,10 +1386,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             insertResource.run(id, set.connectionId, resourceId, set.id, 'edit');
           else if (was !== set.id) moveResourceStmt.run(set.id, id, resourceId);
         }
-        for (const [setId, { connectionId, set }] of removedSets) {
-          if (set.resourceScope !== 'connection' && nextConnections.has(connectionId)) {
-            deleteSetStmt.run(setId);
-          }
+        for (const [setId, { connectionId }] of removedSets) {
+          if (nextConnections.has(connectionId)) deleteSetStmt.run(setId);
         }
         for (const set of planned) {
           if (!set.kept) continue;
@@ -1307,10 +1396,18 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
           if (
             !was ||
             was.position !== set.position ||
-            was.resourceScope !== set.input.resourceScope ||
+            was.future !== set.input.future ||
+            was.env !== set.input.env ||
+            was.mixedEnv ||
             trustLevelsJsonOf(was) !== trustLevels
           ) {
-            updateSetStmt.run(set.position, set.input.resourceScope, trustLevels, set.id);
+            updateSetStmt.run(
+              set.position,
+              set.input.future ? 1 : 0,
+              set.input.env,
+              trustLevels,
+              set.id,
+            );
           }
           if (was) {
             const before = was.trustLevels ?? {};
@@ -1409,9 +1506,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       return issuers;
     },
     async create(input) {
-      const connections = resolveConnectionInputs(ctx, input.connections, input.policy);
-      validateSets(ctx, connections);
-      assertConnectionSelections(ctx, connections);
+      const unchecked = resolveConnectionInputs(ctx, input.connections, input.policy);
+      validateSets(ctx, unchecked);
+      const connections = assertConnectionSelections(ctx, unchecked);
       const id = ctx.newId();
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
@@ -1437,21 +1534,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, (): AddedMissionResources => {
         const sets = setsOfConnection.all(missionId, connectionId);
-        const [first] = sets;
-        if (!first) throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
-        const whole = sets.find((set) => set.resource_scope === 'connection');
+        if (sets.length === 0) {
+          throw new NotFoundError('mission_connection', `${missionId}/${connectionId}`);
+        }
         const judged = sets.filter((set) => judgedSetIds?.includes(set.id) ?? false);
-        const [onlyJudged, ...moreJudged] = judged;
-        const target =
-          onlyJudged && moreJudged.length === 0
-            ? onlyJudged
-            : (whole ?? (onlyJudged ? onlyJudged : first));
-        const scope = parseEnum(
-          RESOURCE_SCOPES,
-          target.resource_scope,
-          'mission_resource_sets.resource_scope',
+        const candidates = judged.length > 0 ? judged : sets;
+        const held = new Map(
+          heldOnConnection
+            .all(missionId, connectionId)
+            .map((r) => [r.resource_id, r.resource_set_id]),
         );
         const refs: string[] = [];
+        const placed: { resourceId: string; resourceSetId: string }[] = [];
+        const added: string[] = [];
         for (const resourceId of resourceIds) {
           const owner = resourceConnectionOf.get(resourceId);
           if (!owner) throw new NotFoundError('connection_resource', resourceId);
@@ -1461,27 +1556,19 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             );
           }
           if (!refs.includes(owner.ref)) refs.push(owner.ref);
-        }
-        const added: string[] = [];
-        // A set of scope `connection` reaches every resource no other set selects already.
-        const writes = scope !== 'connection' && resourceIds.length > 0;
-        if (writes) {
-          // `all` stores no id only when nothing was known at issuance: with one, it is a list.
-          if (scope === 'all') setScope.run('selected', target.id);
-          for (const resourceId of resourceIds) {
-            if (added.includes(resourceId)) continue;
-            const inserted = insertResourceFrom.run(
-              missionId,
-              connectionId,
-              resourceId,
-              target.id,
-              source,
-            );
-            if (inserted.changes > 0) added.push(resourceId);
+          const already = held.get(resourceId);
+          if (already !== undefined) {
+            placed.push({ resourceId, resourceSetId: already });
+            continue;
           }
-          touch.run(now, missionId);
+          const target = placementOf(candidates, owner.env);
+          insertResourceFrom.run(missionId, connectionId, resourceId, target.id, source);
+          held.set(resourceId, target.id);
+          placed.push({ resourceId, resourceSetId: target.id });
+          added.push(resourceId);
         }
-        // What the mission created is in its activity, whatever the scope.
+        if (added.length > 0) touch.run(now, missionId);
+        // What the mission created is in its activity.
         const session =
           source === 'created' && created && refs.length > 0
             ? sessions.sessionOfMission(missionId)
@@ -1497,8 +1584,73 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
             now,
           );
         }
-        return { resourceSetId: target.id, scope: writes ? 'selected' : scope, added };
+        return { placed, added };
       });
+    },
+    async applyResourceChanges(connectionId, changes, neverJoin) {
+      const now = nowIso(ctx);
+      const excluded = new Set(neverJoin);
+      return withImmediateTransaction(db, (): ResourceMove[] => {
+        const resources = new Map<string, { ref: string; env: string | null; hidden: boolean }>();
+        for (const change of changes) {
+          const row = resourceConnectionOf.get(change.resourceId);
+          if (row?.connection_id !== connectionId) continue;
+          resources.set(change.resourceId, {
+            ref: row.ref,
+            env: row.env,
+            hidden: row.hidden === 1,
+          });
+        }
+        const moves: ResourceMove[] = [];
+        for (const { id: missionId } of runningOnConnection.all(connectionId, now)) {
+          const sets = setsOfConnection.all(missionId, connectionId);
+          const held = new Map(
+            heldOnConnection
+              .all(missionId, connectionId)
+              .map((r) => [r.resource_id, r.resource_set_id]),
+          );
+          const before = moves.length;
+          for (const change of changes) {
+            const resource = resources.get(change.resourceId);
+            if (!resource) continue;
+            const move = (resourceSetId: string, kind: ResourceMove['change']): void => {
+              moves.push({
+                missionId,
+                connectionId,
+                resourceSetId,
+                resourceId: change.resourceId,
+                ref: resource.ref,
+                change: kind,
+                reason: change.reason,
+              });
+            };
+            const holding = sets.find((set) => set.id === held.get(change.resourceId));
+            if (holding) {
+              // A resource that just appeared and is held already was placed by its
+              // creating call (`addResources`): only a relabel moves a held resource.
+              if (change.reason !== 'relabelled') continue;
+              if (holding.mixed_env === 1 || holding.env === resource.env) continue;
+              deleteResourceStmt.run(missionId, change.resourceId);
+              held.delete(change.resourceId);
+              move(holding.id, 'left');
+            }
+            if (resource.hidden || excluded.has(change.resourceId)) continue;
+            const target =
+              sets.find(
+                (set) => set.future === 1 && set.mixed_env === 0 && set.env === resource.env,
+              ) ?? sets.find((set) => set.future === 1 && set.mixed_env === 1);
+            if (!target) continue;
+            insertResource.run(missionId, connectionId, change.resourceId, target.id, 'future');
+            held.set(change.resourceId, target.id);
+            move(target.id, 'joined');
+          }
+          if (moves.length > before) touch.run(now, missionId);
+        }
+        return moves;
+      });
+    },
+    async connectionsWithFutureSets(now) {
+      return futureConnections.all(now).map((r) => r.connection_id);
     },
     async getById(id) {
       const row = byId.get(id);

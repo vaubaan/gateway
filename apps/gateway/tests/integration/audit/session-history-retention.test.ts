@@ -67,7 +67,7 @@ describe('retention of the session history', () => {
       creatorUserId: userId,
       periodSeconds,
       expiresAt: null,
-      connections: [{ connectionId, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId, resourceIds: [] }],
       policy: [
         { riskId: READ, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' },
         { riskId: MERGE, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'approval' },
@@ -371,7 +371,7 @@ describe('the retention sweeper purges the session history with the audit', () =
         creatorUserId: user.id,
         periodSeconds: null,
         expiresAt: null,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [
           { riskId: SHIPPED_RISK, quota: 5, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
         ],

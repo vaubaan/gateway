@@ -24,7 +24,8 @@ describe('summarize — the three lines of the creation screen', () => {
       { connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
     ]);
     expect(s.can).toBe(
-      'Acme "Acme main": 4 risks on 3 of 3 resources, up to "Delete things in bulk" (high).',
+      // `all`: the labelled resources, one set per environment (`scratch` has no label).
+      'Acme "Acme main": 4 risks on 2 of 3 resources, up to "Delete things in bulk" (high).',
     );
   });
 
