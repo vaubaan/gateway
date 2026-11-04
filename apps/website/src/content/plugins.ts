@@ -81,6 +81,8 @@ export interface CredentialInfo {
   readonly scopes: readonly string[];
   /** `oauth2` whose client the gateway registers itself: nobody declares anything. */
   readonly registersItself: boolean;
+  /** Signs in through the OAuth broker the instance is enrolled with (Google). */
+  readonly brokered: boolean;
 }
 
 export interface PluginInfo {
@@ -185,7 +187,8 @@ function riskInfo(entry: RiskEntry): RiskInfo {
 }
 
 function credentialInfo(spec: CredentialSpec): CredentialInfo {
-  // An `oauth2` way asks for nothing: the gateway registers its own client at the service.
+  // An `oauth2` way asks for nothing: the gateway registers its own client at the service,
+  // or signs in through the OAuth broker it is enrolled with (`broker`).
   const fields = spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [];
   const guide = spec.kind === 'api-key' ? spec.guide : undefined;
   return {
@@ -203,7 +206,8 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     expiry: guide?.expiry ?? null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
-    registersItself: spec.kind === 'oauth2',
+    registersItself: spec.kind === 'oauth2' && spec.broker === undefined,
+    brokered: spec.kind === 'oauth2' && spec.broker !== undefined,
   };
 }
 

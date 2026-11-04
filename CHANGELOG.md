@@ -75,6 +75,22 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   (`RESOURCE_NOUN_MAX_LENGTH`). Every shipped plugin declares one; the gateway
   says `resource` / `resources` for a plugin without one.
 
+- **The OAuth broker caps refreshes per instance** (`@vaubaan/oauth-broker`
+  0.3.0): each enrolled instance may call `/token` `refresh_per_hour` times an
+  hour (600 unless set in `OAUTH_BROKER_CONFIG`, refilled evenly), so one
+  instance cannot spend the quota of the client every instance shares. Past it
+  the broker answers 429 `rate_limited` with `retry-after` before calling the
+  provider; a gateway reads it as a broker failure and retries, never as an
+  expired connection.
+
+### Documentation
+
+- **Running one's own OAuth broker**: `deploy/README.md` and the site's new
+  page Operations → Your own OAuth broker walk a self-hoster through the
+  broker Google Calendar needs (own Google client, `unattested`, enrolment,
+  `oauth_brokers.<name>.*`). A provider page of a brokered plugin no longer
+  says the gateway registers its own client there.
+
 ## [2.0.0-alpha.15] - 2026-11-02
 
 ### Added

@@ -1,4 +1,4 @@
 {
   "title": "Operations",
-  "pages": ["backup-and-restore", "master-key-rotation", "upgrade", "telemetry"]
+  "pages": ["backup-and-restore", "master-key-rotation", "upgrade", "telemetry", "oauth-broker"]
 }

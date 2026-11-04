@@ -6,7 +6,7 @@ tracks:
   - apps/oauth-broker/package.json
   - apps/oauth-broker/tests/
   - .github/workflows/oauth-broker-image.yml
-last_reviewed: 2026-10-30
+last_reviewed: 2026-11-03
 ---
 
 # OAuth broker — handbook
@@ -52,7 +52,10 @@ without an enclave behind the platform's TLS (`unattested`). Spec:
 - The return URL is hashed exactly as the gateway sends it (no slash added or removed).
 - `refresh-token-sealing-key` is never rotated by a new version while instances are enrolled:
   every token they hold would stop opening (spec open question).
-- Changing the enrollment is a restart: flows in progress are lost.
+- Changing the enrollment is a restart: flows in progress are lost, and so is each instance's count
+  of refreshes (`refresh_per_hour`, 600 by default, all providers together; past it `/token`
+  answers 429 `rate_limited` with `retry-after`, logged `reason: refresh_limit`, which the gateway
+  reads as a broker failure, never an expiry).
 - `OAUTH_BROKER_CONFIG` must not contain `~`, the metadata delimiter below. Any other `tee-env-*`,
   `tee-cmd` or mount is refused by the image's launch policy (its labels, so measured).
 - Locally: `OAUTH_BROKER_PLATFORM=local`, secrets under `platform.local.secrets`; its evidence says
