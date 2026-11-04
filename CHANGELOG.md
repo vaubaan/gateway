@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.16] - 2026-11-04
+
 ### Added
 
 - **Notifications reach messaging addresses and mail** (spec §4.2 bis), wave 2:
@@ -47,6 +49,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **Base image Node 26.13.0** (`node:26.13.0-bookworm-slim`, multi-architecture digest), for the
+  gateway and the OAuth broker's Dockerfile.
 - **The mission screen is cards** (spec §4.2): creating and editing show only the
   mission's cards — one account and the resources of one environment each.
   "+ Add an account" picks the account, then its resources grouped by
@@ -2379,7 +2383,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.15...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.16...HEAD
+[2.0.0-alpha.16]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.15...v2.0.0-alpha.16
 [2.0.0-alpha.15]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.14...v2.0.0-alpha.15
 [2.0.0-alpha.14]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.13...v2.0.0-alpha.14
 [2.0.0-alpha.13]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.12...v2.0.0-alpha.13
