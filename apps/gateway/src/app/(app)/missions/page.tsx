@@ -9,6 +9,10 @@
  * ago", the instant in its `title`): two missions with the same name — an
  * import reissued — are told apart at a glance. Four columns by default; my
  * key is a detail, behind the page's "Show details".
+ *
+ * Stopped missions (stopped or expired: they serve nothing) are behind a filter,
+ * like closed pull requests: "Running" by default, "Stopped" one click away, each
+ * with its count (`?state=stopped`).
  */
 import Link from 'next/link';
 
@@ -23,13 +27,17 @@ import {
   KeyMark,
   PageHeader,
   Section,
+  Segmented,
   StatusMark,
   type Column,
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import {
   ACTIONS,
+  capitalize,
   count,
+  formatNumber,
+  MISSION_LIST_FILTERS,
   expiresOn,
   KEY_WORDS,
   MISSION_WORDS,
@@ -144,7 +152,11 @@ function MissionTable({
   );
 }
 
-export default async function MissionsPage() {
+interface Props {
+  searchParams: Promise<{ state?: string | string[] }>;
+}
+
+export default async function MissionsPage({ searchParams }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const now = new Date();
@@ -166,8 +178,29 @@ export default async function MissionsPage() {
       overview.lost.length,
     ),
   }));
-  const created = listed.filter((m) => m.role === 'creator');
-  const shared = listed.filter((m) => m.role === 'member');
+  const stopped = (await searchParams).state === 'stopped';
+  const stoppedCount = listed.filter((m) => m.mark.over).length;
+  const shown = listed.filter((m) => m.mark.over === stopped);
+  const created = shown.filter((m) => m.role === 'creator');
+  const shared = shown.filter((m) => m.role === 'member');
+  const filter = (
+    <Segmented
+      label={MISSION_LIST_FILTERS.label}
+      value={stopped ? 'stopped' : 'running'}
+      options={[
+        {
+          value: 'running',
+          label: `${formatNumber(listed.length - stoppedCount)} ${capitalize(MISSION_LIST_FILTERS.running)}`,
+          href: ROUTES.missions,
+        },
+        {
+          value: 'stopped',
+          label: `${formatNumber(stoppedCount)} ${capitalize(MISSION_LIST_FILTERS.stopped)}`,
+          href: `${ROUTES.missions}?state=stopped`,
+        },
+      ]}
+    />
+  );
   const newMission = (
     <ButtonLink href={ROUTES.newMission} variant="primary">
       {ACTIONS.newMission}
@@ -189,6 +222,9 @@ export default async function MissionsPage() {
   return (
     <DetailScope id="missions:list">
       <PageHeader title={PAGES.missions.title} lede={PAGES.missions.lede} primary={newMission} />
+      <div className={styles.listFilter} data-testid="missions-filter">
+        {filter}
+      </div>
       <Section
         first
         title={SECTIONS.yours}
@@ -198,7 +234,13 @@ export default async function MissionsPage() {
       >
         {created.length === 0 ? (
           <p className={styles.quiet}>
-            {MISSION_WORDS.noneYet} <Link href={ROUTES.newMission}>Create the first one</Link>.
+            {stopped ? (
+              MISSION_LIST_FILTERS.noneStopped
+            ) : (
+              <>
+                {MISSION_WORDS.noneYet} <Link href={ROUTES.newMission}>Create the first one</Link>.
+              </>
+            )}
           </p>
         ) : (
           <MissionTable
@@ -213,7 +255,9 @@ export default async function MissionsPage() {
       <Section title={SECTIONS.sharedWithYou} count={shared.length} testId="missions-shared">
         {shared.length === 0 ? (
           <p className={styles.quiet}>
-            {MISSION_WORDS.noneShared} {MISSION_WORDS.noneSharedHow}
+            {stopped
+              ? MISSION_LIST_FILTERS.noneStopped
+              : `${MISSION_WORDS.noneShared} ${MISSION_WORDS.noneSharedHow}`}
           </p>
         ) : (
           <MissionTable

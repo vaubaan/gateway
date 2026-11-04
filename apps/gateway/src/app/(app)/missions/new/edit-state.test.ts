@@ -8,7 +8,7 @@ import { judgeEdit, type MissionSnapshot } from '@/lib/missions/mission-edit';
 import { ACME_RESOURCES, acmeConnection } from '../../../../../tests/support/missions/testing';
 
 import { changeLines, editDraftOf, initialEditState, raisedEditState } from './edit-state';
-import { expiryOf, RESOURCE_CHOICES, toggleRisk, type FormState } from './form-state';
+import { expiryOf, replaceCard, type FormState } from './form-state';
 
 const NOW = new Date('2026-10-24T09:00:00.000Z');
 // `scratch` labelled staging: it may join the staging set (a set holds one environment).
@@ -51,16 +51,15 @@ const SNAPSHOT: MissionSnapshot = {
 
 const naming = { resource: (_c: string, id: string) => id, risk: (id: string) => id };
 
-describe('the creation form in edit mode', () => {
+describe('the mission screen in edit mode', () => {
   it('starts from the mission and sends it back unchanged', () => {
     const state = initialEditState(context, SNAPSHOT);
     expect(state.name).toBe('Ship it');
     expect(state.expiry).toBe('keep');
     expect(expiryOf(state, NOW)).toBe(SNAPSHOT.expires_at);
-    expect(state.connections[acme.id]).toMatchObject({
-      included: true,
-      sets: [{ id: 'set-1', resourceScope: 'selected', resourceIds: ['res-app-staging'] }],
-    });
+    expect(state.cards).toMatchObject([
+      { id: 'set-1', connectionId: acme.id, resourceIds: ['res-app-staging'], env: 'staging' },
+    ]);
     const judged = judgeEdit(
       { connections: context, now: NOW },
       SNAPSHOT,
@@ -102,41 +101,18 @@ describe('the creation form in edit mode', () => {
 
   it('lists every change with what it means', () => {
     const state = initialEditState(context, SNAPSHOT);
-    const cs = state.connections[acme.id];
-    const set = cs?.sets[0];
-    if (!cs || !set) throw new Error('fixture');
-    const read = acme.risks.find((r) => r.risk_id === 'acme.read');
-    if (!read) throw new Error('fixture');
-    // Remove the read permission, add scratch.
-    const next: FormState = {
-      ...state,
-      connections: {
-        ...state.connections,
-        [acme.id]: {
-          ...cs,
-          sets: [
-            { ...toggleRisk(acme, set, read), resourceIds: ['res-app-staging', 'res-scratch'] },
-          ],
-        },
-      },
-    };
-    const lowered: FormState = {
-      ...state,
-      connections: {
-        ...state.connections,
-        [acme.id]: {
-          ...cs,
-          sets: [
-            {
-              ...set,
-              entries: {
-                'acme.read': { quota: '2', rateMax: '10', rateWindow: '60', gate: 'auto' },
-              },
-            },
-          ],
-        },
-      },
-    };
+    const [set] = state.cards;
+    if (!set) throw new Error('fixture');
+    // Remove the read permission, add scratch (labelled staging in this fixture).
+    const next: FormState = replaceCard(state, {
+      ...set,
+      entries: {},
+      resourceIds: ['res-app-staging', 'res-scratch'],
+    });
+    const lowered: FormState = replaceCard(state, {
+      ...set,
+      entries: { 'acme.read': { quota: '2', rateMax: '10', rateWindow: '60', gate: 'auto' } },
+    });
     const judgedRemoval = judgeEdit(
       { connections: context, now: NOW },
       SNAPSHOT,
@@ -177,15 +153,9 @@ describe('the creation form in edit mode', () => {
       consequence: 'Already used up: 4 used this period. Refused until the limits reset.',
     });
   });
-
-  it('says a resource found later can be added to the same mission', () => {
-    expect(RESOURCE_CHOICES.find((c) => c.id === 'all')?.explanation).toBe(
-      'The resources listed today, and the ones this mission creates. One found later is not reached until the creator adds it to this mission with “Edit mission”.',
-    );
-  });
 });
 
-describe('the creation form in edit mode — opened by "Raise"', () => {
+describe('the mission screen in edit mode — opened by "Raise"', () => {
   it('raises the macro-action of the set it names, and judges as an ordinary edit', () => {
     const snapshot: MissionSnapshot = {
       ...SNAPSHOT,
@@ -205,7 +175,7 @@ describe('the creation form in edit mode — opened by "Raise"', () => {
       macroActionId: 'read',
       to: 'trusting',
     });
-    expect(state.connections[acme.id]?.sets[0]?.trustLevels).toEqual({ read: 'trusting' });
+    expect(state.cards[0]?.trustLevels).toEqual({ read: 'trusting' });
     expect(replaced).toEqual(['acme.read']);
     const judged = judgeEdit(
       { connections: context, now: NOW },

@@ -3,8 +3,8 @@
 /**
  * Everything a person does to a mission from its page (spec §7.8, §7.9 bis),
  * and the dialogs those acts open. One provider around the page holds the
- * dialogs, so that the header, the "···" menu, the rows of "People and
- * keys" and the stop zone at the bottom open the same ones:
+ * dialogs, so that the header, the "···" menu and the rows of "People and
+ * keys" open the same ones:
  *
  *   setup kit            the three snippets and the check, with the masked key
  *   add people           the creator picks a teammate among the people who signed in
@@ -507,24 +507,6 @@ export function ActButton({
   );
 }
 
-/**
- * The creator stops the mission from the zone at the bottom of its page too,
- * not only from "···": the same dialog, where the name is typed.
- */
-export function StopMissionButton() {
-  const acts = useMissionActs();
-  return (
-    <Button
-      type="button"
-      variant="danger"
-      onClick={() => acts.open({ kind: 'stop' })}
-      data-testid="stop-mission"
-    >
-      {MISSION_ACTIONS.stop}
-    </Button>
-  );
-}
-
 /** A teammate's (or a creator's) first key on the mission: the page's primary action then. */
 export function GenerateKeyButton() {
   const acts = useMissionActs();
@@ -540,17 +522,11 @@ export function MissionMenu({
   missionId,
   duplicable,
   stoppable,
-  limitsHref = null,
-  editHref = null,
 }: {
   missionId: string;
   /** The reader created the mission: a copy of it is theirs to make. */
   duplicable: boolean;
   stoppable: boolean;
-  /** Where the creator changes the limits; `null` when the server would not take it. */
-  limitsHref?: string | null;
-  /** Where the creator edits the whole mission; `null` when the server would not take it. */
-  editHref?: string | null;
 }) {
   const acts = useMissionActs();
   const { team } = acts;
@@ -572,8 +548,6 @@ export function MissionMenu({
       {team.issuable && !mine && (
         <MenuItem onSelect={acts.generateMine}>{MISSION_ACTIONS.generateKey}</MenuItem>
       )}
-      {editHref && <MenuItem href={editHref}>{MISSION_ACTIONS.editMission}</MenuItem>}
-      {limitsHref && <MenuItem href={limitsHref}>{MISSION_ACTIONS.changeLimits}</MenuItem>}
       {duplicable && (
         <MenuItem href={`${ROUTES.newMission}?from=${encodeURIComponent(missionId)}`}>
           {MISSION_ACTIONS.duplicate}

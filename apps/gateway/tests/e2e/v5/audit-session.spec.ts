@@ -48,7 +48,8 @@ test('a day of calls: the mission, its activity, then the record of the mission'
     new RegExp(`^/waiting/(${day.claim_id}|${day.approval_id})$`),
   );
   await expect(page.getByText('And 1 request more on this mission')).toBeVisible();
-  await expect(page.getByTestId('mission-allows')).toContainText('Limit reached');
+  // The gauge of the macro-action whose permission is used up says so.
+  await expect(page.getByTestId('mission-cards')).toContainText('Limit reached');
   await snap(page, 'mission-waiting');
 
   // ── From the mission to its activity ──────────────────────────────────────

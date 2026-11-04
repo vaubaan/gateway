@@ -3,15 +3,14 @@
  * IdP (spec §7.4, §4.2, §4.4).
  *
  * The signed-in person owns a GitHub, a Supabase, a Vercel and a Gmail
- * account. The first test creates a three-account mission and
- * checks the screen is the one the redesign asks for — macro-actions first,
- * each at a trust level saying what it yields; the summary and the one action
- * in a rail that stays in view; the permissions one by one in the Advanced
- * view; a confirmation that lists
- * every permission with its limit — then follows the key through its
- * replacement and the mission to its stop; the second covers the two other
- * ways to start: an agent's proposal and a copy; the third reads the
- * reference.
+ * account. The first test creates a mission card by card — "+ Add an account",
+ * the resources grouped by environment (two Supabase cards, staging and prod),
+ * macro-actions at a trust level, Custom for one of them, a summary bar that
+ * stays in view, a confirmation that lists every permission with its limit —
+ * then reads the mission page (the screen frozen, with the use of the period),
+ * follows the key through its replacement and the mission to its stop and the
+ * list's Stopped filter; the second covers the two other ways to start: an
+ * agent's proposal and a copy; the third reads the reference.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { githubPlugin } from '@vaubaan/plugin-github';
@@ -19,29 +18,19 @@ import { githubPlugin } from '@vaubaan/plugin-github';
 import { checkToken, routeToInstance, signInAs } from './browser';
 import { E2E_USER } from './instance';
 import {
+  cardOf,
   confirmByTyping,
   createMission,
-  trustLevelChoice,
   includeWithTrustLevels,
   missionMenu,
   openCreatedMission,
+  openCustom,
   permissionRow,
   pickTrustLevel,
-  resourcesButton,
   revealedKey,
   savedKey,
-  showPermissions,
-  showView,
+  trustLevelChoice,
 } from './mission-pages';
-
-/**
- * The default state of a mission on three accounts — one row per macro-action,
- * each counted once ticked — fits in about one screen per account plus one for
- * the name and the limits, at 1280 x 800, the build footer included. No
- * permission is listed one by one until the Advanced view is asked for.
- */
-const ACCOUNTS_SHOWN = 3;
-const COMPACT_SCREENS = ACCOUNTS_SHOWN + 1;
 
 /**
  * What the pages show of the GitHub plugin is read from the plugin itself, so a
@@ -74,7 +63,7 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.getByText(E2E_USER.email)).toBeVisible();
 }
 
-test('create a three-account mission on one page, then replace its key and stop it', async ({
+test('create a mission card by card on one page, then replace its key and stop it', async ({
   page,
   request,
 }) => {
@@ -82,183 +71,129 @@ test('create a three-account mission on one page, then replace its key and stop 
   await page.getByRole('link', { name: 'New mission' }).first().click();
   await expect(page.getByRole('heading', { name: 'New mission', level: 1 })).toBeVisible();
 
-  // Every account is offered, Gmail included: no service is held back (docs/handbook/plugin-sdk.md).
-  await expect(page.getByTestId('connection-gmail')).toBeVisible();
-  await expect(page.getByText(/experimental/i)).toHaveCount(0);
-
-  // Nothing can be created before a name, an account and a macro-action; the rail says what is missing.
+  // Only the mission's cards are shown: none yet. Nothing can be created before a name,
+  // an account and a macro-action; the bar says what is missing.
+  const cards = page.getByTestId('cards');
+  await expect(cards.getByRole('region')).toHaveCount(0);
   const create = page.getByRole('button', { name: 'Create mission' });
   await expect(create).toBeDisabled();
   await expect(page.getByTestId('issues')).toContainText('Give the mission a name.');
-  await expect(page.getByTestId('issues')).toContainText('Include at least one account.');
-
+  await expect(page.getByTestId('issues')).toContainText('Add at least one account.');
   await page.getByLabel('Mission name').fill('Ship the billing page');
-  await page.getByLabel('Include GitHub acme-org').check();
-  // An account with no macro-action ticked allows nothing, and the rail says so in the interface's words.
-  await expect(page.getByTestId('issues')).toContainText(
-    'GitHub · acme-org allows nothing yet: tick a macro-action or a permission, or leave the account out.',
+
+  // "+ Add an account" offers every account, Gmail included: no service is held back.
+  await page.getByTestId('add-account').click();
+  const picker = page.getByTestId('account-picker');
+  await expect(picker.getByRole('button', { name: /^Gmail · ops mailbox/ })).toBeVisible();
+  await expect(picker.getByText(/experimental/i)).toHaveCount(0);
+  await picker.getByRole('button', { name: /^GitHub · acme-org/ }).click();
+  // Step 2: the repositories, ticked one by one; no "All".
+  const step = page.getByTestId('resource-picker');
+  await expect(step).toContainText('Which repositories?');
+  await expect(step.getByRole('checkbox', { name: 'Resource acme/app' })).toBeChecked();
+  await expect(step.getByText(/^All$/)).toHaveCount(0);
+  await expect(step.getByRole('checkbox', { name: /^\+ future repositories/ })).not.toBeChecked();
+  await step.getByRole('button', { name: 'Add card' }).click();
+
+  const github = 'GitHub · acme-org';
+  await expect(cardOf(page, github).getByTestId('card-resources')).toHaveText(
+    '3 repositories: acme/app, acme/infra, acme/web',
+  );
+  // A card with no macro-action ticked allows nothing, and the card says so in the interface's words.
+  await expect(cardOf(page, github).getByTestId('card-issues')).toContainText(
+    'GitHub · acme-org allows nothing yet: tick a macro-action, or remove the card.',
   );
   // A trust level ticks its macro-action: reads at Trusting, proposing and shipping at Careful.
-  await pickTrustLevel(page, 'GitHub acme-org', 'Read', 'Trusting');
-  await pickTrustLevel(page, 'GitHub acme-org', 'Propose', 'Careful');
-  await pickTrustLevel(page, 'GitHub acme-org', 'Ship', 'Careful');
-  await includeWithTrustLevels(page, 'Supabase Acme Supabase', {
-    Query: 'Trusting',
-    'Change data': 'Careful',
-  });
-  await includeWithTrustLevels(page, 'Vercel Acme Vercel', {
+  await pickTrustLevel(page, github, 'Read', 'Trusting');
+  await pickTrustLevel(page, github, 'Propose', 'Careful');
+  await pickTrustLevel(page, github, 'Ship', 'Careful');
+
+  // Supabase: one card per environment, the environment read from the projects' labels.
+  await includeWithTrustLevels(
+    page,
+    'Supabase · Acme Supabase',
+    { Query: 'Trusting', 'Change data': 'Careful' },
+    { env: 'staging' },
+    'Supabase · Acme Supabase (staging)',
+  );
+  await page.getByTestId('add-account').click();
+  await expect(picker.getByRole('button', { name: /^Supabase · Acme Supabase/ })).toContainText(
+    '1 of 2 projects free',
+  );
+  await picker.getByRole('button', { name: /^Supabase · Acme Supabase/ }).click();
+  // The staging project is in the other card; the prod group is the one left.
+  await expect(step.getByTestId('group-staging')).toContainText('in another card');
+  await step.getByRole('radio', { name: 'Environment prod' }).check();
+  await expect(step.getByRole('checkbox', { name: 'Resource prdprojectref' })).toBeChecked();
+  await step.getByRole('button', { name: 'Add card' }).click();
+  const prod = 'Supabase · Acme Supabase (prod)';
+  await pickTrustLevel(page, prod, 'Query', 'Careful');
+  await pickTrustLevel(page, prod, 'Change data', 'Careful');
+  await expect(cardOf(page, prod)).toHaveAttribute('data-env', 'prod');
+  // Vercel reads the environment from each call: no badge, unlabelled projects welcome.
+  await includeWithTrustLevels(page, 'Vercel · Acme Vercel', {
     Watch: 'Careful',
     'Deploy and review': 'Careful',
   });
   await expect(page.getByTestId('issues')).toHaveCount(0);
+  await expect(page.getByTestId('card-issues')).toHaveCount(0);
+  await expect(cards.getByRole('region')).toHaveCount(4);
 
-  // Resources: all selected by default, the list behind "Change".
-  await expect(resourcesButton(page, 'GitHub acme-org', '3 of 3')).toBeVisible();
-  await expect(page.getByLabel('Resource acme/app')).toHaveCount(0);
-
-  // The rail says, per account, what is allowed, what asks first and what it cannot do.
-  const rail = page.getByTestId('summary');
-  await expect(page.getByTestId('summary-github')).toContainText('acme/app');
-  await expect(page.getByTestId('summary-github')).toContainText('Can');
-  await expect(page.getByTestId('summary-github')).toContainText('Asks you');
-  await expect(page.getByTestId('summary-github')).toContainText('Cannot');
-  await expect(page.getByTestId('summary-github')).toContainText(/\d+ permissions\./);
-  await expect(page.getByTestId('summary-supabase')).toBeVisible();
-  await expect(page.getByTestId('summary-vercel')).toBeVisible();
-  await expect(page.getByTestId('summary-carries')).toContainText('explicit permissions');
-  await expect(page.getByTestId('summary-carries')).toContainText('limits reset every day');
-  await expect(page.getByTestId('summary-carries')).toContainText('never expires');
-  await expect(rail).not.toContainText(/\b(risk|quota|budget|gate)\b/i);
-  await expect(create).toBeEnabled();
-
-  // Each macro-action says, in the service's words, what its trust level yields here.
-  const ship = page.getByTestId('macro-github-ship');
-  await expect(ship).toContainText('ask first');
-  await expect(ship).toContainText('left out at Careful');
-  await expect(page.getByTestId('macro-github-read')).toContainText('limits ×3');
-  // Administer is not ticked: no trust level is chosen for it.
-  await expect(page.getByLabel('Administer on GitHub acme-org')).not.toBeChecked();
-  await expect(
-    trustLevelChoice(page, 'GitHub acme-org', 'Administer', 'Careful'),
-  ).not.toBeChecked();
-  const digest = page.getByTestId('policy-digest-github');
-  await expect(digest).toContainText('run freely');
-  await expect(digest).toContainText('ask you first');
-  await expect(digest).toContainText(/highest tier [1-4]/);
-
-  // Compact by default: the Simple view, no permission listed one by one, about a screen
-  // per account, and the one action in view without scrolling.
-  await expect(page.getByTestId('risks-github')).toHaveCount(0);
-  await expect(page.locator('[data-permission]')).toHaveCount(0);
-  const layout = await page.evaluate(() => ({
-    pageHeight: document.documentElement.scrollHeight,
-    viewport: window.innerHeight,
-  }));
-  await snap(page, 'creation-three-accounts');
-  expect(layout.pageHeight).toBeLessThanOrEqual(COMPACT_SCREENS * layout.viewport);
-  await expect(create).toBeInViewport();
-  await page.mouse.wheel(0, 2000);
-  await expect(create).toBeInViewport();
-  await page.mouse.wheel(0, -2000);
-
-  // Deselecting the staging project makes its permissions unavailable here, and the row says so.
-  const changeData = page.getByTestId('macro-supabase-change-data');
-  const withStaging = (await changeData.textContent()) ?? '';
-  await resourcesButton(page, 'Supabase Acme Supabase', '2 of 2').click();
-  await page.getByLabel('Resource stgprojectref').uncheck();
-  await expect(changeData).toContainText('not available to you here');
-  await expect(changeData).not.toHaveText(withStaging);
-  await page.getByLabel('Resource stgprojectref').check();
-  await expect(changeData).toHaveText(withStaging);
-
-  // The permissions one by one are the Advanced view, on the lines the trust levels wrote.
-  await showView(page, 'GitHub acme-org', 'Advanced');
-  const editor = page.getByTestId('risks-github');
-  await expect(editor).toBeVisible();
-  // By default it lists what the person may allow here: on an account they own, everything.
-  await expect(editor.locator('[data-permission]')).toHaveCount(GITHUB.permissions);
-  const merge = permissionRow(editor, 'github.merge-protected');
-  await expect(merge).toContainText('Write on main / master / release-*');
-  // The id is printed as the protocol spells it; the severity is one word.
-  await expect(merge).toContainText('github.merge-protected');
-  await expect(merge.locator('[data-severity]')).toHaveText(/low|medium|high|critical/);
-  // "why?" is closed; behind it, the reason, the six words and the reference in a new tab.
-  await expect(editor.getByText('The canonical branch')).toBeHidden();
-  await merge.getByRole('button', { name: 'why?' }).click();
-  await expect(editor.getByText('The canonical branch')).toBeVisible();
-  await expect(editor.getByText('Undo', { exact: true }).filter({ visible: true })).toHaveCount(1);
-  await expect(
-    editor.getByText('Blast radius', { exact: true }).filter({ visible: true }),
-  ).toHaveCount(1);
-  // One "why?" is open: its link is the only one a person can reach.
-  const reference = editor.getByRole('link', { name: /Full entry in the reference/ });
-  await expect(reference).toHaveAttribute('href', '/reference/github#risk-github.merge-protected');
-  await expect(reference).toHaveAttribute('target', '_blank');
-  await merge.getByRole('button', { name: 'hide' }).click();
-  // Administer was not ticked: none of its permissions is.
-  await expect(page.getByLabel('Allow github.branch-protection-write')).not.toBeChecked();
-  await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
-  await expect(page.getByLabel('Limit for github.read-code')).not.toHaveValue('');
-  await expect(page.getByTestId('risks-count-github')).toHaveText(
-    new RegExp(`^\\d+ chosen of ${GITHUB.permissions} you may allow here$`),
+  // Each row says its level; Administer is not ticked.
+  await expect(page.getByTestId('macro-github-ship').first()).toHaveAttribute(
+    'data-level',
+    'careful',
   );
-  // Adjust one limit and one "ask me first": the Simple view says the list was adjusted.
-  const counted = (await digest.textContent()) ?? '';
-  await page.getByLabel('Limit for github.read-code').fill('42');
-  await page.getByLabel('ask me first: github.read-meta').check();
-  await expect(digest).not.toHaveText(counted);
-  await showView(page, 'GitHub acme-org', 'Simple');
-  await expect(page.getByTestId('adjusted-github')).toBeVisible();
-  // A trust level would write the list again over those edits: the screen asks first, and says why.
-  // (a click, not a check: the choice does not move until the person confirms)
-  await trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Trusting').click();
-  const discard = page.getByTestId('discard-dialog');
-  await expect(discard).toContainText('Discard what you changed?');
-  await expect(discard).toContainText('The trust levels write this account');
-  await discard.getByRole('button', { name: 'Cancel' }).click();
-  await expect(trustLevelChoice(page, 'GitHub acme-org', 'Ship', 'Careful')).toBeChecked();
-  await showView(page, 'GitHub acme-org', 'Advanced');
-  await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('42');
-  await snap(page, 'creation-editor');
-
-  // A long catalog is searchable; what no selected resource can carry is one filter away,
-  // listed with the reason and without a usable tick.
-  await showView(page, 'Supabase Acme Supabase', 'Advanced');
-  const supabase = page.getByTestId('risks-supabase');
-  const available = await supabase.locator('[data-permission]').count();
-  await supabase.getByRole('button', { name: 'All', exact: true }).click();
-  const all = await supabase.locator('[data-permission]').count();
-  expect(all).toBeGreaterThan(available);
-  await supabase.getByLabel('Search the permissions of Supabase Acme Supabase').fill('bulk row');
-  const found = await supabase.locator('[data-permission]').count();
-  expect(found).toBeGreaterThan(0);
-  expect(found).toBeLessThan(all);
-  await expect(page.getByLabel('Allow supabase[preview].bulk-row-write')).toBeDisabled();
-  await expect(permissionRow(supabase, 'supabase[preview].bulk-row-write')).toContainText(
-    'Not available: no selected resource is labelled "preview"',
+  await expect(page.getByLabel(`Administer on ${github}`)).not.toBeChecked();
+  await expect(trustLevelChoice(page, github, 'Administer', 'Careful')).not.toBeChecked();
+  // The (i) of a row shows the Custom content, read-only, on hover.
+  const githubCard = cardOf(page, github);
+  await githubCard.getByRole('button', { name: 'About Ship' }).hover();
+  const shipInfo = githubCard.getByTestId('info-ship');
+  await expect(shipInfo).toBeVisible();
+  await expect(shipInfo).toContainText('Asks you first');
+  await expect(shipInfo).toContainText('Left out');
+  await expect(shipInfo.getByRole('spinbutton')).toHaveCount(0);
+  await expect(githubCard.getByTestId('card-digest')).toContainText(
+    /\d+ permissions · \d+ run freely · \d+ ask you/,
   );
-  await supabase.getByLabel('Search the permissions of Supabase Acme Supabase').fill('');
-  // A service with several planes can be sliced by one, in the editor too.
-  const plane = supabase.getByLabel('Plane of the permissions of Supabase Acme Supabase');
-  await plane.selectOption('storage');
-  const storage = await supabase.locator('[data-permission]').count();
+  await snap(page, 'creation-cards');
+
+  // Custom: the permissions of one macro-action, one by one. Apply lights Custom.
+  let modal = await openCustom(page, github, 'Read');
+  await modal.getByLabel('Limit for github.read-code').fill('42');
+  await modal
+    .getByRole('group', { name: 'Behaviour of github.read-meta' })
+    .getByRole('radio', { name: 'Asks first' })
+    .check();
+  await snap(page, 'creation-custom');
+  await modal.getByRole('button', { name: 'Apply' }).click();
+  await expect(trustLevelChoice(page, github, 'Read', 'Custom')).toBeChecked();
+  // "Start from" a level, then single lines; a level clicked again leaves Custom.
+  modal = await openCustom(page, github, 'Read');
+  await expect(modal.getByLabel('Limit for github.read-code')).toHaveValue('42');
+  await modal.getByRole('button', { name: 'Cancel' }).click();
+
+  // On a prod card, what the catalog never accepts in prod is said, never offered; the
+  // plane chips only filter the list.
+  modal = await openCustom(page, prod, 'Change data');
+  await expect(modal).toContainText('never in prod');
+  await expect(modal.getByLabel('Limit for supabase[prod].bulk-row-write')).toHaveCount(0);
+  const all = await modal.locator('[data-permission], [data-never]').count();
+  await modal.getByRole('button', { name: /^storage/ }).click();
+  const storage = await modal.locator('[data-permission], [data-never]').count();
   expect(storage).toBeGreaterThan(0);
   expect(storage).toBeLessThan(all);
-  await expect(supabase.locator('[data-permission*="migration-write"]')).toHaveCount(0);
-  await expect(supabase.locator('[data-permission*="storage.object-read"]')).toHaveCount(1);
-  await snap(page, 'creation-editor-plane');
-  await plane.selectOption('all');
-  expect(await supabase.locator('[data-permission]').count()).toBe(all);
-  // Untouched, the Supabase list is still what the trust levels wrote: nothing says "adjusted".
-  await showView(page, 'Supabase Acme Supabase', 'Simple');
-  await expect(page.getByTestId('adjusted-supabase')).toHaveCount(0);
-  // GitHub has one plane: no plane filter there.
-  await expect(page.getByLabel('Plane of the permissions of GitHub acme-org')).toHaveCount(0);
+  await modal.getByRole('button', { name: 'Cancel' }).click();
+  await expect(trustLevelChoice(page, prod, 'Change data', 'Careful')).toBeChecked();
 
   await page.getByLabel('Limits reset').selectOption({ label: 'Every week' });
-  await page.getByLabel('Expires', { exact: true }).selectOption({ index: 3 });
-  await expect(page.getByTestId('summary-carries')).toContainText('limits reset every week');
-  await expect(page.getByTestId('summary-carries')).toContainText(/expires \d+ \w+/);
+  await page.getByLabel('Ends', { exact: true }).selectOption({ index: 3 });
+  await expect(page.getByTestId('summary')).toContainText(
+    /^4 cards · \d+ permissions · \d+ run freely · \d+ ask you$/,
+  );
+  await expect(create).toBeEnabled();
+  await expect(create).toBeInViewport();
 
   // "Create mission" asks once, and what is confirmed is the explicit list: every
   // permission by its name and its id, with its limit, and what asks first.
@@ -268,7 +203,7 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(confirm).toContainText('This is the explicit list the key will carry');
   const list = confirm.getByTestId('explicit-list');
   const confirmed = await list.locator('[data-permission]').count();
-  expect(confirmed).toBeGreaterThan(20);
+  expect(confirmed).toBeGreaterThan(15);
   const readCodeLine = permissionRow(list, 'github.read-code');
   await expect(readCodeLine).toContainText('Read code, branches, commits, files');
   await expect(readCodeLine).toContainText('42 a week');
@@ -315,38 +250,30 @@ test('create a three-account mission on one page, then replace its key and stop 
     'title',
     missionId,
   );
-  await expect(page.getByTestId('mission-allows')).toContainText('Can');
-  await expect(page.getByTestId('mission-allows')).toContainText('Asks you first');
-  await expect(page.getByTestId('mission-allows')).toContainText('Cannot');
-  await expect(page.getByTestId('mission-allows')).toContainText('Nothing is near its limit');
+  // The page is the creation screen frozen, plus the use of the period per macro-action.
+  const frozen = page.getByTestId('mission-cards');
+  await expect(frozen.getByRole('region')).toHaveCount(4);
+  await expect(trustLevelChoice(page, github, 'Read', 'Custom')).toBeChecked();
+  await expect(trustLevelChoice(page, github, 'Read', 'Custom')).toBeDisabled();
+  await expect(trustLevelChoice(page, prod, 'Query', 'Careful')).toBeChecked();
+  await expect(cardOf(page, github).getByRole('columnheader', { name: 'This week' })).toBeVisible();
+  const gauge = cardOf(page, github).getByTestId('gauge-read');
+  await expect(gauge).toContainText(/0 \/ \d+/);
+  await gauge.getByRole('button').hover();
+  await expect(gauge.locator('[data-permission="github.read-code"]')).toContainText('0 / 42');
+  await expect(gauge.getByRole('link', { name: 'Raise this limit' })).toHaveAttribute(
+    'href',
+    new RegExp(`/missions/${missionId}/edit\\?custom=.+&action=read$`),
+  );
+  // No list of every permission, no stop zone: stop, duplicate and replace key are in "···".
+  await expect(page.getByTestId('mission-permissions')).toHaveCount(0);
+  await expect(page.getByTestId('mission-stop')).toHaveCount(0);
+  await snap(page, 'mission-detail');
   // The key is a detail of "People and keys".
   const prefix = token.split('_')[2] ?? '';
   await expect(page.getByText(`vbn_live_${prefix}_…`)).toBeHidden();
   await page.getByTestId('team-section').getByRole('button', { name: 'Show details' }).click();
   await expect(page.getByText(`vbn_live_${prefix}_…`).first()).toBeVisible();
-
-  // The explicit list is one click away, with what was used; each row explains itself.
-  const permissions = await showPermissions(page);
-  await expect(permissions.locator('tr[data-permission]')).toHaveCount(confirmed);
-  const readCode = permissionRow(permissions, 'github.read-code');
-  await expect(readCode).toContainText('Read code, branches, commits, files');
-  await expect(readCode).toContainText('0 / 42');
-  await expect(permissionRow(permissions, 'github.read-meta')).toContainText('ask me first');
-  await expect(permissions.getByRole('columnheader', { name: 'Used this week' })).toBeVisible();
-  await readCode.getByRole('button', { name: 'why?' }).click();
-  await expect(permissions.getByText('Reads may leak secrets')).toBeVisible();
-  await snap(page, 'mission-detail');
-  // "why?" leads to the entry in the reference.
-  const missionUrl = page.url();
-  await permissions.getByRole('link', { name: 'Full entry in the reference' }).first().click();
-  await expect(page).toHaveURL(/\/reference\/github#risk-github\.read-code$/);
-  await expect(page.getByTestId('risk-github.read-code')).toBeInViewport();
-  await page.goto(missionUrl);
-  await expect(
-    page.getByRole('heading', { name: 'Ship the billing page', level: 1 }),
-  ).toBeVisible();
-  // The page remembered that this mission's permissions were open.
-  await expect(page.getByTestId('permissions-table')).toBeVisible();
 
   // The kit is on the mission page, without the key.
   await page.getByRole('button', { name: 'Setup kit' }).click();
@@ -376,15 +303,8 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByTestId('reveal-dialog')).toBeVisible();
   await savedKey(page);
 
-  // Stop the mission, from the zone at the bottom of its page (the "···" item opens the same
-  // dialog): the person types its name; every key is refused from then on.
-  await page.getByTestId('mission-menu').click();
-  await expect(page.getByRole('menuitem', { name: 'Stop the mission' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  const stopZone = page.getByTestId('mission-stop');
-  await expect(stopZone.getByRole('heading', { name: 'Stop this mission' })).toBeVisible();
-  await expect(stopZone).toContainText('This cannot be undone');
-  await stopZone.getByRole('button', { name: 'Stop the mission' }).click();
+  // Stop the mission from "···": the person types its name; every key is refused from then on.
+  await missionMenu(page, 'Stop the mission');
   await expect(page.getByRole('dialog')).toContainText('Every key of the mission stops working');
   await expect(
     page.getByRole('dialog').getByRole('button', { name: 'Stop the mission' }),
@@ -398,17 +318,24 @@ test('create a three-account mission on one page, then replace its key and stop 
   await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'Add people' })).toHaveCount(0);
-  await expect(page.getByTestId('mission-stop')).toHaveCount(0);
+  await expect(page.getByTestId('edit-mission')).toHaveCount(0);
   expect(await checkToken(request, rotated)).toMatchObject({
     outcome: 'retired',
     reason: 'revoked',
     mission_status: 'revoked',
   });
 
+  // The list hides stopped missions, like closed pull requests: one click away, counted.
   await page
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Missions' })
     .click();
+  await expect(page.getByRole('row', { name: /Ship the billing page/ })).toHaveCount(0);
+  await page
+    .getByTestId('missions-filter')
+    .getByRole('link', { name: /^\d+ Stopped$/ })
+    .click();
+  await expect(page).toHaveURL(/\/missions\?state=stopped$/);
   await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText('stopped');
   // Each row says when its mission was created; four columns by default, the key a detail.
   await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText(
@@ -467,38 +394,40 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   );
   await page.getByRole('button', { name: 'Check and load' }).click();
 
-  // What passes fills the form; what cannot resolve is listed, not loaded.
+  // What passes fills the screen; what cannot resolve is listed, not loaded.
   const report = page.getByTestId('proposal-report');
   await expect(report).toContainText(/Loaded \d+ permissions on 2 accounts/);
-  await expect(report).toContainText('no selected resource carries the environment of');
   await expect(report).toContainText('supabase[preview].bulk-row-write');
   await expect(page.getByLabel('Mission name')).toHaveValue('Review the pricing PR');
-  await expect(page.getByLabel('Include GitHub acme-org')).toBeChecked();
-  await expect(resourcesButton(page, 'GitHub acme-org', '1 of 3')).toBeVisible();
-  // A loaded list carries no trust levels: it opens in the Advanced view, the honest view of it.
-  await expect(page.getByTestId('policy-digest-github')).toContainText('run freely');
-  await expect(page.getByTestId('risks-github')).toBeVisible();
-  await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
+  // One card per account and environment: GitHub, Supabase staging, Supabase prod.
+  const cards = page.getByTestId('cards').getByRole('region');
+  await expect(cards).toHaveCount(3);
+  await expect(cardOf(page, 'GitHub · acme-org').getByTestId('card-resources')).toHaveText(
+    '1 repository: acme/app',
+  );
+  // A loaded list carries no trust levels: its rows read Custom, the honest word for them.
+  await expect(trustLevelChoice(page, 'GitHub · acme-org', 'Read', 'Custom')).toBeChecked();
   await expect(page.getByLabel('Limits reset')).toHaveValue('one-off');
-  await expect(page.getByTestId('summary-carries')).toContainText('limits do not reset');
   // A mission whose limits never reset heads its limit column "In total".
-  await expect(
-    page.getByTestId('risks-github').getByRole('columnheader', { name: 'In total' }),
-  ).toBeVisible();
+  const modal = await openCustom(page, 'GitHub · acme-org', 'Read');
+  await expect(modal.getByRole('columnheader', { name: 'In total' })).toBeVisible();
+  await modal.getByRole('button', { name: 'Cancel' }).click();
 
   const first = await createMission(page);
   await expect(page.getByTestId('kit-instructions')).toContainText('`acme/app`');
   await expect(page.getByTestId('kit-instructions')).not.toContainText('`acme/web`');
   await openCreatedMission(page, 'Review the pricing PR');
 
-  // Duplicate: same policy, its own key.
+  // Duplicate: same cards, its own key.
   await missionMenu(page, 'Duplicate');
   await expect(page.getByTestId('duplicating')).toContainText(
     'Duplicating “Review the pricing PR”',
   );
   await expect(page.getByLabel('Mission name')).toHaveValue('Review the pricing PR (copy)');
-  await expect(page.getByLabel('Include Supabase Acme Supabase')).toBeChecked();
-  await expect(resourcesButton(page, 'GitHub acme-org', '1 of 3')).toBeVisible();
+  await expect(cards).toHaveCount(3);
+  await expect(cardOf(page, 'GitHub · acme-org').getByTestId('card-resources')).toHaveText(
+    '1 repository: acme/app',
+  );
   const second = await createMission(page);
   expect(second).not.toBe(first);
   expect(await checkToken(request, first)).toMatchObject({ outcome: 'verified' });

@@ -2,8 +2,9 @@
  * "Edit mission" in a browser (spec §3.2 "Editing a mission", §4.2, §7.4 bis; ADR
  * mission-editable-after-issuance). The executor holds the key of a mission on the
  * three repositories of an account; the creator opens the mission, edits it on the
- * creation screen prefilled with it — a new name, one repository less —, reads the
- * list of changes with what each means, saves, and the agent's next call, with the
+ * creation screen prefilled with it — a new name, one repository less through
+ * "Change" on its card —, reads the bar and the list of changes with what each
+ * means, saves, and the agent's next call, with the
  * same key, is refused on the repository that left the mission.
  */
 import { expect, test } from '@playwright/test';
@@ -11,6 +12,7 @@ import { expect, test } from '@playwright/test';
 import { connectAgent, type Agent } from './agent';
 import { issueSmallMission, routeToInstance, signInAs } from './browser';
 import { E2E_USER } from './instance';
+import { pickResources } from './mission-pages';
 
 let agent: Agent | null = null;
 test.afterEach(async () => {
@@ -45,7 +47,10 @@ test('the creator edits a running mission; the same key sees it at its next call
 
   await name.fill('Read the billing code, web only');
   await page.getByRole('button', { name: /^Change the resources of GitHub/ }).click();
-  await page.getByRole('checkbox', { name: 'Resource acme/app' }).uncheck();
+  await pickResources(page, { resources: ['acme/web', 'acme/infra'] }, 'Apply');
+  // The bar says what changed, before anything is saved.
+  await expect(page.getByTestId('summary')).toContainText('Name changed');
+  await expect(page.getByTestId('summary')).toContainText('repositories changed');
   await page.getByRole('button', { name: 'Save changes' }).click();
 
   // Every change, before and after, with what it means.

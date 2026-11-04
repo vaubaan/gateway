@@ -102,6 +102,7 @@ export function TeamSection({
   period,
   me,
   now,
+  addPeople = null,
 }: {
   team: MissionTeam;
   calls: readonly HolderCalls[];
@@ -111,6 +112,8 @@ export function TeamSection({
   me: string;
   /** The instant the page was rendered at, so that "2 min" reads the same on both sides. */
   now: string;
+  /** "Add people", for the creator of a mission that is not stopped. */
+  addPeople?: React.ReactNode;
 }) {
   const acts = useMissionActs();
   const isCreator = team.role === 'creator';
@@ -318,6 +321,7 @@ export function TeamSection({
           <>
             <span className={styles.noteText}>{MISSION_WORDS.sameForEveryone}</span>
             <DetailToggle />
+            {addPeople}
           </>
         }
         testId="team-section"

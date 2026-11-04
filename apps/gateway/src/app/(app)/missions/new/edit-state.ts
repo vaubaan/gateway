@@ -1,5 +1,5 @@
 /**
- * The creation form in edit mode (ADR mission-editable-after-issuance): the form
+ * The mission screen in edit mode (ADR mission-editable-after-issuance): the cards
  * prefilled from a mission, the draft it sends back, and what the confirmation
  * says of each change — pure, so the words and the consequences are unit-tested
  * without a browser. The judgement is `judgeEdit`, the function the server runs
@@ -26,6 +26,7 @@ import {
   loadResolved,
   periodChoiceOf,
   raiseMacroAction,
+  replaceCard,
   type FormState,
 } from './form-state';
 
@@ -42,7 +43,7 @@ export interface EditRaise {
 
 /**
  * The edit state with the raise applied, and the hand-edited lines it replaces. A raise
- * whose set the form does not show leaves the state as it is.
+ * whose card the screen does not show leaves the state as it is.
  */
 export function raisedEditState(
   context: readonly IssuanceConnection[],
@@ -50,19 +51,12 @@ export function raisedEditState(
   raise: EditRaise,
 ): { readonly state: FormState; readonly replaced: readonly RiskId[] } {
   const connection = context.find((c) => c.id === raise.connectionId);
-  const account = state.connections[raise.connectionId];
-  const index = account?.sets.findIndex((set) => set.id === raise.resourceSetId) ?? -1;
-  const set = account?.sets[index];
-  if (!connection || !account || !set) return { state, replaced: [] };
-  const raised = raiseMacroAction(connection, set, raise.macroActionId, raise.to);
-  const sets = account.sets.map((s, i) => (i === index ? raised.state : s));
-  return {
-    state: {
-      ...state,
-      connections: { ...state.connections, [connection.id]: { ...account, sets } },
-    },
-    replaced: raised.replaced,
-  };
+  const card = state.cards.find(
+    (c) => c.connectionId === raise.connectionId && c.id === raise.resourceSetId,
+  );
+  if (!connection || !card) return { state, replaced: [] };
+  const raised = raiseMacroAction(connection, card, raise.macroActionId, raise.to);
+  return { state: replaceCard(state, raised.card), replaced: raised.replaced };
 }
 
 /** What the edit form knows of the mission it edits. */
@@ -111,7 +105,7 @@ export function initialEditState(
   context: readonly IssuanceConnection[],
   snapshot: MissionSnapshot,
 ): FormState {
-  const loaded = loadResolved(context, initialFormState(context), resolvedOfSnapshot(snapshot));
+  const loaded = loadResolved(context, initialFormState(), resolvedOfSnapshot(snapshot));
   return {
     ...loaded,
     name: snapshot.name,

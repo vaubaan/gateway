@@ -11,6 +11,9 @@ import { NeedsUser } from '@/components/auth/NeedsUser';
 import { ButtonLink, Callout, PageHeader } from '@/components/ui';
 import { MISSION_ACTIONS, ROUTES, TRUST_RAISE_WORDS } from '@/lib/vocabulary';
 import { currentUser } from '@/lib/auth/session';
+import { serviceIconOf } from '@vaubaan/plugin-sdk';
+
+import type { ServiceMarkIcon } from '@/components/ui';
 import { riskPlanesOf, type RiskPlanes } from '@/lib/providers/planes';
 
 import { MissionForm } from '../../new/mission-form';
@@ -20,7 +23,12 @@ export const dynamic = 'force-dynamic';
 interface Props {
   params: Promise<{ id: string }>;
   /** "Raise" of a trust-raise proposal (risk model §4.7): `raise=<set>&action=<macro-action>`. */
-  searchParams: Promise<{ raise?: string | string[]; action?: string | string[] }>;
+  searchParams: Promise<{
+    raise?: string | string[];
+    action?: string | string[];
+    /** "Raise this limit" (mission page): `custom=<set>&action=<macro-action>`. */
+    custom?: string | string[];
+  }>;
 }
 
 const one = (value: string | string[] | undefined): string | null =>
@@ -75,11 +83,16 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
   const context = await service.issuanceContext(session.user);
   // The services whose data model has several planes: the editor can be sliced by one.
   const planes: Record<string, RiskPlanes> = {};
+  const icons: Record<string, ServiceMarkIcon | null> = {};
   for (const { provider } of context) {
     const plugin = session.root.registry.get(provider)?.plugin;
     const riskPlanes = plugin ? riskPlanesOf(plugin.dataModel, plugin.catalog) : null;
     if (riskPlanes) planes[provider] = riskPlanes;
+    icons[provider] = plugin ? serviceIconOf(plugin) : null;
   }
+  // "Raise this limit" on the mission page: the edit opens on that macro-action's Custom.
+  const customSet = one(query.custom);
+  const customAction = one(query.action);
 
   return (
     <MissionForm
@@ -88,6 +101,12 @@ export default async function EditMissionPage({ params, searchParams }: Props) {
       missions={[]}
       initial={null}
       planes={planes}
+      icons={icons}
+      openCustom={
+        customSet && customAction && !offer
+          ? { resourceSetId: customSet, actionId: customAction }
+          : null
+      }
       edit={{
         missionId: view.mission.id,
         revision: view.revision,

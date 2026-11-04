@@ -18,11 +18,11 @@ import { connectAgent, kitToolsList, type Agent } from './agent';
 import { routeToInstance, signInAs, upstreamLog } from './browser';
 import { E2E_CUTOVER_USER, MOCK_GITHUB, PUBLIC_URL } from './instance';
 import {
+  cardOf,
   createMission,
+  includeWithTrustLevels,
   openCreatedMission,
-  pickTrustLevel,
-  resourcesButton,
-  showView,
+  openCustom,
 } from './mission-pages';
 
 const CONNECTION = 'Cutover org';
@@ -108,20 +108,21 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   // ── 3. Issue a mission from the plugin's macro-actions ────────────────────
   await page.goto('/missions/new');
   await page.getByLabel('Mission name').fill(MISSION);
-  await page.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Read', 'Trusting');
-  await pickTrustLevel(page, `GitHub ${CONNECTION}`, 'Propose', 'Careful');
-  await expect(page.getByTestId('summary-github')).toContainText('permissions.');
   // One code project, one repository: the other one is left out of the mission.
-  await resourcesButton(page, `GitHub ${CONNECTION}`, '2 of 2').click();
-  await page.getByLabel(`Resource ${LEFT_OUT}`).uncheck();
-  await expect(resourcesButton(page, `GitHub ${CONNECTION}`, '1 of 2')).toBeVisible();
-  await expect(page.getByTestId('summary-github')).toContainText('Nor the other 1 resource.');
-  await expect(page.getByTestId('summary-carries')).toContainText('never expires');
-  // The one adjustment: a limit small enough to be reached in this test.
-  // The advanced view opens on the lines the trust levels wrote.
-  await showView(page, `GitHub ${CONNECTION}`, 'Advanced');
-  await page.getByLabel(`Limit for ${READ_CODE}`).fill(String(QUOTA));
+  await includeWithTrustLevels(
+    page,
+    `GitHub · ${CONNECTION}`,
+    { Read: 'Trusting', Propose: 'Careful' },
+    { resources: [REPOSITORY] },
+  );
+  await expect(cardOf(page, `GitHub · ${CONNECTION}`).getByTestId('card-resources')).toContainText(
+    '1 repository',
+  );
+  await expect(page.getByTestId('summary')).toContainText(/^1 card · \d+ permissions/);
+  // The one adjustment: a limit small enough to be reached in this test, in Read's Custom.
+  const custom = await openCustom(page, `GitHub · ${CONNECTION}`, 'Read');
+  await custom.getByLabel(`Limit for ${READ_CODE}`).fill(String(QUOTA));
+  await custom.getByRole('button', { name: 'Apply' }).click();
 
   // The key, shown once, with the kit: the client configuration and the instructions.
   const token = await createMission(page);
@@ -257,8 +258,10 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
 
   // ── 9. …and on the mission's session page ─────────────────────────────────
   await page.goto(`/missions/${missionId}`);
-  // The mission says its limit is reached, beside its title and in its summary.
-  await expect(page.getByTestId('mission-allows')).toContainText('Limit reached');
+  // The mission says its limit is reached on the gauge of Read (its title says the claim waits).
+  await expect(cardOf(page, `GitHub · ${CONNECTION}`).getByTestId('gauge-read')).toContainText(
+    'Limit reached',
+  );
   await page.getByRole('link', { name: 'Everything this mission did' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${missionId}/session$`));
   const permissions = page.getByTestId('session-permissions');

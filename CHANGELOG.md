@@ -47,6 +47,21 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The mission screen is cards** (spec §4.2): creating and editing show only the
+  mission's cards — one account and the resources of one environment each.
+  "+ Add an account" picks the account, then its resources grouped by
+  environment, plus "+ future <resources>". Each macro-action is set Careful,
+  Trusting, Autonomous or **Custom** (its permissions one by one in a modal,
+  filterable by plane, "never in <env>" where the catalog refuses); the (i) of a
+  row shows the same content read-only. A sticky bar says what changed. The
+  mission page is that screen frozen, with today's use per macro-action (the
+  permission closest to its limit, "Raise this limit") and "↻ Check now" on cards
+  with future resources; stop, duplicate and replace key are in "···". The
+  missions list hides stopped missions behind a Running / Stopped filter.
+  Removed: the Simple/Advanced views, "Everything I hold" and "Select all" in the
+  form, the rail, the mission page's permission table and its "ask me first"
+  switch, "Change limits" and the stop zone.
+
 - The management door's mission views carry `resource_selections` (`future` and
   `env` per set) instead of `resource_scopes`; the `resource-not-in-mission` hint
   field is `takes_future_resources`.

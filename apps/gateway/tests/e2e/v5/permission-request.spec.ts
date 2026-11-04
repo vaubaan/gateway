@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { connectAgent, type Agent } from './agent';
 import { issueSmallMission, routeToInstance, signInAs } from './browser';
 import { E2E_USER } from './instance';
+import { openCustom } from './mission-pages';
 
 let agent: Agent | null = null;
 test.afterEach(async () => {
@@ -51,12 +52,17 @@ test('the creator adds a requested permission, then removes it directly, with th
   expect(await executor.call('github__create_or_update_file', args)).toMatchObject({
     outcome: 'allowed',
   });
-  // Taking it back is "Edit mission": the creation screen prefilled; a mission issued line by
-  // line, with no trust levels, opens on its list in the advanced view.
+  // Taking it back is "Edit mission": the creation screen prefilled; the permission is one
+  // line of its macro-action's Custom.
   await page.goto(`/missions/${issued.mission_id}`);
   await page.getByTestId('edit-mission').click();
   await expect(page).toHaveURL(new RegExp(`/missions/${issued.mission_id}/edit$`));
-  await page.getByRole('checkbox', { name: `Allow ${risk}`, exact: true }).uncheck();
+  const modal = await openCustom(page, 'GitHub · acme-org', 'Propose');
+  await modal
+    .getByRole('group', { name: `Behaviour of ${risk}`, exact: true })
+    .getByRole('radio', { name: 'Left out' })
+    .check();
+  await modal.getByRole('button', { name: 'Apply' }).click();
   await page.getByRole('button', { name: 'Save changes' }).click();
   const confirm = page.getByTestId('confirm-edit');
   await expect(page.getByTestId('edit-changes')).toContainText('Refused from the next call');
