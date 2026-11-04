@@ -54,6 +54,7 @@ export class PluginDefinitionError extends Error {
 export function pluginIssues(plugin: ProviderPlugin): string[] {
   return [
     ...identityIssues(plugin),
+    ...resourceNounIssues(plugin),
     ...toolIssues(plugin),
     ...toolTitleIssues(plugin),
     ...secretArgumentIssues(plugin),
@@ -179,6 +180,37 @@ function identityIssues(plugin: ProviderPlugin): string[] {
   }
   if (plugin.revoke !== undefined && typeof plugin.revoke !== 'function') {
     issues.push('revoke: expected a function when present');
+  }
+  return issues;
+}
+
+/** Upper bound of each form of `ProviderPlugin.resourceNoun` : a word or two. */
+export const RESOURCE_NOUN_MAX_LENGTH = 40;
+
+/** A lowercase noun : starts and ends with a letter or digit, words joined by one space or a hyphen. */
+const RESOURCE_NOUN_PATTERN = /^[a-z0-9]+(?:[ -][a-z0-9]+)*$/;
+
+/**
+ * `resourceNoun` : two forms, each a lowercase noun on one line (letters,
+ * digits, spaces, hyphens), without surrounding spaces — the interface puts it
+ * after a count and capitalises it itself.
+ */
+function resourceNounIssues(plugin: ProviderPlugin): string[] {
+  const noun: unknown = plugin.resourceNoun;
+  if (noun === undefined) return [];
+  if (!isRecord(noun)) return ['resourceNoun: expected { one, other } when present'];
+  const issues: string[] = [];
+  for (const form of ['one', 'other'] as const) {
+    const word = noun[form];
+    if (typeof word !== 'string' || word.trim() === '') {
+      issues.push(`resourceNoun.${form}: expected a non-empty string`);
+    } else if (word.length > RESOURCE_NOUN_MAX_LENGTH) {
+      issues.push(`resourceNoun.${form}: expected at most ${RESOURCE_NOUN_MAX_LENGTH} characters`);
+    } else if (!RESOURCE_NOUN_PATTERN.test(word)) {
+      issues.push(
+        `resourceNoun.${form}: expected a lowercase noun (letters, digits, single spaces, hyphens), got '${word}'`,
+      );
+    }
   }
   return issues;
 }

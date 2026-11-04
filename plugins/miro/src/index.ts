@@ -32,6 +32,7 @@ export const miroPlugin = definePlugin({
   displayName: 'Miro',
   icon: MIRO_ICON,
   iconColor: MIRO_ICON_COLOR,
+  resourceNoun: { one: 'board', other: 'boards' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.5.0',
   description:

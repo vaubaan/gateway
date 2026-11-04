@@ -32,6 +32,8 @@ export const templatePlugin = definePlugin({
   displayName: 'Template provider',
   icon: _TEMPLATE_ICON,
   iconColor: _TEMPLATE_ICON_COLOR,
+  // What one resource is called in the interface ("3 workspaces"); optional.
+  resourceNoun: { one: 'workspace', other: 'workspaces' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.2.0',
   description: 'Scaffold plugin. Copy it to start a real one.',

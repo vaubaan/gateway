@@ -27,6 +27,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `0032_notification_mail`. Audit acts `address-added`, `address-removed`,
   `mail-notifications-changed`. Outbound hosts in handbook configuration.
 
+### Plugin SDK
+
+- **0.5.1 — a plugin names its resources.** `ProviderPlugin.resourceNoun?:
+{ one, other }` (new type `ResourceNoun`) says what one resource of the
+  provider is called in the interface (`board` / `boards`); `definePlugin`
+  checks both forms are lowercase nouns of at most 40 characters
+  (`RESOURCE_NOUN_MAX_LENGTH`). Every shipped plugin declares one; the gateway
+  says `resource` / `resources` for a plugin without one.
+
 ## [2.0.0-alpha.15] - 2026-11-02
 
 ### Added

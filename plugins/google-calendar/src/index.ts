@@ -32,6 +32,7 @@ export const googleCalendarPlugin = definePlugin({
   displayName: 'Google Calendar',
   icon: GOOGLE_CALENDAR_ICON,
   iconColor: GOOGLE_CALENDAR_ICON_COLOR,
+  resourceNoun: { one: 'calendar', other: 'calendars' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.4.0',
   description:

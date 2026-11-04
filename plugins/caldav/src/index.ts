@@ -39,6 +39,7 @@ export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): Provider
     displayName: 'CalDAV Calendar',
     icon: CALDAV_ICON,
     iconColor: CALDAV_ICON_COLOR,
+    resourceNoun: { one: 'calendar', other: 'calendars' },
     version: CALDAV_PLUGIN_VERSION,
     description:
       'Calendars on any CalDAV server (iCloud, Fastmail, Nextcloud…), connected with an app password: list calendars and events, read, create, change and delete events, under risks zoned by who the attendees are. Not for Google Calendar.',

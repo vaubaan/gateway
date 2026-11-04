@@ -30,6 +30,7 @@ export const supabasePlugin = definePlugin({
   displayName: 'Supabase',
   icon: SUPABASE_ICON,
   iconColor: SUPABASE_ICON_COLOR,
+  resourceNoun: { one: 'project', other: 'projects' },
   version: '6.0.0',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',

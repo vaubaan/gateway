@@ -34,6 +34,7 @@ export const context7Plugin = definePlugin({
   displayName: 'Context7',
   icon: CONTEXT7_ICON,
   iconColor: CONTEXT7_ICON_COLOR,
+  resourceNoun: { one: 'library index', other: 'library indexes' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.2.0',
   description:

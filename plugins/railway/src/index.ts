@@ -39,6 +39,7 @@ export const railwayPlugin = definePlugin({
   displayName: 'Railway',
   icon: RAILWAY_ICON,
   iconColor: RAILWAY_ICON_COLOR,
+  resourceNoun: { one: 'project', other: 'projects' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '6.0.0',
   description:
