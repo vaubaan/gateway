@@ -1481,6 +1481,10 @@ export const CARD_WORDS = {
   neverChecked: 'not checked yet',
   checkNow: '↻ Check now',
   raiseLimit: 'Raise this limit',
+  /** A permission whose gate the creator opened for the rest of the period. */
+  runsFreelyUntil: 'runs freely until',
+  closeOpening: 'Close',
+  closeOpeningOf: (riskId: string): string => `Close “runs freely until” for ${riskId}`,
   /** The hover of a gauge. */
   usageOf: (action: string, period: string): string => `${action} · ${period}`,
   gaugeRule: 'The bar follows the permission closest to its limit.',

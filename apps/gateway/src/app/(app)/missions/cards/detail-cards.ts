@@ -29,6 +29,8 @@ export interface DetailCard {
   readonly card: CardState;
   /** Calls used this period, per risk of the card. */
   readonly used: Readonly<Record<RiskId, number>>;
+  /** Per risk whose gate is open for the period (spec §3.5): until when. */
+  readonly openUntil: Readonly<Record<RiskId, string>>;
   readonly lastCheckedAt: string | null;
 }
 
@@ -96,6 +98,11 @@ export function detailCards(
             entry.risk_id,
             entry.remaining === null ? 0 : Math.max(0, entry.quota - entry.remaining),
           ]),
+        ),
+        openUntil: Object.fromEntries(
+          lines.flatMap((entry) =>
+            entry.gate_open_until ? [[entry.risk_id, entry.gate_open_until] as const] : [],
+          ),
         ),
         lastCheckedAt: c.last_checked_at,
       };

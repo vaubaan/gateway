@@ -39,6 +39,9 @@ import {
   type CardLevel,
   type LineUsage,
 } from './card-model';
+import { LocalDate } from '@/components/LocalDate';
+
+import { CloseOpening } from './close-opening';
 import { CustomTable } from './custom-table';
 import styles from './cards.module.css';
 
@@ -52,6 +55,10 @@ export interface CardToday {
   readonly used: Readonly<Record<RiskId, number>>;
   /** Where "Raise this limit" leads, per macro-action; `null` when the reader cannot. */
   readonly raiseHrefs: Readonly<Record<string, string>> | null;
+  /** Per risk of the card whose gate is open for the period: until when. */
+  readonly openUntil: Readonly<Record<RiskId, string>>;
+  /** "Close" on an opening: the mission, for its creator; `null` for anyone else. */
+  readonly closeOpenings: { readonly missionId: string } | null;
 }
 
 const LEVELS: readonly CardLevel[] = [...TRUST_LEVELS, 'custom'];
@@ -244,7 +251,7 @@ function ActionRowView({
       </td>
       {today && (
         <td className={styles.today}>
-          <Gauge row={row} today={today} />
+          <Gauge row={row} today={today} resourceSetId={card.id ?? null} />
         </td>
       )}
     </tr>
@@ -351,7 +358,15 @@ function RowInfo({
 }
 
 /** Today's use of a macro-action: the line closest to its limit, the others on hover. */
-function Gauge({ row, today }: { row: ActionRow; today: CardToday }) {
+function Gauge({
+  row,
+  today,
+  resourceSetId,
+}: {
+  row: ActionRow;
+  today: CardToday;
+  resourceSetId: string | null;
+}) {
   if (row.lines.length === 0) return <span aria-hidden="true">—</span>;
   const usages: LineUsage[] = row.lines.map(({ risk, entry }) => ({
     riskId: risk.risk_id,
@@ -378,6 +393,23 @@ function Gauge({ row, today }: { row: ActionRow; today: CardToday }) {
             <li key={u.riskId} data-permission={u.riskId}>
               {u.label} · {formatNumber(u.used)} / {formatNumber(u.quota)} ·{' '}
               {u.gate === 'approval' ? CARD_WORDS.asksFirst : CARD_WORDS.runsFreely}
+              {today.openUntil[u.riskId] && (
+                <span data-testid={`open-until-${u.riskId}`}>
+                  {' · '}
+                  {CARD_WORDS.runsFreelyUntil} <LocalDate ts={today.openUntil[u.riskId]} />
+                  {today.closeOpenings && resourceSetId && (
+                    <>
+                      {' · '}
+                      <CloseOpening
+                        missionId={today.closeOpenings.missionId}
+                        riskId={u.riskId}
+                        resourceSetId={resourceSetId}
+                        label={u.label}
+                      />
+                    </>
+                  )}
+                </span>
+              )}
             </li>
           ))}
         </ul>

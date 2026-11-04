@@ -14,7 +14,7 @@
  *   it (403, nothing) → the creator reads the tool, the arguments in clear,
  *   the slices and the budget, and approves → the identical replay reaches the
  *   provider → the same call again asks again → the creator opens the gate for
- *   the rest of the period → then reads its use on the mission page.
+ *   the rest of the period → then closes that opening on the mission page.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
@@ -296,17 +296,29 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   await expect(sessionPermissions.getByRole('switch')).toHaveCount(0);
   await snap(hedy, 'activity-runs-freely');
 
-  // ── The mission page: the card of the mission, frozen, with the use of the period ──
+  // ── The mission page: the card frozen, with the use of the period ───────
   await hedy.goto(`/missions/${issued.mission_id}`);
   // The gauge of Administer follows its permission closest to its limit: the workflow writes.
   const administer = hedy.getByTestId('mission-cards').getByTestId('gauge-administer');
   await expect(administer).toContainText('3 / 50');
-  await administer.getByRole('button').hover();
-  await expect(administer.locator(`[data-permission="${GATED}"]`)).toContainText('3 / 50');
-  await expect(administer.locator(`[data-permission="${GATED}"]`)).toContainText('Asks first');
-  // Nothing on the page changes "ask me first" by itself: that is "Edit mission".
-  await expect(hedy.getByRole('switch')).toHaveCount(0);
+  await administer.getByRole('button').first().hover();
+  const gatedLine = administer.locator(`[data-permission="${GATED}"]`);
+  await expect(gatedLine).toContainText('3 / 50');
+  await expect(gatedLine).toContainText('Asks first');
+  await expect(gatedLine).toContainText('runs freely until');
   await snap(hedy, 'mission-runs-freely');
+  // "Close": the opening ends before the reset; the gate itself stays "ask me first".
+  await gatedLine.getByTestId(`close-opening-${GATED}`).click();
+  // The change is confirmed where the person looks, and says when it applies.
+  await expect(hedy.getByTestId('toasts')).toContainText('asks you first');
+  await expect(hedy.getByTestId('toasts')).toContainText('From the next call.');
+  await administer.getByRole('button').first().hover();
+  await expect(gatedLine).toContainText('Asks first');
+  await expect(gatedLine).not.toContainText('runs freely until');
+  // The next call asks again, although the period has not ended.
+  approvalRequired(await write({ ...WORKFLOW, message: 'ci: tune again' }));
+  expect(await workflowWrites()).toHaveLength(writesBefore + 3);
+  await snap(hedy, 'mission-gate-edited');
 
   // ── What the audit keeps: the acts and the fingerprint, never the arguments ──
   await hedy.goto(`/activity?mission=${issued.mission_id}`);
@@ -318,6 +330,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
     entries.filter({ hasText: 'let a permission run freely for the period' }),
   ).toHaveCount(1);
   await expect(entries.filter({ hasText: 'refused a request' })).toHaveCount(1);
+  await expect(entries.filter({ hasText: 'changed “ask me first”' })).toHaveCount(1);
   // The one call that used her yes says so on its line.
   await expect(entries.filter({ hasText: 'after a yes' })).toHaveCount(1);
   // A call that had to ask is not "refused" in red: it asked her.
@@ -330,16 +343,17 @@ test('a gated action of the developer trust levels: refused, approved by its cre
 
   // …and the activity of the mission: the decisions are on the timeline, without the arguments.
   await hedy.goto(`/missions/${issued.mission_id}/session`);
-  // The opening runs until the reset. The page remembered that the permissions were open.
+  // The opening was closed on the mission. The page remembered that the permissions were open.
   const gateNow = permissionRow(hedy.getByTestId('session-permissions'), GATED);
   await expect(gateNow).toContainText('ask me first');
-  await expect(gateNow).toContainText('runs freely until');
+  await expect(gateNow).not.toContainText('runs freely until');
   const timeline = hedy.getByTestId('timeline');
   const events = (outcome: string) =>
     timeline.locator('tbody tr').filter({ has: hedy.getByText(outcome, { exact: true }) });
   // Each event says what it did, in the words of the interface.
   await expect(events('runs freely')).toHaveCount(1);
   await expect(events('runs freely')).toContainText('without asking until');
+  await expect(events('set to “ask me first”')).toHaveCount(1);
   await expect(events('allowed')).toHaveCount(3);
   await expect(events('approved')).toContainText('one call, usable until');
   await expect(events('allowed').filter({ hasText: 'after the creator’s yes' })).toHaveCount(1);

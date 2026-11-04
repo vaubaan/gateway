@@ -208,6 +208,15 @@
   white-space: normal;
   text-align: left;
 }
+/* A bridge over the gap, so the pointer can reach the popover's own buttons. */
+.popover::before {
+  position: absolute;
+  top: -8px;
+  right: 0;
+  left: 0;
+  height: 8px;
+  content: '';
+}
 .hover:hover .popover,
 .hover:focus-within .popover {
   display: block;

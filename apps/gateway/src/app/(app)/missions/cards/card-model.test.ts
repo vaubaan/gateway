@@ -196,7 +196,7 @@ describe('the gauge of a macro-action', () => {
       label: 'Read things',
       level: 'low' as const,
       remaining: 76,
-      gate_open_until: null,
+      gate_open_until: '2026-11-05T00:00:00.000Z',
     };
     const cards = detailCards(
       {
@@ -232,6 +232,8 @@ describe('the gauge of a macro-action', () => {
     );
     expect(cards).toHaveLength(1);
     expect(cards[0]?.used).toEqual({ 'acme.read': 24 });
+    // A gate opened for the period says until when: the gauge's hover offers to close it.
+    expect(cards[0]?.openUntil).toEqual({ 'acme.read': '2026-11-05T00:00:00.000Z' });
     expect(cards[0]?.card).toMatchObject({ id: 'set-1', env: 'staging', future: true });
     expect(cards[0]?.lastCheckedAt).toBe('2026-11-04T08:00:00.000Z');
   });

@@ -445,7 +445,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
         />
       </div>
       <div className={[cardStyles.cards, styles.block].join(' ')} data-testid="mission-cards">
-        {cards.map(({ connection, card, used, lastCheckedAt }) => {
+        {cards.map(({ connection, card, used, openUntil, lastCheckedAt }) => {
           const service = serviceOf(connection.provider);
           return (
             <MissionCard
@@ -460,6 +460,10 @@ export default async function MissionPage({ params, searchParams }: Props) {
                 header: capitalize(period),
                 period,
                 used,
+                openUntil,
+                // Closing an opening: the creator, on the rule of every gate edit.
+                closeOpenings:
+                  isCreator && detail.gates_editable ? { missionId: mission.id } : null,
                 raiseHrefs: raisable
                   ? Object.fromEntries(
                       connection.macro_actions.map((action) => [
