@@ -100,6 +100,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'limits-changed': true,
   'permissions-changed': true,
   'mission-resources-added': true,
+  'mission-resource-joined': true,
+  'mission-resource-left': true,
   'mission-changed': true,
   'permission-requested': true,
   'approval-granted': true,

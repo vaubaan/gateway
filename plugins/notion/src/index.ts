@@ -28,6 +28,7 @@ export const notionPlugin = definePlugin({
   displayName: 'Notion',
   icon: NOTION_ICON,
   iconColor: NOTION_ICON_COLOR,
+  resourceNoun: { one: 'page or database', other: 'pages and databases' },
   // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.2.0',
   description:

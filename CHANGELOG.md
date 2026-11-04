@@ -26,6 +26,54 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `0031_notification_addresses` (sealed, resealed by `reseal`) and
   `0032_notification_mail`. Audit acts `address-added`, `address-removed`,
   `mail-notifications-changed`. Outbound hosts in handbook configuration.
+- **A resource set is one environment, with optional future resources** (ADR
+  resource-set-is-one-environment-with-optional-future-resources): a set is an
+  explicit list whose resources all carry one environment, plus `future`: a resource
+  that later appears there (discovered, or relabelled into it) is written into the
+  list, and one relabelled out of it leaves it, each audited on the mission
+  (`mission-resource-joined`, `mission-resource-left`). What a mission reaches is its
+  lists only, never the connection resolved at call time. Discovery runs every hour
+  for the connections a future set depends on, and on demand from a mission card
+  (`POST /api/missions/<id>/resources/check`); the mission detail says when each
+  account was last checked. Drafts gain `future` and `env`; `{ scope: 'all' }`,
+  `{ scope: 'connection' }` (now `all` + `future`) and a selection given on the
+  connection are split into one set per environment. New issues
+  `resource-set-mixed-env`, `resource-unlabelled` (an unlabelled resource enters a
+  set only where no permission depends on the environment); notices
+  `split-by-environment`, `unlabelled-resources-left-out` replace
+  `later-resources-need-env-label`. Migration `0033_resource_set_future_and_env`
+  writes whole-connection sets out as their lists with future on; a set spanning
+  environments keeps working until its next edit splits it.
+
+### Changed
+
+- **The mission screen is cards** (spec §4.2): creating and editing show only the
+  mission's cards — one account and the resources of one environment each.
+  "+ Add an account" picks the account, then its resources grouped by
+  environment, plus "+ future <resources>". Each macro-action is set Careful,
+  Trusting, Autonomous or **Custom** (its permissions one by one in a modal,
+  filterable by plane, "never in <env>" where the catalog refuses); the (i) of a
+  row shows the same content read-only. A sticky bar says what changed. The
+  mission page is that screen frozen, with today's use per macro-action (the
+  permission closest to its limit, "Raise this limit") and "↻ Check now" on cards
+  with future resources; stop, duplicate and replace key are in "···". The
+  missions list hides stopped missions behind a Running / Stopped filter.
+  Removed: the Simple/Advanced views, "Everything I hold" and "Select all" in the
+  form, the rail, the mission page's permission table and its "ask me first"
+  switch, "Change limits" and the stop zone.
+
+- The management door's mission views carry `resource_selections` (`future` and
+  `env` per set) instead of `resource_scopes`; the `resource-not-in-mission` hint
+  field is `takes_future_resources`.
+
+### Plugin SDK
+
+- **0.5.1 — a plugin names its resources.** `ProviderPlugin.resourceNoun?:
+{ one, other }` (new type `ResourceNoun`) says what one resource of the
+  provider is called in the interface (`board` / `boards`); `definePlugin`
+  checks both forms are lowercase nouns of at most 40 characters
+  (`RESOURCE_NOUN_MAX_LENGTH`). Every shipped plugin declares one; the gateway
+  says `resource` / `resources` for a plugin without one.
 
 ## [2.0.0-alpha.15] - 2026-11-02
 

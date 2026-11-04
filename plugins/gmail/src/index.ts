@@ -92,6 +92,7 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
     displayName: 'Gmail',
     icon: GMAIL_ICON,
     iconColor: GMAIL_ICON_COLOR,
+    resourceNoun: { one: 'mailbox', other: 'mailboxes' },
     version: GMAIL_PLUGIN_VERSION,
     description:
       'Search, read (HTML and attachments included), draft, label and create labels in a Gmail mailbox over IMAP, and send messages and drafts over SMTP, with an app password, under risks zoned by who the sender or the recipient is.',

@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the thirty-two migrations 0001 to 0032 in the default directory', () => {
+  it('ships the thirty-three migrations 0001 to 0033 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -141,6 +141,7 @@ describe('migration runner', () => {
       [30, 'notification_devices'],
       [31, 'notification_addresses'],
       [32, 'notification_mail'],
+      [33, 'resource_set_future_and_env'],
     ]);
   });
 });
@@ -340,7 +341,12 @@ describe('migration 0029: a mission connection is partitioned into resource sets
 
   it('gives each existing connection one set holding its scope, resources, levels and lines', () => {
     seedAtVersion28();
-    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    // Up to 0032: 0033 replaces the scope by `future` (its own test).
+    runMigrations(
+      db,
+      loadMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.version < 33),
+      clock,
+    );
 
     expect(
       db
@@ -401,7 +407,12 @@ describe('migration 0029: a mission connection is partitioned into resource sets
 
   it('refuses a second whole-connection set on one connection', () => {
     seedAtVersion28();
-    runMigrations(db, loadMigrations(DEFAULT_MIGRATIONS_DIR), clock);
+    // Up to 0032: 0033 replaces the scope by `future` (its own test).
+    runMigrations(
+      db,
+      loadMigrations(DEFAULT_MIGRATIONS_DIR).filter((m) => m.version < 33),
+      clock,
+    );
     expect(() =>
       db
         .prepare(

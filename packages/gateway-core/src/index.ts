@@ -44,6 +44,8 @@ export {
   RECOVERY_ACTOR_LABEL,
   SCHEDULE_ACTOR_ID,
   SCHEDULE_ACTOR_LABEL,
+  DISCOVERY_ACTOR_ID,
+  DISCOVERY_ACTOR_LABEL,
 } from './audit.ts';
 export type {
   AdminAct,

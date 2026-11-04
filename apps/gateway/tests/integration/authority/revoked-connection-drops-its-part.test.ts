@@ -43,7 +43,8 @@ describe('a revoked connection removes only its part of a mission', () => {
       credential: serializeSecret({ kind: 'api-key', fields: { api_key: 'k' }, metadata: {} }),
     });
     await root.store.connections.syncDiscoveredResources(acme.id, [
-      { ref: 'main', displayName: 'main', env: null },
+      // Labelled: Acme's catalog has env-qualified risks, so an unlabelled resource enters no set.
+      { ref: 'main', displayName: 'main', env: 'prod' },
     ]);
     bob = await root.store.users.upsertFromIdp({
       issuer: 'http://idp.test',
@@ -62,7 +63,8 @@ describe('a revoked connection removes only its part of a mission', () => {
       connections: [
         {
           connection_id: instance.connection.id,
-          resources: { scope: 'all' },
+          // The staging spaces: one environment, so one resource set.
+          resources: { scope: 'selected', resource_refs: ['app-staging', 'scratch'] },
           policy: [line(DEPOT_READ)],
         },
         { connection_id: acme.id, resources: { scope: 'all' }, policy: [line(ACME_READ)] },

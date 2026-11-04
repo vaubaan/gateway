@@ -32,6 +32,7 @@ export const stripePlugin = definePlugin({
   displayName: 'Stripe',
   icon: STRIPE_ICON,
   iconColor: STRIPE_ICON_COLOR,
+  resourceNoun: { one: 'mode', other: 'modes' },
   version: '0.5.0',
   description:
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +

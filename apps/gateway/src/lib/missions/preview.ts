@@ -123,6 +123,17 @@ export function defaultResources(
   return connection.resources.filter((r) => !r.hidden && !r.stale && !r.self);
 }
 
+/**
+ * The resources "all" enters into a mission: `defaultResources`, less the unlabelled
+ * ones where the provider needs a label (`needsEnvLabel`). What a form preselects.
+ */
+export function enterableResources(
+  connection: Pick<IssuanceConnection, 'resources' | 'risks' | 'derives_env'>,
+): IssuanceResource[] {
+  const labelled = needsEnvLabel(connection);
+  return defaultResources(connection).filter((r) => !labelled || r.env !== null);
+}
+
 /** The "M" of "N of M resources": the default set plus hidden resources picked on purpose. */
 function resourcesTotal(
   connection: Pick<IssuanceConnection, 'resources'>,
@@ -141,8 +152,8 @@ function resolveResources(
   wanted: DraftResources,
   where: Where,
   elsewhere: ReadonlySet<string> = new Set(),
+  future = false,
 ): ResourceResolution {
-  // `connection` is judged on what it reaches now; later resources join at read time.
   if (wanted.scope === 'all' || wanted.scope === 'connection') {
     return {
       selected: defaultResources(connection).filter((r) => !elsewhere.has(r.id)),
@@ -205,7 +216,9 @@ function resolveResources(
     });
     for (const r of self) selected.delete(r.id);
   }
-  if (selected.size === 0 && foreign.length === 0 && stale.length === 0 && self.length === 0) {
+  const nothing = foreign.length === 0 && stale.length === 0 && self.length === 0;
+  // A set of future resources only may list none now.
+  if (selected.size === 0 && nothing && !future) {
     issues.push({
       code: 'no-resource-selected',
       message: `Connection "${connection.display_name}" has no resource selected: the mission could touch nothing on it.`,
@@ -496,42 +509,6 @@ export function envNotices(
 }
 
 /**
- * What the creator of a whole-connection selection (scope `connection`) is not
- * told by the per-resource notices: a resource discovered after issuance
- * carries no environment label until someone sets it, and env-scoped risks are
- * refused on it until then. Nothing to say when the plugin derives the
- * environment from the call, when the connection has a default environment
- * (later resources inherit it), or when the catalog has no env-scoped risk.
- */
-export function laterResourcesNotice(
-  connection: Pick<
-    IssuanceConnection,
-    'risks' | 'derives_env' | 'display_name' | 'provider_label' | 'default_env'
-  >,
-  passes: readonly Pick<MissionPolicyEntry, 'risk_id'>[],
-  where: Where,
-): PreviewNotice[] {
-  // A connection default labels every resource found later (ADR
-  // connect-driver-and-resource-curation): nothing to wait for.
-  if (connection.derives_env || connection.default_env !== null) return [];
-  const envScoped = connection.risks.filter((r) => r.env !== null);
-  if (envScoped.length === 0) return [];
-  const scopedIds = new Set(envScoped.map((r) => r.risk_id));
-  const accepted = passes.map((p) => p.risk_id).filter((id) => scopedIds.has(id));
-  return [
-    {
-      code: 'later-resources-need-env-label',
-      message: `"${connection.display_name}" is given whole, resources found later included. The environment of a ${connection.provider_label} risk was checked against the resources known now: a resource found later reaches the risks that depend on the environment${
-        accepted.length > 0 ? ` (${list(accepted)})` : ''
-      } only once it carries its environment label on the connection's page (or the connection has a default environment); until then such a call is refused (risk-not-accepted).`,
-      resource_refs: [],
-      risk_ids: accepted,
-      ...where,
-    },
-  ];
-}
-
-/**
  * Lines of a policy checked exactly as issuance checks the explicit lines of a draft
  * on one connection (`classifyLines`, then `issuesOf`): known to the catalog, inside
  * the creator's authority now, resolvable on the selected resources, with a budget
@@ -607,15 +584,27 @@ interface SetOutcome {
   readonly notices: PreviewNotice[];
 }
 
+/**
+ * One set of a connection after normalization: its draft as `resource_sets` gives it —
+ * an explicit selection, `future`, the policy lines that apply in its environment, and
+ * `env` when it lists no resource — and the resources that selection resolved to.
+ * Previewing the normalized draft again yields the same sets (`normalizeDraft`).
+ */
+interface NormalSet {
+  readonly draft: DraftResourceSet;
+  readonly resources: ResourceResolution;
+  /** One of several sets a legacy selection was split into (`splitByEnvironment`). */
+  readonly split?: true;
+}
+
 /** One set of a draft connection, on the resources it was given. */
 function previewSet(
   connection: IssuanceConnection,
-  draft: DraftResourceSet,
+  set: NormalSet,
   index: number,
-  resources: ResourceResolution,
   where: Where,
 ): SetOutcome {
-  const reachesLater = draft.resources?.scope === 'connection';
+  const { draft, resources } = set;
   // Several sets: each sentence names its set beside the account ("acme — resource set 2").
   const named =
     where.resource_set_index === undefined
@@ -641,7 +630,13 @@ function previewSet(
     defaultsOf: (risk) => fills.get(risk.risk_id) ?? null,
   });
 
-  const issues = [...resources.issues, ...prefill.issues, ...issuesOf(buckets, named, where)];
+  const env = envOfSet(connection, set, named, where);
+  const issues = [
+    ...resources.issues,
+    ...env.issues,
+    ...prefill.issues,
+    ...issuesOf(buckets, named, where),
+  ];
   if (lines.length === 0 || (prefillOnly && buckets.passes.length === 0)) {
     issues.push({
       code: 'no-accepted-risk',
@@ -655,7 +650,8 @@ function previewSet(
       index,
       id: draft.id ?? null,
       resources: resources.selected,
-      reaches_later: reachesLater,
+      future: draft.future === true,
+      env: env.env,
       everything_i_hold: prefill.everything,
       passes: buckets.passes,
       exceeds: buckets.exceeds,
@@ -670,9 +666,99 @@ function previewSet(
     notices: [
       ...(prefill.everything ? [everythingNotice(named, buckets.passes, where)] : []),
       ...envNotices(named, resources.selected, buckets.passes, where),
-      ...(reachesLater ? laterResourcesNotice(named, buckets.passes, where) : []),
     ],
   };
+}
+
+/**
+ * True when a resource of this connection must carry an environment label to enter a
+ * set: its catalog has env-qualified risks and the plugin does not read the environment
+ * from the call itself (ADR resource-set-is-one-environment-with-optional-future-resources).
+ */
+export function needsEnvLabel(
+  connection: Pick<IssuanceConnection, 'risks' | 'derives_env'>,
+): boolean {
+  return !connection.derives_env && connection.risks.some((r) => r.env !== null);
+}
+
+/**
+ * The environment of one set — the label every resource carries, else the one the
+ * draft gave, else the one it takes when empty — and why it cannot be stored: resources
+ * of several environments (`resource-set-mixed-env`), or no label where the provider
+ * needs one (`resource-unlabelled`).
+ */
+function envOfSet(
+  connection: IssuanceConnection,
+  set: NormalSet,
+  named: Pick<IssuanceConnection, 'display_name'>,
+  where: Where,
+): { readonly env: string | null; readonly issues: PreviewIssue[] } {
+  const envs = new Set(set.resources.selected.map((r) => r.env));
+  if (set.draft.env !== undefined) envs.add(set.draft.env);
+  const issues: PreviewIssue[] = [];
+  if (envs.size > 1) {
+    const labels = [...envs].map((e) => (e === null ? 'no label' : `"${e}"`));
+    issues.push({
+      code: 'resource-set-mixed-env',
+      message: `"${named.display_name}" mixes environments (${list(labels)}): a resource set holds the resources of one environment. Split it into one set per environment.`,
+      resource_refs: set.resources.selected.map((r) => r.ref),
+      ...where,
+    });
+  }
+  const [first = null] = envs;
+  const env = envs.size > 1 ? null : first;
+  const unlabelled = set.resources.selected.filter((r) => r.env === null);
+  const futureOnly = set.draft.future === true && set.resources.selected.length === 0;
+  if (
+    needsEnvLabel(connection) &&
+    envs.size <= 1 &&
+    env === null &&
+    (unlabelled.length > 0 || futureOnly)
+  ) {
+    issues.push({
+      code: 'resource-unlabelled',
+      message:
+        unlabelled.length > 0
+          ? `No environment label on ${list(unlabelled.map((r) => r.display_name || r.ref))} ("${named.display_name}"): ${connection.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled. Label it on the connection's page, give the connection a default environment, or leave it out.`
+          : `"${named.display_name}" takes future resources without an environment: ${connection.provider_label} has permissions that depend on the environment. Name the environment of the set.`,
+      resource_refs: unlabelled.map((r) => r.ref),
+      ...where,
+    });
+  }
+  return { env, issues };
+}
+
+/** The environment a risk id is qualified with (`supabase[prod].row-write` → `prod`), or `null`. */
+function qualifiedEnvOf(riskId: RiskId): string | null {
+  return /^[^.[]+\[([^\]]+)\]\./.exec(riskId)?.[1] ?? null;
+}
+
+/**
+ * The lines of `policy` that apply in `env`: every unqualified line, and the lines
+ * qualified with `env`. A line qualified with an environment no set of the split holds
+ * stays in the first set, where it is reported `unresolvable-env`.
+ */
+function linesForEnv(
+  policy: readonly DraftPolicyEntry[] | undefined,
+  env: string | null,
+  envs: readonly (string | null)[],
+  first: boolean,
+): readonly DraftPolicyEntry[] | undefined {
+  if (policy === undefined) return undefined;
+  return policy.filter((line) => {
+    const qualified = qualifiedEnvOf(line.risk_id);
+    if (qualified === null || qualified === env) return true;
+    return first && !envs.includes(qualified);
+  });
+}
+
+/** The resources grouped by environment, in the connection's own order. */
+function byEnvironment(
+  resources: readonly IssuanceResource[],
+): Map<string | null, IssuanceResource[]> {
+  const groups = new Map<string | null, IssuanceResource[]>();
+  for (const r of resources) groups.set(r.env, [...(groups.get(r.env) ?? []), r]);
+  return groups;
 }
 
 /** True when a set takes "the rest" of the connection: every resource no other set selects. */
@@ -682,25 +768,90 @@ function takesTheRest(set: DraftResourceSet): boolean {
 }
 
 /**
- * The partition of a connection's selection between its sets (risk model §4.7): the
- * explicit selections first, each resource in one set only; then the one set that
- * takes the rest, if any. Two sets selecting a resource, or two sets taking the rest,
- * are `resource-sets-overlap`.
+ * One draft set split into one set per environment of its resources, each with the
+ * policy lines that apply in its environment, as an explicit selection; the first keeps
+ * the draft's `id` and what the selection named that resolved to nothing (reported
+ * again when the normalized draft is previewed). `env` is written only on a set that
+ * lists no resource.
  */
-function partitionOf(
+function splitByEnvironment(
+  set: DraftResourceSet,
+  resolution: ResourceResolution,
+  future: boolean,
+  emptyEnv: string | null,
+): NormalSet[] {
+  const { id, policy, resources: wanted, env: _env, future: _future, ...rest } = set;
+  const resolvedIds = new Set(resolution.selected.map((r) => r.id));
+  const resolvedRefs = new Set(resolution.selected.map((r) => r.ref));
+  const leftoverIds =
+    wanted?.scope === 'selected'
+      ? (wanted.resource_ids ?? []).filter((r) => !resolvedIds.has(r))
+      : [];
+  const leftoverRefs =
+    wanted?.scope === 'selected'
+      ? (wanted.resource_refs ?? []).filter((r) => !resolvedRefs.has(r))
+      : [];
+  const groups = byEnvironment(resolution.selected);
+  const envs: (string | null)[] = groups.size === 0 ? [emptyEnv] : [...groups.keys()];
+  return envs.map((env, i): NormalSet => {
+    const members = groups.get(env) ?? [];
+    const lines = envs.length > 1 ? linesForEnv(policy, env, envs, i === 0) : policy;
+    const ids = members.map((r) => r.id);
+    return {
+      draft: {
+        ...(i === 0 && id !== undefined ? { id } : {}),
+        resources: {
+          scope: 'selected',
+          resource_ids: i === 0 ? [...ids, ...leftoverIds] : ids,
+          ...(i === 0 && leftoverRefs.length > 0 ? { resource_refs: leftoverRefs } : {}),
+        },
+        future,
+        ...(members.length === 0 ? { env } : {}),
+        ...rest,
+        ...(lines !== undefined ? { policy: lines } : {}),
+      },
+      resources: { selected: members, issues: i === 0 ? resolution.issues : [] },
+      ...(envs.length > 1 ? { split: true as const } : {}),
+    };
+  });
+}
+
+/**
+ * The sets of a connection as they would be stored (risk model §4.7; ADR
+ * resource-set-is-one-environment-with-optional-future-resources): the explicit
+ * selections first, each resource in one set only; then the one set that takes the
+ * rest (`all`, `connection`), if any. A legacy selection — the flat shape, `all`,
+ * `connection` — is split by environment (a resource without a label left out of the
+ * rest where the provider needs one); a set given in `resource_sets` with `selected` is
+ * kept whole, and refused if it mixes environments.
+ */
+function normalizeSets(
   connection: IssuanceConnection,
-  sets: readonly DraftResourceSet[],
+  draft: DraftConnection,
   where: Where,
-): { readonly resolutions: ResourceResolution[]; readonly issues: PreviewIssue[] } {
+): {
+  readonly sets: NormalSet[];
+  readonly issues: PreviewIssue[];
+  readonly notices: PreviewNotice[];
+} {
+  const sets = draftSetsOf(draft);
+  const flat = draft.resource_sets === undefined;
   const several = sets.length > 1;
   const whereOf = (index: number): Where =>
     several ? { ...where, resource_set_index: index } : where;
   const explicit = sets.map((set, index) =>
     takesTheRest(set)
       ? null
-      : resolveResources(connection, set.resources ?? { scope: 'all' }, whereOf(index)),
+      : resolveResources(
+          connection,
+          set.resources ?? { scope: 'all' },
+          whereOf(index),
+          new Set(),
+          set.future === true,
+        ),
   );
   const issues: PreviewIssue[] = [];
+  const notices: PreviewNotice[] = [];
   const owner = new Map<string, number>();
   const twice = new Set<string>();
   explicit.forEach((resolution, index) => {
@@ -728,12 +879,105 @@ function partitionOf(
     });
   }
   const elsewhere = new Set(owner.keys());
-  const resolutions = sets.map(
-    (set, index) =>
-      explicit[index] ??
-      resolveResources(connection, set.resources ?? { scope: 'all' }, whereOf(index), elsewhere),
+  const normal = sets.flatMap((set, index): NormalSet[] => {
+    const given = explicit[index];
+    if (given) {
+      // A set of `resource_sets` is kept whole: mixing environments is its issue.
+      if (!flat) return [{ draft: set, resources: given }];
+      return byEnvironment(given.selected).size > 1
+        ? splitByEnvironment(set, given, set.future === true, set.env ?? null)
+        : [{ draft: set, resources: given }];
+    }
+    const legacyFuture = set.resources?.scope === 'connection';
+    const future = set.future ?? legacyFuture;
+    let resolution = resolveResources(
+      connection,
+      set.resources ?? { scope: 'all' },
+      whereOf(index),
+      elsewhere,
+    );
+    if (needsEnvLabel(connection)) {
+      const unlabelled = resolution.selected.filter((r) => r.env === null);
+      if (unlabelled.length > 0) {
+        notices.push({
+          code: 'unlabelled-resources-left-out',
+          message: `Left out on "${connection.display_name}", without an environment label: ${list(
+            unlabelled.map((r) => r.display_name || r.ref),
+          )}. ${connection.provider_label} has permissions that depend on the environment, so a resource enters a mission only once labelled.`,
+          resource_refs: unlabelled.map((r) => r.ref),
+          risk_ids: [],
+          ...whereOf(index),
+        });
+        resolution = { ...resolution, selected: resolution.selected.filter((r) => r.env !== null) };
+      }
+    }
+    // A set of future resources only takes the environment later resources inherit.
+    const emptyEnv = set.env !== undefined ? set.env : future ? connection.default_env : null;
+    return splitByEnvironment(set, resolution, future, emptyEnv);
+  });
+  if (normal.length > sets.length) {
+    notices.push({
+      code: 'split-by-environment',
+      message: `"${connection.display_name}" is given as ${normal.length} resource sets, one per environment, each with the permissions that apply there: a resource set holds the resources of one environment.`,
+      resource_refs: [],
+      risk_ids: [],
+      ...where,
+    });
+  }
+  const futureEnvs = new Map<string | null, number>();
+  for (const set of normal) {
+    if (set.draft.future !== true) continue;
+    const env = set.resources.selected[0]?.env ?? set.draft.env ?? null;
+    futureEnvs.set(env, (futureEnvs.get(env) ?? 0) + 1);
+  }
+  for (const [env, count] of futureEnvs) {
+    if (count < 2) continue;
+    issues.push({
+      code: 'resource-sets-overlap',
+      message: `On "${connection.display_name}", ${count} resource sets take the future resources of ${
+        env === null ? 'no environment' : `"${env}"`
+      }: only one set may, so a new resource knows where it goes.`,
+      ...where,
+    });
+  }
+  return { sets: normal, issues, notices };
+}
+
+/** Each set previewed at its place: "resource set N" only when there are several. */
+function previewSets(connection: IssuanceConnection, sets: readonly NormalSet[], where: Where) {
+  const several = sets.length > 1;
+  return sets.map((set, index) =>
+    previewSet(connection, set, index, several ? { ...where, resource_set_index: index } : where),
   );
-  return { resolutions, issues };
+}
+
+/**
+ * The normalized sets of a connection and what each yields. A set a split made that
+ * accepts nothing, and is refused for that alone (`no-accepted-risk`), is dropped while
+ * another set of the split accepts something: the lines of a legacy draft apply to some
+ * environments only (a macro-action of prod risks), and its other environments are left
+ * out rather than refusing the draft. Any other issue keeps the set, so nothing is
+ * narrowed silently.
+ */
+function settledSets(
+  connection: IssuanceConnection,
+  draft: DraftConnection,
+  where: Where,
+): { readonly normalized: ReturnType<typeof normalizeSets>; readonly outcomes: SetOutcome[] } {
+  const normalized = normalizeSets(connection, draft, where);
+  const outcomes = previewSets(connection, normalized.sets, where);
+  const idle = (o: SetOutcome): boolean =>
+    o.preview.passes.length === 0 && o.issues.every((i) => i.code === 'no-accepted-risk');
+  if (!outcomes.some((o) => !idle(o))) return { normalized, outcomes };
+  const kept = normalized.sets.filter((set, i) => {
+    const outcome = outcomes[i];
+    return !(set.split === true && outcome !== undefined && idle(outcome));
+  });
+  if (kept.length === normalized.sets.length) return { normalized, outcomes };
+  return {
+    normalized: { ...normalized, sets: kept },
+    outcomes: previewSets(connection, kept, where),
+  };
 }
 
 /** One connection of a draft against the creator's authority on it. */
@@ -747,6 +991,8 @@ export function previewConnection(
   const mixed =
     draft.resource_sets !== undefined &&
     (draft.resources !== undefined ||
+      draft.future !== undefined ||
+      draft.env !== undefined ||
       draft.policy !== undefined ||
       draft.trust_levels !== undefined ||
       draft.everything_i_hold !== undefined);
@@ -757,26 +1003,15 @@ export function previewConnection(
       ...where,
     });
   }
-  const sets = draftSetsOf(draft);
-  if (sets.length === 0) {
+  if (draftSetsOf(draft).length === 0) {
     issues.push({
       code: 'no-resource-selected',
       message: `Connection "${connection.display_name}" has no resource set: the mission could touch nothing on it.`,
       ...where,
     });
   }
-  const several = sets.length > 1;
-  const partition = partitionOf(connection, sets, where);
-  issues.push(...partition.issues);
-  const outcomes = sets.map((set, setIndex) =>
-    previewSet(
-      connection,
-      set,
-      setIndex,
-      partition.resolutions[setIndex] ?? { selected: [], issues: [] },
-      several ? { ...where, resource_set_index: setIndex } : where,
-    ),
-  );
+  const { normalized, outcomes } = settledSets(connection, draft, where);
+  issues.push(...normalized.issues);
   const previews = outcomes.map((o) => o.preview);
   const resources = connection.resources.filter((r) =>
     previews.some((set) => set.resources.some((own) => own.id === r.id)),
@@ -788,7 +1023,7 @@ export function previewConnection(
       provider: connection.provider,
       display_name: connection.display_name,
       resources,
-      reaches_later: previews.some((set) => set.reaches_later),
+      future: previews.some((set) => set.future),
       resources_total: resourcesTotal(connection, resources),
       everything_i_hold: previews.some((set) => set.everything_i_hold),
       passes: previews.flatMap((set) => set.passes),
@@ -801,8 +1036,43 @@ export function previewConnection(
       resource_sets: previews,
     },
     issues: [...issues, ...outcomes.flatMap((o) => o.issues)],
-    notices: outcomes.flatMap((o) => o.notices),
+    notices: [...normalized.notices, ...outcomes.flatMap((o) => o.notices)],
   };
+}
+
+/**
+ * The draft with every connection the context knows given as `resource_sets` of one
+ * environment each — what `previewDraft` stores — and the notices the normalization
+ * gave. A connection that gives `resource_sets` beside its own fields is left as it is
+ * (`resource-sets-mixed`). The edit's judgement reads the normalized draft, so that its
+ * draft sets and the preview's sets are the same list.
+ */
+export function normalizeDraft(
+  context: PreviewContext,
+  draft: MissionDraft,
+): { readonly draft: MissionDraft; readonly notices: readonly PreviewNotice[] } {
+  const notices: PreviewNotice[] = [];
+  const connections = draft.connections.map((line, index): DraftConnection => {
+    const found = findConnection(context, line, index);
+    if ('issue' in found) return line;
+    const mixed =
+      line.resource_sets !== undefined &&
+      (line.resources !== undefined ||
+        line.future !== undefined ||
+        line.env !== undefined ||
+        line.policy !== undefined ||
+        line.trust_levels !== undefined ||
+        line.everything_i_hold !== undefined);
+    if (mixed) return line;
+    const where: Where = { connection_index: index, connection_id: found.connection.id };
+    const { normalized } = settledSets(found.connection, line, where);
+    notices.push(...normalized.notices);
+    return {
+      connection_id: found.connection.id,
+      resource_sets: normalized.sets.map((set) => set.draft),
+    };
+  });
+  return { draft: { ...draft, connections }, notices };
 }
 
 /** The connection a draft line names, by id or by provider. */
@@ -955,9 +1225,9 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
     connection_id: p.connection_id,
     resource_sets: p.resource_sets.map((set) => ({
       ...(set.id !== null ? { id: set.id } : {}),
-      resources: set.reaches_later
-        ? { scope: 'connection' }
-        : { scope: 'selected', resource_ids: set.resources.map((r) => r.id) },
+      resources: { scope: 'selected', resource_ids: set.resources.map((r) => r.id) },
+      future: set.future,
+      env: set.env,
       everything_i_hold: set.everything_i_hold,
       policy: set.passes,
       trust_levels: set.trust_levels,

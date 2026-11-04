@@ -548,7 +548,7 @@ describe('management door — tools of a delegated agent', () => {
       await agent.close();
     });
 
-    it('issues on the whole connection when asked: previewed, issued and listed with that scope', async () => {
+    it('issues with future resources when asked (legacy `connection`): previewed, issued and listed so', async () => {
       const agent = await rig.agentOf(ADA);
       const draft = draftOn(github, ['github.read-code'], {
         connections: [
@@ -568,37 +568,29 @@ describe('management door — tools of a delegated agent', () => {
       });
       const preview = await agent.call<PreviewView>('preview_policy', draft);
       expect(preview.data).toMatchObject({ ok: true });
-      expect(preview.data.connections[0]?.resource_scope).toBe('connection');
+      expect(preview.data.connections[0]?.future).toBe(true);
 
       const issued = await issue(agent, draft);
       expect(issued.bootstrap_kit.agent_instructions).toContain(
-        'the whole account, including resources discovered later',
+        'resources found later in the same environment join it.',
       );
       const record = await rig.root.store.missions.getById(issued.mission.mission_id);
-      expect(record?.connections).toEqual([
-        {
-          connectionId: github,
-          resourceSets: [
-            {
-              id: expect.any(String) as string,
-              position: 1,
-              resourceScope: 'connection',
-              resourceIds: [],
-            },
-          ],
-        },
-      ]);
+      const [set] = record?.connections[0]?.resourceSets ?? [];
+      expect(set).toMatchObject({ position: 1, future: true, mixedEnv: false });
+      // The legacy scope is stored as the explicit list known now.
+      expect(set?.resourceIds.length).toBeGreaterThan(0);
 
       const listed = await agent.call<MissionsAnswer>('list_my_missions');
-      expect(listed.data.missions[0]?.resource_scopes).toEqual([
+      expect(listed.data.missions[0]?.resource_selections).toEqual([
         {
           connection_id: github,
-          resource_scope: 'connection',
+          future: true,
           resource_sets: [
             {
               resource_set_id: expect.any(String) as string,
               position: 1,
-              resource_scope: 'connection',
+              future: true,
+              env: set?.env ?? null,
             },
           ],
         },
@@ -607,16 +599,15 @@ describe('management door — tools of a delegated agent', () => {
         mission_id: issued.mission.mission_id,
       });
       const detail = one.data.missions[0];
-      expect(detail && 'connections' in detail && detail.connections[0]?.resource_scope).toBe(
-        'connection',
-      );
+      expect(detail && 'connections' in detail && detail.connections[0]?.future).toBe(true);
 
-      // `all` is listed as the resources stored at issuance.
+      // `all` is listed as the resources stored at issuance, future off.
       const known = await issue(agent, draftOn(github, ['github.read-code'], { name: 'Known' }));
       const again = await agent.call<MissionsAnswer>('list_my_missions');
       expect(
-        again.data.missions.find((m) => m.mission_id === known.mission.mission_id)?.resource_scopes,
-      ).toMatchObject([{ connection_id: github, resource_scope: 'selected' }]);
+        again.data.missions.find((m) => m.mission_id === known.mission.mission_id)
+          ?.resource_selections,
+      ).toMatchObject([{ connection_id: github, future: false }]);
       await agent.close();
     });
 

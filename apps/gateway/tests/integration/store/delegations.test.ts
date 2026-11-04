@@ -394,7 +394,7 @@ describe('delegations repository', () => {
       creatorUserId: user,
       periodSeconds: null,
       delegationId: d.id,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         { riskId: 'github.code-read', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
       ],
@@ -406,7 +406,7 @@ describe('delegations repository', () => {
       name: 'by hand',
       creatorUserId: user,
       periodSeconds: null,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         { riskId: 'github.code-read', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
       ],

@@ -90,7 +90,7 @@ export async function openBudgetFixture(
       periodAnchor: ANCHOR,
       periodSeconds: input.periodSeconds,
       expiresAt: input.expiresAt ?? null,
-      connections: [{ connectionId, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId, resourceIds: [] }],
       policy: input.policy ?? DEFAULT_POLICY,
     });
     return budgetMissionOf(record);

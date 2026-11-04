@@ -545,6 +545,33 @@ const RULES: Readonly<Record<string, Rule>> = {
   'DiscoveryAfterCall.stop': exempt(
     'the shutdown of the process (root.close): it schedules nothing more and waits for the discovery in flight, which audits itself',
   ),
+  // "Check now" on a mission card: the creator (or an owner) runs the discovery.
+  'ConnectionService.checkForMission': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.connections.service.checkForMission(
+        rig.alice,
+        mission.id,
+        mission.connections[0]!.connectionId,
+      ),
+    writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.discoverOnSchedule': exempt(
+    'the hourly discovery the gateway runs on its own schedule, no human actor: the joins and leaves it causes are audited (mission-resource-joined, mission-resource-left, actor `discovery`); a failure is recorded on the connection and logged',
+  ),
+  'FutureResources.snapshot': READ,
+  'FutureResources.settle': exempt(
+    'runs after an act that is audited itself (a discovery, a relabel, a default environment, a created resource) and writes one mission-resource-joined / mission-resource-left entry per move (tests/integration/connections/future-resources.test.ts)',
+  ),
+  'HourlyDiscovery.start': exempt('arms the timer of the hourly discovery at boot'),
+  'HourlyDiscovery.stop': exempt(
+    'the shutdown of the process (root.close): waits for a run in progress',
+  ),
+  'HourlyDiscovery.runOnce': exempt(
+    'one run of the hourly discovery: each discovery goes through ConnectionService.discoverOnSchedule',
+  ),
   'ConnectionService.updateResource': {
     kind: 'mutation',
     target: connections,
@@ -1834,6 +1861,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'permissions-changed',
       'request-refused',
       'resource-edited',
+      'resources-discovered',
       'resources-discovered',
       'resources-discovered',
       'second-factor-changed',

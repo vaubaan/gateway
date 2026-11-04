@@ -77,7 +77,7 @@ describe('buildBootstrapKit', () => {
     });
   });
 
-  it('3 — says when an account is given whole: resources discovered later, and the ones known now', () => {
+  it('3 — says when an account takes future resources: the ones known now, and later ones join', () => {
     const whole = buildBootstrapKit({
       ...INPUT,
       connections: [
@@ -85,16 +85,16 @@ describe('buildBootstrapKit', () => {
           provider_label: 'Fly.io',
           display_name: 'acme-org',
           resources: [{ ref: 'acme-api', env: 'prod' }],
-          reaches_later: true,
+          future: true,
         },
-        { provider_label: 'Fly.io', display_name: 'empty-org', resources: [], reaches_later: true },
+        { provider_label: 'Fly.io', display_name: 'empty-org', resources: [], future: true },
       ],
     }).agent_instructions;
     expect(whole).toContain(
-      '- Fly.io "acme-org" — the whole account, including resources discovered later (known now: `acme-api` (prod)).',
+      '- Fly.io "acme-org" — `acme-api` (prod); resources found later in the same environment join it.',
     );
     expect(whole).toContain(
-      '- Fly.io "empty-org" — the whole account, including resources discovered later (none known yet).',
+      '- Fly.io "empty-org" — none known yet; resources found later in the same environment join it.',
     );
     expect(whole).toContain(
       'A resource this mission creates through the gateway (a creating tool of the account, such as a new app, project or board) is reached right after its creation',

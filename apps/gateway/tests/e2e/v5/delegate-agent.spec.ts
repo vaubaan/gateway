@@ -379,7 +379,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   await expect(page.getByRole('heading', { level: 1 })).toContainText(MISSION_NAME);
   // Still running: a mission that serves calls carries no mark beside its title.
   await expect(page.getByTestId('mission-state')).toHaveCount(0);
-  await expect(page.getByTestId('mission-allows')).toBeVisible();
+  await expect(page.getByTestId('mission-cards').getByRole('region').first()).toBeVisible();
 
   await context.close();
 });

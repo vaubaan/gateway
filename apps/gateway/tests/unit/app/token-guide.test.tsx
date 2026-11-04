@@ -33,6 +33,7 @@ function provider(guide: TokenGuideView): ConnectableProvider {
     displayName: 'Acme',
     description: null,
     icon: null,
+    resource_noun: { one: 'resource', other: 'resources' },
     kind: 'api-key',
     redirects: false,
     viaBroker: false,

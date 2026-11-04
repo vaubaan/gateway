@@ -8,13 +8,11 @@
  * (`store/mission-reach.ts`), the rule the mission page and the bootstrap kit
  * read too:
  *
- * - an explicit selection is exactly the rows whose id the mission stored —
- *   scope `all` with an empty list means "none known at issuance" and is never
- *   hydrated from the connection's live list (handbook missions);
- * - scope `connection` (the creator chose "the whole account") is the
- *   connection's live list, read here on every request: a resource discovered
- *   after issuance is reached, a hidden one is not (ADR
- *   mission-reaches-the-whole-connection-on-request).
+ * - a mission reaches exactly the rows whose id its resource sets store, never the
+ *   connection's live list: a resource found later is reached once a set with
+ *   future on took it into its list (ADR
+ *   resource-set-is-one-environment-with-optional-future-resources; handbook
+ *   missions);
  *
  * Either way a *stale* resource (the last discovery no longer returned it) is
  * left out of `resources`: the mission may not touch it any more, and the
@@ -30,7 +28,7 @@
  *
  * `resources` is also what a plugin's `execute` receives (`ctx.resources`): a
  * "list" tool that filters its answer to the mission (`fly__list_apps`,
- * `cloudflare_dns__list_zones`) sees the same live list.
+ * `cloudflare_dns__list_zones`) sees the same lists.
  *
  * A connection whose part of the mission is lost (revoked, or the creator's
  * access to it withdrawn: `MissionGrounds`) stays in `connections`, marked
@@ -59,7 +57,7 @@ import {
 } from '../connections/mapping';
 import type { LostPart } from '../authority';
 import type { Store } from '../store';
-import { reachedResourcesBySet, reachesLaterResources } from '../store/mission-reach';
+import { reachedResourcesBySet, takesFutureResources } from '../store/mission-reach';
 import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
 
 export type MissionContextStore = Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
@@ -125,7 +123,7 @@ export async function loadMissionContext(
       hosts_instance: discovered.some((r) =>
         isSelfResource(selfResources, connection.provider, r.ref),
       ),
-      ...(reachesLaterResources(selection) ? { reaches_later_resources: true } : {}),
+      ...(takesFutureResources(selection) ? { takes_future_resources: true } : {}),
       // A revoked connection is lost whatever the grounds said: its status is final.
       ...(loss === 'access-withdrawn'
         ? { lost: 'access-withdrawn' as const }

@@ -106,6 +106,12 @@ export interface ExecuteContext extends ConnectionContext {
   readonly emitPart?: ToolResultPartSink;
 }
 
+/** The singular and plural of what one resource of a provider is called (`ProviderPlugin.resourceNoun`). */
+export interface ResourceNoun {
+  readonly one: string;
+  readonly other: string;
+}
+
 export interface ProviderPlugin {
   /** Provider id : lowercase slug (`github`, `cloudflare-dns`). Prefixes every tool name. */
   readonly id: string;
@@ -143,6 +149,15 @@ export interface ProviderPlugin {
    * shipped with the gateway fills it (structural test).
    */
   readonly summary?: string;
+  /**
+   * What one resource of this provider is called in the interface, singular
+   * and plural (`{ one: 'board', other: 'boards' }`) : the noun of what
+   * `discoverResources` returns, so a page reads "3 boards" rather than
+   * "3 resources". Lowercase, a word or two ; the interface capitalises it
+   * where a sentence starts. For people only : the host decides nothing from
+   * it. Optional ; without it the gateway says "resource" / "resources".
+   */
+  readonly resourceNoun?: ResourceNoun;
   /**
    * What each tool does, in a few words a person reads at a glance : a verb
    * and its object, sentence case, no final period (`github__merge_pull_request`

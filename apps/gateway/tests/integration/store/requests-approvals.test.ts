@@ -56,7 +56,7 @@ describe('requests repository', () => {
         name: 'm',
         creatorUserId: creator,
         periodSeconds: null,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [
           { riskId: MERGE, quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
         ],
@@ -219,7 +219,7 @@ describe('approvals repository', () => {
         name: 'm',
         creatorUserId: creator,
         periodSeconds: null,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [
           { riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
         ],
@@ -317,7 +317,7 @@ describe('approvals repository', () => {
       name: 'other',
       creatorUserId: creator,
       periodSeconds: null,
-      connections: [{ connectionId, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId, resourceIds: [] }],
       policy: [{ riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' }],
     });
     const stolen = await store.sessions.decideAndDecrement(

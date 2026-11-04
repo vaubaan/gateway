@@ -34,12 +34,9 @@ import type {
   ResourceSetPreview,
 } from './model';
 import { draftSetsOf } from './model';
-import { defaultResources, previewDraft, type PreviewContext } from './preview';
+import { defaultResources, normalizeDraft, previewDraft, type PreviewContext } from './preview';
 
 export { describeMissionChange, missionChangeClauses } from './change-words';
-
-/** How far a mission reaches on one account, as stored (spec §3.1). */
-export type StoredResourceScope = 'all' | 'selected' | 'connection';
 
 /** One resource set of an account of a mission, with its part of the policy. */
 export interface MissionSnapshotSet {
@@ -52,9 +49,12 @@ export interface MissionSnapshotSet {
   readonly id: string | null;
   /** From 1, among the sets of the account. */
   readonly position: number;
-  /** `all` with no id: none was known at issuance; `connection`: no id, read live. */
-  readonly resource_scope: StoredResourceScope;
+  /** The set's resources: an explicit list (ADR resource-set-is-one-environment-with-optional-future-resources). */
   readonly resource_ids: readonly string[];
+  /** Resources that later appear in `env` join the list. */
+  readonly future: boolean;
+  /** The set's environment; `null` for none. */
+  readonly env: string | null;
   /** Its lines; each names the set by `resource_set_id` (`key`). */
   readonly policy: readonly MissionPolicyEntry[];
   /** The trust levels the form recorded (risk model §4.6): they redraw it, they are no change. */
@@ -101,7 +101,8 @@ export interface RevisionInput {
     readonly resource_sets: readonly {
       readonly id: string;
       readonly position: number;
-      readonly resource_scope: StoredResourceScope;
+      readonly future: boolean;
+      readonly env: string | null;
       readonly resource_ids: readonly string[];
     }[];
   }[];
@@ -121,7 +122,7 @@ function canonical(state: RevisionInput): string {
         c.connection_id,
         [...c.resource_sets]
           .sort((a, b) => a.position - b.position)
-          .map((set) => [set.id, set.resource_scope, [...set.resource_ids].sort()]),
+          .map((set) => [set.id, set.future, set.env, [...set.resource_ids].sort()]),
       ]),
     [...state.policy]
       .sort(
@@ -172,7 +173,8 @@ export function missionRevision(snapshot: MissionSnapshot): string {
       resource_sets: c.resource_sets.map((set) => ({
         id: set.id ?? set.key,
         position: set.position,
-        resource_scope: set.resource_scope,
+        future: set.future,
+        env: set.env,
         resource_ids: set.resource_ids,
       })),
     })),
@@ -186,10 +188,12 @@ export function missionRevision(snapshot: MissionSnapshot): string {
 
 /**
  * The mission as a draft, exactly: same name, expiry and period; each account with
- * its stored selection (`selected` with the stored ids, even stale ones — `all`
- * with no id is `selected` with none) and its explicit lines. An account with one
- * resource set is drafted without sets, as before sets existed; one with several
- * lists them, each with its id. Sent back unchanged, it is an edit that moves nothing.
+ * its sets (`selected` with the stored ids, even stale ones; `future`; `env` on a set
+ * that lists none) and their explicit lines. An account with one set is drafted
+ * without sets, as before sets existed; one with several lists them, each with its id.
+ * Sent back unchanged, it is an edit that moves nothing — but for a legacy set mixing
+ * environments (migration 0033): drafted flat it is split by environment into new
+ * sets, inside `resource_sets` it is refused (`resource-set-mixed-env`).
  */
 export function draftOfSnapshot(snapshot: MissionSnapshot): MissionDraft {
   return {
@@ -203,21 +207,21 @@ export function draftOfSnapshot(snapshot: MissionSnapshot): MissionDraft {
 export function draftConnectionOf(c: MissionSnapshotConnection): DraftConnection {
   const [only] = c.resource_sets;
   if (c.resource_sets.length === 1 && only) {
-    return { connection_id: c.connection_id, ...draftSetOf(only, false) };
+    const { id: _id, ...fields } = draftSetOf(only);
+    return { connection_id: c.connection_id, ...fields };
   }
   return {
     connection_id: c.connection_id,
-    resource_sets: c.resource_sets.map((set) => draftSetOf(set, true)),
+    resource_sets: c.resource_sets.map(draftSetOf),
   };
 }
 
-function draftSetOf(set: MissionSnapshotSet, withId: boolean): DraftResourceSet {
+function draftSetOf(set: MissionSnapshotSet): DraftResourceSet {
   return {
-    ...(withId && set.id !== null ? { id: set.id } : {}),
-    resources:
-      set.resource_scope === 'connection'
-        ? { scope: 'connection' }
-        : { scope: 'selected', resource_ids: [...set.resource_ids] },
+    ...(set.id !== null ? { id: set.id } : {}),
+    resources: { scope: 'selected', resource_ids: [...set.resource_ids] },
+    future: set.future,
+    ...(set.resource_ids.length === 0 ? { env: set.env } : {}),
     everything_i_hold: false,
     policy: set.policy.map((p) => ({
       risk_id: p.risk_id,
@@ -240,15 +244,15 @@ export interface AccountRef {
 }
 
 /**
- * The selection of one resource set that moved. `null` scope: the set (or its
+ * The selection of one resource set that moved. `null` future: the set (or its
  * account) was not there.
  */
 export interface ResourceChange extends AccountRef {
   /** The set (`MissionSnapshotSet.key`) and its position after the edit (before, when removed). */
   readonly resource_set_id: string;
   readonly position: number;
-  readonly scope_before: StoredResourceScope | null;
-  readonly scope_after: StoredResourceScope | null;
+  readonly future_before: boolean | null;
+  readonly future_after: boolean | null;
   readonly added: readonly string[];
   readonly removed: readonly string[];
 }
@@ -323,7 +327,8 @@ export function diffSnapshots(before: MissionSnapshot, after: MissionSnapshot): 
       const removed = (old?.resource_ids ?? []).filter((id) => !has.has(id));
       if (
         !old ||
-        old.resource_scope !== set.resource_scope ||
+        old.future !== set.future ||
+        old.env !== set.env ||
         added.length > 0 ||
         removed.length > 0
       ) {
@@ -331,8 +336,8 @@ export function diffSnapshots(before: MissionSnapshot, after: MissionSnapshot): 
           ...refOf(c),
           resource_set_id: set.key,
           position: set.position,
-          scope_before: old?.resource_scope ?? null,
-          scope_after: set.resource_scope,
+          future_before: old?.future ?? null,
+          future_after: set.future,
           added,
           removed,
         });
@@ -347,8 +352,8 @@ export function diffSnapshots(before: MissionSnapshot, after: MissionSnapshot): 
         ...refOf(was),
         resource_set_id: old.key,
         position: old.position,
-        scope_before: old.resource_scope,
-        scope_after: null,
+        future_before: old.future,
+        future_after: null,
         added: [],
         removed: [...old.resource_ids],
       });
@@ -361,8 +366,8 @@ export function diffSnapshots(before: MissionSnapshot, after: MissionSnapshot): 
         ...refOf(c),
         resource_set_id: set.key,
         position: set.position,
-        scope_before: set.resource_scope,
-        scope_after: null,
+        future_before: set.future,
+        future_after: null,
         added: [],
         removed: [...set.resource_ids],
       });
@@ -457,7 +462,7 @@ interface KeptOutcome {
   /** Ids and refs of what the edit adds to the reach (resource issues naming one count). */
   readonly addedKeys: ReadonlySet<string>;
   readonly selectionChanged: boolean;
-  /** Resources added or the scope widened. */
+  /** Resources added, or future resources taken (newly, or in another environment). */
   readonly reachWidens: boolean;
   /** Lines added, or whose quota, calls or window moved: judged. */
   readonly moving: ReadonlySet<RiskId>;
@@ -494,13 +499,9 @@ function keptOutcome(
 ): KeptOutcome {
   // ── The selection ──
   const wanted = draft.resources ?? { scope: 'all' };
-  let scope: StoredResourceScope;
   let ids: string[];
   const foreign: string[] = [];
-  if (wanted.scope === 'connection') {
-    scope = 'connection';
-    ids = [];
-  } else if (wanted.scope === 'all') {
+  if (wanted.scope !== 'selected') {
     // "Every resource known now", resolved as at issuance (the preview's, which leaves
     // out what another set selects); unknowable without the context.
     ids = resolved
@@ -508,7 +509,6 @@ function keptOutcome(
       : context && !several
         ? defaultResources(context).map((r) => r.id)
         : [...before.resource_ids];
-    scope = ids.length > 0 ? 'selected' : 'all';
   } else {
     const byRef = new Map((context?.resources ?? []).map((r) => [r.ref, r.id]));
     ids = [...(wanted.resource_ids ?? [])];
@@ -518,13 +518,11 @@ function keptOutcome(
       else foreign.push(ref);
     }
     ids = [...new Set(ids)];
-    scope = ids.length > 0 ? 'selected' : 'all';
   }
-  const hidden = new Set((context?.resources ?? []).filter((r) => r.hidden).map((r) => r.id));
+  const future = resolved ? resolved.future : draft.future === true;
+  const env = resolved ? resolved.env : before.env;
   const had = new Set(before.resource_ids);
-  const reachedBefore = (id: string): boolean =>
-    before.resource_scope === 'connection' ? !hidden.has(id) : had.has(id);
-  const added = scope === 'connection' ? [] : ids.filter((id) => !reachedBefore(id));
+  const added = ids.filter((id) => !had.has(id));
   const refs = new Map((context?.resources ?? []).map((r) => [r.id, r.ref]));
   const addedKeys = new Set<string>([
     ...added,
@@ -535,13 +533,12 @@ function keptOutcome(
     ...foreign,
   ]);
   const selectionChanged =
-    scope !== before.resource_scope ||
+    future !== before.future ||
+    env !== before.env ||
     ids.length !== before.resource_ids.length ||
     ids.some((id) => !had.has(id));
   const reachWidens =
-    added.length > 0 ||
-    foreign.length > 0 ||
-    (scope === 'connection' && before.resource_scope !== 'connection');
+    added.length > 0 || foreign.length > 0 || (future && (!before.future || env !== before.env));
 
   // ── The lines ──
   const passes = resolved?.passes ?? null;
@@ -595,8 +592,9 @@ function keptOutcome(
     after: {
       ...before,
       position,
-      resource_scope: scope,
-      resource_ids: scope === 'connection' ? [] : ids,
+      future,
+      env,
+      resource_ids: ids,
       policy,
       ...trustLevelsOf(draft, context),
     },
@@ -632,6 +630,12 @@ function countsOnKept(issue: PreviewIssue, kept: KeptOutcome): boolean {
   switch (issue.code) {
     case 'no-resource-selected':
       return kept.selectionChanged;
+    // A resource without a label binds the edit when the edit brings it in, or takes
+    // future resources newly; a kept one stays as issued.
+    case 'resource-unlabelled':
+      return (issue.resource_refs ?? []).length > 0
+        ? intersects(issue.resource_refs, kept.addedKeys)
+        : kept.reachWidens;
     case 'connection-unavailable':
       return kept.reachWidens || kept.linesWiden;
     case 'connection-unknown':
@@ -684,8 +688,9 @@ function newSetOf(
     key,
     id: null,
     position,
-    resource_scope: set.reaches_later ? 'connection' : ids.length > 0 ? 'selected' : 'all',
-    resource_ids: set.reaches_later ? [] : ids,
+    future: set.future,
+    env: set.env,
+    resource_ids: ids,
     policy: set.passes.map((p) => ({ ...p, resource_set_id: key })),
     ...(draft ? trustLevelsOf(draft, context) : {}),
   };
@@ -717,8 +722,12 @@ function keptSetOf(
 export function judgeEdit(
   context: PreviewContext,
   before: MissionSnapshot,
-  draft: MissionDraft,
+  raw: MissionDraft,
 ): EditJudgement {
+  // Normalized first (legacy shapes split by environment), so that the draft's sets and
+  // the preview's sets are one list.
+  const normalized = normalizeDraft(context, raw);
+  const draft = normalized.draft;
   const preview = previewDraft(context, draft);
   const beforeById = new Map(before.connections.map((c) => [c.connection_id, c]));
   const name = draft.name.trim();
@@ -834,7 +843,7 @@ export function judgeEdit(
   return {
     ok,
     issues,
-    notices: preview.notices,
+    notices: [...normalized.notices, ...preview.notices],
     after: ok ? after : before,
     changes: ok ? diffSnapshots(before, after) : diffSnapshots(before, safeAfter(before, after)),
   };
@@ -892,7 +901,8 @@ export function changeSummaryOf(
     resources_added: changes.resources.reduce((n, r) => n + r.added.length, 0),
     resources_removed: changes.resources.reduce((n, r) => n + r.removed.length, 0),
     scopes_changed: changes.resources.filter(
-      (r) => r.scope_before !== null && r.scope_after !== null && r.scope_before !== r.scope_after,
+      (r) =>
+        r.future_before !== null && r.future_after !== null && r.future_before !== r.future_after,
     ).length,
     permissions_added: changes.permissions_added.map((p) => p.risk_id),
     permissions_removed: changes.permissions_removed.map((p) => p.risk_id),
@@ -927,7 +937,8 @@ interface AuditSelection {
   readonly connection_id: string;
   readonly resource_set_id: string;
   readonly position: number;
-  readonly resource_scope: StoredResourceScope;
+  readonly future: boolean;
+  readonly env: string | null;
   readonly resource_ids: readonly string[];
 }
 
@@ -946,7 +957,8 @@ function selectionsOf(c: MissionSnapshotConnection): AuditSelection[] {
     connection_id: c.connection_id,
     resource_set_id: set.key,
     position: set.position,
-    resource_scope: set.resource_scope,
+    future: set.future,
+    env: set.env,
     resource_ids: [...set.resource_ids],
   }));
 }

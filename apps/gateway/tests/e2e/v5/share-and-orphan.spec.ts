@@ -27,7 +27,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { connectAgent, type Agent } from './agent';
 import { passSecondFactor, routeToInstance, seedShareScenario, signInAs } from './browser';
 import { controlUrl, E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
-import { createMission, permissionRow, showView } from './mission-pages';
+import { addAccount, allowOnly, cardOf, createMission, permissionRow } from './mission-pages';
 import { githubPlugin } from '@vaubaan/plugin-github';
 
 /** Every permission of the GitHub catalog: what an owner holds, the share dialog's denominator. */
@@ -204,22 +204,16 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── …and issues a mission within it ─────────────────────────────────────
   await joan.goto('/missions/new');
   await joan.getByLabel('Mission name').fill('Read ines-org');
-  // The account says on what ground she may use it, and how much of it she may allow.
-  await expect(joan.getByTestId('connection-github')).toContainText(
-    /access given to you · may allow \d+ of \d+/,
-  );
-  await showView(joan, `GitHub ${connectionName}`, 'Advanced');
-  // The editor shows what she may allow; what she may not is one filter away, listed with
-  // the reason and without a usable tick.
-  const editor = joan.getByTestId('risks-github');
-  await expect(permissionRow(editor, 'github.merge-protected')).toHaveCount(0);
-  await editor.getByRole('button', { name: 'Not available', exact: true }).click();
-  await expect(joan.getByLabel('Allow github.merge-protected')).toBeDisabled();
-  await expect(permissionRow(editor, 'github.merge-protected')).toContainText(
-    'Not available: outside what you may allow',
-  );
-  await editor.getByRole('button', { name: 'Available to you', exact: true }).click();
-  await joan.getByLabel(`Allow ${READ_CODE}`).check();
+  await addAccount(joan, `GitHub · ${connectionName}`);
+  // A macro-action she may allow nothing of cannot be ticked; its (i) says why, permission
+  // by permission, with no behaviour to choose.
+  const card = cardOf(joan, `GitHub · ${connectionName}`);
+  await expect(joan.getByLabel(`Ship on GitHub · ${connectionName}`)).toBeDisabled();
+  await card.getByRole('button', { name: 'About Ship' }).hover();
+  const merge = permissionRow(card.getByTestId('info-ship'), 'github.merge-protected');
+  await expect(merge).toContainText('outside what you may allow');
+  await expect(merge.getByRole('radio')).toHaveCount(0);
+  await allowOnly(joan, `GitHub · ${connectionName}`, 'Read', [READ_CODE]);
   const token = await createMission(joan);
 
   const executor = (agent = await connectAgent(token));

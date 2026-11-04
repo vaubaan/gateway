@@ -312,7 +312,7 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
           status: 'active',
           resources: [
             { ref: 'app-staging', env: 'staging', display_name: 'app-staging' },
-            { ref: 'scratch', env: null, display_name: 'scratch' },
+            { ref: 'scratch', env: 'staging', display_name: 'scratch' },
           ],
         },
       ]);

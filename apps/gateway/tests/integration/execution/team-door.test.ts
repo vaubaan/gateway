@@ -50,7 +50,11 @@ describe('execution door: one mission, several token holders', () => {
       subject: 'idp|bob',
       email: 'bob@example.com',
     });
-    mission = await instance.issue({ policy: [line(READ, QUOTA)], name: 'Team mission' });
+    mission = await instance.issue({
+      policy: [line(READ, QUOTA)],
+      spaces: ['scratch'],
+      name: 'Team mission',
+    });
     adaToken = mission.token;
     const { team } = instance.root.missions;
     const added = await team.addMember(ada, mission.mission.id, { email: bob.email });

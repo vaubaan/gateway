@@ -8,6 +8,7 @@
  * (spec §4.1 bis). Types and pure helpers only: this file is safe to import from a
  * client component.
  */
+import type { ResourceNoun } from '@vaubaan/plugin-sdk';
 import type { TrustLevel } from '@vaubaan/policy-engine';
 import type {
   Gate,
@@ -39,17 +40,19 @@ export interface DraftPolicyEntry {
 
 /**
  * The resources a mission may touch on one connection (spec §3.1 "Resource
- * selection"):
+ * selection"; ADR resource-set-is-one-environment-with-optional-future-resources).
+ * A set is always stored as an explicit list of one environment:
  *
- * - `all` is resolved at issuance to the resources known then — the ones the
- *   owner did not hide and discovery still returns — and persisted as that
- *   explicit list: a resource discovered later is not covered;
- * - `connection` is the whole connection, resources discovered later
- *   included (hidden ones excepted), resolved each time the mission is read —
- *   only ever chosen explicitly (ADR
- *   mission-reaches-the-whole-connection-on-request);
  * - `selected` names resources by id (the interface) or by ref (an agent's
- *   proposal, which only knows refs).
+ *   proposal, which only knows refs) — the set's list;
+ * - `all` (legacy) is every resource known now that the owner did not hide and
+ *   discovery still returns, and that no other set selects;
+ * - `connection` (legacy) is `all` with `future` on.
+ *
+ * `all` and `connection`, and a selection given without `resource_sets`, are split
+ * by environment into one set per environment, each with the policy lines that
+ * apply there (`previewDraft`); a resource without a label is left out of `all` and
+ * `connection` when the provider's catalog has env-qualified risks.
  */
 export type DraftResources =
   | { readonly scope: 'all' }
@@ -80,13 +83,17 @@ export interface DraftConnection {
   /**
    * Several resource sets on the connection (risk model §4.7), each with its
    * resources, trust levels and policy, in order ("Resource set 1", "Resource set
-   * 2"). Given, it replaces `resources`, `everything_i_hold`, `policy` and
-   * `trust_levels`, which then must be absent; absent, those four fields are the
-   * connection's one set.
+   * 2"). Given, it replaces `resources`, `future`, `env`, `everything_i_hold`,
+   * `policy` and `trust_levels`, which then must be absent; absent, those fields are
+   * the connection's selection, split by environment into one set per environment.
    */
   readonly resource_sets?: readonly DraftResourceSet[];
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
+  /** As `DraftResourceSet.future`, for every set the selection is split into. */
+  readonly future?: boolean;
+  /** As `DraftResourceSet.env`: the environment of a selection that lists no resource. */
+  readonly env?: string | null;
   /**
    * True for the built-in "everything I hold", expanded against the selection
    * (ADR preset-everything-i-hold-expands-explicitly). Absent: false.
@@ -112,6 +119,16 @@ export interface DraftResourceSet {
   readonly id?: string;
   /** Default: `{ scope: 'all' }`. */
   readonly resources?: DraftResources;
+  /**
+   * Resources that later appear on the connection with the set's environment join its
+   * list. Absent: off, except under the legacy `{ scope: 'connection' }`.
+   */
+  readonly future?: boolean;
+  /**
+   * The set's environment when it lists no resource (a set of future resources only):
+   * a label, or `null` for none. Given beside resources, every one must carry it.
+   */
+  readonly env?: string | null;
   readonly everything_i_hold?: boolean;
   readonly policy?: readonly DraftPolicyEntry[];
   readonly trust_levels?: Readonly<Record<string, string>>;
@@ -123,6 +140,8 @@ export function draftSetsOf(connection: DraftConnection): readonly DraftResource
   return [
     {
       ...(connection.resources ? { resources: connection.resources } : {}),
+      ...(connection.future !== undefined ? { future: connection.future } : {}),
+      ...(connection.env !== undefined ? { env: connection.env } : {}),
       ...(connection.everything_i_hold !== undefined
         ? { everything_i_hold: connection.everything_i_hold }
         : {}),
@@ -204,6 +223,8 @@ export interface IssuanceConnection {
   readonly id: string;
   readonly provider: string;
   readonly provider_label: string;
+  /** What one resource of this provider is called (`resourceNounOf`): "board" / "boards". */
+  readonly resource_noun: ResourceNoun;
   readonly display_name: string;
   readonly status: string;
   /**
@@ -262,8 +283,18 @@ export const PREVIEW_ISSUE_CODES = [
   'resource-stale',
   'resource-self',
   'no-resource-selected',
-  /** Two resource sets of one connection hold the same resource, or both take "the rest". */
+  /**
+   * Two resource sets of one connection hold the same resource, both take "the rest", or
+   * both take the future resources of one environment.
+   */
   'resource-sets-overlap',
+  /** A resource set holds resources of several environments (a set is one environment). */
+  'resource-set-mixed-env',
+  /**
+   * A resource without an environment label (or a set of future resources without an
+   * environment) on a provider whose catalog has env-qualified risks.
+   */
+  'resource-unlabelled',
   /** `resource_sets` beside the connection's own `resources`, `policy`, `trust_levels`… */
   'resource-sets-mixed',
   'unknown-macro-action',
@@ -298,7 +329,10 @@ export interface PreviewIssue {
 export const PREVIEW_NOTICE_CODES = [
   'resource-without-env',
   'resource-env-not-in-catalog',
-  'later-resources-need-env-label',
+  /** `all` or `connection` left out resources without a label (`resource-unlabelled`). */
+  'unlabelled-resources-left-out',
+  /** A legacy selection was split into one resource set per environment. */
+  'split-by-environment',
   'everything-i-hold-expanded',
 ] as const;
 export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
@@ -311,10 +345,10 @@ export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
  * resource whose environment label is absent, or is not one the risk is
  * acceptable in, refuses the call (`risk-not-accepted`) whatever the mission
  * accepts. On such a resource the mission therefore reaches the account-scoped
- * risks only. `later-resources-need-env-label` says it of the resources a
- * whole-connection mission (scope `connection`) will reach after issuance:
- * checked against the resources known now, the mission reaches env-scoped
- * permissions on a later one only once it is labelled (`resource_refs` empty).
+ * risks only.
+ *
+ * `unlabelled-resources-left-out` and `split-by-environment` say what the
+ * normalization of a legacy selection did (`DraftResources`).
  *
  * `everything-i-hold-expanded` is of another kind: it says what the built-in
  * expansion `everything-i-hold` wrote out on a connection — how many explicit
@@ -360,10 +394,12 @@ export interface ResourceSetPreview {
   readonly index: number;
   /** The stored set an edit keeps; `null` for a set the draft adds. */
   readonly id: string | null;
-  /** The resources of the set as it would be stored; for `connection`, the ones it reaches now. */
+  /** The resources of the set as it would be stored. */
   readonly resources: readonly IssuanceResource[];
-  /** True for scope `connection`: the resources no other set selects, later ones included. */
-  readonly reaches_later: boolean;
+  /** Resources that later appear in `env` join the set. */
+  readonly future: boolean;
+  /** The set's environment: the label every resource carries; `null` for none. */
+  readonly env: string | null;
   readonly everything_i_hold: boolean;
   readonly passes: readonly MissionPolicyEntry[];
   readonly exceeds: readonly RiskId[];
@@ -383,13 +419,10 @@ export interface ConnectionPreview {
   readonly connection_id: string;
   readonly provider: string;
   readonly display_name: string;
-  /**
-   * The resources the mission would be persisted with (explicit, even for `all`);
-   * for `connection`, the ones it reaches now — later ones join them.
-   */
+  /** The resources the mission would be persisted with, every set together. */
   readonly resources: readonly IssuanceResource[];
-  /** True for scope `connection`: resources discovered after issuance are reached too. */
-  readonly reaches_later: boolean;
+  /** One set at least takes the resources that later appear in its environment. */
+  readonly future: boolean;
   /** Size of "all resources" on this connection, plus the hidden ones selected explicitly. */
   readonly resources_total: number;
   /** The built-in "everything I hold" wrote (or budgets) this connection's lines. */
@@ -422,8 +455,8 @@ export interface MissionSummaryLines {
 }
 
 /**
- * The draft with every alias resolved (connection ids, resource ids, explicit entries).
- * `connection` stays a scope: what it reaches is read when the mission is read.
+ * The draft with every alias resolved (connection ids, resource ids, explicit entries)
+ * and every set split to one environment.
  */
 export interface ResolvedDraftConnection {
   readonly connection_id: string;
@@ -435,9 +468,9 @@ export interface ResolvedDraftConnection {
 export interface ResolvedDraftSet {
   /** The stored set an edit keeps; absent for a new set. */
   readonly id?: string;
-  readonly resources:
-    | { readonly scope: 'selected'; readonly resource_ids: readonly string[] }
-    | { readonly scope: 'connection' };
+  readonly resources: { readonly scope: 'selected'; readonly resource_ids: readonly string[] };
+  readonly future: boolean;
+  readonly env: string | null;
   readonly everything_i_hold: boolean;
   readonly policy: readonly MissionPolicyEntry[];
   /** The draft's trust levels that name a macro-action of the connection. */

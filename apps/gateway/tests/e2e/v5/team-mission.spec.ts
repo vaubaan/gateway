@@ -19,16 +19,17 @@ import { connectAgent, type Agent } from './agent';
 import { routeToInstance, seedShareScenario, signInAs } from './browser';
 import { E2E_SHARE_OWNER, E2E_SHARE_TARGET, localOrigin } from './instance';
 import {
+  addAccount,
+  allowOnly,
   confirmByTyping,
   createMission,
   holderRow,
   missionMenu,
   openCreatedMission,
   permissionRow,
-  showView,
   revealedKey,
   savedKey,
-  showPermissions,
+  trustLevelChoice,
 } from './mission-pages';
 
 const READ_CODE = 'github.read-code';
@@ -122,10 +123,9 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   // ── Ines creates the mission ────────────────────────────────────────────
   const ines = await browserOf(browser, request, E2E_SHARE_OWNER, '/missions/new');
   await ines.getByLabel('Mission name').fill(MISSION);
-  await ines.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  // The advanced view: the permissions one by one, none ticked yet.
-  await showView(ines, `GitHub ${CONNECTION}`, 'Advanced');
-  await ines.getByLabel(`Allow ${READ_CODE}`).check();
+  await addAccount(ines, `GitHub · ${CONNECTION}`);
+  // Custom: the permissions of Read one by one, only one of them allowed.
+  await allowOnly(ines, `GitHub · ${CONNECTION}`, 'Read', [READ_CODE]);
   const inesToken = await createMission(ines);
   // Right after creating, the page says how to work with others.
   await expect(ines.getByTestId('created')).toContainText('Add a teammate');
@@ -244,14 +244,12 @@ test('a creator adds a teammate and a machine key; each holder is attributed; ea
   await expect(joan.getByRole('button', { name: /^Remove / })).toHaveCount(0);
   await expect(joan.getByRole('button', { name: /^Revoke the / })).toHaveCount(0);
   await expect(joan.getByRole('button', { name: /^Replace the machine key/ })).toHaveCount(0);
-  // She reads the permissions, and changes none: no "ask me first" switch for her.
-  const hersPermissions = await showPermissions(joan);
-  await expect(permissionRow(hersPermissions, READ_CODE)).toBeVisible();
+  // She reads the cards, frozen, and changes none: no "Edit mission" for her.
+  await expect(joan.getByLabel(`Read on GitHub · ${CONNECTION}`)).toBeChecked();
+  await expect(joan.getByLabel(`Read on GitHub · ${CONNECTION}`)).toBeDisabled();
+  await expect(trustLevelChoice(joan, `GitHub · ${CONNECTION}`, 'Read', 'Custom')).toBeDisabled();
+  await expect(joan.getByTestId('edit-mission')).toHaveCount(0);
   await expect(joan.getByRole('switch')).toHaveCount(0);
-  // The summary says whose answer a gated action would wait for.
-  await expect(joan.getByTestId('mission-permissions')).not.toContainText(
-    'You choose what asks you first',
-  );
   await expect(machineRow(joan, CI)).toBeVisible();
   await expect(personRow(joan, E2E_SHARE_TARGET.email)).toContainText('no key yet');
 

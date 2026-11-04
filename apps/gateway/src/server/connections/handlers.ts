@@ -12,6 +12,10 @@
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /connections/<id>/default-env               the owner's default environment label
  *                                                    for the unlabelled resources
+ *   POST /api/missions/<id>/resources/check          JSON `{ connection_id }`: "check now"
+ *                                                    on a mission card — discovery of that
+ *                                                    connection, answered as JSON with what
+ *                                                    joined or left the mission
  *
  * Every mutation requires a web session and passes the origin check (spec
  * §6). The callback is a top-level GET from the provider: it carries no
@@ -93,6 +97,38 @@ export interface ConnectionHandlers {
   reassign(request: Request, connectionId: string): Promise<Response>;
   updateResource(request: Request, connectionId: string, resourceId: string): Promise<Response>;
   setDefaultEnv(request: Request, connectionId: string): Promise<Response>;
+  /**
+   * `POST /api/missions/:id/resources/check` — body `{ connection_id }`: runs the
+   * discovery of that connection of the mission (its creator, or an owner of the
+   * connection) and answers `MissionResourceCheck` as JSON.
+   */
+  checkMissionResources(request: Request, missionId: string): Promise<Response>;
+}
+
+const INVALID_CHECK = {
+  error: 'invalid-check',
+  message: 'The body is { "connection_id": string }.',
+};
+
+function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers },
+  });
+}
+
+/** The connection a "check now" names, or `null` when the body is not one. */
+async function checkTargetOf(request: Request): Promise<string | null> {
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const { connection_id: connectionId, ...extra } = raw as Record<string, unknown>;
+  if (Object.keys(extra).length > 0) return null;
+  return typeof connectionId === 'string' && connectionId !== '' ? connectionId : null;
 }
 
 export function createConnectionHandlers(deps: ConnectionHandlerDeps): ConnectionHandlers {
@@ -143,6 +179,41 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
   }
 
   return {
+    async checkMissionResources(request, missionId) {
+      const guard = await guardMutation(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
+      const connectionId = await checkTargetOf(request);
+      if (connectionId === null) return json(400, INVALID_CHECK);
+      try {
+        const check = await deps.connections.checkForMission(
+          actorOf(guard.principal),
+          missionId,
+          connectionId,
+        );
+        return json(200, check);
+      } catch (err) {
+        if (!(err instanceof ConnectError)) {
+          logger.error('connections: unexpected failure', errorFields(err));
+          return json(500, {
+            error: 'internal',
+            message: 'The log of the gateway has the detail.',
+          });
+        }
+        switch (err.code) {
+          case 'not-found':
+            return json(404, { error: 'not-found', message: 'No such mission or account.' });
+          case 'rate-limited':
+            return json(
+              429,
+              { error: 'rate-limited', message: 'Too many checks. Wait a minute and retry.' },
+              { 'Retry-After': String(Math.max(1, Math.ceil(err.retryAfterMs / 1000))) },
+            );
+          default:
+            return json(409, { error: err.code, message: CONNECT_ERROR_MESSAGES[err.code] });
+        }
+      }
+    },
+
     async connect(request, providerId) {
       const who = await userOf(request);
       if ('response' in who) return who.response;

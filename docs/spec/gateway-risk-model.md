@@ -196,11 +196,13 @@ What a creator ticks per connection, in the connector's words
 
 - A connection of a mission holds one or more resource sets. Each set has its resources, its
   macro-actions at their trust levels and its explicit policy, and keeps its own budget counters.
-- A resource belongs to exactly one set of its connection. At most one set per connection reaches
-  the whole connection; resources discovered later join that set.
+- A resource belongs to exactly one set of its connection, and every resource of a set has the same
+  effective environment ([ADR](../decisions/resource-set-is-one-environment-with-optional-future-resources.md)).
+  A set with **future** on takes the resources that later appear with its environment; a resource
+  relabelled out of it leaves it.
 - A resource the mission creates joins the set the creating call was judged against. When that call
-  had several candidate sets, it joins the connection's whole-connection set if it has one, else the
-  first of the candidate sets: never a set the call was not judged against.
+  had several candidate sets, it joins the candidate set with future on in its environment if there
+  is one, else the first of the candidate sets: never a set the call was not judged against.
 - **The set of a call.** A call goes to the sets of the resources each slice names: every identifier
   or list value equal to a mission resource's ref (the reading of §6, step 2). A slice citing refs of
   several sets — an org slug equal to an app's ref, a list of two resources — brings each in.

@@ -7,7 +7,8 @@
  * has its answer; the connection's discovery then runs again — the owner's
  * "Refresh", same merge (`ConnectionService.discoverAfterCall`) — so the new
  * resource is listed, labelled by the connection's default environment, and
- * reached by a mission issued on the whole connection, from the next call on.
+ * written into the sets with future on of its environment (`FutureResources`),
+ * reached from the next call on.
  *
  *   off the request path   `afterCall` returns at once; the discovery starts on
  *                          a later turn of the event loop (`defer`), so the

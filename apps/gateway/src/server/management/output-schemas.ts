@@ -67,10 +67,10 @@ const summary = z
 
 const resourceRef = z.looseObject({ ref: z.string(), env: z.string().nullable() });
 
-const resourceScope = z
-  .string()
+const future = z
+  .boolean()
   .describe(
-    '`selected`: the resources stored at issuance (`resources`). `connection`: the whole connection — `resources` are the ones known now, and resources discovered later are reached too.',
+    'True when a resource set takes the resources that later appear in its environment: they join its list, each join audited. `resources` are the ones in the lists now.',
   );
 
 const connectionsAnswer = z.looseObject({
@@ -218,8 +218,19 @@ const missionsAnswer = z.looseObject({
           'Masked prefix of the user’s own token of this mission; the secret is never shown again.',
         ),
       connection_ids: z.array(z.string()),
-      resource_scopes: z.array(
-        z.looseObject({ connection_id: z.string(), resource_scope: resourceScope }),
+      resource_selections: z.array(
+        z.looseObject({
+          connection_id: z.string(),
+          future,
+          resource_sets: z.array(
+            z.looseObject({
+              resource_set_id: z.string(),
+              position: z.number(),
+              future: z.boolean(),
+              env: z.string().nullable().describe('The environment of every resource of the set.'),
+            }),
+          ),
+        }),
       ),
       policy: z.array(
         z.looseObject({
@@ -238,7 +249,10 @@ const missionsAnswer = z.looseObject({
             provider: z.string(),
             display_name: z.string(),
             status: z.string(),
-            resource_scope: resourceScope,
+            future,
+            last_checked_at: isoInstant
+              .nullable()
+              .describe('When discovery last looked for new resources on the connection.'),
             resources: z.array(resourceRef),
           }),
         )
@@ -273,7 +287,7 @@ const previewAnswer = z.looseObject({
       connection_id: z.string(),
       provider: z.string(),
       display_name: z.string(),
-      resource_scope: resourceScope,
+      future,
       resources: z.array(resourceRef),
       everything_i_hold: z.boolean(),
       passes: z.array(policyLine),

@@ -69,7 +69,7 @@ describe('DelegationService', () => {
         creatorUserId: rig.ada.id,
         periodSeconds: null,
         delegationId: viaDelegation,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [
           {
             riskId: 'github.code-read',
@@ -240,7 +240,7 @@ describe('a delegation revoked for a replay: the missions it issued are surfaced
       periodSeconds: null,
       expiresAt: options.expiresAt ?? null,
       delegationId,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         { riskId: 'github.code-read', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
       ],

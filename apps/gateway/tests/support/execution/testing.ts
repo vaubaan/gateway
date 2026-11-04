@@ -297,10 +297,16 @@ export interface SeedSpace {
   readonly env?: string | null;
 }
 
+/**
+ * The Depot spaces of every execution test. `scratch` carries `staging`: Depot's catalog
+ * has env-qualified risks, so an unlabelled space could not enter a mission (ADR
+ * resource-set-is-one-environment-with-optional-future-resources). A default mission
+ * (`all`) is therefore two resource sets: staging (`app-staging`, `scratch`) and prod.
+ */
 export const DEFAULT_SPACES: readonly SeedSpace[] = [
   { ref: 'app-staging', env: 'staging' },
   { ref: 'app-prod', env: 'prod' },
-  { ref: 'scratch' },
+  { ref: 'scratch', env: 'staging' },
 ];
 
 export const line = (
@@ -333,7 +339,7 @@ export interface ExecutionInstance {
     readonly policy: readonly MissionPolicyEntry[];
     /** Resource refs; default: every seeded space. */
     readonly spaces?: readonly string[];
-    /** Issue on the whole connection (scope `connection`); `spaces` is then ignored. */
+    /** Issue with future resources (legacy scope `connection`); `spaces` is then ignored. */
     readonly wholeConnection?: boolean;
     readonly period?: MissionDraft['period'];
     readonly name?: string;

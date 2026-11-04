@@ -216,7 +216,7 @@ export {
 } from './db.ts';
 export type { StoreDb } from './db.ts';
 export { MEMBERSHIPS, isOnMission, membershipOf, type Membership } from './membership.ts';
-export { reachedResources, reachesLaterResources } from './mission-reach.ts';
+export { reachedResources, takesFutureResources } from './mission-reach.ts';
 export { TOKEN_NOT_ISSUABLE_REASONS, TokenNotIssuableError } from './errors.ts';
 export type { TokenNotIssuableReason } from './errors.ts';
 export { ManualClock, systemClock, toIso } from './clock.ts';
@@ -302,6 +302,9 @@ export type {
   LimitChange,
   MissionsRepo,
   RemovedMember,
+  ResourceChange,
+  ResourceMove,
+  ResourceMoveReason,
 } from './repositories/missions.ts';
 export type {
   DecideContext,

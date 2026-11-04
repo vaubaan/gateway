@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/app/(app)/missions/[id]/session/
   - apps/gateway/tests/integration/audit/admin-mutations.test.ts
   - packages/gateway-core/src/audit.ts
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-04
 ---
 
 # Audit — handbook
@@ -43,6 +43,7 @@ How the record is read (Activity, the activity of one mission), purged, and kept
 - **Token holders are never crossed.** The `holder` filter takes `member:<id>` / `named:<name>`; an email names a member (token names cannot contain `@`); a token named like a user id is not that member.
 - **Timeline label and holder filters** read indexed columns the sessions repository copies at insert (`events_session_label_ts`, `events_session_holder_ts`); the view still reads label and holder from the details.
 - **A resource edit and a discovery name the connection as object**, so the connection filter and owner visibility need no join; a request decision names the request, resolved to its mission at search.
+- **Joins and leaves of future resources name the mission as object** (`mission-resource-joined`, `mission-resource-left`, `after.connection_id`), so the mission's creator and members read them; their actor is the human whose act caused them, or `discovery` (`DISCOVERY_ACTOR_ID`, labelled "The gateway’s discovery") for the hourly discovery and the one after a creating call — a pseudo-actor like `schedule` and `bootstrap`, never a user row.
 - **`countersAgreeWithAudit` on a one-off mission older than the retention** reports a mismatch that is the retention, not a fault.
 - **The retention timer is single-process**: one sweep awaited at boot before serving, then hourly; a hosted deployment runs `sweep()` from one job. The two purges fail apart and are retried next interval.
 

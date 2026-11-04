@@ -1,19 +1,17 @@
 /**
- * `/missions/<id>` — one mission (spec §4.2, §4.4), in the order a person
+ * `/missions/<id>` — one mission (spec §4.2 "On a mission"), in the order a person
  * needs it:
  *
- *   1. what it is and the state it is in (the header);
+ *   1. what it is and the state it is in (the header: "Edit mission", the setup kit,
+ *      and in "···" stop, duplicate, replace my key);
  *   2. what waits for an answer on this mission, with a link to answer — the
  *      one filled box of the page — or, for a teammate, whose answer it waits for;
- *   3. Can / Asks first / Cannot, and the one limit that is near;
+ *   3. the creation screen frozen: its name, period and end, then its cards, each
+ *      with one more column, the use of the period per macro-action (the permission
+ *      closest to its limit, each permission on hover);
  *   4. people and keys, with what each key did in the current period;
- *   5. permissions and usage — the explicit list, one click away — where the
- *      creator changes "ask me first", and "Change limits", which opens the same
- *      table in edit mode for the limits only (`?edit=limits`);
- *   6. activity: a line of counts, the last calls one click away, the whole
- *      record on the mission's activity page;
- *   7. for the creator of a mission that is not stopped, the zone that stops
- *      it — what stopping does, and the same confirmation as the "···" item.
+ *   5. activity: a line of counts, the last calls one click away, the whole
+ *      record on the mission's activity page.
  *
  * The header says when the mission was created, relative ("created 2 h ago",
  * the instant in its `title`), and a details line under it its short id (the
@@ -24,7 +22,7 @@
  * The creator and the teammates of a mission read this page (spec §0 "Mission
  * member"). Each sees the acts the server would take from them and no other:
  * a teammate generates, replaces and revokes their own key; the creator adds
- * and removes people, makes machine keys, stops the mission.
+ * and removes people, makes machine keys, edits and stops the mission.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -33,68 +31,62 @@ import { TrustRaiseOffer } from '@/components/missions/TrustRaiseOffer';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RelativeTime } from '@/components/RelativeTime';
 import {
-  AllowSummary,
   AnswerList,
   AnswerRow,
   Avatar,
   ButtonLink,
   Callout,
   Disclosure,
-  EnvTag,
   Hint,
-  Meter,
+  KeyValue,
   Mono,
   PageHeader,
   Section,
   StatusMark,
   SummaryLine,
+  type ServiceMarkIcon,
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import {
   ACTIONS,
   agoSentence,
   asksFirst,
+  capitalize,
   count,
   expiresOn,
   limitColumn,
   limitsResetEvery,
   listed,
-  reachedOnAccount,
   MISSION_ACTIONS,
   MISSION_WORDS,
   periodWord,
-  RESOURCE_SET_WORDS,
   ROUTES,
   SECTIONS,
   TERMS,
-  until,
   waitingFor,
   WAITING,
 } from '@/lib/vocabulary';
-import { enumerateCatalog, groupVariants } from '@/lib/missions/catalog-view';
+import { enumerateCatalog } from '@/lib/missions/catalog-view';
+import { macroActionsOf } from '@/lib/missions/macro-actions';
+import { riskPlanesOf } from '@/lib/providers/planes';
+import { serviceIconOf } from '@vaubaan/plugin-sdk';
 import { missionGitViews } from '@/server/missions/git-view';
 import { shortId } from '@/server/missions/short-id';
 import { explainLost, explainOrphan } from '@/server/missions/orphan-reason';
-import { riskExplainer } from '@/lib/providers/reference';
 import { toolTitleOf } from '@/server/providers/tool-titles';
 import type { RequestCall } from '@/server/requests';
 import { inboxRequestPath } from '@/server/requests/url';
-import { parseRiskId } from '@vaubaan/shared';
 
 import { CallHeadline } from '../../waiting/parts';
 
 import styles from '../missions.module.css';
-import { allowLines, createdBy, missionMark, nearestLimit } from '../mission-view';
+import cardStyles from '../cards/cards.module.css';
+import { detailCards } from '../cards/detail-cards';
+import { MissionCard } from '../cards/mission-card';
+import { createdBy, missionMark } from '../mission-view';
 import { ActivityTable } from './activity-table';
-import { LimitsEditor, type LimitGroup } from './limits-editor';
-import {
-  ActButton,
-  GenerateKeyButton,
-  MissionActsProvider,
-  MissionMenu,
-  StopMissionButton,
-} from './mission-actions';
-import { PermissionsUsage } from './permissions-usage';
+import { CheckNow } from './check-now';
+import { ActButton, GenerateKeyButton, MissionActsProvider, MissionMenu } from './mission-actions';
 import { TeamSection, type HolderCalls } from './team-section';
 
 export const dynamic = 'force-dynamic';
@@ -104,11 +96,8 @@ const LAST_EVENTS = 8;
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string | string[]; edited?: string | string[] }>;
+  searchParams: Promise<{ edited?: string | string[] }>;
 }
-
-/** The query that opens the permission table in edit mode for the limits. */
-const EDIT_LIMITS = 'limits';
 
 /** What waits on this mission, as the banner shows it. */
 interface Waiting {
@@ -132,14 +121,15 @@ export default async function MissionPage({ params, searchParams }: Props) {
   const { mission, state, orphan, issued_via: issuedVia } = detail;
   const isCreator = detail.role === 'creator';
   const query = await searchParams;
-  const editingLimits = isCreator && detail.limits_editable && query.edit === EDIT_LIMITS;
   // Back from "Edit mission": the edit is saved (ADR mission-editable-after-issuance).
   const justEdited = isCreator && query.edited === '1';
   const now = new Date();
-  const [team, activity, inbox] = await Promise.all([
+  const [team, activity, inbox, context] = await Promise.all([
     root.missions.team.team(user, id),
     root.audit.sessions.get(user, id),
     isCreator ? root.requests.service.inbox(user) : Promise.resolve([]),
+    // The cards read the creator's lines against their authority now, as "Edit mission" does.
+    isCreator ? root.missions.service.issuanceContext(user) : Promise.resolve([]),
   ]);
   if (!team || !activity) notFound();
 
@@ -180,19 +170,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
   const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
   const period = periodWord(periodSeconds);
 
-  // What the mission does not hold, by what it would have allowed: the "Cannot" line.
-  const held = new Set<string>(detail.policy.map((entry) => entry.risk_id));
-  const notIncluded = detail.connections.flatMap((connection) => {
-    const registered = root.registry.get(connection.provider);
-    if (!registered) return [];
-    const left = enumerateCatalog(registered.plugin.catalog)
-      .filter((risk) => !held.has(risk.risk_id) && !risk.deprecated && !risk.fallback)
-      .sort((a, b) => b.severity - a.severity);
-    return groupVariants(left).map((family) => family.label);
-  });
-  const lines = allowLines(detail.policy, notIncluded);
-  const near = state.kind === 'active' ? nearestLimit(detail.policy) : null;
-  const explain = riskExplainer(root.registry);
   const gitViews = missionGitViews({
     registry: root.registry,
     publicUrl: root.config.publicUrl,
@@ -200,50 +177,25 @@ export default async function MissionPage({ params, searchParams }: Props) {
     policy: detail.policy,
   });
   const missionPath = `${ROUTES.missions}/${mission.id}`;
-  const limitGroups: LimitGroup[] = editingLimits
-    ? detail.connections
-        .flatMap((connection) => {
-          // One group per account; per resource set when it has several (risk model §4.7).
-          const several = connection.resource_sets.length > 1;
-          return (several ? connection.resource_sets : [null]).map((set) => ({ connection, set }));
-        })
-        .map(({ connection, set }) => ({
-          key: set ? `${connection.id}:${set.id}` : connection.id,
-          title: set
-            ? `${connection.provider_label} · ${connection.display_name} · ${RESOURCE_SET_WORDS.title(set.position)}`
-            : `${connection.provider_label} · ${connection.display_name}`,
-          note: set
-            ? reachedOnAccount(
-                set.resources.map((r) => r.display_name || r.ref),
-                set.reaches_later,
-              )
-            : reachedOnAccount(
-                connection.resources.map((r) => r.display_name || r.ref),
-                connection.reaches_later,
-              ),
-          rows: detail.policy
-            .filter((entry) =>
-              set
-                ? entry.resource_set_id === set.id
-                : parseRiskId(entry.risk_id)?.provider === connection.provider,
-            )
-            .map((entry) => ({
-              key: `${entry.resource_set_id ?? ''}:${entry.risk_id}`,
-              resource_set_id: entry.resource_set_id ?? '',
-              suffix: set && set.position > 1 ? `-set${set.position}` : '',
-              risk_id: entry.risk_id,
-              label: entry.label,
-              level: entry.level ?? 'low',
-              env: explain(entry.risk_id)?.env ?? null,
-              quota: entry.quota,
-              rate_max: entry.rate_limit.max,
-              rate_window_seconds: entry.rate_limit.window_seconds,
-              gate: entry.gate,
-              used: entry.remaining === null ? null : entry.quota - entry.remaining,
-            })),
-        }))
-        .filter((group) => group.rows.length > 0)
-    : [];
+  // The creation screen, frozen: one card per resource set, with the use of the period.
+  const cards = detailCards(detail, context, (provider) => {
+    const plugin = root.registry.get(provider)?.plugin;
+    return plugin
+      ? {
+          risks: enumerateCatalog(plugin.catalog),
+          macro_actions: macroActionsOf(plugin.catalog),
+          derives_env: typeof plugin.envOf === 'function',
+        }
+      : null;
+  });
+  const serviceOf = (provider: string) => {
+    const plugin = root.registry.get(provider)?.plugin;
+    return {
+      icon: (plugin ? serviceIconOf(plugin) : null) satisfies ServiceMarkIcon | null,
+      planes: plugin ? riskPlanesOf(plugin.dataModel, plugin.catalog) : null,
+    };
+  };
+  const raisable = isCreator && detail.limits_editable;
 
   const calls: HolderCalls[] = activity.holder_activity.flatMap((entry) =>
     entry.holder
@@ -266,6 +218,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
     .at(-1);
   const activityPath = `${ROUTES.missions}/${mission.id}/session`;
   const stoppable = isCreator && state.kind !== 'revoked';
+  const editable = isCreator && detail.limits_editable;
   const needsMyKey = team.issuable && !team.my_token;
 
   const [first, ...others] = waiting;
@@ -308,11 +261,11 @@ export default async function MissionPage({ params, searchParams }: Props) {
   };
 
   const secondary: React.ReactNode[] = [];
-  if (isCreator && state.kind !== 'revoked') {
+  if (editable) {
     secondary.push(
-      <ActButton key="people" act="add-people">
-        {ACTIONS.addPeople}
-      </ActButton>,
+      <ButtonLink key="edit" href={`${missionPath}/edit`} data-testid="edit-mission">
+        {MISSION_ACTIONS.editMission}
+      </ButtonLink>,
     );
   }
   if (team.my_token) {
@@ -341,39 +294,14 @@ export default async function MissionPage({ params, searchParams }: Props) {
           <>
             {createdBy(detail.creator.email, isCreator)}{' '}
             <RelativeTime at={mission.createdAt} now={now} testId="mission-created" />
-            {detail.connections.map((connection) => (
-              <span key={connection.id}>
-                {' · '}
-                {connection.provider_label}{' '}
-                {connection.reaches_later ? (
-                  <span data-testid="whole-account">
-                    {connection.display_name}, {MISSION_WORDS.wholeAccount}
-                  </span>
-                ) : connection.resources.length === 0 ? (
-                  connection.display_name
-                ) : (
-                  listed(
-                    connection.resources.map((r) => {
-                      const name = r.display_name || r.ref;
-                      return connection.created_resource_ids?.includes(r.id)
-                        ? `${name} (${MISSION_WORDS.createdByMission})`
-                        : name;
-                    }),
-                    2,
-                  )
-                )}
-                {[...new Set(connection.resources.flatMap((r) => (r.env ? [r.env] : [])))].map(
-                  (env) => (
-                    <span key={env} className={styles.inlineTag}>
-                      <EnvTag env={env} />
-                    </span>
-                  ),
-                )}
-                {connection.lost && (
-                  <span data-testid={`account-lost-${connection.id}`}> (no longer serves)</span>
-                )}
-              </span>
-            ))}
+            {detail.connections
+              .filter((connection) => connection.lost)
+              .map((connection) => (
+                <span key={connection.id} data-testid={`account-lost-${connection.id}`}>
+                  {' · '}
+                  {connection.provider_label} {connection.display_name} (no longer serves)
+                </span>
+              ))}
             {' · '}
             {limitsResetEvery(periodSeconds)} ·{' '}
             <span title={mission.expiresAt ?? undefined}>{expiresOn(mission.expiresAt, now)}</span>
@@ -387,19 +315,7 @@ export default async function MissionPage({ params, searchParams }: Props) {
               ? [secondary[0]]
               : undefined
         }
-        more={
-          <MissionMenu
-            missionId={mission.id}
-            duplicable={isCreator}
-            stoppable={stoppable}
-            limitsHref={
-              isCreator && detail.limits_editable
-                ? `${missionPath}?edit=${EDIT_LIMITS}#permissions`
-                : null
-            }
-            editHref={isCreator && detail.limits_editable ? `${missionPath}/edit` : null}
-          />
-        }
+        more={<MissionMenu missionId={mission.id} duplicable={isCreator} stoppable={stoppable} />}
       />
 
       <p className={styles.details} data-testid="mission-details">
@@ -512,27 +428,79 @@ export default async function MissionPage({ params, searchParams }: Props) {
         </div>
       )}
 
-      <AllowSummary
-        can={lines.can}
-        asks={lines.asks}
-        cannot={lines.cannot}
-        asksLabel={asksFirst(creatorName)}
-        limits={
-          state.kind !== 'active' ? undefined : near ? (
-            <>
-              <Meter used={near.used} limit={near.limit} threshold={0} label={near.label} />
-              {near.near === 1
-                ? ' · the only one near its limit'
-                : ` · the closest of ${near.near} near their limit`}
-            </>
-          ) : (
-            `Nothing is near its limit · ${limitsResetEvery(periodSeconds)}.`
-          )
-        }
-        testId="mission-allows"
-      />
+      <div className={styles.block}>
+        <KeyValue
+          items={[
+            { term: 'Name', value: mission.name },
+            { term: 'Limits reset', value: capitalize(limitsResetEvery(periodSeconds)) },
+            {
+              term: 'Ends',
+              value: (
+                <span title={mission.expiresAt ?? undefined}>
+                  {capitalize(expiresOn(mission.expiresAt, now))}
+                </span>
+              ),
+            },
+          ]}
+        />
+      </div>
+      <div className={[cardStyles.cards, styles.block].join(' ')} data-testid="mission-cards">
+        {cards.map(({ connection, card, used, openUntil, lastCheckedAt }) => {
+          const service = serviceOf(connection.provider);
+          return (
+            <MissionCard
+              key={card.key}
+              readOnly
+              connection={connection}
+              card={card}
+              icon={service.icon}
+              planes={service.planes}
+              limitLabel={limitColumn(periodSeconds)}
+              today={{
+                header: capitalize(period),
+                period,
+                used,
+                openUntil,
+                // Closing an opening: the creator, on the rule of every gate edit.
+                closeOpenings:
+                  isCreator && detail.gates_editable ? { missionId: mission.id } : null,
+                raiseHrefs: raisable
+                  ? Object.fromEntries(
+                      connection.macro_actions.map((action) => [
+                        action.id,
+                        `${missionPath}/edit?custom=${encodeURIComponent(card.id ?? '')}&action=${encodeURIComponent(action.id)}`,
+                      ]),
+                    )
+                  : null,
+              }}
+              checked={
+                card.future ? (
+                  <CheckNow
+                    missionId={mission.id}
+                    connectionId={connection.id}
+                    lastCheckedAt={lastCheckedAt}
+                    now={now.toISOString()}
+                    canCheck={isCreator && state.kind !== 'revoked'}
+                  />
+                ) : null
+              }
+            />
+          );
+        })}
+      </div>
 
-      <TeamSection team={team} calls={calls} period={period} me={user.id} now={now.toISOString()} />
+      <TeamSection
+        team={team}
+        calls={calls}
+        period={period}
+        me={user.id}
+        now={now.toISOString()}
+        addPeople={
+          isCreator && state.kind !== 'revoked' ? (
+            <ActButton act="add-people">{ACTIONS.addPeople}</ActButton>
+          ) : null
+        }
+      />
 
       {gitViews.length > 0 && (
         <Section
@@ -581,67 +549,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
       )}
 
       <Section
-        id="permissions"
-        title={SECTIONS.permissionsAndUsage}
-        count={detail.policy.length}
-        note={
-          editingLimits ? (
-            'Change a limit up or down. What was used stays used.'
-          ) : isCreator && detail.limits_editable ? (
-            <>
-              <ButtonLink href={`${missionPath}/edit`} size="sm" data-testid="edit-mission">
-                {MISSION_ACTIONS.editMission}
-              </ButtonLink>
-              <ButtonLink
-                href={`${missionPath}?edit=${EDIT_LIMITS}#permissions`}
-                size="sm"
-                data-testid="change-limits"
-              >
-                {MISSION_ACTIONS.changeLimits}
-              </ButtonLink>
-            </>
-          ) : (
-            'The explicit list this mission carries.'
-          )
-        }
-        testId="mission-permissions"
-      >
-        {editingLimits ? (
-          <LimitsEditor
-            missionId={mission.id}
-            missionName={mission.name}
-            groups={limitGroups}
-            limitLabel={limitColumn(periodSeconds)}
-            periodWord={period}
-            resetWords={
-              state.kind === 'active' && state.period.end
-                ? `until the limits reset (${until(state.period.end, now)})`
-                : null
-            }
-            missionPath={missionPath}
-          />
-        ) : (
-          <Disclosure
-            id={`mission:${mission.id}:permissions`}
-            show={`All ${count(detail.policy.length, TERMS.risk)}, with what was used`}
-            hide="Hide the permissions"
-            testId="permissions-disclosure"
-          >
-            <PermissionsUsage
-              detail={detail}
-              explain={explain}
-              periodSeconds={periodSeconds}
-              editable={isCreator && detail.gates_editable}
-            />
-            <Hint>Not in this mission, therefore refused with the reason: {lines.cannot}</Hint>
-            {isCreator && detail.gates_editable && (
-              <Hint>You choose here what asks you first.</Hint>
-            )}
-          </Disclosure>
-        )}
-      </Section>
-
-      <Section
         id="activity"
         title={MISSION_ACTIONS.activity}
         note={<Link href={activityPath}>Everything this mission did</Link>}
@@ -686,15 +593,6 @@ export default async function MissionPage({ params, searchParams }: Props) {
           </div>
         )}
       </Section>
-
-      {stoppable && (
-        <Section id="stop" title={MISSION_WORDS.stopTitle} testId="mission-stop">
-          <p className={styles.quiet}>{MISSION_WORDS.stopWhat}</p>
-          <div className={styles.afterLine}>
-            <StopMissionButton />
-          </div>
-        </Section>
-      )}
     </MissionActsProvider>
   );
 }

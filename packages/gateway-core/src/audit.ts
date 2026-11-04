@@ -170,9 +170,21 @@ export type AdminAct =
    *  `created-by-the-mission` — the mission created them through a creating call
    *  and reaches them at once (ADR created-resources-join-the-mission); the actor is
    *  the human behind the call's key, `after` carries `connection_id`, `tool`,
-   *  `refs`, `resource_scope` and `added_to_selection` (empty under scope
-   *  `connection`, which reaches them already). Object: the mission. */
+   *  `refs`, `resource_set_ids` and `added_to_selection` (the refs written now; one
+   *  already in a set is not). Object: the mission. */
   | 'mission-resources-added'
+  /** A resource joined a resource set with future on after issuance (ADR
+   *  resource-set-is-one-environment-with-optional-future-resources): it appeared on the
+   *  connection (`after.reason` `discovered`) or was relabelled into the set's
+   *  environment (`relabelled`). `after` carries `connection_id`, `resource_set_id`,
+   *  `refs`, `reason`. The actor is the human whose act caused it (an owner's relabel or
+   *  refresh, a creator's "check now"), or `DISCOVERY_ACTOR_ID`. Object: the mission. */
+  | 'mission-resource-joined'
+  /** A resource left a resource set because its environment is no longer the set's (a
+   *  relabel, or a change of the connection's default environment); it may join the set
+   *  of its new environment in the same act (`mission-resource-joined`). Same `after`
+   *  as `mission-resource-joined`. Object: the mission. */
+  | 'mission-resource-left'
   | 'permission-requested'
   | 'limits-changed'
   /** The creator edited the mission (ADR mission-editable-after-issuance): `before` and
@@ -327,6 +339,16 @@ export const SCHEDULE_ACTOR_ID = 'schedule';
 
 /** How the scheduled backup is named wherever an actor is shown. */
 export const SCHEDULE_ACTOR_LABEL = 'The backup schedule';
+
+/**
+ * The `user_id` of entries the gateway's own discovery writes: the hourly discovery of
+ * the connections a mission's future resources depend on, and the discovery after a
+ * creating call (ADR resource-set-is-one-environment-with-optional-future-resources).
+ */
+export const DISCOVERY_ACTOR_ID = 'discovery';
+
+/** How the gateway's own discovery is named wherever an actor is shown. */
+export const DISCOVERY_ACTOR_LABEL = 'The gateway’s discovery';
 
 export interface AdminAuditEntry {
   readonly kind: 'admin';

@@ -88,7 +88,12 @@ export async function authorityRig(options: ExecutionInstanceOptions = {}): Prom
       return root.missions.service.issue(user, {
         name,
         connections: [
-          { connection_id: instance.connection.id, resources: { scope: 'all' }, policy },
+          // The staging spaces: one environment, so one resource set.
+          {
+            connection_id: instance.connection.id,
+            resources: { scope: 'selected', resource_refs: ['app-staging', 'scratch'] },
+            policy,
+          },
         ],
         period: { kind: 'recurring', length_seconds: 86_400 },
         expires_at: null,

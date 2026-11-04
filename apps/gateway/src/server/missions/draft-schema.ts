@@ -56,13 +56,13 @@ const resourcesSchema = z.discriminatedUnion('scope', [
     .object({ scope: z.literal('all') })
     .strict()
     .describe(
-      'Every resource of the connection known now, stored as that list: a resource discovered later is NOT reached. The usual choice.',
+      'Every resource of the connection known now that no other set selects, stored as that list and split into one set per environment: a resource discovered later is NOT reached. A resource without an environment label is left out when the provider has environment-dependent permissions.',
     ),
   z
     .object({ scope: z.literal('connection') })
     .strict()
     .describe(
-      'The whole connection: every resource known now AND every resource discovered later (except the ones the owner hid). Only when the task creates resources or operates the whole account; the user sees the mission marked so.',
+      'Shorthand for `all` with `future: true`: every resource known now, split into one set per environment, each also taking the resources that later appear in its environment (except hidden ones). Only when the task creates resources or operates the whole account; the user sees the mission marked so.',
     ),
   z
     .object({
@@ -74,14 +74,36 @@ const resourcesSchema = z.discriminatedUnion('scope', [
         .optional()
         .describe('Resource refs as `list_my_connections` shows them, e.g. `acme/app`.'),
     })
-    .strict(),
+    .strict()
+    .describe(
+      'Exactly these resources. In a resource set they must all carry one environment label (or all none); given directly on the connection they are split into one set per environment.',
+    ),
 ]);
 
 const resourcesField = () =>
   resourcesSchema
     .optional()
     .describe(
-      'The resources the mission may touch on this connection. Default: `all` (every resource known now). `connection` also reaches resources discovered later.',
+      'The resources the mission may touch. Default: `all` (every resource known now). A resource set holds the resources of one environment.',
+    );
+
+const futureField = () =>
+  z
+    .boolean()
+    .optional()
+    .describe(
+      '`true`: a resource that later appears on the connection with this set’s environment (discovered, or relabelled into it) joins the set, unless another set of the mission holds it. Default `false`. One set per environment at most.',
+    );
+
+const envField = () =>
+  z
+    .string()
+    .min(1)
+    .max(64)
+    .nullable()
+    .optional()
+    .describe(
+      'The set’s environment label, needed only when it lists no resource yet (a set of future resources); `null` for no label. Every listed resource must carry it.',
     );
 
 const everythingField = () =>
@@ -113,12 +135,16 @@ const resourceSetSchema = z
       .optional()
       .describe('The stored set an edit of the mission keeps; ignored when a mission is issued.'),
     resources: resourcesField(),
+    future: futureField(),
+    env: envField(),
     everything_i_hold: everythingField(),
     policy: policyField(),
     trust_levels: trustLevelsField(),
   })
   .strict()
-  .describe('One resource set: some resources of the connection with their own policy and budget.');
+  .describe(
+    'One resource set: resources of one environment of the connection, optionally those that appear there later, with their own policy and budget.',
+  );
 
 const connectionSchema = z
   .object({
@@ -131,6 +157,8 @@ const connectionSchema = z
         'Instead of `connection_id`, when the user holds exactly one usable connection of that provider.',
       ),
     resources: resourcesField(),
+    future: futureField(),
+    env: envField(),
     everything_i_hold: everythingField(),
     policy: policyField(),
     trust_levels: trustLevelsField(),
@@ -140,7 +168,7 @@ const connectionSchema = z
       .max(MAX_RESOURCE_SETS)
       .optional()
       .describe(
-        'Instead of `resources`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each with its own resources, trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Only when the task needs different trust on different resources of one account (staging free, production careful).',
+        'Instead of `resources`, `future`, `env`, `everything_i_hold`, `policy` and `trust_levels` (which must then be absent): several resource sets on this connection, each holding the resources of one environment with its own trust levels and policy, judged and budgeted apart. A resource belongs to one set only; at most one set takes `all` or `connection` (every resource no other set selects). A call naming no resource, or resources of several sets, must be accepted in every set it may touch. Given without sets, the connection is split into one set per environment of its resources, each with the policy lines that apply there.',
       ),
   })
   .strict();

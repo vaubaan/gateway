@@ -155,22 +155,25 @@ describe('everything I hold — the expansion', () => {
 });
 
 describe('everything I hold — the preview', () => {
+  /** The labelled resources of one environment: "all" is then one resource set. */
+  const STAGING = ACME_RESOURCES.filter((r) => r.env === 'staging');
+
   it('passes at once, and the policy is the explicit list, not "everything"', () => {
-    const connection = acmeConnection();
+    const connection = acmeConnection({ resources: STAGING });
     const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
     expect(p.ok).toBe(true);
     expect(p.issues).toEqual([]);
-    expect(p.policy).toEqual(everythingIHold(connection, ACME_RESOURCES).entries);
+    expect(p.policy).toEqual(everythingIHold(connection, STAGING).entries);
     expect(p.connections[0]?.left_out).toEqual([]);
     expect(JSON.stringify(p.policy)).not.toContain(EVERYTHING_I_HOLD);
   });
 
   it('says what it wrote out: count, most severe, and the fallback by id', () => {
-    const connection = acmeConnection();
+    const connection = acmeConnection({ resources: STAGING });
     const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
     const notice = p.notices.find((n) => n.code === 'everything-i-hold-expanded');
     expect(notice?.connection_id).toBe(connection.id);
-    expect(notice?.message).toContain('6 explicit risks');
+    expect(notice?.message).toContain(`${idsOf(connection, STAGING).length} explicit risks`);
     expect(notice?.message).toContain('Most severe: acme[staging].bulk-delete');
     expect(notice?.message).toContain('Includes the fallback acme.uncategorized-write');
     expect(notice?.risk_ids).toEqual(['acme.uncategorized-write']);
@@ -194,14 +197,13 @@ describe('everything I hold — the preview', () => {
     const connection = acmeConnection();
     const p = previewDraft(
       { connections: [connection], now: NOW },
-      draftWith(connection, { scope: 'selected', resource_refs: ['scratch'] }),
+      draftWith(connection, { scope: 'selected', resource_refs: ['app-prod'] }),
     );
     expect(p.ok).toBe(true);
-    expect(p.policy.map((l) => l.risk_id)).toEqual([
-      'acme.read',
-      'acme.admin',
-      'acme.uncategorized-write',
-    ]);
+    const prodOnly = idsOf(connection, [byRef('app-prod')]);
+    expect(p.policy.map((l) => l.risk_id)).toEqual(prodOnly);
+    expect(prodOnly).not.toContain('acme[staging].write');
+    expect(prodOnly.length).toBeLessThan(idsOf(connection, ACME_RESOURCES).length);
     expect(p.connections[0]?.unresolvable).toEqual([]);
   });
 
@@ -225,6 +227,7 @@ describe('everything I hold — the preview', () => {
           {
             connection_id: connection.id,
             everything_i_hold: true,
+            resources: { scope: 'selected', resource_refs: ['app-staging'] },
             policy: [{ risk_id: 'acme.admin' }],
           },
         ],

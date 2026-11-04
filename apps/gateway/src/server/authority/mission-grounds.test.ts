@@ -78,7 +78,6 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       periodSeconds: 86_400,
       connections: connections.map((c) => ({
         connectionId: c.id,
-        resourceScope: 'all',
         resourceIds: [],
       })),
       policy: riskIds.map((riskId) => ({

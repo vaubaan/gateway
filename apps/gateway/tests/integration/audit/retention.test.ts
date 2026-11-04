@@ -108,7 +108,7 @@ describe('audit retention sweeper', () => {
         creatorUserId: userId,
         periodSeconds: 86_400,
         expiresAt: null,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [{ riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' }],
       })
     ).id;

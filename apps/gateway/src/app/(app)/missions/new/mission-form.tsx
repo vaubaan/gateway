@@ -1,54 +1,37 @@
 'use client';
 
 /**
- * "New mission" on one screen (spec §4.2, §7.4): a form in three steps and a
- * rail that says, as the form changes, what the mission would be able to do.
+ * The mission screen (spec §4.2, §7.4, §7.4 bis): creating and editing are one
+ * screen, which shows only the mission's cards.
  *
- *   1. Name — or start from one of your missions, or paste an agent's proposal.
- *   2. Accounts and permissions — per account: its resources (all by default,
- *      "Change" opens the list), then its macro-actions, each ticked at a
- *      trust level and saying what it yields here; the permissions one by one
- *      are the Advanced view (`MacroActionPanel`, `CustomEditor`).
- *   3. Limits and lifetime — how often the limits reset, when the mission
- *      ends. People are added once it exists.
+ *   - Above the cards: the name (or a copy of a mission, or a pasted agent's
+ *     proposal), how often the limits reset, when the mission ends.
+ *   - A card is one account and the resources of ONE environment (ADR
+ *     resource-set-is-one-environment-with-optional-future-resources); "+ Add an
+ *     account" picks the account, then its resources grouped by environment. Each
+ *     macro-action of the card is ticked at a trust level, or Custom when its lines
+ *     are edited one by one (`MissionCard`, `CustomModal`, `AccountPicker`).
+ *   - A sticky bar says what changed (or what the mission holds) and saves.
  *
- * "Create mission" asks once: the dialog lists **every permission with its
- * limit**, by account, and that list is what is created — the trust levels are
- * kept only to redraw this form. The decision shown is `previewDraft`, the function the server runs
- * again at creation; the browser's copy only saves a round trip.
- *
- * Once created, the screen becomes the key, shown once, with the kit
- * (`KeyReveal`): the key exists nowhere else, so nothing navigates away
- * until the person asks to open the mission.
+ * "Create mission" asks once: the dialog lists **every permission with its limit**,
+ * card by card, and that list is what is created — the trust levels are kept only to
+ * redraw this screen. The decision shown is `previewDraft`, which the server runs
+ * again; the browser's copy only saves a round trip. Once created, the screen becomes
+ * the key, shown once, with the kit (`KeyReveal`).
  *
  * With `edit`, the same screen edits a mission after issuance (ADR
- * mission-editable-after-issuance): prefilled from the mission, its period
- * fixed, its end date "as it is", judged by `judgeEdit` — the creation's
- * preview kept on what moves —, and "Save changes" confirms every change
- * before → after with what it means. Same key, same session, same counters.
+ * mission-editable-after-issuance): prefilled, its period fixed, its end date "as it
+ * is", judged by `judgeEdit`, and "Save changes" confirms every change before → after.
  */
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import {
   Button,
   ButtonLink,
   Callout,
-  Card,
-  CardBody,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-  Checkbox,
-  ChoiceChip,
-  ChoiceRow,
-  ConfirmDialog,
   Dialog,
-  EnvTag,
   Field,
-  FormColumns,
-  FormStep,
-  FormWithRail,
   Input,
   Mono,
   PageHeader,
@@ -56,23 +39,21 @@ import {
   Rows,
   Section,
   Select,
-  StatusMark,
-  Tag,
+  ServiceMark,
   Textarea,
+  type ServiceMarkIcon,
 } from '@/components/ui';
 import {
-  ACCOUNT_WORDS,
   ACTIONS,
+  CARD_WORDS,
   count,
   expiresOn,
   limitColumn,
   limitsResetEvery,
   listed,
-  mayAllow,
   MISSION_ACTIONS,
   MISSION_WORDS,
   PAGES,
-  RESOURCE_SET_WORDS,
   ROUTES,
   shortDate,
   TERMS,
@@ -86,51 +67,43 @@ import type {
   IssuanceConnection,
   MissionPreview,
   PreviewIssue,
-  PreviewNotice,
   ResolvedDraftConnection,
 } from '@/lib/missions/model';
 import { hasChanges, judgeEdit } from '@/lib/missions/mission-edit';
-import { defaultResources, previewDraft } from '@/lib/missions/preview';
-import type { TrustLevel } from '@/lib/missions/macro-actions';
+import { previewDraft } from '@/lib/missions/preview';
+import { TRUST_LEVELS } from '@/lib/missions/macro-actions';
 import type { RiskPlanes } from '@/lib/providers/planes';
+import { MS_PER_DAY } from '@vaubaan/shared/time';
 
 import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
 import { messageOf } from '@/lib/http/message-of';
 import { useAction, type PostAnswer } from '@/lib/http/post-json';
 import styles from '../missions.module.css';
-import { CustomEditor } from './custom-editor';
+import cardStyles from '../cards/cards.module.css';
+import { AccountPicker, offeredAccounts, type Picking } from '../cards/account-picker';
+import { actionRows, cardDigest, changeSummary, levelMatching } from '../cards/card-model';
+import { CustomModal } from '../cards/custom-modal';
+import { MissionCard } from '../cards/mission-card';
 import {
-  addResourceSet,
-  applyTrustLevels,
-  applyEverything,
-  discardsEdits,
+  addCard,
+  applyCustom,
+  cardsOf,
   draftOf,
   EXPIRY_CHOICES,
   expiryOf,
-  initialConnectionState,
   initialFormState,
-  initialSetState,
   issueSentence,
   loadResolved,
+  newCard,
   PERIOD_CHOICES,
   periodChoiceOf,
   periodOf,
-  removeResourceSet,
-  resetEdits,
-  RESOURCE_CHOICES,
-  setIncluded,
-  setMacroAction,
-  setOfResource,
-  setResourceScope,
-  setResources,
-  setsOffered,
-  setView,
-  takesTheRest,
-  updateSet,
-  type ConnectionState,
+  removeCard,
+  replaceCard,
+  setActionLevel,
+  setCardResources,
+  type CardState,
   type ExpiryChoice,
-  type ResourceChoice,
-  type SetState,
   type FormState,
   type PeriodChoice,
 } from './form-state';
@@ -141,9 +114,7 @@ import {
   raisedEditState,
   type EditSource,
 } from './edit-state';
-import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
-import { MacroActionPanel, SetPolicy } from './macro-action-panel';
-import { MS_PER_DAY } from '@vaubaan/shared/time';
+import { ExplicitList } from './policy-lines';
 
 export interface InitialDraft {
   readonly name: string;
@@ -152,6 +123,12 @@ export interface InitialDraft {
   /** What could not be carried over from the source (a permission no longer held, a vanished resource). */
   readonly issues: readonly PreviewIssue[];
   readonly sourceName: string;
+}
+
+/** "Raise this limit" on the mission page: the edit opens on the Custom modal of a macro-action. */
+export interface OpenCustom {
+  readonly resourceSetId: string;
+  readonly actionId: string;
 }
 
 interface Created {
@@ -171,15 +148,8 @@ function startState(
   context: readonly IssuanceConnection[],
   initial: InitialDraft | null,
 ): FormState {
-  const blank = initialFormState(context);
-  // A single account is the obvious one: include it up front.
-  const [only] = context;
-  const onlyState = only ? blank.connections[only.id] : undefined;
-  const base: FormState =
-    context.length === 1 && only && onlyState
-      ? { ...blank, connections: { ...blank.connections, [only.id]: setIncluded(onlyState, true) } }
-      : blank;
-  if (!initial) return base;
+  const blank = initialFormState();
+  if (!initial) return blank;
   return {
     ...loadResolved(context, blank, initial.resolved),
     name: initial.name,
@@ -187,35 +157,40 @@ function startState(
   };
 }
 
-/**
- * A choice the screen holds back until the person confirms it, because it
- * would throw away what they changed in the editor of one account.
- */
-type PendingDiscard =
-  | { readonly kind: 'reset'; readonly connectionId: string; readonly setIndex: number }
-  | {
-      readonly kind: 'trust-level';
-      readonly connectionId: string;
-      readonly setIndex: number;
-      readonly actionId: string;
-      readonly trustLevel: TrustLevel | null;
-    }
-  | { readonly kind: 'everything'; readonly connectionId: string; readonly setIndex: number };
+/** The issues of one card: about its account and its place among the account's cards. */
+function issuesOfCard(
+  issues: readonly PreviewIssue[],
+  state: FormState,
+  card: CardState,
+): PreviewIssue[] {
+  const index = cardsOf(state, card.connectionId).findIndex((c) => c.key === card.key);
+  return issues.filter(
+    (issue) =>
+      issue.connection_id === card.connectionId &&
+      (issue.resource_set_index === undefined ? index === 0 : issue.resource_set_index === index),
+  );
+}
 
 export function MissionForm({
   context,
   missions,
   initial,
   planes,
+  icons,
   edit = null,
+  openCustom = null,
 }: {
   context: readonly IssuanceConnection[];
   /** Per service id: the planes of its data model, for the services that have several. */
   planes: Readonly<Record<string, RiskPlanes>>;
+  /** Per service id: its mark (`serviceIconOf`), `null` for a plugin that declares none. */
+  icons: Readonly<Record<string, ServiceMarkIcon | null>>;
   missions: readonly { id: string; name: string }[];
   initial: InitialDraft | null;
-  /** The mission this form edits; `null` for a creation. */
+  /** The mission this screen edits; `null` for a creation. */
   edit?: EditSource | null;
+  /** The macro-action whose Custom modal the edit opens on. */
+  openCustom?: OpenCustom | null;
 }) {
   // "Raise" of a trust-raise proposal opens the edit at the new level (risk model §4.7).
   const [opening] = useState(() => {
@@ -225,8 +200,14 @@ export function MissionForm({
       : { state: start, replaced: [] as readonly string[] };
   });
   const [state, setState] = useState<FormState>(opening.state);
-  const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
-  const [pending, setPending] = useState<PendingDiscard | null>(null);
+  const [picking, setPicking] = useState<Picking | null>(null);
+  const [custom, setCustom] = useState<{ cardKey: string; actionId: string } | null>(() => {
+    const card = openCustom
+      ? opening.state.cards.find((c) => c.id === openCustom.resourceSetId)
+      : undefined;
+    return card && openCustom ? { cardKey: card.key, actionId: openCustom.actionId } : null;
+  });
+  const nextKey = useRef(0);
   const [now] = useState(() => new Date());
   const { busy, error, setError, run } = useAction();
   const [serverIssues, setServerIssues] = useState<readonly PreviewIssue[]>([]);
@@ -255,91 +236,26 @@ export function MissionForm({
   const changed = judgement ? hasChanges(judgement.changes) : false;
   const issues = serverIssues.length > 0 ? serverIssues : (judgement?.issues ?? preview.issues);
   const ready = judgement ? judgement.ok && changed : preview.ok;
-  const permissionCount = judgement
-    ? judgement.after.connections.reduce(
-        (n, c) => n + c.resource_sets.reduce((m, set) => m + set.policy.length, 0),
-        0,
-      )
-    : preview.policy.length;
-  const included: IncludedAccount[] = context.flatMap((connection) => {
-    const cs = state.connections[connection.id];
-    return cs?.included ? [{ connection, state: cs }] : [];
-  });
   const period = periodOf(state.period);
   const periodSeconds = period.kind === 'recurring' ? period.length_seconds : null;
   const expiresAt = expiryOf(state, now);
+  const limitLabel = limitColumn(periodSeconds);
+  const permissionCount = preview.policy.length;
   const carries = `${count(permissionCount, { one: 'explicit permission', many: 'explicit permissions' })}, ${limitsResetEvery(periodSeconds)}, ${expiresAt && Number.isNaN(Date.parse(expiresAt)) ? 'no end date yet' : expiresOn(expiresAt, now)}.`;
+  const connectionOf = (card: CardState) => context.find((c) => c.id === card.connectionId);
 
   function patch(next: Partial<FormState>) {
     setServerIssues([]);
     setState((s) => ({ ...s, ...next }));
   }
-  function patchConnection(id: string, next: ConnectionState) {
+  function update(change: (s: FormState) => FormState) {
     setServerIssues([]);
-    setState((s) => ({ ...s, connections: { ...s.connections, [id]: next } }));
+    setState(change);
   }
-  function toggle(set: (update: (open: ReadonlySet<string>) => ReadonlySet<string>) => void) {
-    return (id: string, open?: boolean) =>
-      set((current) => {
-        const next = new Set(current);
-        if (open ?? !next.has(id)) next.add(id);
-        else next.delete(id);
-        return next;
-      });
-  }
-  const toggleResources = toggle(setOpenResources);
-
-  /** A macro-action ticked, moved or unticked. Over edits it asks first; nothing is dropped silently. */
-  function pickTrustLevel(
-    connection: IssuanceConnection,
-    cs: ConnectionState,
-    setIndex: number,
-    actionId: string,
-    trustLevel: TrustLevel | null,
-  ) {
-    const set = cs.sets[setIndex];
-    if (!set) return;
-    if (discardsEdits(set)) {
-      setPending({
-        kind: 'trust-level',
-        connectionId: connection.id,
-        setIndex,
-        actionId,
-        trustLevel,
-      });
-      return;
-    }
-    patchConnection(
-      connection.id,
-      updateSet(connection, cs, setIndex, setMacroAction(connection, set, actionId, trustLevel)),
-    );
-  }
-  function pickEverything(connection: IssuanceConnection, cs: ConnectionState, setIndex: number) {
-    const set = cs.sets[setIndex];
-    if (!set) return;
-    if (discardsEdits(set)) {
-      setPending({ kind: 'everything', connectionId: connection.id, setIndex });
-      return;
-    }
-    patchConnection(
-      connection.id,
-      updateSet(connection, cs, setIndex, applyEverything(connection, set)),
-    );
-  }
-  function confirmDiscard() {
-    if (!pending) return;
-    const connection = context.find((c) => c.id === pending.connectionId);
-    const cs = connection ? state.connections[connection.id] : undefined;
-    const set = cs?.sets[pending.setIndex];
-    setPending(null);
-    if (!connection || !cs || !set) return;
-    const apply = (next: typeof set) =>
-      patchConnection(connection.id, updateSet(connection, cs, pending.setIndex, next));
-    if (pending.kind === 'reset') apply(resetEdits(connection, set));
-    if (pending.kind === 'trust-level') {
-      apply(setMacroAction(connection, set, pending.actionId, pending.trustLevel));
-    }
-    if (pending.kind === 'everything') apply(applyEverything(connection, set));
+  function patchCard(card: CardState, change: (connection: IssuanceConnection) => CardState) {
+    const connection = connectionOf(card);
+    if (!connection) return;
+    update((s) => replaceCard(s, change(connection)));
   }
 
   async function create() {
@@ -355,7 +271,9 @@ export function MissionForm({
         name: body.mission.name,
         ...made,
         permissions: preview.policy.length,
-        services: included.map(({ connection }) => connection.provider_label),
+        services: [
+          ...new Set(state.cards.flatMap((card) => connectionOf(card)?.provider_label ?? [])),
+        ],
       });
     } else if (answer.status === 422 && isRefusedBody(body)) {
       setConfirming(false);
@@ -412,7 +330,7 @@ export function MissionForm({
       setError(problemsOf(body) ?? messageOf(body, answer.status));
       return;
     }
-    const loaded = loadResolved(context, initialFormState(context), body.preview.resolved);
+    const loaded = loadResolved(context, initialFormState(), body.preview.resolved);
     setState({
       ...loaded,
       name: body.preview.name || state.name,
@@ -422,7 +340,6 @@ export function MissionForm({
     });
     setServerIssues([]);
     setProposalReport(body.preview);
-    setPending(null);
   }
 
   if (created)
@@ -439,17 +356,6 @@ export function MissionForm({
     ? `${MISSION_ACTIONS.editMission} “${edit.snapshot.name}”`
     : PAGES.newMission.title;
   const lede = edit ? MISSION_WORDS.editLede : PAGES.newMission.lede;
-  const naming = {
-    resource: (connectionId: string, resourceId: string) => {
-      const found = context
-        .find((c) => c.id === connectionId)
-        ?.resources.find((r) => r.id === resourceId);
-      return found ? found.display_name || found.ref : resourceId;
-    },
-    risk: (riskId: string) =>
-      context.flatMap((c) => c.risks).find((r) => r.risk_id === riskId)?.label ?? riskId,
-  };
-  const lines = judgement && edit ? changeLines(judgement.changes, edit, naming) : [];
 
   if (context.length === 0) {
     return (
@@ -466,6 +372,40 @@ export function MissionForm({
       </>
     );
   }
+
+  const naming = {
+    resource: (connectionId: string, resourceId: string) => {
+      const found = context
+        .find((c) => c.id === connectionId)
+        ?.resources.find((r) => r.id === resourceId);
+      return found ? found.display_name || found.ref : resourceId;
+    },
+    risk: (riskId: string) =>
+      context.flatMap((c) => c.risks).find((r) => r.risk_id === riskId)?.label ?? riskId,
+  };
+  const lines = judgement && edit ? changeLines(judgement.changes, edit, naming) : [];
+  const phrases = edit
+    ? changeSummary(context, opening.state, state, {
+        before: edit.snapshot.expires_at,
+        after: expiresAt,
+      })
+    : [];
+  const digest = state.cards.reduce(
+    (sum, card) => {
+      const connection = connectionOf(card);
+      if (!connection) return sum;
+      const d = cardDigest(actionRows(connection, card));
+      return { total: sum.total + d.total, free: sum.free + d.free, asks: sum.asks + d.asks };
+    },
+    { total: 0, free: 0, asks: 0 },
+  );
+  const cardKeys = new Set(state.cards.map((c) => c.connectionId));
+  const loose = issues.filter(
+    (i) => i.connection_id === undefined || !cardKeys.has(i.connection_id),
+  );
+  const offered = offeredAccounts(context, state).filter(({ blocked }) => blocked === null);
+  const customCard = custom ? state.cards.find((c) => c.key === custom.cardKey) : undefined;
+  const customConnection = customCard ? connectionOf(customCard) : undefined;
 
   return (
     <>
@@ -500,6 +440,14 @@ export function MissionForm({
         </div>
       )}
 
+      {state.split && state.split.length > 0 && (
+        <div className={styles.block}>
+          <Callout tone="warn" title={CARD_WORDS.splitTitle} testId="split-by-environment">
+            {CARD_WORDS.splitBody}
+          </Callout>
+        </div>
+      )}
+
       {initial && !edit && (
         <div className={styles.block}>
           <Callout
@@ -526,461 +474,294 @@ export function MissionForm({
           if (ready) setConfirming(true);
         }}
       >
-        <FormWithRail
-          rail={
-            <Card>
-              <CardHeader>
-                <CardTitle>{MISSION_WORDS.railTitle}</CardTitle>
-              </CardHeader>
-              <CardBody>
-                <RailSummary accounts={included} carries={carries} />
-                {issues.length > 0 && (
-                  <ul
-                    className={serverIssues.length > 0 ? styles.railRefused : styles.railIssues}
-                    data-testid="issues"
-                  >
-                    {issues.map((i) => (
-                      <li key={`${i.code}:${i.message}`}>{issueSentence(i, context)}</li>
+        <div className={cardStyles.fields}>
+          <Field label="Name" htmlFor="mission-name">
+            <Input
+              id="mission-name"
+              value={state.name}
+              onChange={(e) => patch({ name: e.target.value })}
+              placeholder="What is this mission for? Ship the billing page"
+              aria-label="Mission name"
+              maxLength={120}
+              autoFocus
+            />
+          </Field>
+          <Field
+            label="Limits reset"
+            htmlFor="mission-period"
+            hint={edit ? MISSION_WORDS.periodFixed : undefined}
+          >
+            <Select
+              id="mission-period"
+              value={state.period}
+              disabled={edit !== null}
+              onChange={(e) => {
+                if (isChoice<PeriodChoice>(PERIOD_CHOICES, e.target.value)) {
+                  patch({ period: e.target.value });
+                }
+              }}
+            >
+              {PERIOD_CHOICES.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Ends" htmlFor="mission-expiry">
+            <Select
+              id="mission-expiry"
+              value={state.expiry}
+              onChange={(e) => {
+                if (isChoice<ExpiryChoice>(EXPIRY_CHOICES, e.target.value)) {
+                  patch({ expiry: e.target.value });
+                }
+              }}
+            >
+              {EXPIRY_CHOICES.filter((x) => edit !== null || x.id !== 'keep').map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.id === 'keep'
+                    ? `${x.label} · ${expiresOn(state.keptExpiry ?? null, now)}`
+                    : x.days === null
+                      ? x.label
+                      : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * MS_PER_DAY), now)}`}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        {state.expiry === 'custom' && (
+          <div className={styles.expiryDate}>
+            <Field label="Ends on" htmlFor="mission-expiry-date" shape="your local time">
+              <Input
+                id="mission-expiry-date"
+                type="datetime-local"
+                value={state.expiryCustom}
+                onChange={(e) => patch({ expiryCustom: e.target.value })}
+              />
+            </Field>
+          </div>
+        )}
+
+        {!edit && (
+          <div className={cardStyles.startRow}>
+            {missions.length > 0 && (
+              <Select
+                value=""
+                className={styles.startFrom}
+                aria-label="Start from one of your missions"
+                onChange={(e) => {
+                  // A full navigation: the screen starts again from the copy, not from this state.
+                  if (e.target.value) {
+                    window.location.assign(
+                      `${ROUTES.newMission}?from=${encodeURIComponent(e.target.value)}`,
+                    );
+                  }
+                }}
+              >
+                <option value="">{MISSION_ACTIONS.startFrom}</option>
+                {missions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <Button
+              type="button"
+              aria-expanded={proposalOpen}
+              onClick={() => setProposalOpen((o) => !o)}
+            >
+              {MISSION_ACTIONS.pasteProposal}
+            </Button>
+          </div>
+        )}
+        {proposalOpen && !edit && (
+          <div className={styles.proposal}>
+            <Field
+              label="What the agent proposed"
+              htmlFor="mission-proposal"
+              shape="JSON, as its management tools print it"
+              hint="Nothing is created: what you may allow fills the screen, the rest is listed."
+            >
+              <Textarea
+                id="mission-proposal"
+                mono
+                value={proposalText}
+                onChange={(e) => setProposalText(e.target.value)}
+                aria-label="Agent proposal (JSON)"
+                placeholder='{"connections":[{"provider":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                spellCheck={false}
+              />
+            </Field>
+            <div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void checkProposal()}
+                disabled={busy || proposalText.trim() === ''}
+              >
+                Check and load
+              </Button>
+            </div>
+            {proposalReport && (
+              <Callout
+                tone={proposalReport.ok ? 'ok' : 'warn'}
+                title={`Loaded ${count(proposalReport.policy.length, TERMS.risk)} on ${count(proposalReport.connections.length, TERMS.connection)}`}
+                testId="proposal-report"
+              >
+                {proposalReport.issues.length === 0 ? (
+                  'Everything the proposal asks for is within what you may allow.'
+                ) : (
+                  <ul className={styles.issueList}>
+                    {proposalReport.issues.map((i) => (
+                      <li key={i.message}>{issueSentence(i, context)}</li>
                     ))}
                   </ul>
                 )}
-                {error && !confirming && (
-                  <p className={styles.railRefused} role="alert" data-testid="create-error">
-                    {edit ? 'Not saved' : 'Not created'}: {error}
-                  </p>
-                )}
-              </CardBody>
-              <CardFooter>
-                <Button type="submit" variant="primary" size="lg" disabled={busy || !ready}>
-                  {edit ? MISSION_ACTIONS.saveChanges : ACTIONS.createMission}
-                </Button>
-                <ButtonLink
-                  href={edit ? `${ROUTES.missions}/${edit.missionId}` : ROUTES.missions}
-                  variant="ghost"
-                >
-                  {ACTIONS.cancel}
-                </ButtonLink>
-                <span className={styles.railHint}>
-                  {edit
-                    ? changed
-                      ? MISSION_WORDS.sameKeyAfterEdit
-                      : MISSION_WORDS.nothingChangedYet
-                    : MISSION_WORDS.keyAtTheEnd}
-                </span>
-              </CardFooter>
-            </Card>
-          }
-        >
-          <FormStep n={1} title="Name" hint="How you will find it again.">
-            <div className={styles.nameRow}>
-              <Input
-                value={state.name}
-                onChange={(e) => patch({ name: e.target.value })}
-                placeholder="What is this mission for? Ship the billing page"
-                aria-label="Mission name"
-                maxLength={120}
-                autoFocus
+              </Callout>
+            )}
+          </div>
+        )}
+
+        <div className={cardStyles.cards} data-testid="cards">
+          {state.cards.length === 0 && <p className={styles.quiet}>{CARD_WORDS.nothingYet}</p>}
+          {state.cards.map((card) => {
+            const connection = connectionOf(card);
+            if (!connection) return null;
+            return (
+              <MissionCard
+                key={card.key}
+                connection={connection}
+                card={card}
+                icon={icons[connection.provider] ?? null}
+                planes={planes[connection.provider] ?? null}
+                limitLabel={limitLabel}
+                issues={issuesOfCard(issues, state, card).map((i) => issueSentence(i, context))}
+                onLevel={(actionId, level) =>
+                  patchCard(card, (c) => setActionLevel(c, card, actionId, level))
+                }
+                onCustom={(actionId) => setCustom({ cardKey: card.key, actionId })}
+                onChange={() => setPicking({ kind: 'change', card })}
+                onRemove={() => update((s) => removeCard(s, card.key))}
               />
-              {!edit && missions.length > 0 && (
-                <Select
-                  value=""
-                  className={styles.startFrom}
-                  aria-label="Start from one of your missions"
-                  onChange={(e) => {
-                    // A full navigation: the form starts again from the copy, not from this state.
-                    if (e.target.value) {
-                      window.location.assign(
-                        `${ROUTES.newMission}?from=${encodeURIComponent(e.target.value)}`,
-                      );
-                    }
-                  }}
-                >
-                  <option value="">{MISSION_ACTIONS.startFrom}</option>
-                  {missions.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </Select>
-              )}
-              {!edit && (
-                <Button
-                  type="button"
-                  aria-expanded={proposalOpen}
-                  onClick={() => setProposalOpen((o) => !o)}
-                >
-                  {MISSION_ACTIONS.pasteProposal}
-                </Button>
-              )}
-            </div>
-            {proposalOpen && !edit && (
-              <div className={styles.proposal}>
-                <Field
-                  label="What the agent proposed"
-                  htmlFor="mission-proposal"
-                  shape="JSON, as its management tools print it"
-                  hint="Nothing is created: what you may allow fills the form, the rest is listed."
-                >
-                  <Textarea
-                    id="mission-proposal"
-                    mono
-                    value={proposalText}
-                    onChange={(e) => setProposalText(e.target.value)}
-                    aria-label="Agent proposal (JSON)"
-                    placeholder='{"connections":[{"provider":"github","trust_levels":{"read":"careful","propose":"trusting"},"resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
-                    spellCheck={false}
+            );
+          })}
+          <div className={cardStyles.addRow}>
+            <Button
+              type="button"
+              disabled={offered.length === 0}
+              title={offered.length === 0 ? CARD_WORDS.noAccountLeft : undefined}
+              onClick={() => setPicking({ kind: 'add' })}
+              data-testid="add-account"
+            >
+              {CARD_WORDS.addAccount}
+            </Button>
+            <span className={cardStyles.marks} aria-hidden="true">
+              {[...new Map(offered.map(({ connection: c }) => [c.provider, c])).values()].map(
+                (c) => (
+                  <ServiceMark
+                    key={c.provider}
+                    name={c.provider_label}
+                    icon={icons[c.provider] ?? null}
                   />
-                </Field>
-                <div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => void checkProposal()}
-                    disabled={busy || proposalText.trim() === ''}
-                  >
-                    Check and load
-                  </Button>
-                </div>
-                {proposalReport && (
-                  <Callout
-                    tone={proposalReport.ok ? 'ok' : 'warn'}
-                    title={`Loaded ${count(proposalReport.policy.length, TERMS.risk)} on ${count(proposalReport.connections.length, TERMS.connection)}`}
-                    testId="proposal-report"
-                  >
-                    {proposalReport.issues.length === 0 ? (
-                      'Everything the proposal asks for is within what you may allow.'
-                    ) : (
-                      <ul className={styles.issueList}>
-                        {proposalReport.issues.map((i) => (
-                          <li key={i.message}>{issueSentence(i, context)}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </Callout>
-                )}
-              </div>
+                ),
+              )}
+            </span>
+          </div>
+        </div>
+
+        <div className={cardStyles.bar} data-testid="summary-bar">
+          <div className={cardStyles.barText}>
+            <span data-testid="summary">
+              {edit
+                ? phrases.length === 0
+                  ? MISSION_WORDS.nothingChangedYet
+                  : `${CARD_WORDS.changes(phrases.length)}: ${listed(phrases, 4)}`
+                : CARD_WORDS.creationSummary(
+                    state.cards.length,
+                    digest.total,
+                    digest.free,
+                    digest.asks,
+                  )}
+            </span>
+            {loose.length > 0 && (
+              <ul className={cardStyles.barIssues} data-testid="issues">
+                {loose.map((i) => (
+                  <li key={`${i.code}:${i.message}`}>{issueSentence(i, context)}</li>
+                ))}
+              </ul>
             )}
-          </FormStep>
-
-          <FormStep n={2} title="Accounts and permissions" hint={MISSION_WORDS.explicitList}>
-            <div className={styles.accounts}>
-              {context.map((connection) => {
-                const cs = state.connections[connection.id] ?? initialConnectionState(connection);
-                const name = `${connection.provider_label} ${connection.display_name}`;
-                const several = cs.sets.length > 1;
-                const first = cs.sets[0] ?? initialSetState(connection);
-                // "N of M": M is "all resources" (neither hidden nor stale) plus
-                // the hidden ones the person ticked on purpose.
-                const total =
-                  defaultResources(connection).length +
-                  connection.resources.filter((r) => r.hidden && first.resourceIds.includes(r.id))
-                    .length;
-                const listedCount = connection.resources.length;
-                const whole = first.resourceScope === 'connection';
-                const selected = connection.resources.filter((r) =>
-                  first.resourceIds.includes(r.id),
-                );
-                const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
-                // The expansion of "Everything I hold" is said by the macro-action panel, in its words.
-                const notices = preview.notices.filter(
-                  (n) =>
-                    n.connection_id === connection.id && n.code !== 'everything-i-hold-expanded',
-                );
-                const setPatch = (index: number, next: SetState) =>
-                  patchConnection(connection.id, updateSet(connection, cs, index, next));
-                return (
-                  <div
-                    key={connection.id}
-                    className={[styles.account, cs.included ? '' : styles.accountOff].join(' ')}
-                    data-testid={`connection-${connection.provider}`}
-                  >
-                    <div className={styles.accountHead}>
-                      <Checkbox
-                        checked={cs.included}
-                        aria-label={`Include ${name}`}
-                        onChange={(e) =>
-                          patchConnection(connection.id, setIncluded(cs, e.target.checked))
-                        }
-                      />
-                      <span className={styles.accountName}>
-                        {connection.provider_label} · {connection.display_name}
-                      </span>
-                      <span className={styles.accountHint}>
-                        {connection.basis === 'owner'
-                          ? 'you own it'
-                          : `access given to you · may allow ${mayAllow(connection.authority.length, connection.risks.length)}`}
-                      </span>
-                      {connection.status !== 'active' && (
-                        <StatusMark tone="bad">{connection.status}</StatusMark>
-                      )}
-                      <span className={styles.accountResources}>
-                        {!cs.included ? (
-                          'not in this mission'
-                        ) : several ? (
-                          <span className={styles.resourceNames}>
-                            {count(cs.sets.length, {
-                              one: 'resource set',
-                              many: 'resource sets',
-                            })}
-                          </span>
-                        ) : (
-                          <>
-                            <span className={styles.resourceNames}>
-                              {whole
-                                ? MISSION_WORDS.wholeAccount
-                                : listedCount === 0
-                                  ? 'the account itself, no resource'
-                                  : selected.length === 0
-                                    ? 'No resource'
-                                    : listed(
-                                        selected.map((r) => r.display_name || r.ref),
-                                        2,
-                                      )}
-                            </span>
-                            {envs.map((env) => (
-                              <EnvTag key={env} env={env} />
-                            ))}
-                            {listedCount > 0 && (
-                              <span className={styles.resourceCount}>
-                                {whole
-                                  ? `${first.resourceIds.length} known now`
-                                  : `${first.resourceIds.length} of ${total}`}
-                              </span>
-                            )}
-                            <Button
-                              type="button"
-                              size="sm"
-                              aria-expanded={openResources.has(connection.id)}
-                              aria-label={`${MISSION_ACTIONS.change} the resources of ${name}: ${
-                                whole
-                                  ? MISSION_WORDS.wholeAccount
-                                  : `${first.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`
-                              }`}
-                              onClick={() => toggleResources(connection.id)}
-                            >
-                              {MISSION_ACTIONS.change}
-                            </Button>
-                          </>
-                        )}
-                      </span>
-                    </div>
-
-                    {cs.included && !several && openResources.has(connection.id) && (
-                      <div className={styles.resourceScope} data-testid="resource-scope">
-                        <ChoiceRow legend={`Resources of ${name} the mission reaches`}>
-                          {RESOURCE_CHOICES.map((choice) => (
-                            <ChoiceChip
-                              key={choice.id}
-                              name={`resource-scope-${connection.id}`}
-                              value={choice.id}
-                              checked={first.resourceScope === choice.id}
-                              onChange={() =>
-                                setPatch(0, setResourceScope(connection, first, choice.id))
-                              }
-                              label={choice.label}
-                              hint={choice.hint}
-                            />
-                          ))}
-                        </ChoiceRow>
-                        <p className={styles.quietText}>
-                          {RESOURCE_CHOICES.find((c) => c.id === first.resourceScope)?.explanation}
-                        </p>
-                      </div>
-                    )}
-
-                    {cs.included &&
-                      !several &&
-                      openResources.has(connection.id) &&
-                      first.resourceScope !== 'connection' &&
-                      listedCount > 0 && (
-                        <ResourcePicker
-                          connection={connection}
-                          state={cs}
-                          index={0}
-                          label={`Resources of ${name}`}
-                          onChange={(ids) => setPatch(0, setResources(connection, first, ids))}
-                        />
-                      )}
-
-                    {cs.included && (
-                      <MacroActionPanel
-                        connection={connection}
-                        view={cs.view}
-                        onView={(view) => patchConnection(connection.id, setView(cs, view))}
-                      >
-                        {several && (
-                          <p className={styles.quietText} data-testid="resource-sets-explained">
-                            {RESOURCE_SET_WORDS.explanation}
-                          </p>
-                        )}
-                        {cs.sets.map((set, index) => (
-                          <div
-                            key={set.id ?? `new-${index}`}
-                            className={several ? styles.resourceSet : undefined}
-                            data-testid={
-                              several
-                                ? `resource-set-${connection.provider}-${index + 1}`
-                                : undefined
-                            }
-                          >
-                            {several && (
-                              <ResourceSetHead
-                                connection={connection}
-                                state={cs}
-                                index={index}
-                                onScope={(scope) =>
-                                  setPatch(index, setResourceScope(connection, set, scope))
-                                }
-                                onResources={(ids) =>
-                                  setPatch(index, setResources(connection, set, ids))
-                                }
-                                onRemove={() =>
-                                  patchConnection(
-                                    connection.id,
-                                    removeResourceSet(connection, cs, index),
-                                  )
-                                }
-                              />
-                            )}
-                            <SetPolicy
-                              connection={connection}
-                              state={set}
-                              view={cs.view}
-                              setIndex={index}
-                              onTrustLevel={(actionId, trustLevel) =>
-                                pickTrustLevel(connection, cs, index, actionId, trustLevel)
-                              }
-                              onEverything={() => pickEverything(connection, cs, index)}
-                              onLeaveEverything={() =>
-                                setPatch(
-                                  index,
-                                  applyTrustLevels(connection, { ...set, trustLevels: {} }),
-                                )
-                              }
-                              advanced={
-                                <CustomEditor
-                                  connection={connection}
-                                  state={set}
-                                  setIndex={index}
-                                  planes={planes[connection.provider] ?? null}
-                                  limitLabel={limitColumn(periodSeconds)}
-                                  onChange={(next) => setPatch(index, next)}
-                                  onReset={
-                                    set.edited &&
-                                    (set.everything || Object.keys(set.trustLevels).length > 0)
-                                      ? () =>
-                                          setPending({
-                                            kind: 'reset',
-                                            connectionId: connection.id,
-                                            setIndex: index,
-                                          })
-                                      : null
-                                  }
-                                />
-                              }
-                            />
-                          </div>
-                        ))}
-                        {setsOffered(connection) && (
-                          <button
-                            type="button"
-                            className={styles.addResourceSet}
-                            onClick={() =>
-                              patchConnection(connection.id, addResourceSet(connection, cs))
-                            }
-                          >
-                            {RESOURCE_SET_WORDS.add}
-                          </button>
-                        )}
-                      </MacroActionPanel>
-                    )}
-                    {cs.included &&
-                      notices.map((n) => (
-                        <details
-                          key={`${n.code}:${n.resource_refs.join(',')}`}
-                          className={styles.notice}
-                          data-testid="notices"
-                        >
-                          <summary>{noticeHeadline(n, connection)}</summary>
-                          The mission can be created as it is. To let those permissions through
-                          there, give the resource its environment label on the page of the account,
-                          or leave the resource out. <Mono quiet>{n.risk_ids.join(', ')}</Mono>
-                        </details>
-                      ))}
-                  </div>
-                );
-              })}
-            </div>
-          </FormStep>
-
-          <FormStep
-            n={3}
-            title="Limits and lifetime"
-            hint={
-              edit
-                ? MISSION_WORDS.periodFixed
-                : 'Limits that reset every day suit an agent that works every day.'
-            }
-          >
-            <FormColumns>
-              <Field label="Limits reset" htmlFor="mission-period">
-                <Select
-                  id="mission-period"
-                  value={state.period}
-                  disabled={edit !== null}
-                  onChange={(e) => {
-                    if (isChoice<PeriodChoice>(PERIOD_CHOICES, e.target.value)) {
-                      patch({ period: e.target.value });
-                    }
-                  }}
-                >
-                  {PERIOD_CHOICES.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Expires" htmlFor="mission-expiry">
-                <Select
-                  id="mission-expiry"
-                  value={state.expiry}
-                  onChange={(e) => {
-                    if (isChoice<ExpiryChoice>(EXPIRY_CHOICES, e.target.value)) {
-                      patch({ expiry: e.target.value });
-                    }
-                  }}
-                >
-                  {EXPIRY_CHOICES.filter((x) => edit !== null || x.id !== 'keep').map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.id === 'keep'
-                        ? `${x.label} · ${expiresOn(state.keptExpiry ?? null, now)}`
-                        : x.days === null
-                          ? x.label
-                          : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * MS_PER_DAY), now)}`}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="People">
-                <p className={styles.people}>{MISSION_WORDS.peopleLater}</p>
-              </Field>
-            </FormColumns>
-            {state.expiry === 'custom' && (
-              <div className={styles.expiryDate}>
-                <Field label="Expires on" htmlFor="mission-expiry-date" shape="your local time">
-                  <Input
-                    id="mission-expiry-date"
-                    type="datetime-local"
-                    value={state.expiryCustom}
-                    onChange={(e) => patch({ expiryCustom: e.target.value })}
-                  />
-                </Field>
-              </div>
+            {issues.length > loose.length && (
+              <span className={styles.quietText} data-testid="card-issue-count">
+                {' '}
+                · {count(issues.length - loose.length, { one: 'issue', many: 'issues' })} on the
+                cards
+              </span>
             )}
-          </FormStep>
-        </FormWithRail>
+            {error && !confirming && (
+              <p className={styles.railRefused} role="alert" data-testid="create-error">
+                {edit ? 'Not saved' : 'Not created'}: {error}
+              </p>
+            )}
+          </div>
+          <div className={cardStyles.barActions}>
+            <ButtonLink
+              href={edit ? `${ROUTES.missions}/${edit.missionId}` : ROUTES.missions}
+              variant="ghost"
+            >
+              {ACTIONS.cancel}
+            </ButtonLink>
+            <Button type="submit" variant="primary" disabled={busy || !ready}>
+              {edit ? MISSION_ACTIONS.saveChanges : ACTIONS.createMission}
+            </Button>
+          </div>
+        </div>
       </form>
+
+      {picking && (
+        <AccountPicker
+          context={context}
+          state={state}
+          icons={icons}
+          picking={picking}
+          onCancel={() => setPicking(null)}
+          onDone={(connectionId, resources) => {
+            const editing = picking.kind === 'change' ? picking.card : null;
+            setPicking(null);
+            if (editing) {
+              patchCard(editing, (c) => setCardResources(c, editing, resources));
+              return;
+            }
+            nextKey.current += 1;
+            const key = `new-${nextKey.current}`;
+            update((s) => addCard(s, newCard(connectionId, key, resources)));
+          }}
+        />
+      )}
+
+      {customCard && customConnection && custom && (
+        <CustomModal
+          connection={customConnection}
+          card={customCard}
+          actionId={custom.actionId}
+          planes={planes[customConnection.provider] ?? null}
+          limitLabel={limitLabel}
+          onCancel={() => setCustom(null)}
+          onApply={(applied, from) => {
+            setCustom(null);
+            const kept = Object.values(applied).some((line) => line !== null);
+            const level = kept
+              ? levelMatching(customConnection, customCard, custom.actionId, applied, TRUST_LEVELS)
+              : null;
+            patchCard(customCard, (c) =>
+              level
+                ? setActionLevel(c, customCard, custom.actionId, level)
+                : applyCustom(c, customCard, custom.actionId, applied, from),
+            );
+          }}
+        />
+      )}
 
       {edit && (
         <Dialog
@@ -1061,30 +842,13 @@ export function MissionForm({
           </>
         }
       >
-        <ExplicitList accounts={included} periodSeconds={periodSeconds} />
+        <ExplicitList context={context} cards={state.cards} periodSeconds={periodSeconds} />
         {error && confirming && (
           <p className={styles.railRefused} role="alert">
             Not created: {error}
           </p>
         )}
       </Dialog>
-
-      <ConfirmDialog
-        open={pending !== null}
-        title="Discard what you changed?"
-        consequence={
-          pending?.kind === 'reset'
-            ? 'The permissions, limits and "ask me first" you changed on this account go back to what the trust levels write.'
-            : pending?.kind === 'everything'
-              ? 'Everything you hold on this account replaces the permissions, limits and "ask me first" you changed there.'
-              : 'The trust levels write this account\'s list again: the permissions, limits and "ask me first" you changed there are dropped.'
-        }
-        confirmLabel="Discard my changes"
-        tone="danger"
-        onConfirm={confirmDiscard}
-        onCancel={() => setPending(null)}
-        testId="discard-dialog"
-      />
     </>
   );
 }
@@ -1159,26 +923,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/**
- * The one line of a notice; its full sentence (consequence, remedy) unfolds
- * below it. A resource is named as its owner named it, as on every page.
- */
-function noticeHeadline(notice: PreviewNotice, connection: IssuanceConnection): string {
-  const refs = notice.resource_refs
-    .map((ref) => connection.resources.find((r) => r.ref === ref)?.display_name || ref)
-    .join(', ');
-  switch (notice.code) {
-    case 'resource-without-env':
-      return `No environment label on ${refs}: permissions tied to an environment are refused there.`;
-    case 'resource-env-not-in-catalog':
-      return `The environment label of ${refs} is not one this service knows: permissions tied to an environment are refused there.`;
-    case 'later-resources-need-env-label':
-      return 'A resource found later gets permissions tied to an environment only once it carries its environment label.';
-    case 'everything-i-hold-expanded':
-      return 'Everything you hold on this account, written out one permission at a time.';
-  }
-}
-
 function isCreatedBody(body: unknown): body is { mission: { id: string; name: string } } {
   return isRecord(body) && isRecord(body.mission) && typeof body.mission.id === 'string';
 }
@@ -1197,7 +941,7 @@ function problemsOf(body: unknown): string | null {
   return null;
 }
 
-/** An edit refused for its draft (422) lists the issues the form shows beside its lines. */
+/** An edit refused for its draft (422) lists the issues the screen shows beside its cards. */
 function isIssuesBody(body: unknown): body is { issues: readonly PreviewIssue[] } {
   return (
     isRecord(body) &&
@@ -1207,146 +951,12 @@ function isIssuesBody(body: unknown): body is { issues: readonly PreviewIssue[] 
 }
 
 /**
- * The error a refusal of the mission API shows: none for the 422 the form shows as
- * issues beside its lines, the problems of a refused draft, or the gateway's sentence.
+ * The error a refusal of the mission API shows: none for the 422 the screen shows as
+ * issues beside its cards, the problems of a refused draft, or the gateway's sentence.
  */
 function refusalOf(answer: Extract<PostAnswer, { ok: false }>): string | null {
   if (answer.status === 422 && (isRefusedBody(answer.body) || isIssuesBody(answer.body))) {
     return null;
   }
   return problemsOf(answer.body) ?? answer.message;
-}
-
-/** The resources of an account to tick for one set; one another set picks is held there. */
-function ResourcePicker({
-  connection,
-  state,
-  index,
-  label,
-  onChange,
-}: {
-  connection: IssuanceConnection;
-  state: ConnectionState;
-  /** The set the ticks are for. */
-  index: number;
-  label: string;
-  onChange: (resourceIds: readonly string[]) => void;
-}) {
-  const set = state.sets[index];
-  if (!set) return null;
-  return (
-    <div className={styles.resources} role="group" aria-label={label}>
-      {connection.resources.map((r) => {
-        const holder = setOfResource(state, r.id);
-        const elsewhere = holder !== null && holder !== index;
-        return (
-          <Checkbox
-            key={r.id}
-            checked={set.resourceIds.includes(r.id)}
-            // Discovery no longer returns it, or it hosts this instance: never part of
-            // a new mission. One another set holds is unticked there first.
-            disabled={r.stale || r.self || elsewhere}
-            aria-label={`Resource ${r.ref}`}
-            onChange={(e) =>
-              onChange(
-                e.target.checked
-                  ? [...set.resourceIds, r.id]
-                  : set.resourceIds.filter((id) => id !== r.id),
-              )
-            }
-          >
-            <span className={styles.resource}>
-              {r.display_name || r.ref}
-              {r.display_name && r.display_name !== r.ref && (
-                <span className={styles.quietText}> {r.ref}</span>
-              )}
-              <EnvTag env={r.env} />
-              {r.hidden && <Tag>hidden by its owner</Tag>}
-              {r.stale && <Tag tone="warn">no longer found</Tag>}
-              {r.self && <Tag tone="warn">{ACCOUNT_WORDS.self}</Tag>}
-              {elsewhere && holder !== null && <Tag>{RESOURCE_SET_WORDS.heldBy(holder + 1)}</Tag>}
-            </span>
-          </Checkbox>
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * The head of one resource set when an account has several (risk model §4.7): its
- * title, its scope, its resources when it picks them, and its removal.
- */
-function ResourceSetHead({
-  connection,
-  state,
-  index,
-  onScope,
-  onResources,
-  onRemove,
-}: {
-  connection: IssuanceConnection;
-  state: ConnectionState;
-  index: number;
-  onScope: (scope: ResourceChoice) => void;
-  onResources: (resourceIds: readonly string[]) => void;
-  onRemove: () => void;
-}) {
-  const set = state.sets[index];
-  if (!set) return null;
-  const title = RESOURCE_SET_WORDS.title(index + 1);
-  const name = `${connection.provider_label} ${connection.display_name}`;
-  const restTaken = state.sets.some((other, i) => i !== index && takesTheRest(other));
-  const reached = connection.resources.filter((r) => set.resourceIds.includes(r.id));
-  return (
-    <>
-      <div className={styles.resourceSetHead}>
-        <span className={styles.resourceSetTitle}>{title}</span>
-        <Select
-          className={styles.resourceSetScope}
-          value={set.resourceScope}
-          aria-label={`${RESOURCE_SET_WORDS.scope} of ${title} of ${name}`}
-          onChange={(e) => {
-            const scope = RESOURCE_CHOICES.find((c) => c.id === e.target.value);
-            if (scope) onScope(scope.id);
-          }}
-        >
-          {RESOURCE_CHOICES.map((choice) => (
-            <option
-              key={choice.id}
-              value={choice.id}
-              disabled={choice.id !== 'selected' && restTaken}
-              title={
-                choice.id !== 'selected' && restTaken ? RESOURCE_SET_WORDS.restTaken : undefined
-              }
-            >
-              {choice.label}
-            </option>
-          ))}
-        </Select>
-        <span className={styles.resourceNames}>
-          {reached.length === 0
-            ? 'No resource yet'
-            : listed(
-                reached.map((r) => r.display_name || r.ref),
-                3,
-              )}
-        </span>
-        <Button type="button" size="sm" variant="ghost" onClick={onRemove}>
-          {RESOURCE_SET_WORDS.remove}
-        </Button>
-      </div>
-      {takesTheRest(set) ? (
-        <p className={styles.quietText}>{RESOURCE_SET_WORDS.rest}</p>
-      ) : (
-        <ResourcePicker
-          connection={connection}
-          state={state}
-          index={index}
-          label={`Resources of ${title} of ${name}`}
-          onChange={onResources}
-        />
-      )}
-    </>
-  );
 }

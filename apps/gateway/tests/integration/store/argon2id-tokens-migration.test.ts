@@ -48,7 +48,7 @@ it('revokes the active argon2id tokens, and only them', async () => {
       name: 'Existing mission',
       creatorUserId: user.id,
       periodSeconds: null,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [
         {
           riskId: 'github.code-read',

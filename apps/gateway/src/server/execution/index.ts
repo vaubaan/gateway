@@ -53,7 +53,10 @@ export interface ExecutionModuleDeps {
   readonly auth: Pick<AuthModule, 'sessions'>;
   readonly missions: Pick<MissionsModule, 'service'>;
   /** `discoveryAfterCall`: the connection's discovery after a call that created a resource. */
-  readonly connections: Pick<ConnectionsModule, 'credentials' | 'discoveryAfterCall'>;
+  readonly connections: Pick<
+    ConnectionsModule,
+    'credentials' | 'discoveryAfterCall' | 'futureResources'
+  >;
   /** Re-checks the creator's authority on every request (handbook authority, Start here). */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   /** The budget's session service (quota, rate windows, gate) — one per process. */
@@ -150,6 +153,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     selfResources: deps.config.selfResources,
     logger,
     clock,
+    futureResources: deps.connections.futureResources,
   });
 
   const tokens = new TokenVerifier({ missions: deps.missions.service });

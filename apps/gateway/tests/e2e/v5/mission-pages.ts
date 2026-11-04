@@ -10,60 +10,127 @@ export const KEY = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 /** A trust level as the interface names it. */
 export type TrustLevel = 'Careful' | 'Trusting' | 'Autonomous';
 
+function escaped(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** What step 2 of "+ Add an account" picks: a group, exactly these resources, future ones. */
+export interface CardPick {
+  /** The environment group to take (its radio), when the account has several. */
+  readonly env?: string;
+  /** Exactly these resources (refs) are ticked; absent, what the group ticks by itself. */
+  readonly resources?: readonly string[];
+  readonly future?: boolean;
+}
+
+/** Step 2 of "+ Add an account" (or "Change"): picks resources, then adds or applies. */
+export async function pickResources(page: Page, pick: CardPick, done: string): Promise<void> {
+  const step = page.getByTestId('resource-picker');
+  await expect(step).toBeVisible();
+  if (pick.env) await step.getByRole('radio', { name: `Environment ${pick.env}` }).check();
+  if (pick.resources) {
+    const boxes = step.getByRole('checkbox', { name: /^Resource / });
+    for (const box of await boxes.all()) {
+      const name = (await box.getAttribute('aria-label')) ?? '';
+      const wanted = pick.resources.includes(name.replace(/^Resource /, ''));
+      if (wanted && !(await box.isChecked())) await box.check();
+      if (!wanted && (await box.isChecked()) && (await box.isEnabled())) await box.uncheck();
+    }
+  }
+  if (pick.future) {
+    await step
+      .getByRole('checkbox', { name: new RegExp(`^\\+ future .* in ${escaped(pick.env ?? '')}`) })
+      .first()
+      .check();
+  }
+  await step.getByRole('button', { name: done, exact: true }).click();
+  await expect(step).toBeHidden();
+}
+
 /**
- * Includes an account in the mission being created and ticks macro-actions at a
- * trust level, by their labels: `{ Read: 'Trusting', Propose: 'Careful' }`.
+ * "+ Add an account": the account (`GitHub · acme-org`), then its resources. Without a
+ * pick, the group the account offers alone is taken with what it ticks by itself.
+ */
+export async function addAccount(page: Page, account: string, pick: CardPick = {}): Promise<void> {
+  await page.getByTestId('add-account').click();
+  await page
+    .getByTestId('account-picker')
+    .getByRole('button', { name: new RegExp(`^${escaped(account)}`) })
+    .click();
+  await pickResources(page, pick, 'Add card');
+}
+
+/**
+ * Adds a card for an account and ticks macro-actions at a trust level, by their labels:
+ * `{ Read: 'Trusting', Propose: 'Careful' }`. `card` names the card as its controls do:
+ * the account, and its environment in brackets when the card shows one.
  */
 export async function includeWithTrustLevels(
   page: Page,
   account: string,
   trustLevels: Readonly<Record<string, TrustLevel>>,
+  pick: CardPick = {},
+  card: string = account,
 ): Promise<void> {
-  await page.getByLabel(`Include ${account}`).check();
+  await addAccount(page, account, pick);
   for (const [action, trustLevel] of Object.entries(trustLevels))
-    await pickTrustLevel(page, account, action, trustLevel);
+    await pickTrustLevel(page, card, action, trustLevel);
 }
 
-/** The radio of one trust level of a macro-action of an account. */
+/** One card of the screen or of the mission page, by the name its controls carry. */
+export function cardOf(page: Page, card: string): Locator {
+  return page.getByRole('region', { name: card, exact: true });
+}
+
+/** The radio of one segment of a macro-action's trust control on a card. */
 export function trustLevelChoice(
   page: Page,
-  account: string,
+  card: string,
   action: string,
-  trustLevel: TrustLevel,
+  trustLevel: TrustLevel | 'Custom',
 ): Locator {
   return page
-    .getByRole('group', { name: `Trust level of ${action} on ${account}` })
-    .getByRole('radio', { name: new RegExp(`^${trustLevel}\\b`) });
+    .getByRole('group', { name: `Trust level of ${action} on ${card}`, exact: true })
+    .getByRole('radio', { name: trustLevel, exact: true });
 }
 
 /** Ticks a macro-action at a trust level (or moves it there). */
 export async function pickTrustLevel(
   page: Page,
-  account: string,
+  card: string,
   action: string,
   trustLevel: TrustLevel,
 ): Promise<void> {
-  await trustLevelChoice(page, account, action, trustLevel).check();
+  await trustLevelChoice(page, card, action, trustLevel).check();
 }
 
-/** The Simple or Advanced view of an account's permissions. */
-export async function showView(
+/** "Custom" on a macro-action: the modal of its permissions, one by one. */
+export async function openCustom(page: Page, card: string, action: string): Promise<Locator> {
+  await trustLevelChoice(page, card, action, 'Custom').click();
+  const modal = page.getByTestId('custom-modal');
+  await expect(modal).toBeVisible();
+  return modal;
+}
+
+/**
+ * Custom on a macro-action, then exactly these of its permissions run freely, the
+ * others left out, and Apply.
+ */
+export async function allowOnly(
   page: Page,
-  account: string,
-  view: 'Simple' | 'Advanced',
+  card: string,
+  action: string,
+  riskIds: readonly string[],
 ): Promise<void> {
-  await page
-    .getByRole('tablist', { name: `View of the permissions of ${account}` })
-    .getByRole('tab', { name: view })
-    .click();
-}
-
-/** The button that opens the resource list of an account; its name says "N of M resources". */
-export function resourcesButton(page: Page, account: string, counted?: string): Locator {
-  const pattern = counted
-    ? new RegExp(`resources of ${account}: ${counted} resources?$`)
-    : new RegExp(`resources of ${account}:`);
-  return page.getByRole('button', { name: pattern });
+  const modal = await openCustom(page, card, action);
+  for (const riskId of riskIds) {
+    await modal
+      .getByRole('group', { name: `Behaviour of ${riskId}`, exact: true })
+      .getByRole('radio', { name: 'Runs freely' })
+      .check();
+  }
+  await modal.getByRole('button', { name: 'Apply' }).click();
+  await expect(modal).toBeHidden();
 }
 
 /**
@@ -110,14 +177,12 @@ export async function missionMenu(page: Page, item: string): Promise<void> {
   await page.getByRole('menuitem', { name: item, exact: true }).click();
 }
 
-/** Unfolds "Permissions and usage" on a mission page (remembered per mission afterwards). */
+/** Unfolds "Permissions and usage" on the activity of a mission (remembered per mission afterwards). */
 export async function showPermissions(page: Page): Promise<Locator> {
-  const table = page.getByTestId('permissions-table');
+  const section = page.getByTestId('session-permissions');
+  const table = section.getByTestId('permissions-table');
   if (!(await table.isVisible())) {
-    await page
-      .getByTestId('mission-permissions')
-      .getByRole('button', { name: /^All \d+ permissions?/ })
-      .click();
+    await section.getByRole('button', { name: /^All \d+ permissions?/ }).click();
   }
   await expect(table).toBeVisible();
   return table;

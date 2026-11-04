@@ -203,7 +203,7 @@ export {
   PREVIEW_NOTICE_CODES,
   SEVERITY_LEVELS,
 } from '../../lib/missions/model';
-export { reachedResources, reachesLaterResources } from '../store/mission-reach';
+export { reachedResources, takesFutureResources } from '../store/mission-reach';
 export {
   budgetProblem,
   defaultResources,

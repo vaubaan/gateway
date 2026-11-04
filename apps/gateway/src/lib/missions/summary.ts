@@ -72,13 +72,16 @@ function mostSevere(risks: readonly CatalogRisk[]): CatalogRisk | null {
 function canLine(connection: IssuanceConnection, preview: ConnectionPreview): string | null {
   if (preview.passes.length === 0) return null;
   const byId = new Map(connection.risks.map((r) => [r.risk_id, r]));
-  const accepted = preview.passes.flatMap((p) => byId.get(p.risk_id) ?? []);
+  // A risk accepted in several resource sets is one risk of the account.
+  const accepted = [...new Set(preview.passes.map((p) => p.risk_id))].flatMap(
+    (id) => byId.get(id) ?? [],
+  );
   const top = mostSevere(accepted);
-  const where = preview.reaches_later
-    ? 'the whole account, resources found later included'
-    : preview.resources_total === 0
-      ? 'the account'
-      : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}`;
+  const later = preview.future ? ', resources found later included' : '';
+  const where =
+    preview.resources_total === 0
+      ? `the account${later}`
+      : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}${later}`;
   const upTo = top ? `, up to "${shortLabel(top.label)}" (${top.level})` : '';
   return `${connection.provider_label} "${connection.display_name}": ${plural(
     accepted.length,

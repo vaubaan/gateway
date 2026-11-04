@@ -11,7 +11,7 @@ tracks:
   - deploy/docker/smoke.sh
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-04
 ---
 
 # E2E test plan
@@ -35,6 +35,7 @@ last_reviewed: 2026-10-27
 ## Conventions
 
 - Specs are `apps/gateway/tests/e2e/v5/*.spec.ts`; the helpers beside them (`agent.ts`, `browser.ts`, `instance.ts`, `mission-pages.ts`) are shared by every spec.
+- The mission screen is driven through `mission-pages.ts`: `addAccount` / `includeWithTrustLevels` ("+ Add an account", then step 2), `pickTrustLevel`, `openCustom` / `allowOnly` (the Custom modal). A card is named as its controls name it — `GitHub · acme-org`, with its environment in brackets when it shows one (`Supabase · Acme Supabase (prod)`), and found with `cardOf`.
 - The app listens on `E2E_V5_PORT` (default 3105) and the control endpoints on the next port only (`controlUrl()`, under `/__e2e`; the app port answers 404 as the image does). Pick another pair when several checkouts run at once.
 - The IdP has no default user: each spec names its user with `signInAs` in `beforeEach`, never relies on nor restores another spec's user. Seeded users (`E2E_USER`, `E2E_AUDIT_USER`, `E2E_SHARE_OWNER`, …) are declared in `instance.ts`.
 - Every executor call is HTTP on `/mcp` with a mission token through `agent.ts`, so it crosses the real door and budget. Only the `seed-day` control endpoint records below the door (a day of calls no mock answers).
@@ -50,7 +51,7 @@ last_reviewed: 2026-10-27
 - ⚠️ **Claude Code against a running instance behind TLS** (spec [§4.4](../spec/vaubaan-gateway.md#44-bootstrap-kit-after-issuance)) — never done; the official MCP client stands in. Part of the manual run.
 - ⚠️ **Bootstrap, Settings → Sign-in and the instance name in a browser** (spec [§7.1](../spec/vaubaan-gateway.md#71-install-an-instance)) — integration (`FakeIdp`) and by hand only.
 - ⚠️ **Real sign-in providers** (spec [§4.2](../spec/vaubaan-gateway.md#42-human-surface)) — Google, Entra, Microsoft personal, a GitHub org restricting OAuth Apps: by hand only, when the feature changes.
-- ⚠️ **Several resource sets on one account in a browser** ([risk model](../spec/gateway-risk-model.md) §4.7) — the form's set operations are unit-tested (`form-state.test.ts`) and the runtime in integration (`execution/resource-sets.test.ts`); no spec adds a second set and issues.
+- ⚠️ **Future resources joining a card in a browser** (ADR resource-set-is-one-environment-with-optional-future-resources) — `issue-mission.spec.ts` issues two cards of one account (staging and prod) and the edit spec changes a card's resources; "↻ Check now" and a resource joining a future card are integration-only (`hourly-discovery.test.ts`, the connections service), as is the split of a legacy mixed-environment set on the edit screen (`form-state.test.ts`).
 - ⚠️ **Giving access to a team, approving a registered app, deactivating a person in a browser** (spec [§7.3](../spec/vaubaan-gateway.md#73-give-access)) — integration only.
 - ⚠️ **OAuth and SSH connect flows in a browser** (spec [§7.2](../spec/vaubaan-gateway.md#72-connect-an-account)) — only the pasted-token flow runs in a browser; the others are integration-only, and real accounts are checked by hand.
 - ⚠️ **A notification on a real phone** (spec [§4.2 bis](../spec/vaubaan-gateway.md#42-bis-notifications)) — installing the interface on an iPhone or Android, the lock-screen notification and its click: by hand only, behind TLS.

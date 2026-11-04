@@ -408,8 +408,8 @@ function missionFacts(
   const reached = mission.resource_ids.flatMap((id) => refs.get(id) ?? []);
   const facts = [
     mission.creator.id === youId ? 'you' : mission.creator.label,
-    mission.reaches_later
-      ? 'the whole account'
+    mission.future && reached.length === 0
+      ? 'resources found later on this account'
       : reached.length === 0
         ? 'no resource of this account'
         : reached.length <= 2
@@ -603,13 +603,9 @@ export function AccountView({
   const showsEnvironment =
     resources.some((resource) => resource.env !== null) ||
     (!context.labelling.derivesEnv && context.risks.some((risk) => risk.env !== null));
-  // A mission given the whole account reaches every resource it can, hidden ones excepted.
+  // A mission reaches its lists only: a resource found later is written into them.
   const missionsOn = (resource: ConnectionResourceRecord) =>
-    running.filter(
-      (mission) =>
-        mission.resource_ids.includes(resource.id) ||
-        (mission.reaches_later && !resource.hidden && reachable.includes(resource)),
-    ).length;
+    running.filter((mission) => mission.resource_ids.includes(resource.id)).length;
 
   const resourceColumns: readonly Column<ConnectionResourceRecord>[] = [
     {

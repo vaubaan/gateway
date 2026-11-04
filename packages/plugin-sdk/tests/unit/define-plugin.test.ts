@@ -91,6 +91,45 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('resourceNoun is optional, and two lowercase nouns when present', () => {
+    const noun = (one: unknown, other: unknown) =>
+      pluginIssues({
+        ...acmePlugin,
+        resourceNoun: { one, other } as ProviderPlugin['resourceNoun'],
+      });
+    expect(noun('board', 'boards')).toEqual([]);
+    expect(noun('library index', 'library indexes')).toEqual([]);
+    expect(noun('sub-account', 'sub-accounts')).toEqual([]);
+    expect(noun('', 'boards')).toEqual(['resourceNoun.one: expected a non-empty string']);
+    expect(noun('board', '   ')).toEqual(['resourceNoun.other: expected a non-empty string']);
+    expect(noun('board', undefined)).toEqual(['resourceNoun.other: expected a non-empty string']);
+    expect(noun('x'.repeat(41), 'boards')).toEqual([
+      'resourceNoun.one: expected at most 40 characters',
+    ]);
+    for (const bad of [
+      'Board',
+      ' board',
+      'board ',
+      'two  spaces',
+      'line\nbreak',
+      'board.',
+      '<b>',
+    ]) {
+      expect(noun(bad, 'boards')).toEqual([
+        expect.stringMatching(/^resourceNoun\.one: expected a lowercase noun/),
+      ]);
+    }
+    expect(
+      pluginIssues({
+        ...acmePlugin,
+        resourceNoun: 'board' as unknown as ProviderPlugin['resourceNoun'],
+      }),
+    ).toEqual(['resourceNoun: expected { one, other } when present']);
+    expect(() =>
+      definePlugin({ ...acmePlugin, resourceNoun: { one: 'Board', other: 'boards' } }),
+    ).toThrow(PluginDefinitionError);
+  });
+
   test('secretArguments is optional; it names declared arguments of declared tools', () => {
     const tool = 'acme__update_thing';
     expect(pluginIssues({ ...acmePlugin, secretArguments: { [tool]: ['name'] } })).toEqual([]);

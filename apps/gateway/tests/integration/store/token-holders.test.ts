@@ -167,7 +167,7 @@ describe('token holders (migration 0010)', () => {
       creatorUserId: ada,
       periodAnchor: AT,
       periodSeconds: 86_400,
-      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: connection.id, resourceIds: [] }],
       policy: [{ riskId: READ, quota: 100, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
     const session = await t.store.sessions.getOrCreate(mission.id);

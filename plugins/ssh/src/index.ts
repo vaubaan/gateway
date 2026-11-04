@@ -64,6 +64,7 @@ export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin
     displayName: 'SSH (bash)',
     icon: SSH_ICON,
     iconColor: SSH_ICON_COLOR,
+    resourceNoun: { one: 'host', other: 'hosts' },
     version: '2.0.5',
     description:
       'Shell commands on a host over SSH — inspection on a read allow-list, writes priced by class (destructive, package, service, sudo), lines that cannot be classified priced as all of them.',

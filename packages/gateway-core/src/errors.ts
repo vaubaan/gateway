@@ -266,20 +266,20 @@ export const refuse = {
     cited_ref: string;
     connection: { id: string; name: string };
     allowed_resources: readonly { ref: string; env: string | null; display_name: string | null }[];
-    /** The mission was issued on the whole connection (resources found later included). */
-    reaches_later_resources?: boolean;
+    /** A set of the mission takes the resources that later appear in its environment. */
+    takes_future_resources?: boolean;
   }): ResourceNotInMissionRefusal {
     const allowed =
       input.allowed_resources.length === 0
         ? 'no resource'
         : input.allowed_resources.map((r) => r.ref).join(', ');
-    if (input.reaches_later_resources === true) {
+    if (input.takes_future_resources === true) {
       return {
         code: 'resource-not-in-mission',
         cited_ref: input.cited_ref,
         connection: { id: input.connection.id, name: input.connection.name },
         allowed_resources: input.allowed_resources,
-        hint: `Resource '${input.cited_ref}' is not reached on connection '${input.connection.name}'. This mission reaches the whole account except the resources its owner hid or that are no longer found: ${allowed} today. A resource created through the gateway is reached right after its creation; one created elsewhere once the account's owner refreshes its resources.`,
+        hint: `Resource '${input.cited_ref}' is not reached on connection '${input.connection.name}'. This mission reaches ${allowed} today, and takes the resources that later appear in the environment of its sets (except hidden ones). A resource created through the gateway is reached right after its creation; one created elsewhere once discovery finds it — every hour, or when the mission creator checks now.`,
       };
     }
     return {

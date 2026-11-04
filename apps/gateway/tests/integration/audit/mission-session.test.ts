@@ -184,9 +184,7 @@ describe('mission session view', () => {
       periodAnchor: new Date(now.getTime() - 3 * DAY_SECONDS * 1000).toISOString(),
       periodSeconds: DAY_SECONDS,
       expiresAt: null,
-      connections: [
-        { connectionId: rig.seeded.github.connection.id, resourceScope: 'all', resourceIds: [] },
-      ],
+      connections: [{ connectionId: rig.seeded.github.connection.id, resourceIds: [] }],
       policy: [{ riskId: PR, quota: 2, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
     });
     await seedCall(rig, old, { now: yesterday, risks: [PR] });
@@ -398,9 +396,7 @@ describe('mission session view', () => {
         periodAnchor: new Date(now.getTime() - 3 * DAY_SECONDS * 1000).toISOString(),
         periodSeconds: DAY_SECONDS,
         expiresAt: null,
-        connections: [
-          { connectionId: rig.seeded.github.connection.id, resourceScope: 'all', resourceIds: [] },
-        ],
+        connections: [{ connectionId: rig.seeded.github.connection.id, resourceIds: [] }],
         policy: [{ riskId: READ, quota: 50, rateLimit: 50, rateWindowSeconds: 60, gate: 'auto' }],
       });
       await seedCall(rig, old, { now: yesterday, agentLabel: 'night-shift' });

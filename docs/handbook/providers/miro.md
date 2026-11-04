@@ -3,7 +3,7 @@ title: Miro provider plugin
 tracks:
   - plugins/miro/src/
   - plugins/miro/scripts/
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-04
 ---
 
 # Miro provider plugin — handbook
@@ -77,6 +77,6 @@ One resource per board; no environment. Rules common to every plugin:
 
 ## Debug
 
-- A board refused although it exists → created in Miro itself: the mission's creator adds it (or a
-  whole-connection mission waits for a discovery).
+- A board refused although it exists → created in Miro itself: the mission's creator adds it (or,
+  on a set with future resources, it joins at the next discovery: hourly, or "check now").
 - `miro_url` refused → send `board` (ref or board URL) instead.

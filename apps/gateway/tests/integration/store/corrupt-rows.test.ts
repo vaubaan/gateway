@@ -55,7 +55,7 @@ describe('store rows with a value outside a closed set', () => {
         name: 'm',
         creatorUserId: userId,
         periodSeconds: null,
-        connections: [{ connectionId, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId, resourceIds: [] }],
         policy: [{ riskId: RISK, quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' }],
       })
     ).id;
@@ -120,12 +120,19 @@ describe('store rows with a value outside a closed set', () => {
     await expectLoudFailure(() => store.missions.getById(missionId), 'missions.status');
   });
 
-  it('refuses an unknown mission_resource_sets.resource_scope', async () => {
-    corrupt('mission_resource_sets', 'resource_scope', 'mission_id', missionId);
-    await expectLoudFailure(
-      () => store.missions.getById(missionId),
-      'mission_resource_sets.resource_scope',
-    );
+  it('refuses an unknown mission_resources.source', async () => {
+    const [resource] = await store.connections.syncDiscoveredResources(connectionId, [
+      { ref: 'corrupt/src', displayName: 'src' },
+    ]);
+    const mission = await store.missions.create({
+      name: 'With a resource',
+      creatorUserId: userId,
+      periodSeconds: 86_400,
+      connections: [{ connectionId, resourceIds: [resource!.id] }],
+      policy: [],
+    });
+    corrupt('mission_resources', 'source', 'mission_id', mission.id);
+    await expectLoudFailure(() => store.missions.getById(mission.id), 'mission_resources.source');
   });
 
   it('refuses an unknown mission_policy.gate', async () => {

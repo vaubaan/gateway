@@ -241,7 +241,7 @@ describe('import of a v4 organization', () => {
     sshProbes = 0;
     cloudflareRejects = false;
     loaded = loadInstanceConfig({ env: validEnv() });
-    const sshPlugin = createSshPlugin({
+    const sshBase = createSshPlugin({
       transport: {
         async exec(): Promise<ExecResult> {
           sshProbes += 1;
@@ -255,6 +255,15 @@ describe('import of a v4 organization', () => {
         },
       },
     });
+    // v4 kept no environment for an SSH host, and SSH permissions depend on it: an
+    // unlabelled host enters no mission (ADR
+    // resource-set-is-one-environment-with-optional-future-resources). The host of these
+    // tests is labelled `prod` by its discovery, as an owner would label it before a rerun.
+    const sshPlugin: typeof sshBase = {
+      ...sshBase,
+      discoverResources: async (ctx) =>
+        (await sshBase.discoverResources(ctx)).map((r) => ({ ...r, env: 'prod' })),
+    };
     registry = createRegistry([
       githubPlugin,
       vercelPlugin,
@@ -613,7 +622,7 @@ describe('import of a v4 organization', () => {
       name: 'web',
       creatorUserId: owner,
       periodSeconds: null,
-      connections: [{ connectionId: vercel.id, resourceScope: 'all', resourceIds: [] }],
+      connections: [{ connectionId: vercel.id, resourceIds: [] }],
       policy: [],
     });
     await connectGithubByHand();

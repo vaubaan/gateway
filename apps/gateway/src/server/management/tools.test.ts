@@ -17,7 +17,11 @@ import type { MissionDetail, MissionDraft, MissionOverview, MissionPreview } fro
 import { explainOrphan } from '../missions/orphan-reason';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
 import { previewDraft } from '../../lib/missions/preview';
-import { ACME_CATALOG, acmeConnection } from '../../../tests/support/missions/testing';
+import {
+  ACME_CATALOG,
+  ACME_RESOURCES,
+  acmeConnection,
+} from '../../../tests/support/missions/testing';
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { MANAGEMENT_INSTRUCTIONS, MANAGEMENT_TOOLS } from './definitions';
 import { toolResultOf } from './door';
@@ -722,8 +726,13 @@ describe('views', () => {
       ...DRAFT,
       connections: [{ connection_id: 'conn-acme', everything_i_hold: true }],
     };
+    // One environment: the staging resources (a set holds one, risk model §4.7).
+    const staging = ACME_RESOURCES.filter((r) => r.env === 'staging');
     const preview = previewDraft(
-      { connections: [acmeConnection({ basis: 'share', authority: SHARED })], now: NOW },
+      {
+        connections: [acmeConnection({ basis: 'share', authority: SHARED, resources: staging })],
+        now: NOW,
+      },
       draft,
     );
     const view = previewView(preview);
@@ -761,7 +770,16 @@ describe('views', () => {
         connections: [
           {
             connectionId: 'conn-acme',
-            resourceSets: [{ id: 'set-1', position: 1, resourceScope: 'all', resourceIds: [] }],
+            resourceSets: [
+              {
+                id: 'set-1',
+                position: 1,
+                resourceIds: [],
+                future: false,
+                env: null,
+                mixedEnv: false,
+              },
+            ],
           },
         ],
         policy: [
@@ -823,12 +841,14 @@ describe('tool definitions and results', () => {
     expect(text.preview_policy).toContain('one connection per provider');
     expect(text.preview_policy).toContain('a quota and a rate limit for every risk');
     expect(text.preview_policy).toContain('labelled with that environment');
-    // `all` and `connection` are told apart where a draft is composed.
-    expect(text.preview_policy).toContain("`{ scope: 'connection' }` — the whole connection");
+    // `all` and future resources are told apart where a draft is composed.
+    expect(text.preview_policy).toContain("`{ scope: 'connection' }` — `all` with `future: true`");
     expect(text.preview_policy).toContain('a resource discovered later is not reached');
+    expect(text.preview_policy).toContain('`resource-set-mixed-env`');
     expect(text.issue_mission).toContain("`resources: { scope: 'connection' }`");
-    expect(text.list_my_missions).toContain('`resource_scopes`');
-    expect(MANAGEMENT_INSTRUCTIONS).toContain("`{ scope: 'connection' }` is the whole connection");
+    expect(text.list_my_missions).toContain('`resource_selections`');
+    expect(MANAGEMENT_INSTRUCTIONS).toContain('in resource sets of one environment each');
+    expect(MANAGEMENT_INSTRUCTIONS).toContain('`future: true` on a set');
     expect(text.issue_mission).toContain('The creator is the user, not you');
     expect(text.issue_mission).toContain('shown this once');
     expect(text.issue_mission).toContain('they alone answer the requests');

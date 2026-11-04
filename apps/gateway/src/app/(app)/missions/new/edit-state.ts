@@ -1,5 +1,5 @@
 /**
- * The creation form in edit mode (ADR mission-editable-after-issuance): the form
+ * The mission screen in edit mode (ADR mission-editable-after-issuance): the cards
  * prefilled from a mission, the draft it sends back, and what the confirmation
  * says of each change — pure, so the words and the consequences are unit-tested
  * without a browser. The judgement is `judgeEdit`, the function the server runs
@@ -17,7 +17,6 @@ import {
   draftConnectionOf,
   type MissionChanges,
   type MissionSnapshot,
-  type StoredResourceScope,
 } from '@/lib/missions/mission-edit';
 import { trustLevelsOf, type TrustLevel } from '@/lib/missions/macro-actions';
 
@@ -27,6 +26,7 @@ import {
   loadResolved,
   periodChoiceOf,
   raiseMacroAction,
+  replaceCard,
   type FormState,
 } from './form-state';
 
@@ -43,7 +43,7 @@ export interface EditRaise {
 
 /**
  * The edit state with the raise applied, and the hand-edited lines it replaces. A raise
- * whose set the form does not show leaves the state as it is.
+ * whose card the screen does not show leaves the state as it is.
  */
 export function raisedEditState(
   context: readonly IssuanceConnection[],
@@ -51,19 +51,12 @@ export function raisedEditState(
   raise: EditRaise,
 ): { readonly state: FormState; readonly replaced: readonly RiskId[] } {
   const connection = context.find((c) => c.id === raise.connectionId);
-  const account = state.connections[raise.connectionId];
-  const index = account?.sets.findIndex((set) => set.id === raise.resourceSetId) ?? -1;
-  const set = account?.sets[index];
-  if (!connection || !account || !set) return { state, replaced: [] };
-  const raised = raiseMacroAction(connection, set, raise.macroActionId, raise.to);
-  const sets = account.sets.map((s, i) => (i === index ? raised.state : s));
-  return {
-    state: {
-      ...state,
-      connections: { ...state.connections, [connection.id]: { ...account, sets } },
-    },
-    replaced: raised.replaced,
-  };
+  const card = state.cards.find(
+    (c) => c.connectionId === raise.connectionId && c.id === raise.resourceSetId,
+  );
+  if (!connection || !card) return { state, replaced: [] };
+  const raised = raiseMacroAction(connection, card, raise.macroActionId, raise.to);
+  return { state: replaceCard(state, raised.card), replaced: raised.replaced };
 }
 
 /** What the edit form knows of the mission it edits. */
@@ -94,10 +87,9 @@ export function resolvedOfSnapshot(snapshot: MissionSnapshot): ResolvedDraftConn
     connection_id: c.connection_id,
     resource_sets: c.resource_sets.map((set) => ({
       ...(set.id !== null ? { id: set.id } : {}),
-      resources:
-        set.resource_scope === 'connection'
-          ? { scope: 'connection' as const }
-          : { scope: 'selected' as const, resource_ids: [...set.resource_ids] },
+      resources: { scope: 'selected' as const, resource_ids: [...set.resource_ids] },
+      future: set.future,
+      env: set.env,
       everything_i_hold: false,
       policy: set.policy,
       trust_levels: trustLevelsOf(set.trust_levels),
@@ -113,7 +105,7 @@ export function initialEditState(
   context: readonly IssuanceConnection[],
   snapshot: MissionSnapshot,
 ): FormState {
-  const loaded = loadResolved(context, initialFormState(context), resolvedOfSnapshot(snapshot));
+  const loaded = loadResolved(context, initialFormState(), resolvedOfSnapshot(snapshot));
   return {
     ...loaded,
     name: snapshot.name,
@@ -168,11 +160,10 @@ export interface Naming {
   risk(riskId: RiskId): string;
 }
 
-const SCOPE_WORDS: Readonly<Record<StoredResourceScope, string>> = {
-  all: 'no resource',
-  selected: 'the resources picked',
-  connection: 'the whole account, including resources found later',
-};
+/** A set's `future`, in words. */
+function futureWords(future: boolean): string {
+  return future ? 'the resources picked and resources found later' : 'the resources picked';
+}
 
 function endWords(at: string | null): string {
   return at === null ? 'never' : at.slice(0, 16).replace('T', ' ');
@@ -246,7 +237,7 @@ export function changeLines(
     several.has(r.connection_id) ? `${r.display_name}, resource set ${r.position}` : r.display_name;
   for (const r of changes.resources) {
     if (added.has(r.connection_id) || removed.has(r.connection_id)) continue;
-    if (r.scope_before === null && r.scope_after !== null) {
+    if (r.future_before === null && r.future_after !== null) {
       lines.push({
         section: 'Resources',
         text: `${r.display_name}: resource set ${r.position} added`,
@@ -254,7 +245,7 @@ export function changeLines(
         warn: false,
       });
     }
-    if (r.scope_after === null && r.scope_before !== null) {
+    if (r.future_after === null && r.future_before !== null) {
       lines.push({
         section: 'Resources',
         text: `${r.display_name}: resource set ${r.position} removed`,
@@ -263,14 +254,13 @@ export function changeLines(
       });
       continue;
     }
-    if (r.scope_before !== r.scope_after && r.scope_before !== null && r.scope_after !== null) {
+    if (r.future_before !== r.future_after && r.future_before !== null && r.future_after !== null) {
       lines.push({
         section: 'Resources',
-        text: `${where(r)}: ${SCOPE_WORDS[r.scope_before]} → ${SCOPE_WORDS[r.scope_after]}`,
-        consequence:
-          r.scope_after === 'connection'
-            ? 'Resources found later on the account are reached too.'
-            : null,
+        text: `${where(r)}: ${futureWords(r.future_before)} → ${futureWords(r.future_after)}`,
+        consequence: r.future_after
+          ? 'Resources found later in the same environment join the set.'
+          : null,
         warn: false,
       });
     }

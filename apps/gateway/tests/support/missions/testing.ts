@@ -160,6 +160,7 @@ export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): Iss
     id: 'conn-acme',
     provider: 'acme',
     provider_label: 'Acme',
+    resource_noun: { one: 'thing', other: 'things' },
     display_name: 'Acme main',
     status: 'active',
     derives_env: false,

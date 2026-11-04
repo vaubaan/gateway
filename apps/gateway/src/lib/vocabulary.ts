@@ -653,6 +653,12 @@ export const TRUST_LEVEL_LABELS: Readonly<Record<TrustLevel, string>> = {
   autonomous: 'Autonomous',
 };
 
+/**
+ * The fourth segment of a macro-action's trust control: its lines were edited by hand,
+ * so no trust level writes exactly them (spec §4.2).
+ */
+export const TRUST_LEVEL_CUSTOM = 'Custom';
+
 /** What each trust level does, in one line, wherever its chip shows a tooltip. */
 export const TRUST_LEVEL_HINTS: Readonly<Record<TrustLevel, string>> = {
   careful:
@@ -810,6 +816,8 @@ export const ACT_WORDS = {
   'config-changed': 'changed the configuration',
   'permissions-changed': 'changed the permissions of a mission',
   'mission-resources-added': 'added resources to a mission',
+  'mission-resource-joined': 'added a resource found later to a mission',
+  'mission-resource-left': 'took a relabelled resource out of a mission',
   'permission-requested': 'requested missing permissions',
   'limits-changed': 'changed the limits of a mission',
   'mission-changed': 'changed a mission',
@@ -1323,7 +1331,6 @@ export const MISSION_ACTIONS = {
   startFrom: 'Start from a mission…',
   pasteProposal: 'Paste an agent’s proposal',
   change: 'Change',
-  changeLimits: 'Change limits',
   editMission: 'Edit mission',
   saveChanges: 'Save changes',
   leave: 'Leave the mission',
@@ -1374,13 +1381,20 @@ export const RESOURCE_SET_WORDS = {
     'Each resource set has its own trust levels and limits. A call is judged by the set of the resource it names; a call that names none, or resources of several sets, must be allowed in each.',
 } as const;
 
+/** The filter of the missions list: running ones by default, stopped ones one click away. */
+export const MISSION_LIST_FILTERS = {
+  label: 'Which missions',
+  running: 'running',
+  stopped: 'stopped',
+  noneStopped: 'No stopped mission.',
+} as const;
+
 /** Sentences the mission pages share. */
 export const MISSION_WORDS = {
   editLede:
     'Change anything but how often the limits reset. Same key, same session, same counters: the next call of every holder sees the edited mission.',
   editConfirm:
     'Every change, before and after. It applies at once: the next call of every holder sees it, with the same key; what was used this period stays used.',
-  sameKeyAfterEdit: 'Same key for everyone on it; nothing to hand over again.',
   nothingChangedYet: 'Nothing changed yet.',
   periodFixed:
     'How often the limits reset does not change on a running mission: its counters are kept per period. Duplicate the mission for another one.',
@@ -1399,21 +1413,91 @@ export const MISSION_WORDS = {
   kitWithoutKey: 'Three snippets and a check. The key itself was shown once.',
   noKeyWorks: 'No key works on this mission now.',
   notServing: 'No key can be made now: the mission does not serve calls.',
-  explicitList:
-    'Only the accounts you can use. Each macro-action, at its trust level, writes explicit permissions.',
   /** An account a mission was given whole (resource scope `connection`). */
   wholeAccount: 'the whole account, including resources found later',
+  /** A set with future on (ADR resource-set-is-one-environment-with-optional-future-resources). */
+  futureResources: 'resources found later in the same environment',
   /** After a resource the mission created itself (ADR created-resources-join-the-mission). */
   createdByMission: 'created by this mission',
   peopleLater: 'Just you for now; teammates and machine keys are added after creating.',
-  keyAtTheEnd: 'Key shown once.',
   railTitle: 'What this mission will be able to do',
-  /** The zone at the bottom of a mission page where its creator stops it. */
-  stopTitle: 'Stop this mission',
-  stopWhat:
-    'Every key of the mission stops working at once: each call is refused from then on. This cannot be undone; to continue the work, duplicate the mission. What it did stays in its activity.',
   /** The details line of a mission page: what a report or the audit names it by. */
   missionId: 'Mission id',
+} as const;
+
+/**
+ * The cards of the mission screen and page (spec §4.2): generic words only. What a card
+ * names comes from fields every plugin declares — its resource noun, the catalog's
+ * macro-action and permission labels, the data model's plane slugs — and the
+ * environment labels the owner gave; nothing here is written for one service.
+ */
+export const CARD_WORDS = {
+  addAccount: '+ Add an account',
+  searchAccounts: 'Search accounts…',
+  pickAccount: 'Which account?',
+  addCard: 'Add card',
+  saveCard: 'Apply',
+  /** Step 2 of "+ Add an account": "Which boards?" */
+  whichResources: (other: string): string => `Which ${other}?`,
+  /** A resource another card of the mission holds: a resource is in one card only. */
+  inAnotherCard: 'in another card',
+  /** "+ future boards": the box of a group, and the tail of a card's resources. */
+  future: (other: string): string => `+ future ${other}`,
+  /** A permission the catalog does not accept in that environment. */
+  neverIn: (env: string): string => `never in ${env}`,
+  /** A card of an account that lists no resource. */
+  accountItself: 'the account itself',
+  /** The resources without an environment label, on a provider that needs one. */
+  notSelectable: 'not selectable',
+  labelIt: 'Label it to add it',
+  /** "2 of 4 boards free": what another card of the account may still take. */
+  free: (free: number, total: number, other: string): string =>
+    `${formatNumber(free)} of ${formatNumber(total)} ${other} free`,
+  noAccountLeft: 'Every account you may use is in the mission.',
+  oneAccountPerService: 'A mission takes one account per service.',
+  whatItCanDo: 'What it can do',
+  trust: 'Trust',
+  removeCard: (account: string): string => `Remove ${account}`,
+  changeResources: (account: string): string => `Change the resources of ${account}`,
+  /** The foot of a card. */
+  digest: (total: number, free: number, asks: number): string =>
+    `${formatNumber(total)} ${total === 1 ? 'permission' : 'permissions'} · ${formatNumber(free)} run freely · ${formatNumber(asks)} ask you`,
+  notTicked: 'Not ticked.',
+  /** The three behaviours of a permission in the Custom modal and the (i). */
+  runsFreely: 'Runs freely',
+  asksFirst: 'Asks first',
+  asksYouFirst: 'Asks you first',
+  leftOut: 'Left out',
+  limitsTimes: (factor: number): string => `Limits ×${formatNumber(factor)}`,
+  startFrom: 'Start from',
+  thenSingleLines: 'then change single lines',
+  allPlanes: 'all',
+  planesOnlyFilter: 'The plane chips only filter the list; the mission stores permissions.',
+  apply: 'Apply',
+  permission: 'Permission',
+  behaviour: 'Behaviour',
+  /** A card with future resources: when discovery last ran, and running it now. */
+  checked: (ago: string): string => `checked ${ago}`,
+  neverChecked: 'not checked yet',
+  checkNow: '↻ Check now',
+  raiseLimit: 'Raise this limit',
+  /** A permission whose gate the creator opened for the rest of the period. */
+  runsFreelyUntil: 'runs freely until',
+  closeOpening: 'Close',
+  closeOpeningOf: (riskId: string): string => `Close “runs freely until” for ${riskId}`,
+  /** The hover of a gauge. */
+  usageOf: (action: string, period: string): string => `${action} · ${period}`,
+  gaugeRule: 'The bar follows the permission closest to its limit.',
+  /** A legacy card that mixed environments, split when the screen opened. */
+  splitTitle: 'One card per environment',
+  splitBody:
+    'A card holds the resources of one environment. Cards that held several are shown split, each with the permissions that apply there; saving keeps them so.',
+  nothingYet: 'No account yet: add one, then tick what the agent may do there.',
+  /** The summary bar of a creation. */
+  creationSummary: (cards: number, total: number, free: number, asks: number): string =>
+    `${formatNumber(cards)} ${cards === 1 ? 'card' : 'cards'} · ${formatNumber(total)} ${total === 1 ? 'permission' : 'permissions'} · ${formatNumber(free)} run freely · ${formatNumber(asks)} ask you`,
+  /** The summary bar of an edit: "2 changes: …". */
+  changes: (n: number): string => `${formatNumber(n)} ${n === 1 ? 'change' : 'changes'}`,
 } as const;
 
 /** How often the limits of a mission start again, keyed by the period in seconds (`null`: never). */
@@ -1481,11 +1565,11 @@ export function listed(items: readonly string[], max = 4): string {
  * "the account itself, no resource", or — for an account given whole — that later
  * resources join the ones known now.
  */
-export function reachedOnAccount(names: readonly string[], reachesLater: boolean, max = 3): string {
-  if (reachesLater) {
+export function reachedOnAccount(names: readonly string[], future: boolean, max = 3): string {
+  if (future) {
     return names.length === 0
-      ? `${MISSION_WORDS.wholeAccount} (none known yet)`
-      : `${MISSION_WORDS.wholeAccount} (known now: ${listed(names, max)})`;
+      ? `${MISSION_WORDS.futureResources} (none known yet)`
+      : `${listed(names, max)}, and ${MISSION_WORDS.futureResources}`;
   }
   return names.length === 0 ? 'the account itself, no resource' : listed(names, max);
 }

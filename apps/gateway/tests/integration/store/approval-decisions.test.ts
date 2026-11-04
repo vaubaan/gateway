@@ -57,7 +57,7 @@ describe('store: the approval gate', () => {
         creatorUserId: creator,
         periodAnchor: PERIOD,
         periodSeconds: 86_400,
-        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        connections: [{ connectionId: connection.id, resourceIds: [] }],
         policy: [
           { riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
           { riskId: MERGE, quota: 5, rateLimit: 5, rateWindowSeconds: 60, gate: 'approval' },

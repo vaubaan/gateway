@@ -14,7 +14,6 @@ import {
   missionRevision,
   type MissionSnapshot,
   type MissionSnapshotConnection,
-  type MissionSnapshotSet,
 } from './mission-edit';
 import type { DraftConnection, MissionDraft } from './model';
 import { previewDraft } from './preview';
@@ -42,14 +41,15 @@ const SET = 'set-1';
 /** An account of the snapshot with one resource set. */
 function account(
   c: Omit<MissionSnapshotConnection, 'resource_sets'> & {
-    readonly resource_scope: MissionSnapshotSet['resource_scope'];
     readonly resource_ids: readonly string[];
+    readonly future?: boolean;
+    readonly env?: string | null;
     readonly policy: readonly MissionPolicyEntry[];
     readonly trust_levels?: Readonly<Record<string, string>>;
     readonly set?: string;
   },
 ): MissionSnapshotConnection {
-  const { resource_scope, resource_ids, policy, trust_levels, set = SET, ...rest } = c;
+  const { resource_ids, future = false, env = null, policy, trust_levels, set = SET, ...rest } = c;
   return {
     ...rest,
     resource_sets: [
@@ -57,8 +57,9 @@ function account(
         key: set,
         id: set,
         position: 1,
-        resource_scope,
         resource_ids,
+        future,
+        env,
         policy: policy.map((p) => ({ ...p, resource_set_id: set })),
         ...(trust_levels ? { trust_levels } : {}),
       },
@@ -75,8 +76,8 @@ const BEFORE: MissionSnapshot = {
       connection_id: 'conn-acme',
       provider: 'acme',
       display_name: 'Acme main',
-      resource_scope: 'selected',
       resource_ids: ['res-app-staging'],
+      env: 'staging',
       policy: [line('acme.read'), line('acme[staging].write', 5)],
     }),
   ],
@@ -206,7 +207,6 @@ describe('judgeEdit', () => {
             connection_id: 'conn-gone',
             provider: 'other',
             display_name: 'Gone',
-            resource_scope: 'all',
             resource_ids: [],
             policy: [line('other.read')],
             set: 'set-gone',
@@ -245,7 +245,6 @@ describe('the revision and the words of an edit', () => {
           connection_id: 'conn-acme',
           provider: 'acme',
           display_name: 'Acme main',
-          resource_scope: 'selected',
           resource_ids: ['res-app-staging', 'res-scratch'],
           policy: [line('acme.read', 50)],
         }),
