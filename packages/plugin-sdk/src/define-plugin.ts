@@ -188,7 +188,12 @@ function identityIssues(plugin: ProviderPlugin): string[] {
 export const RESOURCE_NOUN_MAX_LENGTH = 40;
 
 /** A lowercase noun : starts and ends with a letter or digit, words joined by one space or a hyphen. */
-const RESOURCE_NOUN_PATTERN = /^[a-z0-9]+(?:[ -][a-z0-9]+)*$/;
+const RESOURCE_NOUN_WORD = /^[a-z0-9]+$/;
+
+/** Split on the separators first, so no pattern repeats a group (no backtracking). */
+function isResourceNoun(word: string): boolean {
+  return word.split(/[ -]/).every((part) => RESOURCE_NOUN_WORD.test(part));
+}
 
 /**
  * `resourceNoun` : two forms, each a lowercase noun on one line (letters,
@@ -206,7 +211,7 @@ function resourceNounIssues(plugin: ProviderPlugin): string[] {
       issues.push(`resourceNoun.${form}: expected a non-empty string`);
     } else if (word.length > RESOURCE_NOUN_MAX_LENGTH) {
       issues.push(`resourceNoun.${form}: expected at most ${RESOURCE_NOUN_MAX_LENGTH} characters`);
-    } else if (!RESOURCE_NOUN_PATTERN.test(word)) {
+    } else if (!isResourceNoun(word)) {
       issues.push(
         `resourceNoun.${form}: expected a lowercase noun (letters, digits, single spaces, hyphens), got '${word}'`,
       );
