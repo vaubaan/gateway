@@ -9,6 +9,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Documentation
+
+- Facts a first visitor reads, made true again: Node.js 26 and npm 11 on the website's quick look and coding-agent install (and an `.nvmrc`); the upgrade page takes the new release image by tag or digest instead of waiting for a release; the deploy quick start clones into `gateway`; the deploy guides connect accounts on Accounts → Connect an account instead of the removed Company apps page; the site footer, trust center and README no longer say no version is published; the supported versions name the release candidates; customer names removed from test fixtures and script examples.
+
 ## [2.0.0-alpha.16] - 2026-11-04
 
 ### Added
@@ -47,6 +51,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   writes whole-connection sets out as their lists with future on; a set spanning
   environments keeps working until its next edit splits it.
 
+- **The OAuth broker caps refreshes per instance** (`@vaubaan/oauth-broker`
+  0.3.0): each enrolled instance may call `/token` `refresh_per_hour` times an
+  hour (600 unless set in `OAUTH_BROKER_CONFIG`, refilled evenly), so one
+  instance cannot spend the quota of the client every instance shares. Past it
+  the broker answers 429 `rate_limited` with `retry-after` before calling the
+  provider; a gateway reads it as a broker failure and retries, never as an
+  expired connection.
+
 ### Changed
 
 - **Base image Node 26.13.0** (`node:26.13.0-bookworm-slim`, multi-architecture digest), for the
@@ -78,14 +90,6 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   checks both forms are lowercase nouns of at most 40 characters
   (`RESOURCE_NOUN_MAX_LENGTH`). Every shipped plugin declares one; the gateway
   says `resource` / `resources` for a plugin without one.
-
-- **The OAuth broker caps refreshes per instance** (`@vaubaan/oauth-broker`
-  0.3.0): each enrolled instance may call `/token` `refresh_per_hour` times an
-  hour (600 unless set in `OAUTH_BROKER_CONFIG`, refilled evenly), so one
-  instance cannot spend the quota of the client every instance shares. Past it
-  the broker answers 429 `rate_limited` with `retry-after` before calling the
-  provider; a gateway reads it as a broker failure and retries, never as an
-  expired connection.
 
 ### Documentation
 

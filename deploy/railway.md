@@ -293,7 +293,7 @@ by hand. Handbook [store](../docs/handbook/store.md).
    can use a file path instead (a volume mounted read-only beside `/data`).
 4. **Configure the new instance** with the source's variables (the same
    `VAUBAAN_PUBLIC_URL` if the domain moves with it, the same sign-in providers
-   and company apps) and:
+   and OAuth brokers) and:
    - a **new master key** (`npm run gen-master-key`) in `VAUBAAN_MASTER_KEY`,
      `VAUBAAN_MASTER_KEY_VERSION` = the source's version plus one, and
      `VAUBAAN_MASTER_KEY_PREVIOUS` = `<source version>=<source key>` (every

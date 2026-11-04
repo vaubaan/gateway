@@ -7,10 +7,10 @@ handled privately and take priority over other work.
 
 ## Supported versions
 
-| Version                                            | Security fixes                                                                                         |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 2.0.0 pre-releases (`v2.0.0-alpha.*`, from `main`) | Yes. A fix lands on `main` and ships in the next pre-release; nothing is backported to an earlier one. |
-| v4 SaaS (tag `v4-final`) or older                  | No. Historical; not maintained.                                                                        |
+| Version                                                           | Security fixes                                                                                         |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 2.0.0 pre-releases (`v2.0.0-alpha.*`, `v2.0.0-rc.*`, from `main`) | Yes. A fix lands on `main` and ships in the next pre-release; nothing is backported to an earlier one. |
+| v4 SaaS (tag `v4-final`) or older                                 | No. Historical; not maintained.                                                                        |
 
 Until `v2.0.0`, the supported line is the latest pre-release, cut from `main`:
 update to it to receive a fix. From `v2.0.0` on, this table will name the

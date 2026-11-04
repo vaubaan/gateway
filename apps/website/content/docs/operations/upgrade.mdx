@@ -9,21 +9,17 @@ Upgrading an instance means backing it up, running the image of the new version,
 
 1. **Read the release notes.** A patch or a minor release needs nothing else; a major one says what to change first ([versioning policy](https://github.com/vaubaan/gateway/blob/main/docs/workflow/coding-workflow.md#versioning-policy)).
 2. **Back up** the database and keep the master key with the copy ([backup](/docs/operations/backup-and-restore)).
-3. **Take the new version.** Until a release exists, that is the new commit of the repository: `git pull`, then rebuild and restart with the same Compose command as the install:
+3. **Take the new version.** Every release publishes an image at `ghcr.io/vaubaan/gateway:<version>` (the 2.0.0 pre-releases too, for example `2.0.0-alpha.15`). If the `gateway` service runs a released image, change its `image:` line to the new version, pinned by digest (`ghcr.io/vaubaan/gateway@sha256:<digest>`; `docker buildx imagetools inspect ghcr.io/vaubaan/gateway:<version>` prints it), verify it where the release offers an attestation, and restart:
 
    ```bash
-   docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --build
+   docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d
    ```
 
-   On Railway, deploy a verified build of the new commit ([Railway, step 5](/docs/install/railway#5-deploy-a-verified-build)).
+   If you build the image from the sources, as the quick start does, check out the new release tag (`git fetch --tags && git checkout v<version>`) and run the same command with `--build`. On Railway, deploy a verified build of the new version ([Railway, step 5](/docs/install/railway#5-deploy-a-verified-build)). The commands to verify an image: [deploy README, Released images](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#released-images).
 
 4. **Check** `/healthz`: it answers the new version and commit.
 
 Schema migrations run at start, forward-only and checksummed. There is no downgrade: keep the backup of step 2 until you are sure.
-
-## Once releases exist
-
-Releases will be published at `ghcr.io/vaubaan/gateway` (none exists yet). Then: replace the `build:` block of the `gateway` service in `deploy/compose.yaml` by `image: ghcr.io/vaubaan/gateway:<version>`, verify the image's provenance before the first start, and pin the digest you verified. The commands: [deploy README, Released images](https://github.com/vaubaan/gateway/blob/main/deploy/README.md#released-images).
 
 ## Changing the identity provider
 

@@ -19,8 +19,8 @@ const noIssue = (message: string): never => {
 
 describe('readSelfResources', () => {
   it('an instance on Fly counts its own app, from FLY_APP_NAME', () => {
-    expect(readSelfResources([], { [FLY_APP_ENV]: 'vaubaan-dogfood' }, noIssue)).toEqual([
-      { provider: 'fly', ref: 'vaubaan-dogfood', source: 'fly' },
+    expect(readSelfResources([], { [FLY_APP_ENV]: 'acme-gateway' }, noIssue)).toEqual([
+      { provider: 'fly', ref: 'acme-gateway', source: 'fly' },
     ]);
   });
 

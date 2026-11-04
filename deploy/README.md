@@ -44,7 +44,7 @@ Requirements: Docker with Compose v2, a DNS name pointing at the host,
 ports 80 and 443 reachable (Caddy obtains the certificate).
 
 ```bash
-git clone <this repository> && cd vaubaan-gateway
+git clone <this repository> && cd gateway
 cp deploy/config/.env.example deploy/config/.env
 cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
 openssl rand -hex 24                       # paste into VAUBAAN_BOOTSTRAP_TOKEN
@@ -122,14 +122,13 @@ are made on Settings → People (handbook
 [authentication](../docs/handbook/authentication.md)). On Railway, follow
 [railway.md](railway.md).
 
-Then the company apps (**Settings → Administration → Company apps**): one app
-per service in use, registered by your company — this gateway never uses an
-app shared with another one. For GitHub, "Create the GitHub App" does it from
-the page: choose the organisation (or your own account), the name and the
-permissions, confirm at GitHub, and the App's id, key and secrets come back
-stored encrypted — nothing to copy. The other services' apps are registered
-at the service and entered on the same page, or set in the configuration
-(`providers.<id>.*`, then read-only there).
+Then connect the services on **Accounts → Connect an account**; there is no
+app to register first. Most services take a token the person creates at the
+service, Gmail an app password (IMAP); Miro's OAuth client is registered by
+the gateway itself, and Google Calendar goes through an OAuth broker the
+instance is enrolled with (`oauth_brokers.*`, handbook
+[oauth-broker](../docs/handbook/oauth-broker.md)). Handbook:
+[connections](../docs/handbook/connections.md).
 
 Minimum to start: `public_url` (https), `store.path`,
 `encryption.master_key` (or its file with `encryption.generate_master_key`),

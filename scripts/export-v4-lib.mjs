@@ -59,7 +59,7 @@ export const USAGE = `Usage: node scripts/export-v4.mjs --org <slug> [--ssh-host
 Reads one organization of the v4 database (read-only) and writes the import
 bundle on stdout, nothing else; pipe it into the importer of the instance.
 
-  --org <slug>                    the v4 organization (dalae, fidi, …)
+  --org <slug>                    the v4 organization (for example acme)
   --ssh-host <slug>               an SSH host to carry, from whichever organization
                                   holds it (repeatable)
   --ssh-host-key <slug>=SHA256:…  its host key fingerprint; v4 pinned none, the

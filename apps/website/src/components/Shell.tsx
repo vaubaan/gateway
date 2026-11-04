@@ -45,8 +45,8 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="site-footer-inner">
         <p>
-          Vaubaan Gateway is open source under the {LICENSE_NAME} licence. Pre-release: no version
-          is tagged yet.
+          Vaubaan Gateway is open source under the {LICENSE_NAME} licence. Pre-release: the 2.0.0
+          pre-releases are published, 2.0.0 itself is not yet.
         </p>
         <p>
           This site sets no cookie and runs no analytics or third-party script.{' '}
