@@ -30,7 +30,7 @@ project; no environment. Rules common to every plugin: [providers README](README
 
 One plane, `work`: `project` (the resource; `one`, `bounded` for `list_projects`) → `section`
 (`one`, `unbounded`) and `task` (`one`, `unbounded`) → `comment` (`one`, `unbounded`), and the verb
-leaf `delete` under `task`. A subtask is a `task` under the project it belongs to through its
+leaves `rewrite` and `delete` under `task`. A subtask is a `task` under the project it belongs to through its
 ancestors. No entity carries an environment (Asana has none); no `envOf`.
 
 ## 2. Tool → slice mapping
@@ -38,33 +38,39 @@ ancestors. No entity carries an environment (Asana has none); no `envOf`.
 Read in [`src/classify.ts`](../../../plugins/asana/src/classify.ts) (`slicesOf`); the table is in the
 plugin [README](../../../plugins/asana/README.md#tools). Every slice is rooted at
 `project[<the project the call names>]`; `list_projects` names all the mission's projects in one
-bounded slice; `delete_task` emits two slices (`task[t].W` and `task[t].delete.W`).
+bounded slice; `delete_task` emits two slices (`task[t].W` and `task[t].delete.W`), and so does
+`update_task` with `name` or `notes` (`task[t].W` and `task[t].rewrite.W`).
 
 ## 3. Catalog and macro-actions
 
-Seven named risks and `asana.uncategorized-write`, in `read` (project-read, task-read,
-comment-read), `work` (task-create, task-update, comment-create) and `clean-up` (task-delete). The
-patterns do not overlap except by design: `task[*].W` does not match `task[t].comment.W` nor
-`task[t].delete.W`, so commenting never needs `task-update`; the deletion carries both risks
-because the classifier emits both slices. `comment-read` is `pii` (asks at Careful);
-`task-update` and `task-delete` are `costly` (ask at Careful and Trusting). The narratives meant
+Eight named risks and `asana.uncategorized-write`, in `read` (project-read, task-read,
+comment-read), `work` (task-create, task-update, task-rewrite, comment-create) and `clean-up`
+(task-delete). The patterns do not overlap except by design: `task[*].W` does not match
+`task[t].comment.W`, `task[t].rewrite.W` nor `task[t].delete.W`, so commenting never needs
+`task-update`; a deletion and a rewrite carry two risks because the classifier emits two slices.
+`task-update` is `reversible` (assignee, dates, completion and section are set back as easily),
+so routine work runs freely at every trust level; `task-rewrite` (a name or description
+overwritten, no history) and `task-delete` are `costly` (ask at Careful and Trusting);
+`comment-read` is `pii` (asks at Careful). `task-read` declares
+`infra_limits.calls_per_minute_max: 60`, Asana's search limit: no mission's rate for it exceeds
+it. The narratives meant
 for the `narrative` key are in the README until the loader accepts it.
 
 ## 4. Coverage
 
-| Tool                   | Risks touched                            |
-| ---------------------- | ---------------------------------------- |
-| `asana__list_projects` | `asana.project-read`                     |
-| `asana__get_project`   | `asana.project-read`                     |
-| `asana__list_sections` | `asana.project-read`                     |
-| `asana__list_tasks`    | `asana.task-read`                        |
-| `asana__search_tasks`  | `asana.task-read`                        |
-| `asana__get_task`      | `asana.task-read`                        |
-| `asana__list_comments` | `asana.comment-read`                     |
-| `asana__create_task`   | `asana.task-create`                      |
-| `asana__update_task`   | `asana.task-update`                      |
-| `asana__add_comment`   | `asana.comment-create`                   |
-| `asana__delete_task`   | `asana.task-update`, `asana.task-delete` |
+| Tool                   | Risks touched                                                          |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `asana__list_projects` | `asana.project-read`                                                   |
+| `asana__get_project`   | `asana.project-read`                                                   |
+| `asana__list_sections` | `asana.project-read`                                                   |
+| `asana__list_tasks`    | `asana.task-read`                                                      |
+| `asana__search_tasks`  | `asana.task-read`                                                      |
+| `asana__get_task`      | `asana.task-read`                                                      |
+| `asana__list_comments` | `asana.comment-read`                                                   |
+| `asana__create_task`   | `asana.task-create`                                                    |
+| `asana__update_task`   | `asana.task-update`; with `name` or `notes`, also `asana.task-rewrite` |
+| `asana__add_comment`   | `asana.comment-create`                                                 |
+| `asana__delete_task`   | `asana.task-update`, `asana.task-delete`                               |
 
 No tool reaches the fallback (`fallbackHits` is empty in `plugin.test.ts`).
 
@@ -93,7 +99,13 @@ No tool reaches the fallback (`fallbackHits` is empty in `plugin.test.ts`).
 - **Search is Premium only and rate-limited at 60 a minute** (Asana's search limit, apart from the
   standard 150 or 1,500 a minute). Without Premium Asana answers 402, thrown as `UpstreamHttpError`.
   The workspace gid comes from the resource metadata (refused when missing: refresh the account);
-  the project is a filter (`projects.any`), so results stay in the project.
+  the project is a filter (`projects.any`), so results stay in the project. The 60 a minute is the
+  `calls_per_minute_max` of `task-read`: it bounds list and get calls too, which Asana would allow
+  faster, so a mission never outruns the search limit whatever its trust level.
+- **Rewriting is priced apart from changing.** `update_task` emits `task[t].rewrite.W` beside
+  `task[t].W` only when it carries `name` or `notes` (an empty `notes` clears the description,
+  which is a rewrite too). Assignee, dates, completion and section are undone by setting them back;
+  a description Asana keeps no history of is not. A deletion never emits the rewrite leaf.
 - **401 versus 403**: the SDK maps both to `UpstreamAuthError`, and Asana answers 403 for an object
   the account cannot open as well as for a refused token. The gateway expires a connection on 401
   only, so a 403 on one task leaves the account connected.

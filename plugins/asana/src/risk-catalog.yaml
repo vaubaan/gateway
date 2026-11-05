@@ -5,7 +5,8 @@
 #
 # One resource per project ; no environment, so no entry is env-scoped.
 # Writes are layered where an act deserves its own decision : deleting a task
-# is a change of the task (`task-update`) AND a deletion (`task-delete`).
+# is a change of the task (`task-update`) AND a deletion (`task-delete`) ;
+# rewriting its name or description is a change AND a rewrite (`task-rewrite`).
 # The macro-actions' narratives are in the plugin README until the loader
 # accepts the `narrative` key.
 provider: asana
@@ -43,6 +44,10 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
+    # Asana caps its search endpoint at 60 requests a minute per token
+    # (rate limits page) : no mission is issued above it.
+    infra_limits:
+      calls_per_minute_max: 60
 
   - id: asana.comment-read
     label: 'Read comments'
@@ -75,10 +80,28 @@ risks:
   - id: asana.task-update
     label: 'Change tasks'
     reason: >-
-      Overwrites a task's name, description, assignee, due date, completion
-      or section. Asana keeps no history of a description to restore, and
-      completing a task may start the project's rules.
+      Changes a task's assignee, due date, completion or section ; each is
+      undone by setting it back. Completing a task may start the project's
+      rules.
     matches: 'asana.project[**].task[*].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  # Rewriting a task's text gets its own decision through the `rewrite` leaf :
+  # `update_task` with `name` or `notes` emits `task[t].W` AND
+  # `task[t].rewrite.W`, so it touches `task-update` and `task-rewrite`.
+  - id: asana.task-rewrite
+    label: 'Rewrite task names and descriptions'
+    reason: >-
+      Overwrites a task's name or description. Asana keeps no history of a
+      description to restore the old text from. A mission must hold Change
+      tasks too.
+    matches: 'asana.project[**].task[*].rewrite.W'
     vector:
       reversibility: costly
       blast: single
@@ -149,7 +172,7 @@ macro_actions:
         rate_limit: { max: 20, window_seconds: 60 }
   - id: work
     label: 'Work on tasks'
-    description: 'Create tasks and subtasks, change them, comment on them.'
+    description: 'Create tasks and subtasks, change and rewrite them, comment on them.'
     entries:
       - risk_id: asana.task-create
         quota: 100
@@ -157,6 +180,9 @@ macro_actions:
       - risk_id: asana.task-update
         quota: 300
         rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: asana.task-rewrite
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
       - risk_id: asana.comment-create
         quota: 100
         rate_limit: { max: 10, window_seconds: 60 }

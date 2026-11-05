@@ -46,6 +46,8 @@ export const SAMPLES: ToolSamples = {
   ],
   [TOOL.updateTask]: [
     { args: { project: PROJECT, task_gid: TASK, completed: true, section: SECTION } },
+    // Name or notes : also a rewrite.
+    { args: { project: PROJECT, task_gid: TASK, notes: 'New description' } },
     { args: { project: PROJECT, task_gid: TASK }, expectDenied: true },
   ],
   [TOOL.addComment]: [{ args: { project: PROJECT, task_gid: TASK, text: 'Done on staging' } }],

@@ -88,6 +88,14 @@ describe('classifyAsana — slices', () => {
     expect(slices(TOOL.updateTask, { project: PROJECT, task_gid: TASK, assignee: null })).toEqual([
       `${P}.task[${TASK}].W`,
     ]);
+    // Overwriting the name or the description adds the `rewrite` leaf.
+    expect(
+      slices(TOOL.updateTask, { project: PROJECT, task_gid: TASK, name: 'n', completed: true }),
+    ).toEqual([`${P}.task[${TASK}].W`, `${P}.task[${TASK}].rewrite.W`]);
+    expect(slices(TOOL.updateTask, { project: PROJECT, task_gid: TASK, notes: '' })).toEqual([
+      `${P}.task[${TASK}].W`,
+      `${P}.task[${TASK}].rewrite.W`,
+    ]);
     expect(slices(TOOL.addComment, { project: PROJECT, task_gid: TASK, text: 'ok' })).toEqual([
       `${P}.task[${TASK}].comment.W`,
     ]);

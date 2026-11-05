@@ -42,7 +42,7 @@ describe('asana plugin — structural kit', () => {
     expect(catalogPathIssues(asanaPlugin)).toEqual([]);
     const named = asanaCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(report.risksTouched).toEqual(named);
-    expect(report.risksTouched).toHaveLength(7);
+    expect(report.risksTouched).toHaveLength(8);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
   });
@@ -107,9 +107,42 @@ describe('asana catalog — layering and macro-actions', () => {
       'asana.task-delete',
       'asana.task-update',
     ]);
-    expect(touched(TOOL.updateTask, { project: PROJECT, task_gid: TASK, name: 'n' })).toEqual([
-      'asana.task-update',
-    ]);
+    expect(touched(TOOL.updateTask, { project: PROJECT, task_gid: TASK, completed: true })).toEqual(
+      ['asana.task-update'],
+    );
+  });
+
+  test('rewriting a name or a description touches task-update and task-rewrite, never task-delete', () => {
+    for (const change of [
+      { name: 'n' },
+      { notes: 'd' },
+      { notes: '' },
+      { name: 'n', due_on: null },
+    ]) {
+      expect(touched(TOOL.updateTask, { project: PROJECT, task_gid: TASK, ...change })).toEqual([
+        'asana.task-rewrite',
+        'asana.task-update',
+      ]);
+    }
+    for (const change of [
+      { assignee: null },
+      { due_on: '2026-12-01' },
+      { section: '1300000000000001' },
+    ]) {
+      expect(touched(TOOL.updateTask, { project: PROJECT, task_gid: TASK, ...change })).toEqual([
+        'asana.task-update',
+      ]);
+    }
+    expect(touched(TOOL.deleteTask, { project: PROJECT, task_gid: TASK })).not.toContain(
+      'asana.task-rewrite',
+    );
+  });
+
+  test("task-read carries Asana's search ceiling, 60 calls a minute", () => {
+    const entry = asanaCatalog.catalog.risks.find((r) => r.id === 'asana.task-read');
+    expect(entry?.infra_limits).toEqual({ calls_per_minute_max: 60 });
+    const limited = asanaCatalog.catalog.risks.filter((r) => r.infra_limits !== undefined);
+    expect(limited.map((r) => r.id)).toEqual(['asana.task-read']);
   });
 
   test('a comment, a creation and the reads each touch their own risk', () => {
@@ -140,7 +173,7 @@ describe('asana catalog — layering and macro-actions', () => {
     expect(ids).not.toContain(`${PROVIDER_ID}.uncategorized-write`);
   });
 
-  test('at Careful, reading comments and changing or deleting tasks ask first', () => {
+  test('at Careful, reading comments, rewriting and deleting tasks ask first', () => {
     const policy = policyFromMacroActions(asanaPlugin, {
       read: 'careful',
       work: 'careful',
@@ -152,10 +185,25 @@ describe('asana catalog — layering and macro-actions', () => {
       'asana.task-read': 'auto',
       'asana.comment-read': 'approval',
       'asana.task-create': 'auto',
-      'asana.task-update': 'approval',
+      'asana.task-update': 'auto',
+      'asana.task-rewrite': 'approval',
       'asana.comment-create': 'auto',
       'asana.task-delete': 'approval',
     });
+  });
+
+  test('at Trusting, only rewriting and deleting ask first', () => {
+    const policy = policyFromMacroActions(asanaPlugin, {
+      read: 'trusting',
+      work: 'trusting',
+      'clean-up': 'trusting',
+    });
+    const gated = policy.filter((l) => l.gate === 'approval').map((l) => l.risk_id);
+    expect(gated.sort()).toEqual(['asana.task-delete', 'asana.task-rewrite']);
+    // The search ceiling holds whatever the trust level multiplies.
+    expect(policy.find((l) => l.risk_id === 'asana.task-read')?.rate_limit.max).toBeLessThanOrEqual(
+      60,
+    );
   });
 
   test('at Autonomous everything runs freely', () => {

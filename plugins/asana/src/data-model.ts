@@ -5,8 +5,8 @@
  * Handbook : docs/handbook/providers/asana.md.
  *
  * One plane, `work` : the project (the resource a mission selects), its
- * sections, its tasks and the comments of a task, plus `delete`, a verb leaf
- * under the task. A subtask is a task : it is named under the project it
+ * sections, its tasks and the comments of a task, plus two verb leaves under the
+ * task, `rewrite` and `delete`. A subtask is a task : it is named under the project it
  * belongs to through its ancestors. Asana has no environment : no entity is
  * `envScopable`, no risk is env-scoped.
  */
@@ -47,6 +47,13 @@ export const asanaDataModel: DataModel = {
           parent: 'task',
           cardinalities: ['one', 'unbounded'],
           description: 'A comment on a task (a story of subtype comment_added).',
+        },
+        {
+          name: 'rewrite',
+          parent: 'task',
+          cardinalities: ['one'],
+          description:
+            "Verb leaf : overwriting a task's name or description, a write with its own risk.",
         },
         {
           name: 'delete',

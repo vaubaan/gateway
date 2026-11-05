@@ -39,7 +39,10 @@ export function slicesOf(call: AsanaCall): Slice[] {
     case 'createTask':
       return [s(`${P}.task.W`)];
     case 'updateTask':
-      return [s(`${P}.task[${call.task}].W`)];
+      // Layered : overwriting the name or the description is also a rewrite.
+      return call.changes.name !== undefined || call.changes.notes !== undefined
+        ? [s(`${P}.task[${call.task}].W`), s(`${P}.task[${call.task}].rewrite.W`)]
+        : [s(`${P}.task[${call.task}].W`)];
     case 'addComment':
       return [s(`${P}.task[${call.task}].comment.W`)];
     case 'deleteTask':
