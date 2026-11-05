@@ -39,6 +39,15 @@ describe('assertCatalogCoverage', () => {
     expect(report.fallbackHits).toEqual([]);
   });
 
+  test('defaults to the samples the plugin declares (examples)', () => {
+    const declared: ProviderPlugin = { ...acmePlugin, examples: samples };
+    const report = assertCatalogCoverage(declared, undefined, { resources: [staging] });
+    expect(report.samplesChecked).toBe(3);
+    expect(() => assertCatalogCoverage(acmePlugin)).toThrow(
+      /no samples: declare `examples` on the plugin or pass them/,
+    );
+  });
+
   test('reports the samples that only the fallback covers', () => {
     const uncategorized: ProviderPlugin = {
       ...acmePlugin,

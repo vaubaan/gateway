@@ -150,6 +150,47 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('excludedTools is optional; it names tools the plugin does not declare, one sentence each', () => {
+    const reason = 'It runs whatever the provider does with it.';
+    expect(pluginIssues({ ...acmePlugin, excludedTools: { acme__dispatch: reason } })).toEqual([]);
+    expect(
+      pluginIssues({
+        ...acmePlugin,
+        excludedTools: ['acme__dispatch'] as unknown as Record<string, string>,
+      }),
+    ).toEqual(['excludedTools: expected a record tool → reason']);
+    expect(pluginIssues({ ...acmePlugin, excludedTools: { acme__update_thing: reason } })).toEqual([
+      "excludedTools: 'acme__update_thing' is a declared tool of this plugin, it cannot be excluded",
+    ]);
+    expect(pluginIssues({ ...acmePlugin, excludedTools: { acme__dispatch: '  ' } })).toEqual([
+      'excludedTools.acme__dispatch: expected one sentence saying why',
+    ]);
+  });
+
+  test('examples is optional; it maps tools of the plugin to well-formed sample calls', () => {
+    const tool = 'acme__update_thing';
+    expect(pluginIssues({ ...acmePlugin, examples: { [tool]: [{ args: { id: 'x' } }] } })).toEqual(
+      [],
+    );
+    expect(
+      pluginIssues({ ...acmePlugin, examples: [] as unknown as ProviderPlugin['examples'] }),
+    ).toEqual(['examples: expected a record tool → sample calls']);
+    expect(pluginIssues({ ...acmePlugin, examples: { acme__nope: [{ args: {} }] } })).toEqual([
+      "examples: 'acme__nope' is not a tool of this plugin",
+    ]);
+    expect(pluginIssues({ ...acmePlugin, examples: { [tool]: [] } })).toEqual([
+      `examples.${tool}: expected a non-empty list of sample calls`,
+    ]);
+    const malformed = {
+      [tool]: [{ args: 'x' }, { args: {}, resources: 'all', expectDenied: 'yes' }],
+    } as unknown as ProviderPlugin['examples'];
+    expect(pluginIssues({ ...acmePlugin, examples: malformed })).toEqual([
+      `examples.${tool}[0].args: expected an object`,
+      `examples.${tool}[1].resources: expected a list when present`,
+      `examples.${tool}[1].expectDenied: expected a boolean when present`,
+    ]);
+  });
+
   test('resourceCreatingTools is optional; it names MCP tools of the plugin, once each', () => {
     const [tool] = acmePlugin.tools;
     const name = tool!.name;

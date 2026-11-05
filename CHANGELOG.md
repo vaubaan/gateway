@@ -9,6 +9,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Plugin SDK
+
+- **A plugin declares what its public page shows** (ADR
+  plugin-contract-and-credential-spec, amendment 2026-11-05).
+  `ProviderPlugin.excludedTools?: Record<toolName, reason>` names the tools of
+  the provider the plugin deliberately leaves out, one sentence each
+  (`definePlugin` refuses a name that is a declared tool);
+  `ProviderPlugin.examples?: ToolSamples` holds the tool samples, which
+  `assertCatalogCoverage(plugin)` now uses when no samples are passed.
+  `SampleCall` and `ToolSamples` are exported from `@vaubaan/plugin-sdk` (still
+  from `/testing`). A catalog macro-action may carry a `narrative` (two to four
+  sentences, at most 600 characters, spec gateway-risk-model §4.6); the loader
+  refuses one that is not a non-empty string within that length.
+
 ## [2.0.0-alpha.17] - 2026-11-05
 
 ### Added

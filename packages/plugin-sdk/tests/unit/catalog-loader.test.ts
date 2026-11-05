@@ -11,6 +11,7 @@ import {
   parseCatalogYaml,
   validateCatalog,
 } from '../../src/catalog-loader.ts';
+import { NARRATIVE_MAX_LENGTH } from '../../src/catalog-document.ts';
 import { isCompleteVector } from '../../src/catalog-risk-entry.ts';
 import {
   catalogWarnings,
@@ -601,6 +602,56 @@ describe('macro-actions', () => {
       "macro_actions[1].id 'anything-else' is the gateway's own macro-action for the fallback",
       "macro_actions[1].id 'anything-else' is declared twice",
     ]);
+  });
+
+  test('a narrative is optional and read trimmed', () => {
+    const narrative = '  Reads things. Nothing is written.\n';
+    const d = doc({
+      macro_actions: [
+        { ...action('read', ['acme.read-things']), narrative },
+        action('write', ['acme.thing-write']),
+      ],
+    });
+    const actions = validateCatalog(d).catalog.macro_actions;
+    expect(actions[0]!.narrative).toBe('Reads things. Nothing is written.');
+    expect(actions[1]).not.toHaveProperty('narrative');
+  });
+
+  test('a narrative that is not a string of at most 600 characters refuses the catalog', () => {
+    const d = doc({
+      macro_actions: [
+        {
+          ...action('read', ['acme.read-things']),
+          narrative: 'x'.repeat(NARRATIVE_MAX_LENGTH + 1),
+        },
+        { ...action('write', ['acme.thing-write']), narrative: 42 },
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'macro_actions[0].narrative: 601 characters, at most 600 (spec §4.6)',
+      'macro_actions[1].narrative: expected a non-empty string',
+    ]);
+    const blank = doc({
+      macro_actions: [
+        { ...action('read', ['acme.read-things']), narrative: '   ' },
+        action('write', ['acme.thing-write']),
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(blank))).toEqual([
+      'macro_actions[0].narrative: expected a non-empty string',
+    ]);
+  });
+
+  test('a narrative of exactly 600 characters is accepted', () => {
+    const d = doc({
+      macro_actions: [
+        { ...action('read', ['acme.read-things']), narrative: 'x'.repeat(NARRATIVE_MAX_LENGTH) },
+        action('write', ['acme.thing-write']),
+      ],
+    });
+    expect(validateCatalog(d).catalog.macro_actions[0]!.narrative).toHaveLength(
+      NARRATIVE_MAX_LENGTH,
+    );
   });
 
   test('the acme fixture reads its macro-actions with their base budgets', () => {

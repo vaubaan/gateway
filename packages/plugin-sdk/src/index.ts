@@ -20,6 +20,7 @@
  */
 
 export * from './plugin.ts';
+export * from './samples.ts';
 export * from './credential.ts';
 export * from './catalog-loader.ts';
 export * from './catalog-rules.ts';

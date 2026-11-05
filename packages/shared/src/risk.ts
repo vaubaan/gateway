@@ -258,6 +258,13 @@ export interface MacroAction {
   readonly label: string;
   /** One line shown under the label. */
   readonly description: string;
+  /**
+   * Two to four sentences in the connector's words, at most 600 characters:
+   * what an agent does under this verb and why its permissions are cut the
+   * way they are (spec gateway-risk-model §4.6). Shown on the plugin's public
+   * page, never read by the runtime.
+   */
+  readonly narrative?: string;
   readonly entries: readonly MacroActionEntry[];
 }
 

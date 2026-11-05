@@ -39,7 +39,9 @@ const CATALOG_KEYS = new Set([
   'catalog_date',
 ]);
 const CATALOG_KEYS_AND_RETIRED: ReadonlySet<string> = new Set([...CATALOG_KEYS, 'presets']);
-const MACRO_ACTION_KEYS = new Set(['id', 'label', 'description', 'entries']);
+const MACRO_ACTION_KEYS = new Set(['id', 'label', 'description', 'narrative', 'entries']);
+/** Spec gateway-risk-model §4.6: a narrative is at most 600 characters. */
+export const NARRATIVE_MAX_LENGTH = 600;
 const MACRO_ENTRY_KEYS = new Set(['risk_id', 'quota', 'rate_limit']);
 const RATE_LIMIT_KEYS = new Set(['max', 'window_seconds']);
 const MACRO_ACTION_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
@@ -165,7 +167,10 @@ function macroActionsFrom(raw: unknown, ctx: ParseContext): MacroAction[] {
   });
 }
 
-/** One macro-action : a slug, a label and a description in the connector's words, its entries. */
+/**
+ * One macro-action : a slug, a label and a description in the connector's
+ * words, an optional narrative, its entries.
+ */
 function macroActionFrom(raw: unknown, ctx: ParseContext): MacroAction | undefined {
   if (!isRecord(raw)) return notAMapping(ctx);
   const own = scoped(ctx);
@@ -175,7 +180,25 @@ function macroActionFrom(raw: unknown, ctx: ParseContext): MacroAction | undefin
     own.issues.push(`${own.at}.id '${id}' must be a lowercase slug`);
   const label = requireString(raw, 'label', own);
   const description = requireString(raw, 'description', own);
+  const narrative = narrativeFrom(raw, own);
   const entries = macroEntriesFrom(raw.entries, child(own, 'entries'));
   if (!own.commit() || !id || !label || !description) return undefined;
-  return { id, label, description, entries };
+  return narrative === undefined
+    ? { id, label, description, entries }
+    : { id, label, description, narrative, entries };
+}
+
+/** The optional narrative: absent, or a non-empty string of at most 600 characters (spec §15). */
+function narrativeFrom(raw: Rec, ctx: ParseContext): string | undefined {
+  if (raw.narrative === undefined) return undefined;
+  const narrative = requireString(raw, 'narrative', ctx);
+  if (narrative === undefined) return undefined;
+  const text = narrative.trim();
+  if (text.length > NARRATIVE_MAX_LENGTH) {
+    ctx.issues.push(
+      `${ctx.at}.narrative: ${text.length} characters, at most ${NARRATIVE_MAX_LENGTH} (spec §4.6)`,
+    );
+    return undefined;
+  }
+  return text;
 }

@@ -28,6 +28,7 @@ import { fallbackFlagIssues, wildcardIssues } from '../catalog-rules.ts';
 import { declaredToolNames, pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
+import type { SampleCall, ToolSamples } from '../samples.ts';
 import { sliceRoundTripIssues } from '../slices.ts';
 
 export class PluginAssertionError extends Error {
@@ -82,17 +83,9 @@ function isIdList(x: RiskCatalog | ProviderPlugin | readonly RiskId[]): x is rea
   return Array.isArray(x);
 }
 
-/** One representative call of a tool. */
-export interface SampleCall {
-  readonly args: Readonly<Record<string, unknown>>;
-  /** Mission resources for this sample ; defaults to `options.resources`. */
-  readonly resources?: readonly Resource[];
-  /** Set when the classifier itself is expected to refuse this sample. */
-  readonly expectDenied?: boolean;
-}
-
-/** Sample calls keyed by tool name. Every tool of the plugin needs at least one. */
-export type ToolSamples = Readonly<Record<string, readonly SampleCall[]>>;
+// The sample types are the contract's (`ProviderPlugin.examples`); re-exported so the kit's
+// existing imports keep working.
+export type { SampleCall, ToolSamples } from '../samples.ts';
 
 export interface CoverageOptions {
   /** Resources used by samples that declare none. */
@@ -127,14 +120,19 @@ export interface CoverageReport {
  * through serialise → parse, and carries no glob inside an identifier. A tool that classifies
  * to nothing, or a slice no risk covers, would be refused at runtime for
  * the wrong reason — or worse, slip through a future lenient path. The
- * test author supplies realistic arguments per tool ; the kit checks the
- * plumbing.
+ * plugin declares realistic arguments per tool (`examples`, the default) or
+ * the test passes its own ; the kit checks the plumbing.
  */
 export function assertCatalogCoverage(
   plugin: ProviderPlugin,
-  samples: ToolSamples,
+  samples: ToolSamples | undefined = plugin.examples,
   options: CoverageOptions = {},
 ): CoverageReport {
+  if (samples === undefined) {
+    throw new PluginAssertionError(`catalog coverage of plugin '${plugin.id}'`, [
+      'no samples: declare `examples` on the plugin or pass them',
+    ]);
+  }
   const registry = new PluginRegistry([plugin]);
   const indexed: IndexedRiskCatalog = registry.catalogOf(plugin.id);
   // The MCP tools and, for a plugin with a git remote, its two tools.
