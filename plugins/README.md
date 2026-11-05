@@ -277,6 +277,9 @@ macro_actions:
   - id: read
     label: Read
     description: One line shown under the macro-action in New mission.
+    narrative: >- # optional; required of shipped catalogs
+      Reading the widgets of the mission's workspaces. Nothing is modified, but a
+      widget's contents come from people outside the mission.
     entries:
       - risk_id: acme.read-widgets # unqualified, never the fallback
         quota: 500 # the base budget a trust level multiplies (×1, ×3, ×10)
@@ -305,6 +308,12 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   uses those words ("a mission must hold this permission too", "production
   writes ask first"); a sentence that describes the provider keeps the
   provider's. Ids, keys and structure keep the contract's names.
+- **Narrative.** A macro-action may carry a `narrative`: two to four sentences
+  in the provider's words, at most 600 characters, saying what an agent does
+  under this verb and why its permissions are cut the way they are ("two acts
+  are kept apart because they destroy work"). The plugin's public page shows
+  it; the runtime never reads it. Every catalog shipped with the gateway has
+  one per macro-action (risk model §4.6).
 - **Overlapping patterns add up.** `widget[**].W` also matches
   `widget[w-7].delete.W`, so a deletion touches `widget-write` **and**
   `widget-delete`: a mission needs both, and one of them gated `approval` is
@@ -727,19 +736,23 @@ import {
   policyFromMacroActions,
 } from '@vaubaan/plugin-sdk/testing';
 
-const SAMPLES = {
+// src/examples.ts, declared as `examples` on the plugin: the samples the kit runs
+// and the site classifies to show worked calls. `samplesOn` gives each sample
+// its resources, since the site has no test fixtures.
+export const acmeExamples = samplesOn([staging], {
   [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }],
   [TOOL.updateWidget]: [
     { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
     { args: { workspace: 'ws-other', widget_id: 'w1', name: 'x' }, expectDenied: true },
   ],
   // … at least one realistic sample for every declared tool
-};
+});
 
+// tests/unit/plugin.test.ts
+const SAMPLES = acmePlugin.examples;
 assertPluginWellFormed(acmePlugin); // the definition and the catalog, fallback flag included
 assertNoWildcard(acmePlugin); //       no `*` or `?` in a risk id
-// The mission's resources, for samples that give none.
-const report = assertCatalogCoverage(acmePlugin, SAMPLES, { resources: [staging] });
+const report = assertCatalogCoverage(acmePlugin); // runs `acmePlugin.examples`
 expect(report.fallbackHits).toEqual([]); //  no realistic call lands on the fallback
 expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave unreached
 assertSlicesOnDataModel(acmePlugin, SAMPLES, { resources: [staging] }); // step 2
@@ -768,6 +781,12 @@ const policy = policyFromMacroActions(
 );
 // [{ risk_id: 'acme.read-widgets', gate: 'auto', … }, { risk_id: 'acme[prod].widget-write', … }, …]
 ```
+
+A test about one rule may still pass its own samples
+(`assertCatalogCoverage(plugin, { ...SAMPLES, … })`); the plugin's
+`examples` stay the realistic set. A tool of the provider you leave out on
+purpose is named in `excludedTools` with one sentence (shown on the public
+page; never a declared tool, and your `classify` refuses the name).
 
 `assertCatalogCoverage` fails when a tool has no sample, when a sample is
 refused without `expectDenied` (or the reverse), when a slice matches no
