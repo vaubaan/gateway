@@ -74,6 +74,8 @@ import {
   type InstanceConfig,
   LOG_LEVELS,
   type LimitsConfig,
+  type PluginsConfig,
+  type UpdatesConfig,
   type LogLevel,
   type OAuthBrokerConfig,
   type OAuthConfig,
@@ -451,6 +453,8 @@ function validate(
   const bootstrapToken = readBootstrapToken(r, signInProviders.length > 0);
   const limits = readLimits(r);
   const opsToken = readOpsToken(r);
+  const plugins = readPlugins(r);
+  const updates = readUpdates(r);
 
   const mail = readMail(r);
   const backup = readBackup(r);
@@ -477,7 +481,7 @@ function validate(
   const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
-  if (!publicUrl || !storePath || !encryption || !collectorUrl) return null;
+  if (!publicUrl || !storePath || !encryption || !collectorUrl || !updates) return null;
   // An absent key file the boot tolerates: the block is complete but for the key
   // itself, which the caller takes out again (`SetupOutcome`).
 
@@ -514,6 +518,8 @@ function validate(
     },
     limits,
     ops: { token: opsToken },
+    plugins,
+    updates,
     oauth,
     oauthBrokers,
     log: { level },
@@ -687,6 +693,35 @@ function readLimits(r: Reader): LimitsConfig {
     connections: r.optionalInt(keySpec('limits.connections')),
     activeMissions: r.optionalInt(keySpec('limits.active_missions')),
   };
+}
+
+/** The shape of a plugin id (`isProviderId` of the SDK's vocabulary: a lowercase slug). */
+const PLUGIN_ID_SHAPE = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * `plugins.*` (ADR plugins-bundled-or-pinned-by-the-operator). `plugins.dir` is a path
+ * read at boot (`server/plugins`), checked there; `plugins.enabled` a list of plugin ids.
+ * Absent or empty (a blank variable, as for every key) is every plugin; whether each id
+ * names a known plugin is checked once the plugins are loaded.
+ */
+function readPlugins(r: Reader): PluginsConfig {
+  const dir = r.string('plugins.dir')?.trim() ?? null;
+  const path = 'plugins.enabled';
+  const listed = r.stringList(path);
+  if (listed.length === 0) return { dir, enabled: null };
+  const malformed = listed.filter((id) => !PLUGIN_ID_SHAPE.test(id));
+  if (malformed.length > 0) {
+    r.issues.add(path, `not plugin ids: ${malformed.map(show).join(', ')}`, envNamesFor(path));
+  }
+  return { dir, enabled: [...new Set(listed)] };
+}
+
+/** `updates.*`: the versions check, on by default, and its https feed. */
+function readUpdates(r: Reader): UpdatesConfig | undefined {
+  const check = r.bool(keySpec('updates.check'));
+  const feed = keySpec('updates.feed_url');
+  const feedUrl = r.url(feed.path, { fallback: feed.default, https: feed.https });
+  return feedUrl ? { check, feedUrl } : undefined;
 }
 
 /** `ops.token`: optional; when set, long enough to resist guessing. */

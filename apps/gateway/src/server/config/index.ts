@@ -14,6 +14,7 @@ export { parseDuration } from './duration';
 export { RAILWAY_PROJECT_ENV, isSelfResource } from './self-resources';
 export { buildInfoFromEnv, type BuildInfo } from './build-info';
 export { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
+export { DEFAULT_UPDATES_FEED_URL } from './updates-default';
 export {
   checkInstanceName,
   INSTANCE_NAME_MAX_LENGTH,
@@ -60,8 +61,10 @@ export {
   type LogLevel,
   type OAuthConfig,
   type OpsConfig,
+  type PluginsConfig,
   type SelfResource,
   type SelfResourceSource,
   type SetupConfig,
   type TelemetryConfig,
+  type UpdatesConfig,
 } from './types';

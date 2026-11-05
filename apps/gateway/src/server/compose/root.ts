@@ -58,6 +58,14 @@ import {
 } from '../notifications';
 import { toolTitleOf } from '../providers/tool-titles';
 import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } from '../oauth-as';
+import {
+  bundledInventory,
+  checkAccountsServed,
+  loadPlugins,
+  unservedProviders,
+  type LoadedPlugins,
+  type PluginInventory,
+} from '../plugins';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
@@ -76,7 +84,7 @@ import {
 import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { clearSetup, currentSetup, SetupModeError } from '../setup/state';
 import { loadBootConfig } from './boot-config';
-import { buildShippedRegistry } from './shipped-plugins';
+import { SHIPPED_PLUGINS } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
 
 export interface GatewayRoot {
@@ -87,8 +95,13 @@ export interface GatewayRoot {
   readonly encryptor: Encryptor;
   /** The embedded store with its repositories; satisfies `StoreLiveness` of `ports.ts`. */
   readonly store: Store;
-  /** The single provider list: the plugins the image ships (`shipped-plugins.ts`). */
+  /**
+   * The single provider list: the plugins the image bundles (`shipped-plugins.ts`), a pin
+   * of `plugins.dir` replacing the bundled plugin of its id, filtered by `plugins.enabled`.
+   */
   readonly registry: PluginRegistry;
+  /** Every plugin the instance knows, bundled or pinned, registered or not (Administration › Plugins). */
+  readonly plugins: PluginInventory;
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
@@ -153,6 +166,11 @@ export interface RootDeps {
   readonly clock?: Clock;
   /** Sends the mails of the local accounts' links; built from `mail.*` by the boot (wave C). */
   readonly mailer?: LinkMailer;
+  /**
+   * Replaces the plugin loading (tests: a fixture registry). The inventory then lists the
+   * registry's plugins as bundled and enabled. Default: `loadPlugins` over the bundled
+   * plugins and `plugins.*`.
+   */
   readonly buildRegistry?: (config: InstanceConfig, logger: Logger) => Promise<PluginRegistry>;
   readonly rateLimiter?: RateLimiter;
   readonly cache?: CacheClient;
@@ -215,7 +233,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
 
   // The registry comes first: the store checks every persisted RiskId
   // against the loaded catalogs.
-  const registry = await (deps.buildRegistry ?? buildShippedRegistry)(config, logger);
+  const { registry, inventory } = await buildPlugins(config, logger, deps.buildRegistry);
   logRetiredKeys(config, logger);
   checkSelfResources(config, registry);
   checkBrokeredPlugins(registry);
@@ -232,6 +250,15 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   // a failed build, and a retry must not find a second handle on the same file.
   const opened: Closer[] = [() => store.close()];
   try {
+    // Accounts of a provider no registered plugin serves stop the boot (ADR
+    // plugins-bundled-or-pinned-by-the-operator): a plugin disabled, or dropped by an image.
+    checkAccountsServed(
+      unservedProviders(
+        await store.connections.countByProvider(),
+        new Set(registry.ids),
+        inventory.entries,
+      ),
+    );
     await checkSealedKeys(store, config, logger);
     const modules = await wireModules(
       { config, logger, registry, store, build, masterKeyGenerated, encryptor },
@@ -245,6 +272,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       encryptor,
       store,
       registry,
+      plugins: inventory,
       ...modules,
       build,
       startedAt: new Date(),
@@ -261,6 +289,22 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     await closeAfterFailedBuild(opened, logger);
     throw err;
   }
+}
+
+/** The plugins of this start: `loadPlugins` by default, or an injected registry alone. */
+async function buildPlugins(
+  config: InstanceConfig,
+  logger: Logger,
+  buildRegistry: RootDeps['buildRegistry'],
+): Promise<LoadedPlugins> {
+  if (buildRegistry) {
+    const registry = await buildRegistry(config, logger);
+    return {
+      registry,
+      inventory: { dir: null, entries: bundledInventory(registry.all().map((r) => r.plugin)) },
+    };
+  }
+  return loadPlugins(config, logger, { bundled: SHIPPED_PLUGINS });
 }
 
 /**

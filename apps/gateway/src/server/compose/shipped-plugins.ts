@@ -1,5 +1,8 @@
 /**
- * The plugins this image ships — the default `RootDeps.buildRegistry`.
+ * The plugins this image bundles. The root composes them with the plugins the
+ * operator pins in `plugins.dir` and filters them by `plugins.enabled`
+ * (`server/plugins`, ADR plugins-bundled-or-pinned-by-the-operator); a pin of
+ * the same id replaces the bundled plugin.
  *
  * This import list is where a provider enters the gateway: the registry built
  * from it is the single provider list (ADR plugin-contract-and-credential-spec
@@ -10,7 +13,8 @@
  * `transpilePackages` from).
  *
  * `createRegistry` validates every plugin and rejects duplicate ids, so a
- * broken plugin fails the boot instead of the first call.
+ * broken plugin fails the boot instead of the first call. `buildShippedRegistry`
+ * is the bundled set alone, for the tools that need no pin (`reseal`).
  */
 import asanaPlugin from '@vaubaan/plugin-asana';
 import axonautPlugin from '@vaubaan/plugin-axonaut';

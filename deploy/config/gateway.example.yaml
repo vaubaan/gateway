@@ -287,6 +287,25 @@
 # ops:
 #   token: ${file:/run/secrets/ops_token}
 
+# Plugins (ADR plugins-bundled-or-pinned-by-the-operator). `dir` is where you pin
+# plugins, one directory each (the image sets /plugins); a pinned plugin replaces
+# the bundled one of the same id, logged at start. `enabled` lists the plugins the
+# instance registers; absent, every bundled and pinned plugin. A pin built for
+# another SDK range, two pins of one id, an unknown id here, or accounts of a
+# plugin no longer registered stop the start (deploy/README.md "Pin a plugin").
+# env: VAUBAAN_PLUGINS_DIR, VAUBAAN_PLUGINS_ENABLED (comma-separated)
+# plugins:
+#   dir: /plugins
+#   enabled: [github, notion]
+
+# The versions check: at start and daily, a GET of the published versions feed that
+# carries nothing about this instance; Administration › Plugins shows what is behind
+# and what an advisory names. Nothing is downloaded.
+# env: VAUBAAN_UPDATES_CHECK, VAUBAAN_UPDATES_FEED_URL
+# updates:
+#   check: true
+#   feed_url: https://vaubaan.com/versions.json
+
 # How long a request to the creator stays answerable, a claim (spec §3.4) and
 # an approval request (spec §3.5) alike. A duration is a whole number > 0 and
 # one unit: 30s, 10m, 24h, 7d.

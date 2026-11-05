@@ -286,6 +286,27 @@ export interface LimitsConfig {
   readonly activeMissions: number | null;
 }
 
+/**
+ * Where plugins come from besides the image (`plugins.*`, spec §4.3; ADR
+ * plugins-bundled-or-pinned-by-the-operator).
+ */
+export interface PluginsConfig {
+  /**
+   * The directory the operator pins plugins in, one directory per plugin; `null` when
+   * the configuration sets none (the image sets `VAUBAAN_PLUGINS_DIR=/plugins`).
+   */
+  readonly dir: string | null;
+  /** The plugin ids the instance registers, in the order given; `null`: every plugin it knows. */
+  readonly enabled: readonly string[] | null;
+}
+
+/** The published versions feed (`updates.*`, spec §4.3). */
+export interface UpdatesConfig {
+  /** Whether the instance reads the feed at start and daily. */
+  readonly check: boolean;
+  readonly feedUrl: URL;
+}
+
 /** The operator's counters endpoint (`ops.*`, spec §4.3 bis). */
 export interface OpsConfig {
   /** The bearer of `GET /ops/stats`; `null`: the endpoint does not exist (404). */
@@ -361,6 +382,10 @@ export interface InstanceConfig {
   readonly limits: LimitsConfig;
   /** The counters endpoint for the operator's monitoring. */
   readonly ops: OpsConfig;
+  /** The plugins directory and the plugins the instance registers. */
+  readonly plugins: PluginsConfig;
+  /** The published versions feed the instance compares itself with. */
+  readonly updates: UpdatesConfig;
   /** Authorization server of the management door: token lifetimes, who may register. */
   readonly oauth: OAuthConfig;
   /**

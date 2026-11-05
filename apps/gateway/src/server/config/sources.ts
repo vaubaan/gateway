@@ -29,6 +29,7 @@ import {
 } from './secret-refs';
 import { INSTANCE_NAME_MAX_LENGTH } from './instance-name';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
+import { DEFAULT_UPDATES_FEED_URL } from './updates-default';
 import { CLIENT_REGISTRATION_POLICIES, LOG_LEVELS, MAIL_TLS_MODES } from './types';
 
 export type RawTree = Record<string, unknown>;
@@ -377,6 +378,22 @@ const KEY_TABLE = [
     env: 'VAUBAAN_LIMITS_ACTIVE_MISSIONS',
     kind: 'int',
     min: 1,
+  },
+  // Plugins pinned by the operator and the plugins registered (ADR
+  // plugins-bundled-or-pinned-by-the-operator). No default directory: the image sets
+  // `VAUBAAN_PLUGINS_DIR=/plugins`, elsewhere nothing is pinned unless configured.
+  { path: 'plugins.dir', env: 'VAUBAAN_PLUGINS_DIR', kind: 'string' },
+  { path: 'plugins.enabled', env: 'VAUBAAN_PLUGINS_ENABLED', kind: 'list' },
+  // The published versions feed, read at start and daily; a GET carrying nothing
+  // about the instance (`server/updates`).
+  { path: 'updates.check', env: 'VAUBAAN_UPDATES_CHECK', kind: 'bool', default: true },
+  {
+    path: 'updates.feed_url',
+    env: 'VAUBAAN_UPDATES_FEED_URL',
+    kind: 'string',
+    format: 'url',
+    default: DEFAULT_UPDATES_FEED_URL,
+    https: true,
   },
   // The bearer of `GET /ops/stats` (spec §4.3 bis): absent, the endpoint does not exist.
   { path: 'ops.token', env: 'VAUBAAN_OPS_TOKEN', kind: 'secret', minLength: 32 },

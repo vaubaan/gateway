@@ -1,7 +1,7 @@
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadInstanceConfig } from '../config';
+import { ConfigError, loadInstanceConfig } from '../config';
 import { validEnv } from '../../../tests/support/config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
@@ -208,6 +208,50 @@ describe('buildRoot when a step fails after the store is opened', () => {
     await root.close();
     expect(closes).toBe(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('buildRoot and the plugins', () => {
+  it('exposes the inventory: every shipped plugin bundled and enabled by default', async () => {
+    const root = await buildRoot(quiet);
+    expect(root.plugins.dir).toBeNull();
+    expect(root.plugins.entries.map((e) => e.id)).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
+    expect(root.plugins.entries.every((e) => e.origin === 'bundled' && e.enabled)).toBe(true);
+    await root.close();
+  });
+
+  it('registers only plugins.enabled and keeps the others in the inventory', async () => {
+    const root = await buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({ env: validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github,notion' }) }),
+    });
+    expect(root.registry.ids).toEqual(['github', 'notion']);
+    expect(root.plugins.entries.filter((e) => !e.enabled).length).toBe(SHIPPED_PLUGINS.length - 2);
+    await root.close();
+  });
+
+  it('stops the boot when the store holds accounts of a provider no registered plugin serves', async () => {
+    let closed = false;
+    const build = buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({ env: validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github' }) }),
+      openStore: async ({ encryptor, catalog }) => {
+        const store = openMemoryStore({ encryptor, catalog });
+        return {
+          ...store,
+          connections: { ...store.connections, countByProvider: async () => ({ notion: 2 }) },
+          close: async () => {
+            closed = true;
+            await store.close();
+          },
+        };
+      },
+    });
+    await expect(build).rejects.toBeInstanceOf(ConfigError);
+    await expect(build).rejects.toThrow(`the store holds 2 accounts of 'notion'`);
+    expect(closed).toBe(true);
   });
 });
 

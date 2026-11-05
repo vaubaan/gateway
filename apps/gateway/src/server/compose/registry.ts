@@ -3,8 +3,8 @@
  *
  * The registry itself is `@vaubaan/plugin-sdk`'s `PluginRegistry` (ADR
  * plugin-contract-and-credential-spec D6): the root builds it once from the
- * plugins the image ships (`shipped-plugins.ts`, the default
- * `RootDeps.buildRegistry`) and derives everything else from it.
+ * plugins the image bundles (`shipped-plugins.ts`) and the ones the operator
+ * pins (`server/plugins`), and derives everything else from it.
  *
  * Two derivations live here because they bridge the registry with another
  * port of the root:
