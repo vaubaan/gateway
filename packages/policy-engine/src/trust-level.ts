@@ -11,8 +11,18 @@
  * a tier or a trust level.
  */
 
-import type { Budget, Gate, RateLimit, RiskId, RiskVector } from '@vaubaan/shared';
+import type {
+  Budget,
+  Gate,
+  MacroAction,
+  RateLimit,
+  RiskCatalog,
+  RiskId,
+  RiskVector,
+} from '@vaubaan/shared';
 import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
+
+import { isFallbackEntry } from './risk-evaluator.ts';
 
 /** The four tiers, from the mildest. */
 export type Tier = 1 | 2 | 3 | 4;
@@ -35,6 +45,21 @@ export function tierOf(vector: RiskVector): Tier {
     return 2;
   }
   return 1;
+}
+
+/**
+ * The facts that set `tierOf`, in `RiskVector` order: what a page tints as
+ * "the fact that moves the gate". Empty for tier 1 (no fact raises it);
+ * `reversibility` alone for tiers 3 and 4; for tier 2, each of data, blast
+ * and cost that makes it sensitive.
+ */
+export function tierFactsOf(vector: RiskVector): (keyof RiskVector)[] {
+  if (vector.reversibility !== 'reversible') return ['reversibility'];
+  const facts: (keyof RiskVector)[] = [];
+  if (vector.blast === 'bulk' || vector.blast === 'account') facts.push('blast');
+  if (vector.data === 'pii' || vector.data === 'secret') facts.push('data');
+  if (vector.cost === 'unbounded') facts.push('cost');
+  return facts;
 }
 
 export const TRUST_LEVELS = ['careful', 'trusting', 'autonomous'] as const;
@@ -70,6 +95,27 @@ export const ANYTHING_ELSE_BASE_BUDGET: Budget = {
   quota: 50,
   rate_limit: { max: 10, window_seconds: SECONDS_PER_MINUTE },
 };
+
+/**
+ * The catalog's macro-actions, then "Anything else" holding the catalog's
+ * fallback entries when it has any, each at `ANYTHING_ELSE_BASE_BUDGET`: the
+ * macro-actions a mission ticks on a connection, as the creation form, the
+ * management door and the public site list them.
+ */
+export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {
+  const fallbacks = catalog.risks.filter((entry) => isFallbackEntry(entry, catalog.provider));
+  const own = [...(catalog.macro_actions ?? [])];
+  if (fallbacks.length === 0) return own;
+  return [
+    ...own,
+    {
+      id: ANYTHING_ELSE_MACRO_ACTION,
+      label: 'Anything else',
+      description: 'Any write no other permission of this service names, which nobody reviewed.',
+      entries: fallbacks.map((entry) => ({ risk_id: entry.id, ...ANYTHING_ELSE_BASE_BUDGET })),
+    },
+  ];
+}
 
 /**
  * The base budget at a trust level : quota and rate multiplied, the rate then held

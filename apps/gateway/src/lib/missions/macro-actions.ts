@@ -9,13 +9,10 @@
  * the trust levels only to redraw the form.
  */
 import {
-  ANYTHING_ELSE_BASE_BUDGET,
-  ANYTHING_ELSE_MACRO_ACTION,
   TRUST_LEVEL_BUDGET_FACTOR,
   TRUST_LEVEL_GATES,
   DEFAULT_TRUST_LEVEL,
   expandAtTrustLevel,
-  isFallbackEntry,
   isTrustLevel,
   tierOf,
   TRUST_LEVELS,
@@ -24,7 +21,7 @@ import {
   type Tier,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
-import type { Gate, MacroAction, RiskCatalog, RiskId } from '@vaubaan/shared';
+import type { Gate, MacroAction, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource, LeftOutEntry } from './model';
@@ -34,23 +31,10 @@ export type MacroActionTrustLevels = Readonly<Record<string, TrustLevel>>;
 
 /**
  * The catalog's macro-actions, then "Anything else" with the catalog's
- * fallback entries when it has any. What `IssuanceConnection.macro_actions`
- * carries.
+ * fallback entries: the policy engine's `macroActionsOf`, which the public
+ * site lists too. What `IssuanceConnection.macro_actions` carries.
  */
-export function macroActionsOf(catalog: RiskCatalog): MacroAction[] {
-  const fallbacks = catalog.risks.filter((entry) => isFallbackEntry(entry, catalog.provider));
-  const own = [...(catalog.macro_actions ?? [])];
-  if (fallbacks.length === 0) return own;
-  return [
-    ...own,
-    {
-      id: ANYTHING_ELSE_MACRO_ACTION,
-      label: 'Anything else',
-      description: 'Any write no other permission of this service names, which nobody reviewed.',
-      entries: fallbacks.map((entry) => ({ risk_id: entry.id, ...ANYTHING_ELSE_BASE_BUDGET })),
-    },
-  ];
-}
+export { macroActionsOf } from '@vaubaan/policy-engine';
 
 /** One macro-action at one trust level, on this connection with these resources. */
 export interface MacroActionExpansion {
