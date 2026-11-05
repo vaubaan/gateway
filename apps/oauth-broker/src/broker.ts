@@ -109,7 +109,16 @@ export class Broker {
     return found;
   }
 
-  async handleApi(req: IncomingMessage, res: ServerResponse, route: string): Promise<void> {
+  /**
+   * Answers one call of the gateway API. Resolves to the broker's fixed
+   * reason code of an answer that needs one in the access log (a success
+   * that did less than its name says), or `undefined`.
+   */
+  async handleApi(
+    req: IncomingMessage,
+    res: ServerResponse,
+    route: string,
+  ): Promise<string | undefined> {
     // `/attest` carries no key and no body: the gateway sends nothing before
     // it has verified the connection, and the answer is the public token in
     // memory. Rate-limited, generously.
@@ -121,15 +130,18 @@ export class Broker {
         res.setHeader('retry-after', '1');
         throw new HttpError(429, 'rate_limited', 'too many attestation requests');
       }
-      return sendJson(res, 200, this.#attest());
+      sendJson(res, 200, this.#attest());
+      return undefined;
     }
     const instance = this.authenticate(req);
     const body = await readJsonObject(req);
     switch (route) {
       case '/flows':
-        return sendJson(res, 201, this.#startFlow(instance, body));
+        sendJson(res, 201, this.#startFlow(instance, body));
+        return undefined;
       case '/grants/redeem':
-        return sendJson(res, 200, await this.#redeem(instance, body));
+        sendJson(res, 200, await this.#redeem(instance, body));
+        return undefined;
       case '/token': {
         const wait = this.#deps.refreshLimit.take(instance.id);
         if (wait > 0) {
@@ -141,11 +153,15 @@ export class Broker {
             'refresh_limit',
           );
         }
-        return sendJson(res, 200, await this.#refresh(instance, body));
+        sendJson(res, 200, await this.#refresh(instance, body));
+        return undefined;
       }
-      case '/revoke':
-        await this.#revoke(instance, body);
-        return sendEmpty(res, 204);
+      case '/revoke': {
+        const relayed = await this.#revoke(instance, body);
+        sendEmpty(res, 204);
+        // Microsoft has no revocation endpoint: nothing was sent, the gateway's erasure is all.
+        return relayed ? undefined : 'no_revoke_endpoint';
+      }
       default:
         throw new HttpError(404, 'not_found', 'no such call');
     }
@@ -305,7 +321,8 @@ export class Broker {
       : { access_token: accessToken, expires_at: expiresAt, scopes };
   }
 
-  async #revoke(instance: Enrollment, body: Record<string, unknown>): Promise<void> {
+  /** Whether the revocation was relayed to the provider (it has an endpoint). */
+  async #revoke(instance: Enrollment, body: Record<string, unknown>): Promise<boolean> {
     const served = this.#servedFor(body);
     const result = await this.#deps.oauth.revoke(
       served.definition,
@@ -313,6 +330,7 @@ export class Broker {
       this.#refreshToken(instance, served, body),
     );
     if (!result.ok) throw unavailable();
+    return result.value.relayed;
   }
 
   #attest(): { platform: string; evidence: string } {

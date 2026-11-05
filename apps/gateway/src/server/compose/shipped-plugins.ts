@@ -23,6 +23,7 @@ import gmailPlugin from '@vaubaan/plugin-gmail';
 import googleCalendarPlugin from '@vaubaan/plugin-google-calendar';
 import miroPlugin from '@vaubaan/plugin-miro';
 import notionPlugin from '@vaubaan/plugin-notion';
+import outlookPlugin from '@vaubaan/plugin-outlook';
 import railwayPlugin from '@vaubaan/plugin-railway';
 import resendPlugin from '@vaubaan/plugin-resend';
 import { createRegistry, type PluginRegistry, type ProviderPlugin } from '@vaubaan/plugin-sdk';
@@ -51,6 +52,7 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   googleCalendarPlugin,
   asanaPlugin,
   axonautPlugin,
+  outlookPlugin,
 ];
 
 export async function buildShippedRegistry(): Promise<PluginRegistry> {

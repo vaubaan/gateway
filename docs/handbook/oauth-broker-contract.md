@@ -68,25 +68,25 @@ an `attestation` mode ([configuration](configuration.md)).
 
 ## The calls
 
-| Call                         | Request                                                                      | Answer                                                                        |
-| ---------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `POST /attest`               | no body, no key                                                              | `200 { platform, evidence }` (`gcp-confidential-space`: the launcher's JWT)   |
-| `POST /flows`                | `provider`, `scopes`, `return_url`, `state`, `challenge`, `challenge_method` | `201 { authorize_url }`                                                       |
-| browser back to `return_url` | —                                                                            | `?grant=<one-time>&state=…` or `?error=<protocol code>&state=…`, nothing else |
-| `POST /grants/redeem`        | `grant`, `verifier`                                                          | `200 { refresh_token, access_token, expires_at, account, scopes }`            |
-| `POST /token`                | `provider`, `refresh_token`                                                  | `200 { access_token, expires_at, scopes? }`; the broker writes nothing        |
-| `POST /revoke`               | `provider`, `refresh_token`                                                  | `204`, also when already revoked; relayed to the provider                     |
+| Call                         | Request                                                                      | Answer                                                                                                          |
+| ---------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `POST /attest`               | no body, no key                                                              | `200 { platform, evidence }` (`gcp-confidential-space`: the launcher's JWT)                                     |
+| `POST /flows`                | `provider`, `scopes`, `return_url`, `state`, `challenge`, `challenge_method` | `201 { authorize_url }`                                                                                         |
+| browser back to `return_url` | —                                                                            | `?grant=<one-time>&state=…` or `?error=<protocol code>&state=…`, nothing else                                   |
+| `POST /grants/redeem`        | `grant`, `verifier`                                                          | `200 { refresh_token, access_token, expires_at, account, scopes }`                                              |
+| `POST /token`                | `provider`, `refresh_token`                                                  | `200 { access_token, expires_at, scopes? }`; the broker writes nothing                                          |
+| `POST /revoke`               | `provider`, `refresh_token`                                                  | `204`, also when already revoked; relayed to the provider when it has a revocation endpoint; Microsoft has none |
 
-| Field           | Rule                                                                                                                         |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `scopes`        | in full; the broker asks for these and no others; the answer gives what was actually granted                                 |
-| `return_url`    | `<public_url>/connections/callback/<plugin id>`, on record for the key's instance; any other refused                         |
-| `state`         | 20-128 chars `[A-Za-z0-9_-]`, returned unchanged; the gateway's, not the broker's own state at the provider                  |
-| `challenge`     | PKCE S256 of the gateway's verifier, unpadded base64url; `challenge_method` always `S256`                                    |
-| `authorize_url` | https, the broker's client and **its own** PKCE challenge (verifier kept in the enclave); Google: `access_type=offline`      |
-| `grant`         | opaque, URL-safe, ≥ 128 bits, a few minutes; **the first redeem attempt spends it**; the code is exchanged only after checks |
-| `expires_at`    | ISO-8601, or `null`: the gateway then refreshes only when the provider refuses                                               |
-| `account`       | the provider account (an email), or `null`; shown, nothing decided on it                                                     |
+| Field           | Rule                                                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scopes`        | in full; the broker asks for these and no others; the answer gives what was actually granted                                                              |
+| `return_url`    | `<public_url>/connections/callback/<plugin id>`, on record for the key's instance; any other refused                                                      |
+| `state`         | 20-128 chars `[A-Za-z0-9_-]`, returned unchanged; the gateway's, not the broker's own state at the provider                                               |
+| `challenge`     | PKCE S256 of the gateway's verifier, unpadded base64url; `challenge_method` always `S256`                                                                 |
+| `authorize_url` | https, the broker's client and **its own** PKCE challenge (verifier kept in the enclave); Google: `access_type=offline`; Microsoft: `response_mode=query` |
+| `grant`         | opaque, URL-safe, ≥ 128 bits, a few minutes; **the first redeem attempt spends it**; the code is exchanged only after checks                              |
+| `expires_at`    | ISO-8601, or `null`: the gateway then refreshes only when the provider refuses                                                                            |
+| `account`       | the provider account (an email), or `null`; shown, nothing decided on it                                                                                  |
 
 The gateway refreshes when its token expires within a minute, and on a provider 401 or 403. It
 checks `state` itself (session-bound, single use, per plugin, 10 minutes).
@@ -114,4 +114,15 @@ JSON `{ "error": "<[a-z_]{1,40}>", "message"? }`; the message is never shown or 
 - For `google`: a Google Cloud project with the Calendar API enabled; a **Web application** OAuth client whose one redirect
   URI is the broker's callback; an external consent screen with the plugin's scopes and Google's
   app verification for sensitive scopes (no CASA: restricted scopes only).
+- For `microsoft`: an Entra app registration, supported account types "Accounts in any
+  organizational directory and personal Microsoft accounts", platform **Web**, one redirect URI
+  `https://<public host>/oauth/callback/microsoft`; a client secret, pasted into
+  `OAUTH_BROKER_SECRET_MICROSOFT_CLIENT_SECRET` (unattested) or stored in Secret Manager as
+  `microsoft-client-secret` (enclave); the delegated Microsoft Graph permissions `User.Read`,
+  `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite` (with `openid`, `email`, `profile`,
+  `offline_access`); publisher verification, so people of other tenants may consent. A tenant whose
+  consent policy blocks user consent needs one administrator's consent for the app. Microsoft has
+  no endpoint that revokes one refresh token: `/revoke` answers 204 and sends nothing (logged
+  `reason: no_revoke_endpoint`); the gateway erases its copy and the person removes the app from
+  their Microsoft account.
 - An enclave run and a measurement published in a gateway release ([oauth-broker](oauth-broker.md)).
