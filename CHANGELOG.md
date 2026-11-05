@@ -11,7 +11,11 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Plugin SDK
 
-- **A plugin declares what its public page shows** (ADR
+- **0.7.0 — narrative, excludedTools, examples; a minor because the loader and
+  `definePlugin` now refuse what 0.6 accepted** (a malformed `narrative`, an
+  `excludedTools` name that is a declared tool), and before `1.0.0` such a rule
+  is a minor. A pin built against 0.6 (`^0.6.0`) is turned away until it is
+  rebuilt. A plugin declares what its public page shows (ADR
   plugin-contract-and-credential-spec, amendment 2026-11-05).
   `ProviderPlugin.excludedTools?: Record<toolName, reason>` names the tools of
   the provider the plugin deliberately leaves out, one sentence each
