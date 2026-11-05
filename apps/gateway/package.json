@@ -13,6 +13,7 @@
     "@modelcontextprotocol/server": "2.4.0",
     "@vaubaan/gateway-core": "*",
     "@vaubaan/oauth-providers": "*",
+    "@vaubaan/plugin-asana": "*",
     "@vaubaan/plugin-axonaut": "*",
     "@vaubaan/plugin-caldav": "*",
     "@vaubaan/plugin-cloudflare-dns": "*",
