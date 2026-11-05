@@ -99,14 +99,14 @@ const gidAfter = (url: string, segment: string): string =>
 
 /** `GET /tasks/{gid}` (and nothing below it). */
 export const isTaskRead = (call: { method: string; url: string }) =>
-  call.method === 'GET' && /\/tasks\/[^/]+$/.test(new URL(call.url).pathname);
+  call.method === 'GET' && /\/tasks\/\d+$/.test(new URL(call.url).pathname);
 
 /** The routes of the world : tasks and sections by gid, lists empty, writes echoed. */
 export function world(): MockRoute[] {
   return [
     {
       method: 'GET',
-      url: (url: string) => /\/tasks\/[^/]+$/.test(new URL(url).pathname),
+      url: (url: string) => /\/tasks\/\d+$/.test(new URL(url).pathname),
       respond: (call: RecordedCall) => {
         const gid = gidAfter(call.url, 'tasks');
         return { data: TASKS[gid] ?? { gid, projects: [ref(PROJECT)], parent: null } };
@@ -114,7 +114,7 @@ export function world(): MockRoute[] {
     },
     {
       method: 'GET',
-      url: (url: string) => /\/sections\/[^/]+$/.test(new URL(url).pathname),
+      url: (url: string) => /\/sections\/\d+$/.test(new URL(url).pathname),
       respond: (call: RecordedCall) => {
         const gid = gidAfter(call.url, 'sections');
         return { data: { gid, project: ref(gid === OTHER_SECTION ? OTHER_PROJECT : PROJECT) } };
@@ -127,7 +127,7 @@ export function world(): MockRoute[] {
     },
     {
       method: 'GET',
-      url: (url: string) => /\/projects\/[^/]+$/.test(new URL(url).pathname),
+      url: (url: string) => /\/projects\/\d+$/.test(new URL(url).pathname),
       body: { data: { gid: PROJECT, name: 'Roadmap' } },
     },
     {
