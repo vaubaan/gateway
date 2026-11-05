@@ -12,6 +12,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyFly } from './classify.ts';
 import { flyDataModel } from './data-model.ts';
 import { createdFlyResources } from './created.ts';
+import { flyExamples } from './examples.ts';
 import { discoverFlyResources, executeFly } from './execute.ts';
 import { FLY_ICON, FLY_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
@@ -39,6 +40,7 @@ export const flyPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/fly.md',
   tools: flyTools,
   toolTitles: flyToolTitles,
+  examples: flyExamples,
   secretArguments: { [TOOL.setSecrets]: ['values'] },
   // An app is what a Fly connection lists : a created app is discovered at once
   // (ADR created-resources-join-the-mission).
@@ -58,6 +60,7 @@ export const flyPlugin = definePlugin({
 export default flyPlugin;
 
 export { classifyFly, flyDataModel, flyTools };
+export { EXAMPLE_CANARY_APP, EXAMPLE_PROD_APP, flyExamples } from './examples.ts';
 export { readFlyCall, resolveApp } from './call.ts';
 export { createdFlyResources } from './created.ts';
 export {

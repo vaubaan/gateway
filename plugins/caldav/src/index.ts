@@ -22,6 +22,7 @@ import {
 
 import { classifyCaldav } from './classify.ts';
 import { caldavDataModel } from './data-model.ts';
+import { caldavExamples } from './examples.ts';
 import { createCaldavRuntime, type CaldavRuntimeOptions } from './execute.ts';
 import { CALDAV_ICON, CALDAV_ICON_COLOR } from './icon.ts';
 import { CALDAV_PLUGIN_ID, CALDAV_PLUGIN_VERSION } from './identity.ts';
@@ -50,6 +51,7 @@ export function createCaldavPlugin(options: CaldavRuntimeOptions = {}): Provider
     docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/caldav.md',
     tools: caldavTools,
     toolTitles: caldavToolTitles,
+    examples: caldavExamples,
     dataModel: caldavDataModel,
     catalog: caldavCatalog.catalog,
     credential: runtime.credential,
@@ -83,6 +85,7 @@ export {
   normalizeServerUrl,
 } from './credential.ts';
 export { caldavDataModel } from './data-model.ts';
+export { caldavExamples, EXAMPLE_HOME_CALENDAR, EXAMPLE_WORK_CALENDAR } from './examples.ts';
 export { isAllowedTarget, parseMultistatus } from './dav.ts';
 export type { DavAccount } from './dav.ts';
 export { buildEvent, eventView } from './event.ts';

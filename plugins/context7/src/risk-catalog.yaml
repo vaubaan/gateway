@@ -25,9 +25,11 @@
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: context7
-catalog_version: 3
-catalog_date: 2026-10-31
+catalog_version: 4
+catalog_date: 2026-11-05
 
 risks:
   - id: context7.query-docs
@@ -69,6 +71,11 @@ macro_actions:
   - id: ask
     label: 'Ask the docs'
     description: 'Ask Context7 about library documentation.'
+    narrative: >-
+      Finding a library and reading its documentation while the agent codes. Nothing is written
+      anywhere, but the question leaves the company: Context7 stores the queries it receives,
+      and a question may quote code or internal context. What comes back is third-party text,
+      and every call spends the key's monthly Context7 quota.
     entries:
       - risk_id: context7.query-docs
         quota: 300

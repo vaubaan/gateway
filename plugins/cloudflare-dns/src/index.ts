@@ -17,6 +17,7 @@ import { classifyCloudflareDns } from './classify.ts';
 import { cloudflareDnsCredential } from './credential.ts';
 import { cloudflareDnsDataModel } from './data-model.ts';
 import { discoverCloudflareDnsResources, executeCloudflareDns } from './execute.ts';
+import { cloudflareDnsExamples } from './examples.ts';
 import { CLOUDFLARE_DNS_ICON, CLOUDFLARE_DNS_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { cloudflareDnsToolTitles } from './tool-titles.ts';
@@ -43,6 +44,7 @@ export const cloudflareDnsPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/cloudflare-dns.md',
   tools: cloudflareDnsTools,
   toolTitles: cloudflareDnsToolTitles,
+  examples: cloudflareDnsExamples,
   dataModel: cloudflareDnsDataModel,
   catalog: cloudflareDnsCatalog.catalog,
   credential: cloudflareDnsCredential,
@@ -54,6 +56,7 @@ export const cloudflareDnsPlugin = definePlugin({
 export default cloudflareDnsPlugin;
 
 export { classifyCloudflareDns, cloudflareDnsDataModel, cloudflareDnsTools };
+export { cloudflareDnsExamples, EXAMPLE_ZONE } from './examples.ts';
 export {
   CLOUDFLARE_TOKENS_PAGE,
   CLOUDFLARE_TOKEN_PERMISSIONS,

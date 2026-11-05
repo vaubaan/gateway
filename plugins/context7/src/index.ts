@@ -20,6 +20,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyContext7 } from './classify.ts';
 import { CONTEXT7_MANUAL_REVOCATION, context7CredentialSpec } from './credential.ts';
 import { context7DataModel } from './data-model.ts';
+import { context7Examples } from './examples.ts';
 import { discoverContext7Resources, executeContext7 } from './execute.ts';
 import { CONTEXT7_ICON, CONTEXT7_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
@@ -45,6 +46,7 @@ export const context7Plugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/context7.md',
   tools: context7Tools,
   toolTitles: context7ToolTitles,
+  examples: context7Examples,
   dataModel: context7DataModel,
   catalog: context7Catalog.catalog,
   credential: context7CredentialSpec,
@@ -59,6 +61,7 @@ export const context7Plugin = definePlugin({
 export default context7Plugin;
 
 export { classifyContext7, context7DataModel, context7Tools };
+export { context7Examples, EXAMPLE_INDEX } from './examples.ts';
 export {
   MALFORMED_LIBRARY_ID,
   MAX_TEXT_LENGTH,

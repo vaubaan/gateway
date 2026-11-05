@@ -34,9 +34,11 @@
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: caldav
-catalog_version: 3
-catalog_date: 2026-10-31
+catalog_version: 4
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -215,6 +217,11 @@ macro_actions:
   - id: read
     label: 'Read the agenda'
     description: 'Calendars and events, over a wide range too.'
+    narrative: >-
+      Reading the mission's calendars and their events, a week or a month at a time. Nothing
+      changes, but a description may come from a stranger's invitation and lands in the agent's
+      context. A range longer than 31 days is a permission of its own: up to a year of agenda
+      shows habits, recurring meetings and who is met how often.
     entries:
       - risk_id: caldav.read-calendars
         quota: 500
@@ -228,6 +235,11 @@ macro_actions:
   - id: schedule
     label: 'Schedule'
     description: 'Create, change and delete events.'
+    narrative: >-
+      Putting events in the calendar, moving them and removing them, for the account alone. A
+      change is written only if nobody touched the event in between, and invitations organized
+      by somebody else are never changed. Deleting is a permission of its own because CalDAV
+      keeps no bin: a series removed is gone.
     entries:
       - risk_id: caldav.event-create
         quota: 100
@@ -241,6 +253,12 @@ macro_actions:
   - id: invite
     label: 'Invite'
     description: 'Invite, update or cancel attendees.'
+    narrative: >-
+      Every write that concerns other people, cut by who they are: colleagues on the company
+      domains, pre-approved contacts, or anybody else. The server may mail them an invitation,
+      an update or a cancellation, and a message sent cannot be taken back. Outsiders are a
+      permission of their own because the invitation carries the title, place and description of
+      the event to any address.
     entries:
       - risk_id: caldav.attendees-internal
         quota: 200
