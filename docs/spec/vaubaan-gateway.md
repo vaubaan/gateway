@@ -635,7 +635,8 @@ stands in without one.
   trust level; a permission
   unfolds its reason, the six dimensions behind its severity and its tools), **Tools** ("depends on
   the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
-  permission shown elsewhere links here.
+  permission shown elsewhere links here. Each service names its plugin version and, when the
+  plugin is pinned by the operator rather than bundled with the image, says so.
 - **Activity** — the audit, newest first, filtered by period, mission, account, tool, decision,
   person, key holder, agent label and kind; each line has a detail at its own address. Who reads
   what: §8.
@@ -671,6 +672,14 @@ stands in without one.
     runs a sign-in in another window and connects nobody. Changing the source of a service leaves
     the accounts connected through the former one working and is confirmed with that consequence;
     a changed public URL marks an own client as to re-register at the service;
+  - **plugins**: every plugin the instance knows, with its version, where it comes from (bundled
+    with the image, or pinned by the operator in the plugins directory, replacing the bundled
+    version when both exist), whether the configuration enables it, how many accounts it serves,
+    and its community validation. The page says what the published versions feed reports: a
+    gateway or plugin version behind the released one, a version an advisory names with the
+    version that fixes it, and a pin older than what the image bundles. Nothing is installed,
+    updated or removed from here: a plugin changes when the operator changes the image or the
+    directory ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md));
   - teams (local ones); registered apps (approve, disable); telemetry; the instance's name. Other
     §4.3 keys are shown, not edited; the name and the telemetry opt-in are set here unless the
     configuration sets them (then read-only). Every interface change is audited.
@@ -745,6 +754,15 @@ committed:
 - optionally, a **scheduled backup** to object storage (frequency, how many to keep); without it the
   instance backs nothing up (§6);
 - the **telemetry level** (§9) and the collector URL;
+- optionally, the **plugins directory** (`plugins.dir`, the image's `/plugins`) where the
+  operator pins plugins, one directory each, and **`plugins.enabled`**, the ids the instance
+  registers (unset: every bundled and pinned plugin). A pinned plugin replaces a bundled one of the
+  same id. A pinned plugin built for another SDK range, a duplicate, or a provider the store holds
+  accounts for and no registered plugin serves, stops the start with a message naming it
+  ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md));
+- the **versions check** (`updates.check`, on by default; `updates.feed_url`): at start and daily,
+  the instance reads the published versions feed — a request carrying nothing about the instance —
+  and compares locally; the result is shown in Administration › Plugins, nothing is downloaded;
 - optionally, the instance's **name**: 1 to 64 characters, no control characters, a label never
   markup.
 - optionally, **ceilings** on users, connected accounts and active missions, and the **counters
@@ -825,7 +843,13 @@ values.
   and guide; a key pair the instance generates; or the service's sign-in), how to withdraw the grant
   on revocation (or where a person removes it), how to discover resources and which tools create
   one, and its macro-actions. Contribution: [CONTRIBUTING](../../CONTRIBUTING.md),
-  [plugins/README](../../plugins/README.md).
+  [plugins/README](../../plugins/README.md). A plugin reaches an instance in one of two ways:
+  **bundled** with the image, versioned and released with the gateway, or **pinned** by the
+  operator in the plugins directory, as a self-contained bundle the release workflow publishes as
+  an image per plugin and version. The pin wins over the bundled plugin of the same id. A plugin
+  runs in the process with the credential: whatever its way in, it is trusted code the operator
+  chose, never code fetched at run time
+  ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)).
 - **Sign-in providers** — authenticate humans with subject, verified email and, for a directory,
   groups. Trusted for their own issuer's identities only, never for authorization.
 - **Push services and messaging services** — reached outbound, without an account: a push service
@@ -998,6 +1022,22 @@ account gets a machine key. A teammate who leaves loses their key at once.
 A user connects their agent to the management surface and consents; the agent reads the authority
 and the catalog, previews, issues. The mission appears under the user's name, marked as prepared by
 that connected app.
+
+### 7.11 Update a plugin
+
+A provider changes its API overnight; every call of that plugin fails upstream. The agent sees the
+provider's error and says so; nothing is counted against the budget. The mission's holder reads in
+Activity that the calls fail at the provider, not at the policy, and has nothing to change. The
+community ships a new plugin version; an advisory names it when the fix is a security one. The
+administrator learns it in Administration › Plugins from the versions feed, with nothing
+installed by the gateway, and chooses the moment: a new image for a bundled plugin, a new pin in
+the plugins directory for a pinned one, each the operator's own artefact. The instance restarts;
+missions, accounts, policies and the audit are untouched. The agent replays the call. Either it
+runs, or the new version classifies it under a permission the mission does not hold and the call
+is refused with a permission request the holder answers in the interface (§3.3 bis), or the
+provider now wants another grant and the account runs nothing until its owner reconnects it
+(§7.2). A version is never pushed to an instance, and a loaded version never widens what a mission
+may do.
 
 ## 8. Audit
 
