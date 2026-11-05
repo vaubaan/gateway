@@ -19,6 +19,7 @@ import { googleCalendarCredential } from './credential.ts';
 import { googleCalendarDataModel } from './data-model.ts';
 import { discoverGoogleCalendarResources, executeGoogleCalendar } from './execute.ts';
 import { GOOGLE_CALENDAR_ICON, GOOGLE_CALENDAR_ICON_COLOR } from './icon.ts';
+import { googleCalendarExamples } from './examples.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { googleCalendarToolTitles } from './tool-titles.ts';
 import { googleCalendarTools } from './tools.ts';
@@ -45,6 +46,7 @@ export const googleCalendarPlugin = definePlugin({
     'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/google-calendar.md',
   tools: googleCalendarTools,
   toolTitles: googleCalendarToolTitles,
+  examples: googleCalendarExamples,
   dataModel: googleCalendarDataModel,
   catalog: googleCalendarCatalog.catalog,
   credential: googleCalendarCredential,
@@ -69,6 +71,7 @@ export {
   type GuestZone,
 } from './call.ts';
 export { slicesOf } from './classify.ts';
+export { EXAMPLE_PRIMARY, EXAMPLE_TEAM, googleCalendarExamples } from './examples.ts';
 export { REQUIRED_SCOPES, googleCalendarCredential } from './credential.ts';
 export {
   CALENDAR_API_REFUSED,

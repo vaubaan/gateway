@@ -16,6 +16,7 @@ import { notionCredential } from './credential.ts';
 import { notionDataModel } from './data-model.ts';
 import { discoverNotionResources } from './discovery.ts';
 import { executeNotion } from './execute.ts';
+import { notionExamples } from './examples.ts';
 import { NOTION_ICON, NOTION_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { notionToolTitles, notionTools } from './tools.ts';
@@ -40,6 +41,7 @@ export const notionPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/notion.md',
   tools: notionTools,
   toolTitles: notionToolTitles,
+  examples: notionExamples,
   dataModel: notionDataModel,
   catalog: notionCatalog.catalog,
   credential: notionCredential,
@@ -65,3 +67,4 @@ export {
 } from './execute.ts';
 export { notionId } from './ids.ts';
 export { API_TOKEN_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
+export { EXAMPLE_DB_ROOT, EXAMPLE_PAGE_ROOT, notionExamples } from './examples.ts';

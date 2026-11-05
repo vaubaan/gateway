@@ -42,9 +42,11 @@
 # only the fallback matched before), in a new `send` macro-action. The
 # presets are dropped (macro-actions replace them). The reasons of `draft-to-zone-self`, `draft-to-zone-allowlist` and
 # the fallback no longer say the plugin cannot send.
+# catalog_version 9 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: gmail
-catalog_version: 8
-catalog_date: 2026-10-31
+catalog_version: 9
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -413,6 +415,12 @@ macro_actions:
   - id: search
     label: 'Search the mail'
     description: 'Read the structure, the threads and the messages, whoever sent them.'
+    narrative: >-
+      Searching the mailbox and reading threads, messages and drafts. Reads are cut by who sent
+      the mail: notifications, colleagues, allowlisted partners and unknown senders are
+      permissions of their own, because an unknown sender's message is the main way instructions
+      get injected into the agent. Threads under a label the owner declared sensitive, and
+      searches that may return hundreds of threads at once, also ask for their own permission.
     entries:
       - risk_id: gmail.read-mailbox
         quota: 2000
@@ -441,6 +449,10 @@ macro_actions:
   - id: draft
     label: 'Draft'
     description: 'Write and edit drafts. Nothing leaves.'
+    narrative: >-
+      Writing and editing drafts in the mailbox. Nothing leaves: this verb never sends. Each draft is still priced by its recipients (self,
+      colleagues, allowlisted contacts), so a mission can prepare internal notes without
+      preparing mail to partners.
     entries:
       - risk_id: gmail.draft-write
         quota: 300
@@ -457,6 +469,12 @@ macro_actions:
   - id: send
     label: 'Send'
     description: 'Send a message or a draft. Nothing can call it back.'
+    narrative: >-
+      Sending a message or a draft over SMTP, under the owner's name. Nothing calls a sent
+      message back, so each recipient zone is a permission of its own, from the mailbox itself
+      to colleagues, allowlisted contacts and anyone else. Sending to an unknown address is how
+      whatever the agent read can leave the company, and is best kept for missions whose job is
+      exactly that.
     entries:
       - risk_id: gmail.send-to-zone-self
         quota: 50
@@ -473,6 +491,11 @@ macro_actions:
   - id: tidy
     label: 'Tidy'
     description: 'Apply, remove and create labels.'
+    narrative: >-
+      Organising the mailbox: applying and removing labels on a thread or a message, and
+      creating labels. It is reversible, and moving mail to the trash or to spam is refused
+      outright, because a deletion is not a label. A label the owner declared sensitive is out
+      of this verb: touching one needs "Anything else", the catch-all write.
     entries:
       - risk_id: gmail.label-write
         quota: 500

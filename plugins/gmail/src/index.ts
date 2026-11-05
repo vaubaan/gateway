@@ -59,6 +59,7 @@ import {
   type GmailRuntimeOptions,
 } from './execute.ts';
 import { GMAIL_ICON, GMAIL_ICON_COLOR } from './icon.ts';
+import { gmailExamples } from './examples.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { GMAIL_CLASSIFIED_TOOLS, gmailClassifiedToolDeclarations, gmailTools } from './tools.ts';
 import { gmailToolTitles } from './tool-titles.ts';
@@ -102,6 +103,7 @@ export function createGmailPlugin(options: GmailRuntimeOptions = {}): ProviderPl
     docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/gmail.md',
     tools: gmailTools,
     toolTitles: gmailToolTitles,
+    examples: gmailExamples,
     dataModel: gmailDataModel,
     catalog: gmailCatalog.catalog,
     credential: runtime.credential,
@@ -169,6 +171,7 @@ export type { FromZone, GmailMailboxMetadata, ToZone } from './classify.ts';
 export type { GmailAccount };
 export type { GmailRuntime, GmailRuntimeOptions } from './execute.ts';
 export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { EXAMPLE_MAILBOX, EXAMPLE_OTHER_MAILBOX, gmailExamples } from './examples.ts';
 export type { GmailTool } from './identity.ts';
 export type {
   GmailSmtpErrorCode,

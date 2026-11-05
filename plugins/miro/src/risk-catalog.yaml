@@ -47,9 +47,11 @@
 # pattern or preset changed.
 # catalog_version 5 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 6 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: miro
-catalog_version: 5
-catalog_date: 2026-10-31
+catalog_version: 6
+catalog_date: 2026-11-05
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -315,6 +317,12 @@ macro_actions:
   - id: look
     label: 'Look at boards'
     description: 'Read the boards, what is on them, their details and who can open them.'
+    narrative: >-
+      Reading the boards of the mission: what is drawn on them, their comments, which space they
+      sit in and who can open them. Nothing changes at Miro, but board content is written by
+      people and can carry instructions aimed at the agent. Seeing who can open a board is its
+      own permission, because it hands the agent a list of colleagues' names and email
+      addresses.
     entries:
       - risk_id: miro.read-boards
         quota: 1000
@@ -334,6 +342,12 @@ macro_actions:
   - id: draw
     label: 'Draw'
     description: 'Add content, in bulk too, and record a walkthrough.'
+    narrative: >-
+      Adding and editing what is on a board: sticky notes, shapes, tables, images, prototypes
+      and comments, seen at once by everyone on it. Edits are reversible by editing again, but
+      the gateway keeps no earlier version. Adding many items in one call and recording a
+      narrated walkthrough are held apart, because one call can fill a board and a walkthrough
+      is played back to everyone who opens it.
     entries:
       - risk_id: miro.content-write
         quota: 2000
@@ -347,6 +361,11 @@ macro_actions:
   - id: rework
     label: 'Rework'
     description: 'Delete items and frames.'
+    narrative: >-
+      Deleting items and frames, which happens too whenever an update of the canvas drops what
+      the new drawing no longer holds. Miro's MCP server has no restore, so what is gone must be
+      drawn again. A frame is its own permission because it can hold a whole section of the
+      board.
     entries:
       - risk_id: miro.item-delete
         quota: 300
@@ -357,6 +376,11 @@ macro_actions:
   - id: manage
     label: 'Manage boards'
     description: 'Create, rename and share boards.'
+    narrative: >-
+      Creating boards, renaming them and deciding who can open them. A new board joins the
+      account at once and stays at Miro until someone deletes it there. Sharing is the act that
+      reaches furthest: whoever is named can read everything on the board, possibly from outside
+      the company, and access taken back does not undo what was read.
     entries:
       - risk_id: miro.board-create
         quota: 10

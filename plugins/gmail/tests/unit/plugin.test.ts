@@ -38,29 +38,13 @@ import {
   normalizeAppPassword,
   readMailboxMetadata,
 } from '../../src/index.ts';
+import {
+  EXAMPLE_MAILBOX as mailbox,
+  EXAMPLE_OTHER_MAILBOX as otherMailbox,
+  THREAD,
+} from '../../src/examples.ts';
 import { fakeGmail, fakeSmtp } from './fake-imap.ts';
 
-const MAILBOX = 'me@myorg.com';
-const THREAD = '18c2a9f0e1d2b3a4';
-const MESSAGE = '18c2a9f0e1d2b3a5';
-
-const mailbox: Resource = {
-  provider: 'gmail',
-  ref: MAILBOX,
-  displayName: MAILBOX,
-  metadata: {
-    internal_domains: ['myorg.com'],
-    allowlist_addresses: ['partner@vendor.com'],
-    allowlist_domains: ['vendor.com'],
-    sensitive_labels: ['LEGAL', 'HR'],
-    account_email: MAILBOX,
-  },
-};
-const otherMailbox: Resource = {
-  provider: 'gmail',
-  ref: 'support@myorg.com',
-  displayName: 'support@myorg.com',
-};
 const githubRepo: Resource = { provider: 'github', ref: 'acme/app', displayName: 'acme/app' };
 
 const secret = (fields: Record<string, string> = {}): ApiKeySecret => ({
@@ -80,76 +64,8 @@ const execCtx = (resources: readonly Resource[] = [mailbox]): ExecuteContext => 
   resources,
 });
 
-/** The samples of every tool, ids in the grammar (16 lower-case hexadecimal digits at most). */
-const SAMPLES: ToolSamples = {
-  gmail__describe_zones: [{ args: {} }],
-  gmail__search_threads: [
-    { args: { q: 'from:no-reply@vendor.com' } },
-    { args: { q: 'from:colleague@myorg.com' } },
-    { args: { q: 'from:other@vendor.com' } },
-    { args: { q: 'from:random@random.io' } },
-    { args: { q: 'is:unread' } },
-    { args: { q: 'label:LEGAL' } },
-    { args: { q: 'from:no-reply@vendor.com OR newer_than:3650d' } },
-    { args: { q: 'from:colleague@myorg.com -label:LEGAL -label:HR' } },
-    { args: { q: 'is:unread' }, resources: [], expectDenied: true },
-    { args: { q: 'is:unread' }, resources: [mailbox, otherMailbox], expectDenied: true },
-  ],
-  gmail__get_thread: [{ args: { id: THREAD } }, { args: {}, expectDenied: true }],
-  gmail__get_attachment: [
-    { args: { thread_id: THREAD, message_id: MESSAGE, part: '2' } },
-    { args: { thread_id: THREAD, message_id: MESSAGE, part: '1.2' } },
-    { args: { thread_id: THREAD, message_id: MESSAGE }, expectDenied: true },
-    { args: { thread_id: THREAD, message_id: MESSAGE, part: '0' }, expectDenied: true },
-  ],
-  gmail__list_drafts: [{ args: {} }],
-  gmail__create_draft: [
-    { args: { to: [MAILBOX], subject: 's', body: 'b' } },
-    { args: { to: ['colleague@myorg.com'], subject: 's', body: 'b' } },
-    {
-      args: { to: ['partner@vendor.com'], cc: 'Me <me@myorg.com>', subject: 's', body: 'b' },
-    },
-    // An external recipient, and a recipient that does not parse, refuse the call.
-    { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' }, expectDenied: true },
-    {
-      args: { to: ['evil@evil.example, colleague@myorg.com'], subject: 's', body: 'b' },
-      expectDenied: true,
-    },
-  ],
-  gmail__send_message: [
-    { args: { to: [MAILBOX], subject: 's', body: 'b' } },
-    { args: { to: ['colleague@myorg.com'], subject: 's', body: 'b' } },
-    { args: { to: ['partner@vendor.com'], bcc: [MAILBOX], subject: 's', body: 'b' } },
-    // Unlike a draft, a send to an external recipient is a risk a mission may accept.
-    { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' } },
-    { args: { subject: 's', body: 'b' }, expectDenied: true },
-    {
-      args: { to: ['evil@evil.example, colleague@myorg.com'], subject: 's', body: 'b' },
-      expectDenied: true,
-    },
-  ],
-  gmail__send_draft: [
-    { args: { id: MESSAGE, to: ['colleague@myorg.com'] } },
-    { args: { id: MESSAGE, to: ['stranger@evil.example'] } },
-    { args: { to: ['colleague@myorg.com'] }, expectDenied: true },
-    { args: { id: MESSAGE }, expectDenied: true },
-  ],
-  gmail__list_labels: [{ args: {} }],
-  gmail__create_label: [
-    { args: { name: 'Clients 2026' } },
-    { args: { name: 'Projets/Été' } },
-    { args: { name: 'TRASH' }, expectDenied: true },
-    { args: { name: '[Gmail]/Archive' }, expectDenied: true },
-  ],
-  gmail__label_message: [{ args: { thread_id: THREAD, message_id: MESSAGE, label: 'STARRED' } }],
-  gmail__unlabel_message: [{ args: { thread_id: THREAD, message_id: MESSAGE, label: 'STARRED' } }],
-  gmail__label_thread: [
-    { args: { thread_id: THREAD, label: 'STARRED' } },
-    { args: { label: 'STARRED' }, expectDenied: true },
-    { args: { thread_id: THREAD, label: 'TRASH' }, expectDenied: true },
-  ],
-  gmail__unlabel_thread: [{ args: { thread_id: THREAD, label: 'STARRED' } }],
-};
+/** The plugin's own samples (`src/examples.ts`), on `me@myorg.com`. */
+const SAMPLES: ToolSamples = gmailPlugin.examples ?? {};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SDK kit
@@ -181,7 +97,7 @@ describe('gmail plugin — SDK kit', () => {
   });
 
   test('every tool maps to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(gmailPlugin, SAMPLES, { resources: [mailbox] });
+    const report = assertCatalogCoverage(gmailPlugin);
     // Paths only : this model's cardinalities count instances, not how a slice names them.
     assertSlicesOnDataModel(gmailPlugin, SAMPLES, { resources: [mailbox], cardinalities: false });
     expect(report.toolsChecked).toBe(14);
@@ -201,12 +117,13 @@ describe('gmail plugin — SDK kit', () => {
       ...gmailPlugin,
       tools: gmailClassifiedToolDeclarations.filter((t) => t.name === 'gmail__unlabel_thread'),
       toolTitles: { gmail__unlabel_thread: 'Remove a label from a thread' },
+      examples: {
+        gmail__unlabel_thread: [
+          { args: { thread_id: THREAD, label: 'LEGAL' }, resources: [mailbox] },
+        ],
+      },
     });
-    const report = assertCatalogCoverage(
-      exposed,
-      { gmail__unlabel_thread: [{ args: { thread_id: THREAD, label: 'LEGAL' } }] },
-      { resources: [mailbox] },
-    );
+    const report = assertCatalogCoverage(exposed);
     expect(report.fallbackHits).toHaveLength(1);
   });
 
@@ -475,7 +392,7 @@ describe('gmail macro-actions', () => {
       'send',
       'tidy',
     ]);
-    expect(gmailPlugin.catalog.catalog_version).toBe(8);
+    expect(gmailPlugin.catalog.catalog_version).toBe(9);
   });
 
   test('search at Careful : reads only, every sender zone freely ; bulk and sensitive reads ask first', () => {
