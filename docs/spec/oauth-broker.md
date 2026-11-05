@@ -75,7 +75,9 @@ operator.
 - **The public front sees a code it cannot use**: the broker's own verifier never leaves the
   enclave.
 - **What the operator decides is harmless**: enrollment is configuration; provider endpoints and
-  allowed scopes are measured code. The configuration is readable by anyone (it is measured into
+  allowed scopes are measured code, from the provider table the gateway and the broker share
+  ([ADR](../decisions/oauth-brokers-managed-in-settings-with-two-client-sources.md)): a gateway
+  running its own client at a provider reads the same table. The configuration is readable by anyone (it is measured into
   the evidence): it holds digests and opaque ids only.
 - **A stolen instance store is worthless on its own**: its refresh tokens open only with that
   instance's broker key, until the instance is unenrolled.

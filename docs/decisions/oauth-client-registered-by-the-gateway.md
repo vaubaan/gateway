@@ -49,3 +49,10 @@ A client secret common to every instance, held by Vaubaan.
 
 Static endpoints in the plugin are reviewed and tested; a provider moving them changes its plugin
 anyway.
+
+## History
+
+- 2026-11-05: "an administrator registers the client by hand" stays rejected where the service
+  offers dynamic registration; for a service that offers neither a key nor registration, it is one
+  of the two sources an administrator may choose in Settings
+  ([oauth-brokers-managed-in-settings-with-two-client-sources](oauth-brokers-managed-in-settings-with-two-client-sources.md)).
