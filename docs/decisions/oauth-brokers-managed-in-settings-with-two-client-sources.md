@@ -1,6 +1,6 @@
 ---
 title: Brokers are managed in Settings, one client source per service, an external broker or the gateway's own client
-status: proposed
+status: accepted
 date: 2026-11-05
 author: Renaud Pelissier (product owner), drafted with Claude
 ---
