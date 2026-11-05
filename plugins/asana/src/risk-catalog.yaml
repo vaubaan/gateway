@@ -1,0 +1,195 @@
+# Risk catalog of the `asana` provider.
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
+# Handbook : docs/handbook/providers/asana.md.
+#
+# One resource per project ; no environment, so no entry is env-scoped.
+# Writes are layered where an act deserves its own decision : deleting a task
+# is a change of the task (`task-update`) AND a deletion (`task-delete`) ;
+# rewriting its name or description is a change AND a rewrite (`task-rewrite`).
+# The macro-actions' narratives are in the plugin README until the loader
+# accepts the `narrative` key.
+provider: asana
+catalog_version: 1
+catalog_date: 2026-11-05
+
+risks:
+  - id: asana.project-read
+    label: 'Read projects and sections'
+    reason: >-
+      Names and descriptions of the mission's projects and of their sections.
+      Nothing is modified.
+    matches:
+      - 'asana.project[*].R'
+      - 'asana.project[**].section[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: asana.task-read
+    label: 'Read tasks'
+    reason: >-
+      Listing, searching and reading tasks shows their titles, descriptions,
+      assignees and dates : text written by other people, which an agent must
+      treat as untrusted (prompt injection). Nothing is modified.
+    matches: 'asana.project[**].task[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+    # Asana caps its search endpoint at 60 requests a minute per token
+    # (rate limits page) : no mission is issued above it.
+    infra_limits:
+      calls_per_minute_max: 60
+
+  - id: asana.comment-read
+    label: 'Read comments'
+    reason: >-
+      Comments are conversations between named people, sometimes personal.
+      Nothing is modified.
+    matches: 'asana.project[**].task[*].comment[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: asana.task-create
+    label: 'Create tasks'
+    reason: >-
+      A new task (or subtask) appears in the project for everyone in it ;
+      assigning it to someone notifies them. Deleting it undoes it.
+    matches: 'asana.project[**].task.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: asana.task-update
+    label: 'Change tasks'
+    reason: >-
+      Changes a task's assignee, due date, completion or section ; each is
+      undone by setting it back. Completing a task may start the project's
+      rules.
+    matches: 'asana.project[**].task[*].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  # Rewriting a task's text gets its own decision through the `rewrite` leaf :
+  # `update_task` with `name` or `notes` emits `task[t].W` AND
+  # `task[t].rewrite.W`, so it touches `task-update` and `task-rewrite`.
+  - id: asana.task-rewrite
+    label: 'Rewrite task names and descriptions'
+    reason: >-
+      Overwrites a task's name or description. Asana keeps no history of a
+      description to restore the old text from. A mission must hold Change
+      tasks too.
+    matches: 'asana.project[**].task[*].rewrite.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: asana.comment-create
+    label: 'Comment on tasks'
+    reason: >-
+      A comment is signed by the connected account and notifies the task's
+      followers.
+    matches: 'asana.project[**].task[*].comment.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: asana.task-delete
+    label: 'Delete tasks'
+    reason: >-
+      A deleted task goes to the connected account's trash and can be
+      restored from there for 30 days only. A mission must hold Change tasks
+      too.
+    matches: 'asana.project[**].task[*].delete.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  # Fallback — exactly once, in no macro-action. Seen in an audit, it means a
+  # tool classifies to a slice no entry above covers : add the entry.
+  - id: asana.uncategorized-write
+    label: 'Uncategorized write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. A mission that holds it
+      allows the writes this catalog has not reviewed.
+    matches: 'asana.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+macro_actions:
+  - id: read
+    label: 'Read'
+    description: 'Read projects, sections, tasks and comments.'
+    entries:
+      - risk_id: asana.project-read
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: asana.task-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: asana.comment-read
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+  - id: work
+    label: 'Work on tasks'
+    description: 'Create tasks and subtasks, change and rewrite them, comment on them.'
+    entries:
+      - risk_id: asana.task-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: asana.task-update
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: asana.task-rewrite
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: asana.comment-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: clean-up
+    label: 'Clean up'
+    description: "Delete tasks (to the account's trash, 30 days to restore)."
+    entries:
+      - risk_id: asana.task-delete
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }

@@ -12,6 +12,7 @@
  * `createRegistry` validates every plugin and rejects duplicate ids, so a
  * broken plugin fails the boot instead of the first call.
  */
+import asanaPlugin from '@vaubaan/plugin-asana';
 import axonautPlugin from '@vaubaan/plugin-axonaut';
 import caldavPlugin from '@vaubaan/plugin-caldav';
 import cloudflareDnsPlugin from '@vaubaan/plugin-cloudflare-dns';
@@ -48,6 +49,7 @@ export const SHIPPED_PLUGINS: readonly ProviderPlugin[] = [
   notionPlugin,
   caldavPlugin,
   googleCalendarPlugin,
+  asanaPlugin,
   axonautPlugin,
 ];
 

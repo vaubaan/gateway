@@ -1,0 +1,17 @@
+{
+  "name": "@vaubaan/plugin-asana",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Asana provider plugin for Vaubaan Gateway — projects, sections, tasks and comments, with a personal access token",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/plugin-sdk": "*"
+  }
+}

@@ -795,6 +795,13 @@ export const INVARIANTS: readonly Invariant[] = [
         ],
       },
       {
+        file: 'plugins/asana/tests/unit/identifiers.test.ts',
+        tests: [
+          'an accepted gid is named exactly in the path, and the slice',
+          'a resource ref outside the grammar is refused on both sides, even when it is in the mission',
+        ],
+      },
+      {
         file: 'plugins/_template/tests/unit/plugin.test.ts',
         tests: [
           'an identifier that is not one path segment is refused, never escaped',

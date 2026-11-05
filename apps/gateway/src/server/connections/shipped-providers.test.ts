@@ -77,6 +77,7 @@ describe('shipped plugins through the generic connect driver', () => {
     // paste, and `tests/unit/structural/token-guides.test.ts` holds each of these to it.
     const tokenWays = SHIPPED_PLUGINS.filter((plugin) => plugin.credential.kind === 'api-key');
     expect(tokenWays.map((plugin) => plugin.id).sort()).toEqual([
+      'asana',
       'axonaut',
       'caldav',
       'cloudflare-dns',

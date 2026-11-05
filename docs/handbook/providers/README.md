@@ -43,25 +43,26 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 
 ## Index
 
-| Plugin          | Handbook                                     | Credential | In one line                                                      |
-| --------------- | -------------------------------------------- | ---------- | ---------------------------------------------------------------- |
-| Axonaut         | [`axonaut.md`](./axonaut.md)                 | `api-key`  | User API key; one resource, the account; flat records.           |
-| CalDAV Calendar | [`caldav.md`](./caldav.md)                   | `api-key`  | App password over Basic auth to any CalDAV server; not Google.   |
-| Cloudflare DNS  | [`cloudflare-dns.md`](./cloudflare-dns.md)   | `api-key`  | Zone-scoped token; critical-record overlay.                      |
-| Context7        | [`context7.md`](./context7.md)               | `api-key`  | Rewrap of mcp.context7.com; one resource per key.                |
-| Fly.io          | [`fly.md`](./fly.md)                         | `api-key`  | Organization token; image guard, fresh snapshot, secrets masked. |
-| GitHub          | [`github.md`](./github.md)                   | `api-key`  | Fine-grained token; also the agents' git remote.                 |
-| Gmail           | [`gmail.md`](./gmail.md)                     | `api-key`  | App password over IMAP; sends over SMTP.                         |
-| Google Calendar | [`google-calendar.md`](./google-calendar.md) | `oauth2`   | Calendar REST API v3; OAuth client held by a broker.             |
-| Miro            | [`miro.md`](./miro.md)                       | `oauth2`   | Rewrap of Miro's MCP; OAuth client registered by the gateway.    |
-| Notion          | [`notion.md`](./notion.md)                   | `api-key`  | One resource per shared root page or database.                   |
-| Railway         | [`railway.md`](./railway.md)                 | `api-key`  | Workspace or account token; services bound to their project.     |
-| Resend          | [`resend.md`](./resend.md)                   | `api-key`  | Recipient zones from the domain resource.                        |
-| SSH             | [`ssh.md`](./ssh.md)                         | `ssh-key`  | Pinned host key; command classes.                                |
-| Stripe          | [`stripe.md`](./stripe.md)                   | `api-key`  | One resource per mode (test / live).                             |
-| Supabase        | [`supabase.md`](./supabase.md)               | `api-key`  | Management API; `execute_sql` read-only.                         |
-| Upstash Redis   | [`upstash-redis.md`](./upstash-redis.md)     | `api-key`  | Env from the owner's database label.                             |
-| Vercel          | [`vercel.md`](./vercel.md)                   | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                   |
+| Plugin          | Handbook                                     | Credential | In one line                                                         |
+| --------------- | -------------------------------------------- | ---------- | ------------------------------------------------------------------- |
+| Asana           | [`asana.md`](./asana.md)                     | `api-key`  | Personal access token; one resource per project, task proven in it. |
+| Axonaut         | [`axonaut.md`](./axonaut.md)                 | `api-key`  | User API key; one resource, the account; flat records.              |
+| CalDAV Calendar | [`caldav.md`](./caldav.md)                   | `api-key`  | App password over Basic auth to any CalDAV server; not Google.      |
+| Cloudflare DNS  | [`cloudflare-dns.md`](./cloudflare-dns.md)   | `api-key`  | Zone-scoped token; critical-record overlay.                         |
+| Context7        | [`context7.md`](./context7.md)               | `api-key`  | Rewrap of mcp.context7.com; one resource per key.                   |
+| Fly.io          | [`fly.md`](./fly.md)                         | `api-key`  | Organization token; image guard, fresh snapshot, secrets masked.    |
+| GitHub          | [`github.md`](./github.md)                   | `api-key`  | Fine-grained token; also the agents' git remote.                    |
+| Gmail           | [`gmail.md`](./gmail.md)                     | `api-key`  | App password over IMAP; sends over SMTP.                            |
+| Google Calendar | [`google-calendar.md`](./google-calendar.md) | `oauth2`   | Calendar REST API v3; OAuth client held by a broker.                |
+| Miro            | [`miro.md`](./miro.md)                       | `oauth2`   | Rewrap of Miro's MCP; OAuth client registered by the gateway.       |
+| Notion          | [`notion.md`](./notion.md)                   | `api-key`  | One resource per shared root page or database.                      |
+| Railway         | [`railway.md`](./railway.md)                 | `api-key`  | Workspace or account token; services bound to their project.        |
+| Resend          | [`resend.md`](./resend.md)                   | `api-key`  | Recipient zones from the domain resource.                           |
+| SSH             | [`ssh.md`](./ssh.md)                         | `ssh-key`  | Pinned host key; command classes.                                   |
+| Stripe          | [`stripe.md`](./stripe.md)                   | `api-key`  | One resource per mode (test / live).                                |
+| Supabase        | [`supabase.md`](./supabase.md)               | `api-key`  | Management API; `execute_sql` read-only.                            |
+| Upstash Redis   | [`upstash-redis.md`](./upstash-redis.md)     | `api-key`  | Env from the owner's database label.                                |
+| Vercel          | [`vercel.md`](./vercel.md)                   | `api-key`  | Declares `envOf` (the `env[<label>]` segment).                      |
 
 ## Revoking a connection: what happens at the provider
 
@@ -72,6 +73,7 @@ provider's documentation through Context7, never from memory.
 
 | Provider        | Withdrawn by the gateway                                                               | Otherwise, by hand                                                               |
 | --------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Asana           | no                                                                                     | Asana developer console, Personal access tokens: delete the gateway's token      |
 | Google Calendar | **yes** — `POST /revoke` with the refresh token, relayed by the OAuth broker to Google | Google Account, Security, third-party apps with account access                   |
 | Miro            | no                                                                                     | Miro profile settings, apps allowed: remove "Vaubaan Gateway"                    |
 | Axonaut         | no                                                                                     | regenerate the API key in Axonaut, Settings (Paramètres), API                    |
