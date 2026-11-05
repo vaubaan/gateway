@@ -151,6 +151,7 @@ packages/policy-engine/  slices, matching, the risk decision, the validity rule 
 packages/gateway-core/   the call pipeline, refusals, the audit entry
 packages/plugin-sdk/     the plugin contract, catalog loader, registry, test kit
 packages/telemetry/      opt-in, anonymous plugin reports (off by default)
+packages/oauth-providers/ the OAuth provider table the gateway and the broker share
 plugins/<provider>/      one plugin per service; plugins/_template to start one
 deploy/                  Dockerfile, Compose file, example configuration
 docs/                    spec, decisions, handbook, tests, workflow

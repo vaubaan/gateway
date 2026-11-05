@@ -1,9 +1,17 @@
 /**
- * The providers this broker serves, compiled into the image. Never read from
- * configuration: the client secret is sent to `tokenEndpoint` and
- * `revokeEndpoint`, so whoever could change them could capture it (spec
- * oauth-broker §4). Adding a provider, or a scope, is a change to this file,
- * hence a new image, a new measurement and a gateway release that admits it.
+ * The OAuth providers a broker serves: endpoints, allowed scopes, consent
+ * parameters (spec oauth-broker §4). Never read from configuration: the client
+ * secret is sent to `tokenEndpoint` and `revokeEndpoint`, so whoever could
+ * change them could capture it. The gateway reads the same table to refuse,
+ * at boot, a brokered plugin whose provider or scopes it does not list.
+ *
+ * Source: `packages/oauth-providers/src/providers.ts`. The broker runs a
+ * byte-identical copy, `apps/oauth-broker/src/providers.ts`, so that its image
+ * builds from its own folder with no dependency (ADR
+ * oauth-broker-runs-its-typescript-source-with-no-dependency); a broker test
+ * fails when the two differ. Erasable syntax only, and no import.
+ * Adding a provider, or a scope, is a change to the source and its copy: a new
+ * broker image, a new measurement and a gateway release that admits it.
  */
 export interface ProviderDefinition {
   readonly id: string;

@@ -66,7 +66,7 @@ import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
-import { checkSelfResources, RegistryCatalogIndex } from './registry';
+import { checkBrokeredPlugins, checkSelfResources, RegistryCatalogIndex } from './registry';
 import {
   KEY_BESIDE_STORE_WARNING,
   keyBesideStore,
@@ -218,6 +218,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
   const registry = await (deps.buildRegistry ?? buildShippedRegistry)(config, logger);
   logRetiredKeys(config, logger);
   checkSelfResources(config, registry);
+  checkBrokeredPlugins(registry);
 
   const store = await (deps.openStore ?? openEmbeddedStore)({
     config,

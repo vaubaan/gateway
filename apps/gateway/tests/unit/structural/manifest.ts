@@ -1013,4 +1013,27 @@ export const INVARIANTS: readonly Invariant[] = [
       },
     ],
   },
+  {
+    id: 'brokered-scopes-in-provider-table',
+    statement:
+      'Every shipped plugin whose oauth2 credential takes its client from a broker names a provider of the OAuth provider table the broker compiles in, and asks it only for scopes that provider allows; the gateway refuses to boot otherwise, and the broker runs a byte-identical copy of the table.',
+    source: 'Spec oauth-broker §4; ADR oauth-brokers-managed-in-settings-with-two-client-sources',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/brokered-scopes-in-provider-table.test.ts`,
+        tests: [
+          'names a provider of the table',
+          'asks only for scopes the table allows that provider',
+        ],
+      },
+      {
+        file: 'apps/gateway/src/server/compose/brokered-plugins-check.test.ts',
+        tests: ['stops the boot, naming the plugin'],
+      },
+      {
+        file: 'apps/oauth-broker/tests/unit/provider-table-copy.test.ts',
+        tests: ['is a byte-identical copy of packages/oauth-providers/src/providers.ts'],
+      },
+    ],
+  },
 ];

@@ -9,6 +9,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **The OAuth provider table is shared by the gateway and the broker**
+  (`@vaubaan/oauth-broker` 0.4.0, ADR
+  oauth-brokers-managed-in-settings-with-two-client-sources): endpoints,
+  allowed scopes and consent parameters move to `packages/oauth-providers`;
+  the broker runs a byte-identical copy in its own sources (still no
+  dependency, no build step; a test fails when they differ), its content
+  unchanged. The gateway reads the table and refuses to boot when a brokered
+  plugin names a provider it does not list or a scope that provider does not
+  allow; a structural test holds every shipped brokered plugin to it.
+
 ### Documentation
 
 - Facts a first visitor reads, made true again: Node.js 26 and npm 11 on the website's quick look and coding-agent install (and an `.nvmrc`); the upgrade page takes the new release image by tag or digest instead of waiting for a release; the deploy quick start clones into `gateway`; the deploy guides connect accounts on Accounts → Connect an account instead of the removed Company apps page; the site footer, trust center and README no longer say no version is published; the supported versions name the release candidates; customer names removed from test fixtures and script examples.

@@ -5,8 +5,9 @@ tracks:
   - apps/oauth-broker/Dockerfile
   - apps/oauth-broker/package.json
   - apps/oauth-broker/tests/
+  - packages/oauth-providers/
   - .github/workflows/oauth-broker-image.yml
-last_reviewed: 2026-11-03
+last_reviewed: 2026-11-05
 ---
 
 # OAuth broker — handbook
@@ -37,8 +38,17 @@ without an enclave behind the platform's TLS (`unattested`). Spec:
 - **The configuration is public**: Confidential Space measures every container variable, value
   included (`submods.container.env`), into the token `/attest` gives anyone. Enrollment is an
   opaque `id`, `key_sha256` and `return_url_sha256[]`; never a key, a URL or a customer's name.
-- **Provider endpoints and allowed scopes are compiled in** (`src/providers.ts`), never configured:
-  no configuration can send the client secret elsewhere.
+- **Provider endpoints and allowed scopes are compiled in**, never configured: no configuration
+  can send the client secret elsewhere. The table's source is
+  [`packages/oauth-providers/src/providers.ts`](../../packages/oauth-providers/src/providers.ts)
+  (`@vaubaan/oauth-providers`), which the gateway imports to refuse at boot a brokered plugin whose
+  provider or scopes it does not list (`checkBrokeredPlugins`, `server/compose/registry.ts`).
+  `src/providers.ts` is a **byte-identical copy**, not an import: the image builds from
+  `apps/oauth-broker` alone and runs its own sources with no dependency and no build step (ADR
+  [oauth-broker-runs-its-typescript-source-with-no-dependency](../decisions/oauth-broker-runs-its-typescript-source-with-no-dependency.md)),
+  so the measured image holds the table a reviewer reads. `tests/unit/provider-table-copy.test.ts`
+  fails when the two differ: edit the package's file, then copy it over the broker's. Adding a
+  scope is a release of both (a broker image, its measurement, a gateway release).
 - **An instance's `id` seals its tokens** (`sealing.ts`, additional data `v1|<id>|<provider>`):
   changing it, or unenrolling, ends every refresh token that instance holds.
 - **Nothing sensitive is logged** (route templates, statuses, durations, class names, a refusal's
