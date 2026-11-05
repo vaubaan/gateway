@@ -68,3 +68,6 @@ Gmail's scopes are restricted (yearly CASA); Gmail stays on IMAP.
   administrator may choose it as the source serving Google, next to an external broker
   ([oauth-brokers-managed-in-settings-with-two-client-sources](oauth-brokers-managed-in-settings-with-two-client-sources.md)).
   The broker stays the way for a hosted fleet and for whoever does not want to register a client.
+- 2026-11-05: the broker contract now serves a second provider, `microsoft`, for the `outlook`
+  plugin; revocation at the provider became optional, since Microsoft has no endpoint for it
+  ([outlook-through-the-oauth-broker-microsoft-provider](outlook-through-the-oauth-broker-microsoft-provider.md)).
