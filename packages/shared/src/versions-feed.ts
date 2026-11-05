@@ -73,6 +73,7 @@ function isText(x: unknown, max: number): x is string {
 
 /** Whether `x` is a semver version string. */
 export function isSemverVersion(x: unknown): x is string {
+  // nosemgrep: detect-redos -- isText caps the input at VERSIONS_FEED_LIMITS.short (200) characters first; the pattern is semver.org's
   return isText(x, VERSIONS_FEED_LIMITS.short) && SEMVER.test(x);
 }
 
