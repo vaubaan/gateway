@@ -1,0 +1,305 @@
+# Risk catalog of the `axonaut` provider.
+#
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), §4.6 (macro-actions).
+# Handbook : docs/handbook/providers/axonaut.md §3.
+#
+# Every slice is rooted at `axonaut.account[<id>]`, the one resource of a
+# connection. Axonaut's API is flat, so every entity is a direct child of the
+# account. Writes on one record use `[*]` (not `[**]`): the verb leaves
+# `delete` and `outcome` are matched by their own entries only, and a deletion
+# is classified on both the record write and its `delete` leaf (layered).
+#
+# Axonaut documents no rate limit (its `/me` answer reports an
+# `api_time_consumed` counter): the base budgets are kept moderate.
+provider: axonaut
+catalog_version: 1
+catalog_date: 2026-11-05
+
+risks:
+  # ─── Reads ─────────────────────────────────────────────────────────────
+  - id: axonaut.read-crm
+    label: 'Read the CRM'
+    reason: >-
+      Companies, contacts, opportunities and CRM events: names, e-mail
+      addresses, phone numbers and notes about people. Personal data reaches
+      the agent; nothing is modified.
+    matches:
+      - 'axonaut.account[*].company[**].R'
+      - 'axonaut.account[*].contact[**].R'
+      - 'axonaut.account[*].opportunity[**].R'
+      - 'axonaut.account[*].event[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: axonaut.read-sales
+    label: 'Read quotes, invoices and payments'
+    reason: >-
+      Amounts, terms, customers and who paid what. Commercial data reaches
+      the agent; nothing is modified.
+    matches:
+      - 'axonaut.account[*].quotation[**].R'
+      - 'axonaut.account[*].invoice[**].R'
+      - 'axonaut.account[*].payment[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: axonaut.read-work
+    label: 'Read projects, tasks and tickets'
+    reason: >-
+      Projects, tasks and support tickets with their descriptions. Nothing is
+      modified.
+    matches:
+      - 'axonaut.account[*].project[**].R'
+      - 'axonaut.account[*].task[**].R'
+      - 'axonaut.account[*].ticket[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: axonaut.read-catalog
+    label: 'Read the product catalog'
+    reason: >-
+      Products and services with their prices. Nothing is modified.
+    matches: 'axonaut.account[*].product[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── Writes — CRM and work ─────────────────────────────────────────────
+  - id: axonaut.crm-write
+    label: 'Create or modify companies, contacts and CRM events'
+    reason: >-
+      Adds or changes customer records and their contact people, or logs a
+      note, call or meeting on a company. Personal data is written; the
+      colleagues of the account see it.
+    matches:
+      - 'axonaut.account[*].company.W'
+      - 'axonaut.account[*].company[*].W'
+      - 'axonaut.account[*].contact.W'
+      - 'axonaut.account[*].contact[*].W'
+      - 'axonaut.account[*].event.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: axonaut.opportunity-write
+    label: 'Create or modify opportunities'
+    reason: >-
+      Adds a deal to the pipeline or changes its amount, probability, step or
+      due date. The sales team sees it in its pipeline.
+    matches:
+      - 'axonaut.account[*].opportunity.W'
+      - 'axonaut.account[*].opportunity[*].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: axonaut.opportunity-outcome
+    label: 'Mark an opportunity won or lost'
+    reason: >-
+      Closes a deal in the pipeline: sales reporting and forecasts follow
+      the outcome, and undoing it means correcting them.
+    matches: 'axonaut.account[*].opportunity[*].outcome.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: axonaut.work-write
+    label: 'Create or modify tasks and tickets'
+    reason: >-
+      Adds or changes tasks and support tickets, or comments on a ticket. The
+      team sees the change in its workload.
+    matches:
+      - 'axonaut.account[*].task.W'
+      - 'axonaut.account[*].task[*].W'
+      - 'axonaut.account[*].ticket.W'
+      - 'axonaut.account[*].ticket[*].W'
+      - 'axonaut.account[*].ticket[*].comment.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  # ─── Writes — sales ────────────────────────────────────────────────────
+  - id: axonaut.quotation-create
+    label: 'Create a quotation'
+    reason: >-
+      Creates a numbered commercial document for a customer. Creating it does
+      not send it; the customer sees it only once someone sends it.
+    matches: 'axonaut.account[*].quotation.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: axonaut.quotation-outcome
+    label: 'Mark a quotation accepted or refused'
+    reason: >-
+      Accepting a quotation makes Axonaut create the order from it; an
+      accepted quotation can no longer be refused. Undoing it means
+      correcting the order by hand.
+    matches: 'axonaut.account[*].quotation[*].outcome.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+  - id: axonaut.invoice-create
+    label: 'Create an invoice'
+    reason: >-
+      Creates a numbered invoice for a customer: an accounting document that
+      French rules do not let anyone delete, only cancel with a credit note.
+    matches: 'axonaut.account[*].invoice.W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: data
+      cost: free
+      visibility: public
+      persistence: posture
+
+  - id: axonaut.payment-record
+    label: 'Record a payment on an invoice'
+    reason: >-
+      Records money received on an invoice: an accounting entry that marks the
+      invoice paid and feeds the books.
+    matches: 'axonaut.account[*].payment.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: posture
+
+  # ─── Writes — deletions ────────────────────────────────────────────────
+  - id: axonaut.delete-record
+    label: 'Delete a company, contact, opportunity or task'
+    reason: >-
+      Removes a record from the account; Axonaut documents no way to restore
+      it. A deletion also needs the permission to modify that kind of record.
+    matches:
+      - 'axonaut.account[*].company[*].delete.W'
+      - 'axonaut.account[*].contact[*].delete.W'
+      - 'axonaut.account[*].opportunity[*].delete.W'
+      - 'axonaut.account[*].task[*].delete.W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: team
+      persistence: posture
+
+  # Fallback — must exist, exactly once, in no macro-action. Seen in the
+  # audit, it means a tool classifies to a write no entry above covers.
+  - id: axonaut.uncategorized-write
+    label: 'Uncategorized write'
+    reason: >-
+      Catch-all for writes without a dedicated entry. A mission that holds it
+      allows the writes this catalog has not reviewed.
+    matches: 'axonaut.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: posture
+
+macro_actions:
+  - id: read
+    label: 'Read'
+    description: 'Read the CRM, quotes, invoices, payments, projects, tasks, tickets and products.'
+    entries:
+      - risk_id: axonaut.read-crm
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: axonaut.read-sales
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: axonaut.read-work
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: axonaut.read-catalog
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+  - id: crm
+    label: 'Work the CRM'
+    description: 'Keep companies, contacts, notes, the pipeline, tasks and tickets up to date.'
+    entries:
+      - risk_id: axonaut.crm-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: axonaut.opportunity-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: axonaut.opportunity-outcome
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: axonaut.work-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+  - id: sell
+    label: 'Sell and invoice'
+    description: 'Create quotations, record their answer, create invoices and record payments.'
+    entries:
+      - risk_id: axonaut.quotation-create
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: axonaut.quotation-outcome
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: axonaut.invoice-create
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+      - risk_id: axonaut.payment-record
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: clean-up
+    label: 'Clean up'
+    description: 'Delete companies, contacts, opportunities and tasks.'
+    entries:
+      - risk_id: axonaut.delete-record
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
