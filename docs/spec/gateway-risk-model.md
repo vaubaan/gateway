@@ -172,6 +172,11 @@ What a creator ticks per connection, in the connector's words
   that is neither the fallback nor deprecated belongs to **exactly one**, listed unqualified with its
   **base budget** (quota, rate limit; no gate). The gateway adds `anything-else`, holding the
   fallback. A catalog breaking this does not load.
+- A macro-action may carry a **`narrative`**: two to four sentences in the connector's words, at
+  most 600 characters, saying what an agent does under this verb and why its permissions are cut
+  the way they are ("two acts are kept apart because they destroy work"). It is shown on the
+  plugin's public page and in the reference, reviewed like the rest of the catalog, and never read
+  by the runtime. Shipped catalogs fill it (structural test).
 - **Tier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
   reversible but `pii` or `secret` data, `bulk` or `account` blast, or `unbounded` cost → 2, else 1.
 - **Trust level**, one per ticked macro-action, `careful` by default:
@@ -356,7 +361,8 @@ none; mint → issue; gates `allow` / `confirm` / `deny` → accepted or not, th
 - **At catalog load** any finding stops the gateway, with its location: malformed fields; an id not
   `<provider>.<name>`, duplicated or with a wildcard; a pattern that does not parse or names another
   provider; a vector axis missing or out of scale; an invalid environment label; a fallback breaking
-  §4.3; a `presets` key; no macro-action, or macro-actions breaking §4.6.
+  §4.3; a `presets` key; no macro-action, or macro-actions breaking §4.6 (a `narrative` that is not
+  a string of at most 600 characters included).
 - **In each plugin's tests**: every tool has a sample call yielding slices its own catalog matches;
   samples landing on the fallback are reported as a missing entry.
 - **Across shipped plugins**: no catalog declares a limit the gateway does not enforce (§4bis).
