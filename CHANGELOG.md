@@ -11,6 +11,9 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Asana plugin** (`@vaubaan/plugin-asana` 0.1.0): one resource per project, its sections, tasks,
+  subtasks and comments, personal access token; macro-actions `read`, `work` and `clean-up`; a
+  task is proven to belong to the mission's project before every task call.
 - **Axonaut plugin** (`@vaubaan/plugin-axonaut` 0.1.0): the CRM, pipeline, quotations, invoices, payments, projects, tasks, tickets and products of one Axonaut account, with the API key of one Axonaut user; macro-actions `read`, `crm`, `sell` and `clean-up`; creating an invoice and deleting a record are irreversible and always ask first.
 
 ### Changed

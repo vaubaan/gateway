@@ -1,116 +1,132 @@
-# `@vaubaan/plugin-template`
+# `@vaubaan/plugin-asana`
 
-The scaffold a provider plugin starts from: a complete, working plugin for an
-imaginary provider (`template`: workspaces that hold widgets), written the way
-the shipped plugins are. It loads, it passes the SDK test kit, and it is
-never registered in the gateway.
+Asana for Vaubaan Gateway: the projects an Asana account can see, their sections, tasks, subtasks
+and comments, on Asana's REST API (`https://app.asana.com/api/1.0`), with a personal access token.
+Agents read projects and tasks, create, change, comment on and delete tasks. No project
+administration, no access rights, no attachments.
 
-**Starting a plugin?** Follow [`plugins/README.md`](../README.md) step by
-step; it tells you when to copy this folder and what to change in each file.
-After the copy, rewrite this README for your provider, keeping the sections
-below: they are the ones every shipped plugin documents (compare
-[`plugins/cloudflare-dns/README.md`](../cloudflare-dns/README.md)).
-
-Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
-SDK handbook: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md).
-
-## Files
-
-| File                        | What goes in it                                                                                                                                                |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `package.json`              | `@vaubaan/plugin-<id>`, the version (equal to `version` in `src/index.ts`), the SDK as the only runtime dependency.                                            |
-| `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.                                              |
-| `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                                                             |
-| `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and the macro-actions.                                                       |
-| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.                                                         |
-| `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.                                                   |
-| `src/credential.ts`         | The `CredentialSpec`: the token page, the guide (steps, how wide to grant and why, permissions, expiry) and `verify`, the check at paste.                      |
-| `src/execute.ts`            | The calls to the provider through the SDK's `httpJson`, with the credential the gateway hands over, and `discoverResources`.                                   |
-| `src/index.ts`              | `definePlugin({...})`: the wiring, the default export the gateway registers.                                                                                   |
-| `tests/unit/plugin.test.ts` | The SDK kit (well-formed, coverage, slices on the data model, no wildcard), a mission from macro-actions, the classifier cases, `execute` against `mockFetch`. |
+Handbook (model, edge cases, traps):
+[`docs/handbook/providers/asana.md`](../../docs/handbook/providers/asana.md). Kit:
+[`plugins/README.md`](../README.md).
 
 ## Data model
 
-One plane, `workspace`:
+One plane, `work`. Asana has no environment: no entity carries one, no risk is env-scoped.
 
 ```
-workspace[<workspace id>]      the resource; labelled staging / prod by its owner (envScopable)
-  └─ widget[<widget id>]
-       └─ delete               verb leaf: the deletion, a write with its own risk
+project[<project gid>]           the resource (one per project the account sees)
+  ├─ section[<section gid>]      a section or board column
+  └─ task[<task gid>]            a task of the project, or a subtask of one of its tasks
+       ├─ comment[<story gid>]   a comment (a story of subtype comment_added)
+       └─ delete                 verb leaf: moving the task to the trash
 ```
 
 ## Credential and resources
 
 Kind `api-key`, one required secret field:
 
-| Field     | Pattern               | Purpose                                                |
-| --------- | --------------------- | ------------------------------------------------------ |
-| `api_key` | `^[A-Za-z0-9_-]{8,}$` | An API key over all workspaces, with every permission. |
+| Field                   | Pattern        | Purpose                                                        |
+| ----------------------- | -------------- | -------------------------------------------------------------- |
+| `personal_access_token` | `^\S{20,512}$` | A personal access token of the account the agents will act as. |
 
-The connect page shows the guide of `src/credential.ts`: the key page, the
-steps, the grant (all workspaces, every permission: each mission narrows it)
-and the permissions with the tools they serve. `verify` asks `GET /me` who the
-key acts as before anything is stored.
+Asana says to treat its tokens as opaque, so the pattern only bounds the value. A personal access
+token has no scopes: it acts as the person on everything they can see, and every write is signed
+with their name. Use an account made for the agents if their actions should not read as yours. It
+does not expire; it ends when it is deleted in the developer console. `verify` asks
+`GET /users/me` who the token is and refuses an account that belongs to no workspace.
 
-`discoverResources` calls `GET /workspaces` and returns **one resource per
-workspace**: `ref` is the workspace id every tool takes as `workspace`,
-`displayName` its name. The answer is read through a type guard, and a
-payload the guard refuses, or a workspace id that is not a path-safe
-identifier, fails the discovery as the provider's failure
-(`UpstreamProtocolError`).
+`discoverResources` reads the workspaces of `GET /users/me`, then
+`GET /workspaces/{gid}/projects?archived=false`, 100 a page, following `next_page.offset`, **at most
+500 projects** across all workspaces (more fails the discovery). One resource per project: `ref`
+is the project gid, `displayName` is `<team or workspace> / <project>`, metadata
+`workspace_gid`, `workspace_name`, `team_name`. Archived projects are left out.
+
+**Tasks that are in no project** (a person's "My tasks" only) are reachable by no tool: a mission
+selects projects, and every task tool proves its task is in one.
 
 ## Tools
 
-Four tools named `template__<verb>_<noun>`. Each takes `workspace`, which
-must be one of the mission's workspaces (it may be omitted when the mission
-holds exactly one).
+Eleven tools named `asana__<verb>_<noun>`. Every tool but `list_projects` takes `project`, a project
+of the mission (it may be left out when the mission holds exactly one). Task tools also take
+`task_gid`; before acting, the executor proves the task (or one of its ancestors, for a subtask) is
+in that project, and refuses otherwise.
 
-| Tool                      | Slice                                                |
-| ------------------------- | ---------------------------------------------------- |
-| `template__list_widgets`  | `template.workspace[<ws>].widget[*].R`               |
-| `template__get_widget`    | `template.workspace[<ws>].widget[<widget>].R`        |
-| `template__update_widget` | `template.workspace[<ws>].widget[<widget>].W`        |
-| `template__delete_widget` | `template.workspace[<ws>].widget[<widget>].delete.W` |
+| Tool                   | Asana                                                               | Slice                                       |
+| ---------------------- | ------------------------------------------------------------------- | ------------------------------------------- |
+| `asana__list_projects` | none: answered from the mission                                     | `asana.project[<p1>,<p2>…].R`               |
+| `asana__get_project`   | `GET /projects/{p}`                                                 | `asana.project[<p>].R`                      |
+| `asana__list_sections` | `GET /projects/{p}/sections` (up to 500)                            | `asana.project[<p>].section[*].R`           |
+| `asana__list_tasks`    | `GET /projects/{p}/tasks` or `GET /sections/{s}/tasks`              | `asana.project[<p>].task[*].R`              |
+| `asana__search_tasks`  | `GET /workspaces/{w}/tasks/search?projects.any=<p>`                 | `asana.project[<p>].task[*].R`              |
+| `asana__get_task`      | `GET /tasks/{t}`                                                    | `asana.project[<p>].task[<t>].R`            |
+| `asana__list_comments` | `GET /tasks/{t}/stories?resource_subtype=comment_added` (up to 500) | `asana.project[<p>].task[<t>].comment[*].R` |
+| `asana__create_task`   | `POST /tasks`, or `POST /tasks/{parent}/subtasks`                   | `asana.project[<p>].task.W`                 |
+| `asana__update_task`   | `PUT /tasks/{t}`, then `POST /sections/{s}/addTask`                 | `asana.project[<p>].task[<t>].W`            |
+| `asana__add_comment`   | `POST /tasks/{t}/stories`                                           | `asana.project[<p>].task[<t>].comment.W`    |
+| `asana__delete_task`   | `DELETE /tasks/{t}`                                                 | `…task[<t>].W` and `…task[<t>].delete.W`    |
 
-`workspace` and `widget_id` end up in the request path, so both must be one
-path-safe segment, `^[A-Za-z0-9_-]{1,64}$` (`pathIdent` in `src/classify.ts`,
-applied by `classify` and by `execute`). `.`, `..`, a `/` or any other
-character is refused before classification and before any call.
+- `search_tasks` is **Asana Premium only** (a 402 otherwise, returned as the provider's failure)
+  and Asana allows **60 searches a minute** per token.
+- `list_tasks` is paged: `limit` (1 to 100, default 50) and `offset`, the `next_offset` of the
+  previous answer. `completed_since` is `now` (incomplete tasks only) or an ISO-8601 timestamp.
+- An assignee is `me` or a user gid, never an email address. `update_task` takes `null` to
+  unassign or to clear the due date.
+- Every request is built field by field from the declared arguments; an undeclared argument is
+  never read, so never sent.
+- A task answer is cut to this project: its other projects and their section names are removed.
+  People are named, never addressed: no email is asked.
 
 ## Catalog
 
-`src/risk-catalog.yaml`: three named risks and the fallback.
+`src/risk-catalog.yaml`: seven named risks and the fallback.
 
-| Risk                           | Action | Notes                                                                                    |
-| ------------------------------ | ------ | ---------------------------------------------------------------------------------------- |
-| `template.read-widgets`        | R      | Every widget read.                                                                       |
-| `template.widget-write`        | W      | Every widget write, deletions included (`widget[**].W`). Env-scoped (`staging`, `prod`). |
-| `template.widget-delete`       | W      | The `delete` leaf. Env-scoped. Irreversible.                                             |
-| `template.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool of the plugin, in no macro-action.       |
+| Risk                        | Action | Notes                                                                                         |
+| --------------------------- | ------ | --------------------------------------------------------------------------------------------- |
+| `asana.project-read`        | R      | Projects and their sections. Metadata.                                                        |
+| `asana.task-read`           | R      | Listing, searching and reading tasks: text written by others (prompt-injection path).         |
+| `asana.comment-read`        | R      | Conversations between named people (`pii`): asks first at Careful.                            |
+| `asana.task-create`         | W      | A new task or subtask; assigning someone notifies them.                                       |
+| `asana.task-update`         | W      | Overwrites name, description, assignee, dates, completion, section. Costly: no notes history. |
+| `asana.comment-create`      | W      | Signed by the account, notifies followers.                                                    |
+| `asana.task-delete`         | W      | The `delete` leaf: the account's trash, 30 days to restore. Costly.                           |
+| `asana.uncategorized-write` | W      | Fallback (`fallback: true`); touched by no tool, in no macro-action.                          |
 
-Writes are layered: a deletion touches `widget-write` and `widget-delete`,
-and a mission needs both.
+Deletion is layered: `delete_task` emits a write on the task and the `delete` leaf, so a mission
+needs `task-update` **and** `task-delete`.
 
 ## Macro-actions
 
-A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous),
-risk model §4.6: the trust level sets each risk's gate from its vector and scales its
-base budget; the mission stores the explicit lines.
+A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous), risk model §4.6.
+Base budgets (quota per period, rate per minute) are a starting point: the trust level multiplies
+the quota ×1, ×3, ×10. The gateway adds "Anything else", holding the fallback.
 
-| Macro-action | What it covers                     | Its risks                                         |
-| ------------ | ---------------------------------- | ------------------------------------------------- |
-| `read`       | Read widgets.                      | `template.read-widgets`                           |
-| `write`      | Create, modify and delete widgets. | `template.widget-write`, `template.widget-delete` |
+| Macro-action | Its risks (quota, per minute)                                                |
+| ------------ | ---------------------------------------------------------------------------- |
+| `read`       | `project-read` (500, 60), `task-read` (2000, 60), `comment-read` (300, 20)   |
+| `work`       | `task-create` (100, 10), `task-update` (300, 20), `comment-create` (100, 10) |
+| `clean-up`   | `task-delete` (30, 5)                                                        |
 
-The gateway adds "Anything else", holding the fallback.
+The narratives below are meant for the `narrative` key of each macro-action, once the catalog
+loader accepts it:
+
+- **`read`** — An agent reads the projects of its mission, their sections and tasks, and the
+  comments on a task, to plan or report. Comments are kept apart because they are conversations
+  between named people: at Careful the agent asks before reading them. Task text is written by
+  others, so an agent treats it as data, never as instructions. `task-read` is sized for paging
+  through a large project; search counts against Asana's 60 a minute.
+- **`work`** — An agent creates tasks and subtasks, changes them (name, description, assignee,
+  dates, completion, section) and comments on them, signed by the connected account. Changing a
+  task is costly, because Asana keeps no history of a description to restore: at Careful and
+  Trusting it asks first. Creating and commenting run freely, but notify the people involved.
+- **`clean-up`** — An agent deletes tasks it no longer needs. A deletion goes to the account's
+  trash, restorable for 30 days only, so it is kept out of `work` and asks first unless the
+  creator trusts the agent fully. A mission also needs `task-update` from `work` to delete.
 
 ## Tests
 
-`npx vitest run plugins/_template` — 26 tests: the SDK kit
-(`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`, and
-`assertIdentifiersRefused` on the same samples), a mission written from the
-macro-actions (`policyFromMacroActions`),
-the version and default-export check, the classifier
-branch by branch (refusals, path-safe identifiers and the risks a deletion
-touches included), `execute` and
-`discoverResources` against `mockFetch`. No test calls a provider.
+`npx vitest run plugins/asana` — the SDK kit (`assertPluginWellFormed`, `assertNoWildcard`,
+`assertCatalogCoverage`, `assertSlicesOnDataModel`, `catalogPathIssues`, `assertIdentifiersRefused`)
+on `tests/unit/samples.ts`; the layered deletion and the gates of each trust level; the classifier
+branch by branch (`classify.test.ts`); hostile identifiers fed to both sides (`identifiers.test.ts`);
+the executor, the membership proof and what is cut from an answer (`execute.test.ts`); discovery
+(`discovery.test.ts`); the guide and the check at paste (`credential.test.ts`). No test calls Asana.
