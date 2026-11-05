@@ -2,8 +2,9 @@
  * Structural test (spec §10 "no configuration value is hard-coded").
  *
  * Scans the v5 server code and the deployment files for literal URLs,
- * secrets and project references. The only allowed literal URL is the
- * telemetry collector default in `telemetry-default.ts`; example files under
+ * secrets and project references. The only allowed literal URLs are the
+ * telemetry collector default in `telemetry-default.ts` and the versions feed
+ * default in `updates-default.ts`; example files under
  * `deploy/config/*.example*` may show placeholders.
  *
  * Scope: the whole application (`apps/gateway/src`, `next.config.ts`), `deploy/`,
@@ -28,6 +29,8 @@ const SCANNED = [
 /** Files allowed to contain what the scan forbids, with the reason. */
 const ALLOWED: Record<string, string> = {
   'apps/gateway/src/server/config/telemetry-default.ts': 'the single default URL (spec §4.3)',
+  'apps/gateway/src/server/config/updates-default.ts':
+    'the default of updates.feed_url, the published versions feed (spec §4.3)',
   'deploy/collector/README.md': 'the collector documents its own public host (the default URL)',
   'apps/gateway/src/server/config/sign-in.ts':
     'public sign-in providers by address: github.com, and the issuers anyone can hold an account at (docs/handbook/authentication.md)',
@@ -106,6 +109,14 @@ describe('structural: no hard-coded configuration in the v5 perimeter', () => {
   it('allows the telemetry default URL only in telemetry-default.ts', () => {
     const text = readFileSync(
       resolve(REPO, 'apps/gateway/src/server/config/telemetry-default.ts'),
+      'utf8',
+    );
+    expect(text.match(/https:\/\//g)?.length).toBe(1);
+  });
+
+  it('allows the versions feed default URL only in updates-default.ts', () => {
+    const text = readFileSync(
+      resolve(REPO, 'apps/gateway/src/server/config/updates-default.ts'),
       'utf8',
     );
     expect(text.match(/https:\/\//g)?.length).toBe(1);

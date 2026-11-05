@@ -2,17 +2,19 @@
  * `/reference` — the services this gateway can reach (spec §4.2 "Providers"),
  * one quiet line each: what it is, how an account of it is connected, and how
  * large its catalog is. The list is the plugin registry's; nothing is
- * enumerated here. Any signed-in visitor reads it: it documents the gateway,
- * it shows no account and no mission.
+ * enumerated here. Each line names the plugin's version and, when the operator
+ * pinned it rather than the image bundling it, says so (`GatewayRoot.plugins`). Any
+ * signed-in visitor reads it: it documents the gateway, it shows no account and
+ * no mission.
  */
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
-import { Hint, Row, Rows, Section, ServiceMark } from '@/components/ui';
+import { Hint, Mono, Row, Rows, Section, ServiceMark } from '@/components/ui';
 import { requirePrincipal } from '@/lib/auth/session';
 import { REFERENCE_WORDS } from '@/lib/vocabulary';
 import { providerPath } from '@/lib/providers/links';
 import { providerCards } from '@/lib/providers/reference';
 
-import { catalogSize, ReferenceFrame } from './frame';
+import { catalogSize, pinnedPlugins, PinnedTag, ReferenceFrame } from './frame';
 import styles from './reference.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +22,7 @@ export const dynamic = 'force-dynamic';
 export default async function ReferencePage() {
   const { root } = await requirePrincipal();
   const cards = providerCards(root.registry);
+  const pinned = pinnedPlugins(root.plugins);
   // Community validation status per plugin (spec §9); `null` when telemetry is off.
   const validation = new Map(
     await Promise.all(
@@ -40,12 +43,22 @@ export default async function ReferencePage() {
                 <>
                   {card.name}
                   <span className={styles.rowTag}>
+                    <PinnedTag entry={pinned.get(card.id)} />
+                  </span>
+                  <span className={styles.rowTag}>
                     <ValidationBadge status={validation.get(card.id) ?? null} />
                   </span>
                 </>
               }
               href={providerPath(card.id)}
-              description={card.description ?? 'This service ships no description.'}
+              description={
+                <>
+                  {card.description ?? 'This service ships no description.'} ·{' '}
+                  <span data-testid="provider-version">
+                    plugin <Mono>{card.version}</Mono>
+                  </span>
+                </>
+              }
               end={catalogSize(card)}
             />
           ))}

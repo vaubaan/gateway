@@ -16,6 +16,8 @@
  * on as a stream (`PktLineReader.rest`).
  */
 
+import { brandError, hasErrorBrand } from '@vaubaan/shared';
+
 /** Longest pkt-line, length prefix included (gitprotocol-common(5) `LARGE_PACKET_MAX`). */
 export const PKT_LINE_MAX = 65520;
 /** Longest payload of one pkt-line. */
@@ -45,7 +47,13 @@ export class PktLineError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'PktLineError';
+    brandError(this, 'PktLineError');
   }
+}
+
+/** Whether `x` is a `PktLineError`, whatever copy of the SDK made it (the host asks this, never `instanceof`). */
+export function isPktLineError(x: unknown): x is PktLineError {
+  return hasErrorBrand(x, 'PktLineError');
 }
 
 /** One pkt-line carrying `payload` (a string is UTF-8 encoded as is, newline included). */

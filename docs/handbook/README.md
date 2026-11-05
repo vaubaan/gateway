@@ -51,6 +51,7 @@ minutes.
 - [gateway-core](gateway-core.md) — the decision core: refusals, audit entry, mission context, pipeline.
 - [policy-engine](policy-engine.md) — pure modules around slices and risk catalogs.
 - [plugin-sdk](plugin-sdk.md) — what a provider plugin is written against; the one list of providers.
+- [plugin-loading](plugin-loading.md) — bundled and pinned plugins, `plugins.enabled`, the boot refusals, the versions check, plugin bundles and images.
 - [telemetry](telemetry.md) — community telemetry, off at installation.
 - [providers/README](providers/README.md) — index of the per-provider handbooks.
 

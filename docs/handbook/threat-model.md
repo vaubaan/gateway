@@ -45,7 +45,7 @@ tracks:
   - .trivyignore.yaml
   - .gitleaks.toml
   - .github/audit-allowlist.json
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-05
 ---
 
 # Threat model — who can do what to an instance, and what answers it
@@ -79,7 +79,7 @@ the instance: ADR [trust-model-clear-at-rest-idp-style](../decisions/trust-model
 
 - **The operator is trusted.** They hold the master key and can read a decrypted credential in a running call's memory; no control below defends against them. Their acts are **visible** (all audited) and their role **narrow**: configure, approve OAuth clients, keep local groups, deactivate users, reassign ownerless connections — never read arguments, decide others' requests, or issue missions on connections they do not hold.
 - **The identity provider is trusted for identity** (a signed ID token); authorization is local, from ownership, shares and current memberships.
-- **A provider plugin is trusted code**, shipped and reviewed: a classification error is a vulnerability. The provider behind it is **not** trusted.
+- **A provider plugin is trusted code**, shipped and reviewed, or pinned by the operator from a published bundle ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)): a classification error is a vulnerability. The provider behind it is **not** trusted, nor is the published versions feed.
 - **Agents are not trusted**: tool name, arguments, headers and label are attacker-controlled.
 
 ## Actors
@@ -306,6 +306,10 @@ about another call (ADR
 | A shell command classified on one reading, run on another (SSH)    | the raw string classified and sent unmodified; unreadable constructs take the wider class                                                      | `plugins/ssh/tests/unit/injection.test.ts`, `plugins/ssh/tests/unit/classify.test.ts`                                                              |
 | SQL classified syntactically does something else (Supabase)        | accepted limit, A16                                                                                                                            | —                                                                                                                                                  |
 | No branch protection lets a write reach `main`                     | the token's permissions are the hard ceiling at GitHub                                                                                         | `plugins/github/tests/unit/plugin.test.ts`, `plugins/github/tests/unit/git-moves.test.ts`                                                          |
+| Code fetched at run time into the process that holds credentials   | nothing is downloaded: a pin is a directory the operator placed; `/plugins` is root's in the image, so the process cannot plant one            | `src/plugins/loader.test.ts`, `deploy/docker/Dockerfile`                                                                                           |
+| A pin built for another SDK, or a plugin the registry refuses      | refused at boot with its directory, exit 78; never skipped                                                                                     | `src/plugins/loader.test.ts`                                                                                                                       |
+| A pinned plugin's errors misread (its own SDK copy)                | the host reads every SDK error by brand, never `instanceof` (lint rule)                                                                        | `packages/plugin-sdk/tests/unit/error-brands.test.ts`, `src/plugins/loader.test.ts`                                                                |
+| A hostile versions feed injects a link or an oversized answer      | GET with nothing about the instance, 10 s, bounded body; `isVersionsFeed` bounds every string and keeps https links only                       | `packages/shared/src/versions-feed.test.ts`, `src/updates/fetch-feed.test.ts`                                                                      |
 | A read priced as non-secret returns a secret                       | an allow-list of non-secret fields, anything else `[redacted by Vaubaan]`; a value read is a `data: secret` risk                               | `plugins/supabase/tests/unit/redact.test.ts`, `plugins/vercel/tests/unit/env-redaction.test.ts`, `plugins/upstash-redis/tests/unit/plugin.test.ts` |
 
 ### A compromised or hostile provider

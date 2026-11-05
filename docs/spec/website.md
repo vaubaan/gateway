@@ -124,6 +124,19 @@ imports). The Markdown twin keeps the same order; the map becomes a list by undo
   figure on its own. Instances read the same aggregates for their badge. Of the `usage-stats`
   aggregates only gateways per plugin version are published (§5).
 
+### 2.4 bis Versions feed — `/versions.json`
+
+What an instance reads to know whether it is behind, with nothing installed by the gateway
+([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)). One static JSON document:
+the released gateway version and whether it is a pre-release, the released version of every
+bundled plugin, and the **advisories**: each with an id, its subject (the gateway or one plugin),
+the affected version range, the version that fixes it, one sentence and a link. The versions come
+from the repository at the last release (written by the release preparation, never read from the
+collector); the advisories are a committed file written in the fixing pull request. The feed is
+served to anyone, cacheable, and reading it tells the site nothing about the instance: the
+instance compares on its side. The trust center names it among what leaves an instance: a
+request, no payload.
+
 ### 2.5 Trust center — `/trust`
 
 Each claim in the reader's words, linked to the document or code behind it: the trust proposition

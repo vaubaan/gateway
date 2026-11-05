@@ -73,6 +73,8 @@ export {
   checkMissionActive,
   DoorAuthenticator,
   parseBearer,
+  isUpstreamFailureError,
+  isUpstreamRefusalError,
   upstreamErrorClassName,
   UpstreamFailureError,
   UpstreamRefusalError,

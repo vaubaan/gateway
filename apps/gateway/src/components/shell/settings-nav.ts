@@ -10,7 +10,7 @@
  * Accounts, for an administrator (docs/handbook/web-app.md).
  */
 import type { SubNavGroup } from '@/components/ui';
-import { capitalize, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
+import { capitalize, ROUTES, SECTIONS, SETTINGS_PAGES, TERMS } from '@/lib/vocabulary';
 
 export const ADMIN_PAGES = {
   setup: '/admin',
@@ -20,6 +20,7 @@ export const ADMIN_PAGES = {
   telemetry: '/admin/telemetry',
   registeredApps: '/admin/oauth-clients',
   encryption: '/admin/encryption',
+  plugins: '/admin/plugins',
 } as const;
 
 export function settingsNav(administrator: boolean): SubNavGroup[] {
@@ -45,6 +46,7 @@ export function settingsNav(administrator: boolean): SubNavGroup[] {
         { label: 'Telemetry', href: ADMIN_PAGES.telemetry },
         { label: 'Registered apps', href: ADMIN_PAGES.registeredApps },
         { label: 'Encryption', href: ADMIN_PAGES.encryption },
+        { label: SETTINGS_PAGES.plugins.title, href: ADMIN_PAGES.plugins },
       ],
     });
   }

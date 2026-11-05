@@ -5,6 +5,8 @@
  * Spec : docs/spec/vaubaan-gateway.md §4.1 (execution surface).
  */
 
+import { brandError, hasErrorBrand } from './brand.ts';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tool naming — `<provider_id_with_underscores>__<local_name>`
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,7 +89,17 @@ export class UpstreamAuthError extends Error {
     super(message);
     this.name = 'UpstreamAuthError';
     this.upstreamStatus = status;
+    brandError(this, 'UpstreamAuthError');
   }
+}
+
+/**
+ * Whether `x` is an `UpstreamAuthError` (a `CredentialRefusal` included), made
+ * by this copy of the SDK or by the copy a pinned plugin carries (`brand.ts`).
+ * The host asks this, never `instanceof`.
+ */
+export function isUpstreamAuthError(x: unknown): x is UpstreamAuthError {
+  return hasErrorBrand(x, 'UpstreamAuthError') && typeof x['upstreamStatus'] === 'number';
 }
 
 /**
@@ -113,7 +125,13 @@ export class CredentialRefusal extends UpstreamAuthError {
   constructor(message: string, status = 401) {
     super(message, status);
     this.name = 'CredentialRefusal';
+    brandError(this, 'CredentialRefusal');
   }
+}
+
+/** Whether `x` is a `CredentialRefusal`, whatever copy of the SDK made it (`brand.ts`). */
+export function isCredentialRefusal(x: unknown): x is CredentialRefusal {
+  return hasErrorBrand(x, 'CredentialRefusal') && isUpstreamAuthError(x);
 }
 
 /**
@@ -128,7 +146,16 @@ export class UpstreamHttpError extends Error {
     super(message);
     this.name = 'UpstreamHttpError';
     this.status = status;
+    brandError(this, 'UpstreamHttpError');
   }
+}
+
+/**
+ * Whether `x` is an `UpstreamHttpError` (an `UpstreamProtocolError` included),
+ * whatever copy of the SDK made it (`brand.ts`).
+ */
+export function isUpstreamHttpError(x: unknown): x is UpstreamHttpError {
+  return hasErrorBrand(x, 'UpstreamHttpError') && typeof x['status'] === 'number';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,12 +20,13 @@
  */
 import { existsSync } from 'node:fs';
 
-import { buildShippedRegistry } from '../compose/shipped-plugins';
+import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
 import { RegistryCatalogIndex } from '../compose/registry';
 import { openEmbeddedStore, type StoreContext } from '../compose/store';
 import { ConfigError, loadProcessConfig, secretValues, type LoadedConfig } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor } from '../logging';
+import { loadPlugins } from '../plugins';
 import type { CatalogIndex, Store } from '../store';
 import { MEMORY_PATH } from '../store/db';
 import { renderReseal } from './report';
@@ -64,7 +65,7 @@ export interface ResealDeps {
   readonly storeExists?: (path: string) => boolean;
   /** Tests: the `:memory:` store, seeded. */
   readonly openStore?: (ctx: StoreContext) => Promise<Store>;
-  /** Tests: a catalog without the shipped plugins. */
+  /** Tests: a catalog without the plugins of the instance. */
   readonly catalog?: () => Promise<CatalogIndex>;
   /** Tests: the encryptor the store is opened with. */
   readonly encryptor?: (loaded: LoadedConfig) => Promise<Encryptor>;
@@ -146,14 +147,28 @@ async function run(argv: readonly string[], io: ResealIo, deps: ResealDeps): Pro
     redact,
     write: (_level, line) => io.stderr(line),
   }).child({ component: 'reseal' });
+  // The catalog of the plugins the instance itself registers: the bundled ones, the
+  // pins of `plugins.dir`, `plugins.enabled` (the root's `loadPlugins`), so a risk a
+  // pinned plugin declares is known here as at boot.
+  let catalog: CatalogIndex;
+  try {
+    catalog = deps.catalog
+      ? await deps.catalog()
+      : new RegistryCatalogIndex(
+          (await loadPlugins(config, logger, { bundled: SHIPPED_PLUGINS })).registry,
+        );
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      io.stderr(`reseal: the plugins of this instance did not load:\n${redact(err.message)}\n`);
+      return EXIT_CONFIG;
+    }
+    throw err;
+  }
   let store: Store;
   try {
     const encryptor = await (deps.encryptor ?? ((l) => createEncryptor(l.config.encryption)))(
       loaded,
     );
-    const catalog = deps.catalog
-      ? await deps.catalog()
-      : new RegistryCatalogIndex(await buildShippedRegistry());
     store = await (deps.openStore ?? openEmbeddedStore)({ config, logger, encryptor, catalog });
   } catch (err) {
     io.stderr(`reseal: the store could not be opened: ${redact(errorText(err))}\n`);

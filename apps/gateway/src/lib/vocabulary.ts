@@ -871,6 +871,10 @@ export const SETTINGS_PAGES = {
     title: 'Registered apps',
     lede: 'The apps that may ask people to connect them. Whatever is decided here, each person still consents on a screen that names the app.',
   },
+  plugins: {
+    title: 'Plugins',
+    lede: 'Every plugin this gateway knows, where it comes from, and what the published versions say is behind.',
+  },
 } as const;
 
 /**
@@ -1024,6 +1028,53 @@ export const SETTINGS_ACTIONS = {
 export const CONFIG_WORDS = {
   file: 'set in the mounted configuration',
   fileReadOnly: 'Set in the mounted configuration: change it there and restart.',
+} as const;
+
+/**
+ * Plugins and the versions feed (ADR plugins-bundled-or-pinned-by-the-operator):
+ * Administration › Plugins and the tag the Reference shows on a pinned plugin. A
+ * version and a path are printed with `Mono` by the page, never inside these words.
+ */
+export const PLUGIN_WORDS = {
+  listTitle: 'Bundled and pinned',
+  bundled: 'bundled with the image',
+  pinnedFrom: 'pinned from',
+  replacesBundled: 'replaces bundled',
+  /** The tag of a pinned plugin in the Reference. */
+  pinned: 'pinned',
+  replaces: 'replaces',
+  pinnedTitle: 'Pinned by the operator in the plugins directory, not bundled with the image',
+  disabled: 'disabled by plugins.enabled',
+  serves: (accounts: number) => count(accounts, { one: 'account', many: 'accounts' }),
+  servesNone: 'no account',
+  reference: 'Reference',
+  feedSection: 'What the versions feed reports',
+  gatewayBehind: 'This gateway is behind the released version',
+  preRelease: 'pre-release',
+  pluginBehind: 'behind the released version',
+  olderPin: 'pinned at an older version than the image bundles',
+  advisoriesTitle: (n: number) =>
+    `${n === 1 ? 'An advisory names' : `${formatNumber(n)} advisories name`} a version this gateway runs`,
+  fixedIn: 'fixed in',
+  checkNow: 'Check now',
+  checkOff: 'The versions check is off (updates.check): this gateway reads no feed.',
+  notReadYet:
+    'The versions feed has not been read yet: it is read a minute after the start, then every day, from',
+  readAt: 'Versions feed read',
+  from: 'from',
+  lastFailure: 'The last read failed',
+  keptReport: 'what is shown is from the last read that succeeded.',
+  failures: {
+    unreachable: 'the feed could not be reached',
+    timeout: 'the feed did not answer in time',
+    'http-status': 'the feed answered with an error status',
+    'too-large': 'the answer was too large',
+    'not-json': 'the answer was not JSON',
+    'not-a-feed': 'the answer was not a versions feed this gateway reads',
+  },
+  changes:
+    'Nothing here installs, updates or removes a plugin: a plugin changes when the operator changes the image or the plugins directory, then restarts.',
+  howToPin: 'How to pin a plugin',
 } as const;
 
 /**

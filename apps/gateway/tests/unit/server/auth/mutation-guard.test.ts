@@ -456,6 +456,10 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/admin/telemetry/instance-id', headers, {}),
     ),
   ),
+  // Reads the versions feed and changes nothing (off in tests: no request is made).
+  'updates.handlers.checkNow': form('operator', 303, (rig, headers) =>
+    rig.root.updates.handlers.checkNow(post('/admin/plugins/check', headers, {})),
+  ),
   'instance.handlers.setName': form('operator', 303, (rig, headers) =>
     rig.root.instance.handlers.setName(
       post('/api/admin/instance-name', headers, { name: 'Acme prod' }),
@@ -666,6 +670,7 @@ const SURFACES = [
   'users',
   'oauth',
   'notifications',
+  'updates',
 ] as const;
 const GUARDED = Object.entries(MUTATIONS);
 const SESSION_GUARDED = GUARDED.filter(([, m]) => m.role !== 'origin-only');

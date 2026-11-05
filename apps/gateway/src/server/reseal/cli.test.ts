@@ -120,6 +120,21 @@ describe('reseal command', () => {
     expect(run.err()).toContain('no store');
   });
 
+  it('loads the plugins as the root does, and stops on what would stop the boot', async () => {
+    const loaded = loadInstanceConfig({
+      env: validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github,no-such-plugin' }),
+    });
+    const run = capture();
+    const code = await runResealCli([], run.io, {
+      loadConfig: () => loaded,
+      storeExists: () => true,
+      openStore: () => Promise.reject(new Error('the store is never opened')),
+    });
+    expect(code).toBe(EXIT_CONFIG);
+    expect(run.err()).toContain('the plugins of this instance did not load');
+    expect(run.err()).toContain('no-such-plugin');
+  });
+
   it('a dry run reports what it would reseal and writes nothing', async () => {
     const loaded = rotatedConfig();
     const { deps, store } = await seededDeps(loaded);

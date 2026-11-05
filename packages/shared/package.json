@@ -10,6 +10,7 @@
     "./refusal": "./src/refusal.ts",
     "./risk-id": "./src/risk-id.ts",
     "./time": "./src/time.ts",
+    "./versions-feed": "./src/versions-feed.ts",
     "./wildcard": "./src/wildcard.ts"
   },
   "scripts": {

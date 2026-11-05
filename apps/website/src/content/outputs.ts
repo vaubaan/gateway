@@ -21,6 +21,9 @@ import type { ValidationThresholds } from './thresholds';
 /** The files served by a route rather than from `public/` (rendered with the collector read). */
 export const LIVE_FILES = ['plugins.json', 'llms-full.txt'] as const;
 
+/** The files served by a route rendered once at build (`app/versions.json`). */
+export const BUILT_ROUTE_FILES = ['versions.json'] as const;
+
 export type PageGroup = 'home' | 'docs' | 'plugins' | 'trust';
 
 export interface SitePage {

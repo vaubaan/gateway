@@ -10,7 +10,7 @@ tracks:
   - apps/website/next.config.ts
   - apps/website/package.json
   - apps/website/tests/unit/site/
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-05
 ---
 
 # The public site — handbook
@@ -35,9 +35,11 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 - **The footnote** (`healthFootnote()`) is on `/plugins`, `/plugins/<id>` and `/plugins/health`, and in `plugins.json`: calls over the window from instances sharing plugin health; gateways among those also sharing usage statistics, a lower bound; rejected credentials left out of the rate.
 - **Health is read when a page is served, once an hour for the whole site**: every route that imports `src/site/live.ts` exports `revalidate = 3600` (`live.test.ts` keeps the literal equal to `HEALTH_REVALIDATE_SECONDS`), and the collector fetch sits in the Next.js data cache for the same hour. What repeats a plugin page (its twin, `plugins.json`, `llms-full.txt`) is rendered by the same functions, so it shows the same figures.
 
+- **The versions feed's data are committed files, not pages** ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)): `src/content/releases.json` (`{ gateway, prerelease, date, plugins: { <id>: <version> } }`) is written by `npm run release:prepare` — at a gateway release from the root and every `plugins/*/package.json` but `_template`, at a plugin hotfix (`-- --plugin <id>`) that plugin's entry alone; never edited by hand. `src/content/advisories.json` is a JSON list, hand-written in the fix's pull request, one object per advisory, the shape of `VersionsFeedAdvisory` (`@vaubaan/shared/versions-feed`, which the gateway checks): `id` (`VBN-<year>-<nnn>`), `subject` (`gateway` or `plugin:<id>`), `affected` (a semver range), `fixed` (the first fixed version), `summary` (one sentence, at most 1000 characters), `url` (https), `date` (`YYYY-MM-DD`). An advisory is never removed: a fixed one stays, its range says who is affected. `release-data.test.ts` (gateway structural tests) holds both files to the feed's guard. [`app/versions.json/route.ts`](../../apps/website/src/app/versions.json/route.ts) serves them as the feed: `force-static`, rendered once at build (`generated_at` is the build time), `Cache-Control: public, max-age=3600`; `buildVersionsFeed()` (`content/versions-feed.ts`) throws on a file `isVersionsFeed` refuses, so a malformed advisory fails the build. A changed advisory reaches the feed with the next deploy of the site, not before.
+
 ## Traps
 
-- **Generated and gitignored** — never edit by hand: `.generated/`, `.source/`, `public/`, `content/docs/configuration/keys.mdx`, `content/docs/known-limitations.mdx`, `content/docs/providers/<id>.mdx`. The generator empties `public/` and removes every file marked `generated: true` on each run. `public/` holds `llms.txt`, `sitemap.xml` and `robots.txt` only: the Markdown twins, `plugins.json` and `llms-full.txt` are routes.
+- **Generated and gitignored** — never edit by hand: `.generated/`, `.source/`, `public/`, `content/docs/configuration/keys.mdx`, `content/docs/known-limitations.mdx`, `content/docs/providers/<id>.mdx`. The generator empties `public/` and removes every file marked `generated: true` on each run. `public/` holds `llms.txt`, `sitemap.xml` and `robots.txt` only: the Markdown twins, `plugins.json`, `llms-full.txt` and `versions.json` are routes (`LIVE_FILES`, `BUILT_ROUTE_FILES` in `outputs.ts`, which the internal-link test reads).
 - **`revalidate` must be a literal** in a page or route file: Next.js reads it statically, so `export const revalidate = HEALTH_REVALIDATE_SECONDS` silently gives no caching. Write `3600` and let `live.test.ts` catch a drift.
 - **`/.well-known/microsoft-identity-association.json` is a route, not a public file** (`app/.well-known/…/route.ts`, `force-dynamic`): the generator empties `public/`, and the ids must be read at request time so a change of the variable needs no build. No application id is written in the code.
 - **`/twins/…` is reachable directly** (the proxy rewrites to it); it is not listed anywhere and serves the same text as the `.md` address.

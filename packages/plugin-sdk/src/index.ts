@@ -36,6 +36,7 @@ export * from './data-model-paths.ts';
 export * from './registry.ts';
 export * from './streaming.ts';
 export * from './created-resources.ts';
+export * from './version.ts';
 
 // Re-exported so a plugin can import its whole vocabulary from one place.
 export type {
@@ -62,6 +63,9 @@ export {
   WILDCARD_ANY,
   WILDCARD_ONE,
   CredentialRefusal,
+  isCredentialRefusal,
+  isUpstreamAuthError,
+  isUpstreamHttpError,
   UpstreamAuthError,
   UpstreamHttpError,
   toolPrefixFor,

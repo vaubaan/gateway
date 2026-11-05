@@ -1,0 +1,23 @@
+{
+  "gateway": "2.0.0-alpha.16",
+  "prerelease": true,
+  "date": "2026-11-04",
+  "plugins": {
+    "caldav": "0.2.0",
+    "cloudflare-dns": "4.0.0",
+    "context7": "0.2.0",
+    "fly": "0.4.0",
+    "github": "5.0.0",
+    "gmail": "2.0.0",
+    "google-calendar": "0.4.0",
+    "miro": "0.5.0",
+    "notion": "0.2.0",
+    "railway": "6.0.0",
+    "resend": "0.6.0",
+    "ssh": "2.0.5",
+    "stripe": "0.5.0",
+    "supabase": "6.0.0",
+    "upstash-redis": "4.0.0",
+    "vercel": "4.1.0"
+  }
+}

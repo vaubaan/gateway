@@ -53,6 +53,8 @@
 
 import {
   acceptedRisksOf,
+  brandError,
+  hasErrorBrand,
   type McpToolContent,
   type MissionStatus,
   type RiskId,
@@ -365,7 +367,18 @@ export class UpstreamRefusalError extends Error {
   ) {
     super(message ?? refusal.hint);
     this.name = 'UpstreamRefusalError';
+    brandError(this, 'UpstreamRefusalError');
   }
+}
+
+/**
+ * Whether `x` is an `UpstreamRefusalError`. The class is the host's own, but
+ * the host recognises its errors by their brand everywhere, never by
+ * `instanceof` (ADR plugins-bundled-or-pinned-by-the-operator; the lint rule
+ * makes no exception).
+ */
+export function isUpstreamRefusalError(x: unknown): x is UpstreamRefusalError {
+  return hasErrorBrand(x, 'UpstreamRefusalError') && isRefusal(x['refusal']);
 }
 
 /** Upper bound of what `upstream_error` stores for one call. */
@@ -413,7 +426,18 @@ export class UpstreamFailureError extends Error {
     this.summary = input.summary;
     this.detail = input.detail;
     this.status = input.status;
+    brandError(this, 'UpstreamFailureError');
   }
+}
+
+/** Whether `x` is an `UpstreamFailureError`, by its brand (see `isUpstreamRefusalError`). */
+export function isUpstreamFailureError(x: unknown): x is UpstreamFailureError {
+  return (
+    hasErrorBrand(x, 'UpstreamFailureError') &&
+    typeof x['summary'] === 'string' &&
+    typeof x['detail'] === 'string' &&
+    (x['status'] === null || typeof x['status'] === 'number')
+  );
 }
 
 /** What the audit and the caller each read of a failed forward. */
@@ -427,7 +451,7 @@ interface UpstreamFailure {
 
 function describeUpstreamFailure(thrown: unknown): UpstreamFailure {
   const message = thrown instanceof Error ? thrown.message : String(thrown);
-  if (thrown instanceof UpstreamRefusalError) {
+  if (isUpstreamRefusalError(thrown)) {
     const { refusal } = thrown;
     const status = 'status' in refusal ? `: ${refusal.status}` : '';
     return {
@@ -436,7 +460,7 @@ function describeUpstreamFailure(thrown: unknown): UpstreamFailure {
       refusal,
     };
   }
-  if (thrown instanceof UpstreamFailureError) {
+  if (isUpstreamFailureError(thrown)) {
     return { summary: thrown.summary, detail: thrown.detail, refusal: null };
   }
   return {

@@ -20,7 +20,7 @@
 import { randomBytes } from 'node:crypto';
 
 import type { MissionContext } from '@vaubaan/gateway-core';
-import { ExecutorRefusal, type ExecuteContext } from '@vaubaan/plugin-sdk';
+import { type ExecuteContext, isExecutorRefusal } from '@vaubaan/plugin-sdk';
 import {
   advertisementType,
   concatBytes,
@@ -167,7 +167,7 @@ export class TemporaryRefs {
       return this.connection;
     } catch (err) {
       // The plugin declined (a permission the account lacks): its sentence, as it is.
-      if (err instanceof ExecutorRefusal) throw new PushStop(err.message, err.message);
+      if (isExecutorRefusal(err)) throw new PushStop(err.message, err.message);
       throw new PushStop(
         `the ${target.plugin.displayName} account of this mission could not be used (${errorName(err)}); tell the human`,
         `the provider account could not be used (${errorName(err)})`,

@@ -40,8 +40,8 @@
  * declaration; a tool name the plugin does not declare yields no report, so
  * a name chosen by an agent never travels.
  */
-import { UpstreamRefusalError } from '@vaubaan/gateway-core';
-import { UpstreamAuthError } from '@vaubaan/shared';
+import { isUpstreamRefusalError } from '@vaubaan/gateway-core';
+import { isUpstreamAuthError } from '@vaubaan/shared';
 import {
   createPluginReport,
   durationBucket,
@@ -118,7 +118,7 @@ function transportClass(thrown: unknown): 'network' | 'timeout' | null {
 
 /** The HTTP status a thrown value carries, as `http_<status>`, or `null`. */
 function statusClass(thrown: object): ErrorClass | null {
-  if (thrown instanceof UpstreamAuthError) return httpErrorClass(thrown.upstreamStatus);
+  if (isUpstreamAuthError(thrown)) return httpErrorClass(thrown.upstreamStatus);
   const status = (thrown as { status?: unknown }).status;
   return typeof status === 'number' ? httpErrorClass(status) : null;
 }
@@ -127,7 +127,7 @@ function classifyThrown(thrown: unknown): Classified {
   if (typeof thrown !== 'object' || thrown === null) return execution('non_error_throw');
   // The connection's credential was refused for good (or the connection was
   // revoked meanwhile): the plugin ran, the provider said no.
-  if (thrown instanceof UpstreamRefusalError) return upstream('credential_rejected');
+  if (isUpstreamRefusalError(thrown)) return upstream('credential_rejected');
   const status = statusClass(thrown);
   if (status !== null) return upstream(status);
   const transport = transportClass(thrown);

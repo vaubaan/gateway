@@ -7,11 +7,11 @@
  * neither the receive-pack advertisement nor a write credential minted for it.
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
-import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
+import { isExecutorRefusal } from '@vaubaan/plugin-sdk';
 import {
   advertisementType,
   encodeAdvertisement,
-  GitProtocolError,
+  isGitProtocolError,
   parseAdvertisement,
   RECEIVE_PACK_SERVICE,
 } from '@vaubaan/plugin-sdk/git';
@@ -113,15 +113,14 @@ export class PushSide {
       body = new Uint8Array(await answer.arrayBuffer());
     } catch (err) {
       // The plugin declined (the account lacks the permission a push needs).
-      if (err instanceof ExecutorRefusal) return gitText(HTTP_FORBIDDEN, err.message);
+      if (isExecutorRefusal(err)) return gitText(HTTP_FORBIDDEN, err.message);
       return upstreamFailure(this.deps.logger, scope, err instanceof Error ? err.name : 'Error');
     }
     let upstreamAd;
     try {
       upstreamAd = parseAdvertisement(body);
     } catch (err) {
-      if (err instanceof GitProtocolError)
-        return upstreamFailure(this.deps.logger, scope, err.name);
+      if (isGitProtocolError(err)) return upstreamFailure(this.deps.logger, scope, err.name);
       throw err;
     }
     // Object ids are SHA-1 throughout the door: a repository in another format is refused.

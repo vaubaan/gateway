@@ -451,6 +451,11 @@ test('the reference explains each service: permissions against the trust levels,
     `${GITHUB.macroActions} macro-actions`,
   );
   await expect(page.getByTestId('provider-github')).toContainText(`${GITHUB.tools} tools`);
+  // Each line names its plugin's version; a bundled plugin carries no "pinned" tag.
+  await expect(page.getByTestId('provider-github').getByTestId('provider-version')).toHaveText(
+    `plugin ${githubPlugin.version}`,
+  );
+  await expect(page.getByTestId('services').getByTestId('plugin-pinned')).toHaveCount(0);
   await expect(page.getByTestId('provider-gmail')).not.toContainText('experimental');
   // The services are a local navigation beside the content.
   const services = page.getByRole('navigation', { name: 'Services' });

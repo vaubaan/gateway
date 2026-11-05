@@ -9,6 +9,7 @@ tracks:
   - apps/gateway/src/components/shell/
   - apps/gateway/src/lib/vocabulary.ts
   - apps/gateway/src/lib/dates.ts
+  - apps/gateway/src/lib/project-docs.ts
   - apps/gateway/src/lib/theme.ts
   - apps/gateway/src/lib/auth/session.ts
   - apps/gateway/src/lib/http/
@@ -22,7 +23,7 @@ tracks:
   - apps/gateway/public/sw.js
   - apps/gateway/src/components/notifications/
   - apps/gateway/tests/unit/app/
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-05
 ---
 
 # Web app — handbook
@@ -53,6 +54,7 @@ feature's handbook. Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2,
 - **The head of an approval** is the plugin's `toolTitles` and the refused call's `resource_ref`, never an argument. A yes is never given from the home: an approval row leads to its request, where the exact call is shown (`now-and-waiting.test.tsx`). Likewise a trust-raise proposal (`TrustRaiseOffer`, also on the mission page) never raises from the home: "Raise" opens Edit mission, "Not now" only puts it off.
 - **Words live in `vocabulary.ts`** only, the trust levels' names and hints (`TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`) included: a page never prints a protocol name as prose, it prints an id with `Mono`. Routes follow the words (`/accounts`, `/waiting`); `src/server/` keeps protocol names.
 - **A page is built from `components/ui/`**: a missing component is added there with its specimen in `/design`, never in the page. Colours exist only in `tokens.css` as plain hex (`design-tokens.test.ts`: AA pairs, both dark blocks identical, no raw colour elsewhere). The one exception is a service's brand colour: it comes from its plugin (`ServiceIcon`), never a map in the interface, and reaches `ServiceMark` as `--mark-color`; a near-black brand turns to `--ink` in the dark theme (`darkThemeMarkColor`, WCAG luminance under 0.1).
+- **A page links a project document through `lib/project-docs.ts`** (`…/blob/main/…` addresses, the one repository URL shape `no-hardcoded-config.test.ts` admits); a page never spells the repository.
 - **Every human page carries `BuildFooter`**, including the authorization server's HTML pages; one version source, the root `package.json`.
 - **The interface is installable** (`app/manifest.ts`, named after the instance) and the shell registers `/sw.js` (`ServiceWorkerRegistration`); the worker shows notifications and opens pages, nothing else ([notifications](notifications.md)). A yes is never given from a notification either: it opens `/r/<id>`, the mission or the account.
 - **The reference is generated** from the plugin registry (`lib/providers/reference.ts`): a registered plugin has its page; reference URLs and anchors are built only by `lib/providers/links.ts`.

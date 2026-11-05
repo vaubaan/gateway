@@ -1,7 +1,7 @@
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadInstanceConfig } from '../config';
+import { ConfigError, loadInstanceConfig } from '../config';
 import { validEnv } from '../../../tests/support/config/testing';
 import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
@@ -208,6 +208,98 @@ describe('buildRoot when a step fails after the store is opened', () => {
     await root.close();
     expect(closes).toBe(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('buildRoot and the plugins', () => {
+  it('exposes the inventory: every shipped plugin bundled and enabled by default', async () => {
+    const root = await buildRoot(quiet);
+    expect(root.plugins.dir).toBeNull();
+    expect(root.plugins.entries.map((e) => e.id)).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
+    expect(root.plugins.entries.every((e) => e.origin === 'bundled' && e.enabled)).toBe(true);
+    await root.close();
+  });
+
+  it('registers only plugins.enabled and keeps the others in the inventory', async () => {
+    const root = await buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({ env: validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github,notion' }) }),
+    });
+    expect(root.registry.ids).toEqual(['github', 'notion']);
+    expect(root.plugins.entries.filter((e) => !e.enabled).length).toBe(SHIPPED_PLUGINS.length - 2);
+    await root.close();
+  });
+
+  it('stops the boot when the store holds accounts of a provider no registered plugin serves', async () => {
+    let closed = false;
+    const build = buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({ env: validEnv({ VAUBAAN_PLUGINS_ENABLED: 'github' }) }),
+      openStore: async ({ encryptor, catalog }) => {
+        const store = openMemoryStore({ encryptor, catalog });
+        return {
+          ...store,
+          connections: { ...store.connections, countByProvider: async () => ({ notion: 2 }) },
+          close: async () => {
+            closed = true;
+            await store.close();
+          },
+        };
+      },
+    });
+    await expect(build).rejects.toBeInstanceOf(ConfigError);
+    await expect(build).rejects.toThrow(`the store holds 2 accounts of 'notion'`);
+    expect(closed).toBe(true);
+  });
+});
+
+describe('buildRoot and the versions check', () => {
+  it('reads the feed through the injected fetch with the plugins it loaded', async () => {
+    const seen: string[] = [];
+    const root = await buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({
+          env: validEnv({
+            VAUBAAN_UPDATES_CHECK: 'true',
+            VAUBAAN_UPDATES_FEED_URL: 'https://feed.example.com/versions.json',
+          }),
+        }),
+      build: { version: '2.0.0-alpha.16', commit: 'abc' },
+      updatesFetch: async (input: RequestInfo | URL) => {
+        seen.push(String(input));
+        return new Response(
+          JSON.stringify({
+            schema: 1,
+            generated_at: '2026-11-05T10:00:00Z',
+            gateway: { latest: '2.0.0-alpha.17', prerelease: true },
+            plugins: { github: { latest: '99.0.0' } },
+            advisories: [],
+          }),
+        );
+      },
+      updatesTimers: { setTimeout: () => 'armed', clearTimeout: () => undefined },
+    });
+    expect(root.updates.current()).toBeNull();
+    const report = await root.updates.refresh();
+    expect(seen).toEqual(['https://feed.example.com/versions.json']);
+    expect(report?.gateway.behind).toBe(true);
+    expect(report?.pluginsBehind.map((p) => p.id)).toEqual(['github']);
+    await root.close();
+  });
+
+  it('stays silent when updates.check is off', async () => {
+    const root = await buildRoot({
+      ...quiet,
+      updatesFetch: async () => {
+        throw new Error('no request expected');
+      },
+    });
+    expect(await root.updates.refresh()).toBeNull();
+    expect(root.updates.current()).toBeNull();
+    await root.close();
   });
 });
 
