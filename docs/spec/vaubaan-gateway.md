@@ -659,6 +659,18 @@ stands in without one.
     it; **invitations** (with local accounts, inviting sends the account-creation link or shows it
     to copy, and the page can resend it, send a password reset and reset a second factor, each
     audited). Removing an invitation stops the next sign-ins, not an open session;
+  - **OAuth brokers**: where an account of a service with no key to paste signs in
+    ([ADR](../decisions/oauth-brokers-managed-in-settings-with-two-client-sources.md)). The page
+    lists the services shipped plugins sign in through a broker, each with the one source that
+    serves it, whether attested, and its plugins; a service no source serves is marked and the page
+    offers to add one. A source is an **external broker** (URL, enrolment key, attestation required
+    or none, the services it serves; the key is provided by the broker) or **this gateway's own client** at one service (client id and
+    secret the administrator created there, the redirect to register shown to copy). An
+    administrator adds, tests, edits and removes a source, its secret never shown back; one set by
+    the configuration is read-only and always on; one added here is off until a test passed, which
+    runs a sign-in in another window and connects nobody. Changing the source of a service leaves
+    the accounts connected through the former one working and is confirmed with that consequence;
+    a changed public URL marks an own client as to re-register at the service;
   - teams (local ones); registered apps (approve, disable); telemetry; the instance's name. Other
     §4.3 keys are shown, not edited; the name and the telemetry opt-in are set here unless the
     configuration sets them (then read-only). Every interface change is audited.
@@ -717,6 +729,11 @@ committed:
   client registration) the first time someone connects, one per instance, secret sealed, registered
   again when rejected or when the public URL changed
   ([oauth-client-registered-by-the-gateway](../decisions/oauth-client-registered-by-the-gateway.md));
+  a provider that offers neither signs in through a **broker** managed in Settings (§4.2), an
+  external one or the gateway's own client at the provider
+  ([ADR](../decisions/oauth-brokers-managed-in-settings-with-two-client-sources.md)); optionally,
+  **external brokers** (`oauth_brokers.<name>`: URL, enrolment key, attestation, services) as
+  read-only seeds of that page;
 - the **bootstrap token**, the setup link's secret, required while no sign-in provider is
   configured; an instance whose store names no administrator, with neither a token nor an admin
   rule, refuses to start;
@@ -921,7 +938,9 @@ revokes the bootstrap token.
 A user picks a service and lands on the one place that authorizes it
 ([one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
 a key the person makes and pastes whenever the service allows one, with a guide derived from the
-plugin; else the service's own sign-in; a service offering neither is not connectable. A pasted
+plugin; else the service's own sign-in, through a client the gateway registered or through the
+broker that serves the service (§4.2, Administration › OAuth brokers); a service no broker serves reads
+"not configured", with the way to Settings for an administrator. A pasted
 token is checked before it is stored, never shown back, its expiry warned 14 days ahead. An account
 connected a way its plugin no longer offers runs nothing until its owner reconnects it, keeping
 resources and shares.

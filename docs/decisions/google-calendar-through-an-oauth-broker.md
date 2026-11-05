@@ -61,3 +61,10 @@ without domain-wide delegation.
 ### Gmail through the same broker
 
 Gmail's scopes are restricted (yearly CASA); Gmail stays on IMAP.
+
+## History
+
+- 2026-11-05: "one Google OAuth client per instance" is no longer rejected outright: an
+  administrator may choose it as the source serving Google, next to an external broker
+  ([oauth-brokers-managed-in-settings-with-two-client-sources](oauth-brokers-managed-in-settings-with-two-client-sources.md)).
+  The broker stays the way for a hosted fleet and for whoever does not want to register a client.
