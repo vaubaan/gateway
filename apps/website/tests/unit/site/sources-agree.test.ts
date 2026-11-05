@@ -102,9 +102,19 @@ describe('the words of the risk model', () => {
       ...Object.values(policyEngine.GATE_WORDS),
       ...Object.values(policyEngine.TRUST_LEVEL_HINTS),
       ...Object.values(policyEngine.WHY_VALUES).flatMap((values) => Object.values(values)),
+      ...Object.values(policyEngine.UNDO_ROW_WORDS),
     ].filter((word) => word.length > 8);
-    for (const file of ['plugins.ts', 'plugin-examples.ts', 'outputs.ts']) {
-      const source = readRepoFile(`apps/website/src/content/${file}`);
+    const files = [
+      'content/plugins.ts',
+      'content/plugin-examples.ts',
+      'content/plugin-page.ts',
+      'content/plugin-pages.ts',
+      'content/outputs.ts',
+      'components/plugin/Codes.tsx',
+      'components/plugin/PluginPage.tsx',
+    ];
+    for (const file of files) {
+      const source = readRepoFile(`apps/website/src/${file}`);
       for (const word of words) expect(source, `${file}: '${word}'`).not.toContain(`'${word}'`);
     }
   });

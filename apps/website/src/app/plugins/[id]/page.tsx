@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { GeneratedPage, generatedPageMetadata } from '@/components/GeneratedPage';
-import { siteData } from '@/site/data';
-import { liveSite, pageMarkdown } from '@/site/live';
+import { generatedPageMetadata } from '@/components/GeneratedPage';
+import { PluginPageView } from '@/components/plugin/PluginPage';
+import { pageMeta, siteData } from '@/site/data';
+import { liveSite } from '@/site/live';
 
 // HEALTH_REVALIDATE_SECONDS: the collector is read again at most once an hour.
 export const revalidate = 3600;
@@ -22,10 +23,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return generatedPageMetadata(`/plugins/${id}`);
 }
 
+/** The plugin page in the C3 layout; its Markdown twin is `pluginPageMarkdown`, same order. */
 export default async function PluginPage({ params }: Props) {
   const { id } = await params;
   const live = await liveSite();
-  const markdown = pageMarkdown(`/plugins/${id}`, live);
-  if (markdown === null) notFound();
-  return <GeneratedPage path={`/plugins/${id}`} markdown={markdown} />;
+  const plugin = live.plugins.find((p) => p.id === id);
+  if (plugin === undefined) notFound();
+  return (
+    <PluginPageView
+      plugin={plugin}
+      thresholds={live.thresholds}
+      lastModified={pageMeta(`/plugins/${id}`)?.lastModified ?? null}
+    />
+  );
 }

@@ -58,6 +58,11 @@
   --warn: #a35e00;
   --warn-soft: #fbf2df;
   --warn-line: #eed9ae;
+  --ink-4: #9a9ca3;
+  --ok: #1d7a3e;
+  --bad: #b3261e;
+  --bad-soft: #fcefee;
+  --bad-line: #f1c9c5;
   --code-bg: #1e1f22;
   --code-ink: #e7e7e4;
   --focus-ring: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
@@ -79,6 +84,11 @@
     --warn: #e9b04a;
     --warn-soft: #30291d;
     --warn-line: #66512a;
+    --ink-4: #5b606a;
+    --ok: #5cc98a;
+    --bad: #f2867d;
+    --bad-soft: #341c1c;
+    --bad-line: #6e2f2b;
     --code-bg: #0b0c0f;
     --code-ink: #e2e3e6;
   }
@@ -507,6 +517,389 @@ th {
   font-size: var(--text-sm);
 }
 
+/*
+ * Display codes (style guide §5), the gateway's marks mirrored for the plugin
+ * pages: the same words, the same rule — a status is coloured only when it
+ * differs from normal. Components: components/plugin/Codes.tsx.
+ */
+
+.id {
+  background: none;
+  padding: 0;
+  color: var(--ink-2);
+}
+
+.id.quiet {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+td code.id {
+  white-space: normal;
+}
+
+/* The risk word: low is plain; medium and above take a colour. */
+.risk {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.risk-medium {
+  color: var(--warn);
+}
+
+.risk-high,
+.risk-critical {
+  color: var(--bad);
+}
+
+.risk-critical {
+  font-weight: var(--weight-strong);
+}
+
+/* The gate mark: a dot and the words, never the dot alone. */
+.gate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  color: var(--ink-3);
+}
+
+.gate::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--ok);
+}
+
+.gate-ask {
+  color: var(--warn);
+}
+
+.gate-ask::before {
+  background: var(--warn);
+}
+
+.gate-off::before {
+  background: none;
+  border: 1.5px solid var(--ink-4);
+}
+
+/* The six facts: one cell each, the one that moves the gate tinted. */
+.cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: var(--space-1) 0 0;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.cell dt {
+  color: var(--ink-3);
+}
+
+.cell dd {
+  margin: 0;
+  color: var(--ink);
+}
+
+.cell-moves {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+}
+
+/* The tag: a fact that is not a state (an environment), squared. */
+.tag {
+  display: inline-block;
+  margin-left: var(--space-1);
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  line-height: 18px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* A permission on the map, tinted by its risk word. */
+.perms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.perm {
+  display: block;
+  margin: 0 0 3px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+li.perm + li.perm {
+  margin-top: 0;
+}
+
+.perm-medium {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+}
+
+.perm-high,
+.perm-critical {
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
+}
+
+.perm-fallback {
+  border-style: dashed;
+}
+
+/* The plugin page (website spec §2.3) */
+
+.plugin-page article {
+  min-width: 0;
+}
+
+.plugin-page .opening,
+.plugin-page section > p,
+.plugin-page section > ul,
+.plugin-page .connect {
+  max-width: var(--measure);
+}
+
+.crumbs {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-2);
+}
+
+.version {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+}
+
+.verbs {
+  font-size: var(--text-lg);
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  list-style: none;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+
+.counts li + li {
+  margin-top: 0;
+}
+
+.dimensions {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+
+.dimensions dt {
+  font-weight: var(--weight-strong);
+}
+
+.dimensions dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.dimensions ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+}
+
+table.map {
+  table-layout: fixed;
+  min-width: 640px;
+}
+
+.map caption {
+  position: absolute;
+  left: -9999px;
+}
+
+.map th span,
+.map-row span {
+  display: block;
+  color: var(--ink-3);
+  font-size: 0.75rem;
+  font-weight: var(--weight-regular);
+}
+
+.map-row {
+  width: 170px;
+  border-right: 1px solid var(--line-strong);
+  padding-left: var(--space-1);
+}
+
+.map-row b {
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.map td {
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  height: 48px;
+}
+
+.map-gateway {
+  color: var(--ink-3);
+}
+
+.reading {
+  color: var(--ink-2);
+}
+
+.spread {
+  margin-top: var(--space-12);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--line-strong);
+}
+
+.spread h2 {
+  margin-top: 0;
+}
+
+.spread-what {
+  color: var(--ink-2);
+}
+
+.spread-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.spread-aside table.map {
+  min-width: 0;
+}
+
+.spread-aside .map-row {
+  width: 90px;
+}
+
+.spread-aside .map-row span:last-child {
+  display: none;
+}
+
+.spread-table td {
+  padding-right: var(--space-3);
+}
+
+.perm-label {
+  font-weight: var(--weight-strong);
+}
+
+.reason {
+  margin: var(--space-1) 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-xs);
+}
+
+td.level {
+  white-space: nowrap;
+}
+
+td.level .gate {
+  display: flex;
+  margin-bottom: 2px;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+
+.plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.allow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.allow h3 {
+  margin-top: 0;
+}
+
+.quiet {
+  color: var(--ink-3);
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.facts dt {
+  color: var(--ink-3);
+}
+
+.facts dd,
+.scopes {
+  margin: 0;
+}
+
+.scopes {
+  list-style: none;
+  padding: 0;
+}
+
+.plugin-page details summary {
+  cursor: pointer;
+  color: var(--accent-ink);
+  margin-bottom: var(--space-3);
+}
+
 @media (max-width: 1100px) {
   .docs {
     grid-template-columns: var(--side-width) minmax(0, 1fr);
@@ -544,6 +937,11 @@ th {
 
   .hero h1 {
     font-size: var(--text-title);
+  }
+
+  .spread-grid,
+  .allow {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .site-nav {
