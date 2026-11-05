@@ -39,6 +39,7 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 
 - **Generated and gitignored** — never edit by hand: `.generated/`, `.source/`, `public/`, `content/docs/configuration/keys.mdx`, `content/docs/known-limitations.mdx`, `content/docs/providers/<id>.mdx`. The generator empties `public/` and removes every file marked `generated: true` on each run. `public/` holds `llms.txt`, `sitemap.xml` and `robots.txt` only: the Markdown twins, `plugins.json` and `llms-full.txt` are routes.
 - **`revalidate` must be a literal** in a page or route file: Next.js reads it statically, so `export const revalidate = HEALTH_REVALIDATE_SECONDS` silently gives no caching. Write `3600` and let `live.test.ts` catch a drift.
+- **`/.well-known/microsoft-identity-association.json` is a route, not a public file** (`app/.well-known/…/route.ts`, `force-dynamic`): the generator empties `public/`, and the ids must be read at request time so a change of the variable needs no build. No application id is written in the code.
 - **`/twins/…` is reachable directly** (the proxy rewrites to it); it is not listed anywhere and serves the same text as the `.md` address.
 - **Hand-written docs are plain Markdown in `.mdx`**: `loadHandwrittenDocs()` refuses an `import`/`export` line, a `<Tag` or a `{` outside code (write `your-domain` in prose, `<your domain>` in a code span).
 - **Plugin strings go through `text()`**, which escapes Markdown; README sections stay Markdown and `rewriteRelativeLinks()` points their relative links at GitHub.
@@ -48,7 +49,7 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 ## Outside the repo — Vercel project
 
 - Root `apps/website`, Node 22, framework Next.js, build `npm run build`, and **"Include files outside the root directory in the Build Step" on**: the generator reads `plugins/`, `docs/`, `deploy/` and workspace packages.
-- Request-time variables: `COLLECTOR_HOST`, `COLLECTOR_SUPABASE_URL`, `COLLECTOR_SUPABASE_PUBLISHABLE_KEY`; the build needs none. No log drain, no Observability Plus, no analytics.
+- Request-time variables: `COLLECTOR_HOST`, `COLLECTOR_SUPABASE_URL`, `COLLECTOR_SUPABASE_PUBLISHABLE_KEY`, and `MICROSOFT_IDENTITY_APP_IDS` (comma-separated Entra application ids; `/.well-known/microsoft-identity-association.json` answers Microsoft's publisher-domain check from it, 404 without it: the OAuth broker's `microsoft` client names vaubaan.com as its publisher domain, [oauth-broker-contract](oauth-broker-contract.md)); the build needs none. No log drain, no Observability Plus, no analytics.
 - The pages under `/plugins` and the twins route run as functions once an hour (ISR); nothing to configure, Vercel's defaults carry it.
 
 ## Debug

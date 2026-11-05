@@ -29,6 +29,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   is read from the ID token's `email`, or its `preferred_username` when that is
   one address.
 
+- **The site answers `/.well-known/microsoft-identity-association.json`** from the request-time
+  variable `MICROSOFT_IDENTITY_APP_IDS`: Microsoft's check that vaubaan.com is the publisher domain of
+  the OAuth broker's Entra application. 404 when the variable is unset.
+
 ### Changed
 
 - **The OAuth provider table is shared by the gateway and the broker**
