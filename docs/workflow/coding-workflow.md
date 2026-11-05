@@ -115,8 +115,9 @@ owner doing anything:
 
 ### Cutting a release
 
-1. Refresh the base images, then `npm run release:prepare -- <version>` on a branch, pull request
-   `chore(release): <version>`, merge once green.
+1. Refresh the base images, then `npm run release:prepare -- <version>` on a branch (it also writes
+   `apps/website/src/content/releases.json`, the released gateway and plugin versions of the
+   versions feed), pull request `chore(release): <version>`, merge once green.
 2. Only a maintainer tags, by hand: `git tag -a v<version> -m "Vaubaan Gateway <version>" <commit>`,
    `git push origin v<version>` publishes. A failed job is re-run; a version tag never moves.
 3. Rollback: no downgrade (an older image refuses a newer database): fix forward, or restore a
@@ -126,6 +127,20 @@ owner doing anything:
 
 - No arm runner nor artifact attestation on this plan: a release ships `linux/amd64` only,
   unattested, and its notes say so.
+
+### Plugin images and plugin releases
+
+- A gateway release also publishes each bundleable plugin as `ghcr.io/vaubaan/plugin-<id>:<version>`
+  (job `plugin-images` of `release.yml`, one install, `scripts/build-plugin-bundle.mjs --all`);
+  a version already published is left as is. Operators pin them (deploy/README.md "Pin a plugin";
+  ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-pinned-by-the-operator.md)).
+- A plugin fix that waits for no gateway release: bump the plugin's version (package.json and
+  `definePlugin`), CHANGELOG, an entry in `apps/website/src/content/advisories.json` when it is a
+  security fix, then `npm run release:prepare -- --plugin <id>` (that plugin's entry of
+  `releases.json` alone). Pull request, merge, then a maintainer pushes `plugin-<id>-v<version>` on
+  the merged commit: job `plugin-release` checks the tag against the plugin's package.json and that
+  the commit is on `main`, and publishes that one image; an existing version is refused. The
+  gateway jobs ignore these tags.
 
 ### The OAuth broker's image
 

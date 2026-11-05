@@ -5,7 +5,7 @@ tracks:
   - deploy/config/
   - apps/gateway/src/server/missions/bootstrap-kit.ts
   - apps/gateway/tests/e2e/v5/cutover-smoke.spec.ts
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-05
 ---
 
 # First installation — handbook

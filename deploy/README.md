@@ -243,6 +243,55 @@ What a version number promises (configuration keys, refusal codes, the
 plugin contract, catalog ids), and how a release is cut:
 [`docs/workflow/coding-workflow.md`](../docs/workflow/coding-workflow.md#release).
 
+## Pin a plugin
+
+Every plugin ships in the image. To run another version of one — a fix released before the next
+gateway release, or the former version kept while missions are reviewed — pin it: a pinned plugin
+replaces the bundled plugin of the same id, in either direction. The gateway never downloads code;
+the pin is your own artefact ([ADR](../docs/decisions/plugins-bundled-or-pinned-by-the-operator.md)).
+
+Each release publishes every plugin that can be bundled as `ghcr.io/vaubaan/plugin-<id>:<version>`
+(the `ssh` plugin cannot, it needs native addons). Compose an image:
+
+```dockerfile
+FROM ghcr.io/vaubaan/gateway:<gateway version>
+COPY --from=ghcr.io/vaubaan/plugin-notion:0.3.0 /plugin /plugins/notion
+```
+
+Or, with Compose, mount the directory read-only (one sub-directory per plugin, the content of the
+plugin image's `/plugin`):
+
+```yaml
+services:
+  gateway:
+    volumes:
+      - ./plugins/notion:/plugins/notion:ro
+```
+
+The image reads `/plugins` (`VAUBAAN_PLUGINS_DIR`; `plugins.dir` elsewhere). At start, one log line
+per pin says what it replaces (`plugin notion 0.3.0 pinned from /plugins/notion (replaces bundled
+0.2.0)`); Administration › Plugins shows it too. `plugins.enabled` (`VAUBAAN_PLUGINS_ENABLED=github,notion`)
+lists the plugins the instance registers; unset, every bundled and pinned plugin is. A plugin left
+out has no picker entry, no tools and no Reference page.
+
+The start stops with exit code 78, like an invalid key, and a message naming the directory, when:
+
+| Message says                                | Meaning and what to do                                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `was built for @vaubaan/plugin-sdk <range>` | the pin was built for another gateway: pin the build for this one (the plugin image of a newer version) |
+| `refused:` / `the plugin failed to load`    | the plugin is not one this gateway accepts, or it throws at import: check the image you copied          |
+| `pins plugin '<id>' again`                  | two directories hold the same plugin: keep one                                                          |
+| `no package.json` / `no risk-catalog.yaml`  | the directory is not the content of a plugin image's `/plugin`                                          |
+| `'<id>' is not a plugin of this instance`   | `plugins.enabled` names an id neither bundled nor pinned                                                |
+| `the store holds <n> accounts of '<id>'`    | accounts exist for a plugin you disabled or no longer have: enable or pin it, or disconnect them first  |
+
+Nothing changes for a mission when a plugin version changes: a newer version only narrows what a
+call may do, and a call it now classifies under a permission the mission does not hold is refused
+with a permission request. At start and daily the instance reads the published versions feed (a
+request that carries nothing about it; `VAUBAAN_UPDATES_CHECK=false` turns it off) and
+Administration says which plugin is behind, which version an advisory names, and which pin is older
+than what the image bundles.
+
 ## Running the image without Compose
 
 ```bash

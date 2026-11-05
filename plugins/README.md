@@ -994,6 +994,17 @@ Traps.
 Plugins live in this repository and are not published to npm for now
 ([layout ADR](../docs/decisions/repository-layout-and-contribution-workflow.md)).
 
+### How a plugin reaches an instance
+
+Bundled with the gateway image, versioned and released with it; or pinned by the operator, as the
+self-contained bundle `scripts/build-plugin-bundle.mjs` builds and the release publishes as
+`ghcr.io/vaubaan/plugin-<id>:<version>` (a `plugin-<id>-v<version>` tag publishes one plugin alone).
+A dependency that needs a native addon makes a plugin image-only: declare
+`"vaubaan": { "bundleable": false, "reason": "…" }` in its `package.json`. Decision:
+[plugins-bundled-or-pinned-by-the-operator](../docs/decisions/plugins-bundled-or-pinned-by-the-operator.md);
+for operators: [deploy/README.md "Pin a plugin"](../deploy/README.md#pin-a-plugin); internals:
+[plugin-loading](../docs/handbook/plugin-loading.md).
+
 ## Changing an existing plugin or its catalog
 
 To report a wrong or missing risk without writing the fix, use the **catalog

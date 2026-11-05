@@ -12,7 +12,7 @@ tracks:
   - deploy/docker/Dockerfile
   - deploy/compose.yaml
   - deploy/config/
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-05
 ---
 
 # Instance configuration, crypto and composition root — handbook
@@ -39,6 +39,12 @@ How the process starts from configuration alone and wires its modules. Spec:
 - Sealed columns are listed once (`store.sealedBlobs`): the boot probe and
   `reseal` see only those. The connection id is the AEAD associated data.
 - Logs carry an error's class and frames, never its message.
+- **The pin wins**: a plugin directory under `plugins.dir` replaces the bundled plugin of its id,
+  logged at boot; `plugins.enabled` filters what is registered
+  ([plugin-loading](plugin-loading.md)).
+- **Fail closed at boot**: a refused pin, an unknown id in `plugins.enabled`, or accounts of a
+  provider no registered plugin serves are exit 78, like an invalid key; the message holds the
+  directory, or the provider and its account count.
 
 ## Traps
 
@@ -54,6 +60,9 @@ How the process starts from configuration alone and wires its modules. Spec:
   callers (boot `warn`). The demo and the tests load their own environment,
   without `NODE_ENV`, and are never refused. Trust one proxy address (the
   compose file: Caddy's `172.30.253.2`), never a Docker pool.
+- **A gateway upgrade can refuse a pin**: the pin's `peerDependencies["@vaubaan/plugin-sdk"]` range
+  must hold the new SDK version (before SDK 1.0 a caret range holds one minor); the message names
+  the range and the SDK version: pin a build for the new gateway, or remove the directory.
 - A boot failure after the store opened runs the closers in reverse: register
   any new timer or handle with them, or a retry holds a second SQLite handle.
 - `compress: false` (gzip would buffer streamed MCP answers); the proxy skips

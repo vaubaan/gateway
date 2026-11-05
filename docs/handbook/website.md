@@ -10,7 +10,7 @@ tracks:
   - apps/website/next.config.ts
   - apps/website/package.json
   - apps/website/tests/unit/site/
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-05
 ---
 
 # The public site — handbook
@@ -34,6 +34,8 @@ How `apps/website` builds vaubaan.com from the repository at build time, and rea
 - **A minor's gateways come from the collector, never from a sum**: `plugin_instances` groups by minor in SQL so a gateway that moved 4.0.1 → 4.0.2 counts once. Calls and the rate of a minor are sums of its versions' rows (rate = successes / (reports − rejected credentials)).
 - **The footnote** (`healthFootnote()`) is on `/plugins`, `/plugins/<id>` and `/plugins/health`, and in `plugins.json`: calls over the window from instances sharing plugin health; gateways among those also sharing usage statistics, a lower bound; rejected credentials left out of the rate.
 - **Health is read when a page is served, once an hour for the whole site**: every route that imports `src/site/live.ts` exports `revalidate = 3600` (`live.test.ts` keeps the literal equal to `HEALTH_REVALIDATE_SECONDS`), and the collector fetch sits in the Next.js data cache for the same hour. What repeats a plugin page (its twin, `plugins.json`, `llms-full.txt`) is rendered by the same functions, so it shows the same figures.
+
+- **The versions feed's data are committed files, not pages** ([ADR](../decisions/plugins-bundled-or-pinned-by-the-operator.md)): `src/content/releases.json` (`{ gateway, prerelease, date, plugins: { <id>: <version> } }`) is written by `npm run release:prepare` — at a gateway release from the root and every `plugins/*/package.json` but `_template`, at a plugin hotfix (`-- --plugin <id>`) that plugin's entry alone; never edited by hand. `src/content/advisories.json` is a JSON list, hand-written in the fix's pull request, one object per advisory, the shape of `VersionsFeedAdvisory` (`@vaubaan/shared/versions-feed`, which the gateway checks): `id` (`VBN-<year>-<nnn>`), `subject` (`gateway` or `plugin:<id>`), `affected` (a semver range), `fixed` (the first fixed version), `summary` (one sentence, at most 1000 characters), `url` (https), `date` (`YYYY-MM-DD`). An advisory is never removed: a fixed one stays, its range says who is affected. `release-data.test.ts` (gateway structural tests) holds both files to the feed's guard. The route that serves `versions.json` from them is not built yet.
 
 ## Traps
 
