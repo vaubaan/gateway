@@ -45,6 +45,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 
 | Plugin          | Handbook                                     | Credential | In one line                                                      |
 | --------------- | -------------------------------------------- | ---------- | ---------------------------------------------------------------- |
+| Axonaut         | [`axonaut.md`](./axonaut.md)                 | `api-key`  | User API key; one resource, the account; flat records.           |
 | CalDAV Calendar | [`caldav.md`](./caldav.md)                   | `api-key`  | App password over Basic auth to any CalDAV server; not Google.   |
 | Cloudflare DNS  | [`cloudflare-dns.md`](./cloudflare-dns.md)   | `api-key`  | Zone-scoped token; critical-record overlay.                      |
 | Context7        | [`context7.md`](./context7.md)               | `api-key`  | Rewrap of mcp.context7.com; one resource per key.                |
@@ -73,6 +74,7 @@ provider's documentation through Context7, never from memory.
 | --------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Google Calendar | **yes** — `POST /revoke` with the refresh token, relayed by the OAuth broker to Google | Google Account, Security, third-party apps with account access                   |
 | Miro            | no                                                                                     | Miro profile settings, apps allowed: remove "Vaubaan Gateway"                    |
+| Axonaut         | no                                                                                     | regenerate the API key in Axonaut, Settings (Paramètres), API                    |
 | SSH             | no                                                                                     | remove the connection's public key from `authorized_keys` on the host            |
 | every other     | no, on purpose: a pasted key or app password                                           | delete it at the provider; the gateway erases its copy and deletes nothing there |
 

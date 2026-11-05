@@ -19,6 +19,9 @@
  *   - Resend — two sending domains, one segment, emails;
  *   - Upstash Redis — the check at paste, two databases through the Management API, and a few
  *     Redis commands on their REST endpoints;
+ *   - Axonaut — the check at paste and discovery (`GET /me`, one account),
+ *     a few companies, contacts, opportunities, quotations and invoices, and
+ *     the writes of the plugin's tools answered with the record they name;
  *   - Vercel — one team and two projects, each with a production and a
  *     preview deployment and two environment variables: discovery, the
  *     environment-variable tools of the REST API, the deployment lookup, and
@@ -29,6 +32,7 @@
  */
 import { randomBytes } from 'node:crypto';
 
+import { AXONAUT_API_BASE } from '@vaubaan/plugin-axonaut';
 import { CLOUDFLARE_API_BASE } from '@vaubaan/plugin-cloudflare-dns';
 import { GITHUB_TOKEN_FIELD, githubCredential } from '@vaubaan/plugin-github';
 import { RESEND_API_BASE } from '@vaubaan/plugin-resend';
@@ -799,6 +803,76 @@ function vercelRoutes(): MockRoute[] {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Axonaut                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/** The one account every demo Axonaut key opens. */
+export const DEMO_AXONAUT_ACCOUNT = { id: 51200, company_name: 'Acme Conseil SAS' } as const;
+
+const DEMO_AXONAUT_COMPANIES = [
+  { id: 33, name: 'Globex SARL', is_customer: true, is_prospect: false, address_city: 'Toulouse' },
+  { id: 34, name: 'Initech', is_customer: false, is_prospect: true, address_city: 'Lyon' },
+] as const;
+
+function axonautRoutes(): MockRoute[] {
+  const api = escapeRegExp(AXONAUT_API_BASE);
+  const lastSegment = (url: string): string => new URL(url).pathname.split('/').pop() ?? '';
+  const record = (kind: string) => (call: RecordedCall) => ({
+    id: Number(lastSegment(call.url)),
+    kind,
+  });
+  return [
+    {
+      method: 'GET',
+      url: `${AXONAUT_API_BASE}/me`,
+      body: {
+        id: 58962,
+        email: 'alice@acme-conseil.example',
+        fullname: 'Alice Martin',
+        roles: 'ROLE_ADMIN',
+        api_time_consumed: 0,
+        account: [DEMO_AXONAUT_ACCOUNT],
+      },
+    },
+    { method: 'GET', url: new RegExp(`^${api}/companies(\\?|$)`), body: DEMO_AXONAUT_COMPANIES },
+    { method: 'GET', url: new RegExp(`^${api}/companies/\\d+$`), body: DEMO_AXONAUT_COMPANIES[0] },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/companies/\\d+/employees$`),
+      body: [{ id: 81, firstname: 'Claire', lastname: 'Rousseau', email: 'claire@globex.example' }],
+    },
+    {
+      method: 'GET',
+      url: new RegExp(
+        `^${api}/(companies/\\d+/)?(opportunities|quotations|invoices|events)(\\?|$)`,
+      ),
+      body: [],
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/(payments|projects|tasks|tickets|products)(\\?|$)`),
+      body: [],
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/[a-z]+/\\d+$`),
+      respond: (call) => ({ id: Number(lastSegment(call.url)) }),
+    },
+    {
+      method: 'POST',
+      url: new RegExp(`^${api}/[a-z]+(/\\d+/comments)?$`),
+      respond: (call) => ({ id: Number.parseInt(random(3), 16), ...(call.json as object) }),
+    },
+    {
+      method: 'PATCH',
+      url: new RegExp(`^${api}/[a-z]+/\\d+(/[a-z]+)?$`),
+      respond: record('updated'),
+    },
+    { method: 'DELETE', url: new RegExp(`^${api}/[a-z]+/\\d+$`), status: 200 },
+  ];
+}
+
+/* ------------------------------------------------------------------------ */
 /* The one `fetch`                                                           */
 /* ------------------------------------------------------------------------ */
 
@@ -822,6 +896,7 @@ export function createDemoProviders(options: DemoProvidersOptions = {}): DemoPro
     ...resendRoutes(),
     ...upstashRoutes(),
     ...vercelRoutes(),
+    ...axonautRoutes(),
   ]);
 
   const demoFetch: typeof fetch = async (input, init) => {
