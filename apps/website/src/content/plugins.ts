@@ -6,9 +6,12 @@
  * declaration and whose catalog is read from `risk-catalog.yaml` by the
  * plugin SDK's loader — and reduced to plain data the pages can render.
  *
- * Nothing of the gateway is restated here: severity, tier, gates and budgets
- * come from `@vaubaan/policy-engine`, the client source from the plugin SDK,
- * the worked examples from the plugin's own `classify` (`plugin-examples.ts`).
+ * Nothing of the gateway is restated here: severity, tier, gates, budgets,
+ * "Anything else" and every word a person reads of the risk model (the six
+ * facts and their values, the gate words) come from `@vaubaan/policy-engine`,
+ * the client source from the plugin SDK, the worked examples from the
+ * plugin's own `classify` (`plugin-examples.ts`). Each shape below is plain,
+ * serialisable data: `plugins.json` writes it out as it is.
  *
  * Folders whose name starts with `_` are kits, not plugins (`_template`).
  */
@@ -25,19 +28,37 @@ import {
   type TokenReach,
 } from '@vaubaan/plugin-sdk';
 import {
+  ANYTHING_ELSE_MACRO_ACTION,
   budgetAtTrustLevel,
+  gateWordOf,
   isAcceptableInEnv,
+  macroActionsOf,
   resolveVector,
   severityLevel,
   severityOf,
+  tierFactsOf,
   tierOf,
   TRUST_LEVEL_GATES,
   TRUST_LEVELS,
+  WHY_LABELS,
+  WHY_ORDER,
+  WHY_VALUES,
+  whyValue,
+  type GateWord,
   type SeverityLevel,
   type Tier,
   type TrustLevel,
+  type UndoWord,
+  type WhyAxis,
 } from '@vaubaan/policy-engine';
-import type { Gate, MacroActionEntry, RiskEntry, RiskVector } from '@vaubaan/shared';
+import type {
+  Gate,
+  MacroAction,
+  MacroActionEntry,
+  RiskEntry,
+  RiskId,
+  RiskVector,
+} from '@vaubaan/shared';
 
 import {
   classifyExamples,
@@ -57,28 +78,51 @@ export interface ToolInfo {
   readonly name: string;
   readonly title: string | null;
   readonly description: string;
+  /** What it usually touches: the permissions its classified examples touch, catalog order. */
+  readonly touches: readonly RiskId[];
 }
 
 export type RiskKind = 'read' | 'write' | 'destructive';
 
-/**
- * The undo fact of a permission, in the gateway interface's word for its
- * `reversibility` (style guide §2, "the six risk axes are words"). Copied,
- * since the site may not import `apps/gateway`: `sources-agree.test.ts`
- * compares it with the gateway's vocabulary.
- */
-export const UNDO_WORDS = {
-  reversible: 'easy',
-  costly: 'costly',
-  irreversible: 'impossible',
-} as const satisfies Record<RiskVector['reversibility'], string>;
+export type { UndoWord } from '@vaubaan/policy-engine';
 
-export type UndoWord = (typeof UNDO_WORDS)[RiskVector['reversibility']];
+/**
+ * One of the six facts of a permission, in the gateway interface's words
+ * (style guide §2, "the six risk axes are words"): `WHY_LABELS`, `WHY_VALUES`.
+ */
+export interface FactInfo {
+  readonly axis: WhyAxis;
+  /** "Undo", "Blast radius"… */
+  readonly label: string;
+  /** The catalog's value (`irreversible`). */
+  readonly value: string;
+  /** The value in words (`impossible`). */
+  readonly word: string;
+  /** True when this fact sets the tier, so moves the gate (`tierFactsOf`): the page tints it. */
+  readonly movesGate: boolean;
+}
+
+/** The six facts of a vector, in the order the gateway draws them (`WHY_ORDER`). */
+export function factsOf(vector: RiskVector): FactInfo[] {
+  const moving = new Set<WhyAxis>(tierFactsOf(vector));
+  return WHY_ORDER.map((axis) => ({
+    axis,
+    label: WHY_LABELS[axis],
+    value: vector[axis],
+    word: whyValue(axis, vector[axis]),
+    movesGate: moving.has(axis),
+  }));
+}
+
+function undoWordOf(vector: RiskVector): UndoWord {
+  return WHY_VALUES.reversibility[vector.reversibility];
+}
 
 /** A permission in one environment its catalog names (`acceptable_in_envs`, `vector_overrides`). */
 export interface RiskEnvVariant {
   readonly env: string;
   readonly vector: RiskVector;
+  readonly facts: readonly FactInfo[];
   readonly severity: Severity;
   readonly tier: Tier;
   readonly undo: UndoWord;
@@ -93,6 +137,8 @@ export interface RiskInfo {
   readonly severity: Severity;
   /** The six facts, as the catalog declares them. */
   readonly vector: RiskVector;
+  /** The same six facts in the gateway's words, the ones that move the gate marked. */
+  readonly facts: readonly FactInfo[];
   readonly undo: UndoWord;
   /** `tierOf` from the policy engine: what the trust levels read. A page never prints "tier". */
   readonly tier: Tier;
@@ -112,9 +158,15 @@ export interface RiskInfo {
   readonly deprecated: boolean;
 }
 
-/** The line a trust level writes: the gate (`null`: left out) and the budget, by the policy engine. */
+/**
+ * The line a trust level writes: the gate (`null`: left out) and the budget,
+ * by the policy engine. `quota` is calls per period, the period of a mission
+ * being a day unless its creator picks another: the page writes it per day.
+ */
 export interface LevelBudget {
   readonly gate: Gate | null;
+  /** The word class the gateway draws for the gate (`gateWordOf`; `off` when left out). */
+  readonly gateWord: GateWord;
   readonly quota: number;
   readonly rateMax: number;
   readonly rateWindowSeconds: number;
@@ -124,7 +176,7 @@ export type LevelBudgets = Readonly<Record<TrustLevel, LevelBudget>>;
 
 /** One risk of a macro-action with its base budget: no gate, the trust level decides it. */
 export interface MacroActionEntryInfo {
-  readonly riskId: string;
+  readonly riskId: RiskId;
   readonly quota: number;
   readonly rateMax: number;
   readonly rateWindowSeconds: number;
@@ -141,7 +193,25 @@ export interface MacroActionInfo {
   readonly description: string;
   /** The catalog's prose of the macro-action (risk model §4.6), when it has one. */
   readonly narrative: string | null;
+  /** Its risks, in the order of the catalog's `risks` (the map's order), retired ones left out. */
   readonly entries: readonly MacroActionEntryInfo[];
+}
+
+/** A tool of the service the plugin deliberately leaves out (`excludedTools`). */
+export interface ExcludedToolInfo {
+  readonly name: string;
+  readonly reason: string;
+}
+
+/** What the opening of a page counts; the gateways running it come from the collector. */
+export interface PluginCounts {
+  /** Permissions a mission can hold: neither the fallback nor retired ones. */
+  readonly permissions: number;
+  /** The catalog's own macro-actions ("Anything else" not counted). */
+  readonly macroActions: number;
+  readonly tools: number;
+  readonly excludedTools: number;
+  readonly examples: number;
 }
 
 export interface CredentialFieldInfo {
@@ -170,11 +240,18 @@ export interface CredentialInfo {
   readonly createUrl: string | null;
   readonly steps: readonly GuideStep[];
   readonly reach: TokenReach | null;
-  readonly permissions: readonly { readonly name: string; readonly access: string }[];
+  /** What to grant at the provider, each with the tools of the plugin that need it. */
+  readonly permissions: readonly {
+    readonly name: string;
+    readonly access: string;
+    readonly tools: readonly string[];
+  }[];
   readonly expiry: TokenExpiry | null;
   readonly docsUrl: string | null;
-  /** The exact scopes an `oauth2` way asks for. */
+  /** The exact scopes an `oauth2` way asks for (the broker's, for a brokered way). */
   readonly scopes: readonly string[];
+  /** How the person removes the grant by hand at the provider, when the gateway cannot. */
+  readonly manualRevocation: string | null;
 }
 
 export interface PluginInfo {
@@ -190,14 +267,20 @@ export interface PluginInfo {
   readonly iconColor: string | null;
   readonly resourceNoun: { readonly one: string; readonly other: string } | null;
   /** Tools of the service the plugin deliberately leaves out, each with its reason. */
-  readonly excludedTools: readonly { readonly name: string; readonly reason: string }[];
+  readonly excludedTools: readonly ExcludedToolInfo[];
   readonly docsUrl: string | null;
   readonly manualRevocation: string | null;
   readonly catalogVersion: number | null;
   readonly catalogDate: string | null;
   readonly tools: readonly ToolInfo[];
   readonly risks: readonly RiskInfo[];
+  /** The fallback ("Anything else"): the fallback permissions at the gateway's base budget. */
+  readonly anythingElse: MacroActionInfo | null;
+  /** The ids of the retired permissions (`deprecated`), catalog order; each says its `replacedBy`. */
+  readonly retired: readonly RiskId[];
+  /** The catalog's own macro-actions, in catalog order. */
   readonly macroActions: readonly MacroActionInfo[];
+  readonly counts: PluginCounts;
   /** The declared examples, classified when the site is built (`plugin-examples.ts`). */
   readonly examples: readonly ExampleInfo[];
   /** The first two macro-actions at Careful, as the policy engine expands them. */
@@ -278,9 +361,10 @@ function envVariant(entry: RiskEntry, env: string): RiskEnvVariant {
   return {
     env,
     vector: { ...vector },
+    facts: factsOf(vector),
     severity: severityWord(vector),
     tier: tierOf(vector),
-    undo: UNDO_WORDS[vector.reversibility],
+    undo: undoWordOf(vector),
     acceptable: isAcceptableInEnv(entry, env),
   };
 }
@@ -299,7 +383,8 @@ function riskInfo(entry: RiskEntry): RiskInfo {
     reason: entry.reason,
     severity,
     vector: { ...entry.vector },
-    undo: UNDO_WORDS[entry.vector.reversibility],
+    facts: factsOf(entry.vector),
+    undo: undoWordOf(entry.vector),
     tier: tierOf(entry.vector),
     rateCeilingPerMinute: entry.infra_limits?.calls_per_minute_max ?? null,
     patterns: [...patternsOf(entry)],
@@ -323,8 +408,10 @@ function levelBudgets(
   const base = { quota: entry.quota, rate_limit: entry.rate_limit };
   const line = (level: TrustLevel): LevelBudget => {
     const budget = budgetAtTrustLevel(base, level, ceiling);
+    const gate = TRUST_LEVEL_GATES[level][tier];
     return {
-      gate: TRUST_LEVEL_GATES[level][tier],
+      gate,
+      gateWord: gate === null ? 'off' : gateWordOf(gate),
       quota: budget.quota,
       rateMax: budget.rate_limit.max,
       rateWindowSeconds: budget.rate_limit.window_seconds,
@@ -353,12 +440,51 @@ function macroActionEntryInfo(
   };
 }
 
+/**
+ * A macro-action as the page shows it: its entries in catalog order (the
+ * map's), retired permissions left out as the gateway's form leaves them out.
+ */
+function macroActionInfo(
+  action: MacroAction,
+  risks: ReadonlyMap<string, RiskEntry>,
+  order: ReadonlyMap<string, number>,
+): MacroActionInfo {
+  const rank = (id: string): number => order.get(id) ?? Number.MAX_SAFE_INTEGER;
+  return {
+    id: action.id,
+    label: action.label,
+    description: action.description,
+    narrative: action.narrative ?? null,
+    entries: action.entries
+      .filter((entry) => risks.get(entry.risk_id)?.deprecated !== true)
+      .sort((a, b) => rank(a.risk_id) - rank(b.risk_id))
+      .map((entry) => macroActionEntryInfo(entry, risks)),
+  };
+}
+
+/** The permissions each tool's classified examples touch, catalog order. */
+function touchesByTool(
+  examples: readonly ExampleInfo[],
+  order: ReadonlyMap<string, number>,
+): Map<string, RiskId[]> {
+  const byTool = new Map<string, Set<RiskId>>();
+  for (const example of examples) {
+    const set = byTool.get(example.tool) ?? new Set<RiskId>();
+    for (const id of example.permissions) set.add(id);
+    byTool.set(example.tool, set);
+  }
+  const rank = (id: string): number => order.get(id) ?? Number.MAX_SAFE_INTEGER;
+  return new Map(
+    [...byTool].map(([tool, ids]) => [tool, [...ids].sort((a, b) => rank(a) - rank(b))]),
+  );
+}
+
 function clientSourceOf(spec: CredentialSpec): ClientSource {
   if (spec.kind !== 'oauth2') return 'pasted-key';
   return isBrokeredSpec(spec) ? 'broker' : 'gateway-registered';
 }
 
-function credentialInfo(spec: CredentialSpec): CredentialInfo {
+function credentialInfo(spec: CredentialSpec, manualRevocation: string | null): CredentialInfo {
   // An `oauth2` way asks for nothing: the gateway registers its own client at the service,
   // or signs in through the OAuth broker it is enrolled with (`broker`).
   const fields = spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [];
@@ -376,10 +502,13 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
     steps: guide ? [...guide.steps] : [],
     reach: guide?.reach ?? null,
-    permissions: guide ? guide.permissions.map((p) => ({ name: p.name, access: p.access })) : [],
+    permissions: guide
+      ? guide.permissions.map((p) => ({ name: p.name, access: p.access, tools: [...p.tools] }))
+      : [],
     expiry: guide?.expiry ?? null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
+    manualRevocation,
   };
 }
 
@@ -391,6 +520,16 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
 export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: string): PluginInfo {
   const catalog = plugin.catalog;
   const risksById = new Map(catalog.risks.map((r) => [r.id, r]));
+  const order = new Map(catalog.risks.map((r, i) => [r.id, i]));
+  const risks = catalog.risks.map(riskInfo);
+  const all = macroActionsOf(catalog).map((action) => macroActionInfo(action, risksById, order));
+  const macroActions = all.filter((action) => action.id !== ANYTHING_ELSE_MACRO_ACTION);
+  const examples = classifyExamples(plugin);
+  const touches = touchesByTool(examples, order);
+  const excludedTools = Object.entries(plugin.excludedTools ?? {}).map(([name, reason]) => ({
+    name,
+    reason,
+  }));
   return {
     id: plugin.id,
     name: plugin.displayName,
@@ -404,10 +543,7 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
     resourceNoun: plugin.resourceNoun
       ? { one: plugin.resourceNoun.one, other: plugin.resourceNoun.other }
       : null,
-    excludedTools: Object.entries(plugin.excludedTools ?? {}).map(([name, reason]) => ({
-      name,
-      reason,
-    })),
+    excludedTools,
     docsUrl: plugin.docsUrl ?? null,
     manualRevocation: plugin.manualRevocation ?? null,
     catalogVersion: catalog.catalog_version ?? null,
@@ -416,18 +552,22 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
       name: tool.name,
       title: plugin.toolTitles?.[tool.name] ?? null,
       description: tool.description,
+      touches: touches.get(tool.name) ?? [],
     })),
-    risks: catalog.risks.map(riskInfo),
-    macroActions: (catalog.macro_actions ?? []).map((action) => ({
-      id: action.id,
-      label: action.label,
-      description: action.description,
-      narrative: action.narrative ?? null,
-      entries: action.entries.map((entry) => macroActionEntryInfo(entry, risksById)),
-    })),
-    examples: classifyExamples(plugin),
+    risks,
+    anythingElse: all.find((action) => action.id === ANYTHING_ELSE_MACRO_ACTION) ?? null,
+    retired: risks.filter((r) => r.deprecated).map((r) => r.id),
+    macroActions,
+    counts: {
+      permissions: risks.filter((r) => !r.fallback && !r.deprecated).length,
+      macroActions: macroActions.length,
+      tools: plugin.tools.length,
+      excludedTools: excludedTools.length,
+      examples: examples.length,
+    },
+    examples,
     workedMission: workedMission(plugin),
-    credentials: [credentialInfo(plugin.credential)],
+    credentials: [credentialInfo(plugin.credential, plugin.manualRevocation ?? null)],
     gitRemote: plugin.gitRemote !== undefined,
   };
 }

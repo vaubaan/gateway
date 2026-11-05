@@ -1,21 +1,25 @@
 /**
- * What the site copies from the gateway is compared with the gateway, here,
- * since the site may not import it at build time (ADR website-nextjs-on-vercel
- * D1): the configuration keys, the published thresholds, the undo words. The
- * severity word, the tier, the gates and the budgets are not copied: the site
- * imports them from `@vaubaan/policy-engine`.
+ * What the site reads from a file of the gateway is compared with the
+ * gateway, here, since the site may not import it at build time (ADR
+ * website-nextjs-on-vercel D1): the configuration keys, the published
+ * thresholds. The words of the risk model (the six facts and their values,
+ * the gate words, Can / Asks first / Cannot), the severity word, the tier,
+ * the gates and the budgets are not copied: the site and the gateway import
+ * them from `@vaubaan/policy-engine`, which this file holds.
  */
 import { describe, expect, it } from 'vitest';
 
-import { WHY_VALUES } from '../../../../gateway/src/lib/vocabulary';
+import * as policyEngine from '@vaubaan/policy-engine';
+
+import * as vocabulary from '../../../../gateway/src/lib/vocabulary';
 import { KEYS } from '../../../../gateway/src/server/config/sources';
 import {
   configKeysMarkdown,
   CONFIG_HANDBOOK,
   parseConfigKeys,
 } from '../../../src/content/config-keys';
-import { UNDO_WORDS } from '../../../src/content/plugins';
-import { readRepoFile } from '../../../src/content/repo';
+import { factsOf, loadPlugins } from '../../../src/content/plugins';
+import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
 
 const FAMILIES = ['sign_in.<id>.<field>', 'oauth_brokers.<name>.<field>'];
@@ -59,8 +63,49 @@ describe('the published validation thresholds', () => {
   });
 });
 
-describe('the undo words', () => {
-  it('are the gateway interface’s words for reversibility', () => {
-    expect(UNDO_WORDS).toEqual(WHY_VALUES.reversibility);
+/** The risk model's words: one value, the policy engine's, behind both the gateway and the site. */
+const RISK_WORDS = [
+  'ALLOW_WORDS',
+  'GATE_WORDS',
+  'gateWordOf',
+  'SEVERITY_LABEL',
+  'TRUST_LEVEL_HINTS',
+  'TRUST_LEVEL_LABELS',
+  'WHY_LABELS',
+  'WHY_ORDER',
+  'WHY_VALUES',
+  'whyValue',
+] as const;
+
+describe('the words of the risk model', () => {
+  it('are the very values the gateway interface prints: re-exported, never copied', () => {
+    for (const name of RISK_WORDS) expect(vocabulary[name], name).toBe(policyEngine[name]);
+  });
+
+  it('are what the site prints: every fact of every permission is the policy engine’s word', async () => {
+    const plugins = await loadPlugins(REPO_ROOT);
+    for (const risk of plugins.flatMap((p) => p.risks)) {
+      expect(risk.facts, risk.id).toEqual(factsOf(risk.vector));
+      expect(risk.undo, risk.id).toBe(
+        policyEngine.WHY_VALUES.reversibility[risk.vector.reversibility],
+      );
+      for (const fact of risk.facts) {
+        expect(fact.label).toBe(policyEngine.WHY_LABELS[fact.axis]);
+        expect(fact.word).toBe(policyEngine.whyValue(fact.axis, fact.value));
+      }
+    }
+  }, 60_000);
+
+  it('are not restated in the site’s source: no word of the gateway is written there by hand', () => {
+    const words = [
+      ...Object.values(policyEngine.WHY_LABELS),
+      ...Object.values(policyEngine.GATE_WORDS),
+      ...Object.values(policyEngine.TRUST_LEVEL_HINTS),
+      ...Object.values(policyEngine.WHY_VALUES).flatMap((values) => Object.values(values)),
+    ].filter((word) => word.length > 8);
+    for (const file of ['plugins.ts', 'plugin-examples.ts', 'outputs.ts']) {
+      const source = readRepoFile(`apps/website/src/content/${file}`);
+      for (const word of words) expect(source, `${file}: '${word}'`).not.toContain(`'${word}'`);
+    }
   });
 });

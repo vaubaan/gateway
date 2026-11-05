@@ -25,11 +25,15 @@ import {
   risksTouchedBy,
   risksTouchedByAll,
   serializeSlice,
+  TRUST_LEVEL_GATES,
+  tierOf,
+  unqualifyRiskId,
   type IndexedRiskCatalog,
   type TrustLevel,
   type TrustLevelCandidate,
 } from '@vaubaan/policy-engine';
 import type { Gate, RiskId, Slice } from '@vaubaan/shared';
+import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 /** The trust level of the worked mission: the lowest, where a new macro-action starts. */
 export const WORKED_TRUST_LEVEL: TrustLevel = 'careful';
@@ -48,6 +52,22 @@ export interface WorkedDecision {
   readonly asking: readonly RiskId[];
 }
 
+/** What a Careful mission holding exactly what a call touches does with it. */
+export type CarefulOutcome = 'runs' | 'asks-first' | 'cannot';
+
+/** The gate Careful gives one permission a call touches: `null` when Careful leaves it out. */
+export interface CarefulGate {
+  /** Qualified with the call's environment when the permission is environment-scoped. */
+  readonly riskId: RiskId;
+  readonly gate: Gate | null;
+}
+
+export interface CarefulDecision {
+  readonly outcome: CarefulOutcome;
+  /** One per permission the call touches, in the order the policy engine reports them. */
+  readonly gates: readonly CarefulGate[];
+}
+
 export interface ExampleInfo {
   readonly tool: string;
   /** The tool's title when the plugin gives one, else its name. */
@@ -59,7 +79,10 @@ export interface ExampleInfo {
   readonly slices: readonly string[];
   /** The catalog permissions the slices touch, unqualified, catalog order. */
   readonly permissions: readonly RiskId[];
-  readonly careful: WorkedDecision;
+  /** "What a Careful mission does": each permission touched at Careful, by the policy engine. */
+  readonly atCareful: CarefulDecision;
+  /** What the page's worked mission (§2.3 item 6) does with this call. */
+  readonly inWorkedMission: WorkedDecision;
 }
 
 /** One line of the worked mission, as the policy engine wrote it. */
@@ -72,12 +95,22 @@ export interface WorkedLine {
   readonly rateWindowSeconds: number;
 }
 
-/** The first two macro-actions at Careful, over every environment the catalog names. */
+/**
+ * The first two macro-actions at Careful, over every environment the catalog
+ * names: the lines the policy engine writes, and the same read as the
+ * gateway's mission page reads them (Can / Asks first / Cannot, `ALLOW_WORDS`).
+ */
 export interface WorkedMission {
   readonly trustLevel: TrustLevel;
   readonly macroActions: readonly string[];
   readonly lines: readonly WorkedLine[];
   readonly leftOut: readonly { readonly riskId: RiskId; readonly tier: number }[];
+  /** Lines whose gate is `auto`. */
+  readonly can: readonly RiskId[];
+  /** Lines whose gate is `approval`. */
+  readonly asksFirst: readonly RiskId[];
+  /** What Careful leaves out. */
+  readonly cannot: readonly RiskId[];
 }
 
 export class ExampleError extends Error {
@@ -106,7 +139,8 @@ function workedCandidates(
   for (const action of (plugin.catalog.macro_actions ?? []).slice(0, WORKED_MACRO_ACTIONS)) {
     for (const entry of action.entries) {
       const risk = byId.get(entry.risk_id);
-      if (risk === undefined) continue;
+      // A retired permission is not offered, as the gateway's form leaves it out.
+      if (risk === undefined || risk.deprecated === true) continue;
       const base = { quota: entry.quota, rate_limit: entry.rate_limit };
       const ceiling = risk.infra_limits?.calls_per_minute_max ?? null;
       if (!isEnvScopedEntry(risk)) {
@@ -130,6 +164,8 @@ function workedCandidates(
 
 function expand(plugin: ProviderPlugin, envs: readonly string[] | 'acceptable'): WorkedMission {
   const expansion = expandAtTrustLevel(workedCandidates(plugin, envs), WORKED_TRUST_LEVEL);
+  const withGate = (gate: Gate): RiskId[] =>
+    expansion.lines.filter((line) => line.gate === gate).map((line) => line.risk_id);
   return {
     trustLevel: WORKED_TRUST_LEVEL,
     macroActions: (plugin.catalog.macro_actions ?? [])
@@ -144,6 +180,9 @@ function expand(plugin: ProviderPlugin, envs: readonly string[] | 'acceptable'):
       rateWindowSeconds: line.rate_limit.window_seconds,
     })),
     leftOut: expansion.left_out.map((l) => ({ riskId: l.risk_id, tier: l.tier })),
+    can: withGate('auto'),
+    asksFirst: withGate('approval'),
+    cannot: expansion.left_out.map((l) => l.risk_id),
   };
 }
 
@@ -191,6 +230,45 @@ function decide(
   }
   const asking = decision.risks_touched.filter((id) => gates.get(id) === 'approval');
   return { outcome: asking.length > 0 ? 'asks-first' : 'runs', missing: [], asking };
+}
+
+/**
+ * What a Careful mission holding exactly the permissions this call touches
+ * does with it: `evaluateCall` against an empty mission names every touched
+ * permission (env-qualified, as the gateway stores them), and Careful's gate
+ * for each comes from its tier in that environment. A permission refused in
+ * that environment (`acceptable_in_envs`) no mission holds: `null`.
+ */
+function atCareful(
+  plugin: ProviderPlugin,
+  indexed: IndexedRiskCatalog,
+  slices: readonly Slice[],
+  resources: readonly Resource[],
+): CarefulDecision {
+  const byId = new Map(plugin.catalog.risks.map((r) => [r.id, r]));
+  const resolver = envResolverFor(resources, (slice, r) => plugin.envOf?.(slice, r));
+  const decision = evaluateCall({
+    executed_slices: slices,
+    accepted_risks: new Set(),
+    catalog: indexed,
+    envResolver: resolver,
+  });
+  const touched = decision.outcome === 'denied' ? decision.missing_risks : decision.risks_touched;
+  const gates = touched.map((riskId): CarefulGate => {
+    const entry = byId.get(unqualifyRiskId(riskId));
+    const env = parseRiskId(riskId)?.env ?? null;
+    if (entry === undefined || !isAcceptableInEnv(entry, env)) return { riskId, gate: null };
+    return {
+      riskId,
+      gate: TRUST_LEVEL_GATES[WORKED_TRUST_LEVEL][tierOf(resolveVector(entry, env))],
+    };
+  });
+  const outcome: CarefulOutcome = gates.some((g) => g.gate === null)
+    ? 'cannot'
+    : gates.some((g) => g.gate === 'approval')
+      ? 'asks-first'
+      : 'runs';
+  return { outcome, gates };
 }
 
 /** The findings on one emitted slice: it matches a catalog entry other than the fallback. */
@@ -253,7 +331,8 @@ export function classifyExamples(plugin: ProviderPlugin): ExampleInfo[] {
         args: sample.args,
         slices: outcome.slices.map(serializeSlice),
         permissions: risksTouchedByAll(outcome.slices, indexed),
-        careful: decide(plugin, indexed, outcome.slices, resources),
+        atCareful: atCareful(plugin, indexed, outcome.slices, resources),
+        inWorkedMission: decide(plugin, indexed, outcome.slices, resources),
       });
     });
   }

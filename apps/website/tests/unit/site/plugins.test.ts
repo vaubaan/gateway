@@ -10,11 +10,16 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import type { ProviderPlugin } from '@vaubaan/plugin-sdk';
 import {
+  ANYTHING_ELSE_BASE_BUDGET,
   budgetAtTrustLevel,
+  gateWordOf,
   parseSlice,
+  tierFactsOf,
   tierOf,
   TRUST_LEVEL_GATES,
   TRUST_LEVELS,
+  WHY_ORDER,
+  WHY_VALUES,
 } from '@vaubaan/policy-engine';
 
 import { ExampleError } from '../../../src/content/plugin-examples';
@@ -24,7 +29,6 @@ import {
   importPlugin,
   loadPlugins,
   pluginInfo,
-  UNDO_WORDS,
   type PluginInfo,
 } from '../../../src/content/plugins';
 import { REPO_ROOT } from '../../../src/content/repo';
@@ -101,7 +105,15 @@ describe('the plugin catalog of the site', () => {
           'visibility',
         ]);
         expect(risk.tier, risk.id).toBe(tierOf(risk.vector));
-        expect(risk.undo, risk.id).toBe(UNDO_WORDS[risk.vector.reversibility]);
+        expect(risk.undo, risk.id).toBe(WHY_VALUES.reversibility[risk.vector.reversibility]);
+        expect(
+          risk.facts.map((f) => f.axis),
+          risk.id,
+        ).toEqual(WHY_ORDER);
+        expect(
+          risk.facts.filter((f) => f.movesGate).map((f) => f.axis),
+          risk.id,
+        ).toEqual(tierFactsOf(risk.vector));
         expect(risk.patterns.length, risk.id).toBeGreaterThan(0);
       }
     }
@@ -154,8 +166,10 @@ describe('the plugin catalog of the site', () => {
               level,
               risk.rateCeilingPerMinute,
             );
+            const gate = TRUST_LEVEL_GATES[level][risk.tier];
             expect(entry.levels[level], `${entry.riskId} ${level}`).toEqual({
-              gate: TRUST_LEVEL_GATES[level][risk.tier],
+              gate,
+              gateWord: gate === null ? 'off' : gateWordOf(gate),
               quota: budget.quota,
               rateMax: budget.rate_limit.max,
               rateWindowSeconds: budget.rate_limit.window_seconds,
@@ -220,10 +234,11 @@ describe('the plugin catalog of the site', () => {
       expect.arrayContaining(['github.git-push', 'github.feature-branch-write']),
     );
     // The push also forces main and deletes a branch: not held by a Careful read + propose mission.
-    expect(push?.careful.outcome).toBe('refused-not-held');
-    expect(push?.careful.missing.length).toBeGreaterThan(0);
+    expect(push?.inWorkedMission.outcome).toBe('refused-not-held');
+    expect(push?.inWorkedMission.missing.length).toBeGreaterThan(0);
     const read = github.examples.find((e) => e.tool === 'github__list_branches');
-    expect(read?.careful).toEqual({ outcome: 'runs', missing: [], asking: [] });
+    expect(read?.inWorkedMission).toEqual({ outcome: 'runs', missing: [], asking: [] });
+    expect(read?.atCareful.outcome).toBe('runs');
     // A sample the plugin expects its classifier to refuse is not a worked example.
     expect(github.examples.filter((e) => e.tool === 'github__git_push')).toHaveLength(1);
   });
@@ -235,6 +250,22 @@ describe('the plugin catalog of the site', () => {
       github.macroActions.slice(0, 2).map((a) => a.id),
     );
     expect(github.workedMission.lines.length).toBeGreaterThan(0);
+    // Can / Asks first / Cannot are the policy engine's lines and left-outs, read as the gateway reads them.
+    for (const plugin of plugins) {
+      const mission = plugin.workedMission;
+      expect(mission.can, plugin.id).toEqual(
+        mission.lines.filter((l) => l.gate === 'auto').map((l) => l.riskId),
+      );
+      expect(mission.asksFirst, plugin.id).toEqual(
+        mission.lines.filter((l) => l.gate === 'approval').map((l) => l.riskId),
+      );
+      expect(mission.cannot, plugin.id).toEqual(mission.leftOut.map((l) => l.riskId));
+      // Context7's one permission cannot be undone: Careful leaves it out, the mission is all "Cannot".
+      expect(
+        mission.can.length + mission.asksFirst.length + mission.cannot.length,
+        plugin.id,
+      ).toBeGreaterThan(0);
+    }
   });
 
   it('fails the build when a sample lands only on the fallback, or classify refuses it', () => {
@@ -254,6 +285,159 @@ describe('the plugin catalog of the site', () => {
       classify: () => ({ denied: 'no' }),
     } satisfies ProviderPlugin;
     expect(() => pluginInfo(refused, 'plugins/github', 'x')).toThrow(/classify refused it/);
+  });
+
+  it('names the plugin, the tool and the sample when the build fails', () => {
+    const github = githubPlugin;
+    if (!github) throw new Error('github plugin not loaded');
+    const second = {
+      ...github,
+      examples: { github__list_branches: [{ args: {} }, { args: { nowhere: true } }] },
+      classify: (_tool: string, args: Readonly<Record<string, unknown>>) =>
+        args['nowhere'] === true
+          ? { slices: [parseSlice('github.nowhere[x].W')] }
+          : github.classify('github__list_branches', { owner: 'o', repo: 'r' }, []),
+    } satisfies ProviderPlugin;
+    expect(() => pluginInfo(second, 'plugins/github', 'x')).toThrow(
+      /plugin 'github'[\s\S]*'github__list_branches' sample #2 slice #1: 'github\.nowhere\[x\]\.W' lands only on the fallback/,
+    );
+  });
+
+  it('says what a Careful mission does with each example, gate by gate, from the policy engine', () => {
+    for (const plugin of plugins) {
+      const risks = new Map(plugin.risks.map((r) => [r.id, r]));
+      for (const example of plugin.examples) {
+        const where = `${plugin.id} ${example.tool} #${example.sample}`;
+        expect(example.atCareful.gates.length, where).toBeGreaterThan(0);
+        for (const { riskId, gate } of example.atCareful.gates) {
+          const base = risks.get(riskId.replace(/\[[^\]]*\]/, ''));
+          if (base === undefined) throw new Error(`${where}: ${riskId}`);
+          if (base.envVariants.length === 0) {
+            expect(gate, `${where} ${riskId}`).toBe(TRUST_LEVEL_GATES.careful[base.tier]);
+          }
+        }
+        const gates = example.atCareful.gates.map((g) => g.gate);
+        const expected = gates.includes(null)
+          ? 'cannot'
+          : gates.includes('approval')
+            ? 'asks-first'
+            : 'runs';
+        expect(example.atCareful.outcome, where).toBe(expected);
+      }
+    }
+    const deleteRelease = byId('github').examples.find((e) =>
+      e.permissions.includes('github.delete-release'),
+    );
+    expect(deleteRelease?.atCareful.outcome).toBe('cannot');
+  });
+
+  it('opens each page with the counts: 17 GitHub permissions, neither the fallback nor the retired', () => {
+    const github = byId('github');
+    expect(github.counts).toEqual({
+      permissions: 17,
+      macroActions: github.macroActions.length,
+      tools: github.tools.length,
+      excludedTools: github.excludedTools.length,
+      examples: github.examples.length,
+    });
+    expect(github.retired).toEqual([
+      'github.mint-install-token-clone',
+      'github.mint-install-token-push',
+    ]);
+    for (const plugin of plugins) {
+      expect(plugin.counts.permissions, plugin.id).toBe(
+        plugin.risks.filter((r) => !r.fallback && !r.deprecated).length,
+      );
+    }
+  });
+
+  it('lists each macro-action’s permissions in catalog order, retired ones left out', () => {
+    for (const plugin of plugins) {
+      const order = plugin.risks.map((r) => r.id);
+      const retired = new Set(plugin.retired);
+      for (const action of plugin.macroActions) {
+        const ids = action.entries.map((e) => e.riskId);
+        expect(ids, `${plugin.id}/${action.id}`).toEqual(
+          [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b)),
+        );
+        for (const id of ids) expect(retired.has(id), id).toBe(false);
+      }
+    }
+  });
+
+  it('holds the fallback in "Anything else", at the gateway’s base budget', () => {
+    for (const plugin of plugins) {
+      const fallbacks = plugin.risks.filter((r) => r.fallback).map((r) => r.id);
+      const anythingElse = plugin.anythingElse;
+      expect(anythingElse?.id, plugin.id).toBe('anything-else');
+      expect(anythingElse?.label, plugin.id).toBe('Anything else');
+      expect(
+        anythingElse?.entries.map((e) => e.riskId),
+        plugin.id,
+      ).toEqual(fallbacks);
+      for (const entry of anythingElse?.entries ?? []) {
+        expect(entry.quota).toBe(ANYTHING_ELSE_BASE_BUDGET.quota);
+        expect(entry.rateMax).toBe(ANYTHING_ELSE_BASE_BUDGET.rate_limit.max);
+      }
+      expect(
+        plugin.macroActions.map((a) => a.id),
+        plugin.id,
+      ).not.toContain('anything-else');
+    }
+  });
+
+  it('says what each tool usually touches, from its classified examples', () => {
+    for (const plugin of plugins) {
+      const ids = new Set(plugin.risks.map((r) => r.id));
+      for (const tool of plugin.tools) {
+        const fromExamples = new Set(
+          plugin.examples.filter((e) => e.tool === tool.name).flatMap((e) => e.permissions),
+        );
+        expect(new Set(tool.touches), `${plugin.id} ${tool.name}`).toEqual(fromExamples);
+        for (const id of tool.touches) expect(ids.has(id), id).toBe(true);
+      }
+    }
+    const listBranches = byId('github').tools.find((t) => t.name === 'github__list_branches');
+    expect(listBranches?.touches.length).toBeGreaterThan(0);
+  });
+
+  it('takes the three new plugins through every path: examples, narratives, the connect way', () => {
+    for (const id of ['axonaut', 'asana', 'outlook']) {
+      const plugin = byId(id);
+      expect(plugin.examples.length, id).toBeGreaterThan(0);
+      expect(
+        plugin.tools.every((t) => t.touches.length > 0),
+        id,
+      ).toBe(true);
+      for (const action of plugin.macroActions) expect(action.narrative, action.id).not.toBeNull();
+      expect(plugin.workedMission.lines.length, id).toBeGreaterThan(0);
+      expect(plugin.anythingElse, id).not.toBeNull();
+    }
+    expect(byId('axonaut').credentials[0]?.clientSource).toBe('pasted-key');
+    expect(byId('asana').credentials[0]?.clientSource).toBe('pasted-key');
+    expect(byId('outlook').credentials[0]).toMatchObject({
+      kind: 'oauth2',
+      clientSource: 'broker',
+    });
+  });
+
+  it('gives a pasted key’s permissions with the tools that need each, and the manual revocation', () => {
+    const github = byId('github');
+    const way = github.credentials[0];
+    expect(way?.permissions.length).toBeGreaterThan(0);
+    // A permission may serve the git remote's operations (`github__git_fetch`), not only MCP tools.
+    for (const permission of way?.permissions ?? []) {
+      expect(permission.tools.length, permission.name).toBeGreaterThan(0);
+    }
+    const contents = way?.permissions.find((p) => p.tools.includes('github__get_file_contents'));
+    expect(contents).toBeDefined();
+    expect(way?.steps.length).toBeGreaterThan(0);
+    expect(way?.reach).not.toBeNull();
+    expect(way?.expiry).not.toBeNull();
+    expect(way?.docsUrl).toMatch(/^https:/);
+    for (const plugin of plugins) {
+      expect(plugin.credentials[0]?.manualRevocation, plugin.id).toBe(plugin.manualRevocation);
+    }
   });
 
   it('carries no experimental state (docs/handbook/plugin-sdk.md)', () => {

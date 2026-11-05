@@ -96,11 +96,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   the three trust levels (gate or left out, quota, rate); per plugin: icon,
   colour, resource noun, the tools left out, the worked mission (first two
   macro-actions at Careful), and the declared examples run through `classify`
-  at build — slices, permissions touched, what a Careful mission does. The
-  build fails when a sample lands only on the fallback or `classify` refuses
-  it. The credential says its client source (`pasted-key`,
-  `gateway-registered`, `broker` with provider and scopes); the connect page
-  no longer describes a brokered way as a client the gateway registers.
+  at build — slices, permissions touched, the gate Careful gives each. The
+  build fails, naming the plugin, the tool and the sample, when a sample lands
+  only on the fallback or `classify` refuses it. Also: "Anything else" and the
+  retired permissions, the counts of the opening, what each tool usually
+  touches, the worked mission as Can / Asks first / Cannot. The credential says
+  its client source (`pasted-key` with its guide and the tools each permission
+  serves, `gateway-registered`, `broker` with provider and scopes); the connect
+  page no longer describes a brokered way as a client the gateway registers.
+  The words of the risk model (the six facts and their values, the gate words,
+  Can / Asks first / Cannot, the trust levels), `tierFactsOf` and
+  `macroActionsOf` move into `@vaubaan/policy-engine`: the gateway re-exports
+  them, the site imports them, nothing is copied.
   `/plugins.json` carries all of it; the plugin page's Markdown prints the
   narratives.
 

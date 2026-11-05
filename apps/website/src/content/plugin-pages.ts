@@ -155,9 +155,21 @@ export function pluginPageMarkdown(
   } else {
     lines.push(
       markdownTable(
-        ['Tool', 'What it does'],
-        plugin.tools.map((tool) => [code(tool.name), text(tool.title ?? tool.description)]),
+        ['Tool', 'What it does', 'Usually touches'],
+        plugin.tools.map((tool) => [
+          code(tool.name),
+          text(tool.title ?? tool.description),
+          tool.touches.map(code).join(', '),
+        ]),
       ),
+      '',
+    );
+  }
+  if (plugin.excludedTools.length > 0) {
+    lines.push(
+      'Left out on purpose — tools of the service this plugin does not expose:',
+      '',
+      ...plugin.excludedTools.map((tool) => `- ${code(tool.name)}: ${text(tool.reason)}`),
       '',
     );
   }
@@ -230,7 +242,9 @@ function credentialMarkdown(c: CredentialInfo): string[] {
     lines.push(
       'Permissions to grant at the service, all of them: each mission narrows what an agent may do.',
       '',
-      ...c.permissions.map((p) => `- ${text(p.name)}: ${p.access}`),
+      ...c.permissions.map(
+        (p) => `- ${text(p.name)}: ${p.access} (for ${p.tools.map(code).join(', ')})`,
+      ),
       '',
     );
   }
