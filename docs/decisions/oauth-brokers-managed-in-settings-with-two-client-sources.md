@@ -23,11 +23,11 @@ administrator who owns the URL.
 
 ## Decision
 
-- **Settings › Administration › Brokers** manages the brokers in the store, their secrets sealed
+- **Settings › Administration › OAuth brokers** manages the brokers in the store, their secrets sealed
   under the master key, like sign-in providers: an administrator adds, tests, edits and removes one;
   one set by the configuration file is read-only and always on; one added here is off until its
   test passed. Every change is audited.
-- **Two kinds of source.** An **external broker**: URL, enrolment key, attestation `required` or
+- **Two kinds of source.** An **external broker**: URL, the enrolment key the broker provides, attestation `required` or
   `none`, the services it serves. **This gateway's own client**: a service, the client id and
   secret of an OAuth client the administrator created at that service, with the redirect
   `<public URL>/oauth/callback/<service>`; the gateway runs the flow itself, as it does for a
