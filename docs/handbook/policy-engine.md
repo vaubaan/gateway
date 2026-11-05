@@ -35,7 +35,8 @@ last_reviewed: 2026-11-05
   restates it. `SEVERITY_RANKS` restates `RISK_VECTOR_AXES` (server-only barrel); a test asserts
   they agree.
 - The words a person reads of the risk model live in `risk-words.ts` (the six facts and their
-  values, the gate words, Can / Asks first / Cannot, the trust levels): the gateway's
+  values, the gate words, Can / Asks first / Cannot, the trust levels, `UNDO_ROW_WORDS` — the
+  rows of a plugin map, keyed by tier, the site's only so far): the gateway's
   `lib/vocabulary.ts` re-exports them, the public site imports them; `sources-agree.test.ts`
   (website) fails when either holds a copy. `tierFactsOf` (beside `tierOf`, which it must follow
   when the tier rule changes) names the facts that move the gate; `macroActionsOf` adds "Anything

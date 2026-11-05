@@ -12,7 +12,7 @@
 
 import type { Gate, RiskVector } from '@vaubaan/shared';
 
-import type { TrustLevel } from './trust-level.ts';
+import type { Tier, TrustLevel } from './trust-level.ts';
 
 /** The label of the severity chip. The word itself is `severityLevel`'s. */
 export const SEVERITY_LABEL = 'Risk';
@@ -56,6 +56,20 @@ export const WHY_VALUES = {
 
 /** The undo fact in words: what the rows of a plugin's map are named by. */
 export type UndoWord = (typeof WHY_VALUES.reversibility)[RiskVector['reversibility']];
+
+/**
+ * The rows of a plugin's map, worst first: the undo fact, its easy value split
+ * in two by what `tierOf` reads beyond it (secrets or personal data, a whole
+ * account or many items, an unbounded cost). Keyed by what the trust levels
+ * read, so a row and the gates it gets never disagree; the word "tier" is
+ * never printed (website spec §2.3).
+ */
+export const UNDO_ROW_WORDS: Readonly<Record<Tier, string>> = {
+  4: WHY_VALUES.reversibility.irreversible,
+  3: WHY_VALUES.reversibility.costly,
+  2: `${WHY_VALUES.reversibility.reversible}, but sensitive`,
+  1: WHY_VALUES.reversibility.reversible,
+};
 
 /** A value said in words; a value the model does not list is printed as it is. */
 export function whyValue(axis: WhyAxis, value: string): string {

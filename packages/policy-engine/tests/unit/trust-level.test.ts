@@ -6,6 +6,7 @@ import { describe, expect, test } from 'vitest';
 
 import type { RiskCatalog, RiskVector } from '@vaubaan/shared';
 
+import { UNDO_ROW_WORDS, WHY_VALUES } from '../../src/risk-words.ts';
 import { SEVERITY_RANKS } from '../../src/severity.ts';
 import {
   ANYTHING_ELSE_BASE_BUDGET,
@@ -154,6 +155,21 @@ describe('tierFactsOf — the facts that move the gate', () => {
     }
   });
 });
+
+describe('UNDO_ROW_WORDS — the rows of a plugin map', () => {
+  test('name each tier by the undo word of its vectors, the easy one split by sensitivity', () => {
+    expect(UNDO_ROW_WORDS[4]).toBe(WHY_VALUES.reversibility[tierVector(4).reversibility]);
+    expect(UNDO_ROW_WORDS[3]).toBe(WHY_VALUES.reversibility[tierVector(3).reversibility]);
+    expect(UNDO_ROW_WORDS[1]).toBe(WHY_VALUES.reversibility.reversible);
+    expect(UNDO_ROW_WORDS[2].startsWith(WHY_VALUES.reversibility.reversible)).toBe(true);
+    expect(new Set(Object.values(UNDO_ROW_WORDS)).size).toBe(4);
+  });
+});
+
+/** A vector of the given tier, from the mild one. */
+function tierVector(tier: 3 | 4): RiskVector {
+  return { ...mild, reversibility: tier === 4 ? 'irreversible' : 'costly' };
+}
 
 describe('macroActionsOf — the catalog\'s macro-actions, then "Anything else"', () => {
   const catalog = {
