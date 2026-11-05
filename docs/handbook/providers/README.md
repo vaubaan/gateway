@@ -56,6 +56,7 @@ read in `src/tools.ts`, `src/classify.ts` and `src/risk-catalog.yaml`. Model: sp
 | Google Calendar | [`google-calendar.md`](./google-calendar.md) | `oauth2`   | Calendar REST API v3; OAuth client held by a broker.                |
 | Miro            | [`miro.md`](./miro.md)                       | `oauth2`   | Rewrap of Miro's MCP; OAuth client registered by the gateway.       |
 | Notion          | [`notion.md`](./notion.md)                   | `api-key`  | One resource per shared root page or database.                      |
+| Outlook         | [`outlook.md`](./outlook.md)                 | `oauth2`   | Mail and calendar over Microsoft Graph; OAuth client held by a broker. |
 | Railway         | [`railway.md`](./railway.md)                 | `api-key`  | Workspace or account token; services bound to their project.        |
 | Resend          | [`resend.md`](./resend.md)                   | `api-key`  | Recipient zones from the domain resource.                           |
 | SSH             | [`ssh.md`](./ssh.md)                         | `ssh-key`  | Pinned host key; command classes.                                   |
@@ -76,6 +77,7 @@ provider's documentation through Context7, never from memory.
 | Asana           | no                                                                                     | Asana developer console, Personal access tokens: delete the gateway's token      |
 | Google Calendar | **yes** — `POST /revoke` with the refresh token, relayed by the OAuth broker to Google | Google Account, Security, third-party apps with account access                   |
 | Miro            | no                                                                                     | Miro profile settings, apps allowed: remove "Vaubaan Gateway"                    |
+| Outlook         | no — Microsoft offers no endpoint to revoke one refresh token; the broker's `/revoke` calls nothing and the gateway erases its copy | Microsoft account: Privacy → App access (personal) or My Apps → manage apps (work): remove the gateway's app |
 | Axonaut         | no                                                                                     | regenerate the API key in Axonaut, Settings (Paramètres), API                    |
 | SSH             | no                                                                                     | remove the connection's public key from `authorized_keys` on the host            |
 | every other     | no, on purpose: a pasted key or app password                                           | delete it at the provider; the gateway erases its copy and deletes nothing there |

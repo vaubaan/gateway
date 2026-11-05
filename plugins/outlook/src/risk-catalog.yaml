@@ -1,0 +1,585 @@
+# Outlook risk catalog — loaded by `@vaubaan/plugin-sdk` (`loadCatalogFile`)
+# at gateway boot. Mail and calendar of one Microsoft account over Microsoft
+# Graph, with a token from the OAuth broker (ADR
+# outlook-through-the-oauth-broker-microsoft-provider).
+#
+# Spec     : docs/spec/gateway-risk-model.md §4 ; §4.6 (macro-actions).
+# Handbook : docs/handbook/providers/outlook.md.
+#
+# 27 named risks + 1 fallback. Ids are never renamed or deleted (deprecate
+# instead). A mailbox has no environment: no risk is env-scoped.
+#
+# Mail is zoned as Gmail is: a read is priced by who sent the mail
+# (`from-zone[..].R`, `get_message` always `unknown`), a draft by its worst
+# recipient (`to-zone[..].W`; outside the internal domains and the allowlists
+# it is refused by the classifier, so no risk exists for it), a send by its
+# worst recipient (`send-zone[..].W`), a search not bounded by exactly one
+# sender by `bulk-marker.R`. The calendar is modelled as Google Calendar is,
+# with one difference: Graph has no switch that keeps Exchange from mailing
+# the attendees of a change or a cancellation, so every update and every
+# deletion carries `event[e].notify.W`.
+provider: outlook
+catalog_version: 1
+catalog_date: 2026-11-05
+
+risks:
+  # ─── MAIL — READS ──────────────────────────────────────────────────────
+
+  - id: outlook.read-mailbox
+    label: 'Read the mailbox structure (folders, message lists, attachment lists)'
+    reason: >-
+      Folder names and counts, the containment slice of a message or an
+      attachment read (whose content risk is carried by the from-zone
+      permission needed alongside), and the zoning configuration
+      `outlook__describe_zones` returns. The baseline every read needs.
+    matches:
+      - 'outlook.mailbox[*].R'
+      - 'outlook.mailbox[*].folder[**].R'
+      - 'outlook.mailbox[*].message[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.read-from-zone-automated
+    label: 'Read messages from automated / notification senders'
+    reason: >-
+      Notifications (no-reply, alerts) from internal or allowlisted domains.
+      Little direct personal data, but the bodies often carry injectable
+      links and text. Kept apart so an operations agent can read alerts
+      without opening personal correspondence.
+    matches: 'outlook.mailbox[*].from-zone[automated].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.read-from-zone-internal
+    label: 'Read messages from internal-domain senders'
+    reason: >-
+      Correspondence between colleagues: it may hold secrets, decisions and
+      privileged context.
+    matches: 'outlook.mailbox[*].from-zone[internal].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.read-from-zone-known-external
+    label: 'Read messages from known external contacts (allowlist)'
+    reason: >-
+      Messages from the partners and customers on the mailbox's allowlists.
+      Routine business traffic, comparatively low risk.
+    matches: 'outlook.mailbox[*].from-zone[known-external].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.read-from-zone-unknown
+    label: 'Read messages from unknown senders'
+    reason: >-
+      Messages whose sender is neither internal nor allowlisted, and every
+      message read by its id (the sender is known only after the fetch). The
+      cardinal prompt-injection vector: text written by anyone. Tight limits
+      recommended.
+    matches: 'outlook.mailbox[*].from-zone[unknown].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.read-drafts
+    label: 'Read existing drafts'
+    reason: >-
+      Drafts reveal unsent intentions and earlier versions of external
+      communications. A search in the Drafts folder needs this permission
+      too.
+    matches: 'outlook.mailbox[*].draft[**].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.bulk-read
+    label: 'Bulk read across the mailbox (non-discriminating search)'
+    reason: >-
+      A search not bounded by exactly one from: address (is:unread, free
+      words, no sender) may return many messages of anyone at once and
+      bypass per-sender zoning. A distinct permission forces an explicit
+      acceptance.
+    matches: 'outlook.mailbox[*].bulk-marker.R'
+    vector:
+      reversibility: reversible
+      blast: bulk
+      data: data
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── MAIL — DRAFTS ─────────────────────────────────────────────────────
+  # A draft write emits `draft.W` and the zone of its worst recipient; a
+  # recipient outside the internal domains and the allowlists refuses it.
+
+  - id: outlook.draft-write
+    label: 'Create a draft or a reply draft (any recipient)'
+    reason: >-
+      The baseline of a draft, whatever its recipients; who could receive
+      it is the draft-to-zone permission needed alongside. A draft is
+      deleted in Outlook and is never sent by being written.
+    matches: 'outlook.mailbox[*].draft.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: outlook.draft-to-zone-self
+    label: 'Create a draft addressed to the mailbox itself only (or to nobody yet)'
+    reason: >-
+      A memo to oneself. Nothing leaves while it is a draft; sending it is
+      a send permission of its own, priced by its recipients.
+    matches: 'outlook.mailbox[*].to-zone[self].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: outlook.draft-to-zone-internal
+    label: 'Create a draft addressed to internal recipients only'
+    reason: >-
+      A draft for colleagues. It stays internal while unsent.
+    matches: 'outlook.mailbox[*].to-zone[internal].W'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: outlook.draft-to-zone-allowlist
+    label: 'Create a draft to pre-approved external contacts (allowlist)'
+    reason: >-
+      A draft to contacts on the mailbox's allowlists. Limited risk while
+      unsent; sending it needs outlook.send-to-zone-allowlist as well.
+    matches: 'outlook.mailbox[*].to-zone[allowlist].W'
+    vector:
+      reversibility: reversible
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  # ─── MAIL — SENDS ──────────────────────────────────────────────────────
+  # `send_message` and `send_draft` emit one slice, the zone of the worst
+  # recipient. A sent message cannot be called back. `send_draft` is priced
+  # on the recipients its arguments declare; the executor refuses it, unsent,
+  # when the stored draft holds any other.
+
+  - id: outlook.send-to-zone-self
+    label: 'Send a message to the mailbox itself only'
+    reason: >-
+      A note or a report the agent mails to the account's own address.
+      Nothing leaves the account; the message still lands in the inbox,
+      where whoever reads it may act on it.
+    matches: 'outlook.mailbox[*].send-zone[self].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: outlook.send-to-zone-internal
+    label: 'Send a message to internal recipients only'
+    reason: >-
+      Every recipient is the mailbox or on an internal domain. The message
+      stays inside the organisation but cannot be called back: a wrong one
+      is repaired by a correction, and colleagues may act on it before.
+    matches: 'outlook.mailbox[*].send-zone[internal].W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: outlook.send-to-zone-allowlist
+    label: 'Send a message to pre-approved external contacts (allowlist)'
+    reason: >-
+      At least one recipient is outside the organisation, and every one is
+      internal or on the mailbox's allowlists. The message leaves under the
+      owner's name and cannot be called back.
+    matches: 'outlook.mailbox[*].send-zone[allowlist].W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: outlook.send-to-zone-external
+    label: 'Send a message to any external recipient'
+    reason: >-
+      At least one recipient is neither internal nor on the allowlists. The
+      cardinal exfiltration vector: whatever the agent read can leave, under
+      the owner's name, to an address an injected message chose, and nothing
+      calls it back. Accept it only for a mission whose job is to write to
+      unknown people, with tight limits and an approval.
+    matches: 'outlook.mailbox[*].send-zone[external-unbounded].W'
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: public
+      persistence: session
+
+  # ─── MAIL — ORGANISE ───────────────────────────────────────────────────
+
+  - id: outlook.message-organize
+    label: 'Move a message, mark it read or unread, flag it, set its categories'
+    reason: >-
+      Mailbox organisation on one identified message, undone the same way.
+      A move to Deleted Items, Junk Email, the recoverable items or the
+      Outbox is refused by the plugin: a deletion is not a move.
+    matches: 'outlook.mailbox[*].message[*].W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: outlook.folder-create
+    label: 'Create a mail folder'
+    reason: >-
+      Adds a folder at the top of the mailbox or under another one. No
+      message moves and nothing is deleted; the owner removes a folder in
+      Outlook.
+    matches: 'outlook.mailbox[*].folder.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: session
+
+  # ─── CALENDAR — READS ──────────────────────────────────────────────────
+
+  - id: outlook.calendar-list
+    label: 'List the calendars of the account'
+    reason: >-
+      The names, owners and edit rights of the account's calendars, shared
+      ones included. Nothing of an event.
+    matches: 'outlook.calendar[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.event-read
+    label: 'Read events (subjects, times, places, attendees, bodies)'
+    reason: >-
+      Listing, searching and reading the events of a calendar. An agenda
+      says who meets whom, when and where, and a body may hold a meeting
+      link or a document; it is also text written by others, a path for
+      prompt injection.
+    matches: 'outlook.calendar[*].event[*].R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: outlook.free-busy-read
+    label: 'Read when people are free or busy'
+    reason: >-
+      Suggesting a time reads the busy slots of the people named, as far as
+      Exchange shares them with this account. No calendar bounds who is
+      asked about.
+    matches: 'outlook.free-busy.R'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  # ─── CALENDAR — EVENTS ─────────────────────────────────────────────────
+
+  - id: outlook.event-create
+    label: 'Create events'
+    reason: >-
+      A new event on a calendar of the account. Alone it reaches nobody but
+      the calendar's readers; inviting people is a permission of its own,
+      by who they are.
+    matches: 'outlook.calendar[*].event.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: data
+      cost: free
+      visibility: internal
+      persistence: session
+
+  - id: outlook.event-change
+    label: 'Change events (time, subject, body, place, attendees)'
+    reason: >-
+      Moving or rewriting an existing event. Undone by changing it back, but
+      whoever read it meanwhile acted on it; Exchange mails the attendees
+      the change (a permission of its own).
+    matches: 'outlook.calendar[*].event[*].W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: outlook.event-delete
+    label: 'Delete events'
+    reason: >-
+      Removing an event from a calendar; on a meeting this account
+      organises, Exchange sends every attendee a cancellation. A cancelled
+      meeting is not undone for the people who were told.
+    matches: 'outlook.calendar[*].event[*].delete.W'
+    vector:
+      reversibility: costly
+      blast: single
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: outlook.event-respond
+    label: 'Answer invitations (accept, tentative, decline)'
+    reason: >-
+      Accepting, tentatively accepting or declining an invitation, with an
+      optional comment. With send_response, Exchange mails the answer to the
+      organizer, who may be outside the company.
+    matches: 'outlook.calendar[*].event[*].response.W'
+    vector:
+      reversibility: reversible
+      blast: single
+      data: metadata
+      cost: free
+      visibility: team
+      persistence: session
+
+  # ─── CALENDAR — WHO IS REACHED ─────────────────────────────────────────
+
+  - id: outlook.invite-internal
+    label: 'Invite people of the company'
+    reason: >-
+      Adding attendees whose address is on an internal domain of the
+      mailbox. Exchange mails them the event and its body: it stays inside
+      the company.
+    matches: 'outlook.calendar[*].guests[internal].W'
+    vector:
+      reversibility: costly
+      blast: env
+      data: data
+      cost: free
+      visibility: team
+      persistence: session
+
+  - id: outlook.invite-external
+    label: 'Invite people outside the company'
+    reason: >-
+      Adding attendees on any other domain. Exchange mails them the event
+      and its body: the way calendar content leaves the company, and a way
+      to spam in the account's name. Scheduling with customers needs it; it
+      is best asked for.
+    matches: 'outlook.calendar[*].guests[external].W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+  - id: outlook.notify-guests
+    label: 'Let Exchange mail the attendees about a change or a cancellation'
+    reason: >-
+      Exchange mails the current attendees of a meeting this account
+      organises, who may be outside the company, the new version of the
+      event or its cancellation. Graph offers no switch to keep it silent,
+      so every change and every deletion needs this permission; who the
+      attendees are is not known before the call.
+    matches: 'outlook.calendar[*].event[*].notify.W'
+    vector:
+      reversibility: irreversible
+      blast: env
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+  # ─── FALLBACK (required) ───────────────────────────────────────────────
+
+  - id: outlook.uncategorized-write
+    label: 'Uncategorized Outlook write'
+    reason: >-
+      Catch-all for writes no entry above covers; none of the offered tools
+      reaches it today. A tool Microsoft adds is not offered until it is
+      modelled. In no macro-action.
+    matches: 'outlook.**.W'
+    fallback: true
+    vector:
+      reversibility: costly
+      blast: account
+      data: data
+      cost: free
+      visibility: public
+      persistence: session
+
+# Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy): what a
+# mission creator ticks, each at a trust level. Every entry but the fallback
+# belongs to exactly one, with its base budget (×1, ×3, ×10 by trust level).
+# The gateway adds "Anything else", holding the fallback. Base budgets are
+# those of the Gmail and Google Calendar catalogs.
+macro_actions:
+  - id: read
+    label: 'Read mail and agenda'
+    description: 'Folders, messages whoever sent them, drafts, calendars, events and free/busy.'
+    entries:
+      - risk_id: outlook.read-mailbox
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+      - risk_id: outlook.read-from-zone-automated
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: outlook.read-from-zone-internal
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: outlook.read-from-zone-known-external
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: outlook.read-from-zone-unknown
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: outlook.read-drafts
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+      - risk_id: outlook.bulk-read
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: outlook.calendar-list
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: outlook.event-read
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: outlook.free-busy-read
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+  - id: draft
+    label: 'Draft'
+    description: 'Write drafts and reply drafts. Nothing leaves.'
+    entries:
+      - risk_id: outlook.draft-write
+        quota: 300
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: outlook.draft-to-zone-self
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: outlook.draft-to-zone-internal
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+      - risk_id: outlook.draft-to-zone-allowlist
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: send
+    label: 'Send'
+    description: 'Send a message or a draft. Nothing can call it back.'
+    entries:
+      - risk_id: outlook.send-to-zone-self
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: outlook.send-to-zone-internal
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: outlook.send-to-zone-allowlist
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: outlook.send-to-zone-external
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+  - id: tidy
+    label: 'Tidy'
+    description: 'Move, mark, flag and categorise messages; create folders.'
+    entries:
+      - risk_id: outlook.message-organize
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+      - risk_id: outlook.folder-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+  - id: schedule
+    label: 'Schedule'
+    description: 'Create, change, delete and answer events.'
+    entries:
+      - risk_id: outlook.event-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: outlook.event-change
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: outlook.event-delete
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: outlook.event-respond
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+  - id: invite
+    label: 'Invite'
+    description: 'Invite people and let Exchange mail the attendees.'
+    entries:
+      - risk_id: outlook.invite-internal
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+      - risk_id: outlook.invite-external
+        quota: 30
+        rate_limit: { max: 5, window_seconds: 60 }
+      - risk_id: outlook.notify-guests
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }

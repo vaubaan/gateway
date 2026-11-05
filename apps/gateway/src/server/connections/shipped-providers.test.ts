@@ -67,7 +67,13 @@ describe('shipped plugins through the generic connect driver', () => {
         return [plugin.id, isBrokeredSpec(spec) ? 'broker' : spec.revocation];
       }),
     );
-    expect(Object.fromEntries(declared)).toEqual({ 'google-calendar': 'broker' });
+    // Outlook's broker answers `/revoke` without calling Microsoft, which has no endpoint for
+    // one refresh token (ADR outlook-through-the-oauth-broker-microsoft-provider): the call
+    // still goes to the broker, which owns that answer.
+    expect(Object.fromEntries(declared)).toEqual({
+      'google-calendar': 'broker',
+      outlook: 'broker',
+    });
     for (const plugin of SHIPPED_PLUGINS) expect(plugin.revoke, plugin.id).toBeUndefined();
   });
 
@@ -116,17 +122,25 @@ describe('shipped plugins through the generic connect driver', () => {
     expect(before.filter((p) => p.kind === 'oauth2').map((p) => p.id)).toEqual([
       'miro',
       'google-calendar',
+      'outlook',
     ]);
     for (const plugin of SHIPPED_PLUGINS) {
       const spec = plugin.credential;
       if (spec.kind !== 'oauth2') continue;
-      if (isBrokeredSpec(spec)) expect(spec.broker.provider, plugin.id).toBe('google');
-      else expect(spec.clientRegistration.registrationUrl, plugin.id).toMatch(/^https:\/\//);
+      if (isBrokeredSpec(spec)) {
+        expect(spec.broker.provider, plugin.id).toBe(
+          plugin.id === 'outlook' ? 'microsoft' : 'google',
+        );
+      } else expect(spec.clientRegistration.registrationUrl, plugin.id).toMatch(/^https:\/\//);
     }
     expect(before.filter((p) => p.unavailable !== null).map((p) => p.id)).toEqual([
       'google-calendar',
+      'outlook',
     ]);
-    expect(before.filter((p) => p.viaBroker).map((p) => p.id)).toEqual(['google-calendar']);
+    expect(before.filter((p) => p.viaBroker).map((p) => p.id)).toEqual([
+      'google-calendar',
+      'outlook',
+    ]);
   });
 
   it('builds a valid authorization redirect for every oauth2 plugin', async () => {
