@@ -11,7 +11,7 @@ tracks:
   - deploy/docker/smoke.sh
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-05
 ---
 
 # E2E test plan
@@ -40,6 +40,7 @@ last_reviewed: 2026-11-04
 - The IdP has no default user: each spec names its user with `signInAs` in `beforeEach`, never relies on nor restores another spec's user. Seeded users (`E2E_USER`, `E2E_AUDIT_USER`, `E2E_SHARE_OWNER`, …) are declared in `instance.ts`.
 - Every executor call is HTTP on `/mcp` with a mission token through `agent.ts`, so it crosses the real door and budget. Only the `seed-day` control endpoint records below the door (a day of calls no mock answers).
 - No spec creates state in a real cloud: there is no dedicated test org and no sweeper; the state dies with the `:memory:` store.
+- The ephemeral instance reads no versions feed (`VAUBAAN_UPDATES_CHECK=false`, set in `ephemeral-instance.ts`): no spec reaches vaubaan.com, and Administration › Plugins shows no feed notice there; the notices are a unit test of the view.
 - `E2E_V5_SCREENSHOT_DIR=<folder>` keeps a screenshot per step.
 - Push in a browser is stubbed at the service worker container (`notifications.spec.ts`): a headless browser on a closed network reaches no push service, so the spec checks the pages and the subscription they post; Chromium is granted the `notifications` permission. The service worker itself is a unit test. The messaging services are a stand-in `RootDeps.notificationFetch` of the ephemeral instance (it answers the status a path ends with, `…/status-404`, 200 otherwise) and mail notifications a `notificationMailer` that sends nothing, while `mail.*` stays unconfigured for the local accounts.
 - The container smoke takes `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT`, `SMOKE_EXPECT_ARCH`; the release sets all three, per architecture, on the built image and again on the pushed digest.

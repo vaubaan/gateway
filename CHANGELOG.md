@@ -41,6 +41,17 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   start and daily (`updates.check`, on by default; `updates.feed_url`), a GET
   that carries nothing about it, and keeps what is behind and what an
   advisory names for Administration; nothing is downloaded.
+  **Administration › Plugins** lists every plugin the instance knows (version,
+  bundled or pinned and what a pin replaces, enabled or not, accounts served,
+  community validation) under what the feed reports: the gateway or a plugin
+  behind its release, an advisory naming a loaded version with the version that
+  fixes it, a pin older than the bundled version; "Check now" re-reads the feed.
+  The **Reference** names each plugin's version and tags a pinned one.
+  `reseal` loads the plugins as the boot does, pins included.
+- **Website: `/versions.json`**, the versions feed instances read, built at
+  build time from `releases.json` and `advisories.json` (a malformed file fails
+  the build), cacheable for an hour; the trust center and the telemetry docs
+  name it among what leaves an instance.
 
 ### Changed
 

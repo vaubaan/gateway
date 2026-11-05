@@ -432,8 +432,9 @@ async function main(): Promise<void> {
   const root = await getRoot(
     testRootDeps({
       publicUrl: PUBLIC_URL,
-      // The admin rule names the operator of the share spec.
-      env: { VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email },
+      // The admin rule names the operator of the share spec. No spec reaches the
+      // published versions feed: the check is off (Administration › Plugins says so).
+      env: { VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email, VAUBAAN_UPDATES_CHECK: 'false' },
       deps: {
         oidc: {
           fetch: routeFetch({

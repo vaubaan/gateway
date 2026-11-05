@@ -371,6 +371,7 @@ test('Settings leads a person to their own pages and an administrator to the gat
     'Telemetry',
     'Registered apps',
     'Encryption',
+    'Plugins',
   ]);
   // An administrator is offered the interface reference, under Administration.
   await expect(ops.getByTestId('settings-interface-reference')).toContainText(

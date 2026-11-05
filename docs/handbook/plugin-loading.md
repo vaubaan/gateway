@@ -5,6 +5,11 @@ tracks:
   - apps/gateway/src/server/updates/
   - apps/gateway/src/server/compose/root.ts
   - apps/gateway/src/server/compose/shipped-plugins.ts
+  - apps/gateway/src/server/reseal/cli.ts
+  - apps/gateway/src/app/admin/(guarded)/plugins/
+  - apps/gateway/src/app/(app)/reference/frame.tsx
+  - apps/website/src/app/versions.json/route.ts
+  - apps/website/src/content/versions-feed.ts
   - packages/shared/src/brand.ts
   - packages/shared/src/versions-feed.ts
   - scripts/build-plugin-bundle.mjs
@@ -28,6 +33,9 @@ ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-
 - [`plugins/inventory.ts`](../../apps/gateway/src/server/plugins/inventory.ts) — the pin wins, `plugins.enabled`, the accounts check.
 - [`updates/index.ts`](../../apps/gateway/src/server/updates/index.ts) — the daily read of `versions.json`; `root.updates`.
 - [`scripts/build-plugin-bundle.mjs`](../../scripts/build-plugin-bundle.mjs) — the bundle a pin is; the release workflow runs it.
+- `apps/gateway/src/app/admin/(guarded)/plugins/` — Administration › Plugins: `page.tsx` reads `root.plugins`, `root.updates`, the account counts and the badges; `plugins-view.tsx` says it; `check/route.ts` is "Check now" (`updates/handlers.ts`, not audited: it changes nothing).
+- `apps/gateway/src/app/(app)/reference/frame.tsx` — `PinnedTag`, the "pinned" tag the Reference shows from the inventory.
+- [`apps/website/src/app/versions.json/route.ts`](../../apps/website/src/app/versions.json/route.ts) — the feed instances read, built at build time by `content/versions-feed.ts` ([website](website.md)).
 
 ## Invariants
 
@@ -44,7 +52,8 @@ ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-
 - **The import is a native `import()`** with `webpackIgnore` / `turbopackIgnore`: the file is the operator's, read at run time, never traced into the standalone output. Keep both comments.
 - **`/plugins` is root's in the image** (0755): the gateway reads it, never writes it, so a compromised process cannot plant code for the next start.
 - **Tests never read the feed**: `validEnv()` sets `VAUBAAN_UPDATES_CHECK=false`. A test that wants the check sets it back and injects `updatesFetch` (`RootDeps`).
-- **`RootDeps.buildRegistry`** bypasses the loader: the inventory then lists the injected plugins as bundled, and no pin is read. `reseal` still builds the bundled registry alone.
+- **`RootDeps.buildRegistry`** bypasses the loader: the inventory then lists the injected plugins as bundled, and no pin is read. `reseal` runs `loadPlugins` like the root, so a pin that stops the boot stops it too (exit 78).
+- **The e2e instance never reads the feed** (`VAUBAAN_UPDATES_CHECK=false` in `ephemeral-instance.ts`): Administration › Plugins shows no notice there, only "the versions check is off". A notice is tested on the view (`tests/unit/app/admin-plugins.test.tsx`).
 - **A bundle inlines JSON imports**, but a file read at run time (`catalogPathNextTo`) must be copied beside `index.js`: the script copies `src/*.yaml`. A plugin reading another file needs the script taught.
 - **A native addon cannot be bundled** (esbuild has no `.node` loader): the plugin declares `"vaubaan": { "bundleable": false, "reason": … }` (today `ssh`) and stays image-only.
 - **The plugin image's context** is filtered by `plugin.Dockerfile.dockerignore` (BuildKit reads it before the root `.dockerignore`, which excludes `dist/`).

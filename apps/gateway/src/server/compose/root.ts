@@ -71,7 +71,13 @@ import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
 import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
-import { createUpdatesModule, type UpdatesModule, type UpdatesTimers } from '../updates';
+import {
+  createUpdatesHandlers,
+  createUpdatesModule,
+  type UpdatesHandlers,
+  type UpdatesModule,
+  type UpdatesTimers,
+} from '../updates';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
@@ -103,8 +109,11 @@ export interface GatewayRoot {
   readonly registry: PluginRegistry;
   /** Every plugin the instance knows, bundled or pinned, registered or not (Administration › Plugins). */
   readonly plugins: PluginInventory;
-  /** The versions check: what the published feed says is behind, in memory (`updates.*`). */
-  readonly updates: UpdatesModule;
+  /**
+   * The versions check: what the published feed says is behind, in memory (`updates.*`),
+   * and "Check now" of Administration › Plugins.
+   */
+  readonly updates: UpdatesModule & { readonly handlers: UpdatesHandlers };
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
@@ -291,7 +300,14 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       store,
       registry,
       plugins: inventory,
-      updates,
+      updates: {
+        ...updates,
+        handlers: createUpdatesHandlers({
+          publicUrl: config.publicUrl,
+          authenticator: modules.auth.authenticator,
+          updates,
+        }),
+      },
       ...modules,
       build,
       startedAt: new Date(),

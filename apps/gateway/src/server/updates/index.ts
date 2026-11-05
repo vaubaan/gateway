@@ -13,6 +13,13 @@ import type { Logger } from '../logging';
 import type { PluginInventoryEntry } from '../plugins';
 import { compare, type UpdatesComparison } from './compare';
 import { readVersionsFeed, type FeedReadFailure } from './fetch-feed';
+export {
+  createUpdatesHandlers,
+  PLUGINS_PAGE,
+  UPDATES_CHECK_ACTION,
+  type UpdatesHandlerDeps,
+  type UpdatesHandlers,
+} from './handlers';
 
 export {
   compare,

@@ -2,7 +2,8 @@
  * `/reference/<id>` — the reference of one service (spec §4.2 "Providers"):
  * what it is in the plugin's own words, then its permissions compared across
  * the trust levels, its tools, and how it is modelled, behind tabs
- * (`service-view.tsx`).
+ * (`service-view.tsx`). The plugin's version is on the summary line, tagged
+ * "pinned" with the bundled version it replaces when the operator pinned it.
  *
  * Generated from the plugin registry (`server/providers/reference.ts`): no
  * service has a hand-written page. Every permission and every macro-action has
@@ -28,7 +29,7 @@ import { ENVIRONMENT_WORDS } from '@/lib/vocabulary';
 import { gitRemoteBase } from '@/server/git/paths';
 import { providerCards, providerReference } from '@/lib/providers/reference';
 
-import { catalogSize, ReferenceFrame } from '../frame';
+import { catalogSize, pinnedPlugins, PinnedTag, ReferenceFrame } from '../frame';
 import styles from '../reference.module.css';
 import { ServiceView } from './service-view';
 
@@ -46,6 +47,7 @@ export default async function ServiceReferencePage({ params }: Props) {
   const validation = await root.telemetry.stats.statusFor(reference.id);
   const { environment } = reference;
   const gitRemote = root.registry.get(reference.id)?.plugin.gitRemote;
+  const pinned = pinnedPlugins(root.plugins).get(reference.id);
 
   return (
     <ReferenceFrame cards={providerCards(root.registry)}>
@@ -65,6 +67,14 @@ export default async function ServiceReferencePage({ params }: Props) {
             { label: catalogSize(reference) },
             {
               label: `connects through: ${credentialKindLabel(reference.credential_kind)}`,
+            },
+            {
+              label: (
+                <span className={styles.inline} data-testid="provider-version">
+                  plugin <Mono>{reference.version}</Mono>
+                  <PinnedTag entry={pinned} withReplaced />
+                </span>
+              ),
             },
           ]}
         />
