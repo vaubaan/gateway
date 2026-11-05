@@ -17,6 +17,7 @@ import { classifyRailway, environmentsOf, isProjectScopedTool } from './classify
 import { railwayDataModel } from './data-model.ts';
 import { RAILWAY_AGENT_HINT, discoverRailwayResources, executeRailway } from './execute.ts';
 import { createdRailwayResources } from './created.ts';
+import { railwayExamples } from './examples.ts';
 import { railwayCredential } from './credential.ts';
 import { RAILWAY_ICON, RAILWAY_ICON_COLOR } from './icon.ts';
 import {
@@ -51,6 +52,7 @@ export const railwayPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/railway.md',
   tools: railwayTools,
   toolTitles: railwayToolTitles,
+  examples: railwayExamples,
   // A project is what a Railway connection lists : a created project is
   // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createProject],
@@ -93,6 +95,7 @@ export {
   toUpstreamName,
 };
 export type { RailwayEnvironmentRef } from './classify.ts';
+export { EXAMPLE_PROD, EXAMPLE_STAGING, railwayExamples } from './examples.ts';
 export {
   explainMcpRefusal,
   probeRailwayToken,

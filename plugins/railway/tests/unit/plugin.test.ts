@@ -132,62 +132,12 @@ describe('railway plugin — structural kit', () => {
     for (const e of lines) expect(e.quota).toBeGreaterThan(0);
   });
 
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    railway__whoami: [{ args: {} }],
-    'railway__list-projects': [{ args: {} }],
-    'railway__create-project': [{ args: { name: 'new' } }],
-    'railway__list-services': [{ args: { projectId: PROJECT_STG } }, { args: {} }],
-    'railway__list-deployments': [{ args: { projectId: PROJECT_STG, limit: 10 } }],
-    'railway__get-status': [{ args: { projectId: PROJECT_STG, environmentId: ENV_STG } }],
-    'railway__get-logs': [
-      { args: { projectId: PROJECT_STG, serviceId: SERVICE, environmentId: ENV_STG } },
-    ],
-    railway__redeploy: [
-      { args: { projectId: PROJECT_STG, serviceId: SERVICE, environmentId: ENV_STG } },
-      {
-        args: { projectId: PROJECT_PRD, serviceId: SERVICE, environmentId: ENV_PRD },
-        resources: [staging, prod],
-      },
-    ],
-    'railway__accept-deploy': [
-      { args: { environmentId: ENV_STG } },
-      // two projects, no projectId : resolved through the discovered environments.
-      { args: { environmentId: ENV_PRD }, resources: [staging, prod] },
-      // one project, an environment it does not own : outside the mission.
-      { args: { environmentId: ENV_PRD }, expectDenied: true },
-    ],
-    'railway__railway-agent': [
-      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, message: 'scale the worker' } },
-    ],
-    'railway__list-variables': [{ args: { projectId: PROJECT_STG, environmentId: ENV_STG } }],
-    'railway__upsert-variable': [
-      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, name: 'API_KEY', value: 'x' } },
-    ],
-    'railway__upsert-variables': [
-      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, variables: { A: '1' } } },
-      {
-        args: {
-          projectId: PROJECT_STG,
-          environmentId: ENV_STG,
-          variables: { A: '1' },
-          replace: true,
-        },
-      },
-      // two projects, an environment none of them declares : ambiguous.
-      {
-        args: { environmentId: 'env-unknown', variables: { A: '1' } },
-        resources: [staging, prod],
-        expectDenied: true,
-      },
-    ],
-    'railway__delete-variable': [
-      { args: { projectId: PROJECT_STG, environmentId: ENV_STG, name: 'OLD' } },
-    ],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), each sample with its resources.
+  const SAMPLES: ToolSamples = railwayPlugin.examples;
 
   test('every tool classifies to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(railwayPlugin, SAMPLES, { resources: [staging] });
+    const report = assertCatalogCoverage(railwayPlugin);
     // Paths only : this model's cardinalities count instances, not how a slice names them.
     assertSlicesOnDataModel(railwayPlugin, SAMPLES, { resources: [staging], cardinalities: false });
     expect(report.toolsChecked).toBe(14);

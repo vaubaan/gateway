@@ -55,6 +55,7 @@ import {
   profileCommandLine,
   splitCommandLine,
   SshHostKeyMismatchError,
+  sshExamples,
   sshPlugin,
   sshTarget,
   stripPrivilegePrefix,
@@ -148,21 +149,13 @@ describe('ssh plugin — structural kit', () => {
     assertNoWildcard(sshPlugin);
   });
 
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    ssh__exec: [
-      { args: { cmd: 'uptime' } },
-      { args: { host: HOST, cmd: 'cat /etc/shadow' } },
-      { args: { cmd: 'touch /tmp/x' } },
-      { args: { cmd: 'rm -rf /srv/app/releases/old' } },
-      { args: { cmd: 'sudo apt-get install -y nginx' } },
-      { args: { cmd: 'systemctl restart nginx' } },
-      { args: { host: OTHER, cmd: 'ls' }, resources: [staging], expectDenied: true },
-    ],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), each sample with its resources.
+  const SAMPLES: ToolSamples = sshExamples;
 
   test('the single tool classifies to slices every catalog risk covers', () => {
-    const report = assertCatalogCoverage(sshPlugin, SAMPLES, { resources: [staging] });
+    expect(sshPlugin.examples).toBe(sshExamples);
+    const report = assertCatalogCoverage(sshPlugin);
     assertSlicesOnDataModel(sshPlugin, SAMPLES, { resources: [staging] });
     expect(report.toolsChecked).toBe(1);
     expect(report.risksUntouched).toEqual([]);
