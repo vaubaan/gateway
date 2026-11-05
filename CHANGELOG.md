@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.17] - 2026-11-05
+
 ### Added
 
 - **Asana plugin** (`@vaubaan/plugin-asana` 0.1.0): one resource per project, its sections, tasks,
@@ -2477,7 +2479,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.16...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.17...HEAD
+[2.0.0-alpha.17]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.16...v2.0.0-alpha.17
 [2.0.0-alpha.16]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.15...v2.0.0-alpha.16
 [2.0.0-alpha.15]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.14...v2.0.0-alpha.15
 [2.0.0-alpha.14]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.13...v2.0.0-alpha.14
