@@ -14,7 +14,8 @@
  *
  * `createRegistry` validates every plugin and rejects duplicate ids, so a
  * broken plugin fails the boot instead of the first call. `buildShippedRegistry`
- * is the bundled set alone, for the tools that need no pin (`reseal`).
+ * is the bundled set alone, for the tests that read no pin; `reseal` composes its
+ * registry with `loadPlugins`, as the root does.
  */
 import asanaPlugin from '@vaubaan/plugin-asana';
 import axonautPlugin from '@vaubaan/plugin-axonaut';
