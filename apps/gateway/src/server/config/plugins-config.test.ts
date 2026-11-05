@@ -50,7 +50,7 @@ describe('plugins.*', () => {
 
 describe('updates.*', () => {
   it('checks the project feed by default', () => {
-    const { config } = loadInstanceConfig({ env: validEnv() });
+    const { config } = loadInstanceConfig({ env: validEnv({ VAUBAAN_UPDATES_CHECK: undefined }) });
     expect(config.updates.check).toBe(true);
     expect(config.updates.feedUrl.href).toBe(DEFAULT_UPDATES_FEED_URL);
   });

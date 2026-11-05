@@ -255,6 +255,54 @@ describe('buildRoot and the plugins', () => {
   });
 });
 
+describe('buildRoot and the versions check', () => {
+  it('reads the feed through the injected fetch with the plugins it loaded', async () => {
+    const seen: string[] = [];
+    const root = await buildRoot({
+      ...quiet,
+      loadConfig: () =>
+        loadInstanceConfig({
+          env: validEnv({
+            VAUBAAN_UPDATES_CHECK: 'true',
+            VAUBAAN_UPDATES_FEED_URL: 'https://feed.example.com/versions.json',
+          }),
+        }),
+      build: { version: '2.0.0-alpha.16', commit: 'abc' },
+      updatesFetch: async (input: RequestInfo | URL) => {
+        seen.push(String(input));
+        return new Response(
+          JSON.stringify({
+            schema: 1,
+            generated_at: '2026-11-05T10:00:00Z',
+            gateway: { latest: '2.0.0-alpha.17', prerelease: true },
+            plugins: { github: { latest: '99.0.0' } },
+            advisories: [],
+          }),
+        );
+      },
+      updatesTimers: { setTimeout: () => 'armed', clearTimeout: () => undefined },
+    });
+    expect(root.updates.current()).toBeNull();
+    const report = await root.updates.refresh();
+    expect(seen).toEqual(['https://feed.example.com/versions.json']);
+    expect(report?.gateway.behind).toBe(true);
+    expect(report?.pluginsBehind.map((p) => p.id)).toEqual(['github']);
+    await root.close();
+  });
+
+  it('stays silent when updates.check is off', async () => {
+    const root = await buildRoot({
+      ...quiet,
+      updatesFetch: async () => {
+        throw new Error('no request expected');
+      },
+    });
+    expect(await root.updates.refresh()).toBeNull();
+    expect(root.updates.current()).toBeNull();
+    await root.close();
+  });
+});
+
 describe('getRoot', () => {
   it('builds once and hands the same promise to every caller', async () => {
     let builds = 0;

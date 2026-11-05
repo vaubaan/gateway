@@ -19,6 +19,8 @@ export function validEnv(
     VAUBAAN_MASTER_KEY: TEST_MASTER_KEY,
     VAUBAAN_ADMIN_EMAILS: 'ops@example.com',
     VAUBAAN_BOOTSTRAP_TOKEN: TEST_BOOTSTRAP_TOKEN,
+    // No test reads the published versions feed: a root built here never reaches the network.
+    VAUBAAN_UPDATES_CHECK: 'false',
   };
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete base[k];

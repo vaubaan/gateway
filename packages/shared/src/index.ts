@@ -26,6 +26,15 @@ export {
   UpstreamHttpError,
 } from './mcp.ts';
 export { brandError, errorBrand, hasErrorBrand } from './brand.ts';
+export {
+  isAdvisorySubject,
+  isSemverVersion,
+  isVersionsFeed,
+  isVersionsFeedAdvisory,
+  VERSIONS_FEED_LIMITS,
+  VERSIONS_FEED_SCHEMA,
+} from './versions-feed.ts';
+export type { AdvisorySubject, VersionsFeed, VersionsFeedAdvisory } from './versions-feed.ts';
 export type {
   JsonRpcError,
   JsonRpcSuccess,

@@ -71,6 +71,7 @@ import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
 import { createUsersModule, type UsersModule } from '../users';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
+import { createUpdatesModule, type UpdatesModule, type UpdatesTimers } from '../updates';
 import type { Store } from '../store';
 import type { Clock } from '../store/clock';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
@@ -102,6 +103,8 @@ export interface GatewayRoot {
   readonly registry: PluginRegistry;
   /** Every plugin the instance knows, bundled or pinned, registered or not (Administration › Plugins). */
   readonly plugins: PluginInventory;
+  /** The versions check: what the published feed says is behind, in memory (`updates.*`). */
+  readonly updates: UpdatesModule;
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
@@ -189,6 +192,10 @@ export interface RootDeps {
   readonly backupFetch?: typeof fetch;
   /** The scheduled backup's timers (tests drive them by hand). */
   readonly backupTimers?: BackupTimers;
+  /** Outbound HTTP of the versions check (tests inject a fake; default: the global `fetch`). */
+  readonly updatesFetch?: typeof fetch;
+  /** The versions check's timers (tests drive them by hand). */
+  readonly updatesTimers?: UpdatesTimers;
   /** The hourly discovery's timers (tests drive them by hand). */
   readonly discoveryTimers?: DiscoveryTimers;
   /** Outbound HTTP to the browsers' push services (tests inject a fake; default: `fetch`). */
@@ -265,6 +272,17 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       deps,
       opened,
     );
+    // Nothing about the instance leaves with the request; off unless `updates.check`.
+    const updates = createUpdatesModule({
+      config: config.updates,
+      gatewayVersion: build.version,
+      inventory: inventory.entries,
+      logger,
+      fetch: deps.updatesFetch,
+      timers: deps.updatesTimers,
+    });
+    opened.push(() => updates.stop());
+    updates.start();
     const root: GatewayRoot = {
       config,
       configFile,
@@ -273,6 +291,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
       store,
       registry,
       plugins: inventory,
+      updates,
       ...modules,
       build,
       startedAt: new Date(),
