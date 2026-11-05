@@ -20,6 +20,7 @@ import {
 import { docPathOf } from '../../../src/content/docs';
 import {
   absolute,
+  BUILT_ROUTE_FILES,
   LIVE_FILES,
   NAMED_CRAWLERS,
   robotsTxt,
@@ -44,7 +45,7 @@ beforeAll(async () => {
 
 /** Every path the site answers besides its pages: the public files and the live ones. */
 function servedFiles(): Set<string> {
-  return new Set([...site.files.keys(), ...LIVE_FILES]);
+  return new Set([...site.files.keys(), ...LIVE_FILES, ...BUILT_ROUTE_FILES]);
 }
 
 function handwrittenDocPaths(): string[] {

@@ -27,4 +27,6 @@ Never sent: arguments or their hash, payloads, provider answers or error text, r
 
 Only when telemetry is on: `POST` batches to the collector, at most every 60 seconds, and one `GET` of the public plugin statistics every six hours, which feeds the "validated by the community" tag on the accounts and in Reference. A firewall that blocks them costs nothing but the reports and the tag.
 
+Whatever telemetry says, the instance reads the versions feed: one `GET` of `https://vaubaan.com/versions.json` a minute after it starts, then daily, with no payload and no identifier, to show on Settings → Administration → Plugins what is behind. Off with `updates.check: false` (`VAUBAAN_UPDATES_CHECK`); a firewall that blocks it costs nothing but that page's notices. Every field: [trust center, What leaves an instance](/trust#what-leaves-an-instance).
+
 More: [telemetry handbook](https://github.com/vaubaan/gateway/blob/main/docs/handbook/telemetry.md), [collector README](https://github.com/vaubaan/gateway/blob/main/deploy/collector/README.md), [plugin health](/plugins/health).
