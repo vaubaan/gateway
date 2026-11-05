@@ -4,7 +4,7 @@ tracks:
   - packages/policy-engine/src/
   - packages/shared/src/wildcard.ts
   - packages/policy-engine/package.json
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-05
 ---
 
 # Policy engine — handbook
@@ -30,6 +30,10 @@ last_reviewed: 2026-10-27
 - **The barrel names the public API** (`src/index.ts`, no `export *`, **[inv: named-package-barrels]**): a name the other packages need is added there on purpose; the package's own tests import from the module.
 - Values come only from the browser-safe subpaths `@vaubaan/shared/risk-id` and `/domain`: the
   issuance UI bundles this package and the barrel pulls in `node:crypto`.
+- Severity (`severity.ts`) orders, never decides: `severityOf` is the score that sorts permissions,
+  `severityLevel` its word. The gateway's interface and the site call this one function; neither
+  restates it. `SEVERITY_RANKS` restates `RISK_VECTOR_AXES` (server-only barrel); a test asserts
+  they agree.
 - One rule each, called by every consumer: `isAcceptableInEnv` (issuance, runtime, SDK macro-action
   checks, the store's `RegistryCatalogIndex`), `budgetIssues` (SDK loader, `macroActionIssues`,
   issuance preview). Never re-implement them.

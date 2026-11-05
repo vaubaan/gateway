@@ -53,4 +53,12 @@ export {
   TRUST_LEVEL_GATES,
   TRUST_LEVELS,
 } from './trust-level.ts';
+export {
+  MAX_SEVERITY,
+  SEVERITY_LEVELS,
+  SEVERITY_RANKS,
+  severityLevel,
+  severityOf,
+} from './severity.ts';
+export type { SeverityLevel } from './severity.ts';
 export type { Tier, TrustLevel, TrustLevelCandidate, TrustLevelLine } from './trust-level.ts';

@@ -12,7 +12,7 @@ tracks:
   - apps/gateway/src/components/missions/
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-05
 ---
 
 # Missions — handbook
@@ -64,7 +64,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 - **Policy maps are keyed by line.** `PolicyLineKey` (`<set>::<risk>`, `policyLineKey`, `lineKeyOf`) keys usage, limits and open gates everywhere a risk id alone was a key; a helper that takes a bare `RiskId` (`lineOfRisk`, `placeLines`) puts it in every set accepting it, else the first set of its provider's account.
 - **The environment label is the effective one** — the resource's own, else the connection's `default_env` — applied by the repository on read; changing a default relabels every resource inheriting it.
 - **A base id of an env-scoped risk** is valid in a macro-action (expanded per environment the selection resolves) but `unknown-risk` in an explicit policy.
-- **Severity orders, never decides.** `SEVERITY_RANKS` restates `RISK_VECTOR_AXES` because the shared barrel is server-only; a test asserts they agree.
+- **Severity orders, never decides.** `severityOf` and `severityLevel` are the policy engine's (`severity.ts`), re-exported by `catalog-view.ts`; the site calls the same function.
 - **`setGate` is single-process.** It reads the gate opening and writes the gate in two store calls; with a second process, move the decision into `MissionsRepo.setGate`'s transaction. It looks for the opening in the period running now even on an expired mission, else extending the expiry would revive it.
 - **Wiring order.** The root builds missions before the `SessionService`, so `budget` defaults to `missionUsageReader(store.sessions)` — the same function, not a copy.
 - **A trust level moved alone is no edit** (`hasChanges` ignores it), so it neither saves nor restarts a raise count; a raise always rewrites lines, so it saves.

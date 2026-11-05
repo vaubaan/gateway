@@ -8,12 +8,8 @@ import {
   groupByKind,
   groupVariants,
   isResolvable,
-  MAX_SEVERITY,
   patternsOf,
   riskKindOf,
-  SEVERITY_RANKS,
-  severityLevel,
-  severityOf,
   VECTOR_AXES,
   noteBody,
   FALLBACK_NOTE,
@@ -70,48 +66,6 @@ describe('enumerateCatalog', () => {
     const staging = rows.find((r) => r.risk_id === 'acme[staging].write');
     const prod = rows.find((r) => r.risk_id === 'acme[prod].write');
     expect(prod?.severity).toBeGreaterThan(staging?.severity ?? Number.POSITIVE_INFINITY);
-  });
-});
-
-describe('severity', () => {
-  it('ranks the axes exactly like the shared vector vocabulary', () => {
-    expect(SEVERITY_RANKS).toEqual(RISK_VECTOR_AXES);
-  });
-
-  it('is 0 for the mildest vector and MAX_SEVERITY for the worst', () => {
-    expect(
-      severityOf({
-        reversibility: 'reversible',
-        blast: 'single',
-        data: 'metadata',
-        cost: 'free',
-        visibility: 'internal',
-        persistence: 'stateless',
-      }),
-    ).toBe(0);
-    expect(
-      severityOf({
-        reversibility: 'irreversible',
-        blast: 'bulk',
-        data: 'pii',
-        cost: 'unbounded',
-        visibility: 'public',
-        persistence: 'posture',
-      }),
-    ).toBe(MAX_SEVERITY);
-  });
-
-  it('buckets the score into four levels', () => {
-    expect([0, 3, 4, 6, 7, 9, 10, MAX_SEVERITY].map(severityLevel)).toEqual([
-      'low',
-      'low',
-      'medium',
-      'medium',
-      'high',
-      'high',
-      'critical',
-      'critical',
-    ]);
   });
 });
 
