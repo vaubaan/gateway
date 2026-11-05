@@ -1,36 +1,28 @@
 /**
  * Shared fixtures of the `google-calendar` tests: two calendars (the primary
  * one of a Workspace account and a team calendar), an execution context with
- * a brokered access token, routes of Google's Calendar REST API, and one
- * realistic sample per tool (the coverage kit and the identifier proof both
- * run on them). Ids follow the shapes of Google's documentation.
+ * a brokered access token, routes of Google's Calendar REST API, and the
+ * plugin's own samples (`src/examples.ts` ; the coverage kit and the
+ * identifier proof both run on them). Ids follow the shapes of Google's documentation.
  */
 import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockFetch, MockRoute, RecordedCall, ToolSamples } from '@vaubaan/plugin-sdk/testing';
 
-import { CALENDAR_API_BASE, PROVIDER_ID, TOOL } from '../../src/identity.ts';
+import {
+  EVENT,
+  EXAMPLE_PRIMARY as primary,
+  EXAMPLE_TEAM as team,
+  OTHER,
+  PRIMARY,
+  PRIMARY_ID,
+  TEAM,
+  TEAM_ID,
+} from '../../src/examples.ts';
+import { CALENDAR_API_BASE } from '../../src/identity.ts';
+import { googleCalendarPlugin } from '../../src/index.ts';
 
-export const PRIMARY_ID = 'alice@acme.example';
-export const PRIMARY = 'alice~acme.example';
-export const TEAM_ID = 'c_0123abcd@group.calendar.google.com';
-export const TEAM = 'c_0123abcd~group.calendar.google.com';
-export const OTHER = 'bob~acme.example';
-export const EVENT = '7kd8h3j2l1m0n9b8v7c6x5z4a3';
-
-const zoning = { account_email: PRIMARY_ID, internal_domains: ['acme.example'] };
-
-export const primary: Resource = {
-  provider: PROVIDER_ID,
-  ref: PRIMARY,
-  displayName: 'Alice',
-  metadata: { primary: true, access_role: 'owner', ...zoning },
-};
-export const team: Resource = {
-  provider: PROVIDER_ID,
-  ref: TEAM,
-  displayName: 'Team',
-  metadata: { primary: false, access_role: 'writer', ...zoning },
-};
+// The ids and calendars the plugin's `examples` run on (`src/examples.ts`).
+export { EVENT, OTHER, PRIMARY, PRIMARY_ID, TEAM, TEAM_ID, primary, team };
 
 export const TOKEN = 'ya29.brokered-access-token-1234567890';
 
@@ -87,35 +79,5 @@ export const EVENT_GET: MockRoute = {
   body: INVITATION,
 };
 
-const at = { startTime: '2026-11-03T10:00:00Z', endTime: '2026-11-03T11:00:00Z' };
-const range = { timeMin: '2026-11-03T08:00:00Z', timeMax: '2026-11-03T18:00:00Z' };
-
-/** One table for the catalog coverage and the identifier proof. */
-export const SAMPLES: ToolSamples = {
-  [TOOL.listCalendars]: [{ args: {} }],
-  [TOOL.listEvents]: [
-    { args: { calendarId: TEAM, ...range, orderBy: 'startTime', maxResults: 10 } },
-    { args: { calendarId: OTHER }, expectDenied: true },
-  ],
-  [TOOL.searchEvents]: [{ args: { q: 'quarterly review' } }],
-  [TOOL.getEvent]: [{ args: { calendarId: PRIMARY_ID, eventId: EVENT } }],
-  [TOOL.suggestTime]: [
-    { args: { attendeeEmails: ['bob@acme.example'], ...range, durationMinutes: 30 } },
-  ],
-  [TOOL.createEvent]: [
-    { args: { summary: 'Focus', ...at } },
-    {
-      args: {
-        summary: 'Sync',
-        ...at,
-        attendees: [{ email: 'bob@acme.example' }, { email: 'carol@customer.example' }],
-      },
-    },
-  ],
-  [TOOL.updateEvent]: [
-    { args: { eventId: EVENT, summary: 'Sync (moved)', ...at } },
-    { args: { eventId: EVENT, calendarId: TEAM, location: 'Room 2', sendUpdates: 'none' } },
-  ],
-  [TOOL.deleteEvent]: [{ args: { eventId: EVENT, sendUpdates: 'none' } }],
-  [TOOL.respondToEvent]: [{ args: { eventId: EVENT, responseStatus: 'accepted' } }],
-};
+/** One table for the catalog coverage and the identifier proof : the plugin's `examples`. */
+export const SAMPLES: ToolSamples = googleCalendarPlugin.examples;

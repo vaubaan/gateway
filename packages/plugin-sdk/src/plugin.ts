@@ -24,6 +24,7 @@ import type {
 
 import type { CredentialSecret, CredentialSpec } from './credential.ts';
 import type { EnvOf } from './env-of.ts';
+import type { ToolSamples } from './samples.ts';
 import type { GitRemoteCapability } from './git/remote.ts';
 import type { ToolResultPartSink } from './streaming.ts';
 
@@ -192,6 +193,28 @@ export interface ProviderPlugin {
    * of the plugin.
    */
   readonly unboundTools?: Readonly<Record<string, string>>;
+
+  /**
+   * Tools of the provider the plugin deliberately does not expose, each with
+   * one sentence saying why (GitHub's workflow dispatch: it runs whatever the
+   * workflow does, with the repository's secrets). Shown on the plugin's
+   * public page next to "Anything else" (ADR plugin-contract-and-credential-spec,
+   * amendment 2026-11-05). A name here is never a declared tool
+   * (`definePlugin`), and `classify` keeps refusing it by name. Absent : the
+   * plugin names no left-out tool.
+   */
+  readonly excludedTools?: Readonly<Record<string, string>>;
+
+  /**
+   * Representative calls of every tool, keyed by tool name : the samples the
+   * test kit runs (`assertCatalogCoverage` defaults to them) and the site
+   * classifies when it builds, so a page shows the slices the classifier
+   * really emits. Each key is a tool of the plugin and each list is non-empty
+   * (`definePlugin`); that every tool has one and every slice is covered is
+   * the kit's check. Absent : the tests pass their own samples, and the page
+   * shows no worked calls.
+   */
+  readonly examples?: ToolSamples;
 
   /**
    * The tools whose success creates a resource of the connection : something

@@ -160,8 +160,8 @@ npx vitest run plugins/vercel
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertNoWildcard`, `assertCatalogCoverage` with at
-least one sample per tool, `assertSlicesOnDataModel`, `catalogPathIssues`), the classifier conventions, the credential spec,
+`assertNoWildcard`, `assertCatalogCoverage` on the plugin's `examples`
+(`src/examples.ts`, at least one per tool), `assertSlicesOnDataModel`, `catalogPathIssues`), the classifier conventions, the credential spec,
 and `execute` / `discoverResources` against `mockFetch` (including the request
 shapes of the custom REST tools). `classify.test.ts` pins the slices of each
 tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.

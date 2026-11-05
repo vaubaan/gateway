@@ -28,9 +28,11 @@
 # pattern or preset changed.
 # catalog_version 5 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 6 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: vercel
-catalog_version: 5
-catalog_date: 2026-10-31
+catalog_version: 6
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -347,6 +349,12 @@ macro_actions:
   - id: watch
     label: 'Watch'
     description: 'Projects, deployments, encrypted environment keys and firewall.'
+    narrative: >-
+      Looking at the mission's projects: deployments and their logs, domains, the keys of
+      environment variables with their values still encrypted, and the firewall rules. Nothing
+      changes and no secret comes out in the clear. Runtime logs and the firewall rules are
+      permissions of their own because logs can carry application data and the rules show an
+      attacker what to get around.
     entries:
       - risk_id: vercel.read-account
         quota: 2000
@@ -363,6 +371,11 @@ macro_actions:
   - id: deploy
     label: 'Deploy and review'
     description: 'Deploy, open a preview and comment.'
+    narrative: >-
+      The everyday loop: deploying and opening a deployment URL. A preview build changes nothing anyone relies on and can be thrown away, while a
+      production deploy is public and costly to roll back, so the two environments are held
+      apart. A bypass link that opens a protected preview is a permission of its own, since
+      anyone who gets the link gets past the protection.
     entries:
       - risk_id: vercel.deploy
         quota: 50
@@ -379,6 +392,12 @@ macro_actions:
   - id: configure
     label: 'Configure'
     description: 'Environment variables, in clear and in writing.'
+    narrative: >-
+      Environment variables: reading their values in the clear and writing them. Decrypting
+      returns database URLs, signing secrets and payment keys, so that read is here and not
+      under Watch. A write lands per environment, and one that reaches every environment at once
+      (or a delete, which always does) is a separate permission, so a mission allowed preview
+      cannot reach production by accident.
     entries:
       - risk_id: vercel.read-env-var-plaintext
         quota: 20
@@ -392,6 +411,11 @@ macro_actions:
   - id: protect
     label: 'Protect'
     description: 'Firewall and IP rules.'
+    narrative: >-
+      The firewall of a project: switching it on or off, its custom rules and its IP rules. Each
+      change applies to every request reaching production at once. A rule too loose lets attacks
+      through and one too strict blocks paying visitors, which is why these sit apart from
+      deploying.
     entries:
       - risk_id: vercel.firewall-write
         quota: 20
@@ -405,6 +429,11 @@ macro_actions:
   - id: own
     label: 'Own'
     description: 'Project settings and domains.'
+    narrative: >-
+      Changing what every future deployment is built and served from: the project's build
+      settings, its Git connection and its domains. A bad build command breaks preview and
+      production at the next push, and detaching a domain takes the public service down. These
+      outlive the mission, so they form a verb of their own.
     entries:
       - risk_id: vercel.project-settings-write
         quota: 50

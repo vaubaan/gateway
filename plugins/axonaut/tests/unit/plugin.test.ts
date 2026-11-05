@@ -30,7 +30,7 @@ describe('axonaut plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices the catalog covers, none by the fallback', () => {
-    const report = assertCatalogCoverage(axonautPlugin, SAMPLES, { resources: [account] });
+    const report = assertCatalogCoverage(axonautPlugin);
     assertSlicesOnDataModel(axonautPlugin, SAMPLES, { resources: [account] });
     expect(catalogPathIssues(axonautPlugin)).toEqual([]);
     const named = axonautCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);

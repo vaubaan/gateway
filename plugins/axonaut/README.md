@@ -134,7 +134,8 @@ Deletions are layered: deleting a contact touches `crm-write` and `delete-record
 ## Macro-actions
 
 A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous), risk model §4.6.
-The narrative of each, to move into the YAML once the loader accepts a `narrative` key:
+Each macro-action's `narrative`, the two to four sentences its public page shows, is in
+`src/risk-catalog.yaml`.
 
 | Macro-action | Label            | Its risks                                                                   |
 | ------------ | ---------------- | --------------------------------------------------------------------------- |
@@ -143,29 +144,13 @@ The narrative of each, to move into the YAML once the loader accepts a `narrativ
 | `sell`       | Sell and invoice | `quotation-create`, `quotation-outcome`, `invoice-create`, `payment-record` |
 | `clean-up`   | Clean up         | `delete-record`                                                             |
 
-- **Read.** The agent reads the account: customers and their contacts, the pipeline, quotes,
-  invoices and payments, projects, tasks, tickets and products. The CRM read is kept apart because
-  it carries personal data about people outside the company: at Careful it asks first, while the
-  sales, work and catalog reads run freely.
-- **Work the CRM.** The agent keeps the day-to-day records up to date: it adds or corrects
-  companies and contacts, logs calls and notes, moves deals through the pipeline, and manages
-  tasks and tickets. Closing a deal as won or lost is kept apart, because reporting and forecasts
-  follow it.
-- **Sell and invoice.** The agent prepares the commercial documents: quotations, the customer's
-  answer to them, invoices and the payments received. Each act is its own permission because each
-  goes further: an accepted quotation creates an order, an invoice is a numbered legal document
-  that cannot be deleted, a payment is an entry in the books.
-- **Clean up.** The agent deletes companies, contacts, opportunities and tasks. Alone in its
-  macro-action because a deletion cannot be undone: it is left out at Careful and asks first at every
-  other level, and a deletion also needs the permission to modify that kind of record.
-
 The gateway adds "Anything else", holding the fallback.
 
 ## Tests
 
 `npx vitest run plugins/axonaut`: the SDK kit (`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage` with no fallback hit and no risk untouched, `assertSlicesOnDataModel`,
-`catalogPathIssues`, `assertIdentifiersRefused` on the same samples), missions written from the
+`catalogPathIssues`, `assertIdentifiersRefused` on the plugin's `examples`, `src/examples.ts`), missions written from the
 macro-actions (`policyFromMacroActions`), the classifier branch by branch (every refusal included,
 the layered risks of a deletion), `execute` and `discoverResources` against `mockFetch` (headers,
 query, page header, bodies field by field, failures, declines with nothing sent), hostile

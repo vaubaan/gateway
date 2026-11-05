@@ -77,47 +77,12 @@ describe('stripe plugin — structural kit', () => {
     assertNoWildcard(stripePlugin);
   });
 
-  const live = 'acct_1/live';
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    stripe__list_products: [{ args: {} }, { args: { account: live }, resources: both }],
-    stripe__list_prices: [{ args: { product: 'prod_x' } }],
-    stripe__list_customers: [{ args: {} }],
-    stripe__retrieve_customer: [{ args: { id: 'cus_x' } }],
-    stripe__list_subscriptions: [{ args: { customer: 'cus_x' } }],
-    stripe__list_invoices: [{ args: {} }],
-    stripe__list_charges: [{ args: {} }],
-    stripe__list_payment_intents: [{ args: {} }],
-    stripe__get_balance: [{ args: {} }],
-    stripe__list_events: [{ args: {} }],
-    stripe__create_product: [{ args: { name: 'Pro' } }],
-    stripe__update_product: [{ args: { id: 'prod_x' } }],
-    stripe__create_price: [{ args: { product: 'prod_x', unit_amount: 1, currency: 'eur' } }],
-    stripe__update_price: [{ args: { id: 'price_x' } }],
-    stripe__create_coupon: [{ args: { percent_off: 10 } }],
-    stripe__create_promotion_code: [{ args: { coupon: 'co_x' } }],
-    stripe__create_subscription: [{ args: { customer: 'cus_x', items: [] } }],
-    stripe__update_subscription: [
-      { args: { id: 'sub_x' } },
-      { args: { id: 'sub_x', cancel_at_period_end: true } },
-    ],
-    stripe__cancel_subscription: [{ args: { id: 'sub_x' } }],
-    stripe__pause_subscription: [{ args: { id: 'sub_x', pause_collection: {} } }],
-    stripe__create_invoice: [
-      { args: { customer: 'cus_x' } },
-      { args: { customer: 'cus_x', auto_advance: true } },
-      { args: { customer: 'cus_x', expand: ['customer'] }, expectDenied: true },
-    ],
-    stripe__finalize_invoice: [{ args: { id: 'in_x' } }],
-    stripe__void_invoice: [{ args: { id: 'in_x' } }],
-    stripe__create_refund: [{ args: { charge: 'ch_x' } }, { args: { payment_intent: 'pi_x' } }],
-    stripe__create_payout: [{ args: { amount: 100, currency: 'eur' } }],
-    stripe__delete_customer: [{ args: { id: 'cus_x' } }, { args: {}, expectDenied: true }],
-    stripe__create_webhook_endpoint: [{ args: { url: 'https://x', enabled_events: [] } }],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), on the live mode.
+  const SAMPLES: ToolSamples = stripePlugin.examples;
 
   test('every tool classifies to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(stripePlugin, SAMPLES, { resources: [liveRes] });
+    const report = assertCatalogCoverage(stripePlugin);
     // Paths only : this model's cardinalities count instances, not how a slice names them.
     assertSlicesOnDataModel(stripePlugin, SAMPLES, { resources: [liveRes], cardinalities: false });
     expect(report.toolsChecked).toBe(27);

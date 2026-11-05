@@ -11,6 +11,7 @@
     "type-check": "npm run generate && tsc --noEmit"
   },
   "dependencies": {
+    "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "@vaubaan/telemetry": "*",
     "fumadocs-core": "16.17.9",

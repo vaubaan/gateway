@@ -9,7 +9,7 @@
  * client component.
  */
 import type { ResourceNoun } from '@vaubaan/plugin-sdk';
-import type { TrustLevel } from '@vaubaan/policy-engine';
+import type { SeverityLevel, TrustLevel } from '@vaubaan/policy-engine';
 import type {
   Gate,
   MacroAction,
@@ -166,8 +166,8 @@ export interface MissionDraft {
 // Issuance context — what the creator may build a mission from
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const SEVERITY_LEVELS = ['low', 'medium', 'high', 'critical'] as const;
-export type SeverityLevel = (typeof SEVERITY_LEVELS)[number];
+// The four severity words are the policy engine's (one function for the gateway and the site).
+export { SEVERITY_LEVELS, type SeverityLevel } from '@vaubaan/policy-engine';
 
 /**
  * What an entry does, in three words a creator sorts by: it only reads, it

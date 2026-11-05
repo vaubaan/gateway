@@ -17,6 +17,7 @@ import { classifyAxonaut } from './classify.ts';
 import { axonautCredential } from './credential.ts';
 import { axonautDataModel } from './data-model.ts';
 import { discoverAxonautResources, executeAxonaut } from './execute.ts';
+import { axonautExamples } from './examples.ts';
 import { AXONAUT_ICON, AXONAUT_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { axonautToolTitles, axonautTools } from './tools.ts';
@@ -41,6 +42,7 @@ export const axonautPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/axonaut.md',
   tools: axonautTools,
   toolTitles: axonautToolTitles,
+  examples: axonautExamples,
   dataModel: axonautDataModel,
   catalog: axonautCatalog.catalog,
   credential: axonautCredential,
@@ -68,3 +70,4 @@ export {
 } from './execute.ts';
 export { AXONAUT_ID, axonautId } from './fields.ts';
 export { API_KEY_FIELD, PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { EXAMPLE_ACCOUNT, EXAMPLE_OTHER_ACCOUNT, axonautExamples } from './examples.ts';

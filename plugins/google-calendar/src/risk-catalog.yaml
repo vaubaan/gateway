@@ -27,9 +27,11 @@
 # the notification argument is `sendUpdates` (was the MCP's
 # `notificationLevel`) in the wording of notify-guests. No risk, pattern or
 # macro-action changed.
+# catalog_version 5 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: google-calendar
-catalog_version: 4
-catalog_date: 2026-11-02
+catalog_version: 5
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -219,6 +221,11 @@ macro_actions:
   - id: read
     label: 'Read the agenda'
     description: 'Calendars, events and free/busy.'
+    narrative: >-
+      Reading the agenda: the calendars of the mission, their events, and when people are free
+      or busy. Nothing changes, but an agenda says who meets whom, when and where, and event
+      descriptions are text others wrote. Free/busy is a permission of its own because it asks
+      about people no calendar of the mission bounds.
     entries:
       - risk_id: google-calendar.calendar-list
         quota: 500
@@ -232,6 +239,11 @@ macro_actions:
   - id: schedule
     label: 'Schedule'
     description: 'Create, change, delete and answer events.'
+    narrative: >-
+      Putting events on the mission's calendars, moving or rewriting them, deleting them and
+      answering invitations. On its own an event reaches nobody but the calendar's readers, and
+      a change can be changed back. Deleting an event this account organises cancels it for
+      every guest, and an answer goes to the organizer, so both are permissions of their own.
     entries:
       - risk_id: google-calendar.event-create
         quota: 100
@@ -248,6 +260,12 @@ macro_actions:
   - id: invite
     label: 'Invite'
     description: 'Invite people and let Google email them.'
+    narrative: >-
+      Adding guests, which makes Google email them the event with its description and
+      attachments. Guests inside the company and guests outside it are held apart, because an
+      external invitation is how calendar content leaves the company and how spam goes out in
+      the account's name. Letting Google email the guests about a change or a cancellation is
+      apart too, since who they are is only known at the call.
     entries:
       - risk_id: google-calendar.invite-internal
         quota: 100

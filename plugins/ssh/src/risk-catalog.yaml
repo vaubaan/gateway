@@ -52,9 +52,11 @@
 # pattern or preset changed.
 # catalog_version 6 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 7 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: ssh
-catalog_version: 6
-catalog_date: 2026-10-31
+catalog_version: 7
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -229,6 +231,11 @@ macro_actions:
   - id: look
     label: 'Look'
     description: 'Read-only commands, credential files included.'
+    narrative: >-
+      Inspecting the host with the commands of the read allow-list: logs, files, processes,
+      disks and sockets, alone or piped together. Nothing on the host changes. Reading a file
+      that holds credentials, such as a private key, an env file or the shadow file, is a
+      permission of its own, and so is any path the classifier cannot see.
     entries:
       - risk_id: ssh.exec-read
         quota: 2000
@@ -239,6 +246,13 @@ macro_actions:
   - id: fix
     label: 'Fix'
     description: 'Write, restart and destroy.'
+    narrative: >-
+      Running commands that change the host: editing files, building, launching scripts,
+      restarting services. Any command outside the read allow-list is a write, and a line the
+      classifier cannot see through needs every permission at once. Service control is kept
+      apart because a restart interrupts whatever depends on the service, and destructive
+      commands (a recursive delete, a disk wipe, a reboot) because nothing brings back what they
+      remove.
     entries:
       - risk_id: ssh.exec-write
         quota: 200
@@ -252,6 +266,11 @@ macro_actions:
   - id: install
     label: 'Install'
     description: 'Packages and sudo.'
+    narrative: >-
+      Changing what is installed on the host and acting as another user. A package install,
+      removal or upgrade changes what runs for every service and brings in code from outside. A
+      command run through sudo, su or doas does whatever it does as root, so both come on top of
+      the write permission.
     entries:
       - risk_id: ssh.exec-package-install
         quota: 10

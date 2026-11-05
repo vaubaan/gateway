@@ -14,9 +14,9 @@ import { PROVIDER_ID, context7Catalog } from '../../src/index.ts';
 const { catalog, indexed } = context7Catalog;
 
 describe('context7 risk-catalog — YAML structural validation', () => {
-  test('one named risk and the fallback, at catalog version 1', () => {
+  test('one named risk and the fallback, at catalog version 4', () => {
     expect(catalog.provider).toBe(PROVIDER_ID);
-    expect(catalog.catalog_version).toBe(3);
+    expect(catalog.catalog_version).toBe(4);
     expect(catalog.risks.map((r) => [r.id, r.fallback === true])).toEqual([
       [`${PROVIDER_ID}.query-docs`, false],
       [`${PROVIDER_ID}.uncategorized-write`, true],

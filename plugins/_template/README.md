@@ -108,7 +108,7 @@ The gateway adds "Anything else", holding the fallback.
 
 `npx vitest run plugins/_template` — 26 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`, and
-`assertIdentifiersRefused` on the same samples), a mission written from the
+`assertIdentifiersRefused` on the plugin's `examples`, `src/examples.ts`), a mission written from the
 macro-actions (`policyFromMacroActions`),
 the version and default-export check, the classifier
 branch by branch (refusals, path-safe identifiers and the risks a deletion

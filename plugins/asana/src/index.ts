@@ -16,6 +16,7 @@ import { asanaCredential } from './credential.ts';
 import { asanaDataModel } from './data-model.ts';
 import { discoverAsanaResources } from './discovery.ts';
 import { executeAsana } from './execute.ts';
+import { asanaExamples } from './examples.ts';
 import { ASANA_ICON, ASANA_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { asanaToolTitles, asanaTools } from './tools.ts';
@@ -40,6 +41,7 @@ export const asanaPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/asana.md',
   tools: asanaTools,
   toolTitles: asanaToolTitles,
+  examples: asanaExamples,
   dataModel: asanaDataModel,
   catalog: asanaCatalog.catalog,
   credential: asanaCredential,
@@ -61,3 +63,4 @@ export { MAX_COMMENT_PAGES, MAX_SECTION_PAGES } from './execute.ts';
 export { MAX_PARENT_DEPTH } from './membership.ts';
 export { asanaGid, offsetToken } from './ids.ts';
 export { PAT_FIELD, PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { EXAMPLE_OTHER_PROJECT, EXAMPLE_PROJECT, asanaExamples } from './examples.ts';

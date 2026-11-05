@@ -81,44 +81,12 @@ describe('cloudflare-dns plugin — structural kit', () => {
     assertNoWildcard(cloudflareDnsPlugin);
   });
 
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    cloudflare_dns__list_zones: [
-      { args: {} },
-      { args: {}, resources: [github], expectDenied: true },
-    ],
-    cloudflare_dns__get_zone: [{ args: { zone_id: 'z1' } }],
-    cloudflare_dns__list_records: [{ args: { zone_id: 'z1', type: 'A' } }],
-    cloudflare_dns__get_record: [{ args: { zone_id: 'z1', record_id: 'r1' } }],
-    cloudflare_dns__export_records: [{ args: { zone_id: 'z1' } }],
-    cloudflare_dns__get_zone_settings: [{ args: { zone_id: 'z1' } }],
-    cloudflare_dns__get_dnssec: [{ args: { zone_id: 'z1' } }],
-    cloudflare_dns__create_record: [
-      { args: { zone_id: 'z1', type: 'A', name: 'www.example.com', content: '192.0.2.1' } },
-      { args: { zone_id: 'z1', type: 'A', name: 'example.com', content: '192.0.2.1' } },
-    ],
-    cloudflare_dns__update_record: [
-      { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
-      { args: { zone_id: 'z1', record_id: 'r1', type: 'MX', name: 'example.com' } },
-      { args: { zone_id: 'z1', type: 'A', name: 'www.example.com' }, expectDenied: true },
-    ],
-    cloudflare_dns__delete_record: [
-      { args: { zone_id: 'z1', record_id: 'r1' } },
-      { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
-      { args: { zone_id: 'z1', record_id: 'r1', type: 'NS', name: 'sub.example.com' } },
-      { args: { zone_id: 'z1', record_id: '..' }, expectDenied: true },
-    ],
-    cloudflare_dns__import_records: [{ args: { zone_id: 'z1', file: ';; bind' } }],
-    cloudflare_dns__edit_zone_settings: [
-      { args: { zone_id: 'z1', items: [{ id: 'ssl', value: 'strict' }] } },
-    ],
-    cloudflare_dns__purge_cache: [{ args: { zone_id: 'z1', purge_everything: true } }],
-    cloudflare_dns__edit_dnssec: [{ args: { zone_id: 'z1', status: 'active' } }],
-    cloudflare_dns__delete_zone: [{ args: { zone_id: 'z1' } }],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), each sample with its resources.
+  const SAMPLES: ToolSamples = cloudflareDnsPlugin.examples;
 
   test('every tool classifies to slices the catalog covers ; every risk is touched', () => {
-    const report = assertCatalogCoverage(cloudflareDnsPlugin, SAMPLES, { resources: [exampleCom] });
+    const report = assertCatalogCoverage(cloudflareDnsPlugin);
     // Paths only : this model's cardinalities count instances, not how a slice names them.
     assertSlicesOnDataModel(cloudflareDnsPlugin, SAMPLES, {
       resources: [exampleCom],

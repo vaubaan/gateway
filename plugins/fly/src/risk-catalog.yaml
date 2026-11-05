@@ -13,9 +13,11 @@
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: fly
-catalog_version: 3
-catalog_date: 2026-10-31
+catalog_version: 4
+catalog_date: 2026-11-05
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────────
@@ -495,6 +497,11 @@ macro_actions:
   - id: observe
     label: 'Observe'
     description: 'Apps, machines, volumes, secret names and logs.'
+    narrative: >-
+      Looking at the mission's apps: machines and their configuration, volumes, addresses,
+      certificates, the names of secrets and recent logs. Nothing changes, and secret values are
+      replaced before the agent sees them. Logs are a permission of their own because an app may
+      print customer data or a secret.
     entries:
       - risk_id: fly.read-org
         quota: 2000
@@ -511,6 +518,12 @@ macro_actions:
   - id: operate
     label: 'Operate'
     description: 'Deploy, power, resize, snapshot, certificates and shell.'
+    narrative: >-
+      Running what exists: deploying an image, starting, stopping and resizing machines,
+      snapshots, certificates and a shell on a machine. Only images pinned by digest under the
+      connection's prefixes deploy, and a mounted volume is snapshotted first. The shell is kept
+      apart because any command runs there with the app's secrets and volume, the master key of
+      a Vaubaan instance included.
     entries:
       - risk_id: fly.deploy
         quota: 20
@@ -536,6 +549,11 @@ macro_actions:
   - id: build
     label: 'Build'
     description: 'Create apps, machines, volumes and addresses.'
+    narrative: >-
+      Adding to the organization: new apps, machines, volumes, public addresses, and the
+      configuration a machine boots with. Each of these can be billed while it exists, and a
+      public address puts the app on the internet. A configuration is its own permission because
+      it can start any command with the app's secrets in its environment.
     entries:
       - risk_id: fly.app-create
         quota: 10
@@ -561,6 +579,10 @@ macro_actions:
   - id: secrets
     label: 'Set secrets'
     description: 'Set or remove app secrets.'
+    narrative: >-
+      Setting or removing the secrets an app reads, picked up when its machines are next
+      updated. One wrong value, a master key or a sign-in setting, can lock everyone out of an
+      instance or leave its sealed data unreadable, which is why secrets stand alone.
     entries:
       - risk_id: fly.secret-write
         quota: 20
@@ -568,6 +590,11 @@ macro_actions:
   - id: tear-down
     label: 'Tear down'
     description: 'Destroy machines, volumes, apps, addresses and certificates.'
+    narrative: >-
+      Removing what exists: machines, volumes, whole apps, addresses and certificates. Each is
+      final: a destroyed volume survives only in snapshots still within their retention, and a
+      released dedicated address is not given back. Kept apart from everything else so a mission
+      can build and run without being able to destroy.
     entries:
       - risk_id: fly.machine-destroy
         quota: 5

@@ -221,7 +221,7 @@ labels each project's `env` on the account's page (Accounts).
 
 `npx vitest run plugins/supabase` — `plugin.test.ts` runs the SDK kit
 (`assertPluginWellFormed`, `assertNoWildcard`,
-`assertCatalogCoverage` with samples per tool and an empty `fallbackHits`),
+`assertCatalogCoverage` on the plugin's `examples`, `src/examples.ts`, one per tool and an empty `fallbackHits`),
 the credential spec, `execute` and `discoverResources` against `mockFetch`,
 and the macro-actions ; `risk-catalog.test.ts` lints the loaded catalog and binds
 tools to their exact risks ; `classify.test.ts` is the classifier's security

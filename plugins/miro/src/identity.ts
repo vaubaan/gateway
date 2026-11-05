@@ -316,3 +316,21 @@ export const TOOL = {
   boardRoleUpdate: toolNameOf(UPSTREAM_TOOL.boardRoleUpdate),
   createBoardcast: toolNameOf(UPSTREAM_TOOL.createBoardcast),
 } as const;
+
+/** One reason of `LEFT_OUT_UPSTREAM_TOOLS` as the sentence a public page shows. */
+function asSentence(reason: string): string {
+  const text = reason.replaceAll(' ; ', '; ').replaceAll(' : ', ': ');
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+}
+
+/**
+ * The left-out upstream tools under the gateway's names, one sentence each :
+ * the plugin's `excludedTools`. None is declared, so `classify` refuses each
+ * as an unknown tool.
+ */
+export const EXCLUDED_TOOLS: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(LEFT_OUT_UPSTREAM_TOOLS).map(([upstream, reason]) => [
+    toolNameOf(upstream),
+    asSentence(reason),
+  ]),
+);

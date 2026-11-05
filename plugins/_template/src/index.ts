@@ -17,6 +17,7 @@ import { classifyTemplate } from './classify.ts';
 import { templateCredential } from './credential.ts';
 import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
+import { templateExamples } from './examples.ts';
 import { _TEMPLATE_ICON, _TEMPLATE_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { templateTools, templateToolTitles } from './tools.ts';
@@ -47,6 +48,13 @@ export const templatePlugin = definePlugin({
   // What each tool does, in a few words : the head of an approval request in the web
   // interface ("Delete a widget · <workspace>"). Optional ; a tool without one is shown by its name.
   toolTitles: templateToolTitles,
+  // Tools of the provider this plugin deliberately does not expose, one sentence each,
+  // shown on its public page; never a declared tool, and `classify` refuses the name.
+  // Optional : declare it when the risk model leaves a tool out (risk model §7.2).
+  // excludedTools: { <a tool name written in identity.ts>: '<why, in one sentence>' },
+  // Representative calls of every tool (`examples.ts`) : what the tests run through the kit
+  // and the site classifies to show worked calls.
+  examples: templateExamples,
   dataModel: templateDataModel,
   catalog: templateCatalog.catalog,
   // How a connection of this provider is obtained : the one way, the
@@ -80,3 +88,4 @@ export {
 } from './credential.ts';
 export { TEMPLATE_API_BASE, discoverTemplateResources, executeTemplate } from './execute.ts';
 export { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
+export { EXAMPLE_PROD, EXAMPLE_STAGING, templateExamples } from './examples.ts';

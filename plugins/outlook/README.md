@@ -97,27 +97,8 @@ omitted). Lists return the first page only (`top`); `@odata.nextLink` is not fol
 
 A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous, risk model §4.6);
 the trust level sets each risk's gate from its vector and multiplies the base budget. The mission
-stores the explicit list. The narratives below are written to move into the YAML (`narrative`)
-once the loader accepts the key.
-
-- **`read` — Read mail and agenda.** Every mail read is priced by who sent it: a colleague, an
-  allowlisted contact, a notification, or anyone, which is also the price of reading a message by
-  its id. A search that does not name exactly one sender is a bulk read. Calendars, events and
-  free/busy come with it, because an agenda is read for the same work.
-- **`draft` — Draft.** Drafts and reply drafts, priced by their worst recipient: oneself,
-  colleagues or allowlisted contacts. A draft to anyone else is refused outright, so nothing can
-  be staged for an unknown address. Nothing leaves while it is a draft.
-- **`send` — Send.** A message or a stored draft leaves the mailbox, under the owner's name, and
-  nothing calls it back. The permission follows the worst recipient, up to anyone at all; a stored
-  draft is sent only when it holds exactly the recipients the call declared.
-- **`tidy` — Tidy.** Moving messages between folders, marking them read, flagging them, setting
-  their categories, and creating folders. Nothing is deleted: a move to Deleted Items, Junk Email
-  or the Outbox is refused.
-- **`schedule` — Schedule.** Creating, changing and deleting events, and answering invitations.
-  Who is invited, and the mail Exchange sends attendees about a change, are the next macro-action.
-- **`invite` — Invite.** Inviting colleagues or people outside the company, who receive the
-  event by mail. Graph cannot keep Exchange from mailing the attendees of a change or a
-  cancellation, so every update and deletion of an event needs `notify-guests` from here too.
+stores the explicit list. Each macro-action's `narrative`, the two to four sentences its public
+page shows, is in `src/risk-catalog.yaml`.
 
 ## Tests
 

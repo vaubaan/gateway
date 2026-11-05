@@ -37,9 +37,11 @@
 # pattern or preset changed.
 # catalog_version 6 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 7 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: resend
-catalog_version: 6
-catalog_date: 2026-10-31
+catalog_version: 7
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -363,6 +365,11 @@ macro_actions:
   - id: check
     label: 'Check'
     description: 'Email statuses, domains, broadcasts and segments.'
+    narrative: >-
+      Checking what was sent and how sending is set up: the status of an email, the mission's
+      domains and their DNS records, broadcasts and segments. Nothing is sent or changed.
+      Reading segments is a permission of its own because it opens the contact list, names and
+      addresses included.
     entries:
       - risk_id: resend.read-email-status
         quota: 2000
@@ -379,6 +386,11 @@ macro_actions:
   - id: send
     label: 'Send'
     description: 'Transactional emails, one by one or in batches.'
+    narrative: >-
+      Sending transactional emails from a domain of the mission, cut by who receives them: the
+      organisation's own domains, the addresses its owner approved, or anyone. A sent email
+      cannot be recalled, and an arbitrary recipient is where data leaves, so that zone is kept
+      apart. Sending a batch of up to a hundred is its own permission, on top of the zone.
     entries:
       - risk_id: resend.send-email-internal
         quota: 1000
@@ -395,6 +407,11 @@ macro_actions:
   - id: campaign
     label: 'Campaign'
     description: 'Contacts, segments and broadcasts.'
+    narrative: >-
+      Building and sending campaigns: contacts, the segments they belong to and the broadcasts
+      sent to them. Contacts are personal data, and a segment decides who a broadcast reaches.
+      Drafting a broadcast changes nothing anyone sees, while sending it mails the whole segment
+      at once, so the two are kept apart.
     entries:
       - risk_id: resend.contact-write
         quota: 5000
@@ -414,6 +431,11 @@ macro_actions:
   - id: domains
     label: 'Domains'
     description: 'Verify and change sending domains.'
+    narrative: >-
+      Setting up the domains the account sends from: asking Resend to check their DNS records,
+      and adding, changing or removing a domain. A check has no effect beyond the attempt. A
+      change of domain shifts what the account can send and what recipients see, and removing
+      one stops delivery for every sender on it.
     entries:
       - risk_id: resend.domain-verify
         quota: 200

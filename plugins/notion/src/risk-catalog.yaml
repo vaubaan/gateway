@@ -13,9 +13,11 @@
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: notion
-catalog_version: 3
-catalog_date: 2026-10-31
+catalog_version: 4
+catalog_date: 2026-11-05
 
 risks:
   # ─── Reads ─────────────────────────────────────────────────────────────────
@@ -285,6 +287,12 @@ macro_actions:
   - id: read
     label: 'Read'
     description: 'Pages, databases and comments.'
+    narrative: >-
+      Reading the pages, page content, databases and comments under the roots shared with the
+      connection. Nothing changes in Notion, but everything read was written by people and can
+      carry instructions aimed at the agent. Querying a database is a permission of its own
+      because one call exports a whole table, and comments are apart because they are often more
+      candid than the page.
     entries:
       - risk_id: notion.read-content
         quota: 3000
@@ -298,6 +306,9 @@ macro_actions:
   - id: comment
     label: 'Comment'
     description: 'Leave comments.'
+    narrative: >-
+      Opening a discussion on a page or a block, or replying to one, signed by the connection.
+      It is the one write Notion cannot keep silent: the people a comment mentions are notified.
     entries:
       - risk_id: notion.comment-create
         quota: 100
@@ -305,6 +316,11 @@ macro_actions:
   - id: write
     label: 'Write'
     description: 'Create and edit pages, their content and database entries.'
+    narrative: >-
+      Creating pages, adding and rewriting content, adding and editing database entries under
+      the shared roots. Adding is easy to undo; overwriting a title, a block or an entry keeps
+      the old text only in Notion's page history. An entry can also start the database's
+      automations, which then act on their own.
     entries:
       - risk_id: notion.page-create
         quota: 200
@@ -327,6 +343,11 @@ macro_actions:
   - id: reorganize
     label: 'Reorganize'
     description: 'Delete blocks, move to the trash and restore.'
+    narrative: >-
+      Deleting blocks, moving pages to the trash and bringing them back. A block or a page moved
+      to the trash disappears for everyone, and only a person can restore it from Notion.
+      Trashing a whole shared root is held apart, because it takes the resource away from every
+      person and every mission.
     entries:
       - risk_id: notion.block-delete
         quota: 50

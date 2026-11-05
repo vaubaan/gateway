@@ -19,9 +19,15 @@ import type {
   TokenExpiry,
   TokenReach,
 } from '@vaubaan/plugin-sdk';
+import { severityLevel, severityOf, type SeverityLevel } from '@vaubaan/policy-engine';
 import type { RiskEntry } from '@vaubaan/shared';
 
-import { severityOf, type Severity } from './severity';
+/** The one severity word of a permission, the gateway interface's (style guide §2). */
+export type Severity = SeverityLevel;
+
+function severityWord(vector: RiskEntry['vector']): Severity {
+  return severityLevel(severityOf(vector));
+}
 
 export interface ToolInfo {
   readonly name: string;
@@ -166,11 +172,11 @@ function kindOf(entry: RiskEntry): RiskKind {
 }
 
 function riskInfo(entry: RiskEntry): RiskInfo {
-  const severity = severityOf(entry.vector);
+  const severity = severityWord(entry.vector);
   const severityByEnv = Object.entries(entry.vector_overrides ?? {})
     .map(([env, override]) => ({
       env,
-      severity: severityOf({ ...entry.vector, ...override }),
+      severity: severityWord({ ...entry.vector, ...override }),
     }))
     .filter((row) => row.severity !== severity);
   return {

@@ -30,7 +30,7 @@ describe('notion plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices the catalog covers, none by the fallback', () => {
-    const report = assertCatalogCoverage(notionPlugin, SAMPLES, { resources: [pageRoot] });
+    const report = assertCatalogCoverage(notionPlugin);
     assertSlicesOnDataModel(notionPlugin, SAMPLES, { resources: [pageRoot] });
     const named = notionCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(report.risksTouched).toEqual(named);

@@ -110,28 +110,14 @@ the quota ×1, ×3, ×10. The gateway adds "Anything else", holding the fallback
 | `work`       | `task-create` (100, 10), `task-update` (300, 20), `task-rewrite` (100, 10), `comment-create` (100, 10) |
 | `clean-up`   | `task-delete` (30, 5)                                                                                  |
 
-The narratives below are meant for the `narrative` key of each macro-action, once the catalog
-loader accepts it:
-
-- **`read`** — An agent reads the projects of its mission, their sections and tasks, and the
-  comments on a task, to plan or report. Comments are kept apart because they are conversations
-  between named people: at Careful the agent asks before reading them. Task text is written by
-  others, so an agent treats it as data, never as instructions. `task-read` is sized for paging
-  through a large project; search counts against Asana's 60 a minute.
-- **`work`** — An agent creates tasks and subtasks, moves them along (assignee, dates,
-  completion, section) and comments on them, signed by the connected account; all of it runs
-  freely, since each change is undone by setting it back. Rewriting a task's name or description
-  is kept apart, because Asana keeps no history of the old text: at Careful and Trusting it asks
-  first. Creating, assigning and commenting notify the people involved.
-- **`clean-up`** — An agent deletes tasks it no longer needs. A deletion goes to the account's
-  trash, restorable for 30 days only, so it is kept out of `work` and asks first unless the
-  creator trusts the agent fully. A mission also needs `task-update` from `work` to delete.
+Each macro-action's `narrative`, the two to four sentences its public page shows, is in
+`src/risk-catalog.yaml`.
 
 ## Tests
 
 `npx vitest run plugins/asana` — the SDK kit (`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage`, `assertSlicesOnDataModel`, `catalogPathIssues`, `assertIdentifiersRefused`)
-on `tests/unit/samples.ts`; the layered deletion and the gates of each trust level; the classifier
+on the plugin's `examples` (`src/examples.ts`); the layered deletion and the gates of each trust level; the classifier
 branch by branch (`classify.test.ts`); hostile identifiers fed to both sides (`identifiers.test.ts`);
 the executor, the membership proof and what is cut from an answer (`execute.test.ts`); discovery
 (`discovery.test.ts`); the guide and the check at paste (`credential.test.ts`). No test calls Asana.

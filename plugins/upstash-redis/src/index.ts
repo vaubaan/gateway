@@ -54,6 +54,7 @@ import { UPSTASH_REDIS_ICON, UPSTASH_REDIS_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
 import { upstashRedisToolTitles } from './tool-titles.ts';
 import { upstashRedisTools } from './tools.ts';
+import { upstashRedisExamples } from './examples.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
@@ -77,6 +78,7 @@ export const upstashRedisPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/upstash-redis.md',
   tools: upstashRedisTools,
   toolTitles: upstashRedisToolTitles,
+  examples: upstashRedisExamples,
   // A database is what an Upstash connection lists : a created one is
   // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createDatabase],
@@ -127,3 +129,4 @@ export {
   verifyUpstashKey,
   type UpstashAuth,
 };
+export { EXAMPLE_DATABASE, upstashRedisExamples } from './examples.ts';

@@ -84,7 +84,7 @@ agent that sends it is refused. Every other argument is Miro's, except:
   `prototype_create`'s `html_tokens` and `image_tokens`: not offered, so
   `prototype_create` requires `html_contents`.
 
-Left out (refused as unknown tools, the reason in `LEFT_OUT_UPSTREAM_TOOLS`):
+Left out (refused as unknown tools, the reason in `LEFT_OUT_UPSTREAM_TOOLS`, declared as the plugin's `excludedTools`):
 `board_search_boards` (discovery only), the three tools that hand out an
 upload URL, `user_who_am_i`, `user_search_organization_users`,
 `get_brand_context`, `board_create_format`, `board_move`,

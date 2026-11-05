@@ -18,9 +18,11 @@
 # pattern or preset changed.
 # catalog_version 3 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: template
-catalog_version: 3
-catalog_date: 2026-10-31
+catalog_version: 4
+catalog_date: 2026-11-05
 
 risks:
   - id: template.read-widgets
@@ -107,6 +109,12 @@ macro_actions:
   - id: read
     label: 'Read'
     description: 'Read widgets.'
+    # Two to four sentences in the connector's words (≤ 600 characters) : what an
+    # agent does under this verb and why its permissions are cut this way. Shown on
+    # the plugin's public page ; never read by the runtime (spec §4.6).
+    narrative: >-
+      Reading the widgets of the mission's workspaces. Nothing is modified, but a widget's
+      contents come from people outside the mission and land in the agent's context.
     entries:
       - risk_id: template.read-widgets
         quota: 1000
@@ -114,6 +122,10 @@ macro_actions:
   - id: write
     label: 'Write'
     description: 'Create, modify and delete widgets.'
+    narrative: >-
+      Creating and changing widgets, on staging freely and on prod where customers see the
+      change until it is reverted. Deleting a widget is a permission of its own because a
+      deleted widget cannot be restored.
     entries:
       - risk_id: template.widget-write
         quota: 20

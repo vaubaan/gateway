@@ -30,9 +30,7 @@ describe('google-calendar plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices the catalog covers, none to the fallback', () => {
-    const report = assertCatalogCoverage(googleCalendarPlugin, SAMPLES, {
-      resources: [primary, team],
-    });
+    const report = assertCatalogCoverage(googleCalendarPlugin);
     // Paths only : this model's cardinalities count instances, not how a slice names them.
     assertSlicesOnDataModel(googleCalendarPlugin, SAMPLES, {
       resources: [primary, team],

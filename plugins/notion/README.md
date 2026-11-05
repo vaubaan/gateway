@@ -169,7 +169,7 @@ its `Retry-After`.
 `npx vitest run plugins/notion` — 148 tests: the SDK kit
 (`assertPluginWellFormed`, `assertNoWildcard`,
 `assertCatalogCoverage` with no fallback hit and no risk untouched,
-`assertIdentifiersRefused` on the same samples), the classifier branch by
+`assertIdentifiersRefused` on the plugin's `examples`, `src/examples.ts`), the classifier branch by
 branch, the ancestry walk, the requests of `execute` (silent notifications
 included), discovery and `verify` against `mockFetch`, hostile identifiers
 in every position, the catalog's layering, and every slice and pattern

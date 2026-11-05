@@ -20,6 +20,7 @@ import { SUPABASE_ICON, SUPABASE_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID } from './identity.ts';
 import { supabaseToolTitles } from './tool-titles.ts';
 import { supabaseTools } from './tools.ts';
+import { supabaseExamples } from './examples.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
@@ -41,6 +42,7 @@ export const supabasePlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/supabase.md',
   tools: supabaseTools,
   toolTitles: supabaseToolTitles,
+  examples: supabaseExamples,
   dataModel: supabaseDataModel,
   catalog: supabaseCatalog.catalog,
   credential: supabaseCredential,
@@ -70,3 +72,4 @@ export {
   redactFunctionSecrets,
 } from './redact.ts';
 export { supabaseBearerOf, verifySupabaseToken, SUPABASE_TOKEN_FIELD } from './credential.ts';
+export { EXAMPLE_STAGING_PROJECT, supabaseExamples } from './examples.ts';

@@ -52,23 +52,12 @@ describe('template plugin — structural kit', () => {
     assertNoWildcard(templatePlugin);
   });
 
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    [TOOL.listWidgets]: [{ args: { workspace: 'ws-stg' } }, { args: {} }],
-    [TOOL.getWidget]: [
-      { args: { workspace: 'ws-prd', widget_id: 'w1' }, resources: [staging, prod] },
-      // A workspace the mission does not hold is refused by the classifier.
-      { args: { workspace: 'ws-prd', widget_id: 'w1' }, expectDenied: true },
-    ],
-    [TOOL.updateWidget]: [
-      { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
-      { args: { widget_id: 'w1', name: 'x' }, resources: [staging, prod], expectDenied: true },
-    ],
-    [TOOL.deleteWidget]: [{ args: { workspace: 'ws-stg', widget_id: 'w1' } }],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), each sample with its resources.
+  const SAMPLES: ToolSamples = templatePlugin.examples;
 
   test('every tool classifies to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(templatePlugin, SAMPLES, { resources: [staging] });
+    const report = assertCatalogCoverage(templatePlugin);
     // What the classifier emits and what the catalog matches are paths of the data model.
     assertSlicesOnDataModel(templatePlugin, SAMPLES, { resources: [staging] });
     expect(catalogPathIssues(templatePlugin)).toEqual([]);

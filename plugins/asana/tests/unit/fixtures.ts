@@ -6,38 +6,34 @@ import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockRoute, RecordedCall } from '@vaubaan/plugin-sdk/testing';
 
 import { ASANA_API_BASE } from '../../src/api.ts';
+import {
+  EXAMPLE_OTHER_PROJECT,
+  EXAMPLE_PROJECT,
+  OTHER_PROJECT,
+  PARENT_SAMPLE,
+  PROJECT,
+  SECTION,
+  TASK,
+  USER,
+  WORKSPACE,
+} from '../../src/examples.ts';
 import { PAT_FIELD, PROVIDER_ID } from '../../src/identity.ts';
 
+// The ids and projects the plugin's `examples` run on (`src/examples.ts`).
+export { OTHER_PROJECT, PARENT_SAMPLE, PROJECT, SECTION, TASK, USER, WORKSPACE };
+
 export const TOKEN = '2/1200000000000000/1200000000000999:0123456789abcdef';
-export const WORKSPACE = '1100000000000001';
-export const PROJECT = '1200000000000001';
-export const OTHER_PROJECT = '1200000000000002';
 /** A project of the mission whose resource carries no workspace. */
 export const BARE_PROJECT = '1200000000000003';
-export const SECTION = '1300000000000001';
 export const OTHER_SECTION = '1300000000000002';
-export const TASK = '1400000000000001';
 /** A subtask of `TASK`, two levels down : in the project through its ancestors. */
 export const SUBTASK = '1400000000000002';
 export const SUB_SUBTASK = '1400000000000003';
 /** A task of another project only. */
 export const FOREIGN_TASK = '1400000000000009';
-export const USER = '1500000000000001';
-/** The parent of a subtask in the samples : distinct from `TASK`, so the proof sees it in the path. */
-export const PARENT_SAMPLE = '1400000000000005';
 
-export const project: Resource = {
-  provider: PROVIDER_ID,
-  ref: PROJECT,
-  displayName: 'Engineering / Roadmap',
-  metadata: { workspace_gid: WORKSPACE, workspace_name: 'Acme', team_name: 'Engineering' },
-};
-export const otherProject: Resource = {
-  provider: PROVIDER_ID,
-  ref: OTHER_PROJECT,
-  displayName: 'Acme / Hiring',
-  metadata: { workspace_gid: WORKSPACE, workspace_name: 'Acme' },
-};
+export const project: Resource = EXAMPLE_PROJECT;
+export const otherProject: Resource = EXAMPLE_OTHER_PROJECT;
 export const bareProject: Resource = {
   provider: PROVIDER_ID,
   ref: BARE_PROJECT,

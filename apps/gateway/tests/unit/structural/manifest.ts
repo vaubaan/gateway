@@ -915,6 +915,41 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'shipped-plugin-page-declarations',
+    statement:
+      'Every plugin the image ships declares what its public page shows: a narrative per macro-action of its catalog (two to four sentences, at most 600 characters), its tool samples as `examples` (one per tool, each with its resources), and the tools the risk model leaves out as `excludedTools`, which its classifier refuses by name.',
+    source:
+      'ADR plugin-contract-and-credential-spec, amendment 2026-11-05; spec gateway-risk-model §4.6, §7.2, §15',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-narratives.test.ts`,
+        tests: ['every macro-action of a shipped catalog has a narrative'],
+      },
+      {
+        file: `${STRUCTURAL}/plugin-examples.test.ts`,
+        tests: [
+          'has a sample for each of its tools',
+          'names the resources of every sample, so the site classifies it as the tests do',
+        ],
+      },
+      {
+        file: `${STRUCTURAL}/plugin-excluded-tools.test.ts`,
+        tests: ['declares the tools spec §7.2 leaves out', 'refuses every excluded tool by name'],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/catalog-loader.test.ts',
+        tests: ['a narrative that is not a string of at most 600 characters refuses the catalog'],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/define-plugin.test.ts',
+        tests: [
+          'excludedTools is optional; it names tools the plugin does not declare, one sentence each',
+          'examples is optional; it maps tools of the plugin to well-formed sample calls',
+        ],
+      },
+    ],
+  },
+  {
     id: 'cookies-host-prefixed',
     statement:
       'The session and pending sign-in cookies carry the __Host- prefix with what it requires (Secure, Path=/, no Domain), HttpOnly and SameSite=Lax.',

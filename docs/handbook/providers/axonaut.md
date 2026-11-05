@@ -59,8 +59,8 @@ An outcome (`won` / `lost`, `accepted` / `refused`) is the `outcome` leaf alone;
 
 ## 3. Catalog and macro-actions
 
-13 named risks and the fallback, four macro-actions (`read`, `crm`, `sell`, `clean-up`); the
-narratives are in the README until the loader accepts a `narrative` key. Choices that are not
+13 named risks and the fallback, four macro-actions (`read`, `crm`, `sell`, `clean-up`), each
+with its `narrative` in the catalog. Choices that are not
 obvious:
 
 - `read-crm` is `pii`: contact people, e-mail addresses, phone numbers, notes about people. It is

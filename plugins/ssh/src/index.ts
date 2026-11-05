@@ -35,6 +35,7 @@ import {
   sshTarget,
 } from './credential.ts';
 import { sshDataModel } from './data-model.ts';
+import { sshExamples } from './examples.ts';
 import { createSshRuntime, DISCOVERY_PROBE, hostResource } from './execute.ts';
 import { SSH_ICON, SSH_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
@@ -75,6 +76,7 @@ export function createSshPlugin(options: SshRuntimeOptions = {}): ProviderPlugin
     docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/ssh.md',
     tools: sshTools,
     toolTitles: sshToolTitles,
+    examples: sshExamples,
     dataModel: sshDataModel,
     catalog: sshCatalog.catalog,
     credential: sshCredential,
@@ -120,6 +122,7 @@ export {
   TOOL,
   TOOL_PREFIX,
 };
+export { EXAMPLE_HOST, EXAMPLE_STAGING_HOST, sshExamples } from './examples.ts';
 export type { ExecArgs } from './classify.ts';
 export type { SshTarget } from './credential.ts';
 export type { SshRuntime, SshRuntimeOptions } from './execute.ts';

@@ -66,6 +66,8 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
     ...resourceCreatingToolIssues(plugin),
     ...gitRemoteIssues(plugin),
     ...toolReasonIssues(plugin.unboundTools, declaredToolNames(plugin), 'unboundTools'),
+    ...excludedToolIssues(plugin),
+    ...sampleIssues(plugin.examples, declaredToolNames(plugin)),
   ];
 }
 
@@ -402,6 +404,65 @@ function toolReasonIssues(reasons: unknown, tools: ReadonlySet<unknown>, label: 
     if (!isSentence(reason, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
       issues.push(`${label}.${tool}: expected one sentence saying why`);
     }
+  }
+  return issues;
+}
+
+/**
+ * `excludedTools` names tools of the provider the plugin deliberately does not
+ * expose, one sentence each : a name the plugin also declares would be exposed
+ * and excluded at once.
+ */
+function excludedToolIssues(plugin: ProviderPlugin): string[] {
+  const excluded: unknown = plugin.excludedTools;
+  if (excluded === undefined) return [];
+  if (!isRecord(excluded)) return ['excludedTools: expected a record tool → reason'];
+  const declared = declaredToolNames(plugin);
+  const issues: string[] = [];
+  for (const [tool, reason] of Object.entries(excluded)) {
+    if (declared.has(tool)) {
+      issues.push(
+        `excludedTools: '${tool}' is a declared tool of this plugin, it cannot be excluded`,
+      );
+    }
+    if (!isSentence(reason, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`excludedTools.${tool}: expected one sentence saying why`);
+    }
+  }
+  return issues;
+}
+
+/**
+ * The shape of a sample set : a record tool → non-empty list of samples, each
+ * with an `args` object, `resources` a list and `expectDenied` a boolean when
+ * present, and every key a tool of the plugin. Whether a sample classifies
+ * into covered slices is the test kit's (`assertCatalogCoverage`), not a
+ * load-time check.
+ */
+function sampleIssues(samples: unknown, tools: ReadonlySet<unknown>): string[] {
+  const label = 'examples';
+  if (samples === undefined) return [];
+  if (!isRecord(samples)) return [`${label}: expected a record tool → sample calls`];
+  const issues: string[] = [];
+  for (const [tool, calls] of Object.entries(samples)) {
+    if (!tools.has(tool)) issues.push(`${label}: '${tool}' is not a tool of this plugin`);
+    if (!isList(calls) || calls.length === 0) {
+      issues.push(`${label}.${tool}: expected a non-empty list of sample calls`);
+      continue;
+    }
+    calls.forEach((call: unknown, i) => {
+      const at = `${label}.${tool}[${i}]`;
+      if (!isRecord(call) || !isRecord(call.args)) {
+        issues.push(`${at}.args: expected an object`);
+        return;
+      }
+      if (call.resources !== undefined && !isList(call.resources)) {
+        issues.push(`${at}.resources: expected a list when present`);
+      }
+      if (call.expectDenied !== undefined && typeof call.expectDenied !== 'boolean') {
+        issues.push(`${at}.expectDenied: expected a boolean when present`);
+      }
+    });
   }
   return issues;
 }

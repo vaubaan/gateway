@@ -172,12 +172,17 @@ field by field.
 - `delete_message` and permanent deletion: no deletion of mail is offered.
 - `forward`, `reply`, `replyAll`: they send content to recipients unknown before the call; draft,
   then `send_draft`.
+
 - `sendMail` with attachments: no upload path is modelled.
 - Mail rules, mailbox settings and automatic replies: posture changes with no risk modelled.
 - Other users' and shared mailboxes (`/users/{id}`): one connection is one account.
 - Calendar sharing and permissions: a change of who can read the agenda, not modelled.
 - `event: cancel` with a message: `delete_event` covers it.
 - Contacts, To Do, Teams: other services, not asked for.
+
+The first two lines are the plugin's `excludedTools` (`identity.ts`), shown on its public page:
+`outlook__delete_message`, `outlook__forward_message`, `outlook__reply_message` and
+`outlook__reply_all_message`; the other lines name no tool.
 
 ## Outside the repo
 

@@ -28,31 +28,11 @@ import defaultExport, {
 } from '../../src/index.ts';
 import { DOCS_RESULT, ctx, index, mcpAnswers } from './support.ts';
 
-/** One table for the catalog coverage and for the identifier proof (handbook). */
-const SAMPLES: ToolSamples = {
-  [TOOL.resolveLibraryId]: [
-    { args: { libraryName: 'Next.js', query: 'app router middleware' } },
-    // A mission without a Context7 resource.
-    {
-      args: { libraryName: 'Next.js', query: 'app router middleware' },
-      resources: [],
-      expectDenied: true,
-    },
-  ],
-  [TOOL.queryDocs]: [
-    { args: { libraryId: '/vercel/next.js', query: 'middleware matcher' } },
-    {
-      args: {
-        libraryId: '/vercel/next.js@v14.3.0',
-        query: 'middleware matcher',
-        language: 'TypeScript',
-      },
-    },
-    // An upstream alias for `libraryId` : undeclared, refused.
-    { args: { libraryName: '/evil/lib', query: 'middleware matcher' }, expectDenied: true },
-    { args: { libraryId: '/a/../b', query: 'middleware matcher' }, expectDenied: true },
-  ],
-};
+/**
+ * One table for the catalog coverage and for the identifier proof (handbook) : the
+ * plugin's own `examples` (`src/examples.ts`), each sample with its resources.
+ */
+const SAMPLES: ToolSamples = context7Plugin.examples;
 
 describe('context7 plugin — structural kit', () => {
   test('well-formed, no wildcard', () => {
@@ -61,7 +41,7 @@ describe('context7 plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices the catalog covers, none on the fallback', () => {
-    const report = assertCatalogCoverage(context7Plugin, SAMPLES, { resources: [index] });
+    const report = assertCatalogCoverage(context7Plugin);
     assertSlicesOnDataModel(context7Plugin, SAMPLES, { resources: [index] });
     const named = context7Catalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(named).toEqual([`${PROVIDER_ID}.query-docs`]);

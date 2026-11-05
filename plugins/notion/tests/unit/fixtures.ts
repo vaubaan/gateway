@@ -7,41 +7,34 @@ import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import { NOTION_API_BASE } from '../../src/api.ts';
+import {
+  BLOCK,
+  DB,
+  DISCUSSION,
+  DS,
+  ENTRY,
+  EXAMPLE_DB_ROOT,
+  EXAMPLE_PAGE_ROOT,
+  OTHER_ROOT,
+  PAGE,
+  ROOT,
+} from '../../src/examples.ts';
 import { API_TOKEN_FIELD, PROVIDER_ID } from '../../src/identity.ts';
 
 const id = (digit: string) =>
   `${digit.repeat(8)}-${digit.repeat(4)}-4${digit.repeat(3)}-8${digit.repeat(3)}-${digit.repeat(12)}`;
 
-/** The shared root page of the mission. */
-export const ROOT = id('1');
-export const PAGE = id('2');
+// The ids and roots the plugin's `examples` run on (`src/examples.ts`).
+export { BLOCK, DB, DISCUSSION, DS, ENTRY, OTHER_ROOT, PAGE, ROOT };
 export const CHILD = id('3');
-export const BLOCK = id('4');
-/** A shared root database. */
-export const DB = id('5');
-export const DS = id('6');
-export const ENTRY = id('7');
-/** Another root of the connection, outside the mission. */
-export const OTHER_ROOT = id('8');
 export const FOREIGN = id('9');
-export const DISCUSSION = id('a');
 export const SYNCED = id('b');
 export const ORIGINAL = id('c');
 
 export const TOKEN = 'ntn_test_token_0123456789';
 
-export const pageRoot: Resource = {
-  provider: PROVIDER_ID,
-  ref: ROOT,
-  displayName: 'Handbook',
-  metadata: { kind: 'page' },
-};
-export const dbRoot: Resource = {
-  provider: PROVIDER_ID,
-  ref: DB,
-  displayName: 'Tasks',
-  metadata: { kind: 'database' },
-};
+export const pageRoot: Resource = EXAMPLE_PAGE_ROOT;
+export const dbRoot: Resource = EXAMPLE_DB_ROOT;
 export const otherRoot: Resource = {
   provider: PROVIDER_ID,
   ref: OTHER_ROOT,

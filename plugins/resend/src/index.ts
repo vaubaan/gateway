@@ -19,6 +19,7 @@ import { classifyResend } from './classify.ts';
 import { createdResendResources } from './created.ts';
 import { resendCredential } from './credential.ts';
 import { resendDataModel } from './data-model.ts';
+import { resendExamples } from './examples.ts';
 import { discoverResendResources, executeResend } from './execute.ts';
 import { RESEND_ICON, RESEND_ICON_COLOR } from './icon.ts';
 import { PROVIDER_ID, TOOL } from './identity.ts';
@@ -45,6 +46,7 @@ export const resendPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/resend.md',
   tools: resendTools,
   toolTitles: resendToolTitles,
+  examples: resendExamples,
   // Domains and segments are what a Resend connection lists : a created one is
   // discovered at once (ADR created-resources-join-the-mission).
   resourceCreatingTools: [TOOL.createDomain, TOOL.createSegment],
@@ -106,3 +108,4 @@ export {
   type ToZone,
 } from './zones.ts';
 export { RESEND_WRITE_TOOL_NAMES } from './tools.ts';
+export { EXAMPLE_MISSION, resendExamples } from './examples.ts';

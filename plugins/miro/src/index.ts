@@ -19,7 +19,8 @@ import { miroDataModel } from './data-model.ts';
 import { createdMiroResources } from './created.ts';
 import { discoverMiroResources, executeMiro } from './execute.ts';
 import { MIRO_ICON, MIRO_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID, TOOL } from './identity.ts';
+import { miroExamples } from './examples.ts';
+import { EXCLUDED_TOOLS, PROVIDER_ID, TOOL } from './identity.ts';
 import { miroToolTitles } from './tool-titles.ts';
 import { miroTools } from './tools.ts';
 
@@ -44,6 +45,8 @@ export const miroPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/miro.md',
   tools: miroTools,
   toolTitles: miroToolTitles,
+  excludedTools: EXCLUDED_TOOLS,
+  examples: miroExamples,
   dataModel: miroDataModel,
   catalog: miroCatalog.catalog,
   credential: miroCredential,
@@ -69,6 +72,7 @@ export {
   type MiroCall,
 } from './call.ts';
 export { slicesOf } from './classify.ts';
+export { EXAMPLE_BOARD, EXAMPLE_OTHER_BOARD, miroExamples } from './examples.ts';
 export { createdMiroResources } from './created.ts';
 export { REQUIRED_SCOPES, miroCredential } from './credential.ts';
 export {

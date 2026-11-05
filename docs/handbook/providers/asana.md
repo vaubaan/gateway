@@ -53,8 +53,7 @@ so routine work runs freely at every trust level; `task-rewrite` (a name or desc
 overwritten, no history) and `task-delete` are `costly` (ask at Careful and Trusting);
 `comment-read` is `pii` (asks at Careful). `task-read` declares
 `infra_limits.calls_per_minute_max: 60`, Asana's search limit: no mission's rate for it exceeds
-it. The narratives meant
-for the `narrative` key are in the README until the loader accepts it.
+it. Each macro-action's `narrative` is in the catalog.
 
 ## 4. Coverage
 

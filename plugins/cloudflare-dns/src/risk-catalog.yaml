@@ -27,9 +27,11 @@
 # pattern or preset changed.
 # catalog_version 5 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 6 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: cloudflare-dns
-catalog_version: 5
-catalog_date: 2026-10-31
+catalog_version: 6
+catalog_date: 2026-11-05
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -242,6 +244,11 @@ macro_actions:
   - id: look-up
     label: 'Look up'
     description: 'Metadata, records and export.'
+    narrative: >-
+      Reading the mission's zones: their status and settings, their records, and the zone file.
+      Nothing changes, but records map the network (server addresses, mail relays, SPF and
+      DKIM), which is what an attacker scouts first. The export is a permission of its own
+      because one call hands over the whole zone.
     entries:
       - risk_id: cloudflare-dns.read-zone-metadata
         quota: 2000
@@ -255,6 +262,11 @@ macro_actions:
   - id: point
     label: 'Point subdomains'
     description: 'Ordinary records and cache purge.'
+    narrative: >-
+      Pointing hosts somewhere: adding and changing ordinary records, and purging the cache. A
+      record is public as soon as it is written and DNS keeps no history, so undoing a change
+      means knowing the old value. A purge only costs a load spike on the origin while the cache
+      rebuilds.
     entries:
       - risk_id: cloudflare-dns.record-write
         quota: 500
@@ -265,6 +277,11 @@ macro_actions:
   - id: change-domain
     label: 'Change the domain'
     description: 'Apex, MX and NS records, deletions and imports.'
+    narrative: >-
+      The writes that move the whole domain rather than one host: the apex and its wildcard, MX
+      that routes all incoming mail, NS that hands a subtree to another nameserver, and BIND
+      imports that rewrite hundreds of records in one call. Deleting a record sits here too,
+      because what it served stops resolving at once and its value is gone.
     entries:
       - risk_id: cloudflare-dns.critical-record-write
         quota: 50
@@ -278,6 +295,12 @@ macro_actions:
   - id: rule-zone
     label: 'Rule the zone'
     description: 'Zone settings, DNSSEC and zone deletion.'
+    narrative: >-
+      Changing how the zone itself is run: its security settings, DNSSEC, and the zone's
+      existence. A weaker TLS setting opens the origin to interception, and DNSSEC turned on
+      without the registrar's DS record breaks resolution for everyone. Deleting the zone takes
+      every record and setting with it, which is why it is the one irreversible permission of
+      this service.
     entries:
       - risk_id: cloudflare-dns.zone-settings-write
         quota: 50

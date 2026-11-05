@@ -30,7 +30,7 @@ describe('outlook plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices the catalog covers, none to the fallback', () => {
-    const report = assertCatalogCoverage(outlookPlugin, SAMPLES, { resources: [mailbox] });
+    const report = assertCatalogCoverage(outlookPlugin);
     const named = outlookCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect([...report.risksTouched].sort()).toEqual([...named].sort());
     expect(report.risksTouched).toHaveLength(27);

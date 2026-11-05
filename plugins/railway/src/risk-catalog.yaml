@@ -26,9 +26,11 @@
 # pattern or preset changed.
 # catalog_version 6 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 7 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: railway
-catalog_version: 6
-catalog_date: 2026-10-31
+catalog_version: 7
+catalog_date: 2026-11-05
 
 risks:
   # ───── Reads ────────────────────────────────────────────────────────────────
@@ -210,6 +212,11 @@ macro_actions:
   - id: watch
     label: 'Watch'
     description: 'Projects, services, deployments and logs.'
+    narrative: >-
+      Following what runs: the workspace's projects, then the services, deployments, statuses
+      and logs of the mission's projects. Nothing is changed. Logs are a permission of their own
+      because applications print secrets and personal data into them more often than they
+      should.
     entries:
       - risk_id: railway.read-account
         quota: 1000
@@ -223,6 +230,10 @@ macro_actions:
   - id: deploy
     label: 'Deploy'
     description: 'Redeploy and apply staged changes.'
+    narrative: >-
+      Redeploying a service or applying the changes staged on an environment. A bad deploy is
+      undone by the next one, but on prod customers see it until then, so the permission is held
+      per environment label.
     entries:
       - risk_id: railway.deploy
         quota: 20
@@ -230,6 +241,11 @@ macro_actions:
   - id: configure
     label: 'Configure'
     description: 'Read and write variables.'
+    narrative: >-
+      Reading and writing the environment variables of a project, where its production
+      credentials live. Each permission is held per environment, so holding staging says nothing
+      about prod. Replacing every variable at once is kept apart because whatever the payload
+      leaves out is deleted.
     entries:
       - risk_id: railway.read-variables
         quota: 50
@@ -243,6 +259,11 @@ macro_actions:
   - id: create
     label: 'Create'
     description: "Projects and Railway's agent."
+    narrative: >-
+      Creating a new Railway project and handing a free-text request to Railway's own agent. A
+      project is created outside the mission's projects and can cost without limit. The agent
+      decides alone what to change with the whole credential, so a mission must also hold the
+      deploy and variable permissions it may use.
     entries:
       - risk_id: railway.create-project
         quota: 5
