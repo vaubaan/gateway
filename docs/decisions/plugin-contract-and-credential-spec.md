@@ -100,3 +100,56 @@ later is a non-breaking change.
 
 The checklist is what drifted: twelve copies of the 401/403 rule, the caller's `signal` dropped in
 some, unbounded reads in all.
+
+## Amendment 2026-11-05: what a plugin declares for its public page
+
+### Context
+
+The site's plugin page ([website](../spec/website.md) §2.3) shows the risk model of a service: the
+map of its permissions, one narrative per macro-action, worked calls with the slices and
+permissions they touch, the tools left out on purpose, and how an account is connected. Three of
+those contents nothing declares today: the narrative (`macro_actions[].description` is one line),
+the tools a classifier refuses by name (GitHub keeps them in a constant of `identity.ts`, Supabase
+in the spec), and the worked calls — which exist as the tool samples every plugin's tests run
+through the kit (`ToolSamples`, risk model §15), invisible to a build of the site. The connect
+page also described every `oauth2` way as a client the gateway registers, which is false for a
+brokered one.
+
+### Decision
+
+- A catalog macro-action may carry a `narrative` ([gateway-risk-model](../spec/gateway-risk-model.md)
+  §4.6).
+- `ProviderPlugin` gains two optional members. `excludedTools: Record<toolName, reason>` names the
+  tools of the provider the plugin deliberately does not expose, with one sentence each; such a
+  name is never a declared tool, and `classify` keeps refusing it. `examples: ToolSamples` holds the
+  tool samples: the test kit reads them from the plugin instead of the test file, and the site
+  runs `classify` on them when it builds, so a page shows slices the classifier really emits.
+- Both are optional members: a non-breaking change, a minor of the SDK. Every plugin shipped with
+  the gateway fills `narrative`, `examples` and, where the risk model names a left-out tool,
+  `excludedTools` (structural tests, as for `summary`).
+- A page or a connect guide names the client source of an `oauth2` way: registered by the gateway
+  (`clientRegistration`) or a broker's (`broker`), never one for the other.
+
+### Consequences
+
+- The site imports `@vaubaan/policy-engine` for tiers, gates and budgets and the plugin's
+  `classify` for the examples; it restates nothing by hand, so the duplicate severity function of
+  the site moves to the policy engine.
+- A third-party plugin without these members gets a page without those sections, nothing else.
+- `RETIRED_TOOL` of the GitHub plugin becomes its `excludedTools`.
+
+### Rejected alternatives
+
+#### Hand-written examples in the catalog, slices included
+
+A slice written by hand drifts from the classifier the day a grammar changes; computed, it cannot.
+
+#### Prose sections of the plugin README parsed by the site
+
+No schema, no length, no review as code; the connect page already pays for this with its
+hand-pointed links.
+
+#### Importing the test files at build time
+
+Test code in the production build of the site, and a sample's shape fixed by a test helper rather
+than by the contract.

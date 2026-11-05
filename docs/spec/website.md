@@ -58,8 +58,50 @@ upgrade, retention, telemetry), known limitations.
 
 ### 2.3 Plugins — `/plugins`, `/plugins/<id>`
 
-Each shipped plugin with description, version, tools, risks, macro-actions, how to connect and its health,
-generated from its folder; a plugin is listed because it exists in the repository.
+Each shipped plugin has a page generated from its folder; a plugin is listed because it exists in
+the repository. The page shows how the service is modelled, in the gateway's own words and display
+codes ([style guide](./style-guide.md) §5: gate mark, risk word, the six facts, identifier, tag),
+along three dimensions: **risk** (six facts per permission, summed into one word), the
+**macro-actions** (the verbs of the service) and **trust** (the three levels). In order:
+
+1. **Opening** — the service, its version, the counts (permissions, macro-actions, tools, gateways
+   running it), the verbs in one sentence built from the macro-action labels, and the three
+   dimensions in a few lines.
+2. **The map** — every permission placed by macro-action (columns) and by its undo fact (rows:
+   impossible, costly, easy but sensitive, easy), tinted by its risk word; each row says what the
+   trust levels do with it. A reading sentence is computed from the counts. The page never says
+   "tier": the undo words carry that meaning.
+3. **One section per macro-action**, in catalog order: its narrative
+   ([gateway-risk-model](./gateway-risk-model.md) §4.6), then a table of its permissions against
+   the trust levels — label, id, reason, the six facts in the gateway's words with the fact that
+   moves the gate tinted, the risk word, and per trust level the gate and the quota, written for a
+   day, the default period; the page says a mission's period may differ. Rate ceilings are a note.
+   An environment-scoped permission is one line per environment, tagged. Beside the table, the
+   macro-action's own column of the map.
+4. **Worked examples** — the plugin's declared examples
+   ([ADR](../decisions/plugin-contract-and-credential-spec.md), amendment 2026-11-05) run through
+   `classify` when the site is built: the call, the slices it yields, the permissions they touch,
+   and what a Careful mission does with it. The site never writes a slice by hand.
+5. **Anything else** (the fallback) and the tools the plugin **deliberately leaves out**
+   (`excludedTools`), each with its reason.
+6. **A mission, worked out** — the first two macro-actions at Careful, expanded by the policy engine
+   into Can / Asks first / Cannot, as the gateway shows a mission.
+7. **Connecting an account** — the way, one of three: a key the person creates at the service and
+   pastes (`api-key`, `ssh-key`); a client the gateway registers itself at the service (`oauth2`
+   with `clientRegistration`); **a broker's client** (`oauth2` with `broker`). For the third the page
+   says that the instance must be enrolled with an OAuth broker serving that provider, names the
+   provider and the exact scopes asked, says that the person signs in at the service and that the
+   gateway's pages tell whether the broker is attested, and gives the two ways to get one: enrol
+   with a broker someone else operates, or run the published image with one's own client
+   ([oauth-broker](./oauth-broker.md)). A brokered way is never described as a client the gateway
+   registers.
+8. The retired permissions, the tools (count, link to the list with what each usually touches),
+   health (§2.4), the links: connect, handbook, catalog as code, Markdown twin.
+
+Everything on the page comes from the plugin's declaration, its catalog, `@vaubaan/policy-engine`
+(tier, gates, budgets, severity) and the collector; the site restates nothing of the gateway by
+hand (§1.1, no second source of truth; the [website handbook](../handbook/website.md) names the
+imports). The Markdown twin keeps the same order; the map becomes a list by undo row.
 
 ### 2.4 Plugin health — `/plugins/health` and on each plugin page
 
