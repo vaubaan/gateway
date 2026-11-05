@@ -11,9 +11,17 @@
  *   - `RegistryCatalogIndex` answers the store's "does this RiskId exist?"
  *     from the loaded catalogs, env-qualified ids included;
  *   - `checkSelfResources` compares the configured self resources with the
- *     registered ids.
+ *     registered ids;
+ *   - `checkBrokeredPlugins` compares each brokered plugin with the OAuth
+ *     provider table the broker compiles in (`@vaubaan/oauth-providers`).
  */
-import { PluginRegistry } from '@vaubaan/plugin-sdk';
+import { PROVIDERS, type ProviderTable } from '@vaubaan/oauth-providers';
+import {
+  isBrokeredSpec,
+  PluginRegistry,
+  PluginRegistryError,
+  type ProviderPlugin,
+} from '@vaubaan/plugin-sdk';
 import { findRiskEntry, isAcceptableInEnv, isEnvScopedEntry } from '@vaubaan/policy-engine';
 import { baseRiskId, parseRiskId, type RiskId } from '@vaubaan/shared';
 
@@ -65,4 +73,47 @@ export function checkSelfResources(config: InstanceConfig, registry: PluginRegis
       message: `'${self.provider}' is not a registered plugin id (registered: ${known}); the entry would protect nothing`,
     })),
   );
+}
+
+/**
+ * What a brokered plugin asks of the OAuth provider table (spec oauth-broker
+ * §4): its `broker.provider` is a provider of the table, and every one of its
+ * `scopes` is in that provider's `allowedScopes`. The broker refuses anything
+ * else at the first flow; the gateway says it at boot, naming the plugin.
+ * Empty when every brokered plugin fits.
+ */
+export function brokeredPluginProblems(
+  plugins: readonly ProviderPlugin[],
+  providers: ProviderTable = PROVIDERS,
+): string[] {
+  const problems: string[] = [];
+  for (const plugin of plugins) {
+    const spec = plugin.credential;
+    if (spec.kind !== 'oauth2' || !isBrokeredSpec(spec)) continue;
+    const provider = providers.get(spec.broker.provider);
+    if (provider === undefined) {
+      const known = [...providers.keys()].join(', ');
+      problems.push(
+        `plugin '${plugin.id}' is brokered by provider '${spec.broker.provider}', which the OAuth provider table does not list (listed: ${known})`,
+      );
+      continue;
+    }
+    const refused = spec.scopes.filter((scope) => !provider.allowedScopes.has(scope));
+    if (refused.length > 0) {
+      problems.push(
+        `plugin '${plugin.id}' asks provider '${provider.id}' for scopes the OAuth provider table does not allow: ${refused.join(', ')}`,
+      );
+    }
+  }
+  return problems;
+}
+
+/**
+ * Stops the boot when a brokered plugin does not fit the OAuth provider table:
+ * a plugin and a broker released apart (a scope added to one and not the
+ * other) would otherwise fail only when someone connects an account.
+ */
+export function checkBrokeredPlugins(registry: PluginRegistry): void {
+  const problems = brokeredPluginProblems(registry.all().map((r) => r.plugin));
+  if (problems.length > 0) throw new PluginRegistryError(problems);
 }

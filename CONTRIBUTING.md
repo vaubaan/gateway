@@ -132,6 +132,7 @@ packages/policy-engine/  slices, matching, the risk decision, the validity rule 
 packages/plugin-sdk/     the plugin contract, registry and test kit    @vaubaan/plugin-sdk
 packages/gateway-core/   call pipeline, decisions, refusals, audit     @vaubaan/gateway-core
 packages/telemetry/      opt-in telemetry report                       @vaubaan/telemetry
+packages/oauth-providers/ OAuth provider table, copied into the broker @vaubaan/oauth-providers
 plugins/<provider>/      one provider plugin per folder                @vaubaan/plugin-<provider>
 plugins/_template/       the scaffold for a new plugin                 @vaubaan/plugin-template
 deploy/                  Dockerfile, Compose file, example configuration

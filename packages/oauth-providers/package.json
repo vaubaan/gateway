@@ -1,0 +1,14 @@
+{
+  "name": "@vaubaan/oauth-providers",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The OAuth provider table the gateway and the OAuth broker share: endpoints, allowed scopes, consent parameters",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/providers.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  }
+}

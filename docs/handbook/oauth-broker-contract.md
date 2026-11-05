@@ -8,7 +8,8 @@ tracks:
   - apps/gateway/src/server/connections/broker-measurements.json
   - apps/gateway/tests/support/connections/fake-oauth-broker.ts
   - apps/gateway/src/server/config/oauth-brokers.ts
-last_reviewed: 2026-10-27
+  - packages/oauth-providers/src/providers.ts
+last_reviewed: 2026-11-05
 ---
 
 # OAuth broker contract — handbook
@@ -48,6 +49,11 @@ an `attestation` mode ([configuration](configuration.md)).
   replica per address (each enrolled as its own block).
 - `attestation: none` (an administrator's own broker): ordinary HTTPS, system CAs, no `/attest`;
   the pages say "not attested". Nothing in the configuration widens the allowlist.
+- **`provider` and `scopes` come from one table**:
+  [`@vaubaan/oauth-providers`](../../packages/oauth-providers/src/providers.ts), which the reference
+  broker compiles in. The gateway refuses to boot when a brokered plugin names a provider the table
+  does not list, or a scope outside that provider's `allowedScopes`; a broker of another author
+  serves at least those ids and scopes.
 
 ## Transport
 
