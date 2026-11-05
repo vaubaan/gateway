@@ -33,9 +33,11 @@
 # pattern or preset changed.
 # catalog_version 7 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 8 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: stripe
-catalog_version: 7
-catalog_date: 2026-10-31
+catalog_version: 8
+catalog_date: 2026-11-05
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -362,6 +364,12 @@ macro_actions:
   - id: books
     label: 'Look at the books'
     description: 'Catalog, billing history, balance and customers.'
+    narrative: >-
+      Reading the account without changing it: the product catalog, invoices and charges, the
+      balance and the event feed, and the customers. The cash position and the billing history
+      are separate permissions so a monitoring agent needs no customer details. Customers'
+      personal fields (email, name, address) are a permission of their own, emitted with every
+      customer read, because handing them to an agent carries a minimisation duty.
     entries:
       - risk_id: stripe.read-catalog
         quota: 2000
@@ -378,6 +386,11 @@ macro_actions:
   - id: set-up
     label: 'Set up'
     description: 'Catalog and webhooks.'
+    narrative: >-
+      Shaping the offer and the plumbing: products, prices, coupons and webhook endpoints.
+      Catalog changes can be archived and redone, but every future checkout sees them. A webhook
+      endpoint decides where events and customer data are sent, and creating one hands back its
+      signing secret once, which is why that secret is a permission of its own.
     entries:
       - risk_id: stripe.catalog-write
         quota: 1000
@@ -391,6 +404,11 @@ macro_actions:
   - id: bill
     label: 'Bill'
     description: 'Subscriptions and invoices.'
+    narrative: >-
+      Running recurring billing: creating and changing subscriptions, drafting and finalising
+      invoices. A draft invoice notifies nobody and moves no money, so it stands apart from
+      finalising, which emails the customer and may collect. Creating or changing a subscription
+      can charge the customer at once through proration.
     entries:
       - risk_id: stripe.subscription-create
         quota: 50
@@ -407,6 +425,11 @@ macro_actions:
   - id: money-out
     label: 'Move money out'
     description: 'Refunds and payouts.'
+    narrative: >-
+      Refunds and payouts, the two ways real money leaves the account. Neither can be taken back
+      once it settles: a refund is not reversed, and a payout is cancellable only while pending.
+      Each call is bounded by the charge or the balance, not by the mission, so the limits here
+      are what keeps many calls in check.
     entries:
       - risk_id: stripe.refund-create
         quota: 20
@@ -417,6 +440,11 @@ macro_actions:
   - id: cancel
     label: 'Cancel and void'
     description: 'Cancel subscriptions, void invoices, delete customers.'
+    narrative: >-
+      Ending things for good: cancelling a subscription, voiding an invoice, deleting a
+      customer. None of them can be undone, which is why they are a verb of their own rather
+      than part of Bill. Deleting a customer also cancels every active subscription and erases
+      their personal data in one call.
     entries:
       - risk_id: stripe.subscription-cancel
         quota: 50

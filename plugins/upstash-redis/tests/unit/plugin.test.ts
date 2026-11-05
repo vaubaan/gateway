@@ -169,50 +169,12 @@ describe('upstash-redis plugin — structural kit', () => {
     expect(auto).toContain('upstash-redis.create-database');
   });
 
-  const d = { databaseId: 'db-abc-123' };
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    upstash_redis__list_databases: [{ args: {} }],
-    upstash_redis__get_database: [{ args: d }, { args: {} }],
-    upstash_redis__get_database_stats: [{ args: d }],
-    upstash_redis__create_database: [{ args: { name: 'new-cache', region: 'eu-west-1' } }],
-    upstash_redis__delete_database: [{ args: d }],
-    upstash_redis__rename_database: [{ args: { ...d, name: 'renamed' } }],
-    upstash_redis__execute: [
-      { args: { ...d, command: ['GET', 'k'] } },
-      { args: { ...d, command: ['SET', 'k', 'v'] } },
-      { args: { ...d, command: ['DEL', 'k'] } },
-      { args: { ...d, command: ['EXPIRE', 'k', '0'] } },
-      { args: { ...d, command: ['FLUSHDB'] } },
-      { args: { ...d, command: ['CONFIG', 'SET', 'maxmemory', '0'] } },
-      { args: { ...d, command: ['EVAL', 'return 1', '0'] } },
-      { args: { ...d, command: [['MULTI'], ['SET', 'k', 'v'], ['DEL', 'j'], ['EXEC']] } },
-      { args: { ...d, command: [] } },
-      { args: { command: ['PING'] } },
-    ],
-    upstash_redis__get: [{ args: { ...d, key: 'session:1' } }, { args: { key: 'k' } }],
-    upstash_redis__set: [{ args: { ...d, key: 'k', value: 'v', ex: 60 } }],
-    upstash_redis__del: [{ args: { ...d, keys: ['k1'] } }, { args: { ...d, keys: ['k1', 'k2'] } }],
-    upstash_redis__keys: [{ args: { ...d, pattern: 'user:*' } }],
-    upstash_redis__scan: [{ args: { ...d, cursor: 0 } }],
-    upstash_redis__ttl: [{ args: { ...d, key: 'k' } }],
-    upstash_redis__expire: [
-      { args: { ...d, key: 'k', seconds: 60 } },
-      { args: { ...d, key: 'k', seconds: 0 } },
-    ],
-    upstash_redis__hset: [{ args: { ...d, key: 'h', fields: { f: 'v' } } }],
-    upstash_redis__hgetall: [{ args: { ...d, key: 'h' } }],
-    upstash_redis__lpush: [{ args: { ...d, key: 'l', values: ['a'] } }],
-    upstash_redis__lrange: [{ args: { ...d, key: 'l', start: 0, stop: -1 } }],
-    upstash_redis__sadd: [{ args: { ...d, key: 's', members: ['x'] } }],
-    upstash_redis__smembers: [{ args: { ...d, key: 's' } }],
-    upstash_redis__dbsize: [{ args: d }],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), each sample with its resources.
+  const SAMPLES: ToolSamples = upstashRedisPlugin.examples;
 
   test('every tool classifies to slices the catalog covers, every named risk is reached', () => {
-    const report = assertCatalogCoverage(upstashRedisPlugin, SAMPLES, {
-      resources: [cache, foreign],
-    });
+    const report = assertCatalogCoverage(upstashRedisPlugin);
     // Paths only : this model's cardinalities count instances, not how a slice names them.
     assertSlicesOnDataModel(upstashRedisPlugin, SAMPLES, {
       resources: [cache, foreign],

@@ -43,6 +43,7 @@ import {
 } from './identity.ts';
 import { vercelToolTitles } from './tool-titles.ts';
 import { vercelTools } from './tools.ts';
+import { vercelExamples } from './examples.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
@@ -65,6 +66,7 @@ export const vercelPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/vercel.md',
   tools: vercelTools,
   toolTitles: vercelToolTitles,
+  examples: vercelExamples,
   dataModel: vercelDataModel,
   catalog: vercelCatalog.catalog,
   credential: vercelCredential,
@@ -101,3 +103,4 @@ export {
   VERCEL_TOKENS_URL,
   type VercelEnv,
 };
+export { EXAMPLE_PROJECT, vercelExamples } from './examples.ts';

@@ -42,9 +42,11 @@
 # pattern or preset changed.
 # catalog_version 8 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 9 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: upstash-redis
-catalog_version: 8
-catalog_date: 2026-10-31
+catalog_version: 9
+catalog_date: 2026-11-05
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -255,6 +257,11 @@ macro_actions:
   - id: peek
     label: 'Peek'
     description: 'Metadata, stats and values.'
+    narrative: >-
+      Looking at the mission's databases without changing them: their configuration, usage
+      statistics and the values stored under their keys. Metadata and statistics leak nothing,
+      and the REST tokens are stripped from what the agent sees. Reading values is a permission
+      of its own, because applications often keep sessions or cached credentials in Redis.
     entries:
       - risk_id: upstash-redis.read-database-metadata
         quota: 2000
@@ -268,6 +275,11 @@ macro_actions:
   - id: write
     label: 'Write keys'
     description: 'Set keys.'
+    narrative: >-
+      Setting and overwriting keys, through the dedicated tools or a plain command. An
+      overwritten value is lost unless it is kept elsewhere, and the application reads the new
+      one at once. This permission alone writes values that stay and nothing else: deleting,
+      expiring or moving a key needs the delete permission too.
     entries:
       - risk_id: upstash-redis.write-data
         quota: 500
@@ -275,6 +287,11 @@ macro_actions:
   - id: delete
     label: 'Delete keys'
     description: 'Delete keys and flush the database.'
+    narrative: >-
+      Removing data: whole keys, parts of a value, a time to live given to a key, or a move out
+      of its source, plus flushing the whole database. Deleted data is back only from a backup,
+      so these sit apart from writing; a cache write with a time to live needs both. A flush
+      wipes every key at once, which is why it is a permission of its own.
     entries:
       - risk_id: upstash-redis.delete-data
         quota: 100
@@ -285,6 +302,12 @@ macro_actions:
   - id: manage
     label: 'Manage databases'
     description: 'Create, rename, delete, and arbitrary commands.'
+    narrative: >-
+      Working on the databases themselves: creating, renaming and deleting them, and running any
+      Redis command through execute. Creating one can cost money on a paid plan, a rename breaks
+      whatever still uses the old name, and a deletion drops the store and all its data. An
+      arbitrary command or script can do anything Redis can, deletion and flush included, so it
+      belongs here rather than with writes.
     entries:
       - risk_id: upstash-redis.create-database
         quota: 10

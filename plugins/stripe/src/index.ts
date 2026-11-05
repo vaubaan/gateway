@@ -22,6 +22,7 @@ import { PROVIDER_ID } from './identity.ts';
 import { STRIPE_ICON, STRIPE_ICON_COLOR } from './icon.ts';
 import { stripeToolTitles } from './tool-titles.ts';
 import { stripeTools } from './tools.ts';
+import { stripeExamples } from './examples.ts';
 
 // The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
 // filesystem path the bundler leaves alone (docs/handbook/plugin-sdk.md).
@@ -44,6 +45,7 @@ export const stripePlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/stripe.md',
   tools: stripeTools,
   toolTitles: stripeToolTitles,
+  examples: stripeExamples,
   dataModel: stripeDataModel,
   catalog: stripeCatalog.catalog,
   credential: stripeCredential,
@@ -75,3 +77,4 @@ export {
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';
+export { EXAMPLE_LIVE_MODE, EXAMPLE_TEST_MODE, stripeExamples } from './examples.ts';

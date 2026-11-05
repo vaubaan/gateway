@@ -138,72 +138,12 @@ describe('vercel plugin — structural kit', () => {
     expect(gated).not.toContain('vercel[preview].env-var-write');
   });
 
-  const p = { projectId: 'prj_abc' };
-  // One table for the catalog coverage and for the identifier proof.
-  const SAMPLES: ToolSamples = {
-    vercel__search_vercel_documentation: [{ args: { topic: 'routing' } }],
-    vercel__list_teams: [{ args: {} }],
-    vercel__list_projects: [{ args: { teamId: 'team_abc' } }],
-    vercel__check_domain_availability_and_price: [{ args: { names: ['example.com'] } }],
-    vercel__get_project: [{ args: { ...p, teamId: 'team_abc' } }, { args: {} }],
-    vercel__list_project_domains: [{ args: p }],
-    vercel__list_deployments: [{ args: p }],
-    vercel__get_deployment: [{ args: { ...p, idOrUrl: 'dpl_1' } }],
-    vercel__get_deployment_build_logs: [{ args: { ...p, idOrUrl: 'dpl_1' } }],
-    vercel__get_runtime_logs: [
-      { args: { ...p, deploymentId: 'dpl_1' } },
-      { args: { ...p, environment: 'production' } },
-    ],
-    vercel__web_fetch_vercel_url: [{ args: { url: 'https://app-git-main.vercel.app/' } }],
-    vercel__list_toolbar_threads: [{ args: p }],
-    vercel__get_toolbar_thread: [{ args: { ...p, threadId: 'thr_1' }, expectDenied: true }],
-    vercel__list_env_vars: [{ args: p }, { args: { ...p, decrypt: true } }],
-    vercel__deploy_to_vercel: [{ args: p }, { args: {} }],
-    vercel__get_access_to_vercel_url: [{ args: { url: 'https://app-git-main.vercel.app/' } }],
-    vercel__upsert_env_var: [
-      { args: { ...p, key: 'K', value: 'v', target: ['preview'] } },
-      { args: { ...p, key: 'K', value: 'v' } },
-      {
-        args: { ...p, key: 'K', value: 'v', target: ['preview', 'staging'] },
-        expectDenied: true,
-      },
-    ],
-    vercel__delete_env_var: [{ args: { ...p, id: 'env_1' } }],
-    vercel__update_project_settings: [{ args: { ...p, framework: 'nextjs' } }],
-    vercel__disconnect_git: [{ args: p }],
-    vercel__add_project_domain: [{ args: { ...p, name: 'www.example.com' } }],
-    vercel__verify_project_domain: [{ args: { ...p, domain: 'www.example.com' } }],
-    vercel__remove_project_domain: [{ args: { ...p, domain: 'www.example.com' } }],
-    vercel__get_firewall_config: [{ args: p }],
-    vercel__toggle_firewall: [{ args: { ...p, enabled: true } }],
-    vercel__upsert_firewall_rule: [
-      { args: { ...p, name: 'r', active: true, conditionGroup: [], action: { type: 'deny' } } },
-    ],
-    vercel__remove_firewall_rule: [{ args: { ...p, ruleId: 'rule_1' } }],
-    vercel__manage_ip_blocking: [{ args: { ...p, operation: 'insert', ip: '10.0.0.1' } }],
-    // The four thread-addressed writes are refused : a thread cannot be bound to a project.
-    vercel__change_toolbar_thread_resolve_status: [
-      { args: { ...p, threadId: 'thr_1', resolved: true }, expectDenied: true },
-    ],
-    vercel__reply_to_toolbar_thread: [
-      { args: { ...p, threadId: 'thr_1', markdown: 'x' }, expectDenied: true },
-    ],
-    vercel__edit_toolbar_message: [
-      {
-        args: { ...p, threadId: 'thr_1', messageId: 'msg_1', markdown: 'x' },
-        expectDenied: true,
-      },
-    ],
-    vercel__add_toolbar_reaction: [
-      {
-        args: { ...p, threadId: 'thr_1', messageId: 'msg_1', emoji: '+1' },
-        expectDenied: true,
-      },
-    ],
-  };
+  // One table for the catalog coverage and for the identifier proof : the plugin's own
+  // `examples` (`src/examples.ts`), each sample with its resources.
+  const SAMPLES: ToolSamples = vercelPlugin.examples;
 
   test('every tool classifies to slices the catalog covers', () => {
-    const report = assertCatalogCoverage(vercelPlugin, SAMPLES, { resources: [app, foreign] });
+    const report = assertCatalogCoverage(vercelPlugin);
     expect(report.toolsChecked).toBe(32);
     // Every named risk but one is reached by at least one tool ; no sample
     // lands on the fallback (ADR fallback-risk-only-when-uncategorized).

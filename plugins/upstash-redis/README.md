@@ -159,8 +159,8 @@ npx vitest run plugins/upstash-redis
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertNoWildcard`, `assertCatalogCoverage` with
-samples for every tool), the classifier conventions, env resolution through
+`assertNoWildcard`, `assertCatalogCoverage` on the plugin's `examples`,
+`src/examples.ts`, one per tool), the classifier conventions, env resolution through
 the resource label, the credential spec, and `execute` / `discoverResources`
 against `mockFetch`. `classify.test.ts` pins the expected slice of every
 tool and the denials; `command-table.test.ts` is the adversarial table of

@@ -49,9 +49,11 @@
 # pattern or preset changed.
 # catalog_version 7 (2026-10-31) : presets retired (same ADR) ; no risk,
 # pattern or macro-action changed.
+# catalog_version 8 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: supabase
-catalog_version: 7
-catalog_date: 2026-10-31
+catalog_version: 8
+catalog_date: 2026-11-05
 
 risks:
   # ───────────────────────────────────────────────────────────────────────
@@ -496,6 +498,12 @@ macro_actions:
   - id: query
     label: 'Query'
     description: 'Data, storage objects, functions, users and managed schemas.'
+    narrative: >-
+      Reading the project: tables through read-only SQL, storage objects, Edge Function code and
+      auth users. Every read touches the broad data permission, and narrower ones fire with it
+      where the stakes rise: personal data of users, a signed URL that hands a file to someone
+      the agent picks, and the schemas Supabase keeps for itself (auth sessions, vault secrets),
+      which a query the classifier cannot read with confidence also touches.
     entries:
       - risk_id: supabase.read-data
         quota: 2000
@@ -518,6 +526,11 @@ macro_actions:
   - id: change-data
     label: 'Change data'
     description: 'Rows, storage objects, users and sign-in links.'
+    narrative: >-
+      Changing what the applications hold: rows written by migrations, files in buckets, users
+      and their sign-in links. One file or one user can be put back; a mass row write or a
+      prefix-wide delete cannot, so those are separate permissions and are never accepted on
+      prod. A sign-in link is a permission of its own because whoever holds it is that user.
     entries:
       - risk_id: supabase.bulk-row-write
         quota: 50
@@ -540,6 +553,11 @@ macro_actions:
   - id: change-schema
     label: 'Change the schema'
     description: 'Migrations, row-level security, extensions and buckets.'
+    narrative: >-
+      Migrations that create or alter tables and indexes, row-level security policies,
+      extensions and buckets. Each migration touches the schema permission, and one that also
+      writes rows, changes security or adds an extension needs that permission too. A policy or
+      a public bucket decides who can read the data, so a single mistake here is a leak.
     entries:
       - risk_id: supabase.migration-write
         quota: 20
@@ -556,6 +574,11 @@ macro_actions:
   - id: ship-functions
     label: 'Ship functions'
     description: 'Code, deployment and secrets of Edge Functions.'
+    narrative: >-
+      Changing the code of Edge Functions, deploying it, and setting the secrets it reads at
+      runtime. Writing the body and deploying it are kept apart, since a deploy changes live
+      behaviour at once, on prod for every caller. A secret change can break a function
+      immediately or feed it a value someone else chose.
     entries:
       - risk_id: supabase.functions.body-write
         quota: 500
@@ -569,6 +592,12 @@ macro_actions:
   - id: administer
     label: 'Administer'
     description: 'Database roles, storage and auth configuration, SSO.'
+    narrative: >-
+      Changing who may do what in the project: database roles and grants, storage settings, SSO
+      and third-party sign-in, the auth configuration. Each one shifts the posture for every
+      application and every user at once, and outlives the mission. A wrong identity provider or
+      signup policy lets strangers sign in, which is why none of this belongs to the other
+      verbs.
     entries:
       - risk_id: supabase.db-role-write
         quota: 50
