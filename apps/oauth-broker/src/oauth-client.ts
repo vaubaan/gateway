@@ -67,16 +67,35 @@ async function post(
   }
 }
 
-/** The `email` claim of an ID token received straight from the token endpoint over TLS. */
-function emailOf(idToken: unknown): string | null {
+const MAX_ADDRESS_LENGTH = 320;
+/** One `local@domain` and nothing around it: no space, no second `@`, no angle bracket. */
+const ADDRESS = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
+
+function addressClaim(value: unknown): string | null {
+  return typeof value === 'string' && value.length <= MAX_ADDRESS_LENGTH && ADDRESS.test(value)
+    ? value
+    : null;
+}
+
+/**
+ * The account an ID token received straight from the token endpoint over TLS
+ * names: its `email` claim, or else its `preferred_username` when that is one
+ * address. Microsoft puts `email` in the token only when the `email` scope was
+ * asked and the tenant holds an address for the person; `preferred_username`
+ * is the sign-in name, an address for personal accounts and most work ones.
+ */
+export function emailOf(idToken: unknown): string | null {
   if (typeof idToken !== 'string') return null;
   const payload = idToken.split('.')[1];
   if (payload === undefined) return null;
   try {
     const claims: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     if (typeof claims !== 'object' || claims === null) return null;
-    const email = (claims as Record<string, unknown>).email;
-    return typeof email === 'string' && email.length <= 320 ? email : null;
+    const record = claims as Record<string, unknown>;
+    if (typeof record.email === 'string') {
+      return record.email.length <= MAX_ADDRESS_LENGTH ? record.email : null;
+    }
+    return addressClaim(record.preferred_username);
   } catch {
     return null;
   }
@@ -155,12 +174,17 @@ export class OAuthClient {
     return tokenResult(answer, this.#now());
   }
 
-  /** Done, also when the provider says the token was already revoked or unknown. */
+  /**
+   * Done, also when the provider says the token was already revoked or
+   * unknown. A provider without a revocation endpoint (Microsoft) is done at
+   * once, with no request: `relayed: false` says so to the caller's log.
+   */
   async revoke(
     provider: ProviderDefinition,
     client: ClientCredentials,
     refreshToken: string,
-  ): Promise<ProviderResult<null>> {
+  ): Promise<ProviderResult<{ readonly relayed: boolean }>> {
+    if (provider.revokeEndpoint === undefined) return { ok: true, value: { relayed: false } };
     const answer = await post(this.#fetch, provider.revokeEndpoint, {
       token: refreshToken,
       token_type_hint: 'refresh_token',
@@ -168,11 +192,11 @@ export class OAuthClient {
       client_secret: client.clientSecret,
     });
     if (answer === undefined) return { ok: false, reason: 'unavailable' };
-    if (answer.status === 200) return { ok: true, value: null };
+    if (answer.status === 200) return { ok: true, value: { relayed: true } };
     // Google answers 400 invalid_token for a token already revoked or expired.
     const error = answer.json?.error;
     if (answer.status === 400 && (error === 'invalid_token' || error === 'invalid_grant')) {
-      return { ok: true, value: null };
+      return { ok: true, value: { relayed: true } };
     }
     return { ok: false, reason: 'unavailable' };
   }

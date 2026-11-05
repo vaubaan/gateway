@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, isAllowedUrl, parseConfig } from '../../src/config.ts';
 import { type Flow, FlowStore, type FlowStart, type StartResult } from '../../src/flows.ts';
-import { PROVIDERS } from '../../src/providers.ts';
+import { OAuthClient, emailOf } from '../../src/oauth-client.ts';
+import { MICROSOFT, PROVIDERS } from '../../src/providers.ts';
 
 const DIGEST = 'a'.repeat(64);
 const URL_DIGEST = createHash('sha256')
@@ -158,5 +159,85 @@ describe('flow store', () => {
     expect(a.id).not.toBe(b.id);
     expect(a.brokerVerifier).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(a.brokerVerifier).not.toBe(b.brokerVerifier);
+  });
+});
+
+describe('the microsoft provider', () => {
+  it('is served with the v2.0 endpoints of the common tenant, no revocation endpoint', () => {
+    expect(PROVIDERS.get('microsoft')).toBe(MICROSOFT);
+    expect(MICROSOFT.authorizeEndpoint).toBe(
+      'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    );
+    expect(MICROSOFT.tokenEndpoint).toBe(
+      'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    );
+    expect(MICROSOFT.revokeEndpoint).toBeUndefined();
+    expect([...MICROSOFT.allowedScopes].sort()).toEqual(
+      [
+        'Calendars.ReadWrite',
+        'Mail.ReadWrite',
+        'Mail.Send',
+        'User.Read',
+        'email',
+        'offline_access',
+        'openid',
+        'profile',
+      ].sort(),
+    );
+    expect(MICROSOFT.authorizeParams).toEqual({ response_mode: 'query' });
+  });
+
+  it('is enrolled under its own secret name', () => {
+    const config = parse({ ...valid, providers: { microsoft: { client_id: 'ms-cid' } } });
+    expect(config.clients.get('microsoft')).toEqual({
+      clientId: 'ms-cid',
+      secretName: 'microsoft-client-secret',
+    });
+  });
+
+  it('revokes without any request: Microsoft cannot revoke one refresh token', async () => {
+    const calls: string[] = [];
+    const fake = (async (url: string | URL | Request) => {
+      calls.push(String(url));
+      return new Response('', { status: 200 });
+    }) as typeof fetch;
+    const result = await new OAuthClient(fake).revoke(
+      MICROSOFT,
+      { clientId: 'ms-cid', clientSecret: 'cs' },
+      'rt',
+    );
+    expect(result).toEqual({ ok: true, value: { relayed: false } });
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('the account an ID token names', () => {
+  const token = (claims: object): string =>
+    `h.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.s`;
+
+  it('reads email, else a preferred_username that is one address', () => {
+    expect(emailOf(token({ email: 'alice@acme.example' }))).toBe('alice@acme.example');
+    expect(emailOf(token({ preferred_username: 'alice@contoso.onmicrosoft.com' }))).toBe(
+      'alice@contoso.onmicrosoft.com',
+    );
+    expect(
+      emailOf(token({ email: 'alice@acme.example', preferred_username: 'other@x.example' })),
+    ).toBe('alice@acme.example');
+  });
+
+  it('refuses a preferred_username that is not exactly one bounded address', () => {
+    for (const name of [
+      'alice',
+      '+33612345678',
+      'a@b@c.example',
+      'Alice <alice@acme.example>',
+      'a b@acme.example',
+      `${'a'.repeat(320)}@acme.example`,
+      42,
+    ]) {
+      expect(emailOf(token({ preferred_username: name })), String(name)).toBeNull();
+    }
+    expect(emailOf('not-a-jwt')).toBeNull();
+    expect(emailOf(undefined)).toBeNull();
   });
 });

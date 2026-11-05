@@ -60,12 +60,12 @@ async function answer(
   route: string,
   req: IncomingMessage,
   res: ServerResponse,
-  handle: () => Promise<void>,
+  handle: () => Promise<string | undefined | void>,
 ): Promise<void> {
   const started = performance.now();
   let reason: string | undefined;
   try {
-    await handle();
+    reason = (await handle()) ?? undefined;
   } catch (error) {
     if (error instanceof HttpError) {
       reason = error.reason;
@@ -96,7 +96,7 @@ function apiHandler(broker: Broker, log: Logger, listener: string): Handler {
     void answer(log, listener, route, req, res, async () => {
       if (route === 'unknown') throw new HttpError(404, 'not_found', 'no such call');
       if (req.method !== 'POST') throw new HttpError(405, 'method_not_allowed', 'POST only');
-      await broker.handleApi(req, res, path);
+      return broker.handleApi(req, res, path);
     });
   };
 }

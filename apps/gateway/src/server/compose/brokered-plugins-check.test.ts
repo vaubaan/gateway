@@ -30,7 +30,7 @@ describe('brokered plugins against the OAuth provider table', () => {
   it('names a provider the table does not list', () => {
     const plugin = fixturePlugin({ id: 'calco', credential: brokered('outlook', [EVENTS]) });
     expect(brokeredPluginProblems([plugin])).toEqual([
-      "plugin 'calco' is brokered by provider 'outlook', which the OAuth provider table does not list (listed: google)",
+      "plugin 'calco' is brokered by provider 'outlook', which the OAuth provider table does not list (listed: google, microsoft)",
     ]);
   });
 

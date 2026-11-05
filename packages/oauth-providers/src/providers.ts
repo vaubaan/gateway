@@ -17,7 +17,12 @@ export interface ProviderDefinition {
   readonly id: string;
   readonly authorizeEndpoint: string;
   readonly tokenEndpoint: string;
-  readonly revokeEndpoint: string;
+  /**
+   * RFC 7009 revocation of one refresh token. Absent when the provider has
+   * none (Microsoft): `/revoke` then calls nothing at the provider, and the
+   * gateway's erasure of its sealed copy is the whole revocation.
+   */
+  readonly revokeEndpoint?: string;
   /** The only scopes a flow may ask for. */
   readonly allowedScopes: ReadonlySet<string>;
   /** Added to every consent URL. */
@@ -47,4 +52,35 @@ export const GOOGLE: ProviderDefinition = {
   authorizeParams: { access_type: 'offline', prompt: 'consent' },
 };
 
-export const PROVIDERS: ProviderTable = new Map([[GOOGLE.id, GOOGLE]]);
+/**
+ * Microsoft identity platform v2.0, `common` tenant: work or school accounts
+ * of any Entra tenant and personal Microsoft accounts ("Get access on behalf
+ * of a user", Microsoft Graph docs, read 2026-11-05). `offline_access` is the
+ * scope that makes the code exchange answer a refresh token; `response_mode`
+ * `query` brings the code back as a query parameter of the redirect.
+ * Scopes: the delegated Graph permissions the outlook plugin asks for (ADR
+ * outlook-through-the-oauth-broker-microsoft-provider), plus `openid`,
+ * `email` and `profile` so the ID token can name the account. Microsoft
+ * offers no endpoint that revokes one refresh token: no `revokeEndpoint`.
+ */
+export const MICROSOFT: ProviderDefinition = {
+  id: 'microsoft',
+  authorizeEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+  tokenEndpoint: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+  allowedScopes: new Set([
+    'openid',
+    'email',
+    'profile',
+    'offline_access',
+    'User.Read',
+    'Mail.ReadWrite',
+    'Mail.Send',
+    'Calendars.ReadWrite',
+  ]),
+  authorizeParams: { response_mode: 'query' },
+};
+
+export const PROVIDERS: ProviderTable = new Map([
+  [GOOGLE.id, GOOGLE],
+  [MICROSOFT.id, MICROSOFT],
+]);

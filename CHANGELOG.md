@@ -15,6 +15,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   subtasks and comments, personal access token; macro-actions `read`, `work` and `clean-up`; a
   task is proven to belong to the mission's project before every task call.
 - **Axonaut plugin** (`@vaubaan/plugin-axonaut` 0.1.0): the CRM, pipeline, quotations, invoices, payments, projects, tasks, tickets and products of one Axonaut account, with the API key of one Axonaut user; macro-actions `read`, `crm`, `sell` and `clean-up`; creating an invoice and deleting a record are irreversible and always ask first.
+- **The OAuth broker serves Microsoft** (`@vaubaan/oauth-broker` 0.5.0): the
+  `microsoft` provider (identity platform v2.0, `common` tenant: work, school
+  and personal accounts) with the delegated Graph permissions `User.Read`,
+  `Mail.ReadWrite`, `Mail.Send` and `Calendars.ReadWrite`. Microsoft has no
+  endpoint that revokes one refresh token, so `/revoke` for it answers 204
+  without calling Microsoft (logged `reason: no_revoke_endpoint`). The account
+  is read from the ID token's `email`, or its `preferred_username` when that is
+  one address.
 
 ### Changed
 

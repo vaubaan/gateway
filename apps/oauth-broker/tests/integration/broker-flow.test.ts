@@ -36,6 +36,8 @@ const RETURN_A = 'https://gw-a.example/connections/callback/google-calendar';
 const RETURN_B = 'https://gw-b.example/connections/callback/google-calendar';
 const RETURN_C = 'https://gw-c.example/connections/callback/google-calendar';
 const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/calendar.events'];
+/** A provider without a revocation endpoint, as Microsoft is. */
+const MS_SCOPES = ['openid', 'email', 'offline_access', 'Mail.ReadWrite'];
 const digest = (key: string): string => createHash('sha256').update(key).digest('hex');
 
 // ---- the fake provider ------------------------------------------------------
@@ -123,7 +125,10 @@ async function launch(instances: Enrolled[], refreshPerHour?: number): Promise<R
     JSON.stringify({
       public_url: 'https://broker.example.com',
       refresh_per_hour: refreshPerHour,
-      providers: { google: { client_id: 'cid.example' } },
+      providers: {
+        google: { client_id: 'cid.example' },
+        microsoft: { client_id: 'ms-cid.example' },
+      },
       instances: instances.map((i) => ({
         id: i.id,
         key_sha256: digest(i.key),
@@ -138,6 +143,7 @@ async function launch(instances: Enrolled[], refreshPerHour?: number): Promise<R
     platform: createLocalAdapter({
       secrets: {
         'google-client-secret': CLIENT_SECRET,
+        'microsoft-client-secret': CLIENT_SECRET,
         'refresh-token-sealing-key': SEALING_KEY.toString('base64'),
       },
     }),
@@ -173,7 +179,17 @@ beforeAll(async () => {
     allowedScopes: new Set(SCOPES),
     authorizeParams: { access_type: 'offline', prompt: 'consent' },
   };
-  providers = new Map([[fake.id, fake]]);
+  const fakeMicrosoft: ProviderDefinition = {
+    id: 'microsoft',
+    authorizeEndpoint: 'https://login.provider.example/common/oauth2/v2.0/authorize',
+    tokenEndpoint: `${base}/token`,
+    allowedScopes: new Set(MS_SCOPES),
+    authorizeParams: { response_mode: 'query' },
+  };
+  providers = new Map([
+    [fake.id, fake],
+    [fakeMicrosoft.id, fakeMicrosoft],
+  ]);
   broker = await launch([
     { id: ID_A, key: KEY_A, returnUrl: RETURN_A },
     { id: ID_B, key: KEY_B, returnUrl: RETURN_B },
@@ -532,6 +548,46 @@ describe('refresh and revocation', () => {
     const alive = sealed('rt_alive');
     expect((await api('/token', { provider: 'google', refresh_token: alive })).status).toBe(502);
     expect((await api('/revoke', { provider: 'google', refresh_token: alive })).status).toBe(502);
+  });
+});
+
+describe('a provider without a revocation endpoint (microsoft)', () => {
+  const flowBody = (scopes: readonly string[]) => ({
+    provider: 'microsoft',
+    scopes,
+    return_url: RETURN_A,
+    state: randomBytes(24).toString('base64url'),
+    challenge: s256(randomBytes(32).toString('base64url')),
+    challenge_method: 'S256',
+  });
+
+  it('starts a flow with its own scopes and response_mode, and refuses a scope it does not allow', async () => {
+    const res = await api('/flows', flowBody(MS_SCOPES));
+    expect(res.status).toBe(201);
+    const authorize = new URL(String(res.json?.authorize_url));
+    expect(authorize.origin + authorize.pathname).toBe(
+      'https://login.provider.example/common/oauth2/v2.0/authorize',
+    );
+    expect(Object.fromEntries(authorize.searchParams)).toMatchObject({
+      client_id: 'ms-cid.example',
+      redirect_uri: 'https://broker.example.com/oauth/callback/microsoft',
+      scope: MS_SCOPES.join(' '),
+      response_mode: 'query',
+    });
+    for (const scopes of [['Mail.Send'], [...MS_SCOPES, 'Files.ReadWrite.All'], SCOPES]) {
+      const refused = await api('/flows', flowBody(scopes));
+      expect([refused.status, refused.json?.error]).toEqual([400, 'invalid_scope']);
+    }
+  });
+
+  it('answers a revocation 204 without calling the provider, and logs why', async () => {
+    const blob = testSealer.seal(ID_A, 'microsoft', 'rt_ms');
+    const res = await api('/revoke', { provider: 'microsoft', refresh_token: blob });
+    expect(res.status).toBe(204);
+    expect(provider.calls).toHaveLength(0);
+    expect(logLines.at(-1)).toContain('"route":"/revoke","status":204');
+    expect(logLines.at(-1)).toContain('"reason":"no_revoke_endpoint"');
+    expect(logLines.at(-1)).not.toContain('rt_ms');
   });
 });
 
