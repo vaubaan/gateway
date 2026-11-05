@@ -1,17 +1,20 @@
 /**
  * What the site copies from the gateway is compared with the gateway, here,
  * since the site may not import it at build time (ADR website-nextjs-on-vercel
- * D1): the configuration keys, the published thresholds. The severity word is
- * not copied: the site imports it from `@vaubaan/policy-engine`.
+ * D1): the configuration keys, the published thresholds, the undo words. The
+ * severity word, the tier, the gates and the budgets are not copied: the site
+ * imports them from `@vaubaan/policy-engine`.
  */
 import { describe, expect, it } from 'vitest';
 
+import { WHY_VALUES } from '../../../../gateway/src/lib/vocabulary';
 import { KEYS } from '../../../../gateway/src/server/config/sources';
 import {
   configKeysMarkdown,
   CONFIG_HANDBOOK,
   parseConfigKeys,
 } from '../../../src/content/config-keys';
+import { UNDO_WORDS } from '../../../src/content/plugins';
 import { readRepoFile } from '../../../src/content/repo';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
 
@@ -53,5 +56,11 @@ describe('the published validation thresholds', () => {
       new RegExp(`\\| Minimum success rate \\| ${Math.round(thresholds.minSuccessRate * 100)} %`),
     );
     expect(readme).toContain(`over the last **${thresholds.windowDays} days**`);
+  });
+});
+
+describe('the undo words', () => {
+  it('are the gateway interface’s words for reversibility', () => {
+    expect(UNDO_WORDS).toEqual(WHY_VALUES.reversibility);
   });
 });

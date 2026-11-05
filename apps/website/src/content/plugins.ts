@@ -6,26 +6,50 @@
  * declaration and whose catalog is read from `risk-catalog.yaml` by the
  * plugin SDK's loader — and reduced to plain data the pages can render.
  *
+ * Nothing of the gateway is restated here: severity, tier, gates and budgets
+ * come from `@vaubaan/policy-engine`, the client source from the plugin SDK,
+ * the worked examples from the plugin's own `classify` (`plugin-examples.ts`).
+ *
  * Folders whose name starts with `_` are kits, not plugins (`_template`).
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import type {
-  CredentialSpec,
-  GuideStep,
-  ProviderPlugin,
-  TokenExpiry,
-  TokenReach,
+import {
+  isBrokeredSpec,
+  type CredentialSpec,
+  type GuideStep,
+  type ProviderPlugin,
+  type TokenExpiry,
+  type TokenReach,
 } from '@vaubaan/plugin-sdk';
-import { severityLevel, severityOf, type SeverityLevel } from '@vaubaan/policy-engine';
-import type { RiskEntry } from '@vaubaan/shared';
+import {
+  budgetAtTrustLevel,
+  isAcceptableInEnv,
+  resolveVector,
+  severityLevel,
+  severityOf,
+  tierOf,
+  TRUST_LEVEL_GATES,
+  TRUST_LEVELS,
+  type SeverityLevel,
+  type Tier,
+  type TrustLevel,
+} from '@vaubaan/policy-engine';
+import type { Gate, MacroActionEntry, RiskEntry, RiskVector } from '@vaubaan/shared';
+
+import {
+  classifyExamples,
+  workedMission,
+  type ExampleInfo,
+  type WorkedMission,
+} from './plugin-examples';
 
 /** The one severity word of a permission, the gateway interface's (style guide §2). */
 export type Severity = SeverityLevel;
 
-function severityWord(vector: RiskEntry['vector']): Severity {
+function severityWord(vector: RiskVector): Severity {
   return severityLevel(severityOf(vector));
 }
 
@@ -37,11 +61,48 @@ export interface ToolInfo {
 
 export type RiskKind = 'read' | 'write' | 'destructive';
 
+/**
+ * The undo fact of a permission, in the gateway interface's word for its
+ * `reversibility` (style guide §2, "the six risk axes are words"). Copied,
+ * since the site may not import `apps/gateway`: `sources-agree.test.ts`
+ * compares it with the gateway's vocabulary.
+ */
+export const UNDO_WORDS = {
+  reversible: 'easy',
+  costly: 'costly',
+  irreversible: 'impossible',
+} as const satisfies Record<RiskVector['reversibility'], string>;
+
+export type UndoWord = (typeof UNDO_WORDS)[RiskVector['reversibility']];
+
+/** A permission in one environment its catalog names (`acceptable_in_envs`, `vector_overrides`). */
+export interface RiskEnvVariant {
+  readonly env: string;
+  readonly vector: RiskVector;
+  readonly severity: Severity;
+  readonly tier: Tier;
+  readonly undo: UndoWord;
+  /** False when `acceptable_in_envs` leaves this environment out: no mission holds it there. */
+  readonly acceptable: boolean;
+}
+
 export interface RiskInfo {
   readonly id: string;
   readonly label: string;
   readonly reason: string;
   readonly severity: Severity;
+  /** The six facts, as the catalog declares them. */
+  readonly vector: RiskVector;
+  readonly undo: UndoWord;
+  /** `tierOf` from the policy engine: what the trust levels read. A page never prints "tier". */
+  readonly tier: Tier;
+  /** The catalog's per-minute ceiling (`infra_limits.calls_per_minute_max`), when declared. */
+  readonly rateCeilingPerMinute: number | null;
+  /** The slice patterns the permission covers (`matches`). */
+  readonly patterns: readonly string[];
+  readonly replacedBy: string | null;
+  /** One row per environment the catalog names for this permission. */
+  readonly envVariants: readonly RiskEnvVariant[];
   readonly kind: RiskKind;
   /** Environment labels whose own vector gives another severity (`prod: high`). */
   readonly severityByEnv: readonly { readonly env: string; readonly severity: Severity }[];
@@ -51,12 +112,26 @@ export interface RiskInfo {
   readonly deprecated: boolean;
 }
 
+/** The line a trust level writes: the gate (`null`: left out) and the budget, by the policy engine. */
+export interface LevelBudget {
+  readonly gate: Gate | null;
+  readonly quota: number;
+  readonly rateMax: number;
+  readonly rateWindowSeconds: number;
+}
+
+export type LevelBudgets = Readonly<Record<TrustLevel, LevelBudget>>;
+
 /** One risk of a macro-action with its base budget: no gate, the trust level decides it. */
 export interface MacroActionEntryInfo {
   readonly riskId: string;
   readonly quota: number;
   readonly rateMax: number;
   readonly rateWindowSeconds: number;
+  /** The line each trust level writes, for the catalog's vector. */
+  readonly levels: LevelBudgets;
+  /** The lines in each acceptable environment of the permission, whose vector may move the gate. */
+  readonly envLevels: readonly { readonly env: string; readonly levels: LevelBudgets }[];
 }
 
 /** A macro-action of the catalog (ADR macro-actions-and-trust-levels-prefill-the-policy). */
@@ -64,6 +139,8 @@ export interface MacroActionInfo {
   readonly id: string;
   readonly label: string;
   readonly description: string;
+  /** The catalog's prose of the macro-action (risk model §4.6), when it has one. */
+  readonly narrative: string | null;
   readonly entries: readonly MacroActionEntryInfo[];
 }
 
@@ -73,8 +150,20 @@ export interface CredentialFieldInfo {
   readonly help: string | null;
 }
 
+/**
+ * Where the credential comes from, one of the three ways of connecting
+ * (website spec §2.3 item 7): a key the person creates at the service and
+ * pastes (`api-key`, `ssh-key`), a client the gateway registers itself at the
+ * service (`oauth2` with `clientRegistration`), or an OAuth broker's client
+ * (`oauth2` with `broker`).
+ */
+export type ClientSource = 'pasted-key' | 'gateway-registered' | 'broker';
+
 export interface CredentialInfo {
   readonly kind: CredentialSpec['kind'];
+  readonly clientSource: ClientSource;
+  /** The provider the broker runs the flow at (`google`), for a brokered way only. */
+  readonly brokerProvider: string | null;
   /** What the person creates, in the provider's words, when the plugin says. */
   readonly label: string | null;
   readonly fields: readonly CredentialFieldInfo[];
@@ -84,11 +173,8 @@ export interface CredentialInfo {
   readonly permissions: readonly { readonly name: string; readonly access: string }[];
   readonly expiry: TokenExpiry | null;
   readonly docsUrl: string | null;
+  /** The exact scopes an `oauth2` way asks for. */
   readonly scopes: readonly string[];
-  /** `oauth2` whose client the gateway registers itself: nobody declares anything. */
-  readonly registersItself: boolean;
-  /** Signs in through the OAuth broker the instance is enrolled with (Google). */
-  readonly brokered: boolean;
 }
 
 export interface PluginInfo {
@@ -100,6 +186,11 @@ export interface PluginInfo {
   readonly dir: string;
   readonly description: string;
   readonly summary: string | null;
+  readonly icon: string | null;
+  readonly iconColor: string | null;
+  readonly resourceNoun: { readonly one: string; readonly other: string } | null;
+  /** Tools of the service the plugin deliberately leaves out, each with its reason. */
+  readonly excludedTools: readonly { readonly name: string; readonly reason: string }[];
   readonly docsUrl: string | null;
   readonly manualRevocation: string | null;
   readonly catalogVersion: number | null;
@@ -107,6 +198,10 @@ export interface PluginInfo {
   readonly tools: readonly ToolInfo[];
   readonly risks: readonly RiskInfo[];
   readonly macroActions: readonly MacroActionInfo[];
+  /** The declared examples, classified when the site is built (`plugin-examples.ts`). */
+  readonly examples: readonly ExampleInfo[];
+  /** The first two macro-actions at Careful, as the policy engine expands them. */
+  readonly workedMission: WorkedMission;
   readonly credentials: readonly CredentialInfo[];
   readonly gitRemote: boolean;
 }
@@ -171,6 +266,25 @@ function kindOf(entry: RiskEntry): RiskKind {
   return entry.vector.reversibility === 'irreversible' ? 'destructive' : 'write';
 }
 
+/** The environments a catalog entry names: its acceptable ones, then those it overrides. */
+function envsNamedBy(entry: RiskEntry): string[] {
+  return [
+    ...new Set([...(entry.acceptable_in_envs ?? []), ...Object.keys(entry.vector_overrides ?? {})]),
+  ];
+}
+
+function envVariant(entry: RiskEntry, env: string): RiskEnvVariant {
+  const vector = resolveVector(entry, env);
+  return {
+    env,
+    vector: { ...vector },
+    severity: severityWord(vector),
+    tier: tierOf(vector),
+    undo: UNDO_WORDS[vector.reversibility],
+    acceptable: isAcceptableInEnv(entry, env),
+  };
+}
+
 function riskInfo(entry: RiskEntry): RiskInfo {
   const severity = severityWord(entry.vector);
   const severityByEnv = Object.entries(entry.vector_overrides ?? {})
@@ -184,12 +298,64 @@ function riskInfo(entry: RiskEntry): RiskInfo {
     label: entry.label,
     reason: entry.reason,
     severity,
+    vector: { ...entry.vector },
+    undo: UNDO_WORDS[entry.vector.reversibility],
+    tier: tierOf(entry.vector),
+    rateCeilingPerMinute: entry.infra_limits?.calls_per_minute_max ?? null,
+    patterns: [...patternsOf(entry)],
+    replacedBy: entry.replaced_by ?? null,
+    envVariants: envsNamedBy(entry).map((env) => envVariant(entry, env)),
     kind: kindOf(entry),
     severityByEnv,
     acceptableInEnvs: entry.acceptable_in_envs ? [...entry.acceptable_in_envs] : null,
     fallback: entry.fallback === true,
     deprecated: entry.deprecated === true,
   };
+}
+
+/** The line each trust level writes for a risk of this vector and base budget. */
+function levelBudgets(
+  vector: RiskVector,
+  entry: MacroActionEntry,
+  ceiling: number | null,
+): LevelBudgets {
+  const tier = tierOf(vector);
+  const base = { quota: entry.quota, rate_limit: entry.rate_limit };
+  const line = (level: TrustLevel): LevelBudget => {
+    const budget = budgetAtTrustLevel(base, level, ceiling);
+    return {
+      gate: TRUST_LEVEL_GATES[level][tier],
+      quota: budget.quota,
+      rateMax: budget.rate_limit.max,
+      rateWindowSeconds: budget.rate_limit.window_seconds,
+    };
+  };
+  const [careful, trusting, autonomous] = TRUST_LEVELS;
+  return { careful: line(careful), trusting: line(trusting), autonomous: line(autonomous) };
+}
+
+function macroActionEntryInfo(
+  entry: MacroActionEntry,
+  risks: ReadonlyMap<string, RiskEntry>,
+): MacroActionEntryInfo {
+  const risk = risks.get(entry.risk_id);
+  if (risk === undefined) throw new Error(`macro-action entry '${entry.risk_id}': no such risk`);
+  const ceiling = risk.infra_limits?.calls_per_minute_max ?? null;
+  return {
+    riskId: entry.risk_id,
+    quota: entry.quota,
+    rateMax: entry.rate_limit.max,
+    rateWindowSeconds: entry.rate_limit.window_seconds,
+    levels: levelBudgets(risk.vector, entry, ceiling),
+    envLevels: envsNamedBy(risk)
+      .filter((env) => isAcceptableInEnv(risk, env))
+      .map((env) => ({ env, levels: levelBudgets(resolveVector(risk, env), entry, ceiling) })),
+  };
+}
+
+function clientSourceOf(spec: CredentialSpec): ClientSource {
+  if (spec.kind !== 'oauth2') return 'pasted-key';
+  return isBrokeredSpec(spec) ? 'broker' : 'gateway-registered';
 }
 
 function credentialInfo(spec: CredentialSpec): CredentialInfo {
@@ -199,6 +365,8 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
   const guide = spec.kind === 'api-key' ? spec.guide : undefined;
   return {
     kind: spec.kind,
+    clientSource: clientSourceOf(spec),
+    brokerProvider: spec.kind === 'oauth2' && isBrokeredSpec(spec) ? spec.broker.provider : null,
     label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
     fields: fields.map((field) => ({
       label: field.label,
@@ -212,14 +380,17 @@ function credentialInfo(spec: CredentialSpec): CredentialInfo {
     expiry: guide?.expiry ?? null,
     docsUrl: guide?.docsUrl ?? null,
     scopes: spec.kind === 'oauth2' ? [...spec.scopes] : [],
-    registersItself: spec.kind === 'oauth2' && spec.broker === undefined,
-    brokered: spec.kind === 'oauth2' && spec.broker !== undefined,
   };
 }
 
-/** The plain data the site shows of one plugin. */
+/**
+ * The plain data the site shows of one plugin. Throws `ExampleError` when a
+ * declared example does not classify onto the plugin's own catalog: the build
+ * fails rather than publish a page showing what the gateway would not do.
+ */
 export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: string): PluginInfo {
   const catalog = plugin.catalog;
+  const risksById = new Map(catalog.risks.map((r) => [r.id, r]));
   return {
     id: plugin.id,
     name: plugin.displayName,
@@ -228,6 +399,15 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
     dir,
     description: plugin.description ?? '',
     summary: plugin.summary ?? null,
+    icon: plugin.icon ?? null,
+    iconColor: plugin.iconColor ?? null,
+    resourceNoun: plugin.resourceNoun
+      ? { one: plugin.resourceNoun.one, other: plugin.resourceNoun.other }
+      : null,
+    excludedTools: Object.entries(plugin.excludedTools ?? {}).map(([name, reason]) => ({
+      name,
+      reason,
+    })),
     docsUrl: plugin.docsUrl ?? null,
     manualRevocation: plugin.manualRevocation ?? null,
     catalogVersion: catalog.catalog_version ?? null,
@@ -242,13 +422,11 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
       id: action.id,
       label: action.label,
       description: action.description,
-      entries: action.entries.map((entry) => ({
-        riskId: entry.risk_id,
-        quota: entry.quota,
-        rateMax: entry.rate_limit.max,
-        rateWindowSeconds: entry.rate_limit.window_seconds,
-      })),
+      narrative: action.narrative ?? null,
+      entries: action.entries.map((entry) => macroActionEntryInfo(entry, risksById)),
     })),
+    examples: classifyExamples(plugin),
+    workedMission: workedMission(plugin),
     credentials: [credentialInfo(plugin.credential)],
     gitRemote: plugin.gitRemote !== undefined,
   };

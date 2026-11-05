@@ -88,6 +88,21 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   unchanged. The gateway reads the table and refuses to boot when a brokered
   plugin names a provider it does not list or a scope that provider does not
   allow; a structural test holds every shipped brokered plugin to it.
+- **vaubaan.com reads everything a plugin page needs from the plugin and the
+  policy engine** (website spec §2.3, ADR plugin-contract-and-credential-spec,
+  amendment 2026-11-05). Per permission: the six facts, the undo word, the
+  tier, the per-minute ceiling, the patterns, `replaced_by`, one variant per
+  environment; per macro-action: its narrative and each entry written out at
+  the three trust levels (gate or left out, quota, rate); per plugin: icon,
+  colour, resource noun, the tools left out, the worked mission (first two
+  macro-actions at Careful), and the declared examples run through `classify`
+  at build — slices, permissions touched, what a Careful mission does. The
+  build fails when a sample lands only on the fallback or `classify` refuses
+  it. The credential says its client source (`pasted-key`,
+  `gateway-registered`, `broker` with provider and scopes); the connect page
+  no longer describes a brokered way as a client the gateway registers.
+  `/plugins.json` carries all of it; the plugin page's Markdown prints the
+  narratives.
 
 ### Plugin SDK
 
