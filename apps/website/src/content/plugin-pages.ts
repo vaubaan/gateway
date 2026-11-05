@@ -18,8 +18,37 @@ import {
 } from './health';
 import { code, markdownTable, text } from './markdown';
 import type { GuideStep, TokenExpiry } from '@vaubaan/plugin-sdk';
+import {
+  GATE_WORDS,
+  SEVERITY_LABEL,
+  TRUST_LEVEL_LABELS,
+  TRUST_LEVELS,
+  type TrustLevel,
+} from '@vaubaan/policy-engine';
 
-import type { CredentialInfo, MacroActionEntryInfo, PluginInfo } from './plugins';
+import { twinPathOf } from './outputs';
+import { WORKED_TRUST_LEVEL, type ExampleInfo } from './plugin-examples';
+import {
+  BROKER_DOC,
+  callWords,
+  capitalise,
+  carefulGateOf,
+  connectSentences,
+  DAY_NOTE,
+  levelCellWords,
+  levelHeadings,
+  listWords,
+  mapOf,
+  missionOf,
+  openingOf,
+  retiredOf,
+  spreadsOf,
+  TOOLS_NOTE,
+  type MapColumn,
+  type MapRow,
+  type Spread,
+} from './plugin-page';
+import type { CredentialInfo, FactInfo, LevelBudgets, PluginInfo } from './plugins';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
 export interface PluginWithHealth extends PluginInfo {
@@ -56,110 +85,214 @@ export function pluginGroupMarkdown(
   return markdown;
 }
 
-function windowWords(seconds: number): string {
-  if (seconds === 60) return 'minute';
-  if (seconds === 3600) return 'hour';
-  if (seconds === 86400) return 'day';
-  return `${seconds} s`;
-}
-
-function macroActionRow(
-  entry: MacroActionEntryInfo,
-  labels: ReadonlyMap<string, string>,
-): string[] {
-  return [
-    code(entry.riskId),
-    text(labels.get(entry.riskId) ?? ''),
-    String(entry.quota),
-    `${entry.rateMax} per ${windowWords(entry.rateWindowSeconds)}`,
-  ];
-}
-
 export function pluginPageTitle(plugin: Pick<PluginInfo, 'name'>): string {
   return `${plugin.name} plugin`;
 }
 
 export function pluginPageDescription(plugin: PluginInfo): string {
-  return `${plugin.name} plugin of Vaubaan Gateway, version ${plugin.version}: ${plugin.risks.length} permissions, ${plugin.macroActions.length} macro-actions, ${plugin.tools.length} tools.`;
+  return `${plugin.name} plugin of Vaubaan Gateway, version ${plugin.version}: ${plugin.counts.permissions} permissions, ${plugin.counts.macroActions} macro-actions, ${plugin.counts.tools} tools.`;
 }
 
-/** `/plugins/<id>`: what the plugin covers, its permissions, macro-actions, tools and health. */
+/** The links of a plugin page (section 8): connect, handbook, catalog as code, Markdown twin. */
+export function pluginLinks(
+  plugin: PluginInfo,
+): { readonly label: string; readonly href: string }[] {
+  return [
+    { label: `Connect a ${plugin.name} account`, href: `/docs/providers/${plugin.id}` },
+    ...(plugin.docsUrl ? [{ label: `How ${plugin.name} is modelled`, href: plugin.docsUrl }] : []),
+    {
+      label: 'The catalog, as code',
+      href: githubBlob(`${plugin.dir}/src/risk-catalog.yaml`),
+    },
+    { label: 'The plugin source', href: githubTree(plugin.dir) },
+    { label: 'This page as Markdown', href: twinPathOf(`/plugins/${plugin.id}`) },
+  ];
+}
+
+/** A permission as the twin names it: its label, its id, its environment. */
+function permissionWords(
+  label: string,
+  riskId: string,
+  envs: readonly string[] | string | null,
+): string {
+  const list = envs === null ? [] : typeof envs === 'string' ? [envs] : envs;
+  return `${text(label)} ${code(riskId)}${list.length > 0 ? ` [${list.join(', ')}]` : ''}`;
+}
+
+function gateCell(levels: LevelBudgets, level: TrustLevel): string {
+  const { gate, quota } = levelCellWords(levels, level);
+  if (quota === null) return GATE_WORDS[gate];
+  return gate === 'free' ? quota : `${GATE_WORDS[gate]}, ${quota}`;
+}
+
+function factsWords(facts: readonly FactInfo[]): string {
+  return facts
+    .map((f) => (f.movesGate ? `**${f.label} ${f.word}**` : `${f.label} ${f.word}`))
+    .join(' · ');
+}
+
+function mapColumnMarkdown(rows: readonly MapRow[], columns: readonly MapColumn[]): string[] {
+  const lines: string[] = [];
+  for (const row of rows) {
+    const boxes = row.cells.flatMap((cell, i) =>
+      cell.map((b) => ({ ...b, column: columns[i]?.label ?? '' })),
+    );
+    const sensitive = row.sensitiveBy.length > 0 ? ` (${row.sensitiveBy.join(', ')})` : '';
+    lines.push(`- **${capitalise(row.word)}**${sensitive} — ${row.levelsSentence}.`);
+    for (const b of boxes) {
+      lines.push(
+        `  - ${columns.length > 1 ? `${text(b.column)}: ` : ''}${permissionWords(b.label, b.riskId, b.envs)}, ${b.severity}${b.fallback ? ', the fallback' : ''}`,
+      );
+    }
+  }
+  return lines;
+}
+
+function spreadMarkdown(spread: Spread): string[] {
+  const lines: string[] = [
+    `### ${text(spread.label)}`,
+    '',
+    `${code(spread.id)} — ${text(spread.description)}`,
+    '',
+  ];
+  if (spread.narrative) lines.push(text(spread.narrative), '');
+  lines.push(
+    markdownTable(
+      [
+        'Permission',
+        'The six facts',
+        SEVERITY_LABEL,
+        ...spread.levelHeadings.map((h) => h.heading),
+      ],
+      spread.lines.map((line) => [
+        `${permissionWords(line.label, line.riskId, line.env)}: ${text(line.reason)}`,
+        factsWords(line.facts),
+        line.severity,
+        ...TRUST_LEVELS.map((level) => gateCell(line.levels, level)),
+      ]),
+    ),
+    '',
+    spread.limitsNote,
+    '',
+  );
+  return lines;
+}
+
+function exampleMarkdown(example: ExampleInfo, labels: ReadonlyMap<string, string>): string {
+  return [
+    `- ${code(callWords(example))}`,
+    `  - the plugin sees: ${example.slices.map(code).join(', ')}`,
+    `  - the catalog answers: ${example.permissions.map((id) => `${text(labels.get(id) ?? id)} ${code(id)}`).join(', ')}`,
+    `  - a ${TRUST_LEVEL_LABELS[WORKED_TRUST_LEVEL]} mission: ${GATE_WORDS[carefulGateOf(example)]}`,
+  ].join('\n');
+}
+
+function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
+  const lines = connectSentences(c, plugin.name).flatMap((sentence) => [sentence, '']);
+  if (c.clientSource === 'broker') {
+    lines.push(
+      `Provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
+      '',
+    );
+    return lines;
+  }
+  if (c.clientSource === 'gateway-registered') {
+    if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
+    return lines;
+  }
+  if (c.reach) {
+    lines.push(
+      `How wide to grant — ${text(c.reach.what)}: ${text(c.reach.grant)}. ${text(c.reach.why)}`,
+      '',
+    );
+  }
+  if (c.steps.length > 0) lines.push(...c.steps.map((step, i) => stepMarkdown(step, i + 1)), '');
+  if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
+  if (c.permissions.length > 0) {
+    lines.push(
+      ...c.permissions.map(
+        (p) => `- ${text(p.name)}: ${p.access} (for ${p.tools.map(code).join(', ')})`,
+      ),
+      '',
+    );
+  }
+  if (c.expiry) lines.push(expiryWords(c.expiry), '');
+  if (c.fields.length > 0) {
+    lines.push(
+      `The connect page asks: ${c.fields.map((f) => `${text(f.label)}${f.secret ? ' (secret)' : ''}`).join(', ')}.`,
+      '',
+    );
+  }
+  if (c.docsUrl) lines.push(`The service's documentation: [${c.docsUrl}](${c.docsUrl})`, '');
+  return lines;
+}
+
+/**
+ * `/plugins/<id>` as Markdown: the sections of the page in the same order
+ * (website spec §2.3, 1–8), the map as a list by undo row.
+ */
 export function pluginPageMarkdown(
   plugin: PluginWithHealth,
   thresholds: ValidationThresholds,
 ): string {
   const labels = new Map(plugin.risks.map((r) => [r.id, r.label]));
+  const opening = openingOf(plugin);
+  const map = mapOf(plugin);
   const lines: string[] = [
     `# ${pluginPageTitle(plugin)}`,
     '',
     `The ${plugin.name} plugin lets a Vaubaan Gateway mission use ${plugin.name} without handing the agent a credential. ${text(plugin.description)}`,
     '',
-    `- Version: ${code(plugin.version)} (package ${code(plugin.packageName)})`,
-    `- Gateways: ${gatewaysSentence(plugin.health, thresholds.windowDays)} [Health per version](#health)`,
-    `- Source: [${plugin.dir}](${githubTree(plugin.dir)}), catalog [risk-catalog.yaml](${githubBlob(`${plugin.dir}/src/risk-catalog.yaml`)})${plugin.catalogVersion !== null ? ` version ${plugin.catalogVersion}` : ''}${plugin.catalogDate ? ` of ${plugin.catalogDate}` : ''}`,
-    `- How to connect an account: [Connect ${plugin.name}](/docs/providers/${plugin.id})`,
+    opening.verbs,
+    '',
+    `Version ${code(plugin.version)} · ${opening.counts.join(' · ')} · ${gatewaysSentence(plugin.health, thresholds.windowDays)}`,
+    '',
   ];
-  if (plugin.docsUrl) lines.push(`- How it is modelled: [handbook](${plugin.docsUrl})`);
-  lines.push('');
   if (plugin.summary) lines.push(text(plugin.summary), '');
-
   lines.push(
-    '## Permissions',
+    ...opening.dimensions.map((d) => `- **${d.term}**: ${d.line}`),
+    ...opening.levels.map((l) => `  - ${l.label} ×${l.factor}: ${l.hint}`),
     '',
-    `Each permission is a named risk of the plugin's catalog: a mission holds an explicit list of them, never "all". The severity is computed from the permission's six axes (undo, blast radius, data, cost, visible to, lasts); nothing is decided from it.`,
+    '## The map',
     '',
-    markdownTable(
-      ['Permission', 'What it allows', 'Severity', 'Why it is a risk'],
-      plugin.risks.map((risk) => {
-        const notes: string[] = [];
-        if (risk.severityByEnv.length > 0) {
-          notes.push(
-            risk.severityByEnv.map((row) => `${row.severity} on ${code(row.env)}`).join(', '),
-          );
-        }
-        if (risk.acceptableInEnvs) {
-          notes.push(`only for ${risk.acceptableInEnvs.map(code).join(', ')}`);
-        }
-        if (risk.fallback)
-          notes.push('the catch-all: touched only by a call no other permission covers');
-        if (risk.deprecated) notes.push('deprecated');
-        const severity =
-          notes.length > 0 ? `${risk.severity} (${notes.join('; ')})` : risk.severity;
-        return [code(risk.id), text(risk.label), severity, text(risk.reason)];
-      }),
-    ),
+    'Every permission by its undo fact, the rows, and its macro-action; each row says what the trust levels do with it.',
     '',
-    '## Macro-actions',
+    ...mapColumnMarkdown(map.rows, map.columns),
     '',
-    'A macro-action groups the permissions of one thing to do with the service, each with a base limit per period and a base rate. The person creating a mission ticks macro-actions and sets each to a trust level, Careful, Trusting or Autonomous: the level decides, from how hard each permission is to undo, whether it runs freely, asks first or is left out, and raises the limits. "Anything else", added by the gateway, holds the catch-all permission. The mission stores the explicit list, which the person can still edit line by line.',
+    `Read it: ${map.reading}`,
     '',
   );
-  for (const action of plugin.macroActions) {
+
+  for (const spread of spreadsOf(plugin, map)) lines.push(...spreadMarkdown(spread));
+
+  lines.push('## Worked examples', '');
+  if (plugin.examples.length === 0) {
+    lines.push('This plugin declares no example yet.', '');
+  } else {
     lines.push(
-      `### ${text(action.label)}`,
+      `The plugin's declared calls, run through its own classifier when this page was built: what it sees, the permissions the catalog answers, and what a ${TRUST_LEVEL_LABELS[WORKED_TRUST_LEVEL]} mission does.`,
       '',
-      `${code(action.id)} — ${text(action.description)}`,
-      '',
-      ...(action.narrative ? [text(action.narrative), ''] : []),
-      markdownTable(
-        ['Permission', 'What it allows', 'Base limit per period', 'Base rate'],
-        action.entries.map((entry) => macroActionRow(entry, labels)),
-      ),
+      ...plugin.examples.map((e) => exampleMarkdown(e, labels)),
       '',
     );
   }
 
-  lines.push('## Tools', '');
-  if (plugin.tools.length === 0) {
-    lines.push('This plugin exposes no tool yet.', '');
-  } else {
+  lines.push('## Anything else', '');
+  const fallback = plugin.anythingElse?.entries ?? [];
+  lines.push(
+    fallback.length > 0
+      ? `A call no permission covers touches ${listWords(fallback.map((e) => code(e.riskId)))} instead of slipping through. No macro-action holds it; a person ticks "${text(plugin.anythingElse?.label ?? '')}" knowingly. ${DAY_NOTE}`
+      : 'This plugin has no fallback permission.',
+    '',
+  );
+  if (fallback.length > 0) {
     lines.push(
       markdownTable(
-        ['Tool', 'What it does', 'Usually touches'],
-        plugin.tools.map((tool) => [
-          code(tool.name),
-          text(tool.title ?? tool.description),
-          tool.touches.map(code).join(', '),
+        ['Permission', SEVERITY_LABEL, ...levelHeadings().map((h) => h.heading)],
+        fallback.map((entry) => [
+          permissionWords(labels.get(entry.riskId) ?? '', entry.riskId, null),
+          plugin.risks.find((r) => r.id === entry.riskId)?.severity ?? '',
+          ...TRUST_LEVELS.map((level) => gateCell(entry.levels, level)),
         ]),
       ),
       '',
@@ -173,11 +306,56 @@ export function pluginPageMarkdown(
       '',
     );
   }
-  if (plugin.gitRemote) {
+
+  const mission = missionOf(plugin);
+  lines.push('## A mission, worked out', '', text(mission.intro), '');
+  for (const group of mission.groups) {
+    lines.push(`**${group.heading}** (${group.items.length})`, '');
+    if (group.items.length > 0) {
+      lines.push(...group.items.map((i) => `- ${permissionWords(i.label, i.riskId, null)}`), '');
+    }
+  }
+  if (mission.notTicked) lines.push(text(mission.notTicked), '');
+
+  lines.push('## Connecting an account', '');
+  plugin.credentials.forEach((c) => lines.push(...connectMarkdown(plugin, c)));
+  lines.push(`The steps: [Connect ${plugin.name}](/docs/providers/${plugin.id}).`, '');
+
+  const retired = retiredOf(plugin);
+  if (retired.length > 0) {
     lines.push(
-      "The instance is also the agents' git remote for this service: `git clone` and `git push` go through the gateway with the mission key, every pushed ref decided like a tool call ([git remote](/docs/missions/git-remote)).",
+      '## Retired permissions',
+      '',
+      'Kept so the missions that hold them still read; no tool touches them and no new mission is offered them.',
+      '',
+      ...retired.map(
+        (r) =>
+          `- ${permissionWords(r.label, r.riskId, null)}${r.replacedBy ? `: replaced by ${code(r.replacedBy)}` : ''}`,
+      ),
       '',
     );
+  }
+
+  lines.push('## Tools', '');
+  if (plugin.tools.length === 0) {
+    lines.push('This plugin exposes no tool yet.', '');
+  } else {
+    lines.push(
+      `${plural(plugin.tools.length, 'tool', 'tools')}. ${TOOLS_NOTE}`,
+      '',
+      markdownTable(
+        ['Tool', 'What it does', 'Usually touches'],
+        plugin.tools.map((tool) => [
+          code(tool.name),
+          text(tool.title ?? tool.description),
+          tool.touches.map(code).join(', '),
+        ]),
+      ),
+      '',
+    );
+  }
+  if (plugin.gitRemote) {
+    lines.push(GIT_REMOTE_SENTENCE, '');
   }
 
   lines.push(
@@ -187,12 +365,32 @@ export function pluginPageMarkdown(
     '',
     versionsTable(plugin.health),
     '',
-    `A version is marked validated by the community with ${thresholdsSentence(thresholds)}; a gateway shows that mark on the accounts of this service. The figures are refreshed at most hourly ([what they mean](/plugins/health)). It is a community signal, not a security guarantee.`,
+    validatedSentence(thresholds),
     '',
     healthFootnote(thresholds.windowDays),
     '',
+    '## Links',
+    '',
+    // The twin is this text: it names the page it repeats instead.
+    ...pluginLinks(plugin).map((l) =>
+      l.href.endsWith('.md')
+        ? `- The page: [/plugins/${plugin.id}](/plugins/${plugin.id})`
+        : `- [${l.label}](${l.href})`,
+    ),
+    '',
   );
   return lines.join('\n').trimEnd() + '\n';
+}
+
+export const GIT_REMOTE_SENTENCE =
+  "The instance is also the agents' git remote for this service: `git clone` and `git push` go through the gateway with the mission key, every pushed ref decided like a tool call ([git remote](/docs/missions/git-remote)).";
+
+export function validatedSentence(thresholds: ValidationThresholds): string {
+  return `A version is marked validated by the community with ${thresholdsSentence(thresholds)}; a gateway shows that mark on the accounts of this service. The figures are refreshed at most hourly ([what they mean](/plugins/health)). It is a community signal, not a security guarantee.`;
+}
+
+function plural(n: number, one: string, other: string): string {
+  return `${n} ${n === 1 ? one : other}`;
 }
 
 function credentialKindWords(c: CredentialInfo): string {
@@ -215,14 +413,15 @@ function stepMarkdown(step: GuideStep, n: number): string {
   return `${n}. ${text(step.do)}${where}${command}`;
 }
 
-function expiryWords(expiry: TokenExpiry): string {
+/** The expiry of a pasted key in one sentence; `escape` is `text` for Markdown, none for HTML. */
+export function expiryWords(expiry: TokenExpiry, escape: (value: string) => string = text): string {
   switch (expiry.kind) {
     case 'provider-reports':
       return 'Expiry: the service tells the gateway the date, and the account page warns before it.';
     case 'person-types':
       return `Expiry: about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
     case 'none':
-      return `Expiry: ${text(expiry.reason)}`;
+      return `Expiry: ${escape(expiry.reason)}`;
   }
 }
 
@@ -306,12 +505,12 @@ export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections
 }
 
 /** The figures of a line, in the columns Gateways | Calls | Success. */
-function figureCells(line: LineFigures): string[] {
+export function figureCells(line: LineFigures): string[] {
   return [countWords(line.gateways), callsWords(line.calls), rateWords(line.successRate)];
 }
 
 /** The last versions the collector knows, newest first, or why there is none. */
-function versionsTable(health: PluginHealth): string {
+export function versionsTable(health: PluginHealth): string {
   if (health.versions.length === 0) {
     const unread = health.minors[0]?.calls === NOT_READ && health.gateways === NOT_READ;
     return unread

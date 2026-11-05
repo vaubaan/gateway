@@ -27,6 +27,26 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   sentences, at most 600 characters, spec gateway-risk-model §4.6); the loader
   refuses one that is not a non-empty string within that length.
 
+### Added
+
+- **vaubaan.com plugin pages in the C3 layout** (website spec §2.3): the
+  opening with the counts and the macro-actions in one sentence; the map, every
+  permission by macro-action and undo row (impossible, costly, easy but
+  sensitive, easy), tinted by its risk word, each row saying what the trust
+  levels do, with a reading sentence computed from the counts; one spread per
+  macro-action (narrative, the permissions against the three trust levels with
+  the six facts, the fact that moves the gate tinted, the gate and quota a day,
+  the rates as a note, an environment-scoped permission one line per
+  environment, the macro-action's own column of the map beside it); the worked
+  examples; Anything else and the tools left out; a mission worked out (Can /
+  Asks first / Cannot); connecting an account in its three shapes (a pasted
+  key, a client the gateway registers, a broker's client with its provider,
+  scopes and the two ways to get one); retired permissions, tools, health and
+  links. The page is HTML built from the data, with the gateway's display codes
+  mirrored in the site's CSS, light and dark; the Markdown twin keeps the same
+  order, the map as a list by undo row. The page never says "tier": the undo
+  rows' words are `UNDO_ROW_WORDS` of `@vaubaan/policy-engine`.
+
 ## [2.0.0-alpha.17] - 2026-11-05
 
 ### Added
