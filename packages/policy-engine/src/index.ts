@@ -48,6 +48,8 @@ export {
   DEFAULT_TRUST_LEVEL,
   expandAtTrustLevel,
   isTrustLevel,
+  macroActionsOf,
+  tierFactsOf,
   tierOf,
   TRUST_LEVEL_BUDGET_FACTOR,
   TRUST_LEVEL_GATES,
@@ -61,4 +63,17 @@ export {
   severityOf,
 } from './severity.ts';
 export type { SeverityLevel } from './severity.ts';
+export {
+  ALLOW_WORDS,
+  GATE_WORDS,
+  gateWordOf,
+  SEVERITY_LABEL,
+  TRUST_LEVEL_HINTS,
+  TRUST_LEVEL_LABELS,
+  WHY_LABELS,
+  WHY_ORDER,
+  WHY_VALUES,
+  whyValue,
+} from './risk-words.ts';
+export type { GateWord, UndoWord, WhyAxis } from './risk-words.ts';
 export type { Tier, TrustLevel, TrustLevelCandidate, TrustLevelLine } from './trust-level.ts';

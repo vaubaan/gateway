@@ -46,3 +46,33 @@ to hold two names.
 ### A global density setting
 
 A fourth concept to explain, tripling what each page must be designed and tested for.
+
+## Amendment 2026-11-05: the risk model's words live in the policy engine
+
+### Context
+
+The public site's plugin page ([website](../spec/website.md) §2.3) prints the six facts of a
+permission, the gate words and a mission's Can / Asks first / Cannot "in the gateway's words",
+and may not import `apps/gateway` ([ADR](website-nextjs-on-vercel.md)). It kept a copy of the
+undo words, checked by a test: a second source of truth (website spec §1.1).
+
+### Decision
+
+The words of the risk model — `WHY_LABELS`, `WHY_ORDER`, `WHY_VALUES`/`whyValue`,
+`gateWordOf`/`GATE_WORDS`, `ALLOW_WORDS`, `TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`,
+`SEVERITY_LABEL` — live in `@vaubaan/policy-engine` (`risk-words.ts`), beside the severity and the
+tier they name. `lib/vocabulary.ts` re-exports them: it stays the one file a gateway page imports
+its words from; the site imports the same values from the package.
+
+### Consequences
+
+- Changing one of those words changes the gateway and the site together; `sources-agree.test.ts`
+  (website) fails when either holds a copy.
+- Every other word stays in `lib/vocabulary.ts`. A word the site needs is moved to the package
+  only when it belongs to the risk model.
+
+### Rejected alternatives
+
+- **A copy in the site checked by a test**: two places to edit, and the test only catches drift
+  after the fact.
+- **`@vaubaan/shared`**: the trust level type is the policy engine's; the words key on it.

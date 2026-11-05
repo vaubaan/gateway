@@ -16,6 +16,7 @@ import {
   type PluginHealth,
 } from './health';
 import type { PluginWithHealth } from './plugin-pages';
+import type { LevelBudgets, MacroActionInfo, RiskInfo } from './plugins';
 import type { ValidationThresholds } from './thresholds';
 
 /** The files served by a route rather than from `public/` (rendered with the collector read). */
@@ -139,39 +140,149 @@ export function pluginsJson(
         gateways: snapshot.instances.rows !== null,
       },
       health_footnote: healthFootnote(thresholds.windowDays),
-      plugins: plugins.map((p) => ({
-        id: p.id,
-        name: p.name,
-        version: p.version,
-        description: p.description,
-        page: absolute(`/plugins/${p.id}`),
-        source: `${GITHUB_REPO}/tree/main/${p.dir}`,
-        health: healthJson(p.health),
-        tools: p.tools.map((t) => ({ name: t.name, title: t.title, description: t.description })),
-        risks: p.risks.map((r) => ({
-          id: r.id,
-          label: r.label,
-          reason: r.reason,
-          severity: r.severity,
-          kind: r.kind,
-          acceptable_in_envs: r.acceptableInEnvs,
-          fallback: r.fallback,
-        })),
-        macro_actions: p.macroActions.map((action) => ({
-          id: action.id,
-          label: action.label,
-          description: action.description,
-          entries: action.entries.map((e) => ({
-            risk_id: e.riskId,
-            quota: e.quota,
-            rate_limit: { max: e.rateMax, window_seconds: e.rateWindowSeconds },
-          })),
-        })),
-      })),
+      plugins: plugins.map(pluginJson),
     },
     null,
     2,
   )}\n`;
+}
+
+function rateJson(max: number, windowSeconds: number): Record<string, number> {
+  return { max, window_seconds: windowSeconds };
+}
+
+/** The line of each trust level: `gate` null when the level leaves the permission out. */
+function levelsJson(levels: LevelBudgets): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(levels).map(([level, line]) => [
+      level,
+      {
+        gate: line.gate,
+        gate_word: line.gateWord,
+        quota: line.quota,
+        rate_limit: rateJson(line.rateMax, line.rateWindowSeconds),
+      },
+    ]),
+  );
+}
+
+function riskJson(r: RiskInfo): Record<string, unknown> {
+  return {
+    id: r.id,
+    label: r.label,
+    reason: r.reason,
+    severity: r.severity,
+    kind: r.kind,
+    vector: r.vector,
+    undo: r.undo,
+    tier: r.tier,
+    rate_ceiling_per_minute: r.rateCeilingPerMinute,
+    patterns: r.patterns,
+    facts: r.facts,
+    acceptable_in_envs: r.acceptableInEnvs,
+    env_variants: r.envVariants,
+    fallback: r.fallback,
+    deprecated: r.deprecated,
+    replaced_by: r.replacedBy,
+  };
+}
+
+function macroActionJson(action: MacroActionInfo): Record<string, unknown> {
+  return {
+    id: action.id,
+    label: action.label,
+    description: action.description,
+    narrative: action.narrative,
+    entries: action.entries.map((e) => ({
+      risk_id: e.riskId,
+      quota: e.quota,
+      rate_limit: rateJson(e.rateMax, e.rateWindowSeconds),
+      trust_levels: levelsJson(e.levels),
+      env_trust_levels: e.envLevels.map((row) => ({
+        env: row.env,
+        trust_levels: levelsJson(row.levels),
+      })),
+    })),
+  };
+}
+
+/** One plugin of `plugins.json`: what its page shows, as data. */
+function pluginJson(p: PluginWithHealth): Record<string, unknown> {
+  return {
+    id: p.id,
+    name: p.name,
+    version: p.version,
+    description: p.description,
+    summary: p.summary,
+    icon: p.icon,
+    icon_color: p.iconColor,
+    resource_noun: p.resourceNoun,
+    page: absolute(`/plugins/${p.id}`),
+    source: `${GITHUB_REPO}/tree/main/${p.dir}`,
+    health: healthJson(p.health),
+    counts: {
+      permissions: p.counts.permissions,
+      macro_actions: p.counts.macroActions,
+      tools: p.counts.tools,
+      excluded_tools: p.counts.excludedTools,
+      examples: p.counts.examples,
+    },
+    tools: p.tools.map((t) => ({
+      name: t.name,
+      title: t.title,
+      description: t.description,
+      touches: t.touches,
+    })),
+    excluded_tools: p.excludedTools,
+    risks: p.risks.map(riskJson),
+    macro_actions: p.macroActions.map(macroActionJson),
+    anything_else: p.anythingElse ? macroActionJson(p.anythingElse) : null,
+    retired: p.retired,
+    examples: p.examples.map((e) => ({
+      tool: e.tool,
+      title: e.title,
+      sample: e.sample,
+      args: e.args,
+      slices: e.slices,
+      permissions: e.permissions,
+      at_careful: {
+        outcome: e.atCareful.outcome,
+        gates: e.atCareful.gates.map((g) => ({ risk_id: g.riskId, gate: g.gate })),
+      },
+      in_worked_mission: e.inWorkedMission,
+    })),
+    worked_mission: {
+      trust_level: p.workedMission.trustLevel,
+      macro_actions: p.workedMission.macroActions,
+      lines: p.workedMission.lines.map((line) => ({
+        risk_id: line.riskId,
+        gate: line.gate,
+        tier: line.tier,
+        quota: line.quota,
+        rate_limit: rateJson(line.rateMax, line.rateWindowSeconds),
+      })),
+      left_out: p.workedMission.leftOut.map((l) => ({ risk_id: l.riskId, tier: l.tier })),
+      can: p.workedMission.can,
+      asks_first: p.workedMission.asksFirst,
+      cannot: p.workedMission.cannot,
+    },
+    credentials: p.credentials.map((c) => ({
+      kind: c.kind,
+      client_source: c.clientSource,
+      broker_provider: c.brokerProvider,
+      scopes: c.scopes,
+      label: c.label,
+      create_url: c.createUrl,
+      fields: c.fields,
+      steps: c.steps,
+      reach: c.reach,
+      permissions: c.permissions,
+      expiry: c.expiry,
+      docs_url: c.docsUrl,
+      manual_revocation: c.manualRevocation,
+      connect: absolute(`/docs/providers/${p.id}`),
+    })),
+  };
 }
 
 function escapeXml(value: string): string {

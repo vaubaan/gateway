@@ -140,6 +140,7 @@ export function pluginPageMarkdown(
       '',
       `${code(action.id)} — ${text(action.description)}`,
       '',
+      ...(action.narrative ? [text(action.narrative), ''] : []),
       markdownTable(
         ['Permission', 'What it allows', 'Base limit per period', 'Base rate'],
         action.entries.map((entry) => macroActionRow(entry, labels)),
@@ -154,9 +155,21 @@ export function pluginPageMarkdown(
   } else {
     lines.push(
       markdownTable(
-        ['Tool', 'What it does'],
-        plugin.tools.map((tool) => [code(tool.name), text(tool.title ?? tool.description)]),
+        ['Tool', 'What it does', 'Usually touches'],
+        plugin.tools.map((tool) => [
+          code(tool.name),
+          text(tool.title ?? tool.description),
+          tool.touches.map(code).join(', '),
+        ]),
       ),
+      '',
+    );
+  }
+  if (plugin.excludedTools.length > 0) {
+    lines.push(
+      'Left out on purpose — tools of the service this plugin does not expose:',
+      '',
+      ...plugin.excludedTools.map((tool) => `- ${code(tool.name)}: ${text(tool.reason)}`),
       '',
     );
   }
@@ -183,15 +196,15 @@ export function pluginPageMarkdown(
 }
 
 function credentialKindWords(c: CredentialInfo): string {
-  switch (c.kind) {
-    case 'oauth2':
-      return c.brokered
-        ? 'by signing in at the service through the OAuth broker the instance is enrolled with (nothing to create or paste; a self-hosted instance runs its own broker: [Your own OAuth broker](/docs/operations/oauth-broker))'
-        : 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)';
-    case 'api-key':
-      return `with a ${c.label ?? 'key'} pasted by hand`;
-    case 'ssh-key':
-      return 'with a key pair the instance generates; you install its public key on the host';
+  switch (c.clientSource) {
+    case 'broker':
+      return `by signing in at the service through an OAuth broker's client (nothing to create or paste; the instance must be enrolled with a broker serving ${code(c.brokerProvider ?? '')}: one someone else operates, or the published image run with your own client, [Your own OAuth broker](/docs/operations/oauth-broker); the gateway's pages tell whether the broker is attested)`;
+    case 'gateway-registered':
+      return 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)';
+    case 'pasted-key':
+      return c.kind === 'ssh-key'
+        ? 'with a key pair the instance generates; you install its public key on the host'
+        : `with a ${c.label ?? 'key'} pasted by hand`;
   }
 }
 
@@ -229,7 +242,9 @@ function credentialMarkdown(c: CredentialInfo): string[] {
     lines.push(
       'Permissions to grant at the service, all of them: each mission narrows what an agent may do.',
       '',
-      ...c.permissions.map((p) => `- ${text(p.name)}: ${p.access}`),
+      ...c.permissions.map(
+        (p) => `- ${text(p.name)}: ${p.access} (for ${p.tools.map(code).join(', ')})`,
+      ),
       '',
     );
   }

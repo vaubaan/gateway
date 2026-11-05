@@ -9,13 +9,29 @@
  * `quota`, `request`, `delegation`, `operator`…). A page prints an id as the
  * protocol spells it (in mono) and everything around it with these words.
  *
- * Pure and browser-safe, usable in server and client components. Its one
- * import is `lib/dates`, the one place a date becomes text (and the type of a
- * trust level, which keys the words of each).
+ * Pure and browser-safe, usable in server and client components. Its imports
+ * are `lib/dates`, the one place a date becomes text, and the risk model's
+ * words (the six facts, the gate, Can / Asks first / Cannot, the trust
+ * levels), which `@vaubaan/policy-engine` holds so the public site prints the
+ * same words: re-exported here, a page imports them from this file as before.
  */
-import type { TrustLevel } from '@vaubaan/policy-engine';
+import { ALLOW_WORDS } from '@vaubaan/policy-engine';
 
 import { formatDay } from './dates';
+
+export {
+  ALLOW_WORDS,
+  GATE_WORDS,
+  gateWordOf,
+  SEVERITY_LABEL,
+  TRUST_LEVEL_HINTS,
+  TRUST_LEVEL_LABELS,
+  WHY_LABELS,
+  WHY_ORDER,
+  WHY_VALUES,
+  whyValue,
+} from '@vaubaan/policy-engine';
+export type { GateWord, WhyAxis } from '@vaubaan/policy-engine';
 
 /** The product, and how it names itself in the shell. */
 export const PRODUCT = { name: 'Vaubaan', mark: 'V' } as const;
@@ -210,26 +226,9 @@ export const SECTIONS = {
 // Gate → "runs freely" / "ask me first". Protocol values: `auto`, `approval`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type GateWord = 'free' | 'ask' | 'off';
-
-/** The protocol's gate as the word class the interface draws. */
-export function gateWordOf(gate: 'auto' | 'approval'): GateWord {
-  return gate === 'approval' ? 'ask' : 'free';
-}
-
-export const GATE_WORDS: Readonly<Record<GateWord, string>> = {
-  free: 'runs freely',
-  ask: 'ask me first',
-  off: 'not included',
-};
-
-/** The same three, as the headings of the summary of a mission. */
-export const ALLOW_WORDS = {
-  can: 'Can',
-  asks: 'Asks you first',
-  cannot: 'Cannot',
-  limits: 'Limits today',
-} as const;
+// The gate words and a mission's Can / Asks first / Cannot belong to the risk
+// model: `@vaubaan/policy-engine` (`risk-words.ts`) holds them, so the public
+// site prints the same words (re-exported at the top of this file).
 
 /**
  * Said of someone else's mission: who is asked is the creator, not the reader.
@@ -247,51 +246,8 @@ export function asksFirst(creator: string | null): string {
 
 export type SeverityWord = 'low' | 'medium' | 'high' | 'critical';
 
-export const SEVERITY_LABEL = 'Risk';
-
-/**
- * The six words behind a severity, as the "why?" disclosure labels them. Keyed
- * by the axis names of the risk model (`RiskVector`).
- */
-export const WHY_LABELS = {
-  reversibility: 'Undo',
-  blast: 'Blast radius',
-  data: 'Data',
-  cost: 'Cost',
-  visibility: 'Visible to',
-  persistence: 'Lasts',
-} as const;
-
-export type WhyAxis = keyof typeof WHY_LABELS;
-
-/** The order the six cells are drawn in. */
-export const WHY_ORDER: readonly WhyAxis[] = [
-  'reversibility',
-  'blast',
-  'data',
-  'cost',
-  'visibility',
-  'persistence',
-];
-
-/** A value of the risk model, said in words. Values not listed are printed as they are. */
-export const WHY_VALUES: Readonly<Record<WhyAxis, Readonly<Record<string, string>>>> = {
-  reversibility: { reversible: 'easy', costly: 'costly', irreversible: 'impossible' },
-  blast: {
-    single: 'one thing',
-    env: 'one environment',
-    account: 'whole account',
-    bulk: 'many at once',
-  },
-  data: { metadata: 'metadata', data: 'contents', secret: 'secrets', pii: 'personal data' },
-  cost: { free: 'free', moderate: 'moderate', unbounded: 'unbounded' },
-  visibility: { internal: 'internal', team: 'the team', public: 'public' },
-  persistence: { stateless: 'nothing', session: 'the session', posture: 'until reverted' },
-};
-
-export function whyValue(axis: WhyAxis, value: string): string {
-  return WHY_VALUES[axis][value] ?? value;
-}
+// The six facts, their words and the severity label: `@vaubaan/policy-engine`
+// (`risk-words.ts`), re-exported at the top of this file.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Limits: budget, quota and rate limit are "limits", with their unit.
@@ -646,27 +602,11 @@ export const ENVIRONMENT_WORDS = {
   none: 'none: every permission is held once',
 } as const;
 
-/** A trust level as the interface names it (risk model §4.6). */
-export const TRUST_LEVEL_LABELS: Readonly<Record<TrustLevel, string>> = {
-  careful: 'Careful',
-  trusting: 'Trusting',
-  autonomous: 'Autonomous',
-};
-
 /**
  * The fourth segment of a macro-action's trust control: its lines were edited by hand,
  * so no trust level writes exactly them (spec §4.2).
  */
 export const TRUST_LEVEL_CUSTOM = 'Custom';
-
-/** What each trust level does, in one line, wherever its chip shows a tooltip. */
-export const TRUST_LEVEL_HINTS: Readonly<Record<TrustLevel, string>> = {
-  careful:
-    'Mild actions run freely; sensitive or costly ones ask first; irreversible ones are left out.',
-  trusting:
-    'Up to sensitive actions run freely; costly and irreversible ones ask first. Limits ×3.',
-  autonomous: 'Everything but irreversible actions runs freely; those ask first. Limits ×10.',
-};
 
 /** "Tier 3" — the tier of a permission, 1 mild to 4 irreversible. */
 export function tierWord(tier: number): string {

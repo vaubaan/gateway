@@ -161,6 +161,60 @@ describe('plugins.json', () => {
       });
     }
   });
+
+  it('carries what the plugin page shows: facts, trust levels, examples, the worked mission, the client source', () => {
+    const json = JSON.parse(livePluginsJson(liveSiteFrom(site.data, UNREAD))) as {
+      plugins: Record<string, unknown>[];
+    };
+    for (const plugin of json.plugins) {
+      expect(Object.keys(plugin), String(plugin.id)).toEqual(
+        expect.arrayContaining([
+          'icon',
+          'icon_color',
+          'resource_noun',
+          'summary',
+          'excluded_tools',
+          'examples',
+          'worked_mission',
+          'credentials',
+        ]),
+      );
+    }
+    const github = json.plugins.find((p) => p.id === 'github') as {
+      risks: Record<string, unknown>[];
+      macro_actions: { narrative: string | null; entries: Record<string, unknown>[] }[];
+      examples: { tool: string; slices: string[]; permissions: string[]; careful: unknown }[];
+      credentials: { client_source: string }[];
+    };
+    expect(Object.keys(github.risks[0] ?? {})).toEqual(
+      expect.arrayContaining([
+        'vector',
+        'undo',
+        'tier',
+        'rate_ceiling_per_minute',
+        'patterns',
+        'env_variants',
+        'replaced_by',
+      ]),
+    );
+    expect(github.macro_actions[0]?.narrative).toEqual(expect.any(String));
+    expect(Object.keys(github.macro_actions[0]?.entries[0]?.trust_levels ?? {})).toEqual([
+      'careful',
+      'trusting',
+      'autonomous',
+    ]);
+    expect(github.examples.find((e) => e.tool === 'github__git_push')?.permissions).toContain(
+      'github.git-push',
+    );
+    expect(github.credentials[0]?.client_source).toBe('pasted-key');
+    const calendar = json.plugins.find((p) => p.id === 'google-calendar') as {
+      credentials: { client_source: string; broker_provider: string; scopes: string[] }[];
+    };
+    expect(calendar.credentials[0]).toMatchObject({
+      client_source: 'broker',
+      broker_provider: 'google',
+    });
+  });
 });
 
 describe('links into the repository', () => {

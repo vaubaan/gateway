@@ -4,10 +4,15 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import type { RiskVector } from '@vaubaan/shared';
+import type { RiskCatalog, RiskVector } from '@vaubaan/shared';
 
+import { SEVERITY_RANKS } from '../../src/severity.ts';
 import {
+  ANYTHING_ELSE_BASE_BUDGET,
+  ANYTHING_ELSE_MACRO_ACTION,
   budgetAtTrustLevel,
+  macroActionsOf,
+  tierFactsOf,
   TRUST_LEVEL_GATES,
   expandAtTrustLevel,
   tierOf,
@@ -118,5 +123,72 @@ describe('expandAtTrustLevel', () => {
     expect(left_out).toEqual([]);
     expect(lines.map((l) => l.gate)).toEqual(['auto', 'auto', 'auto', 'approval']);
     expect(lines[0]).toMatchObject({ quota: 100, rate_limit: { max: 50, window_seconds: 60 } });
+  });
+});
+
+describe('tierFactsOf — the facts that move the gate', () => {
+  test('none for tier 1, reversibility alone for tiers 3 and 4', () => {
+    expect(tierFactsOf(mild)).toEqual([]);
+    expect(tierFactsOf({ ...mild, reversibility: 'costly', data: 'pii' })).toEqual([
+      'reversibility',
+    ]);
+    expect(tierFactsOf({ ...mild, reversibility: 'irreversible' })).toEqual(['reversibility']);
+  });
+
+  test('for tier 2, each sensitive fact, in vector order', () => {
+    expect(tierFactsOf({ ...mild, blast: 'account', data: 'secret', cost: 'unbounded' })).toEqual([
+      'blast',
+      'data',
+      'cost',
+    ]);
+  });
+
+  test('agrees with tierOf on every vector: no fact exactly when tier 1', () => {
+    const axes = Object.keys(SEVERITY_RANKS) as (keyof RiskVector)[];
+    const vectors: RiskVector[] = [mild];
+    for (const axis of axes) {
+      for (const value of SEVERITY_RANKS[axis]) vectors.push({ ...mild, [axis]: value });
+    }
+    for (const vector of vectors) {
+      expect(tierFactsOf(vector).length === 0, JSON.stringify(vector)).toBe(tierOf(vector) === 1);
+    }
+  });
+});
+
+describe('macroActionsOf — the catalog\'s macro-actions, then "Anything else"', () => {
+  const catalog = {
+    provider: 'acme',
+    risks: [
+      { id: 'acme.read', label: 'Read', reason: 'r', matches: 'acme.x.R', vector: mild },
+      {
+        id: 'acme.uncategorized-write',
+        label: 'Uncategorized write',
+        reason: 'r',
+        matches: 'acme.**.W',
+        fallback: true,
+        vector: mild,
+      },
+    ],
+    macro_actions: [
+      {
+        id: 'read',
+        label: 'Read',
+        description: 'd',
+        entries: [{ risk_id: 'acme.read', quota: 10, rate_limit: { max: 1, window_seconds: 60 } }],
+      },
+    ],
+  } as unknown as RiskCatalog;
+
+  test('appends the fallback at the base budget of "Anything else"', () => {
+    const actions = macroActionsOf(catalog);
+    expect(actions.map((a) => a.id)).toEqual(['read', ANYTHING_ELSE_MACRO_ACTION]);
+    expect(actions[1]?.entries).toEqual([
+      { risk_id: 'acme.uncategorized-write', ...ANYTHING_ELSE_BASE_BUDGET },
+    ]);
+  });
+
+  test('adds nothing to a catalog without a fallback', () => {
+    const risks = catalog.risks.filter((r) => r.fallback !== true);
+    expect(macroActionsOf({ ...catalog, risks }).map((a) => a.id)).toEqual(['read']);
   });
 });
