@@ -65,9 +65,13 @@ RUN npm run build --workspace @vaubaan/gateway-app
 # runner: the traced standalone output only, non-root, /data volume.
 # ---------------------------------------------------------------------------
 FROM base AS runner
+# VAUBAAN_PLUGINS_DIR: where an operator pins plugins, one directory each, by an image
+# built FROM this one that copies the /plugin directory of ghcr.io/vaubaan/plugin-<id>:<version>
+# into /plugins/<id>, or a read-only mount (deploy/README.md "Pin a plugin"). Empty here.
 ENV NODE_ENV=production \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    VAUBAAN_PLUGINS_DIR=/plugins
 # The running gateway needs node and nothing else: the package managers of the
 # base image (npm, npx, corepack, yarn) are removed. They are never run in the
 # container, and they carried most of what the image scan reported
@@ -76,9 +80,10 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
  && groupadd --system --gid 10001 vaubaan \
  && useradd --system --uid 10001 --gid vaubaan --home-dir /app --shell /usr/sbin/nologin vaubaan \
- && mkdir -p /data /keys /config \
+ && mkdir -p /data /keys /config /plugins \
  && chown vaubaan:vaubaan /data /keys \
- && chmod 0700 /keys
+ && chmod 0700 /keys \
+ && chmod 0755 /plugins
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/standalone ./
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/.next/static ./apps/gateway/.next/static
 COPY --from=build --chown=vaubaan:vaubaan /app/apps/gateway/public ./apps/gateway/public
@@ -90,6 +95,8 @@ COPY --chown=vaubaan:vaubaan LICENSE NOTICE ./
 COPY deploy/docker/entrypoint.sh /usr/local/bin/vaubaan-entrypoint
 RUN chmod 0755 /usr/local/bin/vaubaan-entrypoint
 USER vaubaan
+# /plugins stays root's: the gateway reads its plugins, it never writes them, so a
+# compromised process cannot plant code that the next start would load.
 # No VOLUME instruction: /data (the store) and /keys (the master key, kept
 # apart from the store) are mounted by the deployment (Compose volume, a
 # platform volume such as Railway's, which refuses VOLUME, or `docker run -v`).

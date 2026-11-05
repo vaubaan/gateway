@@ -13,18 +13,24 @@ import {
   RELEASE_BODY_MAX_CHARS,
   ReleaseError,
   assertMovesForward,
+  assertPluginTag,
   assertReleasableTag,
   bumpLockfile,
   bumpManifest,
   compareVersions,
   extractReleaseNotes,
   imageTags,
+  parsePluginTag,
+  parseReleasesData,
   parseVersion,
   platformsText,
   prepareChangelog,
   publicationScope,
+  releasesData,
+  serializeReleasesData,
   unreleasedNotes,
   versionOfTag,
+  withPluginRelease,
 } from './release-lib.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -327,6 +333,57 @@ describe('assertMovesForward', () => {
   });
 });
 
+describe('released versions for the versions feed', () => {
+  const data = releasesData({
+    gatewayVersion: '2.0.0-alpha.17',
+    date: '2026-11-06',
+    plugins: { notion: '0.2.0', github: '5.0.0', _template: '0.2.0' },
+  });
+
+  it('records the gateway and every plugin but the template, sorted', () => {
+    expect(data).toEqual({
+      gateway: '2.0.0-alpha.17',
+      prerelease: true,
+      date: '2026-11-06',
+      plugins: { github: '5.0.0', notion: '0.2.0' },
+    });
+    expect(parseReleasesData(serializeReleasesData(data))).toEqual(data);
+    expect(() => releasesData({ gatewayVersion: '2.0', date: '2026-11-06', plugins: {} })).toThrow(
+      ReleaseError,
+    );
+  });
+
+  it('moves one plugin forward on a hotfix, and only forward', () => {
+    expect(withPluginRelease(data, 'notion', '0.2.1').plugins).toEqual({
+      github: '5.0.0',
+      notion: '0.2.1',
+    });
+    expect(withPluginRelease(data, 'acme', '0.1.0').plugins).toHaveProperty('acme', '0.1.0');
+    expect(() => withPluginRelease(data, 'notion', '0.2.0')).toThrow(/does not come after/);
+    expect(() => withPluginRelease(data, '_template', '9.0.0')).toThrow(/never released/);
+  });
+
+  it('reads a plugin release tag', () => {
+    expect(parsePluginTag('plugin-cloudflare-dns-v4.0.1')).toEqual({
+      id: 'cloudflare-dns',
+      version: '4.0.1',
+    });
+    expect(parsePluginTag('plugin-notion-v0.3.0-rc.1').version).toBe('0.3.0-rc.1');
+    expect(() => parsePluginTag('v2.0.0')).toThrow(/not a plugin release tag/);
+    expect(() => parsePluginTag('plugin-notion-v0.3')).toThrow(/not a release version/);
+    expect(assertPluginTag({ tag: 'plugin-notion-v0.3.0', manifestVersion: '0.3.0' })).toEqual({
+      id: 'notion',
+      version: '0.3.0',
+    });
+    expect(() =>
+      assertPluginTag({ tag: 'plugin-notion-v0.3.0', manifestVersion: '0.2.0' }),
+    ).toThrow(/does not match the version in plugins\/notion\/package.json \(0.2.0\)/);
+    expect(() => assertPluginTag({ tag: 'plugin-jira-v1.0.0', manifestVersion: null })).toThrow(
+      /names no plugin/,
+    );
+  });
+});
+
 describe('the command-line scripts', () => {
   let sandbox;
 
@@ -343,6 +400,13 @@ describe('the command-line scripts', () => {
       `${JSON.stringify({ ...manifest, packages: { '': manifest } }, null, 2)}\n`,
     );
     writeFileSync(join(sandbox, 'CHANGELOG.md'), FIXTURE);
+    for (const [id, version] of [
+      ['notion', '0.2.0'],
+      ['_template', '0.2.0'],
+    ]) {
+      mkdirSync(join(sandbox, 'plugins', id), { recursive: true });
+      writeFileSync(join(sandbox, 'plugins', id, 'package.json'), JSON.stringify({ version }));
+    }
   });
 
   afterEach(() => {
@@ -375,6 +439,33 @@ describe('the command-line scripts', () => {
     expect(JSON.parse(read('package-lock.json')).packages[''].version).toBe('2.2.0');
     expect(result.stdout).toContain('git tag -a v2.2.0 -m "Vaubaan Gateway 2.2.0" <commit>');
     expect(result.stdout).toContain('No commit and no tag were created.');
+    expect(JSON.parse(read('apps/website/src/content/releases.json'))).toEqual({
+      gateway: '2.2.0',
+      prerelease: false,
+      date: '2026-12-01',
+      plugins: { notion: '0.2.0' },
+    });
+  });
+
+  it('release:prepare --plugin moves that plugin alone and prints its tag', () => {
+    run('release-prepare.mjs', ['2.2.0', '--date', '2026-12-01']);
+    writeFileSync(
+      join(sandbox, 'plugins', 'notion', 'package.json'),
+      JSON.stringify({ version: '0.2.1' }),
+    );
+    const result = run('release-prepare.mjs', ['--plugin', 'notion']);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(read('apps/website/src/content/releases.json'))).toEqual({
+      gateway: '2.2.0',
+      prerelease: false,
+      date: '2026-12-01',
+      plugins: { notion: '0.2.1' },
+    });
+    expect(result.stdout).toContain('git tag -a plugin-notion-v0.2.1');
+    expect(run('release-prepare.mjs', ['--plugin', 'notion']).stderr).toContain(
+      'does not come after',
+    );
+    expect(run('release-prepare.mjs', ['--plugin', 'jira']).stderr).toContain("no plugin 'jira'");
   });
 
   it('release:prepare refuses a version that does not move forward and writes nothing', () => {

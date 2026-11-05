@@ -477,3 +477,133 @@ export function assertMovesForward(current, next) {
     throw new ReleaseError(`${next} does not come after the current version ${current}`);
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Released versions for the website's versions feed (ADR
+// plugins-bundled-or-pinned-by-the-operator): `release:prepare` writes
+// apps/website/src/content/releases.json, the site serves it in versions.json.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The plugin template is never released. */
+export const PLUGIN_TEMPLATE = '_template';
+
+/**
+ * @typedef {object} ReleasesData
+ * @property {string} gateway the released gateway version
+ * @property {boolean} prerelease
+ * @property {string} date YYYY-MM-DD of the gateway release
+ * @property {Record<string, string>} plugins the released version of each plugin, by id
+ */
+
+/**
+ * The released versions at a gateway release: its version and every plugin's, sorted
+ * by id (the template left out).
+ * @param {{ gatewayVersion: string, date: string, plugins: Record<string, string> }} input
+ * @returns {ReleasesData}
+ */
+export function releasesData({ gatewayVersion, date, plugins }) {
+  const version = parseVersion(gatewayVersion);
+  if (!ISO_DATE.test(date)) throw new ReleaseError(`"${date}" is not a date (YYYY-MM-DD)`);
+  /** @type {Record<string, string>} */
+  const sorted = {};
+  for (const id of Object.keys(plugins).sort()) {
+    if (id === PLUGIN_TEMPLATE) continue;
+    sorted[id] = parseVersion(plugins[id] ?? '').raw;
+  }
+  return { gateway: version.raw, prerelease: version.prerelease !== null, date, plugins: sorted };
+}
+
+/**
+ * The released versions after a plugin hotfix: that plugin's entry alone moves, and
+ * only forward.
+ * @param {ReleasesData} data
+ * @param {string} id
+ * @param {string} version
+ * @returns {ReleasesData}
+ */
+export function withPluginRelease(data, id, version) {
+  if (id === PLUGIN_TEMPLATE) throw new ReleaseError('the plugin template is never released');
+  const current = data.plugins[id];
+  if (current !== undefined) assertMovesForward(current, version);
+  else parseVersion(version);
+  return {
+    ...data,
+    plugins: Object.fromEntries(
+      Object.entries({ ...data.plugins, [id]: version }).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  };
+}
+
+/**
+ * Reads releases.json as `release:prepare` wrote it.
+ * @param {string} text
+ * @returns {ReleasesData}
+ */
+export function parseReleasesData(text) {
+  /** @type {unknown} */
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new ReleaseError('releases.json is not valid JSON');
+  }
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ReleaseError('releases.json is not an object');
+  }
+  const { gateway, date, plugins } = /** @type {Record<string, unknown>} */ (raw);
+  if (typeof gateway !== 'string' || typeof date !== 'string') {
+    throw new ReleaseError('releases.json has no "gateway" version or no "date"');
+  }
+  if (typeof plugins !== 'object' || plugins === null || Array.isArray(plugins)) {
+    throw new ReleaseError('releases.json has no "plugins" object');
+  }
+  return releasesData({
+    gatewayVersion: gateway,
+    date,
+    plugins: /** @type {Record<string, string>} */ (plugins),
+  });
+}
+
+/**
+ * releases.json as committed: two-space JSON and a final newline.
+ * @param {ReleasesData} data
+ * @returns {string}
+ */
+export function serializeReleasesData(data) {
+  return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+const PLUGIN_TAG = /^plugin-([a-z][a-z0-9-]*)-v(.+)$/;
+
+/**
+ * The plugin and version a plugin release tag names: `plugin-cloudflare-dns-v4.0.1`.
+ * @param {string} tag
+ * @returns {{ id: string, version: string }}
+ */
+export function parsePluginTag(tag) {
+  const match = PLUGIN_TAG.exec(tag);
+  if (!match) {
+    throw new ReleaseError(
+      `tag "${tag}" is not a plugin release tag (plugin-<id>-v<version>, for example plugin-notion-v0.3.0)`,
+    );
+  }
+  const [, id = '', version = ''] = match;
+  return { id, version: parseVersion(version).raw };
+}
+
+/**
+ * A plugin release tag must name the version of that plugin's package.json.
+ * @param {{ tag: string, manifestVersion: string | null }} input
+ * @returns {{ id: string, version: string }}
+ */
+export function assertPluginTag({ tag, manifestVersion }) {
+  const { id, version } = parsePluginTag(tag);
+  if (id === PLUGIN_TEMPLATE) throw new ReleaseError('the plugin template is never released');
+  if (manifestVersion === null) throw new ReleaseError(`tag "${tag}" names no plugin of plugins/`);
+  if (manifestVersion !== version) {
+    throw new ReleaseError(
+      `tag "${tag}" does not match the version in plugins/${id}/package.json (${manifestVersion})`,
+    );
+  }
+  return { id, version };
+}

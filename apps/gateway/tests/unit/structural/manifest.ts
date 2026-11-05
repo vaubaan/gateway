@@ -526,6 +526,21 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'versions-feed-data-readable',
+    statement:
+      'The data of the published versions feed (releases.json, advisories.json) make a feed the gateway reads: semver versions, advisories with a range, a fix and an https link.',
+    source: 'docs/decisions/plugins-bundled-or-pinned-by-the-operator.md',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/release-data.test.ts`,
+        tests: [
+          'lists advisories of the feed shape, each id once',
+          'makes, with the released versions, a feed the gateway reads',
+        ],
+      },
+    ],
+  },
+  {
     id: 'plugin-version-two-places',
     statement:
       "A shipped plugin's version is written in definePlugin and in its package.json, equal; its README states neither the plugin's version nor its catalog's.",
