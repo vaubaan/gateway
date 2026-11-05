@@ -11,8 +11,10 @@
 #
 # Axonaut documents no rate limit (its `/me` answer reports an
 # `api_time_consumed` counter): the base budgets are kept moderate.
+# catalog_version 2 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: axonaut
-catalog_version: 1
+catalog_version: 2
 catalog_date: 2026-11-05
 
 risks:
@@ -251,6 +253,11 @@ macro_actions:
   - id: read
     label: 'Read'
     description: 'Read the CRM, quotes, invoices, payments, projects, tasks, tickets and products.'
+    narrative: >-
+      The agent reads the account: customers and their contacts, the pipeline, quotes, invoices and
+      payments, projects, tasks, tickets and products. The CRM read is kept apart because it carries
+      personal data about people outside the company: at Careful it asks first, while the sales,
+      work and catalog reads run freely.
     entries:
       - risk_id: axonaut.read-crm
         quota: 1000
@@ -267,6 +274,10 @@ macro_actions:
   - id: crm
     label: 'Work the CRM'
     description: 'Keep companies, contacts, notes, the pipeline, tasks and tickets up to date.'
+    narrative: >-
+      The agent keeps the day-to-day records up to date: it adds or corrects companies and contacts,
+      logs calls and notes, moves deals through the pipeline, and manages tasks and tickets. Closing
+      a deal as won or lost is kept apart, because reporting and forecasts follow it.
     entries:
       - risk_id: axonaut.crm-write
         quota: 100
@@ -283,6 +294,11 @@ macro_actions:
   - id: sell
     label: 'Sell and invoice'
     description: 'Create quotations, record their answer, create invoices and record payments.'
+    narrative: >-
+      The agent prepares the commercial documents: quotations, the customer's answer to them,
+      invoices and the payments received. Each act is its own permission because each goes further:
+      an accepted quotation creates an order, an invoice is a numbered legal document that cannot be
+      deleted, a payment is an entry in the books.
     entries:
       - risk_id: axonaut.quotation-create
         quota: 50
@@ -299,6 +315,10 @@ macro_actions:
   - id: clean-up
     label: 'Clean up'
     description: 'Delete companies, contacts, opportunities and tasks.'
+    narrative: >-
+      The agent deletes companies, contacts, opportunities and tasks. Alone in its macro-action
+      because a deletion cannot be undone: it is left out at Careful and asks first at every other
+      level, and a deletion also needs the permission to modify that kind of record.
     entries:
       - risk_id: axonaut.delete-record
         quota: 20

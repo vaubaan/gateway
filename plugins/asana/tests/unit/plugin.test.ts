@@ -37,7 +37,7 @@ describe('asana plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices the catalog covers, none by the fallback', () => {
-    const report = assertCatalogCoverage(asanaPlugin, SAMPLES, { resources: [project] });
+    const report = assertCatalogCoverage(asanaPlugin);
     assertSlicesOnDataModel(asanaPlugin, SAMPLES, { resources: [project] });
     expect(catalogPathIssues(asanaPlugin)).toEqual([]);
     const named = asanaCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);

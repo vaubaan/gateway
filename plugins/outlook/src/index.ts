@@ -18,8 +18,9 @@ import { classifyOutlook } from './classify.ts';
 import { outlookCredential } from './credential.ts';
 import { outlookDataModel } from './data-model.ts';
 import { discoverOutlookResources, executeOutlook } from './execute.ts';
+import { outlookExamples } from './examples.ts';
 import { OUTLOOK_ICON, OUTLOOK_ICON_COLOR } from './icon.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { EXCLUDED_TOOLS, PROVIDER_ID } from './identity.ts';
 import { outlookToolTitles } from './tool-titles.ts';
 import { outlookTools } from './tools.ts';
 
@@ -44,6 +45,8 @@ export const outlookPlugin = definePlugin({
   docsUrl: 'https://github.com/vaubaan/gateway/blob/main/docs/handbook/providers/outlook.md',
   tools: outlookTools,
   toolTitles: outlookToolTitles,
+  excludedTools: EXCLUDED_TOOLS,
+  examples: outlookExamples,
   dataModel: outlookDataModel,
   catalog: outlookCatalog.catalog,
   credential: outlookCredential,
@@ -74,6 +77,7 @@ export { folderRef, graphId, mailboxRefOf, pathSegment } from './identifiers.ts'
 export {
   BARE_TOOL,
   BROKER_PROVIDER,
+  EXCLUDED_TOOLS,
   GRAPH_API_BASE,
   PROVIDER_ID,
   SCOPES,
@@ -81,3 +85,4 @@ export {
 } from './identity.ts';
 export { parseQuery, type ParsedQuery } from './q-parser.ts';
 export { outlookDataModel, outlookToolTitles, outlookTools };
+export { EXAMPLE_MAILBOX, outlookExamples } from './examples.ts';

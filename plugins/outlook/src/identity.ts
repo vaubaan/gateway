@@ -105,6 +105,23 @@ export const TOOL = {
   respondToEvent: toolNameOf(BARE_TOOL.respondToEvent),
 } as const;
 
+/**
+ * Tools of Outlook the plugin deliberately leaves out (handbook
+ * providers/outlook.md, "Tools deliberately left out"), each with the sentence
+ * its public page shows: declared nowhere, so `classify` refuses each as an
+ * unknown tool, and the plugin's `excludedTools`.
+ */
+export const EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
+  [toolNameOf('delete_message')]:
+    'No deletion of mail is offered, not even a move to Deleted Items; tidying stops at moving a message between folders.',
+  [toolNameOf('forward_message')]:
+    "Forwarding sends a message's content at once to recipients unknown before the call; the agent writes a draft and sends it with send_draft instead.",
+  [toolNameOf('reply_message')]:
+    'Replying sends at once to whoever the original names, unknown before the call; the agent writes a reply draft and sends it with send_draft instead.',
+  [toolNameOf('reply_all_message')]:
+    'Replying to all sends at once to every recipient of the original, unknown before the call; the agent writes a reply draft and sends it with send_draft instead.',
+};
+
 /** The tools of the `calendar` and `free-busy` side; every other tool is mail. */
 export const CALENDAR_TOOLS: ReadonlySet<string> = new Set([
   TOOL.listCalendars,

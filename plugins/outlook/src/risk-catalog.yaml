@@ -18,8 +18,10 @@
 # with one difference: Graph has no switch that keeps Exchange from mailing
 # the attendees of a change or a cancellation, so every update and every
 # deletion carries `event[e].notify.W`.
+# catalog_version 2 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: outlook
-catalog_version: 1
+catalog_version: 2
 catalog_date: 2026-11-05
 
 risks:
@@ -481,6 +483,11 @@ macro_actions:
   - id: read
     label: 'Read mail and agenda'
     description: 'Folders, messages whoever sent them, drafts, calendars, events and free/busy.'
+    narrative: >-
+      Every mail read is priced by who sent it: a colleague, an allowlisted contact, a notification,
+      or anyone, which is also the price of reading a message by its id. A search that does not name
+      exactly one sender is a bulk read. Calendars, events and free/busy come with it, because an
+      agenda is read for the same work.
     entries:
       - risk_id: outlook.read-mailbox
         quota: 2000
@@ -515,6 +522,10 @@ macro_actions:
   - id: draft
     label: 'Draft'
     description: 'Write drafts and reply drafts. Nothing leaves.'
+    narrative: >-
+      Drafts and reply drafts, priced by their worst recipient: oneself, colleagues or allowlisted
+      contacts. A draft to anyone else is refused outright, so nothing can be staged for an unknown
+      address. Nothing leaves while it is a draft.
     entries:
       - risk_id: outlook.draft-write
         quota: 300
@@ -531,6 +542,10 @@ macro_actions:
   - id: send
     label: 'Send'
     description: 'Send a message or a draft. Nothing can call it back.'
+    narrative: >-
+      A message or a stored draft leaves the mailbox, under the owner's name, and nothing calls it
+      back. The permission follows the worst recipient, up to anyone at all; a stored draft is sent
+      only when it holds exactly the recipients the call declared.
     entries:
       - risk_id: outlook.send-to-zone-self
         quota: 50
@@ -547,6 +562,10 @@ macro_actions:
   - id: tidy
     label: 'Tidy'
     description: 'Move, mark, flag and categorise messages; create folders.'
+    narrative: >-
+      Moving messages between folders, marking them read, flagging them, setting their categories,
+      and creating folders. Nothing is deleted: a move to Deleted Items, Junk Email or the Outbox is
+      refused.
     entries:
       - risk_id: outlook.message-organize
         quota: 500
@@ -557,6 +576,9 @@ macro_actions:
   - id: schedule
     label: 'Schedule'
     description: 'Create, change, delete and answer events.'
+    narrative: >-
+      Creating, changing and deleting events, and answering invitations. Who is invited, and the
+      mail Exchange sends attendees about a change, are the next macro-action.
     entries:
       - risk_id: outlook.event-create
         quota: 100
@@ -573,6 +595,10 @@ macro_actions:
   - id: invite
     label: 'Invite'
     description: 'Invite people and let Exchange mail the attendees.'
+    narrative: >-
+      Inviting colleagues or people outside the company, who receive the event by mail. Graph cannot
+      keep Exchange from mailing the attendees of a change or a cancellation, so every update and
+      deletion of an event also needs the permission to let Exchange mail them, from here.
     entries:
       - risk_id: outlook.invite-internal
         quota: 100
