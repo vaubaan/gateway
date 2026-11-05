@@ -14,7 +14,7 @@
 # no user created (the base image's `node` user).
 
 # Bump the tag and the digest together, with the gateway's (deploy/docker/Dockerfile).
-FROM node:26.13.0-bookworm-slim@sha256:bc0a2afd3b74ce12222fc8bab99271e66257f021078f5f4a5d687a77d280c1d9
+FROM node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
 
 # The broker needs node and nothing else: no package manager in the image.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
