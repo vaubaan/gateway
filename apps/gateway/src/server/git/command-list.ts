@@ -5,14 +5,15 @@
  * push is the pipeline's question, for every command.
  */
 import {
+  type CommandList,
   GitProtocolError,
+  type GitReviewedUpdate,
+  isGitProtocolError,
+  isPktLineError,
   OID_SHAPE,
-  PktLineError,
+  type PktLineReader,
   printableRef,
   readCommandList,
-  type CommandList,
-  type GitReviewedUpdate,
-  type PktLineReader,
   type RefCommand,
 } from '@vaubaan/plugin-sdk/git';
 
@@ -47,7 +48,7 @@ export async function readPushCommands(
       return pkt;
     });
   } catch (err) {
-    if (err instanceof GitProtocolError || err instanceof PktLineError) {
+    if (isGitProtocolError(err) || isPktLineError(err)) {
       return { issue: `this push could not be read: ${err.message}` };
     }
     throw err;

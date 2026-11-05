@@ -106,6 +106,25 @@ export default tseslint.config(
       ],
     },
   },
+  // The host identifies an SDK error by its brand, never by `instanceof` (ADR
+  // plugins-bundled-or-pinned-by-the-operator): a pinned plugin carries its own copy of the
+  // SDK, so its errors are instances of another class. The SDK itself, and `@vaubaan/shared`
+  // where three of the classes live, test their own instances.
+  {
+    files: ['apps/**/*.{ts,tsx}', 'packages/**/*.ts'],
+    ignores: ['packages/plugin-sdk/**', 'packages/shared/src/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "BinaryExpression[operator='instanceof'][right.name=/^(UpstreamAuthError|CredentialRefusal|UpstreamHttpError|UpstreamProtocolError|UpstreamAnswerTooLarge|UpstreamRefusalError|UpstreamFailureError|ExecutorRefusal|GitProtocolError|PktLineError)$/]",
+          message:
+            'An SDK error is recognised by its guard (isUpstreamAuthError…), never by instanceof: a pinned plugin carries its own copy of the SDK (docs/handbook/plugin-sdk.md).',
+        },
+      ],
+    },
+  },
   // CLI-ish ops scripts log to stdout by design; console is OK.
   {
     files: ['scripts/**/*.ts', 'scripts/**/*.mjs'],

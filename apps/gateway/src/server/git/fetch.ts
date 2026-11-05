@@ -15,17 +15,17 @@
  * and is counted as a transfer (fail closed).
  */
 import type { CallPipeline } from '@vaubaan/gateway-core';
-import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
+import { isExecutorRefusal } from '@vaubaan/plugin-sdk';
 import {
   advertisementType,
   advertisementWithout,
-  GitProtocolError,
+  type GitAccess,
+  isGitProtocolError,
   lsRefsWithout,
   PktLineReader,
   prependChunk,
   readV2RequestHead,
   UPLOAD_PACK_SERVICE,
-  type GitAccess,
 } from '@vaubaan/plugin-sdk/git';
 
 import type { Logger } from '../logging';
@@ -96,7 +96,7 @@ export class FetchSide {
       command = head.command;
       body = prependChunk(head.bytes, reader.rest());
     } catch (err) {
-      if (!(err instanceof GitProtocolError)) throw err;
+      if (!isGitProtocolError(err)) throw err;
       const reason = `this fetch could not be read: ${err.message}`;
       const outcome = await this.deps.pipeline.reject(scope.ctx, fetchCall(scope, 'pack'), reason);
       logOutcome(this.deps.logger, 'git fetch', scope, outcome);
@@ -189,8 +189,7 @@ export class FetchSide {
       try {
         filtered = filter(body);
       } catch (err) {
-        if (err instanceof GitProtocolError)
-          return upstreamFailure(this.deps.logger, scope, err.name);
+        if (isGitProtocolError(err)) return upstreamFailure(this.deps.logger, scope, err.name);
         throw err;
       }
       const type = answer.headers.get('content-type') ?? advertisementType(UPLOAD_PACK_SERVICE);
@@ -199,7 +198,7 @@ export class FetchSide {
         headers: { 'Content-Type': type, ...NO_CACHE },
       });
     } catch (err) {
-      if (err instanceof ExecutorRefusal) return gitText(HTTP_FORBIDDEN, err.message);
+      if (isExecutorRefusal(err)) return gitText(HTTP_FORBIDDEN, err.message);
       return upstreamFailure(this.deps.logger, scope, err instanceof Error ? err.name : 'Error');
     }
   }

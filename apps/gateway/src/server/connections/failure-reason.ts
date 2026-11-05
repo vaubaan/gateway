@@ -23,7 +23,12 @@
  * alone.
  */
 import type { CredentialSecret } from '@vaubaan/plugin-sdk';
-import { CredentialRefusal, UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
+import {
+  isCredentialRefusal,
+  isUpstreamAuthError,
+  isUpstreamHttpError,
+  type UpstreamAuthError,
+} from '@vaubaan/shared';
 
 import {
   ConnectError,
@@ -80,14 +85,14 @@ function connectSentence(err: UpstreamAuthError, credential: CredentialSecret): 
  * sentence, masked.
  */
 export function providerFailureReason(err: unknown, connecting?: CredentialSecret): string {
-  if (err instanceof CredentialRefusal) return oneLine(err.message);
-  if (err instanceof UpstreamAuthError) {
+  if (isCredentialRefusal(err)) return oneLine(err.message);
+  if (isUpstreamAuthError(err)) {
     if (connecting !== undefined && err.message.trim() !== '') {
       return connectSentence(err, connecting);
     }
     return `the provider rejected the credential (HTTP ${err.upstreamStatus})`;
   }
-  if (err instanceof UpstreamHttpError) return `the provider answered HTTP ${err.status}`;
+  if (isUpstreamHttpError(err)) return `the provider answered HTTP ${err.status}`;
   if (err instanceof OAuth2TokenError) {
     if (err.status === 0) return 'the token endpoint could not be reached';
     const code =

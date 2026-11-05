@@ -10,7 +10,7 @@
  *   const resolved = await broker.resolve(connectionId);   // refreshes when about to expire
  *   try { await plugin.execute({ ...resolved, … }) }
  *   catch (err) {
- *     if (!(err instanceof UpstreamAuthError)) throw err;
+ *     if (!isUpstreamAuthError(err)) throw err;
  *     const again = await broker.refresh(connectionId);    // forced; marks `expired` on failure
  *     await plugin.execute({ ...again, … });
  *   }
@@ -35,7 +35,7 @@
  * `expired`.
  */
 import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
-import { UpstreamAuthError } from '@vaubaan/shared';
+import { isUpstreamAuthError, UpstreamAuthError } from '@vaubaan/shared';
 import {
   isBrokeredSpec,
   type ConnectionContext,
@@ -387,7 +387,7 @@ export class CredentialBroker {
     } catch (err) {
       // Only a rejection by the provider ends the connection; an unreachable provider,
       // a missing app configuration or a bug leaves its status alone for the next attempt.
-      if (!(err instanceof UpstreamAuthError)) {
+      if (!isUpstreamAuthError(err)) {
         if (err instanceof ProviderUnreachableError) {
           if (err instanceof OAuthBrokerUnavailableError) {
             this.deps.logger.warn('credential not refreshed: the OAuth broker failed', {

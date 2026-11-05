@@ -17,7 +17,7 @@ import {
   type MissionContext,
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
-import { ExecutorRefusal, refusalResult } from '@vaubaan/plugin-sdk';
+import { isExecutorRefusal, refusalResult } from '@vaubaan/plugin-sdk';
 import type { ExecuteContext, PluginRegistry, ProviderPlugin } from '@vaubaan/plugin-sdk';
 import type { GitAccess, GitRemoteCapability, GitUpstream } from '@vaubaan/plugin-sdk/git';
 
@@ -227,7 +227,7 @@ export function createGitUpstreamStage(deps: GitUpstreamStageDeps): UpstreamStag
         upstream = await remote.upstream(execCtx, job.repository, job.access);
       } catch (err) {
         // The plugin declined (a permission the account lacks): a result, like any tool's.
-        if (err instanceof ExecutorRefusal) return refusalResult(err.message);
+        if (isExecutorRefusal(err)) return refusalResult(err.message);
         throw err;
       }
       const answer = await callUpstream(execCtx, upstream, { ...job.request, signal: job.signal });

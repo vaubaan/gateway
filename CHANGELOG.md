@@ -28,6 +28,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   without calling Microsoft (logged `reason: no_revoke_endpoint`). The account
   is read from the ID token's `email`, or its `preferred_username` when that is
   one address.
+- **Plugins bundled with the image or pinned by the operator** (ADR
+  plugins-bundled-or-pinned-by-the-operator): a plugin directory under
+  `plugins.dir` (`/plugins` in the image) replaces the bundled plugin of the
+  same id, logged at boot; `plugins.enabled` lists the plugins an instance
+  registers. The boot stops (exit 78) on a pin built for another SDK range, a
+  pin `definePlugin` refuses, two pins of one id, an unknown id in
+  `plugins.enabled`, or a provider the store holds accounts for that no
+  registered plugin serves. The release workflow publishes every bundled
+  plugin as `ghcr.io/vaubaan/plugin-<id>:<version>` (a `plugin-<id>-v<version>`
+  tag publishes one alone). The instance reads the published versions feed at
+  start and daily (`updates.check`, on by default; `updates.feed_url`), a GET
+  that carries nothing about it, and keeps what is behind and what an
+  advisory names for Administration; nothing is downloaded.
 
 ### Changed
 
@@ -40,6 +53,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   unchanged. The gateway reads the table and refuses to boot when a brokered
   plugin names a provider it does not list or a scope that provider does not
   allow; a structural test holds every shipped brokered plugin to it.
+
+### Plugin SDK
+
+- **0.6.0 — errors carry a brand, the SDK says its version.** Every error class
+  the host inspects (`UpstreamAuthError`, `CredentialRefusal`,
+  `UpstreamHttpError`, `UpstreamProtocolError`, `ExecutorRefusal`,
+  `GitProtocolError`, `PktLineError`) sets a
+  `Symbol.for('@vaubaan/plugin-sdk/<ClassName>')` brand, read by the new guards
+  `isUpstreamAuthError`, `isCredentialRefusal`, `isUpstreamHttpError`,
+  `isUpstreamProtocolError`, `isExecutorRefusal`, `isGitProtocolError`,
+  `isPktLineError`; `SDK_VERSION` is the SDK's version. A minor, not a patch:
+  the host recognises errors by brand only, so a pinned plugin built against
+  0.5 (no brand) would have its errors misread; its range `^0.5.x` keeps it
+  out.
 
 ### Documentation
 

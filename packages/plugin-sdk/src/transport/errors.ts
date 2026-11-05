@@ -9,7 +9,7 @@
  * (`refusal.ts`).
  */
 
-import { UpstreamHttpError } from '@vaubaan/shared';
+import { brandError, hasErrorBrand, isUpstreamHttpError, UpstreamHttpError } from '@vaubaan/shared';
 
 /** The status a protocol failure carries : the provider is a bad gateway for the call. */
 export const PROTOCOL_FAILURE_STATUS = 502;
@@ -23,7 +23,17 @@ export class UpstreamProtocolError extends UpstreamHttpError {
   constructor(message: string, status: number = PROTOCOL_FAILURE_STATUS) {
     super(message, status);
     this.name = 'UpstreamProtocolError';
+    brandError(this, 'UpstreamProtocolError');
   }
+}
+
+/**
+ * Whether `x` is an `UpstreamProtocolError` (an `UpstreamAnswerTooLarge`
+ * included), whatever copy of the SDK made it : the host asks this, never
+ * `instanceof` (ADR plugins-bundled-or-pinned-by-the-operator).
+ */
+export function isUpstreamProtocolError(x: unknown): x is UpstreamProtocolError {
+  return hasErrorBrand(x, 'UpstreamProtocolError') && isUpstreamHttpError(x);
 }
 
 /** The provider's answer is larger than `maxBytes` : the rest was not read. */

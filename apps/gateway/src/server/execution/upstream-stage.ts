@@ -66,19 +66,21 @@
  * says what happened.
  */
 import {
-  isUnavailableConnectionStatus,
-  refuse,
-  UpstreamFailureError,
-  upstreamErrorClassName,
-  UpstreamRefusalError,
   type CallRequest,
   type CallTarget,
   type ConnectionStatus,
+  isUnavailableConnectionStatus,
+  isUpstreamFailureError,
+  isUpstreamRefusalError,
   type MissionContext,
+  refuse,
+  upstreamErrorClassName,
+  UpstreamFailureError,
+  UpstreamRefusalError,
   type UpstreamStage,
 } from '@vaubaan/gateway-core';
 import type { ToolResultPartSink } from '@vaubaan/plugin-sdk';
-import { UpstreamAuthError } from '@vaubaan/shared';
+import { isUpstreamAuthError, type UpstreamAuthError } from '@vaubaan/shared';
 
 import {
   ConnectionUnavailableError,
@@ -107,7 +109,7 @@ const MS_PER_SECOND = 1000;
 
 /** The provider said the credential itself is not valid (as opposed to "not allowed"). */
 function credentialRejected(err: unknown): err is UpstreamAuthError {
-  return err instanceof UpstreamAuthError && err.upstreamStatus === HTTP_UNAUTHORIZED;
+  return isUpstreamAuthError(err) && err.upstreamStatus === HTTP_UNAUTHORIZED;
 }
 
 function isHttpStatus(value: unknown): value is number {
@@ -125,7 +127,7 @@ function isHttpStatus(value: unknown): value is number {
  * HTTP clients put on their errors.
  */
 function httpStatusOf(err: unknown): number | null {
-  if (err instanceof UpstreamAuthError) {
+  if (isUpstreamAuthError(err)) {
     return isHttpStatus(err.upstreamStatus) ? err.upstreamStatus : null;
   }
   if (typeof err !== 'object' || err === null || !('status' in err)) return null;
@@ -222,7 +224,7 @@ function partsPhrase(count: number): string {
 
 /** A provider failure, split into what the audit stores and what the agent reads. */
 function asUpstreamFailure(err: unknown, provider: string, parts: number): UpstreamFailureError {
-  if (err instanceof UpstreamFailureError) return err;
+  if (isUpstreamFailureError(err)) return err;
   const status = httpStatusOf(err);
   const className = upstreamErrorClassName(err);
   const detail = err instanceof Error ? err.message : String(err);
@@ -321,7 +323,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     let status: ConnectionStatus | 'missing' | null = null;
     if (err instanceof ConnectionUnavailableError) status = err.connectionStatus;
     // A rejected refresh: the broker marked the connection `expired` before throwing.
-    else if (err instanceof UpstreamAuthError) status = 'expired';
+    else if (isUpstreamAuthError(err)) status = 'expired';
     if (status === null || status === 'missing' || !isUnavailableConnectionStatus(status)) {
       return err;
     }
@@ -396,7 +398,7 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
         report(call, { ok: true, result });
         return result;
       } catch (thrown) {
-        if (thrown instanceof UpstreamRefusalError) {
+        if (isUpstreamRefusalError(thrown)) {
           if (!call.signal?.aborted) report(call, { ok: false, error: thrown });
           throw thrown;
         }

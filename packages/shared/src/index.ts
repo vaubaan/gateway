@@ -17,11 +17,15 @@
 // A name missing here is internal to the package (structural test: no `export *`).
 export {
   CredentialRefusal,
+  isCredentialRefusal,
+  isUpstreamAuthError,
+  isUpstreamHttpError,
   splitToolName,
   toolPrefixFor,
   UpstreamAuthError,
   UpstreamHttpError,
 } from './mcp.ts';
+export { brandError, errorBrand, hasErrorBrand } from './brand.ts';
 export type {
   JsonRpcError,
   JsonRpcSuccess,

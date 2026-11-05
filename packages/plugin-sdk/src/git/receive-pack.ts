@@ -14,6 +14,8 @@
 
 import { createHash } from 'node:crypto';
 
+import { brandError, hasErrorBrand } from '@vaubaan/shared';
+
 import {
   concatBytes,
   demultiplexSideBand,
@@ -62,7 +64,13 @@ export class GitProtocolError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'GitProtocolError';
+    brandError(this, 'GitProtocolError');
   }
+}
+
+/** Whether `x` is a `GitProtocolError`, whatever copy of the SDK made it (the host asks this, never `instanceof`). */
+export function isGitProtocolError(x: unknown): x is GitProtocolError {
+  return hasErrorBrand(x, 'GitProtocolError');
 }
 
 function oidOrNull(value: string, line: string): string | null {

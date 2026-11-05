@@ -23,14 +23,20 @@
  * through untouched.
  */
 
-import type { McpToolResult } from '@vaubaan/shared';
+import { brandError, hasErrorBrand, type McpToolResult } from '@vaubaan/shared';
 
 /** The executor declines the call : thrown inside `execute`, never out of it. */
 export class ExecutorRefusal extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ExecutorRefusal';
+    brandError(this, 'ExecutorRefusal');
   }
+}
+
+/** Whether `x` is an `ExecutorRefusal`, whatever copy of the SDK made it (the host asks this, never `instanceof`). */
+export function isExecutorRefusal(x: unknown): x is ExecutorRefusal {
+  return hasErrorBrand(x, 'ExecutorRefusal');
 }
 
 /** The `isError` result of a declined call : one text block, the reason. */
@@ -47,7 +53,7 @@ export async function declining(run: () => Promise<McpToolResult>): Promise<McpT
   try {
     return await run();
   } catch (error) {
-    if (error instanceof ExecutorRefusal) return refusalResult(error.message);
+    if (isExecutorRefusal(error)) return refusalResult(error.message);
     throw error;
   }
 }

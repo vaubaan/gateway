@@ -23,7 +23,7 @@
  * plugin at connect time and merged by `syncDiscoveredResources`, which
  * never overwrites an owner edit and never deletes a row.
  */
-import { UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
+import { type CredentialKind, isUpstreamAuthError, UpstreamAuthError } from '@vaubaan/shared';
 import {
   type ApiKeyCredentialSpec,
   type ConnectionContext,
@@ -800,7 +800,7 @@ export class ConnectionService {
         signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
       });
     } catch (err) {
-      const rejected = err instanceof UpstreamAuthError || !isTransportFailure(err);
+      const rejected = isUpstreamAuthError(err) || !isTransportFailure(err);
       throw new ConnectError(
         rejected ? 'credential-rejected' : 'provider-unreachable',
         `${plugin.displayName}: ${providerFailureReason(err, secret)}`,
@@ -1048,7 +1048,7 @@ export class ConnectionService {
       });
       return { resources, error: null };
     } catch (err) {
-      const rejected = err instanceof UpstreamAuthError;
+      const rejected = isUpstreamAuthError(err);
       if (policy === 'required') {
         throw new ConnectError(
           rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
@@ -1273,11 +1273,11 @@ export class ConnectionService {
       try {
         resources = await this.discoverWith(resolved.plugin, this.discoveryContextOf(resolved));
       } catch (err) {
-        if (!(err instanceof UpstreamAuthError)) throw err;
+        if (!isUpstreamAuthError(err)) throw err;
         try {
           resolved = await this.deps.broker.refresh(connection.id);
         } catch (refreshErr) {
-          if (!(refreshErr instanceof UpstreamAuthError)) throw refreshErr;
+          if (!isUpstreamAuthError(refreshErr)) throw refreshErr;
           // Keep the provider's own words: they say what is wrong with the credential.
           throw new UpstreamAuthError(
             `${err.message} — the credential could not be refreshed, the connection is now expired; reconnect it`,
