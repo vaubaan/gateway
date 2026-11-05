@@ -28,9 +28,11 @@
 # pattern or macro-action changed.
 # catalog_version 12 (2026-11-02) : `github.label-write` (tool `add_labels`), in
 # the macro-action `propose`.
+# catalog_version 13 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
+# no risk, pattern or macro-action changed.
 provider: github
-catalog_version: 12
-catalog_date: 2026-11-02
+catalog_version: 13
+catalog_date: 2026-11-05
 
 risks:
   # ---------------------------------------------------------------
@@ -456,6 +458,12 @@ macro_actions:
   - id: read
     label: 'Read'
     description: 'Code, metadata and global search.'
+    narrative: >-
+      Reading the code, issues, pull requests, releases, workflow runs and job logs of the
+      mission's repositories. Nothing here changes a repository, but what is read lands in the
+      agent's context: a README or an issue body can carry instructions someone else wrote.
+      Global search is a permission of its own because it reaches beyond the mission's
+      repositories.
     entries:
       - risk_id: github.read-code
         quota: 5000
@@ -469,6 +477,10 @@ macro_actions:
   - id: propose
     label: 'Propose'
     description: 'Work branches, push, pull requests, comments and labels.'
+    narrative: >-
+      The coding agent's loop. Everything lands on branches named feature/*, fix/*, chore/*… and
+      can be reverted; nothing reaches production until a person merges. Two acts are kept apart
+      because they destroy work: deleting a branch and rewriting its history.
     entries:
       - risk_id: github.feature-branch-write
         quota: 500
@@ -497,6 +509,12 @@ macro_actions:
   - id: ship
     label: 'Ship'
     description: 'Merge on protected branches, tags and releases.'
+    narrative: >-
+      Getting work onto main, master or release-* and publishing it: merges and direct commits
+      there, tags and releases. Each reaches people outside the session (CI/CD runs on the
+      protected branch, watchers are notified, consumers pull the tag), so undoing one is
+      costly. Deleting a release sits here because its assets vanish for whoever already links
+      to them.
     entries:
       - risk_id: github.merge-protected
         quota: 50
@@ -513,6 +531,11 @@ macro_actions:
   - id: administer
     label: 'Administer'
     description: 'Branch protection and workflow files.'
+    narrative: >-
+      Changing the rules a repository runs by: branch protection and the workflow files under
+      .github/workflows. Both outlive the mission. A loosened protection lets writes through
+      that nobody reviews, and a workflow runs with the repository's secrets on every trigger,
+      which is why neither is part of Propose.
     entries:
       - risk_id: github.branch-protection-write
         quota: 50

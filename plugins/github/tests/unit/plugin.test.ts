@@ -31,120 +31,8 @@ import { appRepo, executeCtx, libRepo } from './fixtures.ts';
 const repo = { owner: 'acme', repo: 'app' };
 const feature = 'feature/test';
 
-/**
- * Realistic calls per tool ; branches are feature/* and protected names, so
- * both write classes are exercised and no sample lands on the fallback.
- */
-const samples = {
-  github__list_branches: [{ args: { ...repo } }],
-  github__list_commits: [{ args: { ...repo } }, { args: { ...repo, sha: feature } }],
-  github__list_pull_requests: [{ args: { ...repo, state: 'open' } }],
-  github__list_issues: [{ args: { ...repo } }],
-  github__get_file_contents: [
-    { args: { ...repo, path: 'README.md' } },
-    { args: { ...repo, path: 'src/a.ts', ref: 'main' } },
-  ],
-  github__get_pull_request: [{ args: { ...repo, pull_number: 1 } }],
-  github__get_issue: [{ args: { ...repo, issue_number: 1 } }],
-  github__get_commit: [{ args: { ...repo, sha: 'deadbeef' } }],
-  github__search_code: [{ args: { q: 'foo' } }],
-  github__search_issues: [{ args: { q: 'foo' } }],
-  github__create_branch: [
-    { args: { ...repo, branch: feature } },
-    { args: { ...repo, branch: 'release-2026' } },
-  ],
-  github__create_or_update_file: [
-    { args: { ...repo, branch: feature, path: 'src/a.ts', content: 'x', message: 'm' } },
-    { args: { ...repo, branch: 'main', path: 'README.md', content: 'x', message: 'm' } },
-    {
-      args: {
-        ...repo,
-        branch: feature,
-        path: '.github/workflows/ci.yml',
-        content: 'x',
-        message: 'm',
-      },
-    },
-  ],
-  github__push_files: [
-    {
-      args: {
-        ...repo,
-        branch: feature,
-        message: 'm',
-        files: [
-          { path: 'a.ts', content: '1' },
-          { path: 'b.ts', content: '2' },
-        ],
-      },
-    },
-  ],
-  github__create_pull_request: [{ args: { ...repo, title: 't', head: feature, base: 'main' } }],
-  github__add_issue_comment: [{ args: { ...repo, issue_number: 1, body: 'b' } }],
-  github__add_labels: [
-    { args: { ...repo, issue_number: 1, labels: ['e2e'] } },
-    { args: { ...repo, issue_number: 1, labels: ['bug', 'needs review'] } },
-  ],
-  github__list_workflows: [{ args: { ...repo } }],
-  github__list_workflow_runs: [{ args: { ...repo } }, { args: { ...repo, workflow_id: 'ci.yml' } }],
-  github__list_workflow_jobs: [
-    { args: { ...repo, run_id: 7 } },
-    { args: { ...repo, run_id: 7, filter: 'all' } },
-  ],
-  github__get_job_logs: [
-    { args: { ...repo, job_id: 9 } },
-    { args: { ...repo, job_id: 9, max_bytes: 1024, tail: true } },
-  ],
-  github__get_branch_protection: [{ args: { ...repo, branch: 'main' } }],
-  github__merge_pull_request: [
-    { args: { ...repo, pull_number: 1 } },
-    { args: { ...repo, pull_number: 1, base: 'release-2026' } },
-  ],
-  github__delete_file: [
-    { args: { ...repo, branch: feature, path: 'a.ts', message: 'm', sha: 'd' } },
-  ],
-  github__update_branch_protection: [{ args: { ...repo, branch: 'main' } }],
-  github__list_releases: [{ args: { ...repo } }],
-  github__list_tags: [{ args: { ...repo } }],
-  github__create_release: [{ args: { ...repo, tag_name: 'v1.0.0' } }],
-  github__delete_release: [{ args: { ...repo, release_id: 1 } }],
-  // The git remote's two tools : their arguments are the host's review.
-  github__git_fetch: [{ args: { repository: 'acme/app', step: 'pack' } }],
-  github__git_push: [
-    {
-      args: {
-        repository: 'acme/app',
-        updates: [
-          gitUpdate('refs/heads/feature/test', 'create'),
-          gitUpdate('refs/heads/main', 'force', ['.github/workflows/ci.yml']),
-          gitUpdate('refs/heads/feature/old', 'delete'),
-          gitUpdate('refs/tags/v1.0.0', 'create'),
-        ],
-      },
-    },
-    {
-      args: { repository: 'acme/app', updates: [gitUpdate('refs/notes/x', 'create')] },
-      expectDenied: true,
-    },
-  ],
-} as const;
-
-function gitUpdate(
-  ref: string,
-  kind: 'create' | 'force' | 'delete',
-  files: readonly string[] = ['a.ts'],
-) {
-  return {
-    ref,
-    old: kind === 'create' ? null : 'a'.repeat(40),
-    new: kind === 'delete' ? null : 'b'.repeat(40),
-    kind,
-    commits: kind === 'delete' ? 0 : 1,
-    files: kind === 'delete' ? [] : [...files],
-    workflow_files: files.filter((f) => f.startsWith('.github/workflows/')),
-  };
-}
-
+/** The plugin's own samples (`src/examples.ts`), on `acme/app`. */
+const samples = githubPlugin.examples;
 const resources: readonly Resource[] = [appRepo];
 
 describe('github plugin — structural kit', () => {
@@ -173,7 +61,7 @@ describe('github plugin — structural kit', () => {
   });
 
   test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
-    const report = assertCatalogCoverage(githubPlugin, samples, { resources });
+    const report = assertCatalogCoverage(githubPlugin);
     // The 28 MCP tools and the git remote's two.
     expect(report.toolsChecked).toBe(30);
     // The 17 named risks, in catalog order ; the fallback is not among them.
@@ -227,6 +115,19 @@ describe('github plugin — structural kit', () => {
     expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 
+  test('the retired workflow tools are excluded, never declared, and refused by name', () => {
+    const excluded = Object.keys(githubPlugin.excludedTools);
+    expect(excluded).toEqual([
+      'github__dispatch_workflow',
+      'github__cancel_workflow_run',
+      'github__rerun_workflow_run',
+    ]);
+    for (const tool of excluded) {
+      const outcome = githubPlugin.classify(tool, { ...repo }, resources);
+      expect('denied' in outcome ? outcome.denied : null).toMatch(/^tool retired/);
+    }
+  });
+
   test('the fallback is the one catalog risk the samples leave out', () => {
     const named = githubCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
     expect(named).toHaveLength(19);
@@ -261,14 +162,14 @@ describe('github catalog — macro-actions at a trust level', () => {
       policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('read, propose, ship, administer ; catalog version 12', () => {
+  test('read, propose, ship, administer ; catalog version 13', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
       'read',
       'propose',
       'ship',
       'administer',
     ]);
-    expect(githubCatalog.catalog.catalog_version).toBe(12);
+    expect(githubCatalog.catalog.catalog_version).toBe(13);
   });
 
   test('read at Careful : code and metadata run freely, the global search asks first', () => {

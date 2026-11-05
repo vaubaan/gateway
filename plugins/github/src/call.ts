@@ -25,10 +25,10 @@
 
 import { isList, type Resource } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER_ID, RETIRED_TOOL, TOOL } from './identity.ts';
+import { EXCLUDED_TOOLS, PROVIDER_ID, TOOL } from './identity.ts';
 
 /** Tools retired by the risk-model spec §7.2 #1. Refused explicitly, even if a client still names them. */
-const RETIRED_TOOLS: ReadonlySet<string> = new Set(Object.values(RETIRED_TOOL));
+const RETIRED_TOOLS: ReadonlySet<string> = new Set(Object.keys(EXCLUDED_TOOLS));
 
 const RETIRED_HINT =
   'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.';

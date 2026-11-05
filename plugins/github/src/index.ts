@@ -17,7 +17,8 @@ import { githubCredential } from './credential.ts';
 import { githubDataModel } from './data-model.ts';
 import { discoverGithubResources, executeGithub } from './execute.ts';
 import { githubGitRemoteOf } from './git-remote.ts';
-import { PROVIDER_ID } from './identity.ts';
+import { githubExamples } from './examples.ts';
+import { EXCLUDED_TOOLS, PROVIDER_ID } from './identity.ts';
 import { GITHUB_ICON, GITHUB_ICON_COLOR } from './icon.ts';
 import { githubToolTitles } from './tool-titles.ts';
 import { githubTools } from './tools.ts';
@@ -50,6 +51,8 @@ export const githubPlugin = definePlugin({
   gitRemote: githubGitRemote,
   tools: githubTools,
   toolTitles: githubToolTitles,
+  excludedTools: EXCLUDED_TOOLS,
+  examples: githubExamples,
   dataModel: githubDataModel,
   catalog: githubCatalog.catalog,
   credential: githubCredential,
@@ -63,7 +66,8 @@ export default githubPlugin;
 export { classifyGithub, githubCredential, githubDataModel, githubTools };
 export { expiryOf, GITHUB_TOKEN_FIELD, verifyGithubToken } from './credential.ts';
 export { GITHUB_TOKEN_PERMISSIONS } from './permissions.ts';
-export { PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { EXCLUDED_TOOLS, PROVIDER_ID, TOOL, TOOL_PREFIX } from './identity.ts';
+export { EXAMPLE_REPOSITORY, githubExamples } from './examples.ts';
 export { discoverGithubResources, executeGithub } from './execute.ts';
 export { GIT_FETCH_TOOL, GIT_PUSH_TOOL, readGitCall } from './git-call.ts';
 export { COMPARE_MAX_COMMITS, COMPARE_MAX_FILES, workingBranchesOf } from './git-remote.ts';

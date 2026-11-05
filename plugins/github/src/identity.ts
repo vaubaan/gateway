@@ -61,11 +61,16 @@ export const TOOL = {
 } as const;
 
 /**
- * Tools retired by the risk-model spec §7.2 #1 : declared nowhere, and
- * refused by name if a client still calls them.
+ * Tools of GitHub the plugin deliberately leaves out (risk-model spec §7.2 #1),
+ * each with the sentence its public page shows : declared nowhere, refused by
+ * name if a client still calls them (`call.ts`), and the plugin's
+ * `excludedTools`.
  */
-export const RETIRED_TOOL = {
-  dispatchWorkflow: `${TOOL_PREFIX}dispatch_workflow`,
-  cancelWorkflowRun: `${TOOL_PREFIX}cancel_workflow_run`,
-  rerunWorkflowRun: `${TOOL_PREFIX}rerun_workflow_run`,
-} as const;
+export const EXCLUDED_TOOLS: Readonly<Record<string, string>> = {
+  [`${TOOL_PREFIX}dispatch_workflow`]:
+    "Dispatching a workflow runs whatever it does with the repository's secrets; deployments go through the tools of the provider that hosts the service.",
+  [`${TOOL_PREFIX}cancel_workflow_run`]:
+    'Cancelling a run stops checks or a deployment a person started; nothing an agent needs to do its work.',
+  [`${TOOL_PREFIX}rerun_workflow_run`]:
+    "Re-running a run executes it again with the repository's secrets, which is a dispatch by another name.",
+};

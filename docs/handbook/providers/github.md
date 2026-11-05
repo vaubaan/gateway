@@ -3,7 +3,7 @@ title: GitHub provider plugin
 tracks:
   - plugins/github/src/
   - plugins/github/README.md
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-05
 ---
 
 # GitHub provider plugin — handbook
@@ -69,7 +69,7 @@ env-scoped. Rules common to every plugin: [providers README](README.md).
 - `add_labels` with `labels: []` would remove every label at GitHub: the grammar asks 1 to 20 names.
   A label is case-insensitive at GitHub, not in a slice: `E2E` on a mission narrowed to
   `label[e2e]` is refused (fail closed), and a missing label is created, not refused.
-- `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run` are retired (risk model §7.2).
+- `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run` are retired (risk model §7.2): the plugin's `excludedTools` (`EXCLUDED_TOOLS`, `identity.ts`), refused by name.
 
 ## Outside the repo
 
