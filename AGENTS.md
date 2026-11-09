@@ -32,6 +32,7 @@ The files the harness generates (`AGENTS.md`, `CLAUDE.md`, the `.claude/`, `.age
 - `doc-audit` (`/doc-audit`) — Audits the completeness and freshness of the docs (6 pillars: README,
 - `drift-detector` (`/drift`) — Detects code ↔ doc drift. For each doc file that declares a
 - `handbook-writer` (`/handbook`) — Writes or updates `docs/handbook/<slug>.md`: only what an agent cannot
+- `journey-writer` (`/journey`, `/story`) — Writes or updates `docs/journeys/<slug>.md`: the user intentions of
 - `readme-writer` (`/readme`) — Maintains `README.md` at the repo root. Syncs the links to the other
 - `spec-writer` (`/spec`) — Human-guided wizard to write or update a `docs/spec/<name>.md`
 - `test-plan-writer` (`/test-plan`) — Updates `docs/tests/integration-tests.md` and/or
