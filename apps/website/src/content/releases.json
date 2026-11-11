@@ -1,7 +1,7 @@
 {
-  "gateway": "2.0.0-alpha.17",
+  "gateway": "2.0.0-alpha.18",
   "prerelease": true,
-  "date": "2026-11-05",
+  "date": "2026-11-11",
   "plugins": {
     "asana": "0.1.0",
     "axonaut": "0.1.0",
