@@ -245,13 +245,14 @@ describe('github credential spec — a fine-grained token', () => {
     expect(githubCredential.kind).toBe('api-key');
     expect(githubCredential.fields.map((f) => [f.name, f.secret])).toEqual([['token', true]]);
     expect(githubCredential.createUrl).toBe('https://github.com/settings/personal-access-tokens');
+    // In the order of GitHub's token page, alphabetical, so the guide reads down it.
     expect(githubCredential.guide?.permissions.map((p) => p.name)).toEqual([
-      'Metadata',
-      'Contents',
-      'Pull requests',
-      'Issues',
       'Actions',
       'Administration',
+      'Contents',
+      'Issues',
+      'Metadata',
+      'Pull requests',
       'Workflows',
     ]);
   });

@@ -163,8 +163,9 @@ Activity says who made it.
    Developer settings → Personal access tokens → Fine-grained tokens →
    Generate new token. Resource owner: the organization; All repositories;
    an expiry; every permission the connect page lists, built from
-   `GITHUB_TOKEN_PERMISSIONS` (Contents, Pull requests, Issues, Actions,
-   Administration, Workflows; GitHub adds Metadata read). Grant this wide
+   `GITHUB_TOKEN_PERMISSIONS` in GitHub's alphabetical order (Actions,
+   Administration, Contents, Issues, Metadata read — GitHub adds it —, Pull
+   requests, Workflows). Grant this wide
    once: each mission narrows it to its repositories and permissions, and a
    token that lacks one means a new token.
 2. Paste it on "Connect a GitHub account". A classic token (`ghp_`) is
