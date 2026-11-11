@@ -3,7 +3,7 @@
  * apps: the note a redirect left, the state of an account, and the inputs of a
  * plugin-declared `CredentialField` list.
  */
-import type { CredentialField } from '@vaubaan/plugin-sdk';
+import type { CredentialAlternative, CredentialField } from '@vaubaan/plugin-sdk';
 
 import { Callout, CodeBlock, Field, Input, StatusMark, Textarea, type Tone } from '@/components/ui';
 import { ACCOUNT_STATES } from '@/lib/vocabulary';
@@ -123,6 +123,7 @@ export function fieldErrorWords(field: CredentialField, problem: FieldProblem): 
 export function CredentialFieldInputs({
   idPrefix,
   fields,
+  alternatives = [],
   values = {},
   secretsSet = [],
   invalid = {},
@@ -130,6 +131,13 @@ export function CredentialFieldInputs({
 }: {
   idPrefix: string;
   fields: readonly CredentialField[];
+  /**
+   * The shapes of the key (`CredentialAlternative`): a field of one of them
+   * sits in that alternative's panel (`data-alternative-panel`), which the
+   * page hides while another alternative is chosen, and the browser does not
+   * hold it required — the server reads only the chosen alternative's fields.
+   */
+  alternatives?: readonly CredentialAlternative[];
   values?: Readonly<Record<string, string>>;
   secretsSet?: readonly string[];
   /** The fields a refused form got wrong: each is marked and says why under itself. */
@@ -140,7 +148,8 @@ export function CredentialFieldInputs({
     <>
       {fields.map((field) => {
         const stored = secretsSet.includes(field.name);
-        const required = field.required !== false && !stored;
+        const panel = alternatives.findIndex((a) => a.fields.includes(field.name));
+        const required = field.required !== false && !stored && panel < 0;
         const hint = [field.help, stored ? 'A value is stored; leave blank to keep it.' : null]
           .filter(Boolean)
           .join(' ');
@@ -155,7 +164,7 @@ export function CredentialFieldInputs({
           autoComplete: 'off',
           spellCheck: false,
         };
-        return (
+        const input = (
           <Field
             key={field.name}
             htmlFor={id}
@@ -178,6 +187,13 @@ export function CredentialFieldInputs({
               />
             )}
           </Field>
+        );
+        return panel < 0 ? (
+          input
+        ) : (
+          <div key={field.name} data-alternative-panel={panel}>
+            {input}
+          </div>
         );
       })}
     </>

@@ -40,7 +40,10 @@ describe('every shipped token way guides the person and checks the token', () =>
     });
 
     it('lists steps to act on, the last one at the paste', () => {
-      for (const step of spec.guide.steps) expect(step.do).toMatch(IMPERATIVE);
+      const alternativeSteps = (spec.alternatives ?? []).flatMap((alt) => alt.steps);
+      for (const step of [...alternativeSteps, ...spec.guide.steps]) {
+        expect(step.do).toMatch(IMPERATIVE);
+      }
       expect(spec.guide.steps.at(-1)?.do).toMatch(/paste/i);
     });
 
@@ -49,6 +52,10 @@ describe('every shipped token way guides the person and checks the token', () =>
       const words = [
         spec.guide.reach.grant,
         ...spec.guide.steps.map((step) => step.do),
+        ...(spec.alternatives ?? []).flatMap((alt) => [
+          alt.help ?? '',
+          ...alt.steps.map((step) => step.do),
+        ]),
         ...spec.fields.map((field) => field.help ?? ''),
       ];
       for (const text of words) expect(text).not.toMatch(NARROW);

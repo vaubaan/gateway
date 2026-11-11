@@ -9,6 +9,29 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Plugin SDK
+
+- **0.7.1 — alternatives of a pasted key** (ADR plugin-contract-and-credential-spec,
+  amendment 2026-11-11). `ApiKeyCredentialSpec.alternatives?: CredentialAlternative[]`
+  (2 to 4 `{ id, label, help?, fields, steps }`): the connect page asks the person to
+  choose one, shows its steps before the guide's own, and keeps only the shared fields
+  and the chosen alternative's; `definePlugin` checks ids, labels, steps, that each
+  field belongs to one alternative at most and that each alternative asks a secret.
+  `guideText(guide, alternatives?)` reads the alternatives' steps too. An optional
+  member: a patch.
+
+### Added
+
+- **Vercel: a token scoped to one project** (plugin 4.2.0; ADR
+  one-place-to-authorize-services-token-first, amendment 2026-11-11, reversing the
+  2026-10-31 refusal). The connect form offers "Team" (token + Team ID) or "One
+  project" (token + Project ID). A project account is checked against
+  `GET /v9/projects/{id}`, named after the project, discovers that project alone,
+  sends the REST API no team and refuses every `teamId` argument and every other
+  project. Team accounts are unchanged and need no reconnection; a team token
+  refused the team now says it may be scoped to one project, and an unknown Team ID
+  says so instead of blaming the scope.
+
 ## [2.0.0-alpha.18] - 2026-11-11
 
 ### Plugin SDK

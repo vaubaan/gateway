@@ -7,7 +7,9 @@ import {
   parseEnvLabel,
   parseListValue,
   readCredentialFields,
+  readCredentialForm,
   resolveReturnTo,
+  type FormFields,
 } from './input';
 import { API_KEY_SPEC, PUBLIC_URL } from '../../../tests/support/connections/testing';
 
@@ -39,7 +41,7 @@ describe('readCredentialFields', () => {
 describe('echoOfForm — what a refused form is drawn with again', () => {
   it('keeps the name and the non-secret values, and never a secret', () => {
     const echo = echoOfForm(
-      API_KEY_SPEC.fields,
+      API_KEY_SPEC,
       { token: 'tok-SECRET-VALUE', team_id: 'not-a-team', note: '  for the audit  ' },
       '  Acme   sandbox ',
     );
@@ -53,11 +55,79 @@ describe('echoOfForm — what a refused form is drawn with again', () => {
   });
 
   it('says which field is missing, and keeps nothing of a field left blank', () => {
-    expect(echoOfForm(API_KEY_SPEC.fields, { team_id: 'team_abc' }, null)).toEqual({
+    expect(echoOfForm(API_KEY_SPEC, { team_id: 'team_abc' }, null)).toEqual({
       name: '',
       values: { team_id: 'team_abc' },
       invalid: { token: 'required' },
     });
+  });
+});
+
+describe('readCredentialForm — a key with alternatives (a team or one project)', () => {
+  const FORM: FormFields = {
+    fields: [
+      { name: 'token', label: 'Access token', secret: true },
+      { name: 'team_id', label: 'Team ID', secret: false, pattern: '^team_[a-z]+$' },
+      { name: 'project_id', label: 'Project ID', secret: false },
+    ],
+    alternatives: [
+      { id: 'team', label: 'Team', fields: ['team_id'], steps: [{ do: 'a' }] },
+      { id: 'project', label: 'One project', fields: ['project_id'], steps: [{ do: 'b' }] },
+    ],
+  };
+
+  it('reads the shared fields and the chosen one, and drops the others', () => {
+    const read = readCredentialForm(
+      FORM,
+      { token: 'tok', team_id: 'team_abc', project_id: 'prj_1' },
+      'project',
+    );
+    expect(read.problems).toEqual([]);
+    expect(read.alternative).toBe('project');
+    expect(read.values).toEqual({ token: 'tok', project_id: 'prj_1' });
+    expect(read.visible).toEqual({ project_id: 'prj_1' });
+  });
+
+  it("requires the chosen alternative's fields, not the other's", () => {
+    const read = readCredentialForm(FORM, { token: 'tok', team_id: 'team_abc' }, 'project');
+    expect(read.problems).toEqual(['Project ID is required']);
+    expect(read.invalid).toEqual({ project_id: 'required' });
+  });
+
+  it('without a choice, takes the only alternative whose fields hold a value', () => {
+    const read = readCredentialForm(FORM, { token: 'tok', team_id: 'team_abc' }, null);
+    expect(read.problems).toEqual([]);
+    expect(read.alternative).toBe('team');
+    expect(read.values).toEqual({ token: 'tok', team_id: 'team_abc' });
+  });
+
+  it('refuses no choice with no field, the fields of both, or an unknown choice', () => {
+    expect(readCredentialForm(FORM, { token: 'tok' }, '').problems).toEqual([
+      'choose Team or One project',
+    ]);
+    expect(
+      readCredentialForm(FORM, { token: 'tok', team_id: 'team_a', project_id: 'prj_1' }, null)
+        .problems,
+    ).toEqual(['choose Team or One project, not both: fill the fields of one']);
+    expect(readCredentialForm(FORM, { token: 'tok', team_id: 'team_a' }, 'org').problems).toEqual([
+      'choose Team or One project',
+    ]);
+  });
+
+  it('a refused form comes back with its choice, never the secret', () => {
+    const echo = echoOfForm(FORM, { token: 'tok-SECRET', project_id: '' }, 'x', 'project');
+    expect(echo).toEqual({
+      name: 'x',
+      values: {},
+      invalid: { project_id: 'required' },
+      alternative: 'project',
+    });
+  });
+
+  it('a spec without alternatives reads every field, as before', () => {
+    const read = readCredentialForm(API_KEY_SPEC, { token: 'tok', team_id: 'team_abc' }, 'team');
+    expect(read.alternative).toBeNull();
+    expect(read.values).toEqual({ token: 'tok', team_id: 'team_abc' });
   });
 });
 

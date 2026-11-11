@@ -21,7 +21,9 @@ import { UNBOUND_TOOLS } from '../../src/classify.ts';
 import { TEAMLESS_UPSTREAM_TOOLS } from '../../src/execute.ts';
 import { vercelPlugin, VERCEL_API_BASE } from '../../src/index.ts';
 import { isCustomTool } from '../../src/tools.ts';
-import { ctx, forwardedArgs, isMcpCall, mcpRoute, TEAM } from './fixtures.ts';
+import type { ExecuteContext, Resource } from '@vaubaan/plugin-sdk';
+
+import { app, ctx, forwardedArgs, isMcpCall, mcpRoute, site, TEAM } from './fixtures.ts';
 
 /** One valid call per declared tool, without `teamId`. */
 const SAMPLES: Readonly<Record<string, Record<string, unknown>>> = {
@@ -209,5 +211,94 @@ describe('team pin — the tools that cannot carry a team are reviewed one by on
     expect(fetch.calls.map((c) => c.url)).toEqual([
       `${VERCEL_API_BASE}/v10/projects/prj_abc/env?teamId=${TEAM}`,
     ]);
+  });
+});
+
+/**
+ * A token scoped to one project (`project_id`, ADR
+ * one-place-to-authorize-services-token-first, amendment 2026-11-11) : the
+ * REST API is sent no team (Vercel infers it from the token), the rewrapped
+ * tools — whose upstream schema requires one — the project's own team as
+ * discovery read it, every `teamId` argument is refused, and so is another
+ * project.
+ */
+describe('project pin — a connection scoped to one project', () => {
+  const owned: Resource = { ...app, metadata: { team_id: TEAM } };
+  const projectCtx = (
+    fetch: typeof globalThis.fetch,
+    resources: readonly Resource[] = [owned],
+  ): ExecuteContext => ({
+    credential: {
+      kind: 'api-key',
+      fields: { token: 'vcp_secret', project_id: 'prj_abc' },
+      metadata: {},
+    },
+    fetch,
+    resources,
+  });
+
+  test.each(TOOLS)(
+    '%s names no team to the REST API, the project team to the MCP server',
+    async (tool) => {
+      const fetch = vercel();
+      await vercelPlugin.execute(projectCtx(fetch), tool, SAMPLES[tool]!);
+      if (UNBOUND_TOOLS.has(tool)) {
+        expect(fetch.calls).toHaveLength(0);
+        return;
+      }
+      expect(fetch.calls.length, `${tool} made no call`).toBeGreaterThan(0);
+      for (const call of fetch.calls) {
+        expect(call.headers.authorization, tool).toBe('Bearer vcp_secret');
+        const expected = isMcpCall(call) && !(tool in TEAMLESS_UPSTREAM_TOOLS) ? TEAM : null;
+        expect(teamOf(call), `${tool} → ${call.method} ${call.url}`).toBe(expected);
+      }
+    },
+  );
+
+  test.each(TOOLS)('%s refuses every teamId argument, the right team included', async (tool) => {
+    for (const teamId of [TEAM, 'team_other', '']) {
+      const fetch = vercel();
+      const result = await vercelPlugin.execute(projectCtx(fetch), tool, {
+        ...SAMPLES[tool]!,
+        teamId,
+      });
+      expect(result.isError, `${tool} teamId=${teamId}`).toBe(true);
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+
+  test('another project, even one the mission holds, is refused before any call', async () => {
+    const fetch = vercel();
+    const result = await vercelPlugin.execute(
+      projectCtx(fetch, [owned, site]),
+      'vercel__list_env_vars',
+      { projectId: 'prj_site' },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      'not the project this connection is scoped to',
+    );
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('a deployment is looked up without teamId, and bound to the project', async () => {
+    const fetch = vercel();
+    await vercelPlugin.execute(projectCtx(fetch), 'vercel__get_deployment', { idOrUrl: 'dpl_1' });
+    expect(fetch.calls.map((c) => c.url)).toEqual([
+      `${VERCEL_API_BASE}/v13/deployments/dpl_1`,
+      'https://mcp.vercel.com/',
+    ]);
+    expect(forwardedArgs(fetch.calls[1]!)).toEqual({ idOrUrl: 'dpl_1', teamId: TEAM });
+  });
+
+  test('without the team discovery read, a rewrapped tool is refused; REST still runs', async () => {
+    const bare = vercel();
+    const refused = await vercelPlugin.execute(projectCtx(bare, [app]), 'vercel__get_project', {});
+    expect(refused.isError).toBe(true);
+    expect(bare.calls).toHaveLength(0);
+
+    const rest = vercel();
+    await vercelPlugin.execute(projectCtx(rest, [app]), 'vercel__list_env_vars', {});
+    expect(rest.calls.map((c) => c.url)).toEqual([`${VERCEL_API_BASE}/v10/projects/prj_abc/env`]);
   });
 });

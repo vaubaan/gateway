@@ -150,3 +150,72 @@ describe('the token guide of an api-key credential', () => {
     ]);
   });
 });
+
+describe('the alternatives of an api-key credential', () => {
+  const SPLIT: ApiKeyCredentialSpec = {
+    ...TOKEN,
+    fields: [
+      { name: 'token', label: 'Token', secret: true },
+      { name: 'workspace_id', label: 'Workspace ID', secret: false },
+      { name: 'project_id', label: 'Project ID', secret: false },
+    ],
+    alternatives: [
+      {
+        id: 'workspace',
+        label: 'Workspace',
+        fields: ['workspace_id'],
+        steps: [{ do: 'Copy the workspace ID.' }],
+      },
+      {
+        id: 'project',
+        label: 'One project',
+        help: 'For a token scoped to one project.',
+        fields: ['project_id'],
+        steps: [{ do: 'Copy the project ID.' }],
+      },
+    ],
+  };
+  const [WORKSPACE, PROJECT] = SPLIT.alternatives!;
+
+  function withAlternatives(alternatives: unknown): ProviderPlugin {
+    return withCredential({ ...SPLIT, alternatives } as ApiKeyCredentialSpec);
+  }
+
+  test('well-formed alternatives pass', () => {
+    expect(pluginIssues(withCredential(SPLIT))).toEqual([]);
+  });
+
+  test('a choice has two to four alternatives', () => {
+    expect(pluginIssues(withAlternatives([WORKSPACE]))).toContain(
+      'credential.alternatives: expected 2 to 4 alternatives',
+    );
+  });
+
+  test('each has a unique slug, a label, steps, and fields of its own the spec declares', () => {
+    const issues = pluginIssues(
+      withAlternatives([
+        WORKSPACE,
+        { ...PROJECT, id: 'workspace', label: '', steps: [], fields: ['workspace_id', 'nope'] },
+      ]),
+    );
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        "credential.alternatives[1].id: 'workspace' is already the id of another alternative",
+        'credential.alternatives[1].label: expected a few words',
+        'credential.alternatives[1].steps: expected at least one step',
+        "credential.alternatives[1].fields: 'workspace_id' already belongs to another alternative",
+        "credential.alternatives[1].fields: 'nope' is not a field of this spec",
+      ]),
+    );
+    expect(pluginIssues(withAlternatives([WORKSPACE, { ...PROJECT, id: 'Project X' }]))).toContain(
+      "credential.alternatives[1].id: expected a lowercase slug such as 'team'",
+    );
+  });
+
+  test('every alternative asks for a secret, shared or its own', () => {
+    const issues = pluginIssues(
+      withAlternatives([{ ...WORKSPACE, fields: ['workspace_id', 'token'] }, PROJECT]),
+    );
+    expect(issues).toContain('credential.alternatives[1]: asks for no secret field');
+  });
+});

@@ -28,6 +28,7 @@ import {
   type ApiKeyCredentialSpec,
   type ConnectionContext,
   type CredentialCheck,
+  type CredentialAlternative,
   type CredentialField,
   type CredentialSecret,
   type GuideStep,
@@ -76,9 +77,10 @@ import {
   editableMetadataKeys,
   parseEnvLabel,
   parseListValue,
-  readCredentialFields,
+  readCredentialForm,
   resolveReturnTo,
   type FieldValues,
+  type FormFields,
 } from './input';
 import {
   buildAuthorizationUrl,
@@ -194,6 +196,8 @@ export interface ConnectableProvider {
   readonly brokerAttested: boolean | null;
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
+  /** The shapes the key comes in, one chosen at connect (`api-key`); empty when it has one. */
+  readonly alternatives: readonly CredentialAlternative[];
   /** Where the user creates the key (`api-key`). */
   readonly createUrl: string | null;
   /** What the person creates, in the service's words (`api-key`): "fine-grained personal access token". */
@@ -309,6 +313,11 @@ export interface StartInput {
   readonly reconnectId?: string | null;
   /** Form values for `api-key` / `ssh-key`. */
   readonly fields?: Readonly<Record<string, string>>;
+  /**
+   * The `CredentialAlternative` the person chose (the form's radio); absent,
+   * the one whose own fields hold a value (`chooseAlternative`).
+   */
+  readonly alternative?: string | null;
 }
 
 export interface Connected {
@@ -508,6 +517,7 @@ export class ConnectionService {
           ? (this.deps.brokers.forProvider(spec.broker.provider)?.attested ?? null)
           : null,
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
+      alternatives: spec.kind === 'api-key' ? (spec.alternatives ?? []) : [],
       createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
       label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
       guide: guide
@@ -684,7 +694,7 @@ export class ConnectionService {
     input: StartInput,
     extra: Readonly<Record<string, unknown>>,
   ): Promise<Connected> {
-    const read = this.readFormOrThrow(spec.fields, input);
+    const read = this.readFormOrThrow(spec, input);
     const secret: CredentialSecret = {
       kind: 'api-key',
       fields: read.values,
@@ -748,7 +758,7 @@ export class ConnectionService {
     if (spec.kind !== 'ssh-key') {
       throw new ConnectError('invalid-input', `${plugin.displayName} takes no ssh key`);
     }
-    const read = this.readFormOrThrow(spec.fields, { fields: input.fields });
+    const read = this.readFormOrThrow({ fields: spec.fields }, { fields: input.fields });
     const secret: CredentialSecret = {
       kind: 'ssh-key',
       privateKeyPem: input.keyPair.privateKeyPem,
@@ -831,7 +841,7 @@ export class ConnectionService {
     spec: SshKeyCredentialSpec,
     input: StartInput,
   ): Promise<StartResult> {
-    const read = this.readFormOrThrow(spec.fields, input);
+    const read = this.readFormOrThrow({ fields: spec.fields }, input);
     const pair = generateEd25519KeyPair(SSH_KEY_COMMENT);
     const secret: CredentialSecret = {
       kind: 'ssh-key',
@@ -870,9 +880,13 @@ export class ConnectionService {
     };
   }
 
-  /** The form values of an `api-key` / `ssh-key` connect, or `invalid-input` naming each problem. */
-  private readFormOrThrow(fields: readonly CredentialField[], input: StartInput): FieldValues {
-    const read = readCredentialFields(fields, input.fields ?? {});
+  /**
+   * The form values of an `api-key` / `ssh-key` connect, read under the
+   * alternative chosen (only its fields and the shared ones are kept), or
+   * `invalid-input` naming each problem.
+   */
+  private readFormOrThrow(form: FormFields, input: StartInput): FieldValues {
+    const read = readCredentialForm(form, input.fields ?? {}, input.alternative);
     if (read.problems.length > 0) throw new ConnectError('invalid-input', read.problems.join('; '));
     return read;
   }

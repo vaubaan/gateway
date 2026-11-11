@@ -7,13 +7,16 @@
  * form. Nothing about a service is written here; the frame's words are
  * `TOKEN_CONNECT`.
  */
-import { Callout, CodeBlock, FormStep, Hint, Row, Rows } from '@/components/ui';
+import type { CredentialAlternative, GuideStep } from '@vaubaan/plugin-sdk';
+
+import { Callout, CodeBlock, FormStep, Hint, Radio, Row, Rows } from '@/components/ui';
 import { listed, TOKEN_CONNECT } from '@/lib/vocabulary';
-import type {
-  ConnectableProvider,
-  TokenGuideView,
-  TokenPermissionView,
-  ToolLabel,
+import {
+  ALTERNATIVE_FIELD,
+  type ConnectableProvider,
+  type TokenGuideView,
+  type TokenPermissionView,
+  type ToolLabel,
 } from '@/server/connections';
 
 import styles from './TokenGuide.module.css';
@@ -53,11 +56,31 @@ export function expiryWords(service: string, expiry: TokenGuideView['expiry']): 
   }
 }
 
-function Steps({ steps }: { steps: TokenGuideView['steps'] }) {
+/** A step, and the alternative whose panel it belongs to (`-1`: every alternative). */
+interface PanelStep {
+  readonly step: GuideStep;
+  readonly panel: number;
+}
+
+/**
+ * The steps of every alternative, each in its panel, then the guide's own:
+ * one numbered list, the page hiding the panels of the alternatives not chosen.
+ */
+export function panelSteps(
+  alternatives: readonly CredentialAlternative[],
+  steps: readonly GuideStep[],
+): PanelStep[] {
+  return [
+    ...alternatives.flatMap((alt, panel) => alt.steps.map((step) => ({ step, panel }))),
+    ...steps.map((step) => ({ step, panel: -1 })),
+  ];
+}
+
+function Steps({ steps }: { steps: readonly PanelStep[] }) {
   return (
     <ol className={styles.steps}>
-      {steps.map((step) => (
-        <li key={step.do}>
+      {steps.map(({ step, panel }) => (
+        <li key={`${panel}:${step.do}`} data-alternative-panel={panel < 0 ? undefined : panel}>
           {step.do}
           {step.url && (
             <>
@@ -82,13 +105,57 @@ function Steps({ steps }: { steps: TokenGuideView['steps'] }) {
   );
 }
 
-/** Steps 1 and 2 of the connect page for a token way. */
+/**
+ * The radio between the shapes of the key, bound to the connect form by
+ * `formId` (it sits in step 1, the form in the last step).
+ */
+function AlternativeChoice({
+  alternatives,
+  chosen,
+  formId,
+}: {
+  alternatives: readonly CredentialAlternative[];
+  chosen: string | null;
+  formId: string;
+}) {
+  return (
+    <fieldset className={styles.alternatives} data-testid="token-alternatives">
+      <legend className={styles.alternativesLegend}>{TOKEN_CONNECT.alternativesLegend}</legend>
+      {alternatives.map((alt, i) => (
+        <div key={alt.id} className={styles.alternative}>
+          <Radio
+            name={ALTERNATIVE_FIELD}
+            value={alt.id}
+            form={formId}
+            required
+            defaultChecked={alt.id === (chosen ?? alternatives[0]?.id)}
+            data-alternative-choice={i}
+            data-testid={`token-alternative-${alt.id}`}
+          >
+            {alt.label}
+          </Radio>
+          {alt.help && <Hint>{alt.help}</Hint>}
+        </div>
+      ))}
+    </fieldset>
+  );
+}
+
+/**
+ * Steps 1 and 2 of the connect page for a token way. A key with alternatives
+ * starts with the radio (`chosen` is checked, the first one otherwise), bound
+ * to the form `formId`.
+ */
 export function TokenGuide({
   service,
   provider,
+  chosen = null,
+  formId,
 }: {
   service: string;
   provider: ConnectableProvider;
+  chosen?: string | null;
+  formId: string;
 }) {
   const guide = provider.guide;
   if (!guide) return null;
@@ -103,7 +170,10 @@ export function TokenGuide({
         >
           {guide.reach.why}
         </Callout>
-        <Steps steps={guide.steps} />
+        {provider.alternatives.length > 0 && (
+          <AlternativeChoice alternatives={provider.alternatives} chosen={chosen} formId={formId} />
+        )}
+        <Steps steps={panelSteps(provider.alternatives, guide.steps)} />
         {provider.createUrl && (
           <p className={styles.link}>
             <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">

@@ -187,3 +187,20 @@
   flex-direction: column;
   gap: var(--space-8);
 }
+/*
+ * A key with alternatives (a team or one project): the steps and fields of the
+ * alternatives not chosen are hidden. The radio carries its index
+ * (`data-alternative-choice`), each step and field its alternative's
+ * (`data-alternative-panel`); at most four (CREDENTIAL_ALTERNATIVES_MAX).
+ * Without `:has`, every panel shows and the server still reads the chosen one only.
+ */
+.guided:has([data-alternative-choice='0']:checked)
+  [data-alternative-panel]:not([data-alternative-panel='0']),
+.guided:has([data-alternative-choice='1']:checked)
+  [data-alternative-panel]:not([data-alternative-panel='1']),
+.guided:has([data-alternative-choice='2']:checked)
+  [data-alternative-panel]:not([data-alternative-panel='2']),
+.guided:has([data-alternative-choice='3']:checked)
+  [data-alternative-panel]:not([data-alternative-panel='3']) {
+  display: none;
+}

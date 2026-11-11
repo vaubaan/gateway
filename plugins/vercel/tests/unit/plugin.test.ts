@@ -375,7 +375,14 @@ describe('vercel credential spec', () => {
   });
 
   test('vercelAuth narrows the secret and refuses the wrong kind or a missing field', () => {
-    expect(vercelAuth(credential)).toEqual({ token: 'vcp_secret', teamId: 'team_abc' });
+    expect(vercelAuth(credential)).toEqual({
+      mode: 'team',
+      token: 'vcp_secret',
+      teamId: 'team_abc',
+    });
+    expect(
+      vercelAuth({ kind: 'api-key', fields: { token: 'x', project_id: 'prj_a1' }, metadata: {} }),
+    ).toEqual({ mode: 'project', token: 'x', projectId: 'prj_a1' });
     expect(() =>
       vercelAuth({
         kind: 'oauth2',
@@ -387,8 +394,18 @@ describe('vercel credential spec', () => {
       }),
     ).toThrow(CredentialKindMismatch);
     expect(() => vercelAuth({ kind: 'api-key', fields: { token: 'x' }, metadata: {} })).toThrow(
-      /team_id/,
+      /exactly one of 'team_id' and 'project_id'/,
     );
+    expect(() =>
+      vercelAuth({
+        kind: 'api-key',
+        fields: { token: 'x', team_id: 'team_abc', project_id: 'prj_a1' },
+        metadata: {},
+      }),
+    ).toThrow(/exactly one/);
+    expect(() =>
+      vercelAuth({ kind: 'api-key', fields: { token: 'x', project_id: 'app' }, metadata: {} }),
+    ).toThrow(/prj_/);
     expect(() =>
       vercelAuth({ kind: 'api-key', fields: { token: 'x', team_id: 'slug' }, metadata: {} }),
     ).toThrow(/team_/);
@@ -959,6 +976,37 @@ describe('discoverVercelResources with mockFetch', () => {
     await expect(vercelPlugin.discoverResources(ctx(fetch))).rejects.toBeInstanceOf(
       UpstreamProtocolError,
     );
+  });
+
+  test('a token scoped to one project discovers that project alone, without teamId', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_a`,
+        body: { id: 'prj_a', name: 'a', framework: 'nextjs', accountId: 'team_abc' },
+      },
+    ]);
+    const resources = await vercelPlugin.discoverResources({
+      credential: {
+        kind: 'api-key',
+        fields: { token: 'vcp_secret', project_id: 'prj_a' },
+        metadata: {},
+      },
+      fetch,
+    });
+    expect(resources).toEqual([
+      {
+        provider: 'vercel',
+        ref: 'prj_a',
+        displayName: 'a',
+        metadata: {
+          team_id: 'team_abc',
+          framework: 'nextjs',
+          environments: ['prod', 'preview', 'development'],
+        },
+      },
+    ]);
+    expect(fetch.calls).toHaveLength(1);
   });
 
   test('an invalid token surfaces as UpstreamAuthError from the team check', async () => {

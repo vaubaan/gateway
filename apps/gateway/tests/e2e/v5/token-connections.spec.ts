@@ -12,6 +12,9 @@
  *   - Railway: a workspace token, the account token second; the token pasted
  *     is checked at the mocked Railway and the account page names its
  *     workspace.
+ *   - Vercel: a token for a team or for one project, chosen by a radio that
+ *     shows only that alternative's steps and field; a project token is
+ *     checked against that project and the account is named after it.
  *
  * `E2E_V5_PK_SHOTS` names a folder: the connect pages are captured there at
  * 1440×900 and 390 px wide, light and dark (design review).
@@ -22,7 +25,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { RAILWAY_GRAPHQL_URL } from '@vaubaan/plugin-railway';
 
 import { routeToInstance, signInAs, upstreamLog } from './browser';
-import { E2E_USER } from './instance';
+import { E2E_USER, MOCK_VERCEL_PROJECT } from './instance';
 
 test.beforeEach(async ({ context, request }) => {
   await routeToInstance(context);
@@ -160,4 +163,47 @@ test('Railway: a workspace token, checked, named by its workspace', async ({ pag
 
   const log = await upstreamLog(request);
   expect(log.calls.some((c) => c.url === RAILWAY_GRAPHQL_URL)).toBe(true);
+});
+
+test('Vercel: a team or one project, chosen before the steps; a project token named by its project', async ({
+  page,
+  request,
+}) => {
+  await signIn(page);
+  await page.goto('/accounts/new/vercel');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a Vercel account$/);
+  const guide = page.getByTestId('token-guide');
+  const team = page.getByTestId('token-alternative-team');
+  const project = page.getByTestId('token-alternative-project');
+
+  // Team first: its step and field show, the project's do not.
+  await expect(team).toBeChecked();
+  await expect(guide.getByText(/copy the Team ID/)).toBeVisible();
+  await expect(guide.getByText(/copy the Project ID/)).toBeHidden();
+  await expect(page.getByLabel(/Team ID/)).toBeVisible();
+  await expect(page.getByLabel(/Project ID/)).toBeHidden();
+
+  await project.check();
+  await expect(guide.getByText(/copy the Project ID/)).toBeVisible();
+  await expect(guide.getByText(/copy the Team ID/)).toBeHidden();
+  await expect(page.getByLabel(/Team ID/)).toBeHidden();
+  await captureAll(page, 'connect-vercel-project-token');
+  await project.check(); // captureAll reloads the page: choose again
+
+  const token = `vcp_${randomBytes(16).toString('hex')}`;
+  await page.getByLabel(/Access token/).fill(token);
+  await page.getByLabel(/Project ID/).fill(MOCK_VERCEL_PROJECT);
+  await page.getByRole('button', { name: 'Check and connect' }).click();
+
+  await expect(page).toHaveURL(/\/accounts\/[^/]+$/);
+  await page.getByRole('button', { name: 'Show details' }).click();
+  await expect(page.getByTestId('account-facts')).toContainText('acts as the site project');
+  expect(await page.content()).not.toContain(token);
+
+  const log = await upstreamLog(request);
+  const projectReads = log.calls.filter((c) =>
+    c.url.includes(`/v9/projects/${MOCK_VERCEL_PROJECT}`),
+  );
+  expect(projectReads.length).toBeGreaterThan(0);
+  expect(projectReads.every((c) => !c.url.includes('teamId='))).toBe(true);
 });

@@ -3,7 +3,7 @@ title: Vercel provider plugin
 tracks:
   - plugins/vercel/src/
   - plugins/vercel/README.md
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-11
 ---
 
 # Vercel provider plugin — handbook
@@ -16,7 +16,10 @@ Resource: the project; the environment is a slice segment, not a resource label.
 
 - [`src/classify.ts`](../../../plugins/vercel/src/classify.ts) — `resolveProject`, the id grammars,
   `readDeploymentTargets`, `vercelEnvOf`, `UNBOUND_TOOLS`.
-- [`src/execute.ts`](../../../plugins/vercel/src/execute.ts) — `pinArgs`, `bindDeployments`.
+- [`src/credential.ts`](../../../plugins/vercel/src/credential.ts) — `vercelAuth` (the mode from
+  the field there), `verifyVercelToken`, the two alternatives.
+- [`src/execute.ts`](../../../plugins/vercel/src/execute.ts) — `pinArgs`, `projectTeam`,
+  `bindDeployments`, `discoverOneProject`.
 - [`src/redact.ts`](../../../plugins/vercel/src/redact.ts) and
   [`src/project-redact.ts`](../../../plugins/vercel/src/project-redact.ts) — redaction of metadata
   reads.
@@ -34,8 +37,19 @@ Resource: the project; the environment is a slice segment, not a resource label.
   emit `env[*]` (`get_runtime_logs` names it when its `environment` filter does). No env-scoped risk
   matches those slices, so their `NO_SINGLE_ENV` changes no decision: keep it so (a test checks every
   sample); the catalog's `project[**]` patterns match with or without the `env` segment.
+- **Two modes, read from the field the host kept** (`vercelAuth`; the form's choice is not stored):
+  `team_id` → team mode, every connection made before 2026-11-11 included, no migration;
+  `project_id` → project mode. Both or neither is a host bug (plain `Error`).
 - **The team is pinned to the credential**: a `teamId` argument other than the credential's is
-  refused on every tool; the sent value always comes from the credential. Rewrapped tools that
+  refused on every tool; the sent value always comes from the credential.
+- **Project mode** ([ADR amendment 2026-11-11](../../decisions/one-place-to-authorize-services-token-first.md)):
+  every `teamId` argument is refused, the right one included; REST requests carry no `teamId`
+  (Vercel infers team and project from the token); a resolved project other than `project_id` is
+  refused, so a mission holding two projects cannot reach the second through this account.
+  The rewrapped tools' frozen schemas require `teamId`, so they get the project's team as discovery
+  read it (`accountId` → the resource's `team_id`); without it they are refused ("refresh the
+  resources"), REST tools still run. A deployment lookup skips the `ownerId` check (no team to
+  compare) and keeps the `projectId` one. Rewrapped tools that
   cannot carry it (`TEAMLESS_UPSTREAM_TOOLS`) are forwarded only when they read no team data or
   after their deployment is resolved under the pinned team; any other teamless tool is refused
   (`tests/unit/team-pin.test.ts` checks the list against the schemas).
@@ -77,15 +91,24 @@ Resource: the project; the environment is a slice segment, not a resource label.
 
 ## Outside the repo
 
-- An API token (Scope: the team, All Projects) plus its `team_id` (`team_…`). Checked at paste:
-  `GET /v5/user/tokens/current` gives the expiry, `GET /v2/teams/{id}` names the team; a
-  project-scoped token or a wrong Team ID (403/404 there) is refused at paste.
+- An API token, two alternatives on the connect form. **Team**: Scope = the team, All Projects,
+  plus its `team_id` (`team_…`); checked by `GET /v5/user/tokens/current` (expiry) and
+  `GET /v2/teams/{id}` (name): 403 → "does not cover the whole team (it may be scoped to one
+  project)", 404 → "no team with the ID". **One project**: Scope = the team, then the project, plus
+  its `project_id` (`prj_…`, Project Settings → General); checked by `GET /v9/projects/{id}` without
+  `teamId`, account = the project name; 403/404 → "does not open the project". Discovery then
+  returns that project alone.
 
 ## Debug
 
 - `deployment '…' does not belong to vercel project '…'` → pass the right `projectId`;
   `could not be verified` → another team, deleted, or a custom domain: use the deployment id or its
   `*.vercel.app` URL.
-- `teamId is fixed by the connection` → omit `teamId`.
+- `teamId is fixed by the connection` / `scoped to the vercel project … infers its team` → omit
+  `teamId`.
+- `not the project this connection is scoped to` → a project-mode account reaches its one project;
+  use a team account for the other.
+- `the team of vercel project … is not known` → a project-mode resource discovered without
+  `accountId`: refresh the account's resources.
 - `get_firewall_config` or `deploy_to_vercel` refused on a mission without `watch`, or without
   `vercel[prod].deploy` → by design: the mission holds no such line.

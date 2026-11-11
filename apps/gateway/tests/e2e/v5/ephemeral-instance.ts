@@ -49,6 +49,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { RAILWAY_GRAPHQL_URL } from '@vaubaan/plugin-railway';
+import { VERCEL_API_BASE } from '@vaubaan/plugin-vercel';
 import { SUPABASE_API_BASE } from '@vaubaan/plugin-supabase';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
@@ -75,6 +76,7 @@ import {
   IDP_ISSUER,
   instancePort,
   MOCK_GITHUB,
+  MOCK_VERCEL_PROJECT,
   PUBLIC_URL,
 } from './instance';
 import { saveTestOidcProvider } from '../../support/auth/testing';
@@ -233,6 +235,18 @@ function mockedGithub(): MockFetch {
       method: 'POST',
       url: RAILWAY_GRAPHQL_URL,
       respond: (call) => railwayAnswerFor((call.json as { query?: string }).query ?? ''),
+    },
+    // Vercel, for the account connected with a token scoped to one project:
+    // the token's expiry, then the project, read without a team (check and discovery).
+    {
+      method: 'GET',
+      url: `${VERCEL_API_BASE}/v5/user/tokens/current`,
+      body: { token: { id: 'tk_e2e', name: 'gateway' } },
+    },
+    {
+      method: 'GET',
+      url: `${VERCEL_API_BASE}/v9/projects/${MOCK_VERCEL_PROJECT}`,
+      body: { id: MOCK_VERCEL_PROJECT, name: 'site', framework: 'nextjs', accountId: 'team_e2e' },
     },
     // Supabase, for the account connected with a pasted personal access token
     // (no Supabase app is registered here): the token's check and discovery.

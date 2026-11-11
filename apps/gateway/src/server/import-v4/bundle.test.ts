@@ -5,6 +5,7 @@ import stripePlugin from '@vaubaan/plugin-stripe';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
 
+import { readCredentialForm } from '../connections/input';
 import { parseBundle, secretsOf } from './bundle';
 import type { Store } from '../store';
 import { createImportMarker, parseArgs } from './cli';
@@ -98,7 +99,12 @@ describe('credential mapping holds to the plugins’ forms', () => {
     const vercel = pastedKeyFields(bundle.accounts[2]!);
     if (!cloudflare.ok || !vercel.ok) throw new Error('mapped');
     expect(Object.keys(cloudflare.fields)).toEqual(fieldNames(cloudflareDnsPlugin, 'api-key'));
-    expect(Object.keys(vercel.fields)).toEqual(fieldNames(vercelPlugin, 'api-key'));
+    // Vercel's form has two alternatives: a v4 key (a team id) reads as the Team one.
+    if (vercelPlugin.credential.kind !== 'api-key') throw new Error('api-key');
+    const read = readCredentialForm(vercelPlugin.credential, vercel.fields, null);
+    expect(read.problems).toEqual([]);
+    expect(read.alternative).toBe('team');
+    expect(Object.keys(read.values)).toEqual(Object.keys(vercel.fields));
   });
 
   it('Stripe keys and SSH hosts fill theirs', () => {

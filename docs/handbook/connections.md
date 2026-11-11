@@ -9,7 +9,7 @@ tracks:
   - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/components/connections/
   - apps/gateway/tests/integration/connections/
-last_reviewed: 2026-11-04
+last_reviewed: 2026-11-11
 ---
 
 # Connections — handbook
@@ -34,6 +34,7 @@ discovering and curating its resources. Spec:
 
 - **Connect state** (`pending.ts`): 32 random bytes, consumed once whoever presents it, returned only to the session of the user who started it, for that provider only; anything else is `state-invalid`. The redirect URI is built from `public_url`, never the request host; a foreign `return_to` is refused (`return-url-refused`), never defaulted.
 - **A token way is guided entirely by its plugin** (`TokenGuideView` in `service.ts`, rendered by `components/connections/TokenGuide.tsx`): how wide to grant and why, the steps, the token page, the permissions, the expiry kind, the documentation. The page writes nothing about a service; `definePlugin` refuses a token way without its guide or `verify`, and `tests/unit/structural/token-guides.test.ts` holds the shipped ones to it (ADR one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide, narrowed by each mission).
+- **A key in several shapes** (`CredentialAlternative`, Vercel: Team or One project): the radio (`alternative`, in step 1, bound to the form by `form="connect-form"`) and every alternative's steps and fields are rendered; `accounts.module.css` hides the panels (`data-alternative-panel`) of the alternatives not chosen with `:has` (at most four), and the browser holds none of their fields required. The server is the rule (`readCredentialForm` in `input.ts`): only the shared fields and the chosen alternative's are read and kept; no choice (the v4 import) → the only alternative whose fields hold a value, else `invalid-input`. The choice is not stored; the plugin reads it back from its fields.
 - **A token is checked before it is stored**: a rejected one stores nothing. A failed first discovery refuses an `api-key` connection, is recorded for `oauth2` (the code is spent), is not attempted for `ssh-key`.
 - **No message in a URL**: outcomes travel as an opaque `?notice=<id>`, readable once, only by the web session it was written for. A refused form is echoed back, **never a `secret` field**.
 - **A provider's error text is never logged or stored** at connect or refresh (it can echo the credential): only its status in the gateway's words. The agent still gets it on a tool call (ADR [provider-error-text-stays-with-the-agent](../decisions/provider-error-text-stays-with-the-agent.md)). A plugin-worded `CredentialRefusal` is kept. **One exception, the connect page**: the `UpstreamAuthError` sentence of `verify` or of the first discovery reaches the person connecting, masked of every value of the credential they pasted (`providerFailureReason(err, secret)`), never a recorded discovery failure.

@@ -153,3 +153,43 @@ hand-pointed links.
 
 Test code in the production build of the site, and a sample's shape fixed by a test helper rather
 than by the contract.
+
+## Amendment 2026-11-11: alternatives of a pasted key
+
+### Context
+
+A service may make the same key in several shapes that need different companion fields (Vercel:
+a token for a team needs the Team ID, a token for one project the Project ID). `CredentialField`
+knew no choice between field groups, and a plugin could only declare every field required, or
+every one optional with no rule binding them.
+
+### Decision
+
+- `ApiKeyCredentialSpec` gains an optional `alternatives: CredentialAlternative[]` (2 to 4), each
+  `{ id, label, help?, fields, steps }`: `fields` names the spec's fields only that alternative
+  asks (each in one alternative at most); a field no alternative names is shared; `steps` are
+  shown before the guide's own. `definePlugin` checks them, and that each alternative asks a
+  secret.
+- The host renders a radio before the guide's steps, hides the other alternatives' steps and
+  fields, and reads only the shared fields and the chosen alternative's; a form without a choice is
+  read under the only alternative whose fields hold a value, otherwise refused. The choice is not
+  stored: the fields are plain fields, and the plugin narrows them by which one is there.
+- An optional member: a patch of the SDK before `1.0.0` (0.7.1).
+
+### Consequences
+
+- No plugin-specific code in the host; a plugin without alternatives is unchanged.
+- A connection made before a plugin added alternatives keeps its fields and keeps working, if the
+  plugin infers the mode from them.
+- The site lists each alternative's steps prefixed by its label.
+
+### Rejected alternatives
+
+#### Two credential specs per plugin
+
+Breaks "one way per plugin": two `verify`, two guides, two connect pages for one key.
+
+#### Optional fields and a check in `verify`
+
+The form could not say which fields go together, and an error would come back only after a call
+to the service.

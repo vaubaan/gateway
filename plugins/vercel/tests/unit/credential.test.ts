@@ -22,14 +22,18 @@ import {
 const CURRENT = `${VERCEL_API_BASE}/v5/user/tokens/current`;
 const TEAM = `${VERCEL_API_BASE}/v2/teams/team_abc`;
 
-const ctx = (fetch: typeof globalThis.fetch): ConnectionContext => ({
-  credential: {
-    kind: 'api-key',
-    fields: { token: 'vcp_secret', team_id: 'team_abc' },
-    metadata: {},
-  },
+const PROJECT = `${VERCEL_API_BASE}/v9/projects/prj_app`;
+
+const ctx = (
+  fetch: typeof globalThis.fetch,
+  fields: Record<string, string> = { token: 'vcp_secret', team_id: 'team_abc' },
+): ConnectionContext => ({
+  credential: { kind: 'api-key', fields, metadata: {} },
   fetch,
 });
+
+const projectCtx = (fetch: typeof globalThis.fetch): ConnectionContext =>
+  ctx(fetch, { token: 'vcp_secret', project_id: 'prj_app' });
 
 const current = (token: Record<string, unknown>): MockRoute => ({
   method: 'GET',
@@ -38,12 +42,27 @@ const current = (token: Record<string, unknown>): MockRoute => ({
 });
 
 describe('vercel token — the guide', () => {
-  test('the token page, the team with All Projects, the Team ID read first', () => {
+  const [team, project] = vercelCredential.alternatives!;
+
+  test('two alternatives: a team with All Projects, or one project', () => {
     expect(vercelCredential.createUrl).toBe(VERCEL_TOKENS_URL);
-    const text = guideText(vercelCredential.guide);
-    expect(text.indexOf('Team ID')).toBeLessThan(text.indexOf('Account Settings, Tokens'));
-    expect(vercelCredential.guide.reach.grant).toBe('The team, All Projects');
+    expect(vercelCredential.alternatives!.map((a) => [a.id, a.label, a.fields])).toEqual([
+      ['team', 'Team', ['team_id']],
+      ['project', 'One project', ['project_id']],
+    ]);
+    expect(vercelCredential.guide.reach.grant).toBe('The team with All Projects, or one project');
     expect(vercelCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
+  });
+
+  test('each alternative reads its ID first, then scopes the token', () => {
+    const teamText = guideText({ ...vercelCredential.guide, steps: [] }, [team!]);
+    expect(teamText.indexOf('Team ID')).toBeLessThan(teamText.indexOf('Account Settings, Tokens'));
+    expect(teamText).toMatch(/choose the team, then All Projects/);
+    const projectText = guideText({ ...vercelCredential.guide, steps: [] }, [project!]);
+    expect(projectText.indexOf('Project ID')).toBeLessThan(
+      projectText.indexOf('Account Settings, Tokens'),
+    );
+    expect(projectText).toMatch(/then the project/);
   });
 });
 
@@ -68,13 +87,43 @@ describe('vercel token — verify at paste', () => {
     });
   });
 
+  test('a token refused the team (403) may be scoped to one project: says to choose One project', async () => {
+    const fetch = mockFetch([current({}), { method: 'GET', url: TEAM, status: 403, body: {} }]);
+    const check = verifyVercelToken(ctx(fetch));
+    await expect(check).rejects.toBeInstanceOf(CredentialRefusal);
+    await expect(check).rejects.toThrow(
+      'Vercel: this token does not cover the whole team team_abc (it may be scoped to one project): choose One project, or recreate it with the team and All Projects.',
+    );
+  });
+
+  test('a Team ID Vercel does not know (404) is refused as such', async () => {
+    const fetch = mockFetch([current({}), { method: 'GET', url: TEAM, status: 404, body: {} }]);
+    const check = verifyVercelToken(ctx(fetch));
+    await expect(check).rejects.toBeInstanceOf(CredentialRefusal);
+    await expect(check).rejects.toThrow(/no team with the ID team_abc/);
+  });
+
+  test('a project token: names the project, read without teamId, and reads the expiry', async () => {
+    const fetch = mockFetch([
+      current({ expiresAt: Date.UTC(2027, 0, 31) }),
+      { method: 'GET', url: PROJECT, body: { id: 'prj_app', name: 'site', accountId: 'team_abc' } },
+    ]);
+    expect(await verifyVercelToken(projectCtx(fetch))).toEqual({
+      account: 'the site project',
+      expiresAt: '2027-01-31T00:00:00.000Z',
+    });
+    expect(fetch.calls.map((c) => c.url)).toEqual([CURRENT, PROJECT]);
+  });
+
   test.each([403, 404])(
-    'a token that cannot open the team (HTTP %i) is refused with the scope to choose',
+    'a project the token does not open (HTTP %i) is refused with the scope to choose',
     async (status) => {
-      const fetch = mockFetch([current({}), { method: 'GET', url: TEAM, status, body: {} }]);
-      const check = verifyVercelToken(ctx(fetch));
+      const fetch = mockFetch([current({}), { method: 'GET', url: PROJECT, status, body: {} }]);
+      const check = verifyVercelToken(projectCtx(fetch));
       await expect(check).rejects.toBeInstanceOf(CredentialRefusal);
-      await expect(check).rejects.toThrow(/cannot open the team team_abc.*All Projects/);
+      await expect(check).rejects.toThrow(
+        /does not open the project prj_app.*the team that owns it, then that project/,
+      );
     },
   );
 
