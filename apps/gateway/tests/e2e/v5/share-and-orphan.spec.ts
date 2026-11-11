@@ -390,6 +390,18 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // A disconnected account takes no owner act any more.
   await expect(ines.getByRole('link', { name: 'Give access', exact: true })).toHaveCount(0);
   await expect(ines.getByRole('link', { name: 'Reconnect' })).toHaveCount(0);
+  // The list of accounts keeps it, out of the way: under the table, closed, one click from sight.
+  await ines.goto('/accounts');
+  await expect(
+    ines.getByText('None of your accounts is connected.', { exact: false }),
+  ).toBeVisible();
+  const listed = ines.getByRole('link', { name: connectionName, exact: true });
+  await expect(listed).toHaveCount(0);
+  const disconnectedList = ines.getByTestId('accounts-disconnected');
+  await disconnectedList
+    .getByRole('button', { name: /^Show the \d+ disconnected accounts?$/ })
+    .click();
+  await expect(listed).toBeVisible();
 });
 
 test('transfer to a group; the group empties; the operator reassigns the connection', async ({

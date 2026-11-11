@@ -8,6 +8,10 @@
  * accounts can my missions use, and how far". For an administrator, the
  * accounts whose owners all left are the last region, when there are any
  * (docs/handbook/web-app.md).
+ *
+ * A disconnected account is never deleted: the activity and the missions that
+ * ran on it still name it. It leaves the table of yours for a closed list
+ * under it, one click away.
  */
 import Link from 'next/link';
 
@@ -20,6 +24,7 @@ import { ServicePicker } from '@/components/connections/ServicePicker';
 import {
   ButtonLink,
   DataTable,
+  Disclosure,
   EmptyState,
   Hint,
   PageHeader,
@@ -96,7 +101,9 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
     principal.isOperator ? root.connections.service.listOwnerless() : [],
     principal.isOperator ? root.connections.service.reassignTargets() : [],
   ]);
-  const yours = await Promise.all(owned.map((view) => ownedRow(root, actor, view)));
+  const rows = await Promise.all(owned.map((view) => ownedRow(root, actor, view)));
+  const yours = rows.filter((row) => row.view.connection.status !== 'revoked');
+  const disconnected = rows.filter((row) => row.view.connection.status === 'revoked');
   const totals = new Map(
     providerCards(root.registry).map((card) => [card.id, card.counts.risk_ids] as const),
   );
@@ -176,6 +183,18 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
     },
   ];
 
+  // A disconnected account reaches nothing and runs nothing: its name and when it ended.
+  const disconnectedColumns: readonly Column<OwnedRow>[] = [
+    yourColumns[0]!,
+    {
+      id: 'checked',
+      header: ACCOUNT_WORDS.status,
+      align: 'right',
+      nowrap: true,
+      cell: (row) => <AccountState status={row.view.connection.status} />,
+    },
+  ];
+
   const sharedColumns: readonly Column<SharedRow>[] = [
     {
       id: 'account',
@@ -249,7 +268,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
       />
       <NoticeBanner notice={notice} />
 
-      {yours.length === 0 && shared.length === 0 ? (
+      {rows.length === 0 && shared.length === 0 ? (
         <EmptyState title={ACCOUNT_PAGES.empty} testId="accounts-empty" />
       ) : (
         <Section
@@ -264,10 +283,31 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
             columns={yourColumns}
             rows={yours}
             rowKey={(row) => row.view.connection.id}
-            rowTone={(row) => (row.view.connection.status === 'revoked' ? 'quiet' : undefined)}
-            empty={<Hint>You own no account yet. Connect one below.</Hint>}
+            empty={
+              <Hint>
+                {disconnected.length === 0
+                  ? 'You own no account yet. Connect one below.'
+                  : 'None of your accounts is connected. Connect one below.'}
+              </Hint>
+            }
             testId="accounts-yours"
           />
+          {disconnected.length > 0 && (
+            <Disclosure
+              id="accounts:disconnected"
+              show={`Show the ${count(disconnected.length, TERMS.disconnectedAccount)}`}
+              hide="Hide the disconnected ones"
+              testId="accounts-disconnected"
+            >
+              <DataTable
+                caption="Your disconnected accounts"
+                columns={disconnectedColumns}
+                rows={disconnected}
+                rowKey={(row) => row.view.connection.id}
+                rowTone={() => 'quiet'}
+              />
+            </Disclosure>
+          )}
         </Section>
       )}
 
