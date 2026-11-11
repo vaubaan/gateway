@@ -27,6 +27,13 @@
  *     argument that is not exactly that value (another string, a non-string)
  *     is refused before any network call, and the value sent upstream is
  *     always written from the credential, on both surfaces ;
+ *   - a connection scoped to one project (`project_id`, ADR
+ *     one-place-to-authorize-services-token-first, amendment 2026-11-11)
+ *     refuses every `teamId` argument and names no team to the REST API
+ *     (Vercel infers it from the token) ; the rewrapped tools, whose upstream
+ *     schema requires a `teamId`, get the project's own team as discovery
+ *     read it (`accountId`, the resource's `team_id`) ; a call naming another
+ *     project is refused, and discovery returns that project alone ;
  *   - the project is the one the classifier resolved (`resolveProject`, the
  *     same function) : the argument is overwritten with it, never forwarded
  *     as received ;
@@ -72,7 +79,7 @@ import {
   undeclaredArgument,
   VERCEL_ENVS,
 } from './classify.ts';
-import { vercelAuth } from './credential.ts';
+import { vercelAuth, type VercelAuth } from './credential.ts';
 import { PROVIDER_ID, TOOL, VERCEL_API_BASE, VERCEL_MCP_SERVER } from './identity.ts';
 import { PROJECT_TOOLS, redactProjectResult } from './project-redact.ts';
 import { redactEncryptedEnvListing } from './redact.ts';
@@ -107,8 +114,17 @@ const HTTP_NOT_FOUND = 404;
 interface VercelCall {
   readonly io: UpstreamIo;
   readonly token: string;
-  /** The connection's team. */
-  readonly teamId: string;
+  /** The connection's team ; `null` for a token scoped to one project (Vercel infers it). */
+  readonly teamId: string | null;
+}
+
+function callOf(io: UpstreamIo, auth: VercelAuth): VercelCall {
+  return { io, token: auth.token, teamId: auth.mode === 'team' ? auth.teamId : null };
+}
+
+/** The `teamId` query a REST request carries : the connection's team, or none for a project token. */
+function teamQuery(call: VercelCall): Record<string, string> {
+  return call.teamId === null ? {} : { teamId: call.teamId };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,10 +136,11 @@ export async function executeVercel(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  const { token, teamId } = vercelAuth(ctx.credential);
-  const call: VercelCall = { io: ctx, token, teamId };
+  const auth = vercelAuth(ctx.credential);
+  const call = callOf(ctx, auth);
+  const { token } = auth;
   return declining(async () => {
-    const pinned = pinArgs(tool, args, teamId, ctx.resources);
+    const pinned = pinArgs(tool, args, auth, ctx.resources);
     const finalArgs = await bindDeployments(call, tool, pinned.args, pinned.projectRef);
     const result = isCustomTool(tool)
       ? jsonResult(await executeCustom(call, tool, finalArgs))
@@ -134,7 +151,9 @@ export async function executeVercel(
 }
 
 /**
- * Resources reachable with this credential : one `Resource` per project of
+ * Resources reachable with this credential : for a token scoped to one
+ * project, that project alone (`GET /v9/projects/{id}`, its `accountId` kept
+ * as `team_id`) ; otherwise one `Resource` per project of
  * the connection's team, paged (`DISCOVERY_PAGE_SIZE` × `DISCOVERY_MAX_PAGES`).
  * The team is read first, which also validates the token. A token scoped to
  * some projects is refused every team-level read (403) : the team's name and
@@ -146,8 +165,10 @@ export async function executeVercel(
 export async function discoverVercelResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const { token, teamId } = vercelAuth(ctx.credential);
-  const call: VercelCall = { io: ctx, token, teamId };
+  const auth = vercelAuth(ctx.credential);
+  const call = callOf(ctx, auth);
+  if (auth.mode === 'project') return [await discoverOneProject(call, auth.projectId)];
+  const { teamId } = auth;
 
   const team = await readTeam(call, teamId);
 
@@ -186,6 +207,29 @@ export async function discoverVercelResources(
       environments: [...VERCEL_ENVS],
     },
   }));
+}
+
+/**
+ * The one project a project-scoped token opens, read without `teamId` (Vercel
+ * infers the team from the token). Its `accountId` is the team the rewrapped
+ * tools are sent (`pinArgs`).
+ */
+async function discoverOneProject(call: VercelCall, projectId: string): Promise<Resource> {
+  const answer = await rest(call, 'GET', `/v9/projects/${projectId}`, {}, isRecord);
+  const team = pathIdent(answer.accountId);
+  if (!isProject(answer) || answer.id !== projectId) {
+    throw new Error(`${PROVIDER_ID}: project ${projectId} did not answer as itself`);
+  }
+  return {
+    provider: PROVIDER_ID,
+    ref: answer.id,
+    displayName: answer.name,
+    metadata: {
+      ...(team !== null ? { team_id: team } : {}),
+      framework: answer.framework ?? null,
+      environments: [...VERCEL_ENVS],
+    },
+  };
 }
 
 /** What discovery keeps of the team ; each field only when Vercel gives it as a string. */
@@ -265,20 +309,30 @@ interface PinnedArgs {
 function pinArgs(
   tool: string,
   args: Readonly<Record<string, unknown>>,
-  teamId: string,
+  auth: VercelAuth,
   resources: readonly Resource[],
 ): PinnedArgs {
   if (UNBOUND_TOOLS.has(tool)) throw new ExecutorRefusal(unboundToolDenial(tool));
   if (!isClassifiedTool(tool) || vercelToolByName(tool) === undefined) {
     throw new ExecutorRefusal(`unknown vercel tool '${tool}'.`);
   }
-  if (args.teamId !== undefined && args.teamId !== teamId) {
+  if (auth.mode === 'project' && args.teamId !== undefined) {
     throw new ExecutorRefusal(
-      `teamId is fixed by the connection ('${teamId}') : the value given is not the team of this connection — omit the argument.`,
+      `teamId : this connection is scoped to the vercel project '${auth.projectId}' and Vercel infers its team — omit the argument.`,
+    );
+  }
+  if (auth.mode === 'team' && args.teamId !== undefined && args.teamId !== auth.teamId) {
+    throw new ExecutorRefusal(
+      `teamId is fixed by the connection ('${auth.teamId}') : the value given is not the team of this connection — omit the argument.`,
     );
   }
   const project = resolveProject(args, resources, !isAccountTool(tool));
   if ('denied' in project) throw new ExecutorRefusal(project.denied);
+  if (auth.mode === 'project' && project.ref !== null && project.ref !== auth.projectId) {
+    throw new ExecutorRefusal(
+      `vercel project '${project.ref}' is not the project this connection is scoped to ('${auth.projectId}').`,
+    );
+  }
   // Everything else is forwarded as given : only what the tool declares may be there.
   const undeclared = undeclaredArgument(tool, args);
   if (undeclared !== null) throw new ExecutorRefusal(undeclared);
@@ -288,7 +342,11 @@ function pinArgs(
     if (key !== 'teamId' && key !== 'projectId') out[key] = value;
   }
   if (toolAcceptsArgument(tool, 'teamId')) {
-    out.teamId = teamId;
+    // A project token names no team to the REST API ; a rewrapped tool's
+    // upstream schema requires one : the project's own.
+    const team =
+      auth.mode === 'team' ? auth.teamId : isCustomTool(tool) ? null : projectTeam(auth, resources);
+    if (team !== null) out.teamId = team;
   } else if (!Object.hasOwn(TEAMLESS_UPSTREAM_TOOLS, tool)) {
     throw new ExecutorRefusal(
       `${tool}: the upstream tool cannot carry the team of this connection and has not been reviewed — refused.`,
@@ -298,6 +356,24 @@ function pinArgs(
     out.projectId = project.ref;
   }
   return { args: out, projectRef: project.ref };
+}
+
+/**
+ * The team of the project a project-scoped token opens, as discovery read it
+ * (`accountId`, kept as the resource's `team_id`) ; never from the arguments.
+ */
+function projectTeam(
+  auth: Extract<VercelAuth, { mode: 'project' }>,
+  resources: readonly Resource[],
+): string {
+  const own = resources.find((r) => r.provider === PROVIDER_ID && r.ref === auth.projectId);
+  const team = pathIdent(own?.metadata?.team_id);
+  if (team === null) {
+    throw new ExecutorRefusal(
+      `the team of vercel project '${auth.projectId}' is not known : refresh the resources of this account, then retry.`,
+    );
+  }
+  return team;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -328,7 +404,7 @@ async function verifiedDeploymentId(
       call,
       'GET',
       `/v13/deployments/${encodeURIComponent(key)}`,
-      { teamId: call.teamId },
+      teamQuery(call),
       anyJson,
     );
   } catch (e) {
@@ -343,7 +419,8 @@ async function verifiedDeploymentId(
   if (!isRecord(body) || typeof body.id !== 'string' || typeof body.projectId !== 'string') {
     throw new ExecutorRefusal(`${unverified} : the lookup did not name its project.`);
   }
-  if (body.ownerId !== undefined && body.ownerId !== call.teamId) {
+  // A project token's team is Vercel's to infer : the project check below binds it.
+  if (call.teamId !== null && body.ownerId !== undefined && body.ownerId !== call.teamId) {
     throw new ExecutorRefusal(`${unverified} : it is owned by another team.`);
   }
   if (body.projectId !== projectRef) {
@@ -469,7 +546,7 @@ async function executeCustom(
   if (project === null) {
     throw new ExecutorRefusal(`Vercel custom tool ${tool}: projectId is required.`);
   }
-  const query: Record<string, string> = { teamId: call.teamId };
+  const query = teamQuery(call);
 
   if (tool === TOOL.updateProjectSettings) {
     const body = pickDefined(args, PROJECT_SETTINGS_FIELDS);

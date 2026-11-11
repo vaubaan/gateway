@@ -1615,6 +1615,7 @@ export const TOKEN_CONNECT = {
   lacksBody: (service: string) =>
     `${service} said, when the token was checked, that it does not hold these. The tools that need them fail until you create a token with them and reconnect; the account keeps its missions.`,
   pasteTitle: 'Paste it here',
+  alternativesLegend: 'What the token covers',
 } as const;
 
 /** A token that expires within this many days is announced on its account page. */

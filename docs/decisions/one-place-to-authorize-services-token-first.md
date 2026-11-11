@@ -87,3 +87,39 @@ call, in the gateway.
 #### Optional guides, checked by review
 
 Five plugins shipped without one; only a rule at definition keeps a new plugin from doing the same.
+
+## Amendment 2026-11-11: a token scoped to one project is accepted too
+
+### Context
+
+On 2026-10-31 (PR #159) the Vercel way refused a token scoped to one project: grant wide at the
+service, the mission narrows. Some owners will not hand a team-wide token to a gateway, and the
+refusal blamed the Team ID for what was the token's scope.
+
+### Decision
+
+The owner (Renaud Pelissier) reverses that refusal: where a service makes a key either wide or
+confined to one resource, the plugin offers both as alternatives of its one way (amendment
+2026-11-11 of [plugin-contract-and-credential-spec](plugin-contract-and-credential-spec.md)). The
+guide still recommends the wide grant first and says why; the narrow alternative confines the
+account to that resource, and the missions narrow inside it. Vercel is the first: "Team" (token +
+Team ID) or "One project" (token + Project ID).
+
+### Consequences
+
+- One way per plugin still holds: one credential spec, one `verify`, one execute; the plugin reads
+  the mode from the field the host kept, so connections made before need no migration.
+- A narrow account discovers its one resource only; a mission needing another one needs another
+  account (or a wide one).
+- `verify` tells the two failures apart: a token that does not cover the whole team is told to
+  choose the narrow alternative, a team id the service does not know is said so.
+
+### Rejected alternatives
+
+#### Keep refusing narrow tokens
+
+Blocks owners whose policy forbids a team-wide token, for a breadth the gateway does not need.
+
+#### A second plugin (`vercel-project`)
+
+Two catalogs, two pages and two sets of tests for one service.

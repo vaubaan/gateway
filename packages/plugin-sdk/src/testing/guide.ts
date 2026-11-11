@@ -3,11 +3,26 @@
  * what its guide says, and a complete `api-key` way for a test plugin whose
  * guide is not under test.
  */
-import type { ApiKeyCredentialSpec, CredentialField, TokenGuide } from '../credential.ts';
+import type {
+  ApiKeyCredentialSpec,
+  CredentialAlternative,
+  CredentialField,
+  TokenGuide,
+} from '../credential.ts';
 
-/** Every step (sentence, page, command), then how wide to grant and why, as one string. */
-export function guideText(guide: TokenGuide): string {
-  const steps = guide.steps.flatMap((step) => [step.do, step.url ?? '', step.code ?? '']);
+/**
+ * Every step (sentence, page, command) — the steps of each alternative first
+ * when `alternatives` are given —, then how wide to grant and why, as one string.
+ */
+export function guideText(
+  guide: TokenGuide,
+  alternatives: readonly CredentialAlternative[] = [],
+): string {
+  const steps = [...alternatives.flatMap((alt) => alt.steps), ...guide.steps].flatMap((step) => [
+    step.do,
+    step.url ?? '',
+    step.code ?? '',
+  ]);
   return [...steps, guide.reach.what, guide.reach.grant, guide.reach.why]
     .filter((part) => part !== '')
     .join(' ');

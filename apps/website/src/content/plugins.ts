@@ -500,7 +500,16 @@ function credentialInfo(spec: CredentialSpec, manualRevocation: string | null): 
       help: field.help ?? null,
     })),
     createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
-    steps: guide ? [...guide.steps] : [],
+    // A key in several shapes (Vercel: a team or one project): each
+    // alternative's steps first, said with the alternative they belong to.
+    steps: guide
+      ? [
+          ...(spec.kind === 'api-key' ? (spec.alternatives ?? []) : []).flatMap((alt) =>
+            alt.steps.map((step) => ({ ...step, do: `${alt.label}: ${step.do}` })),
+          ),
+          ...guide.steps,
+        ]
+      : [],
     reach: guide?.reach ?? null,
     permissions: guide
       ? guide.permissions.map((p) => ({ name: p.name, access: p.access, tools: [...p.tools] }))

@@ -140,4 +140,27 @@ describe('CredentialFieldInputs', () => {
     expect(new Set(controls).size).toBe(controls.length);
     expect(labels).toEqual(controls);
   });
+
+  it("puts an alternative's fields in its panel, not held required by the browser", () => {
+    const fields: CredentialField[] = [
+      { name: 'token', label: 'Token', secret: true },
+      { name: 'team_id', label: 'Team ID', secret: false },
+      { name: 'project_id', label: 'Project ID', secret: false },
+    ];
+    const html = renderToStaticMarkup(
+      <CredentialFieldInputs
+        idPrefix="c"
+        fields={fields}
+        alternatives={[
+          { id: 'team', label: 'Team', fields: ['team_id'], steps: [{ do: 'a' }] },
+          { id: 'project', label: 'One project', fields: ['project_id'], steps: [{ do: 'b' }] },
+        ]}
+      />,
+    );
+    expect(html).toMatch(/<input[^>]*id="c-token"[^>]*required=""/);
+    expect(html).toMatch(/<div data-alternative-panel="0">.*id="c-team_id"/);
+    expect(html).toMatch(/<div data-alternative-panel="1">.*id="c-project_id"/);
+    expect(html).not.toMatch(/<input[^>]*id="c-team_id"[^>]*required=""/);
+    expect(html).not.toMatch(/<input[^>]*id="c-project_id"[^>]*required=""/);
+  });
 });

@@ -148,10 +148,47 @@ export interface CredentialCheck {
   readonly granted?: readonly string[];
 }
 
+/**
+ * One of several shapes the same key can take at the provider (Vercel: a token
+ * scoped to a team, or to one project of it). The connect page shows the
+ * alternatives as a radio before the guide's steps; the person picks one, and
+ * the host asks and keeps only the fields shared by every alternative plus
+ * the chosen one's. The choice itself is not stored: the plugin reads which
+ * field is there (ADR plugin-contract-and-credential-spec, amendment
+ * 2026-11-11).
+ */
+export interface CredentialAlternative {
+  /** A lowercase slug (`team`, `project`): what the form sends. */
+  readonly id: string;
+  /** What the radio says, in a few words ("Team", "One project"). */
+  readonly label: string;
+  /** One sentence under the radio: when to choose it. */
+  readonly help?: string;
+  /**
+   * Names of the spec's `fields` only this alternative asks for ; at least
+   * one, each in one alternative at most. A field no alternative names is
+   * asked whatever the choice (the token).
+   */
+  readonly fields: readonly string[];
+  /** What to do at the provider for this alternative, shown before the guide's own steps. */
+  readonly steps: readonly GuideStep[];
+}
+
+/** At most this many alternatives per spec: a radio a person reads at a glance. */
+export const CREDENTIAL_ALTERNATIVES_MAX = 4;
+
+/** An alternative's id: a lowercase slug, at most 32 characters. */
+export const CREDENTIAL_ALTERNATIVE_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+
 /** The user pastes one or more values (API token, account id). */
 export interface ApiKeyCredentialSpec {
   readonly kind: 'api-key';
   readonly fields: readonly CredentialField[];
+  /**
+   * Two to `CREDENTIAL_ALTERNATIVES_MAX` shapes of the key, one chosen at
+   * connect ; absent when the key has one shape.
+   */
+  readonly alternatives?: readonly CredentialAlternative[];
   /** URL of the provider page where the user creates the key: the token page itself, not a dashboard. */
   readonly createUrl: string;
   /**

@@ -224,6 +224,7 @@ export {
   actorOf,
   connectPagePath,
   connectionPath,
+  ALTERNATIVE_FIELD,
   FIELD_PREFIX,
   METADATA_PREFIX,
   NEW_CONNECTION_PATH,
@@ -234,15 +235,19 @@ export {
   type ConnectionHandlers,
 } from './handlers';
 export {
+  askedFields,
+  chooseAlternative,
   cleanName,
   echoOfForm,
   editableMetadataKeys,
   parseEnvLabel,
   parseListValue,
   readCredentialFields,
+  readCredentialForm,
   resolveReturnTo,
   type FieldProblem,
   type FormEcho,
+  type FormFields,
 } from './input';
 export {
   buildAuthorizationUrl,

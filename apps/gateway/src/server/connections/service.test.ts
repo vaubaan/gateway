@@ -376,6 +376,73 @@ describe('api-key — form checked by a first discovery', () => {
     expect(JSON.stringify(done.connection.metadata)).not.toContain('tok-secret-123');
   });
 
+  it('keeps only the fields of the alternative chosen, and refuses a form without a choice', async () => {
+    const seen: ConnectionContext[] = [];
+    const credential = {
+      ...API_KEY_SPEC,
+      fields: [
+        ...API_KEY_SPEC.fields,
+        { name: 'project_id', label: 'Project ID', secret: false, pattern: '^prj_[a-z0-9]+$' },
+      ],
+      alternatives: [
+        { id: 'team', label: 'Team', fields: ['team_id'], steps: [{ do: 'Copy the Team ID.' }] },
+        {
+          id: 'project',
+          label: 'One project',
+          fields: ['project_id'],
+          steps: [{ do: 'Copy the Project ID.' }],
+        },
+      ],
+    };
+    const h = connectionsHarness({
+      plugins: [
+        fixturePlugin({
+          id: 'keyco',
+          credential,
+          discoverResources: async (ctx) => {
+            seen.push(ctx);
+            return [resource('keyco', 'prj_1')];
+          },
+        }),
+      ],
+    });
+    const alice = await h.actor('alice@example.com');
+    expect((await h.service.provider('keyco'))!.alternatives.map((a) => a.id)).toEqual([
+      'team',
+      'project',
+    ]);
+
+    const none = await expectConnectError(
+      h.service.start(alice, 'keyco', { fields: { token: 'tok-1' } }),
+      'invalid-input',
+    );
+    expect(none.detail).toBe('choose Team or One project');
+    const missing = await expectConnectError(
+      h.service.start(alice, 'keyco', {
+        fields: { token: 'tok-1', team_id: 'team_a' },
+        alternative: 'project',
+      }),
+      'invalid-input',
+    );
+    expect(missing.detail).toBe('Project ID is required');
+    expect(seen).toHaveLength(0);
+
+    const done = connectedOf(
+      await h.service.start(alice, 'keyco', {
+        fields: { token: 'tok-1', team_id: 'team_a', project_id: 'prj_1' },
+        alternative: 'project',
+      }),
+    );
+    expect(seen[0]!.credential).toEqual({
+      kind: 'api-key',
+      fields: { token: 'tok-1', project_id: 'prj_1' },
+      metadata: { project_id: 'prj_1' },
+    });
+    expect((await h.service.get(alice, done.connection.id)).fields).toEqual({
+      project_id: 'prj_1',
+    });
+  });
+
   it('stores nothing when the provider rejects the key, and shows the provider error', async () => {
     const h = connectionsHarness({
       plugins: [

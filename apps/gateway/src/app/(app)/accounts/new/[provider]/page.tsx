@@ -13,6 +13,11 @@
  * to the service (ADRs oauth-client-registered-by-the-gateway,
  * gmail-over-imap-with-an-app-password).
  *
+ * A key that comes in several shapes (`CredentialAlternative`: a Vercel token
+ * for a team or for one project) starts its guide with a radio; the steps and
+ * fields of the alternatives not chosen are hidden by the page's CSS, and the
+ * server reads only the chosen one's.
+ *
  * A field says the shape it expects before the person types (its placeholder
  * and the line under it are the plugin's); the how-to is open by default.
  * A form the server refused comes back as it was typed — the name and the
@@ -53,6 +58,7 @@ import {
   TOKEN_CONNECT,
 } from '@/lib/vocabulary';
 import {
+  chooseAlternative,
   connectionPath,
   CONNECTIONS_PATH,
   isConnectError,
@@ -67,6 +73,8 @@ import styles from '../../accounts.module.css';
 export const dynamic = 'force-dynamic';
 
 const MAX_NAME_LENGTH = 80;
+/** The connect form; the radio between a key's alternatives sits in the guide and names it. */
+const CONNECT_FORM_ID = 'connect-form';
 
 /** One sentence: how an account of this service is connected. */
 function ledeOf(provider: ConnectableProvider): string {
@@ -194,6 +202,11 @@ export default async function ConnectOneAccountPage({
   const unowned = reconnect?.connection.status === 'unowned';
   const name = provider.displayName;
   const back = reconnect ? connectionPath(reconnect.connection.id) : ROUTES.accounts;
+  const values = { ...reconnect?.fields, ...typed?.values };
+  // The alternative checked: the one the refused form was read with, or the
+  // one the account's fields belong to; the first one otherwise.
+  const choice = chooseAlternative(provider, values, typed?.alternative);
+  const chosen = choice.ok ? (choice.alternative?.id ?? null) : null;
 
   return (
     <>
@@ -233,10 +246,20 @@ export default async function ConnectOneAccountPage({
         </Callout>
       ) : (
         <Guided
-          guide={provider.guide ? <TokenGuide service={name} provider={provider} /> : null}
+          guide={
+            provider.guide ? (
+              <TokenGuide
+                service={name}
+                provider={provider}
+                chosen={chosen}
+                formId={CONNECT_FORM_ID}
+              />
+            ) : null
+          }
           step={pasteStep}
         >
           <form
+            id={CONNECT_FORM_ID}
             method="post"
             action={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(provider.id)}`}
             className={styles.form}
@@ -266,7 +289,8 @@ export default async function ConnectOneAccountPage({
             <CredentialFieldInputs
               idPrefix="credential"
               fields={provider.fields}
-              values={{ ...reconnect?.fields, ...typed?.values }}
+              alternatives={provider.alternatives}
+              values={values}
               invalid={typed?.invalid}
             />
             <div className={styles.formActions}>

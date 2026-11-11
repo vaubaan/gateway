@@ -21,7 +21,7 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 | `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                           |
 | `src/tools.ts`          | 32 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 14 custom REST (`custom-tools.ts`).                                                    |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources; denies the five thread-addressed tools (`UNBOUND_TOOLS`).       |
-| `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                                                                    |
+| `src/credential.ts`     | `api-key` spec: access token + team id or project id (two alternatives); `vercelAuth()` narrows the secret to its mode.                                       |
 | `src/execute.ts`        | Team and project pinning, deployment binding, `tools/call` to the Vercel MCP server (SDK client), REST for custom tools, `discoverResources` (paged listing). |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
@@ -85,27 +85,40 @@ shape). Vercel's own tool result is passed through, its `isError` included.
 
 ## Credential
 
-`api-key` with two fields, collected by the host's generic form:
+`api-key` with three fields and two alternatives (`CredentialAlternative`),
+collected by the host's generic form: a radio "Team" or "One project", then the
+token and the chosen alternative's ID. The host keeps only that one.
 
-| Field     | Secret | Value                                                                                               |
-| --------- | ------ | --------------------------------------------------------------------------------------------------- |
-| `token`   | yes    | A Vercel access token (Account Settings → Tokens), Scope: the team, All Projects.                   |
-| `team_id` | no     | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it. |
+| Field        | Secret | Alternative | Value                                                                                                 |
+| ------------ | ------ | ----------- | ----------------------------------------------------------------------------------------------------- |
+| `token`      | yes    | both        | A Vercel access token (Account Settings → Tokens), Scope: the team with All Projects, or one project. |
+| `team_id`    | no     | Team        | The team id (`team_…`, Team Settings → General). Every call of the connection acts on behalf of it.   |
+| `project_id` | no     | One project | The project id (`prj_…`, Project Settings → General). The connection reaches that project only.       |
 
 There is no OAuth app to register: Vercel's REST API and MCP server are both
-reached with a personal access token, which is what works. The guide asks for
-the team with All Projects (the missions narrow it to their projects). The
-Team ID stays a field: a wide token reaches every team of its owner, and the
-host keeps only what the form gives. The check at paste (`verifyVercelToken`)
-reads `GET /v5/user/tokens/current` for the expiry and `GET /v2/teams/{id}`
-for the team's name; a token that cannot open the team is refused.
-The token does not refresh (`refresh` is absent); the account page shows its
-expiry and the person reconnects before it. The team is pinned to the
-credential: a `teamId` argument that is not exactly the connection's team
-(another string, or any non-string) is refused before any network call, and
-the value sent to Vercel is always written from the credential. The four
-rewrapped tools that cannot carry a team are listed with their reason in
-`TEAMLESS_UPSTREAM_TOOLS` (`src/execute.ts`).
+reached with a personal access token, which is what works. The guide asks
+first for the team with All Projects (the missions narrow it to their
+projects); a token scoped to one project is accepted too (ADR
+`one-place-to-authorize-services-token-first`, amendment 2026-11-11).
+`vercelAuth` reads the mode from the field there, so a connection made with
+`team_id` before the alternatives keeps working.
+
+The check at paste (`verifyVercelToken`) reads `GET /v5/user/tokens/current`
+for the expiry, then `GET /v2/teams/{id}` for the team's name (403: the token
+does not cover the whole team, choose One project; 404: no such team) or
+`GET /v9/projects/{id}` without `teamId` for the project's name (403/404: the
+token does not open that project). The token does not refresh (`refresh` is
+absent); the account page shows its expiry and the person reconnects before
+it.
+
+Team mode pins the team to the credential: a `teamId` argument that is not
+exactly the connection's team (another string, or any non-string) is refused
+before any network call, and the value sent to Vercel is always written from
+the credential. The four rewrapped tools that cannot carry a team are listed
+with their reason in `TEAMLESS_UPSTREAM_TOOLS` (`src/execute.ts`). Project
+mode refuses every `teamId` argument and every other project, sends no
+`teamId` to the REST API, and sends the rewrapped tools (whose upstream schema
+requires one) the project's own team as discovery read it.
 
 ## Catalog and macro-actions
 
@@ -147,7 +160,9 @@ refuses every env-scoped risk the slice touches. See the handbook,
 
 ## Resources
 
-`discoverResources` reads `GET /v2/teams/{team_id}` (validates the token and
+In project mode `discoverResources` reads `GET /v9/projects/{project_id}` and
+returns that project alone, its `accountId` as `metadata.team_id`. In team
+mode it reads `GET /v2/teams/{team_id}` (validates the token and
 names the team), then pages `GET /v10/projects?teamId=…&limit=100` through
 `pagination.next` / `until`, at most 10 pages (1 000 projects). Each project
 becomes `{ provider: 'vercel', ref: project.id, displayName: project.name,
@@ -166,9 +181,11 @@ and `execute` / `discoverResources` against `mockFetch` (including the request
 shapes of the custom REST tools). `classify.test.ts` pins the slices of each
 tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.
 `team-pin.test.ts` proves, over every declared tool, that each request
-carries the credential's team and that no team id comes from the arguments;
+carries the credential's team and that no team id comes from the arguments,
+and, for a project-scoped connection, that REST names no team, the MCP server
+gets the project's, and every `teamId` argument and other project is refused;
 `binding.test.ts` covers the deployment binding and the refused thread tools;
 `identifier-injection.test.ts` feeds dot segments, separators and encoded
 forms to every identifier position of `classify` and `execute`;
 `firewall.test.ts` covers the five firewall tools (slices, risks, request
-shapes). 653 tests; none reaches the network.
+shapes). 733 tests; none reaches the network.

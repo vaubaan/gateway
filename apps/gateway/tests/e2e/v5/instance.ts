@@ -66,6 +66,9 @@ export function controlUrl(path: string): string {
  *
  * Ada owns the seeded connections (GitHub, Supabase, Vercel, Gmail).
  */
+/** The one project the mocked Vercel token is scoped to (`token-connections.spec`). */
+export const MOCK_VERCEL_PROJECT = 'prj_e2esite';
+
 export const E2E_USER = { sub: 'idp|ada', email: 'ada@example.com', name: 'Ada' } as const;
 /** A second user of the same IdP, who created nothing. */
 export const E2E_OTHER_USER = { sub: 'idp|bob', email: 'bob@example.com', name: 'Bob' } as const;

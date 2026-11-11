@@ -10,6 +10,9 @@ import { CREDENTIAL_KINDS, isCredentialKind } from '@vaubaan/shared';
 
 import {
   BROKER_PROVIDER_PATTERN,
+  CREDENTIAL_ALTERNATIVE_ID_PATTERN,
+  CREDENTIAL_ALTERNATIVES_MAX,
+  type CredentialField,
   OAUTH2_REVOCATION_FORMATS,
   TOKEN_EXPIRY_KINDS,
   TOKEN_PERMISSION_ACCESS,
@@ -44,7 +47,74 @@ export function credentialSpecIssues(spec: CredentialSpec, tools: ReadonlySet<un
       issues.push(`${at}.createUrl: expected the https URL of the token page`);
     }
     issues.push(...guideIssues(spec.guide, tools, `${at}.guide`));
+    if (spec.alternatives !== undefined) {
+      issues.push(...alternativesIssues(spec.alternatives, spec.fields, `${at}.alternatives`));
+    }
   }
+  return issues;
+}
+
+/**
+ * Alternatives are a real choice (two or more, a handful at most), each with
+ * a unique slug, a label, its own steps and fields of its own that the spec
+ * declares; together with the shared fields, each asks for a secret.
+ */
+function alternativesIssues(
+  alternatives: unknown,
+  fields: readonly CredentialField[],
+  at: string,
+): string[] {
+  if (
+    !isList(alternatives) ||
+    alternatives.length < 2 ||
+    alternatives.length > CREDENTIAL_ALTERNATIVES_MAX
+  ) {
+    return [`${at}: expected 2 to ${CREDENTIAL_ALTERNATIVES_MAX} alternatives`];
+  }
+  const declared = new Map(fields.map((f) => [f.name, f]));
+  const owner = new Map<string, number>();
+  const ids = new Set<unknown>();
+  const issues: string[] = [];
+  alternatives.forEach((alt, i) => {
+    const where = `${at}[${i}]`;
+    if (!isRecord(alt)) {
+      issues.push(`${where}: expected { id, label, fields, steps }`);
+      return;
+    }
+    if (typeof alt.id !== 'string' || !CREDENTIAL_ALTERNATIVE_ID_PATTERN.test(alt.id)) {
+      issues.push(`${where}.id: expected a lowercase slug such as 'team'`);
+    } else if (ids.has(alt.id)) {
+      issues.push(`${where}.id: '${alt.id}' is already the id of another alternative`);
+    }
+    ids.add(alt.id);
+    if (!isSentence(alt.label, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${where}.label: expected a few words`);
+    }
+    if (alt.help !== undefined && !isSentence(alt.help, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
+      issues.push(`${where}.help: expected one sentence when present`);
+    }
+    issues.push(...stepIssues(alt.steps, `${where}.steps`));
+    if (!isList(alt.fields) || alt.fields.length === 0) {
+      issues.push(`${where}.fields: expected at least one field of its own`);
+      return;
+    }
+    for (const name of alt.fields) {
+      if (typeof name !== 'string' || !declared.has(name)) {
+        issues.push(`${where}.fields: '${String(name)}' is not a field of this spec`);
+      } else if (owner.has(name)) {
+        issues.push(`${where}.fields: '${name}' already belongs to another alternative`);
+      } else {
+        owner.set(name, i);
+      }
+    }
+  });
+  alternatives.forEach((alt, i) => {
+    if (!isRecord(alt)) return;
+    const asked = fields.filter((f) => !owner.has(f.name) || owner.get(f.name) === i);
+    if (!asked.some((f) => f.secret)) {
+      issues.push(`${at}[${i}]: asks for no secret field`);
+    }
+  });
   return issues;
 }
 

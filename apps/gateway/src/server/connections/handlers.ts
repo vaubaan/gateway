@@ -70,6 +70,8 @@ export function REASSIGN_PATH(connectionId: string): string {
 export const NOTICE_PARAM = 'notice';
 /** Form inputs carrying a `CredentialField` value are named `field.<name>`. */
 export const FIELD_PREFIX = 'field.';
+/** The connect form's radio between the `CredentialAlternative`s of a key. */
+export const ALTERNATIVE_FIELD = 'alternative';
 /** Form inputs carrying an editable metadata list are named `meta.<key>`. */
 export const METADATA_PREFIX = 'meta.';
 const LOGIN_PAGE = '/login';
@@ -227,6 +229,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           returnTo: stringField(form, 'return_to') || null,
           reconnectId,
           fields: typed,
+          alternative: stringField(form, ALTERNATIVE_FIELD) || null,
         });
         if (result.kind === 'redirect') return redirect(result.url);
         return await redirectWithNotice(
@@ -255,7 +258,15 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           who.principal,
           back,
           provider
-            ? { ...notice, form: echoOfForm(provider.fields, typed, stringField(form, 'name')) }
+            ? {
+                ...notice,
+                form: echoOfForm(
+                  provider,
+                  typed,
+                  stringField(form, 'name'),
+                  stringField(form, ALTERNATIVE_FIELD) || null,
+                ),
+              }
             : notice,
         );
       }

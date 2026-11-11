@@ -13,6 +13,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Plugin SDK
 
+- **0.7.1 — alternatives of a pasted key** (ADR plugin-contract-and-credential-spec,
+  amendment 2026-11-11). `ApiKeyCredentialSpec.alternatives?: CredentialAlternative[]`
+  (2 to 4 `{ id, label, help?, fields, steps }`): the connect page asks the person to
+  choose one, shows its steps before the guide's own, and keeps only the shared fields
+  and the chosen alternative's; `definePlugin` checks ids, labels, steps, that each
+  field belongs to one alternative at most and that each alternative asks a secret.
+  `guideText(guide, alternatives?)` reads the alternatives' steps too. An optional
+  member: a patch.
+
 - **0.7.0 — narrative, excludedTools, examples; a minor because the loader and
   `definePlugin` now refuse what 0.6 accepted** (a malformed `narrative`, an
   `excludedTools` name that is a declared tool), and before `1.0.0` such a rule
@@ -30,6 +39,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   refuses one that is not a non-empty string within that length.
 
 ### Added
+
+- **Vercel: a token scoped to one project** (plugin 4.2.0; ADR
+  one-place-to-authorize-services-token-first, amendment 2026-11-11, reversing the
+  2026-10-31 refusal). The connect form offers "Team" (token + Team ID) or "One
+  project" (token + Project ID). A project account is checked against
+  `GET /v9/projects/{id}`, named after the project, discovers that project alone,
+  sends the REST API no team and refuses every `teamId` argument and every other
+  project. Team accounts are unchanged and need no reconnection; a team token
+  refused the team now says it may be scoped to one project, and an unknown Team ID
+  says so instead of blaming the scope.
 
 - **vaubaan.com plugin pages in the C3 layout** (website spec §2.3): the
   opening with the counts and the macro-actions in one sentence; the map, every
