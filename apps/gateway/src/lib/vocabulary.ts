@@ -105,6 +105,7 @@ export interface Term {
  */
 export const TERMS = {
   connection: { one: 'account', many: 'accounts' },
+  disconnectedAccount: { one: 'disconnected account', many: 'disconnected accounts' },
   mission: { one: 'mission', many: 'missions' },
   risk: { one: 'permission', many: 'permissions' },
   macroAction: { one: 'macro-action', many: 'macro-actions' },
