@@ -9,6 +9,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+## [2.0.0-alpha.19] - 2026-11-13
+
 ### Plugin SDK
 
 - **0.7.1 — alternatives of a pasted key** (ADR plugin-contract-and-credential-spec,
@@ -2567,7 +2569,8 @@ permission Workflows …`, with nothing sent to GitHub (it used to be stored at 
   package with a review date, and an audit that printed nothing is a broken gate, not a
   pass.
 
-[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.18...HEAD
+[Unreleased]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.19...HEAD
+[2.0.0-alpha.19]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.18...v2.0.0-alpha.19
 [2.0.0-alpha.18]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.17...v2.0.0-alpha.18
 [2.0.0-alpha.17]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.16...v2.0.0-alpha.17
 [2.0.0-alpha.16]: https://github.com/vaubaan/gateway/compare/v2.0.0-alpha.15...v2.0.0-alpha.16
