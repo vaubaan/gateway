@@ -51,13 +51,13 @@ export const caldavGuide: TokenGuide = {
   steps: [
     {
       path: ['Sign-In and Security', 'App-Specific Passwords'],
-      do: 'Open your Apple Account for iCloud, and create one named "Vaubaan Gateway" (two-factor authentication must be on); the server URL is below.',
+      do: 'Open your Apple Account and create an app-specific password named "Vaubaan Gateway" (two-factor authentication must be on); the server URL is below.',
       url: APPLE_ACCOUNT_URL,
       code: ICLOUD_CALDAV_URL,
     },
     {
       path: ['Settings', 'Privacy & Security', 'Manage app passwords and access'],
-      do: 'Open the security settings for Fastmail, and create one named "Vaubaan Gateway" with access to Calendars (CalDAV); the server URL is below.',
+      do: 'Open the security settings of Fastmail and create an app password named "Vaubaan Gateway" with access to Calendars (CalDAV); the server URL is below.',
       url: FASTMAIL_SECURITY_URL,
       code: FASTMAIL_CALDAV_URL,
     },
