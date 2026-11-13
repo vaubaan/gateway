@@ -116,7 +116,7 @@ describe('management door — tools of a delegated agent', () => {
         'anything-else',
       ]);
       expect(gh.macro_actions.every((a) => a.unavailable.length === 0)).toBe(true);
-      // Ship holds delete-release (irreversible, tier 4): Careful leaves it out.
+      // Ship holds delete-release (irreversible, row 4): Careful leaves it out.
       const ship = gh.macro_actions.find((a) => a.id === 'ship');
       expect(ship?.at_trust_level.careful).toEqual({ auto: 0, approval: 3, left_out: 1 });
       expect(ship?.at_trust_level.trusting).toEqual({ auto: 0, approval: 4, left_out: 0 });
@@ -271,7 +271,7 @@ describe('management door — tools of a delegated agent', () => {
       });
 
       expect(plain.data.risks.find((r) => r.risk_id === 'github.force-push')).toMatchObject({
-        tier: 3,
+        row: 3,
         macro_action: 'propose',
       });
       expect(plain.data.trust_levels.careful).toEqual({

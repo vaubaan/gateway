@@ -392,7 +392,7 @@ describe('gmail macro-actions', () => {
       'send',
       'tidy',
     ]);
-    expect(gmailPlugin.catalog.catalog_version).toBe(9);
+    expect(gmailPlugin.catalog.catalog_version).toBe(10);
   });
 
   test('search at Careful : reads only, every sender zone freely ; bulk and sensitive reads ask first', () => {

@@ -20,9 +20,11 @@
 # deletion carries `event[e].notify.W`.
 # catalog_version 2 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 3 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: outlook
-catalog_version: 2
-catalog_date: 2026-11-05
+catalog_version: 3
+catalog_date: 2026-11-13
 
 risks:
   # ─── MAIL — READS ──────────────────────────────────────────────────────
@@ -44,8 +46,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.read-from-zone-automated
     label: 'Read messages from automated / notification senders'
     reason: >-
@@ -60,8 +60,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.read-from-zone-internal
     label: 'Read messages from internal-domain senders'
     reason: >-
@@ -74,8 +72,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.read-from-zone-known-external
     label: 'Read messages from known external contacts (allowlist)'
     reason: >-
@@ -88,8 +84,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.read-from-zone-unknown
     label: 'Read messages from unknown senders'
     reason: >-
@@ -104,8 +98,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.read-drafts
     label: 'Read existing drafts'
     reason: >-
@@ -119,8 +111,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.bulk-read
     label: 'Bulk read across the mailbox (non-discriminating search)'
     reason: >-
@@ -135,8 +125,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── MAIL — DRAFTS ─────────────────────────────────────────────────────
   # A draft write emits `draft.W` and the zone of its worst recipient; a
   # recipient outside the internal domains and the allowlists refuses it.
@@ -154,8 +142,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: outlook.draft-to-zone-self
     label: 'Create a draft addressed to the mailbox itself only (or to nobody yet)'
     reason: >-
@@ -168,8 +154,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: outlook.draft-to-zone-internal
     label: 'Create a draft addressed to internal recipients only'
     reason: >-
@@ -181,8 +165,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: outlook.draft-to-zone-allowlist
     label: 'Create a draft to pre-approved external contacts (allowlist)'
     reason: >-
@@ -195,8 +177,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   # ─── MAIL — SENDS ──────────────────────────────────────────────────────
   # `send_message` and `send_draft` emit one slice, the zone of the worst
   # recipient. A sent message cannot be called back. `send_draft` is priced
@@ -216,8 +196,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: outlook.send-to-zone-internal
     label: 'Send a message to internal recipients only'
     reason: >-
@@ -231,8 +209,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: outlook.send-to-zone-allowlist
     label: 'Send a message to pre-approved external contacts (allowlist)'
     reason: >-
@@ -246,8 +222,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: outlook.send-to-zone-external
     label: 'Send a message to any external recipient'
     reason: >-
@@ -263,8 +237,6 @@ risks:
       data: pii
       cost: free
       visibility: public
-      persistence: session
-
   # ─── MAIL — ORGANISE ───────────────────────────────────────────────────
 
   - id: outlook.message-organize
@@ -280,8 +252,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: session
-
   - id: outlook.folder-create
     label: 'Create a mail folder'
     reason: >-
@@ -295,8 +265,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: session
-
   # ─── CALENDAR — READS ──────────────────────────────────────────────────
 
   - id: outlook.calendar-list
@@ -311,8 +279,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.event-read
     label: 'Read events (subjects, times, places, attendees, bodies)'
     reason: >-
@@ -327,8 +293,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: outlook.free-busy-read
     label: 'Read when people are free or busy'
     reason: >-
@@ -342,8 +306,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── CALENDAR — EVENTS ─────────────────────────────────────────────────
 
   - id: outlook.event-create
@@ -359,8 +321,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: outlook.event-change
     label: 'Change events (time, subject, body, place, attendees)'
     reason: >-
@@ -374,8 +334,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: outlook.event-delete
     label: 'Delete events'
     reason: >-
@@ -389,8 +347,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: outlook.event-respond
     label: 'Answer invitations (accept, tentative, decline)'
     reason: >-
@@ -404,8 +360,6 @@ risks:
       data: metadata
       cost: free
       visibility: team
-      persistence: session
-
   # ─── CALENDAR — WHO IS REACHED ─────────────────────────────────────────
 
   - id: outlook.invite-internal
@@ -421,8 +375,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: outlook.invite-external
     label: 'Invite people outside the company'
     reason: >-
@@ -437,8 +389,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
   - id: outlook.notify-guests
     label: 'Let Exchange mail the attendees about a change or a cancellation'
     reason: >-
@@ -454,8 +404,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
   # ─── FALLBACK (required) ───────────────────────────────────────────────
 
   - id: outlook.uncategorized-write
@@ -472,8 +420,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy): what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (×1, ×3, ×10 by trust level).

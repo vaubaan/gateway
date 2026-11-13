@@ -4,21 +4,21 @@
  * coloured only when it differs from normal. The words come from
  * `@vaubaan/policy-engine`; the look is `globals.css` ("Display codes").
  *
- * - `RiskWord` — the one severity word; low is plain, medium and above tinted.
+ * - `RiskWord` — the row word of a permission; harmless is plain, rows 2 and above tinted.
  * - `GateMark` — runs freely, ask me first, not included: a dot and the words.
- * - `FactCells` — the six facts in words, the one that moves the gate tinted.
+ * - `FactCells` — the five facts in words, the one that moved the gate tinted.
  * - `Tag` — a fact that is not a state (an environment), squared.
  * - `Mono` — an identifier as the protocol spells it, wrapping between words.
- * - `PermissionBox` — a permission on the map, tinted by its risk word.
+ * - `PermissionBox` — a permission on the map, tinted by its row.
  *
  * Imports are relative: the unit tests render these without the `@/` alias.
  */
 import { Fragment, type ReactNode } from 'react';
 
-import { GATE_WORDS, type GateWord } from '@vaubaan/policy-engine';
+import { GATE_WORDS, REASON_WORDS, ROW_WORDS, type GateWord } from '@vaubaan/policy-engine';
 
 import type { PermissionBox as Box } from '../../content/plugin-page';
-import type { FactInfo, Severity } from '../../content/plugins';
+import type { FactInfo, Row } from '../../content/plugins';
 
 /** `a_b.c-d/e` → where an identifier may wrap: after each separator. */
 const WORD_END = /(?<=[_.\-/:\]@])(?=[^_.\-/:\]@])/;
@@ -38,10 +38,10 @@ export function Mono({ children, quiet = false }: { children: string; quiet?: bo
   );
 }
 
-export function RiskWord({ level }: { level: Severity }) {
+export function RiskWord({ row }: { row: Row }) {
   return (
-    <span className={`risk risk-${level}`} data-risk={level}>
-      {level}
+    <span className={`risk risk-row-${row}`} data-row={row}>
+      {ROW_WORDS[row]}
     </span>
   );
 }
@@ -76,11 +76,12 @@ export function Tag({ children }: { children: ReactNode }) {
 }
 
 export function PermissionBox({ box }: { box: Box }) {
-  const classes = ['perm', `perm-${box.severity}`, box.fallback ? 'perm-fallback' : '']
+  const classes = ['perm', `perm-row-${box.row}`, box.fallback ? 'perm-fallback' : '']
     .filter(Boolean)
     .join(' ');
+  const why = box.rowReason ? ` · ${REASON_WORDS[box.rowReason]}` : '';
   return (
-    <li className={classes} data-risk-id={box.riskId} title={`${box.riskId} · ${box.severity}`}>
+    <li className={classes} data-risk-id={box.riskId} title={`${box.riskId}${why}`}>
       <span>{box.label}</span>
       {box.envs.map((env) => (
         <Tag key={env}>{env}</Tag>

@@ -11,6 +11,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Plugin SDK
 
+- **0.9.0 — the risk vector has five facts; a minor because the catalog loader refuses
+  what 0.8 accepted** (spec gateway-risk-model §4.2, ADR
+  macro-actions-and-trust-levels-prefill-the-policy, amendment 2026-11-13). A
+  `persistence` key in a `vector` or a `vector_overrides` entry is an unknown axis, with a
+  hint to remove the line; a pin built against 0.8 (`^0.8.0`) is turned away until it is
+  rebuilt with its catalog's `persistence:` lines removed. `RiskVector` loses
+  `persistence`. The test kit (`@vaubaan/plugin-sdk/testing`) exports `rowOf` and
+  `reasonOf` in place of `tierOf`.
+
 - **0.8.0 — the connect guide: menu paths and screenshots with their provenance; a
   minor because `definePlugin` now refuses what 0.7 accepted** (a malformed `path`, a
   screenshot without a source, a licence outside the allowlist, a step naming an
@@ -42,6 +51,44 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   (`GET /reference/<id>/connect/<file>`, signed-in users). Every guide step carries
   its menu path; Cloudflare DNS shows the Create Token form from Cloudflare's own
   documentation (CC BY 4.0). The plugin bundle carries `docs/connect/`.
+
+### Changed
+
+- **The gate of a permission comes from a decision tree over five facts; the severity
+  word is gone** (spec gateway-risk-model §4.2, §4.6; ADRs
+  macro-actions-and-trust-levels-prefill-the-policy and
+  interface-redesign-vocabulary-and-design-system, amendments 2026-11-13). A permission
+  sits in the first row its facts answer: irreversible → **Cannot be repaired**; costly
+  to undo or unbounded cost → **Repairable, at a price**; secret or personal data, whole
+  account or bulk, moderate cost, public → **Repairable, worth a look**; otherwise
+  **Harmless**. The branch that decided is its reason, shown in quiet type. The gateway
+  and vaubaan.com print the row and its reason where they printed low / medium / high /
+  critical, order lists by row (the hardest to repair first, then catalog order), and say
+  "the hardest to repair" where they said "the most severe". The five facts stay behind
+  "why?" in the Reference only. The gates of each row at each trust level do not change.
+  Every shipped catalog drops its `persistence:` lines (a new `catalog_version`, dated
+  2026-11-13; no risk, pattern or macro-action changed).
+- **Behaviour change of the pre-filled gates.** These lines move from row 1 to row 2, so
+  a macro-action ticked at Careful now writes them `approval` (Trusting and Autonomous
+  unchanged): Fly `machine-create`, `machine-power`, `volume-create`,
+  `volume-backup-settings`, `volume-snapshot`, `ip-write`, `certificate-write`; Railway
+  `deploy` (staging, preview, dev); SSH `exec-service-control`; Stripe `read-catalog`;
+  Vercel `deploy` (preview, development), `fetch-deployment-url`, `firewall-write`,
+  `firewall-rule-write`, `ip-rule-write`. `fly.scale` moves from row 2 to row 3: it now
+  asks first at Careful and at Trusting. Missions already issued keep their explicit
+  lines; only a newly ticked or re-ticked macro-action writes the new gate.
+- **Context7: `query-docs` is a documentation read** (catalog_version 5): its vector was
+  "irreversible" (the question cannot be recalled), which put a read in "Cannot be
+  repaired" and left it out at Careful. It is now reversible, single, data, free,
+  internal: it runs freely at every trust level; the disclosure of the question stays in
+  its reason.
+- **Management door: `get_catalog` answers `row` and `row_reason`** for each risk instead
+  of `level` and `tier`; `trust_levels.*.gates` keeps its keys `'1'`…`'4'`, now rows. The
+  `everything-i-hold-expanded` notice names the risk hardest to repair and the row-4
+  risks running freely.
+- **`/plugins.json`**: each permission carries `row` and `row_reason` (per environment in
+  `env_variants` too) instead of `severity` and `tier`, and its `vector` has five facts;
+  the worked mission's lines and left-out risks carry `row`.
 
 ## [2.0.0-alpha.19] - 2026-11-13
 

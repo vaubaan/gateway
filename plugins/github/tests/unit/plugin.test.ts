@@ -162,14 +162,14 @@ describe('github catalog — macro-actions at a trust level', () => {
       policyFromMacroActions(githubPlugin, trustLevels).map((l) => [l.risk_id, l.gate]),
     );
 
-  test('read, propose, ship, administer ; catalog version 13', () => {
+  test('read, propose, ship, administer ; catalog version 14', () => {
     expect(githubCatalog.catalog.macro_actions.map((a) => a.id)).toEqual([
       'read',
       'propose',
       'ship',
       'administer',
     ]);
-    expect(githubCatalog.catalog.catalog_version).toBe(13);
+    expect(githubCatalog.catalog.catalog_version).toBe(14);
   });
 
   test('read at Careful : code and metadata run freely, the global search asks first', () => {

@@ -2,14 +2,15 @@
  * What the site reads from a file of the gateway is compared with the
  * gateway, here, since the site may not import it at build time (ADR
  * website-nextjs-on-vercel D1): the configuration keys, the published
- * thresholds. The words of the risk model (the six facts and their values,
- * the gate words, Can / Asks first / Cannot), the severity word, the tier,
+ * thresholds. The words of the risk model (the five facts and their values,
+ * the gate words, Can / Asks first / Cannot), the row words and reasons,
  * the gates and the budgets are not copied: the site and the gateway import
  * them from `@vaubaan/policy-engine`, which this file holds.
  */
 import { describe, expect, it } from 'vitest';
 
 import * as policyEngine from '@vaubaan/policy-engine';
+import { RISK_VECTOR_AXES } from '@vaubaan/shared';
 
 import * as vocabulary from '../../../../gateway/src/lib/vocabulary';
 import { KEYS } from '../../../../gateway/src/server/config/sources';
@@ -68,7 +69,10 @@ const RISK_WORDS = [
   'ALLOW_WORDS',
   'GATE_WORDS',
   'gateWordOf',
-  'SEVERITY_LABEL',
+  'REASON_WORDS',
+  'ROW_LABEL',
+  'ROW_WORDS',
+  'TREE_LEGEND',
   'TRUST_LEVEL_HINTS',
   'TRUST_LEVEL_LABELS',
   'WHY_LABELS',
@@ -102,8 +106,17 @@ describe('the words of the risk model', () => {
       ...Object.values(policyEngine.GATE_WORDS),
       ...Object.values(policyEngine.TRUST_LEVEL_HINTS),
       ...Object.values(policyEngine.WHY_VALUES).flatMap((values) => Object.values(values)),
-      ...Object.values(policyEngine.UNDO_ROW_WORDS),
-    ].filter((word) => word.length > 8);
+      ...Object.values(policyEngine.ROW_WORDS),
+      ...Object.values(policyEngine.REASON_WORDS),
+    ]
+      // A reason spelled like the catalog's own value (`irreversible`) is a protocol name too.
+      .filter(
+        (word) =>
+          !Object.values(RISK_VECTOR_AXES).some((values) =>
+            (values as readonly string[]).includes(word),
+          ),
+      )
+      .filter((word) => word.length > 8);
     const files = [
       'content/plugins.ts',
       'content/plugin-examples.ts',

@@ -25,7 +25,6 @@ const READ_VECTOR = {
   data: 'data',
   cost: 'free',
   visibility: 'internal',
-  persistence: 'stateless',
 } as const;
 
 export const ACME_CATALOG: RiskCatalog = {
@@ -44,7 +43,7 @@ export const ACME_CATALOG: RiskCatalog = {
       reason: 'Reversible edit of one thing.',
       matches: 'acme.space[**].thing[one].W',
       acceptable_in_envs: ['staging', 'prod'],
-      vector: { ...READ_VECTOR, reversibility: 'costly', persistence: 'session' },
+      vector: { ...READ_VECTOR, reversibility: 'costly' },
       vector_overrides: { prod: { blast: 'env', visibility: 'public' } },
     },
     {
@@ -59,7 +58,6 @@ export const ACME_CATALOG: RiskCatalog = {
         data: 'data',
         cost: 'moderate',
         visibility: 'team',
-        persistence: 'session',
       },
     },
     {
@@ -73,7 +71,6 @@ export const ACME_CATALOG: RiskCatalog = {
         data: 'secret',
         cost: 'free',
         visibility: 'team',
-        persistence: 'posture',
       },
       infra_limits: { calls_per_minute_max: 10 },
     },
@@ -92,7 +89,7 @@ export const ACME_CATALOG: RiskCatalog = {
       reason: 'Catch-all for writes the catalog does not name.',
       matches: 'acme.**.W',
       fallback: true,
-      vector: { ...READ_VECTOR, reversibility: 'costly', blast: 'env', persistence: 'session' },
+      vector: { ...READ_VECTOR, reversibility: 'costly', blast: 'env' },
     },
   ],
   macro_actions: [

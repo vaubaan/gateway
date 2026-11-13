@@ -978,7 +978,7 @@ export function AccountView({
                   return {
                     id,
                     label: risk?.label ?? id,
-                    level: risk?.level ?? null,
+                    row: risk?.row ?? null,
                     known: risk !== undefined,
                   };
                 })}

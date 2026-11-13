@@ -28,7 +28,6 @@ const githubCatalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'stateless',
       },
     },
     {
@@ -42,7 +41,6 @@ const githubCatalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
     {
@@ -56,7 +54,6 @@ const githubCatalog: RiskCatalog = {
         data: 'data',
         cost: 'moderate',
         visibility: 'team',
-        persistence: 'session',
       },
     },
     {
@@ -70,7 +67,6 @@ const githubCatalog: RiskCatalog = {
         data: 'metadata',
         cost: 'free',
         visibility: 'team',
-        persistence: 'posture',
       },
     },
     {
@@ -84,7 +80,6 @@ const githubCatalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
   ],
@@ -251,7 +246,6 @@ function entry(id: string, matches: string): RiskCatalog['risks'][number] {
       data: 'data',
       cost: 'free',
       visibility: 'internal',
-      persistence: 'stateless',
     },
   };
 }
@@ -272,7 +266,6 @@ describe('indexCatalog', () => {
             data: 'data',
             cost: 'free',
             visibility: 'internal',
-            persistence: 'stateless',
           },
         },
       ],
@@ -295,7 +288,6 @@ describe('indexCatalog', () => {
             data: 'data',
             cost: 'free',
             visibility: 'internal',
-            persistence: 'stateless',
           },
         },
       ],
@@ -320,7 +312,6 @@ describe('indexCatalog', () => {
             data: 'data',
             cost: 'free',
             visibility: 'internal',
-            persistence: 'stateless',
           },
         },
         {
@@ -334,7 +325,6 @@ describe('indexCatalog', () => {
             data: 'data',
             cost: 'free',
             visibility: 'internal',
-            persistence: 'stateless',
           },
         },
       ],

@@ -34,7 +34,6 @@ const FAKE_CATALOG: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'stateless',
       },
     },
     {
@@ -49,7 +48,6 @@ const FAKE_CATALOG: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'team',
-        persistence: 'session',
       },
     },
     {
@@ -63,7 +61,6 @@ const FAKE_CATALOG: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
   ],

@@ -196,7 +196,8 @@ describe('plugins.json', () => {
       expect.arrayContaining([
         'vector',
         'undo',
-        'tier',
+        'row',
+        'row_reason',
         'rate_ceiling_per_minute',
         'patterns',
         'env_variants',

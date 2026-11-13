@@ -46,7 +46,6 @@ const VECTOR = {
   data: 'data',
   cost: 'free',
   visibility: 'internal',
-  persistence: 'stateless',
 } as const;
 
 export type DepotExecute = (
@@ -158,7 +157,7 @@ export function depotPlugin(): DepotPlugin {
           reason: 'Reversible edit of one item.',
           matches: `${DEPOT}.space[**].item[**].W`,
           acceptable_in_envs: ['staging', 'prod'],
-          vector: { ...VECTOR, persistence: 'session' },
+          vector: { ...VECTOR },
         },
         {
           id: `${DEPOT}.purge`,

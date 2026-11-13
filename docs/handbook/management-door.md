@@ -8,7 +8,7 @@ tracks:
   - apps/gateway/src/app/oauth/
   - apps/gateway/src/app/.well-known/
   - apps/gateway/src/app/mcp/manage/route.ts
-last_reviewed: 2026-10-31
+last_reviewed: 2026-11-13
 ---
 
 # Management door — handbook
@@ -46,8 +46,15 @@ resource, `/mcp/manage`, whose tools prepare missions. Spec:
   mission service, not the door, checks the delegating user's current authority.
 - An agent composes a connection from `trust_levels` (macro-action → trust level) or `everything_i_hold: true`; the
   views say what each trust level yields with the mission module's own `expandMacroAction`
-  (`at_trust_level`), and `get_catalog` gives each risk's tier and the trust level table, so the agent can
-  predict the preview. Catalogs ship no presets, and a draft names none.
+  (`at_trust_level`), and `get_catalog` gives each risk's `row` (1 harmless to 4 cannot be
+  repaired) and `row_reason` (the branch of the tree, `null` in row 1) with the trust level table
+  keyed by row, so the agent can predict the preview. Catalogs ship no presets, and a draft names
+  none.
+- **`get_catalog`'s JSON changed on 2026-11-13** (risk model §4.6): each risk lost `level`
+  (`low`…`critical`) and `tier`, and gained `row` and `row_reason`; `trust_levels.<level>.gates`
+  keeps its keys `'1'`…`'4'`, now rows. The `everything-i-hold-expanded` notice names "the hardest
+  to repair" and the row-4 lines running freely, not "most severe" and "critical". An agent
+  reading the old fields gets nothing: there is no alias.
 - `rotate_mission_token` reaches only missions this delegation issued; `MissionService.rotate`
   checks it again (`not-issued-by-delegation`).
 

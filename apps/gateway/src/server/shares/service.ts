@@ -149,7 +149,7 @@ export interface RevokeOutcome {
 export interface ReceivedRisk {
   readonly risk_id: RiskId;
   readonly label: string;
-  readonly level: CatalogRisk['level'] | null;
+  readonly row: CatalogRisk['row'] | null;
   readonly known: boolean;
 }
 
@@ -619,10 +619,10 @@ function receivedRisks(
   const held = new Set(restriction);
   const known = rows
     .filter((row) => held.has(row.risk_id))
-    .map((row) => ({ risk_id: row.risk_id, label: row.label, level: row.level, known: true }));
+    .map((row) => ({ risk_id: row.risk_id, label: row.label, row: row.row, known: true }));
   const listed = new Set(known.map((risk) => risk.risk_id));
   const dropped = restriction
     .filter((id) => !listed.has(id))
-    .map((id) => ({ risk_id: id, label: id, level: null, known: false }));
+    .map((id) => ({ risk_id: id, label: id, row: null, known: false }));
   return [...known, ...dropped];
 }

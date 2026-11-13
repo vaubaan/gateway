@@ -2,9 +2,9 @@
 
 /**
  * A permission, as a row: what it lets an agent do in words, its id in mono
- * (a person may need to quote it), its severity, its limits per day and per
- * minute, whether it runs freely or asks first, and — one click away — why it
- * is rated the way it is.
+ * (a person may need to quote it), its row and the reason that put it there,
+ * its limits per day and per minute, whether it runs freely or asks first,
+ * and — one click away — why it is rated the way it is.
  *
  * `PermissionTable` chooses the columns once (`variant`) and its rows follow:
  *
@@ -24,20 +24,21 @@ import {
   ACTIONS,
   formatNumber,
   LIMIT_WORDS,
-  SEVERITY_LABEL,
+  ROW_LABEL,
   type GateWord,
-  type SeverityWord,
+  type Reason,
+  type Row,
   type WhyAxis,
 } from '@/lib/vocabulary';
 
-import { GateMark, SeverityChip, WhyCells } from './Marks.tsx';
+import { GateMark, RowChip, WhyCells } from './Marks.tsx';
 import styles from './Permission.module.css';
 
 export type PermissionVariant = 'editor' | 'read' | 'usage' | 'pick';
 
 interface Layout {
   readonly select: boolean;
-  readonly severity: boolean;
+  readonly row: boolean;
   readonly usage: boolean;
   readonly perDay: boolean;
   readonly perMinute: boolean;
@@ -48,7 +49,7 @@ interface Layout {
 const LAYOUTS: Readonly<Record<PermissionVariant, Layout>> = {
   editor: {
     select: true,
-    severity: true,
+    row: true,
     usage: false,
     perDay: true,
     perMinute: true,
@@ -57,7 +58,7 @@ const LAYOUTS: Readonly<Record<PermissionVariant, Layout>> = {
   },
   read: {
     select: false,
-    severity: true,
+    row: true,
     usage: false,
     perDay: true,
     perMinute: true,
@@ -66,7 +67,7 @@ const LAYOUTS: Readonly<Record<PermissionVariant, Layout>> = {
   },
   usage: {
     select: false,
-    severity: false,
+    row: false,
     usage: true,
     perDay: false,
     perMinute: true,
@@ -75,7 +76,7 @@ const LAYOUTS: Readonly<Record<PermissionVariant, Layout>> = {
   },
   pick: {
     select: true,
-    severity: true,
+    row: true,
     usage: false,
     perDay: false,
     perMinute: false,
@@ -88,7 +89,7 @@ function columnCount(layout: Layout): number {
   return (
     1 +
     Number(layout.select) +
-    Number(layout.severity) +
+    Number(layout.row) +
     Number(layout.usage) +
     Number(layout.perDay) +
     Number(layout.perMinute) +
@@ -131,7 +132,7 @@ export function PermissionTable({
                 </th>
               )}
               <th scope="col">Permission</th>
-              {layout.severity && <th scope="col">{SEVERITY_LABEL}</th>}
+              {layout.row && <th scope="col">{ROW_LABEL}</th>}
               {layout.usage && <th scope="col">{labels?.usage ?? LIMIT_WORDS.usedToday}</th>}
               {layout.perDay && (
                 <th scope="col" className={styles.number}>
@@ -186,7 +187,7 @@ export function PermissionGroup({
 export interface PermissionWhy {
   /** Why it is rated this way, in a sentence or two. */
   readonly reason: React.ReactNode;
-  /** The six words of the risk model, by axis; values are the catalog's. */
+  /** The five facts of the risk model, by axis; values are the catalog's. The Reference only. */
   readonly cells?: Readonly<Partial<Record<WhyAxis, string>>>;
   /** Where the whole entry is: the reference of the service. */
   readonly referenceHref?: string;
@@ -201,7 +202,8 @@ function limitCell(value: React.ReactNode): React.ReactNode {
 export function PermissionRow({
   label,
   id,
-  severity,
+  row,
+  rowReason,
   included = true,
   select,
   usage,
@@ -217,7 +219,10 @@ export function PermissionRow({
   label: React.ReactNode;
   /** The protocol's id (`github.merge-protected`), printed in mono under the label. */
   id?: string;
-  severity: SeverityWord;
+  /** The row of the permission (risk model §4.6); required by the variants that show it. */
+  row?: Row;
+  /** The branch of the tree that put it there, in quiet type beside the row; none in row 1. */
+  rowReason?: Reason | null;
   /** `false`: the permission is listed as not included (quiet row, no limits). */
   included?: boolean;
   /** The tick of the row (a `Checkbox`), in the `editor` and `pick` variants. */
@@ -262,9 +267,9 @@ export function PermissionRow({
           </span>
           {id && <code className={styles.id}>{id}</code>}
         </td>
-        {layout.severity && (
-          <td className={styles.severityCell}>
-            <SeverityChip level={severity} />
+        {layout.row && (
+          <td className={styles.rowCell}>
+            {row !== undefined && <RowChip row={row} reason={rowReason} />}
             {!layout.gate && whyButton}
           </td>
         )}

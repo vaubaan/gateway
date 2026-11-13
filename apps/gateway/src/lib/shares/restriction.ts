@@ -9,21 +9,24 @@
  */
 import type { RiskId } from '@vaubaan/shared';
 
-import { SEVERITY_LEVELS, type CatalogRisk, type SeverityLevel } from '../missions/model';
+import { ROW_WORDS } from '@vaubaan/policy-engine';
 
-/** Most severe first: the order of the checklist's groups. */
-export const SEVERITY_ORDER: readonly SeverityLevel[] = [...SEVERITY_LEVELS].reverse();
+import { hardestToRepair } from '../missions/catalog-view';
+import type { CatalogRisk, Row } from '../missions/model';
 
-export interface SeverityGroup {
-  readonly level: SeverityLevel;
+/** The hardest to repair first: the order of the checklist's groups (risk model §4.6). */
+export const ROW_ORDER: readonly Row[] = [4, 3, 2, 1];
+
+export interface RowGroup {
+  readonly row: Row;
   readonly risks: readonly CatalogRisk[];
 }
 
-/** The catalog rows grouped by severity level, empty groups left out, catalog order inside. */
-export function groupBySeverity(risks: readonly CatalogRisk[]): SeverityGroup[] {
-  return SEVERITY_ORDER.map((level) => ({
-    level,
-    risks: risks.filter((risk) => risk.level === level),
+/** The catalog rows grouped by row, empty groups left out, catalog order inside. */
+export function groupByRow(risks: readonly CatalogRisk[]): RowGroup[] {
+  return ROW_ORDER.map((row) => ({
+    row,
+    risks: risks.filter((risk) => risk.row === row),
   })).filter((group) => group.risks.length > 0);
 }
 
@@ -43,20 +46,18 @@ export function summarizeRestriction(
   selected: ReadonlySet<RiskId>,
 ): string {
   const chosen = risks.filter((risk) => selected.has(risk.risk_id));
-  if (chosen.length === 0) return 'Nothing ticked: this access would allow nothing.';
-  const mostSevere = chosen.reduce((worst, risk) =>
-    risk.severity > worst.severity ? risk : worst,
-  );
-  const perLevel = SEVERITY_ORDER.map((level) => ({
-    level,
-    count: chosen.filter((risk) => risk.level === level).length,
+  const hardest = hardestToRepair(chosen);
+  if (hardest === null) return 'Nothing ticked: this access would allow nothing.';
+  const perRow = ROW_ORDER.map((row) => ({
+    row,
+    count: chosen.filter((risk) => risk.row === row).length,
   }))
     .filter((entry) => entry.count > 0)
-    .map((entry) => `${entry.count} ${entry.level}`);
+    .map((entry) => `${entry.count} ${ROW_WORDS[entry.row].toLowerCase()}`);
   return [
     `${chosen.length} of ${risks.length} ${risks.length === 1 ? 'permission' : 'permissions'}`,
-    perLevel.join(', '),
-    `most severe: ${mostSevere.label} (${mostSevere.level})`,
+    perRow.join(', '),
+    `hardest to repair: ${hardest.label} (${ROW_WORDS[hardest.row].toLowerCase()})`,
   ].join(' · ');
 }
 

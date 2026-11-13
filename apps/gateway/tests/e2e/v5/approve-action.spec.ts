@@ -4,7 +4,7 @@
  * §4.2 "Request inbox").
  *
  * The mission is composed from the GitHub plugin's macro-actions as they ship:
- * Administer at Careful gates writing a workflow file (tier 3) `approval`, at
+ * Administer at Careful gates writing a workflow file (row 3) `approval`, at
  * its base budget of 50; Propose at Trusting runs the feature-branch write
  * freely, at three times its base budget of 500. The
  * executor is an MCP client holding the mission token; its calls go over HTTP
@@ -145,7 +145,7 @@ test('a gated action of the developer trust levels: refused, approved by its cre
   const needed = hedy.getByTestId('approval-gated-risks');
   await expect(needed).toContainText(GATED);
   await expect(hedy.getByTestId('approval-gate')).toHaveText('ask me first');
-  await expect(needed.locator('[data-severity]')).toHaveCount(1);
+  await expect(needed.locator('[data-row]')).toHaveCount(1);
   // What is left of every permission the call counts against, once it has run: the
   // whole call is what waits, so the one that runs freely is listed too.
   await expect(hedy.getByTestId(`approval-room-${GATED}`)).toContainText('49 of 50 left');

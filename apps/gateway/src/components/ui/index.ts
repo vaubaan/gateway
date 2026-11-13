@@ -57,7 +57,7 @@ export {
   type StackMember,
 } from './Avatar.tsx';
 export { Mono } from './Mono.tsx';
-export { SeverityChip, GateMark, WhyCells } from './Marks.tsx';
+export { RowChip, GateMark, WhyCells } from './Marks.tsx';
 export { Icon, type IconName } from './Icon.tsx';
 
 // Permissions and what a mission allows

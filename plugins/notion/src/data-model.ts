@@ -13,7 +13,7 @@
  *
  * No entity carries an environment (product owner, 2026-10-16) : a root is
  * written whatever its owner's label, and the destructive operations are
- * gated by their tier instead.
+ * gated by their row instead.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';

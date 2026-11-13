@@ -6,7 +6,7 @@
  *
  * The checklist is the catalog as explicit ids, grouped the way the reference
  * groups them (reads, writes, irreversible writes), each line with its
- * severity and a "why?" one click away. "Select all" and the macro-actions
+ * row and its reason, and a "why?" one click away. "Select all" and the macro-actions
  * tick the boxes one by one: the form posts one `risk` value per ticked permission, so
  * what is stored is the list resolved at the time of the click (spec §3.1
  * "Enumeration"), never "everything". A permission the catalog gains later is
@@ -403,7 +403,8 @@ export function GiveAccessDialog({
                         key={risk.risk_id}
                         label={family.label}
                         id={risk.risk_id}
-                        severity={risk.level}
+                        row={risk.row}
+                        rowReason={risk.row_reason}
                         included={selected.has(risk.risk_id)}
                         tag={
                           risk.env || risk.fallback || risk.deprecated ? (
@@ -425,7 +426,6 @@ export function GiveAccessDialog({
                         }
                         why={{
                           reason: risk.reason,
-                          cells: risk.vector,
                           referenceHref: riskReferencePath(risk.risk_id) ?? service.referenceHref,
                         }}
                       />

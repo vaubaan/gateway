@@ -250,7 +250,7 @@ function page(view: ApprovalView | ClaimView, extra: { decided?: boolean; proble
       view={view}
       viewerId={VIEWER}
       now={NOW_AT}
-      levels={{ [MERGE]: 'high' }}
+      rows={{ [MERGE]: 3 }}
       decided={extra.decided ?? false}
       problem={extra.problem ?? null}
     />,
@@ -421,7 +421,7 @@ describe('eventWords', () => {
 });
 
 describe('the page of an approval', () => {
-  it('is read in this order: who, the mission, the call and its arguments, the permission and its severity, what an answer does, the answers', () => {
+  it('is read in this order: who, the mission, the call and its arguments, the permission and its row, what an answer does, the answers', () => {
     const html = page(approval());
     inOrder(text(html), [
       'codex',
@@ -437,7 +437,7 @@ describe('the page of an approval', () => {
       'Permission it needs',
       'ask me first',
       'Merge to a protected branch',
-      'high',
+      'Repairable, at a price',
       MERGE,
       'Room left after this',
       '49 of 50 left today',
@@ -447,8 +447,8 @@ describe('the page of an approval', () => {
       'What led here',
       'What the agent sees meanwhile',
     ]);
-    // The severity is a word, and the consequence is stated before the first button.
-    inOrder(html, ['data-severity="high"', 'Valid 10 minutes', 'name="resolution" value="grant"']);
+    // The row is a word, and the consequence is stated before the first button.
+    inOrder(html, ['data-row="3"', 'Valid 10 minutes', 'name="resolution" value="grant"']);
     // The arguments as they were sent, each by its name.
     expect(html).toContain(ARGUMENT);
     expect(text(html)).toContain('repoweb');

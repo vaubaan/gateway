@@ -35,9 +35,11 @@
 # pattern or macro-action changed.
 # catalog_version 8 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 9 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: stripe
-catalog_version: 8
-catalog_date: 2026-11-05
+catalog_version: 9
+catalog_date: 2026-11-13
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -59,8 +61,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: stateless
-
   - id: stripe.read-billing-history
     label: 'Read billing history (subscriptions, invoices, charges, payment intents)'
     reason: >-
@@ -81,8 +81,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: stripe.read-customer-pii
     label: 'Read customer PII (email, name, address, phone)'
     reason: >-
@@ -98,8 +96,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: stripe.read-balance
     label: 'Read balance, ledger and events (cash position)'
     reason: >-
@@ -118,8 +114,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── Writes — catalog ────────────────────────────────────────────────────
 
   - id: stripe.catalog-write
@@ -140,8 +134,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   # ─── Writes — subscriptions ──────────────────────────────────────────────
 
   - id: stripe.subscription-create
@@ -162,8 +154,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
-
   - id: stripe.subscription-update
     label: 'Update a subscription (plan, quantity, pause, metadata)'
     reason: >-
@@ -178,8 +168,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
-
   - id: stripe.subscription-cancel
     label: 'Cancel a subscription (stops future charges)'
     reason: >-
@@ -194,8 +182,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
-
   # ─── Writes — invoices ───────────────────────────────────────────────────
 
   - id: stripe.invoice-create-draft
@@ -211,8 +197,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: stripe.invoice-finalize
     label: 'Finalize an invoice (locks it, notifies, attempts collection)'
     reason: >-
@@ -227,8 +211,6 @@ risks:
       data: data
       cost: moderate
       visibility: team
-      persistence: posture
-
   - id: stripe.invoice-void
     label: 'Void a finalized invoice (cannot be undone)'
     reason: >-
@@ -243,8 +225,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   # ─── Writes — money out ──────────────────────────────────────────────────
 
   - id: stripe.refund-create
@@ -263,7 +243,6 @@ risks:
       data: data
       cost: unbounded
       visibility: internal
-      persistence: posture
     infra_limits:
       calls_per_minute_max: 30
 
@@ -281,7 +260,6 @@ risks:
       data: data
       cost: unbounded
       visibility: internal
-      persistence: posture
     infra_limits:
       calls_per_minute_max: 30
 
@@ -301,8 +279,6 @@ risks:
       data: pii
       cost: moderate
       visibility: team
-      persistence: posture
-
   # ─── Writes — webhooks (configuration + credential mint) ─────────────────
 
   - id: stripe.webhook-endpoint-write
@@ -320,8 +296,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: stripe.mint-webhook-secret
     label: 'Mint a webhook signing secret (create_webhook_endpoint)'
     reason: >-
@@ -336,8 +310,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: posture
-
   # ─── Fallback (required) ─────────────────────────────────────────────────
 
   - id: stripe.uncategorized-write
@@ -354,8 +326,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

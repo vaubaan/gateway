@@ -2,34 +2,41 @@
  * The permissions of a service against the trust levels: first the
  * macro-actions a mission ticks, then one row per catalog entry — what it
  * allows in words, its id in mono, its macro-action, one line on why it
- * matters, its severity and tier — and one column per trust level with the gate
- * and limit that trust level writes, or "left out". The difference between two trust levels
- * is read along a row; "why?" unfolds the entry: the whole reason, the six
- * words behind the severity, what it covers, its tools, and its line at each
- * trust level.
+ * matters, its row and the reason that put it there — and one column per trust
+ * level with the gate and limit that trust level writes, or "left out". The
+ * difference between two trust levels is read along a row; "why?" unfolds the
+ * entry: the whole reason, the five facts the row is read from (the only page
+ * that prints them), what it covers, its tools, and its line at each trust level.
  *
- * An entry is listed once, under the kind of its most severe variant, so its
+ * An entry is listed once, under the kind of its worst variant, so its
  * anchor (`#risk-<id>`) is unique; an entry that exists once per environment
  * shows one limit per environment in a cell.
  */
 import { Fragment } from 'react';
 
-import { EnvTag, GateMark, Mono, SeverityChip, Tag, WhyCells } from '@/components/ui';
+import { EnvTag, GateMark, Mono, RowChip, Tag, WhyCells } from '@/components/ui';
 import {
   ACTIONS,
   count,
   formatNumber,
   gateWordOf,
   GATE_WORDS,
-  tierWord,
   PERMISSION_KINDS,
   REFERENCE_WORDS,
-  SEVERITY_LABEL,
+  ROW_LABEL,
+  ROW_WORDS,
+  TREE_LEGEND,
   TERMS,
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
 } from '@/lib/vocabulary';
-import { DEPRECATED_NOTE, FALLBACK_NOTE, formatRate, noteBody } from '@/lib/missions/catalog-view';
+import {
+  DEPRECATED_NOTE,
+  FALLBACK_NOTE,
+  formatRate,
+  hardestToRepair,
+  noteBody,
+} from '@/lib/missions/catalog-view';
 import { TRUST_LEVELS } from '@/lib/missions/macro-actions';
 import type { CatalogRisk } from '@/lib/missions/model';
 import { riskReferencePath } from '@/lib/providers/links';
@@ -42,12 +49,9 @@ import {
 
 import styles from '../reference.module.css';
 
-/** The variant a row shows: the most severe one, so nothing is understated. */
+/** The variant a row shows: the one hardest to repair, so nothing is understated. */
 function worstVariant(entry: RiskReference): CatalogRisk | undefined {
-  return entry.variants.reduce<CatalogRisk | undefined>(
-    (worst, risk) => (worst === undefined || risk.severity > worst.severity ? risk : worst),
-    undefined,
-  );
+  return hardestToRepair(entry.variants) ?? undefined;
 }
 
 /** One cell: per variant, the gate and limit the trust level writes, or "left out". */
@@ -137,6 +141,9 @@ export function PermissionComparison({
           </li>
         ))}
       </ul>
+      <p className={styles.note} data-testid="tree-legend">
+        {TREE_LEGEND}
+      </p>
       <div className={styles.scroll}>
         <table className={styles.comparison} data-testid="trust-level-matrix">
           <caption className="vbn-sr-only">
@@ -146,8 +153,8 @@ export function PermissionComparison({
           <thead>
             <tr>
               <th scope="col">{REFERENCE_WORDS.permission}</th>
-              <th scope="col" className={styles.severityHead}>
-                {SEVERITY_LABEL}
+              <th scope="col" className={styles.rowHead}>
+                {ROW_LABEL}
               </th>
               {TRUST_LEVELS.map((trustLevel) => (
                 <th
@@ -225,8 +232,8 @@ export function PermissionComparison({
                           </button>
                         </span>
                       </th>
-                      <td className={styles.severityCell}>
-                        {shown && <SeverityChip level={shown.level} />}
+                      <td className={styles.rowCell}>
+                        {shown && <RowChip row={shown.row} reason={shown.row_reason} />}
                       </td>
                       {TRUST_LEVELS.map((trustLevel) => (
                         <td
@@ -271,7 +278,7 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
           {entry.variants.map((risk) => (
             <li key={risk.risk_id}>
               <span className={styles.variantHead}>
-                <EnvTag env={risk.env} /> <SeverityChip level={risk.level} />
+                <EnvTag env={risk.env} /> <RowChip row={risk.row} reason={risk.row_reason} />
               </span>
               <WhyCells values={risk.vector} />
             </li>
@@ -316,7 +323,7 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
               {entry.macro_action.label}
               <ul className={styles.patterns}>
                 {TRUST_LEVELS.flatMap((trustLevel) =>
-                  entry.at_trust_level[trustLevel].map(({ risk, tier, line }) => (
+                  entry.at_trust_level[trustLevel].map(({ risk, row, line }) => (
                     <li key={`${trustLevel}:${risk.risk_id}`}>
                       {TRUST_LEVEL_LABELS[trustLevel]}
                       {risk.env && (
@@ -325,7 +332,7 @@ function PermissionDetail({ entry }: { entry: RiskReference }) {
                           <EnvTag env={risk.env} />
                         </>
                       )}{' '}
-                      ({tierWord(tier)}):{' '}
+                      ({ROW_WORDS[row]}):{' '}
                       {line === null
                         ? REFERENCE_WORDS.leftOut
                         : `${formatNumber(line.quota)} per period, ${formatRate(line.rate_limit)}, ${

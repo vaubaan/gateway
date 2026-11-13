@@ -514,7 +514,7 @@ describe('views', () => {
   it('a macro-action says what each trust level writes, with the mission module’s own expansion', () => {
     const owner = connectionView(acmeConnection());
     const change = owner.macro_actions.find((action) => action.id === 'change');
-    // Writes are costly (tier 3), bulk deletes irreversible (tier 4).
+    // Writes are costly (row 3), bulk deletes irreversible (row 4).
     expect(change?.at_trust_level).toEqual({
       careful: { auto: 0, approval: 2, left_out: 1 },
       trusting: { auto: 0, approval: 3, left_out: 0 },
@@ -684,9 +684,9 @@ describe('views', () => {
     expect(
       flagged.risks.filter((risk) => risk.in_my_authority).map((risk) => risk.risk_id),
     ).toEqual(SHARED);
-    // Each risk says its tier and macro-action; the trust levels say what a tier gets.
+    // Each risk says its row and macro-action; the trust levels say what a row gets.
     expect(plain.risks.find((risk) => risk.risk_id === 'acme[staging].bulk-delete')).toMatchObject({
-      tier: 4,
+      row: 4,
       macro_action: 'change',
     });
     expect(plain.risks.find((risk) => risk.risk_id === 'acme.legacy-export')?.macro_action).toBe(

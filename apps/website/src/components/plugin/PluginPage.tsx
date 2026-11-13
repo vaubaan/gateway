@@ -10,7 +10,7 @@
  */
 import { Fragment, type ReactNode } from 'react';
 
-import { SEVERITY_LABEL, TRUST_LEVELS, TRUST_LEVEL_LABELS } from '@vaubaan/policy-engine';
+import { ROW_LABEL, TRUST_LEVELS, TRUST_LEVEL_LABELS } from '@vaubaan/policy-engine';
 
 import { gatewaysSentence, healthFootnote, NOT_READ } from '../../content/health';
 import { WORKED_TRUST_LEVEL } from '../../content/plugin-examples';
@@ -189,8 +189,8 @@ function SpreadTable({ spread }: { spread: Spread }) {
       <table className="spread-table">
         <thead>
           <tr>
-            <th scope="col">Permission · the six facts</th>
-            <th scope="col">{SEVERITY_LABEL}</th>
+            <th scope="col">Permission · the five facts</th>
+            <th scope="col">{ROW_LABEL}</th>
             {spread.levelHeadings.map((h) => (
               <th scope="col" key={h.level}>
                 {h.heading}
@@ -213,7 +213,7 @@ function SpreadTable({ spread }: { spread: Spread }) {
                 <FactCells facts={line.facts} />
               </td>
               <td>
-                <RiskWord level={line.severity} />
+                <RiskWord row={line.row} />
               </td>
               {TRUST_LEVELS.map((level) => (
                 <LevelCell key={level} levels={line.levels} level={level} />
@@ -441,7 +441,7 @@ export function PluginPageView({
   const mission = missionOf(plugin);
   const retired = retiredOf(plugin);
   const labels = new Map(plugin.risks.map((r) => [r.id, r.label]));
-  const severities = new Map(plugin.risks.map((r) => [r.id, r.severity]));
+  const rowOfRisk = new Map(plugin.risks.map((r) => [r.id, r.row]));
   const fallback = plugin.anythingElse?.entries ?? [];
   const links = pluginLinks(plugin);
   const twin = links[links.length - 1]!;
@@ -590,7 +590,7 @@ export function PluginPageView({
                   <thead>
                     <tr>
                       <th scope="col">Permission</th>
-                      <th scope="col">{SEVERITY_LABEL}</th>
+                      <th scope="col">{ROW_LABEL}</th>
                       {levelHeadings().map((h) => (
                         <th scope="col" key={h.level}>
                           {h.heading}
@@ -606,8 +606,8 @@ export function PluginPageView({
                           <Mono quiet>{entry.riskId}</Mono>
                         </td>
                         <td>
-                          {severities.get(entry.riskId) && (
-                            <RiskWord level={severities.get(entry.riskId)!} />
+                          {rowOfRisk.has(entry.riskId) && (
+                            <RiskWord row={rowOfRisk.get(entry.riskId)!} />
                           )}
                         </td>
                         {TRUST_LEVELS.map((level) => (

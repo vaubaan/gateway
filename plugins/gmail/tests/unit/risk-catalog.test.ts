@@ -76,14 +76,13 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
     }
   });
 
-  test('every 6D vector axis carries a valid value', () => {
+  test('every vector axis (five facts) carries a valid value', () => {
     const axes: Record<keyof RiskEntry['vector'], readonly string[]> = {
       reversibility: ['reversible', 'costly', 'irreversible'],
       blast: ['single', 'env', 'account', 'bulk'],
       data: ['metadata', 'data', 'secret', 'pii'],
       cost: ['free', 'moderate', 'unbounded'],
       visibility: ['internal', 'team', 'public'],
-      persistence: ['stateless', 'session', 'posture'],
     };
     for (const entry of parsedCatalog.risks) {
       for (const [axis, allowed] of Object.entries(axes) as Array<

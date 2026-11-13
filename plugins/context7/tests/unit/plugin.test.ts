@@ -114,16 +114,15 @@ describe('context7 plugin — structural kit', () => {
     ]);
   });
 
-  // The question leaves for a third party and cannot be recalled : the
-  // vector is irreversible, so no trust level runs a query freely.
-  test('a query is left out at Careful and asks first at the other trust levels', () => {
-    expect(policyFromMacroActions(context7Plugin, { ask: 'careful' })).toEqual([]);
-    expect(policyFromMacroActions(context7Plugin, { ask: 'trusting' })).toEqual([
+  // A documentation read (vector corrected 2026-11-13) : harmless, it runs
+  // freely at every trust level, within its budget.
+  test('a query runs freely from Careful on', () => {
+    expect(policyFromMacroActions(context7Plugin, { ask: 'careful' })).toEqual([
       {
         risk_id: `${PROVIDER_ID}.query-docs`,
-        quota: 900,
-        rate_limit: { max: 60, window_seconds: 60 },
-        gate: 'approval',
+        quota: 300,
+        rate_limit: { max: 20, window_seconds: 60 },
+        gate: 'auto',
       },
     ]);
   });

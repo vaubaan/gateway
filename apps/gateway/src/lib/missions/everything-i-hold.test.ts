@@ -13,8 +13,8 @@ import {
   EVERYTHING_I_HOLD,
   everythingIHold,
   expansionDigest,
-  QUOTA_BY_LEVEL,
-  RATE_BY_LEVEL,
+  QUOTA_BY_ROW,
+  RATE_BY_ROW,
 } from './everything-i-hold';
 import type { IssuanceConnection, IssuanceResource, MissionDraft } from './model';
 import { budgetProblem, previewDraft } from './preview';
@@ -128,14 +128,14 @@ describe('everything I hold — the expansion', () => {
       rate_limit: { max: 100, window_seconds: 60 },
       gate: 'auto',
     });
-    // A risk in no macro-action: by level.
+    // A risk in no macro-action: by row.
     const lone = acmeConnection({ macro_actions: [] });
     const read = risks.get('acme.read');
     expect(
       everythingIHold(lone, ACME_RESOURCES).entries.find((e) => e.risk_id === 'acme.read'),
     ).toMatchObject({
-      quota: read ? QUOTA_BY_LEVEL[read.level] : -1,
-      rate_limit: { max: read ? RATE_BY_LEVEL[read.level] : -1, window_seconds: 60 },
+      quota: read ? QUOTA_BY_ROW[read.row] : -1,
+      rate_limit: { max: read ? RATE_BY_ROW[read.row] : -1, window_seconds: 60 },
     });
     // Every line passes the issuance budget check, ceilings included.
     for (const entry of byId.values()) {
@@ -168,28 +168,39 @@ describe('everything I hold — the preview', () => {
     expect(JSON.stringify(p.policy)).not.toContain(EVERYTHING_I_HOLD);
   });
 
-  it('says what it wrote out: count, most severe, and the fallback by id', () => {
+  it('says what it wrote out: count, the hardest to repair, and the fallback by id', () => {
     const connection = acmeConnection({ resources: STAGING });
     const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
     const notice = p.notices.find((n) => n.code === 'everything-i-hold-expanded');
     expect(notice?.connection_id).toBe(connection.id);
     expect(notice?.message).toContain(`${idsOf(connection, STAGING).length} explicit risks`);
-    expect(notice?.message).toContain('Most severe: acme[staging].bulk-delete');
+    expect(notice?.message).toContain(
+      'The hardest to repair: acme[staging].bulk-delete (Cannot be repaired)',
+    );
     expect(notice?.message).toContain('Includes the fallback acme.uncategorized-write');
-    expect(notice?.risk_ids).toEqual(['acme.uncategorized-write']);
+    // The bulk delete cannot be repaired and runs freely here: named first.
+    expect(notice?.risk_ids).toEqual(['acme[staging].bulk-delete', 'acme.uncategorized-write']);
   });
 
-  it('names the critical lines that run freely, without adding a gate', () => {
+  it('names the lines that cannot be repaired and run freely, without adding a gate', () => {
     const base = acmeConnection();
-    // Make `acme.admin` critical: the notice must say so, the gate stays `auto`.
+    // Put `acme.admin` in row 4: the notice must say so, the gate stays `auto`.
     const risks = base.risks.map((r) =>
-      r.risk_id === 'acme.admin' ? { ...r, severity: 12, level: 'critical' as const } : r,
+      r.risk_id === 'acme.admin'
+        ? { ...r, row: 4 as const, row_reason: 'irreversible' as const }
+        : r,
     );
     const connection = acmeConnection({ risks });
     const p = previewDraft({ connections: [connection], now: NOW }, draftWith(connection));
     const notice = p.notices.find((n) => n.code === 'everything-i-hold-expanded');
-    expect(notice?.message).toContain('gate auto (no approval asked): acme.admin');
-    expect(notice?.risk_ids).toEqual(['acme.admin', 'acme.uncategorized-write']);
+    expect(notice?.message).toContain(
+      'Cannot be repaired, gate auto (no approval asked): acme[staging].bulk-delete, acme.admin.',
+    );
+    expect(notice?.risk_ids).toEqual([
+      'acme[staging].bulk-delete',
+      'acme.admin',
+      'acme.uncategorized-write',
+    ]);
     expect(p.policy.every((line) => line.gate === 'auto')).toBe(true);
   });
 
@@ -257,7 +268,7 @@ describe('everything I hold — the preview', () => {
 });
 
 describe('expansionDigest', () => {
-  it('counts the lines, names the most severe, the critical running freely and the fallback', () => {
+  it('counts the lines, names the hardest to repair, those that cannot be repaired running freely and the fallback', () => {
     const risks = enumerateCatalog(ACME_CATALOG);
     const digest = expansionDigest(
       [
@@ -268,8 +279,12 @@ describe('expansionDigest', () => {
       risks,
     );
     expect(digest.count).toBe(3);
-    expect(digest.most_severe?.risk_id).toBe('acme[staging].bulk-delete');
-    expect(digest.critical_auto).toEqual([]);
+    expect(digest.hardest).toEqual({
+      risk_id: 'acme[staging].bulk-delete',
+      label: risks.find((r) => r.risk_id === 'acme[staging].bulk-delete')?.label,
+      row: 4,
+    });
+    expect(digest.irreparable_auto).toEqual([]);
     expect(digest.fallback.map((r) => r.risk_id)).toEqual(['acme.uncategorized-write']);
   });
 });

@@ -157,11 +157,10 @@ describe('previewDraft — partition per connection', () => {
           data: 'data',
           cost: 'free',
           visibility: 'internal',
-          persistence: 'stateless',
         },
         kind: 'read',
-        severity: 1,
-        level: 'low',
+        row: 1,
+        row_reason: null,
         fallback: false,
         deprecated: false,
         rate_ceiling_per_minute: null,
@@ -523,7 +522,7 @@ describe('previewDraft — budget is mandatory', () => {
 });
 
 describe('previewDraft — macro-actions at a trust level', () => {
-  it('writes the explicit lines of the ticked macro-actions, gate from the tier, budget from the trust level', () => {
+  it('writes the explicit lines of the ticked macro-actions, gate from the row, budget from the trust level', () => {
     const p = preview([
       {
         connection_id: 'conn-acme',

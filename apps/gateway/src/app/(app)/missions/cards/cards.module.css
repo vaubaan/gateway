@@ -273,6 +273,9 @@
   border-top: 1px solid var(--line);
   vertical-align: middle;
 }
+.permissionRow {
+  display: block;
+}
 .permissionId {
   display: block;
   color: var(--ink-3);

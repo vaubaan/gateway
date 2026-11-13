@@ -64,7 +64,7 @@ import {
 
 import type { Subject } from '../authority';
 import type { MissionState } from '../budget';
-import type { MissionDetail, MissionRole, MissionService, SeverityLevel } from '../missions';
+import type { MissionDetail, MissionRole, MissionService, Row } from '../missions';
 import { missionChangeClauses } from '../../lib/missions/change-words';
 import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
@@ -125,7 +125,7 @@ const MS_PER_SECOND = 1000;
 
 export interface SessionRiskRow extends MissionPolicyEntry {
   readonly label: string;
-  readonly level: SeverityLevel | null;
+  readonly row: Row | null;
   /** Actions counted this period, net of what granted claims gave back; `null`
    *  when the mission is not active. */
   readonly consumed: number | null;
@@ -521,7 +521,7 @@ function riskRows(
     rate_limit: entry.rate_limit,
     gate: entry.gate,
     label: entry.label,
-    level: entry.level,
+    row: entry.row,
     consumed: active ? (consumed.get(lineKeyOf(entry)) ?? 0) : null,
     remaining: active ? (active.remaining[lineKeyOf(entry)] ?? null) : null,
     exhausted: active ? active.exhausted.includes(lineKeyOf(entry)) : false,

@@ -30,9 +30,11 @@
 # the macro-action `propose`.
 # catalog_version 13 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 14 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: github
-catalog_version: 13
-catalog_date: 2026-11-05
+catalog_version: 14
+catalog_date: 2026-11-13
 
 risks:
   # ---------------------------------------------------------------
@@ -57,8 +59,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: github.read-meta
     label: 'Read PRs, issues, releases, workflows, runs and job logs, branch-protection'
     reason: >-
@@ -82,8 +82,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: github.search-global
     label: 'Global GitHub search (code / issues, beyond the mission resources)'
     reason: >-
@@ -100,8 +98,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ---------------------------------------------------------------
   # WRITES — branches feature/* (low-risk, the coding-agent hot loop)
   # ---------------------------------------------------------------
@@ -120,8 +116,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   # ---------------------------------------------------------------
   # WRITES — protected branches (main / master / release-* / prod)
   # ---------------------------------------------------------------
@@ -143,8 +137,6 @@ risks:
       data: data
       cost: moderate
       visibility: team
-      persistence: session
-
   # ---------------------------------------------------------------
   # WRITES — workflow YAML files (privilege escalation vector)
   # ---------------------------------------------------------------
@@ -171,8 +163,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: posture
-
   # ---------------------------------------------------------------
   # WRITES — bulk multi-file push (push_files)
   # ---------------------------------------------------------------
@@ -192,8 +182,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   # ---------------------------------------------------------------
   # WRITES — pull requests, comments & labels
   # ---------------------------------------------------------------
@@ -211,8 +199,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: github.comment-write
     label: 'Comment on an issue or PR'
     reason: >-
@@ -227,8 +213,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: github.label-write
     label: 'Add labels to an issue or PR'
     reason: >-
@@ -244,8 +228,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   # ---------------------------------------------------------------
   # WRITES — releases (potentially public publication)
   # ---------------------------------------------------------------
@@ -265,8 +247,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: session
-
   - id: github.delete-release
     label: 'Delete a release'
     reason: >-
@@ -281,8 +261,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: session
-
   # ---------------------------------------------------------------
   # WRITES — branch protection (posture-shift)
   # ---------------------------------------------------------------
@@ -301,8 +279,6 @@ risks:
       data: metadata
       cost: free
       visibility: team
-      persistence: posture
-
   # ---------------------------------------------------------------
   # GIT REMOTE — pushes through https://<instance>/git/github/<owner>/<repo>.git
   # ---------------------------------------------------------------
@@ -330,8 +306,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: github.force-push
     label: 'Force-push (rewrite the history of a branch or move a tag)'
     reason: >-
@@ -348,8 +322,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: github.branch-delete
     label: 'Delete a branch with git'
     reason: >-
@@ -364,8 +336,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: session
-
   - id: github.tag-write
     label: 'Push or delete a tag with git'
     reason: >-
@@ -384,8 +354,6 @@ risks:
       data: metadata
       cost: free
       visibility: team
-      persistence: posture
-
   # ---------------------------------------------------------------
   # DEPRECATED — the install-token mint of the company's GitHub App, gone
   # with the App (ADR one-place-to-authorize-services-token-first, catalog
@@ -408,8 +376,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: session
-
   - id: github.mint-install-token-push
     deprecated: true
     replaced_by: github.git-push
@@ -427,8 +393,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: posture
-
   # ---------------------------------------------------------------
   # FALLBACK — catch-all (mandatory, risk-model spec §4.3)
   # ---------------------------------------------------------------
@@ -448,8 +412,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

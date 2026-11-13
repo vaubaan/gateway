@@ -36,7 +36,6 @@ import {
   explainOrphan,
   isResolvable,
   macroActionOfRisk,
-  tierOf,
   TRUST_LEVELS,
   type DraftPeriod,
   type IssuanceConnection,
@@ -44,7 +43,8 @@ import {
   type MissionIssuer,
   type MissionOverview,
   type MissionPreview,
-  type Tier,
+  type Reason,
+  type Row,
   takesFutureResources,
   type TrustLevel,
 } from '../missions';
@@ -90,7 +90,7 @@ export interface TrustLevelYieldView {
   readonly auto: number;
   /** Lines that ask the creator first. */
   readonly approval: number;
-  /** Risks the trust level does not accept (tier 4 at Careful). */
+  /** Risks the trust level does not accept (row 4 at Careful). */
   readonly left_out: number;
 }
 
@@ -235,9 +235,13 @@ export interface CatalogRiskView {
   readonly env: string | null;
   readonly label: string;
   readonly reason: string;
-  readonly level: string;
-  /** 1 mild to 4 irreversible, read from the vector: what a trust level maps to a gate. */
-  readonly tier: Tier;
+  /**
+   * 1 harmless to 4 cannot be repaired, read from the vector by the decision
+   * tree (risk model §4.6): what a trust level maps to a gate.
+   */
+  readonly row: Row;
+  /** The branch of the tree that put the risk in its row (`irreversible`, `secret-data`…); `null` in row 1. */
+  readonly row_reason: Reason | null;
   /** The macro-action the risk belongs to; `anything-else` for the fallback, `null` when deprecated. */
   readonly macro_action: string | null;
   /** The catalog's catch-all for writes it does not name; only in "Anything else". */
@@ -258,7 +262,7 @@ export interface CatalogView {
   readonly risks: readonly CatalogRiskView[];
   /** The macro-actions, each risk with its base budget (unqualified ids: one line per environment reached). */
   readonly macro_actions: readonly CatalogMacroActionView[];
-  /** Per trust level: the gate of each tier (`null`: not accepted) and the factor on the base budget. */
+  /** Per trust level: the gate of each row (`null`: not accepted) and the factor on the base budget. */
   readonly trust_levels: Readonly<Record<TrustLevel, TrustLevelRuleView>>;
   /** With a connection: the built-in `everything-i-hold` written out for it, entry by entry. */
   readonly everything_i_hold?: {
@@ -276,7 +280,7 @@ export interface CatalogMacroActionView {
 }
 
 export interface TrustLevelRuleView {
-  readonly gates: Readonly<Record<`${Tier}`, Gate | null>>;
+  readonly gates: Readonly<Record<`${Row}`, Gate | null>>;
   readonly budget_factor: number;
 }
 
@@ -310,8 +314,8 @@ export function catalogView(
       env: risk.env,
       label: risk.label,
       reason: risk.reason,
-      level: risk.level,
-      tier: tierOf(risk.vector),
+      row: risk.row,
+      row_reason: risk.row_reason,
       macro_action: macroActionOfRisk(catalog, risk)?.id ?? null,
       fallback: risk.fallback,
       deprecated: risk.deprecated,

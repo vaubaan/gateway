@@ -83,7 +83,6 @@ function risk(id: string, matches: string): Record<string, unknown> {
       data: 'data',
       cost: 'free',
       visibility: 'internal',
-      persistence: 'stateless',
     },
   };
 }
@@ -422,7 +421,20 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     expect(loaded.risks[0]!.replaced_by).toBe('acme.thing-write');
   });
 
-  test('a vector must name its six axes ; an override may name a subset', () => {
+  test('the retired persistence axis is refused like any unknown key, with a hint (SDK 0.9)', () => {
+    const d = doc();
+    ((d.risks as Record<string, unknown>[])[0]!.vector as Record<string, unknown>).persistence =
+      'stateless';
+    (d.risks as Record<string, unknown>[])[1]!.vector_overrides = {
+      prod: { persistence: 'posture' },
+    };
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'risks[0].vector.persistence: unknown axis (retired on 2026-11-13, spec gateway-risk-model §4.2: remove the line)',
+      'risks[1].vector_overrides.prod.persistence: unknown axis (retired on 2026-11-13, spec gateway-risk-model §4.2: remove the line)',
+    ]);
+  });
+
+  test('a vector must name its five axes ; an override may name a subset', () => {
     const d = doc();
     delete ((d.risks as Record<string, unknown>[])[0]!.vector as Record<string, unknown>).cost;
     (d.risks as Record<string, unknown>[])[1]!.vector_overrides = {
@@ -504,13 +516,12 @@ describe('isCompleteVector', () => {
     data: 'data',
     cost: 'free',
     visibility: 'internal',
-    persistence: 'stateless',
   } as const;
 
-  test('true only when the six axes are set', () => {
+  test('true only when the five axes are set', () => {
     expect(isCompleteVector(full)).toBe(true);
     expect(isCompleteVector({})).toBe(false);
-    expect(isCompleteVector({ ...full, persistence: undefined })).toBe(false);
+    expect(isCompleteVector({ ...full, visibility: undefined })).toBe(false);
   });
 });
 

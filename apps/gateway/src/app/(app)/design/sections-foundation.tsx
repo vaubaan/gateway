@@ -21,7 +21,7 @@ import {
   PageHeader,
   SectionHeading,
   ServiceMark,
-  SeverityChip,
+  RowChip,
   Stats,
   StatusMark,
   SubNav,
@@ -447,13 +447,13 @@ export function MarkSections({ icons }: { icons: GalleryIcons }) {
             </Line>
           )}
         </Specimen>
-        <Specimen name="Severity and gate" note="one word each">
+        <Specimen name="Row and gate" note="the row in words, its reason in quiet type">
           {() => (
             <Line>
-              <SeverityChip level="low" />
-              <SeverityChip level="medium" />
-              <SeverityChip level="high" />
-              <SeverityChip level="critical" />
+              <RowChip row={1} />
+              <RowChip row={2} reason="personal-data" />
+              <RowChip row={3} reason="costly-to-undo" />
+              <RowChip row={4} reason="irreversible" />
               <GateMark gate="free" />
               <GateMark gate="ask" />
               <GateMark gate="off" />

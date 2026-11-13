@@ -6,8 +6,9 @@
  * Pure and browser-safe. The same text is returned by `preview()` and shown
  * live by the creation form.
  */
-import { ratePerMinute } from '@vaubaan/policy-engine';
+import { ratePerMinute, ROW_WORDS } from '@vaubaan/policy-engine';
 
+import { byRowWorstFirst, hardestToRepair } from './catalog-view';
 import type {
   CatalogRisk,
   ConnectionPreview,
@@ -63,10 +64,9 @@ export function expiryPhrase(expiresAt: string | null): string {
   return `expires ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-function mostSevere(risks: readonly CatalogRisk[]): CatalogRisk | null {
-  let top: CatalogRisk | null = null;
-  for (const risk of risks) if (top === null || risk.severity > top.severity) top = risk;
-  return top;
+/** A row in words, as a summary sentence quotes it: "(cannot be repaired)". */
+function rowPhrase(risk: Pick<CatalogRisk, 'row'>): string {
+  return ROW_WORDS[risk.row].toLowerCase();
 }
 
 function canLine(connection: IssuanceConnection, preview: ConnectionPreview): string | null {
@@ -76,13 +76,13 @@ function canLine(connection: IssuanceConnection, preview: ConnectionPreview): st
   const accepted = [...new Set(preview.passes.map((p) => p.risk_id))].flatMap(
     (id) => byId.get(id) ?? [],
   );
-  const top = mostSevere(accepted);
+  const top = hardestToRepair(accepted);
   const later = preview.future ? ', resources found later included' : '';
   const where =
     preview.resources_total === 0
       ? `the account${later}`
       : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}${later}`;
-  const upTo = top ? `, up to "${shortLabel(top.label)}" (${top.level})` : '';
+  const upTo = top ? `, up to "${shortLabel(top.label)}" (${rowPhrase(top)})` : '';
   return `${connection.provider_label} "${connection.display_name}": ${plural(
     accepted.length,
     'risk',
@@ -92,16 +92,18 @@ function canLine(connection: IssuanceConnection, preview: ConnectionPreview): st
 function cannotLine(connection: IssuanceConnection, preview: ConnectionPreview): string {
   const accepted = new Set(preview.passes.map((p) => p.risk_id));
   const held = new Set(connection.authority);
-  const withheld = connection.risks
-    .filter((r) => held.has(r.risk_id) && !accepted.has(r.risk_id) && !r.deprecated)
-    .sort((a, b) => b.severity - a.severity);
+  const withheld = byRowWorstFirst(
+    connection.risks.filter(
+      (r) => held.has(r.risk_id) && !accepted.has(r.risk_id) && !r.deprecated,
+    ),
+  );
   const parts: string[] = [];
   const [worst] = withheld;
   if (!worst) {
     parts.push('every risk you hold is accepted');
   } else {
     parts.push(
-      `${plural(withheld.length, 'risk')} withheld, the most severe "${shortLabel(worst.label)}" (${worst.level})`,
+      `${plural(withheld.length, 'risk')} withheld, the hardest to repair "${shortLabel(worst.label)}" (${rowPhrase(worst)})`,
     );
   }
   const leftOut = preview.resources_total - preview.resources.length;

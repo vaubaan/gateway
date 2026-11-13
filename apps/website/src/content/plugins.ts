@@ -6,9 +6,9 @@
  * declaration and whose catalog is read from `risk-catalog.yaml` by the
  * plugin SDK's loader — and reduced to plain data the pages can render.
  *
- * Nothing of the gateway is restated here: severity, tier, gates, budgets,
- * "Anything else" and every word a person reads of the risk model (the six
- * facts and their values, the gate words) come from `@vaubaan/policy-engine`,
+ * Nothing of the gateway is restated here: the row and its reason, gates,
+ * budgets, "Anything else" and every word a person reads of the risk model
+ * (the four rows, the reasons, the five facts and their values, the gate words) come from `@vaubaan/policy-engine`,
  * the client source from the plugin SDK, the worked examples from the
  * plugin's own `classify` (`plugin-examples.ts`). Each shape below is plain,
  * serialisable data: `plugins.json` writes it out as it is.
@@ -39,11 +39,10 @@ import {
   gateWordOf,
   isAcceptableInEnv,
   macroActionsOf,
+  REASON_AXIS,
+  reasonOf,
   resolveVector,
-  severityLevel,
-  severityOf,
-  tierFactsOf,
-  tierOf,
+  rowOf,
   TRUST_LEVEL_GATES,
   TRUST_LEVELS,
   WHY_LABELS,
@@ -51,10 +50,9 @@ import {
   WHY_VALUES,
   whyValue,
   type GateWord,
-  type SeverityLevel,
-  type Tier,
+  type Reason,
+  type Row,
   type TrustLevel,
-  type UndoWord,
   type WhyAxis,
 } from '@vaubaan/policy-engine';
 import type {
@@ -73,12 +71,10 @@ import {
   type WorkedMission,
 } from './plugin-examples';
 
-/** The one severity word of a permission, the gateway interface's (style guide §2). */
-export type Severity = SeverityLevel;
+export type { Reason, Row } from '@vaubaan/policy-engine';
 
-function severityWord(vector: RiskVector): Severity {
-  return severityLevel(severityOf(vector));
-}
+/** The undo fact in words (`WHY_VALUES.reversibility`): `easy`, `costly`, `impossible`. */
+export type UndoWord = (typeof WHY_VALUES.reversibility)[RiskVector['reversibility']];
 
 export interface ToolInfo {
   readonly name: string;
@@ -90,11 +86,9 @@ export interface ToolInfo {
 
 export type RiskKind = 'read' | 'write' | 'destructive';
 
-export type { UndoWord } from '@vaubaan/policy-engine';
-
 /**
- * One of the six facts of a permission, in the gateway interface's words
- * (style guide §2, "the six risk axes are words"): `WHY_LABELS`, `WHY_VALUES`.
+ * One of the five facts of a permission, in the gateway interface's words
+ * (style guide §2): `WHY_LABELS`, `WHY_VALUES`.
  */
 export interface FactInfo {
   readonly axis: WhyAxis;
@@ -104,19 +98,20 @@ export interface FactInfo {
   readonly value: string;
   /** The value in words (`impossible`). */
   readonly word: string;
-  /** True when this fact sets the tier, so moves the gate (`tierFactsOf`): the page tints it. */
+  /** True when this fact gave the row its reason, so moved the gate (`reasonOf`): the page tints it. */
   readonly movesGate: boolean;
 }
 
-/** The six facts of a vector, in the order the gateway draws them (`WHY_ORDER`). */
+/** The five facts of a vector, in the order the gateway draws them (`WHY_ORDER`). */
 export function factsOf(vector: RiskVector): FactInfo[] {
-  const moving = new Set<WhyAxis>(tierFactsOf(vector));
+  const reason = reasonOf(vector);
+  const moving = reason === null ? null : REASON_AXIS[reason];
   return WHY_ORDER.map((axis) => ({
     axis,
     label: WHY_LABELS[axis],
     value: vector[axis],
     word: whyValue(axis, vector[axis]),
-    movesGate: moving.has(axis),
+    movesGate: axis === moving,
   }));
 }
 
@@ -129,8 +124,10 @@ export interface RiskEnvVariant {
   readonly env: string;
   readonly vector: RiskVector;
   readonly facts: readonly FactInfo[];
-  readonly severity: Severity;
-  readonly tier: Tier;
+  /** `rowOf` in this environment: what the trust levels read. */
+  readonly row: Row;
+  /** `reasonOf` in this environment; `null` in row 1. */
+  readonly rowReason: Reason | null;
   readonly undo: UndoWord;
   /** False when `acceptable_in_envs` leaves this environment out: no mission holds it there. */
   readonly acceptable: boolean;
@@ -140,14 +137,15 @@ export interface RiskInfo {
   readonly id: string;
   readonly label: string;
   readonly reason: string;
-  readonly severity: Severity;
-  /** The six facts, as the catalog declares them. */
+  /** The five facts, as the catalog declares them. */
   readonly vector: RiskVector;
-  /** The same six facts in the gateway's words, the ones that move the gate marked. */
+  /** The same five facts in the gateway's words, the one that moved the gate marked. */
   readonly facts: readonly FactInfo[];
   readonly undo: UndoWord;
-  /** `tierOf` from the policy engine: what the trust levels read. A page never prints "tier". */
-  readonly tier: Tier;
+  /** `rowOf` from the policy engine: the row it is printed with, what the trust levels read. */
+  readonly row: Row;
+  /** `reasonOf`: the branch of the tree that decided the row; `null` in row 1. */
+  readonly rowReason: Reason | null;
   /** The catalog's per-minute ceiling (`infra_limits.calls_per_minute_max`), when declared. */
   readonly rateCeilingPerMinute: number | null;
   /** The slice patterns the permission covers (`matches`). */
@@ -156,8 +154,8 @@ export interface RiskInfo {
   /** One row per environment the catalog names for this permission. */
   readonly envVariants: readonly RiskEnvVariant[];
   readonly kind: RiskKind;
-  /** Environment labels whose own vector gives another severity (`prod: high`). */
-  readonly severityByEnv: readonly { readonly env: string; readonly severity: Severity }[];
+  /** Environment labels whose own vector gives another row (`prod: 3`). */
+  readonly rowByEnv: readonly { readonly env: string; readonly row: Row }[];
   /** The only environment labels this permission may be accepted for, when the catalog restricts it. */
   readonly acceptableInEnvs: readonly string[] | null;
   readonly fallback: boolean;
@@ -420,36 +418,33 @@ function envVariant(entry: RiskEntry, env: string): RiskEnvVariant {
     env,
     vector: { ...vector },
     facts: factsOf(vector),
-    severity: severityWord(vector),
-    tier: tierOf(vector),
+    row: rowOf(vector),
+    rowReason: reasonOf(vector),
     undo: undoWordOf(vector),
     acceptable: isAcceptableInEnv(entry, env),
   };
 }
 
 function riskInfo(entry: RiskEntry): RiskInfo {
-  const severity = severityWord(entry.vector);
-  const severityByEnv = Object.entries(entry.vector_overrides ?? {})
-    .map(([env, override]) => ({
-      env,
-      severity: severityWord({ ...entry.vector, ...override }),
-    }))
-    .filter((row) => row.severity !== severity);
+  const row = rowOf(entry.vector);
+  const rowByEnv = Object.entries(entry.vector_overrides ?? {})
+    .map(([env, override]) => ({ env, row: rowOf({ ...entry.vector, ...override }) }))
+    .filter((variant) => variant.row !== row);
   return {
     id: entry.id,
     label: entry.label,
     reason: entry.reason,
-    severity,
     vector: { ...entry.vector },
     facts: factsOf(entry.vector),
     undo: undoWordOf(entry.vector),
-    tier: tierOf(entry.vector),
+    row,
+    rowReason: reasonOf(entry.vector),
     rateCeilingPerMinute: entry.infra_limits?.calls_per_minute_max ?? null,
     patterns: [...patternsOf(entry)],
     replacedBy: entry.replaced_by ?? null,
     envVariants: envsNamedBy(entry).map((env) => envVariant(entry, env)),
     kind: kindOf(entry),
-    severityByEnv,
+    rowByEnv,
     acceptableInEnvs: entry.acceptable_in_envs ? [...entry.acceptable_in_envs] : null,
     fallback: entry.fallback === true,
     deprecated: entry.deprecated === true,
@@ -462,11 +457,11 @@ function levelBudgets(
   entry: MacroActionEntry,
   ceiling: number | null,
 ): LevelBudgets {
-  const tier = tierOf(vector);
+  const row = rowOf(vector);
   const base = { quota: entry.quota, rate_limit: entry.rate_limit };
   const line = (level: TrustLevel): LevelBudget => {
     const budget = budgetAtTrustLevel(base, level, ceiling);
-    const gate = TRUST_LEVEL_GATES[level][tier];
+    const gate = TRUST_LEVEL_GATES[level][row];
     return {
       gate,
       gateWord: gate === null ? 'off' : gateWordOf(gate),

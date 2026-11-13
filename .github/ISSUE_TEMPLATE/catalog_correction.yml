@@ -10,7 +10,7 @@ body:
 
         **Stop if the problem lets a mission do more than it accepted** (a write classified as a read, a call that escapes its resource, a dangerous call no risk covers). That is a vulnerability: report it privately as `SECURITY.md` says, not here.
 
-        This form is for everything else: a call refused that should not be, a risk that is too broad or too narrow to be useful, a wrong severity, a misleading label, a macro-action that does not fit real work.
+        This form is for everything else: a call refused that should not be, a risk that is too broad or too narrow to be useful, a risk in the wrong row, a misleading label, a macro-action that does not fit real work.
   - type: input
     id: provider
     attributes:
@@ -36,7 +36,7 @@ body:
         - A call is refused or needs a risk it should not need (classified too strictly)
         - A risk groups operations that deserve separate decisions (too broad)
         - A risk is missing for an operation that is only covered by the fallback
-        - The vector of a risk is wrong (reversibility, blast, data, cost, visibility, persistence)
+        - The vector of a risk is wrong (reversibility, blast, data, cost, visibility)
         - A label, a reason or a description is wrong or unclear
         - A macro-action does not fit real work (risks, base budgets, what each trust level writes)
         - The environments a risk is acceptable in are wrong

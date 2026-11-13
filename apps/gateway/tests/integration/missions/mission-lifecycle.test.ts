@@ -582,7 +582,7 @@ describe('missions: issue, rotate, revoke', () => {
         provider,
       ).toBe(true);
     }
-    // Careful on Read: the global search, of tier 2, asks first.
+    // Careful on Read: the global search, in row 2, asks first.
     expect(result.preview.connections[0]?.passes.map((e) => [e.risk_id, e.gate])).toEqual([
       ['github.read-code', 'auto'],
       ['github.read-meta', 'auto'],
@@ -639,7 +639,7 @@ describe('missions: issue, rotate, revoke', () => {
     expect(fromTrustLevels.ok).toBe(true);
     const leftOut = fromTrustLevels.connections[0]?.left_out ?? [];
     expect(leftOut.length).toBeGreaterThan(0);
-    // At Trusting no tier is left out: only the environments no project carries.
+    // At Trusting no row is left out: only the environments no project carries.
     expect(leftOut.every((s) => s.reason === 'unresolvable-env' && s.env !== 'prod')).toBe(true);
     expect(leftOut.map((s) => s.risk_id)).toContain('supabase[staging].bulk-row-write');
     expect(fromTrustLevels.policy.every((e) => !e.risk_id.includes('[staging]'))).toBe(true);

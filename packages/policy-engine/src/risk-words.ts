@@ -1,6 +1,6 @@
 /**
- * The words a person reads for the risk model — the six facts and their
- * values, the gate, a mission's Can / Asks first / Cannot, the trust levels.
+ * The words a person reads for the risk model — the four rows and the reason
+ * of a permission, the five facts and their values, the gate, a mission's Can / Asks first / Cannot, the trust levels.
  * Pure and browser-safe. The gateway's interface (`lib/vocabulary.ts`
  * re-exports them) and the public site (`apps/website`) print these, never a
  * copy (ADR interface-redesign-vocabulary-and-design-system, amendment
@@ -12,31 +12,67 @@
 
 import type { Gate, RiskVector } from '@vaubaan/shared';
 
-import type { Tier, TrustLevel } from './trust-level.ts';
+import type { Reason, Row, TrustLevel } from './trust-level.ts';
 
-/** The label of the severity chip. The word itself is `severityLevel`'s. */
-export const SEVERITY_LABEL = 'Risk';
+/** The heading of the column that carries the row of a permission. */
+export const ROW_LABEL = 'Risk';
 
-/** The six facts behind a severity, as the "why?" disclosure labels them. Keyed by `RiskVector` axis. */
+/**
+ * The four rows of the risk model, worst first in the interface: the word a
+ * permission is printed with (`rowOf`). Keyed by what the trust levels read,
+ * so a row and the gates it gets never disagree; the word "tier" is never
+ * printed (risk model §4.6).
+ */
+export const ROW_WORDS: Readonly<Record<Row, string>> = {
+  4: 'Cannot be repaired',
+  3: 'Repairable, at a price',
+  2: 'Repairable, worth a look',
+  1: 'Harmless',
+};
+
+/** The branch of the tree that put a permission in its row (`reasonOf`), in quiet type. */
+export const REASON_WORDS: Readonly<Record<Reason, string>> = {
+  irreversible: 'irreversible',
+  'costly-to-undo': 'costly to undo',
+  'unbounded-cost': 'unbounded cost',
+  'secret-data': 'secret data',
+  'personal-data': 'personal data',
+  'whole-account': 'whole account',
+  'in-bulk': 'in bulk',
+  'moderate-cost': 'moderate cost',
+  public: 'public',
+};
+
+/** What the trust levels do with each row, in one sentence (risk model §4.6). */
+export const ROW_GATE_SENTENCES: Readonly<Record<Row, string>> = {
+  4: 'Careful: no. Trusting, Autonomous: ask me.',
+  3: 'Careful, Trusting: ask me. Autonomous: runs freely.',
+  2: 'Careful: ask me. Trusting, Autonomous: runs freely.',
+  1: 'Runs freely at every level.',
+};
+
+/** How a permission finds its row, in one sentence. */
+export const TREE_LEGEND =
+  'A permission sits in the first row its facts answer: irreversible; costly to undo or unbounded cost; secret or personal data, whole account or bulk, moderate cost, public; otherwise harmless.';
+
+/** The five facts behind a row, as the "why?" disclosure labels them. Keyed by `RiskVector` axis. */
 export const WHY_LABELS = {
   reversibility: 'Undo',
   blast: 'Blast radius',
   data: 'Data',
   cost: 'Cost',
   visibility: 'Visible to',
-  persistence: 'Lasts',
 } as const satisfies Record<keyof RiskVector, string>;
 
 export type WhyAxis = keyof typeof WHY_LABELS;
 
-/** The order the six cells are drawn in. */
+/** The order the five cells are drawn in. */
 export const WHY_ORDER: readonly WhyAxis[] = [
   'reversibility',
   'blast',
   'data',
   'cost',
   'visibility',
-  'persistence',
 ];
 
 /** Each value of the risk model, said in words. */
@@ -51,25 +87,7 @@ export const WHY_VALUES = {
   data: { metadata: 'metadata', data: 'contents', secret: 'secrets', pii: 'personal data' },
   cost: { free: 'free', moderate: 'moderate', unbounded: 'unbounded' },
   visibility: { internal: 'internal', team: 'the team', public: 'public' },
-  persistence: { stateless: 'nothing', session: 'the session', posture: 'until reverted' },
 } as const satisfies { readonly [K in WhyAxis]: Readonly<Record<RiskVector[K], string>> };
-
-/** The undo fact in words: what the rows of a plugin's map are named by. */
-export type UndoWord = (typeof WHY_VALUES.reversibility)[RiskVector['reversibility']];
-
-/**
- * The rows of a plugin's map, worst first: the undo fact, its easy value split
- * in two by what `tierOf` reads beyond it (secrets or personal data, a whole
- * account or many items, an unbounded cost). Keyed by what the trust levels
- * read, so a row and the gates it gets never disagree; the word "tier" is
- * never printed (website spec §2.3).
- */
-export const UNDO_ROW_WORDS: Readonly<Record<Tier, string>> = {
-  4: WHY_VALUES.reversibility.irreversible,
-  3: WHY_VALUES.reversibility.costly,
-  2: `${WHY_VALUES.reversibility.reversible}, but sensitive`,
-  1: WHY_VALUES.reversibility.reversible,
-};
 
 /** A value said in words; a value the model does not list is printed as it is. */
 export function whyValue(axis: WhyAxis, value: string): string {

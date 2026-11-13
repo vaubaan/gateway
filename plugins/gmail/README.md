@@ -169,8 +169,8 @@ and bulk reads and bulk labels ask first. In no macro-action:
 acceptable: the classifier refuses the draft, and the entry is kept
 `deprecated` because ids are never deleted) and the fallback. Sending
 (the four `gmail.send-to-zone-*`) is its own macro-action, "Send": a sent
-message cannot be called back, so it is ticked on purpose; self is tier 1,
-internal 3, allowlist and external 4.
+message cannot be called back, so it is ticked on purpose; self is in row 1 (harmless),
+internal row 3, allowlist and external row 4.
 
 ## Credential — an app password
 

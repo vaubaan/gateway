@@ -224,22 +224,13 @@ risks:
       data: data #                metadata | data | secret | pii
       cost: free #                free | moderate | unbounded
       visibility: internal #      internal | team | public
-      persistence: stateless #    stateless | session | posture
 
   - id: acme.widget-write
     label: 'Create or modify a widget'
     reason: 'Reversible on staging; visible to customers on prod until reverted.'
     matches: 'acme.workspace[**].widget[**].W'
     acceptable_in_envs: [staging, prod] # makes the risk env-scoped
-    vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: data,
-        cost: free,
-        visibility: team,
-        persistence: session,
-      }
+    vector: { reversibility: reversible, blast: single, data: data, cost: free, visibility: team }
     vector_overrides: # optional: what changes in one environment
       prod: { reversibility: costly, visibility: public }
 
@@ -248,30 +239,14 @@ risks:
     reason: 'A deleted widget cannot be restored.'
     matches: 'acme.workspace[**].widget[**].delete.W'
     acceptable_in_envs: [staging, prod]
-    vector:
-      {
-        reversibility: irreversible,
-        blast: single,
-        data: data,
-        cost: free,
-        visibility: team,
-        persistence: session,
-      }
+    vector: { reversibility: irreversible, blast: single, data: data, cost: free, visibility: team }
 
   - id: acme.uncategorized-write # the fallback: mandatory, exactly one
     label: 'Uncategorized write'
     reason: 'Catch-all for writes without a dedicated entry.'
     matches: 'acme.**.W' # must be this catch-all pattern
     fallback: true #       must carry the flag
-    vector:
-      {
-        reversibility: costly,
-        blast: env,
-        data: data,
-        cost: moderate,
-        visibility: internal,
-        persistence: session,
-      }
+    vector: { reversibility: costly, blast: env, data: data, cost: moderate, visibility: internal }
 
 macro_actions:
   - id: read
@@ -328,7 +303,18 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   a write no other entry covers. Seeing it in an audit log means the catalog
   misses an entry; no macro-action may contain it
   ([ADR](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
-- **Environment.** A risk whose severity depends on the environment is
+- **The vector: five facts, sorted into a row.** The gateway never sums the
+  vector: it reads a decision tree, in order, and the first branch that
+  answers gives the risk its **row** and its **reason** (risk model §4.6):
+  `irreversible` → 4 "Cannot be repaired"; `costly` to undo or `unbounded`
+  cost → 3 "Repairable, at a price"; `secret` or `pii` data, `account` or
+  `bulk` blast, `moderate` cost, or `public` visibility → 2 "Repairable,
+  worth a look"; otherwise 1 "Harmless". Fill each fact for what the act does
+  at the provider, not for whether it writes: a read that spends a paid quota
+  is `moderate`, a read that changes nothing is `reversible` even when the
+  question leaves the company (say that in the `reason`). There is no sixth
+  axis: a `persistence` key does not load (SDK 0.9).
+- **Environment.** A risk whose row depends on the environment is
   **one** entry with `acceptable_in_envs`, never two ids with the environment
   in the name. In a mission it appears qualified,
   `acme[prod].widget-write`. A call on a resource its owner has not labelled
@@ -337,8 +323,8 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   "Move money out"), independent of each other: every entry but the fallback
   and deprecated ones belongs to **exactly one**, unqualified, with a base
   budget and no gate. A creator ticks them at a trust level; the gate follows
-  the entry's vector (irreversible asks or stays out, costly asks, a
-  sensitive read asks at the lowest trust level), so the vector must be right. The
+  the entry's row (row 4 asks or stays out, row 3 asks until Autonomous, row 2
+  asks at Careful), so the vector must be right. The
   gateway adds "Anything else" for the fallback
   ([ADR](../docs/decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 - **No presets.** Presets were retired: a catalog with a `presets` key does
@@ -770,7 +756,7 @@ call the way the gateway's risk step does. Never import
 **Test a mission the way a creator composes it.** `policyFromMacroActions`
 writes the explicit lines of ticked macro-actions at their trust levels, for the
 environments given, with the policy engine's own rules (gate from the
-tier, budget scaled by the trust level):
+row, budget scaled by the trust level):
 
 ```ts
 const policy = policyFromMacroActions(

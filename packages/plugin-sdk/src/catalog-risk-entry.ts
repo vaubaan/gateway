@@ -1,6 +1,6 @@
 /**
  * One risk of a YAML catalog, read field by field : id, words, patterns,
- * the six-axis vector and its per-environment overrides, the environments,
+ * the five-axis vector and its per-environment overrides, the environments,
  * the limits, the fallback and deprecation flags. Every reader returns the
  * typed value, or `undefined` after reporting at its path
  * (`risks[3].vector.blast`).
@@ -57,10 +57,13 @@ const SCOPE_CAP_KEYS = [
 const CAP_KEYS: ReadonlySet<string> = new Set(SCOPE_CAP_KEYS);
 
 type Axis = keyof RiskVector;
-/** The six axes, in declaration order. `Object.keys` widens to `string[]` ; the keys of a constant object are its keys. */
+/** The five axes, in declaration order. `Object.keys` widens to `string[]` ; the keys of a constant object are its keys. */
 const AXES = Object.keys(RISK_VECTOR_AXES) as readonly Axis[];
 
 // ── Risk vector ──────────────────────────────────────────────────────────────
+
+/** The sixth axis of SDK 0.8 and earlier: refused like any unknown key, with a hint. */
+const RETIRED_AXIS = 'persistence';
 
 type MutableVector = { -readonly [A in Axis]?: RiskVector[A] };
 
@@ -101,18 +104,23 @@ function partialVectorFrom(
   required: boolean,
 ): Partial<RiskVector> | undefined {
   if (!isRecord(raw)) {
-    ctx.issues.push(`${ctx.at}: expected a mapping of the six risk axes`);
+    ctx.issues.push(`${ctx.at}: expected a mapping of the five risk axes`);
     return undefined;
   }
   const out: MutableVector = {};
   for (const axis of AXES) readAxis(raw, axis, out, ctx, required);
   for (const key of Object.keys(raw)) {
-    if (!(key in RISK_VECTOR_AXES)) ctx.issues.push(`${ctx.at}.${key}: unknown axis`);
+    if (key in RISK_VECTOR_AXES) continue;
+    ctx.issues.push(
+      key === RETIRED_AXIS
+        ? `${ctx.at}.${key}: unknown axis (retired on 2026-11-13, spec gateway-risk-model §4.2: remove the line)`
+        : `${ctx.at}.${key}: unknown axis`,
+    );
   }
   return out;
 }
 
-/** True iff every one of the six axes is set : the partial vector is a `RiskVector`. */
+/** True iff every one of the five axes is set : the partial vector is a `RiskVector`. */
 export function isCompleteVector(vector: Partial<RiskVector>): vector is RiskVector {
   return AXES.every((axis) => vector[axis] !== undefined);
 }

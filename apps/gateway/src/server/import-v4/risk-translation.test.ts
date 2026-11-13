@@ -4,7 +4,7 @@ import supabasePlugin from '@vaubaan/plugin-supabase';
 import vercelPlugin from '@vaubaan/plugin-vercel';
 import { describe, expect, it } from 'vitest';
 
-import { budgetAtTrustLevel, tierOf, TRUST_LEVEL_GATES } from '@vaubaan/policy-engine';
+import { budgetAtTrustLevel, rowOf, TRUST_LEVEL_GATES } from '@vaubaan/policy-engine';
 
 import { enumerateCatalog } from '../../lib/missions/catalog-view';
 import { macroActionsOf } from '../../lib/missions/macro-actions';
@@ -42,7 +42,7 @@ describe('v4 risk ids translated to the v5 catalog', () => {
     expect(t.entries.map((e) => e.risk_id)).toEqual(['github.create-pr', 'github.read-code']);
     expect(t.entries[0]).toMatchObject({
       ...budgetAtTrustLevel(base!, IMPORT_TRUST_LEVEL, risk!.rate_ceiling_per_minute),
-      gate: TRUST_LEVEL_GATES[IMPORT_TRUST_LEVEL][tierOf(risk!.vector)],
+      gate: TRUST_LEVEL_GATES[IMPORT_TRUST_LEVEL][rowOf(risk!.vector)],
       macroActionId: 'propose',
       from: 'github.create-pr',
     });

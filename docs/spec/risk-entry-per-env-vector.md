@@ -31,9 +31,10 @@ environment or no override: the default.
 
 ### 1.2 What the resolved vector is used for
 
-Only what a human reads: the severity that orders a catalog's risks and names a preset's most severe
-risk is computed per qualified id, so `[prod].deploy` ranks above `[staging].deploy`. It changes
-**no decision** ([gateway-risk-model](./gateway-risk-model.md) §8).
+The row of the risk ([gateway-risk-model](./gateway-risk-model.md) §4.6) is read per qualified id,
+so `[prod].deploy` can sit in a harder row than `[staging].deploy`: what the interface orders by,
+names as "the hardest to repair", and what a trust level pre-fills a gate from. It changes **no
+runtime decision** (§8).
 
 ### 1.3 Validity
 

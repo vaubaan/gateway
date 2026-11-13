@@ -64,7 +64,7 @@ with its `narrative` in the catalog. Choices that are not
 obvious:
 
 - `read-crm` is `pii`: contact people, e-mail addresses, phone numbers, notes about people. It is
-  tier 2, so a Careful read of the CRM asks first, while sales, work and catalog reads run freely.
+  row 2, so a Careful read of the CRM asks first, while sales, work and catalog reads run freely.
 - `invoice-create` is `irreversible` and `public`: a numbered invoice is a legal accounting
   document addressed to a customer, which French rules forbid deleting (it is cancelled by a credit
   note). It is left out at Careful and asks first at every other level.

@@ -45,7 +45,7 @@ Still one opaque bundle per persona; independent intents (administer without rea
 
 Each rung includes the one below, so reading cannot be left out of administering.
 
-### The tier from the existing severity score, or written by hand per entry
+### The tier from the existing severity score, or written by hand per entry (see the amendment of 2026-11-13)
 
 The six-axis sum ranks `force-push` low: it sorts well and gates badly. Hand-written tiers are
 205 values to keep consistent across 14 plugins.
@@ -53,6 +53,46 @@ The six-axis sum ranks `force-push` low: it sorts well and gates badly. Hand-wri
 ### The trust level in the token, resolved at call time
 
 A catalog change would widen a mission nobody re-read; the token keeps the explicit list.
+
+## Amendment 2026-11-13: a decision tree over five facts replaces the tier rule
+
+### Context
+
+The tier rule named its inputs in one sentence, but the interface also printed a severity word
+(low, medium, high, critical) summed from six axes: two measures of one risk that disagreed (a
+reversible deploy "medium" and harmless, an irreversible send "medium" too). A moderate cost and a
+public effect raised nothing, and authors filled the sixth axis, `persistence`, as "is a write".
+
+### Decision
+
+The gate comes from an explicit **decision tree** over five facts, read in order, the first branch
+deciding the **row** (numbers kept, 4 the worst): irreversible → 4 "Cannot be repaired"; costly to
+undo or unbounded cost → 3 "Repairable, at a price"; secret or personal data, whole account or
+bulk, moderate cost, or public → 2 "Repairable, worth a look"; else 1 "Harmless". The branch that
+decided is the permission's **reason**. The gates per row and trust level do not change. The
+`persistence` axis leaves the vector and the catalogs (an SDK minor: the loader refuses it). The
+severity word leaves the product: a permission is printed with its row and, in quiet type, its
+reason, and lists are ordered by row then catalog order (spec gateway-risk-model §4.2, §4.6).
+
+### Consequences
+
+- Fifteen shipped catalog entries move from row 1 to row 2 (deploys, machine power, volumes,
+  addresses, certificates, firewall rules, a paid catalog read, service control) and `fly.scale`
+  from 2 to 3: their pre-filled gate asks at Careful (Trusting for `fly.scale`). Missions already
+  issued keep their explicit lines.
+- The vector stays the author's method for sorting a risk; the five facts are shown behind "why?"
+  in the Reference only.
+- The management door's `get_catalog` gives `row` and `row_reason` instead of `level` and `tier`.
+
+### Rejected alternatives
+
+- **The six-axis sum**: it compensates (a free, internal, single-item force-push scored low) and
+  gates badly; it was the severity word.
+- **Clustering the shipped entries**: its groups are kinds of actions (reads, deploys), not
+  dangers, and move when a catalog is added.
+- **A hand-filled table** of gates per entry: about 100 cells per plugin once environments
+  multiply the entries, kept consistent by nobody.
+- **Keeping `persistence`**: it decided no row, and the authors filled it as "is a write".
 
 ## History
 

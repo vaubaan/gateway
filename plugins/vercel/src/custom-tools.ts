@@ -140,7 +140,7 @@ export const customTools: readonly McpToolDeclaration[] = [
   {
     name: TOOL.listEnvVars,
     description:
-      'List environment variables on a Vercel project. Values are returned encrypted by default; pass `decrypt: true` to receive plaintext (a distinct, high-severity risk of the catalog). Backed by GET /v10/projects/{projectId}/env.',
+      'List environment variables on a Vercel project. Values are returned encrypted by default; pass `decrypt: true` to receive plaintext (a distinct risk of the catalog, about secret data). Backed by GET /v10/projects/{projectId}/env.',
     inputSchema: {
       type: 'object',
       properties: {

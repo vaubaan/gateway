@@ -15,8 +15,10 @@
 # point `replaced_by` at its successor, so existing missions keep working.
 #
 # 1 risk + 1 fallback. Both tools are the same act : send the agent's
-# question to Context7 and read documentation back. The vector describes the
-# disclosure of that question, not the read. No environment : Context7 has
+# question to Context7 and read documentation back. The vector is what a
+# documentation read is : nothing at the provider changes, one library, its
+# contents, within the plan's quota, seen by the company. The question leaving
+# the company is said in the reason and the narrative. No environment : Context7 has
 # none, no risk is env-scoped. No `infra_limits` : Context7 publishes no rate
 # figure, and a 429 is a provider failure.
 
@@ -27,9 +29,14 @@
 # pattern or macro-action changed.
 # catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no pattern or macro-action changed. One vector corrected : `query-docs` was
+# filed as irreversible (the question cannot be recalled), which put a
+# documentation read in the row "Cannot be repaired" ; it is now the vector of
+# a read (reversible, single, data, free, internal).
 provider: context7
-catalog_version: 4
-catalog_date: 2026-11-05
+catalog_version: 5
+catalog_date: 2026-11-13
 
 risks:
   - id: context7.query-docs
@@ -41,27 +48,18 @@ risks:
       spends the key's monthly Context7 quota.
     matches: 'context7.index[**].library[**].R'
     vector:
-      reversibility: irreversible # what was sent cannot be recalled
+      reversibility: reversible # a read changes nothing at the provider
       blast: single
-      data: data #                  free text written by the agent
-      cost: moderate #              plan quota ; billed overage on paid plans
-      visibility: public #          leaves the company
-      persistence: stateless
+      data: data #                documentation contents
+      cost: free #                within the plan's monthly quota
+      visibility: internal
 
   - id: context7.uncategorized-write
     label: 'Uncategorized write'
     reason: 'Catch-all for writes without a dedicated entry. No Context7 tool of this plugin writes.'
     matches: 'context7.**.W'
     fallback: true
-    vector:
-      {
-        reversibility: costly,
-        blast: account,
-        data: data,
-        cost: moderate,
-        visibility: team,
-        persistence: posture,
-      }
+    vector: { reversibility: costly, blast: account, data: data, cost: moderate, visibility: team }
 
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback

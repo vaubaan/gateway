@@ -2,6 +2,7 @@ import { createRegistry } from '@vaubaan/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
 import { SHIPPED_PLUGINS } from '../../server/compose/shipped-plugins';
+import { enumerateCatalog } from '../missions/catalog-view';
 import { RISK_KINDS } from '../missions/model';
 import {
   macroActionAnchor,
@@ -176,9 +177,9 @@ describe('the reference of the shipped plugins', () => {
             if (cell.line) expect(cell.line.quota).toBeGreaterThan(0);
           }
         }
-        // Careful leaves out tier 4 and nothing else.
+        // Careful leaves out row 4 and nothing else.
         for (const cell of entry.at_trust_level.careful) {
-          expect(cell.line === null).toBe(cell.tier === 4);
+          expect(cell.line === null).toBe(cell.row === 4);
         }
       }
       // The fallback is in "Anything else", last.
@@ -234,7 +235,7 @@ describe('the reference of the shipped plugins', () => {
     expect(byId.get('github.uncategorized-write')?.macro_action?.id).toBe('anything-else');
     // The deprecated mint risk of the App: no macro-action.
     expect(byId.get('github.mint-install-token-push')).toMatchObject({ macro_action: null });
-    // Force-push is costly (tier 3): it asks first until Autonomous.
+    // Force-push is costly (row 3): it asks first until Autonomous.
     expect(
       Object.values(byId.get('github.force-push')?.at_trust_level ?? {}).map(
         (cells) => cells[0]?.line?.gate,
@@ -272,5 +273,48 @@ describe('riskExplainer', () => {
     expect(explain('supabase[prod].bulk-row-write')).toBeNull();
     expect(explain('nowhere.read')).toBeNull();
     expect(explain('not a risk id')).toBeNull();
+  });
+});
+
+describe('the rows of the shipped catalogs (decision tree, 2026-11-13)', () => {
+  const rowsById = new Map(
+    SHIPPED_PLUGINS.flatMap((plugin) =>
+      enumerateCatalog(plugin.catalog).map((risk) => [risk.risk_id, risk] as const),
+    ),
+  );
+
+  // What moved when the tree replaced the tier rule: a moderate cost or a public effect now
+  // asks at Careful (row 2), an unbounded cost asks until Autonomous (row 3).
+  it.each<[string, 1 | 2 | 3, string | null | undefined]>([
+    ['fly[prod].machine-create', 2, 'moderate-cost'],
+    ['fly[prod].machine-power', 2, undefined],
+    ['fly.volume-create', 2, undefined],
+    ['fly[prod].volume-backup-settings', 2, undefined],
+    ['fly.volume-snapshot', 2, undefined],
+    ['fly[prod].ip-write', 2, undefined],
+    ['fly[prod].certificate-write', 2, undefined],
+    ['fly[prod].scale', 3, 'unbounded-cost'],
+    ['railway[staging].deploy', 2, 'moderate-cost'],
+    ['ssh[prod].exec-service-control', 2, undefined],
+    ['stripe[live].read-catalog', 2, undefined],
+    ['vercel[preview].deploy', 2, undefined],
+    ['vercel.fetch-deployment-url', 2, undefined],
+    ['vercel.firewall-write', 2, undefined],
+    ['vercel.firewall-rule-write', 2, undefined],
+    ['vercel.ip-rule-write', 2, undefined],
+    // A documentation read, corrected from "irreversible".
+    ['context7.query-docs', 1, null],
+  ])('%s sits in row %i', (id, row, reason) => {
+    const risk = rowsById.get(id);
+    expect(risk, id).toBeDefined();
+    expect(risk?.row).toBe(row);
+    if (reason !== undefined) expect(risk?.row_reason).toBe(reason);
+  });
+
+  it('no shipped catalog line carries a severity score or word', () => {
+    for (const risk of rowsById.values()) {
+      expect(Object.keys(risk)).not.toContain('severity');
+      expect(Object.keys(risk)).not.toContain('level');
+    }
   });
 });

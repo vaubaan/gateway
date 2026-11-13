@@ -20,7 +20,9 @@ import { code, markdownTable, text } from './markdown';
 import type { TokenExpiry } from '@vaubaan/plugin-sdk';
 import {
   GATE_WORDS,
-  SEVERITY_LABEL,
+  REASON_WORDS,
+  ROW_LABEL,
+  ROW_WORDS,
   TRUST_LEVEL_LABELS,
   TRUST_LEVELS,
   type TrustLevel,
@@ -61,6 +63,9 @@ import type {
   FactInfo,
   LevelBudgets,
   PluginInfo,
+  Reason,
+  RiskInfo,
+  Row,
 } from './plugins';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
@@ -144,6 +149,15 @@ function factsWords(facts: readonly FactInfo[]): string {
     .join(' · ');
 }
 
+/** "Repairable, worth a look (personal data)": the row, then its reason when it has one. */
+function rowWords(row: Row, reason: Reason | null): string {
+  return reason ? `${ROW_WORDS[row]} (${REASON_WORDS[reason]})` : ROW_WORDS[row];
+}
+
+function rowWordsOf(risk: RiskInfo | undefined): string {
+  return risk ? rowWords(risk.row, risk.rowReason) : '';
+}
+
 function mapColumnMarkdown(rows: readonly MapRow[], columns: readonly MapColumn[]): string[] {
   const lines: string[] = [];
   for (const row of rows) {
@@ -154,7 +168,7 @@ function mapColumnMarkdown(rows: readonly MapRow[], columns: readonly MapColumn[
     lines.push(`- **${capitalise(row.word)}**${sensitive} — ${row.levelsSentence}.`);
     for (const b of boxes) {
       lines.push(
-        `  - ${columns.length > 1 ? `${text(b.column)}: ` : ''}${permissionWords(b.label, b.riskId, b.envs)}, ${b.severity}${b.fallback ? ', the fallback' : ''}`,
+        `  - ${columns.length > 1 ? `${text(b.column)}: ` : ''}${permissionWords(b.label, b.riskId, b.envs)}${b.rowReason ? `, ${REASON_WORDS[b.rowReason]}` : ''}${b.fallback ? ', the fallback' : ''}`,
       );
     }
   }
@@ -171,16 +185,11 @@ function spreadMarkdown(spread: Spread): string[] {
   if (spread.narrative) lines.push(text(spread.narrative), '');
   lines.push(
     markdownTable(
-      [
-        'Permission',
-        'The six facts',
-        SEVERITY_LABEL,
-        ...spread.levelHeadings.map((h) => h.heading),
-      ],
+      ['Permission', 'The five facts', ROW_LABEL, ...spread.levelHeadings.map((h) => h.heading)],
       spread.lines.map((line) => [
         `${permissionWords(line.label, line.riskId, line.env)}: ${text(line.reason)}`,
         factsWords(line.facts),
-        line.severity,
+        rowWords(line.row, line.rowReason),
         ...TRUST_LEVELS.map((level) => gateCell(line.levels, level)),
       ]),
     ),
@@ -319,10 +328,10 @@ export function pluginPageMarkdown(
   if (fallback.length > 0) {
     lines.push(
       markdownTable(
-        ['Permission', SEVERITY_LABEL, ...levelHeadings().map((h) => h.heading)],
+        ['Permission', ROW_LABEL, ...levelHeadings().map((h) => h.heading)],
         fallback.map((entry) => [
           permissionWords(labels.get(entry.riskId) ?? '', entry.riskId, null),
-          plugin.risks.find((r) => r.id === entry.riskId)?.severity ?? '',
+          rowWordsOf(plugin.risks.find((r) => r.id === entry.riskId)),
           ...TRUST_LEVELS.map((level) => gateCell(entry.levels, level)),
         ]),
       ),

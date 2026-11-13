@@ -8,7 +8,7 @@
  *
  * The vector pre-fills, it never decides : the lines this module writes are
  * shown, editable, and stored as the explicit list ; the runtime never reads
- * a tier or a trust level.
+ * a row or a trust level.
  */
 
 import type {
@@ -24,42 +24,80 @@ import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 import { isFallbackEntry } from './risk-evaluator.ts';
 
-/** The four tiers, from the mildest. */
-export type Tier = 1 | 2 | 3 | 4;
+/**
+ * The four rows of the risk model, from the mildest: 4 is the hardest to
+ * repair. The word "tier" is never printed; the interface names a row with
+ * `ROW_WORDS` (spec gateway-risk-model §4.6).
+ */
+export type Row = 1 | 2 | 3 | 4;
+
+/** The one branch of the decision tree that put a permission in its row (rows 2 to 4). */
+export const REASONS = [
+  'irreversible',
+  'costly-to-undo',
+  'unbounded-cost',
+  'secret-data',
+  'personal-data',
+  'whole-account',
+  'in-bulk',
+  'moderate-cost',
+  'public',
+] as const;
+export type Reason = (typeof REASONS)[number];
 
 /**
- * "Consequence and sensitivity" : irreversible → 4, costly → 3, reversible
- * but touching pii or secrets, reaching a whole account or many items, or of
- * unbounded cost → 2, else 1.
+ * The decision tree over the five facts, read in order; the first branch a
+ * vector answers decides (spec gateway-risk-model §4.6). `null` for row 1,
+ * where no branch answered.
  */
-export function tierOf(vector: RiskVector): Tier {
-  if (vector.reversibility === 'irreversible') return 4;
-  if (vector.reversibility === 'costly') return 3;
-  if (
-    vector.data === 'pii' ||
-    vector.data === 'secret' ||
-    vector.blast === 'bulk' ||
-    vector.blast === 'account' ||
-    vector.cost === 'unbounded'
-  ) {
-    return 2;
-  }
-  return 1;
+export function reasonOf(vector: RiskVector): Reason | null {
+  if (vector.reversibility === 'irreversible') return 'irreversible';
+  if (vector.reversibility === 'costly') return 'costly-to-undo';
+  if (vector.cost === 'unbounded') return 'unbounded-cost';
+  if (vector.data === 'secret') return 'secret-data';
+  if (vector.data === 'pii') return 'personal-data';
+  if (vector.blast === 'account') return 'whole-account';
+  if (vector.blast === 'bulk') return 'in-bulk';
+  if (vector.cost === 'moderate') return 'moderate-cost';
+  if (vector.visibility === 'public') return 'public';
+  return null;
 }
 
+/** The row each branch of the tree leads to. */
+export const ROW_OF_REASON: Readonly<Record<Reason, Row>> = {
+  irreversible: 4,
+  'costly-to-undo': 3,
+  'unbounded-cost': 3,
+  'secret-data': 2,
+  'personal-data': 2,
+  'whole-account': 2,
+  'in-bulk': 2,
+  'moderate-cost': 2,
+  public: 2,
+};
+
+/** The fact each branch reads: what a page tints as "the fact that moved the gate". */
+export const REASON_AXIS: Readonly<Record<Reason, keyof RiskVector>> = {
+  irreversible: 'reversibility',
+  'costly-to-undo': 'reversibility',
+  'unbounded-cost': 'cost',
+  'secret-data': 'data',
+  'personal-data': 'data',
+  'whole-account': 'blast',
+  'in-bulk': 'blast',
+  'moderate-cost': 'cost',
+  public: 'visibility',
+};
+
 /**
- * The facts that set `tierOf`, in `RiskVector` order: what a page tints as
- * "the fact that moves the gate". Empty for tier 1 (no fact raises it);
- * `reversibility` alone for tiers 3 and 4; for tier 2, each of data, blast
- * and cost that makes it sensitive.
+ * The row of a vector: irreversible → 4 "Cannot be repaired"; costly to undo
+ * or of unbounded cost → 3 "Repairable, at a price"; secret or personal
+ * data, a whole account or many items, a moderate cost, or public → 2
+ * "Repairable, worth a look"; otherwise 1 "Harmless".
  */
-export function tierFactsOf(vector: RiskVector): (keyof RiskVector)[] {
-  if (vector.reversibility !== 'reversible') return ['reversibility'];
-  const facts: (keyof RiskVector)[] = [];
-  if (vector.blast === 'bulk' || vector.blast === 'account') facts.push('blast');
-  if (vector.data === 'pii' || vector.data === 'secret') facts.push('data');
-  if (vector.cost === 'unbounded') facts.push('cost');
-  return facts;
+export function rowOf(vector: RiskVector): Row {
+  const reason = reasonOf(vector);
+  return reason === null ? 1 : ROW_OF_REASON[reason];
 }
 
 export const TRUST_LEVELS = ['careful', 'trusting', 'autonomous'] as const;
@@ -72,13 +110,12 @@ export function isTrustLevel(raw: unknown): raw is TrustLevel {
   return typeof raw === 'string' && (TRUST_LEVELS as readonly string[]).includes(raw);
 }
 
-/** Per trust level and tier : the gate of the line, or `null` when the risk is not accepted. */
-export const TRUST_LEVEL_GATES: Readonly<Record<TrustLevel, Readonly<Record<Tier, Gate | null>>>> =
-  {
-    careful: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
-    trusting: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
-    autonomous: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
-  };
+/** Per trust level and row : the gate of the line, or `null` when the risk is not accepted. */
+export const TRUST_LEVEL_GATES: Readonly<Record<TrustLevel, Readonly<Record<Row, Gate | null>>>> = {
+  careful: { 1: 'auto', 2: 'approval', 3: 'approval', 4: null },
+  trusting: { 1: 'auto', 2: 'auto', 3: 'approval', 4: 'approval' },
+  autonomous: { 1: 'auto', 2: 'auto', 3: 'auto', 4: 'approval' },
+};
 
 /** What the trust level multiplies the base budget by (quota and rate). */
 export const TRUST_LEVEL_BUDGET_FACTOR: Readonly<Record<TrustLevel, number>> = {
@@ -148,17 +185,17 @@ export interface TrustLevelCandidate {
   readonly rate_ceiling_per_minute: number | null;
 }
 
-/** A policy line a trust level wrote, with the tier that chose its gate. */
+/** A policy line a trust level wrote, with the row that chose its gate. */
 export interface TrustLevelLine extends Budget {
   readonly risk_id: RiskId;
   readonly gate: Gate;
-  readonly tier: Tier;
+  readonly row: Row;
 }
 
 /** What a macro-action at a trust level yields : the lines, and the risks it leaves out. */
 export interface TrustLevelExpansion {
   readonly lines: readonly TrustLevelLine[];
-  readonly left_out: readonly { readonly risk_id: RiskId; readonly tier: Tier }[];
+  readonly left_out: readonly { readonly risk_id: RiskId; readonly row: Row }[];
 }
 
 /** The explicit lines of one macro-action at one trust level. */
@@ -167,18 +204,18 @@ export function expandAtTrustLevel(
   trustLevel: TrustLevel,
 ): TrustLevelExpansion {
   const lines: TrustLevelLine[] = [];
-  const leftOut: { risk_id: RiskId; tier: Tier }[] = [];
+  const leftOut: { risk_id: RiskId; row: Row }[] = [];
   for (const candidate of candidates) {
-    const tier = tierOf(candidate.vector);
-    const gate = TRUST_LEVEL_GATES[trustLevel][tier];
+    const row = rowOf(candidate.vector);
+    const gate = TRUST_LEVEL_GATES[trustLevel][row];
     if (gate === null) {
-      leftOut.push({ risk_id: candidate.risk_id, tier });
+      leftOut.push({ risk_id: candidate.risk_id, row });
       continue;
     }
     lines.push({
       risk_id: candidate.risk_id,
       gate,
-      tier,
+      row,
       ...budgetAtTrustLevel(candidate.base, trustLevel, candidate.rate_ceiling_per_minute),
     });
   }

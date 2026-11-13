@@ -25,7 +25,13 @@ import {
   WhyCells,
   type TabItem,
 } from '@/components/ui';
-import { REFERENCE_WORDS, type WHY_LABELS, WHY_ORDER } from '@/lib/vocabulary';
+import {
+  REFERENCE_WORDS,
+  ROW_WORDS,
+  TREE_LEGEND,
+  type WHY_LABELS,
+  WHY_ORDER,
+} from '@/lib/vocabulary';
 import { DEPRECATED_NOTE, FALLBACK_NOTE, noteBody } from '@/lib/missions/catalog-view';
 import { REFERENCE_SECTIONS } from '@/lib/providers/links';
 import { OTHER_PLANE } from '@/lib/providers/planes';
@@ -259,15 +265,15 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
           A <strong>macro-action</strong> groups the permissions of one thing an agent does on the
           service, in its own words. A mission ticks macro-actions, each at a{' '}
           <strong>trust level</strong>: Careful, Trusting or Autonomous sets, from each permission’s
-          tier (1 mild to 4 irreversible), whether it runs freely, asks first or is left out, and
-          multiplies its limits ×1, ×3 or ×10. Ticking never gives more than you hold on the
-          account, and a catalog that changes in a later version does not change a mission that
-          exists.
+          row, whether it runs freely, asks first or is left out, and multiplies its limits ×1, ×3
+          or ×10. Ticking never gives more than you hold on the account, and a catalog that changes
+          in a later version does not change a mission that exists.
         </p>
         <p>
-          <strong>Risk</strong> is one word — low, medium, high, critical — read from six facts
-          about the permission, shown behind “why?”. It explains and orders the list; nothing is
-          decided from it.
+          <strong>Risk</strong> is the row of the permission — {ROW_WORDS[1]},{' '}
+          {ROW_WORDS[2].toLowerCase()}, {ROW_WORDS[3].toLowerCase()} or {ROW_WORDS[4].toLowerCase()}{' '}
+          — and the reason that put it there. {TREE_LEGEND} The five facts it is read from are shown
+          behind “why?”.
         </p>
         <WhyCells
           values={Object.fromEntries(WHY_ORDER.map((axis) => [axis, WHY_QUESTIONS[axis]] as const))}
@@ -317,12 +323,11 @@ export function ServiceView({ reference }: { reference: ProviderReference }) {
   );
 }
 
-/** What each of the six facts answers, shown in the legend in place of a value. */
+/** What each of the five facts answers, shown in the legend in place of a value. */
 const WHY_QUESTIONS: Readonly<Record<keyof typeof WHY_LABELS, string>> = {
   reversibility: 'can it be undone, and at what price?',
   blast: 'how much does one action reach?',
   data: 'what kind of data is exposed?',
   cost: 'can it spend money?',
   visibility: 'who sees the effect?',
-  persistence: 'does the effect outlive the mission?',
 };

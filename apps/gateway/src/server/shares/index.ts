@@ -78,12 +78,12 @@ export {
 } from './pending';
 export {
   envNotes,
-  groupBySeverity,
+  groupByRow,
   selectAllIds,
-  SEVERITY_ORDER,
+  ROW_ORDER,
   summarizeRestriction,
   type EnvLabelling,
-  type SeverityGroup,
+  type RowGroup,
 } from '../../lib/shares/restriction';
 export {
   labellingOf,

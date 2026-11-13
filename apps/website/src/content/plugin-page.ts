@@ -4,26 +4,26 @@
  * (`components/plugin/PluginPage.tsx`) and its Markdown twin
  * (`pluginPageMarkdown` in `plugin-pages.ts`). Every word of the risk model
  * comes from `@vaubaan/policy-engine` — the undo rows, the gates, the trust
- * levels, the six facts —; this module only places, counts and joins them.
- * The page never says the word the trust levels read (spec §2.3): the undo
- * row words carry it.
+ * levels, the five facts —; this module only places, counts and joins them.
+ * The rows are named by `ROW_WORDS`; the page never says "tier".
  */
 import {
   ALLOW_WORDS,
   GATE_WORDS,
   gateWordOf,
-  SEVERITY_LEVELS,
   TRUST_LEVEL_BUDGET_FACTOR,
   TRUST_LEVEL_GATES,
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
   TRUST_LEVELS,
-  UNDO_ROW_WORDS,
+  ROW_WORDS,
+  TREE_LEGEND,
   unqualifyRiskId,
   WHY_LABELS,
   WHY_ORDER,
   type GateWord,
-  type Tier,
+  type Reason,
+  type Row,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
@@ -37,7 +37,6 @@ import type {
   MacroActionInfo,
   PluginInfo,
   RiskInfo,
-  Severity,
 } from './plugins';
 
 // ---------------------------------------------------------------------------
@@ -71,8 +70,8 @@ function windowWords(seconds: number): string {
 }
 
 /** The gate a trust level gives a permission of this kind, as the word class drawn. */
-function gateWordAt(level: TrustLevel, tier: Tier): GateWord {
-  const gate = TRUST_LEVEL_GATES[level][tier];
+function gateWordAt(level: TrustLevel, row: Row): GateWord {
+  const gate = TRUST_LEVEL_GATES[level][row];
   return gate === null ? 'off' : gateWordOf(gate);
 }
 
@@ -114,7 +113,11 @@ export function openingOf(plugin: PluginInfo): Opening {
     dimensions: [
       {
         term: 'Risk',
-        line: `six facts per permission — ${listWords(WHY_ORDER.map((axis) => WHY_LABELS[axis].toLowerCase()))} — summed into one word, ${listWords([...SEVERITY_LEVELS])}. The word orders; the undo fact and what makes a permission sensitive decide the gate.`,
+        line: `four rows — ${listWords(
+          MAP_ROWS.slice()
+            .reverse()
+            .map((row) => ROW_WORDS[row].toLowerCase()),
+        )} — read from five facts per permission (${listWords(WHY_ORDER.map((axis) => WHY_LABELS[axis].toLowerCase()))}). ${TREE_LEGEND}`,
       },
       {
         term: 'Macro-actions',
@@ -122,7 +125,7 @@ export function openingOf(plugin: PluginInfo): Opening {
       },
       {
         term: 'Trust',
-        line: `${listWords(TRUST_LEVELS.map((l) => TRUST_LEVEL_LABELS[l]))}, set per macro-action. From the undo fact it decides whether a permission runs freely, asks first or is left out, and multiplies the limits.`,
+        line: `${listWords(TRUST_LEVELS.map((l) => TRUST_LEVEL_LABELS[l]))}, set per macro-action. From the row it decides whether a permission runs freely, asks first or is left out, and multiplies the limits.`,
       },
     ],
     levels: TRUST_LEVELS.map((level) => ({
@@ -138,23 +141,24 @@ export function openingOf(plugin: PluginInfo): Opening {
 // ---------------------------------------------------------------------------
 
 /** The rows of the map, worst first. */
-export const MAP_ROWS: readonly Tier[] = [4, 3, 2, 1];
+export const MAP_ROWS: readonly Row[] = [4, 3, 2, 1];
 
 /** A permission on the map: one box, once per environment when it is environment-scoped. */
 export interface PermissionBox {
   readonly riskId: string;
   readonly label: string;
-  readonly severity: Severity;
   /**
    * The environments of this box, for an environment-scoped permission: one
-   * box per row it lands in, so the environments that share a row (and a
-   * risk word) share the box. Empty for a permission without environments.
+   * box per row and reason it lands in, so the environments that share them
+   * share the box. Empty for a permission without environments.
    */
   readonly envs: readonly string[];
-  readonly row: Tier;
+  readonly row: Row;
+  /** The branch of the tree that put it in its row; `null` in row 1. */
+  readonly rowReason: Reason | null;
   /** The fallback, in "Anything else": drawn dashed, never counted. */
   readonly fallback: boolean;
-  /** The facts that move the gate, in words (`whole account`), for the sensitive row. */
+  /** The fact that moved the gate, in words (`whole account`), for row 2. */
   readonly sensitiveBy: readonly string[];
 }
 
@@ -175,13 +179,13 @@ export interface RowLevel {
 }
 
 export interface MapRow {
-  readonly row: Tier;
-  /** The undo word of the row (`impossible`, `easy, but sensitive`). */
+  readonly row: Row;
+  /** The name of the row (`Cannot be repaired`, `Repairable, worth a look`). */
   readonly word: string;
   readonly levels: readonly RowLevel[];
   /** "runs freely at every level", "not included at Careful, ask me first at Trusting and Autonomous". */
   readonly levelsSentence: string;
-  /** For the sensitive row: what makes its permissions sensitive, in words. */
+  /** For row 2: the facts that put its permissions there, in words. */
   readonly sensitiveBy: readonly string[];
   /** One cell per column, in column order. */
   readonly cells: readonly (readonly PermissionBox[])[];
@@ -201,30 +205,30 @@ export interface PluginMap {
 function boxesOf(entry: MacroActionEntryInfo, risk: RiskInfo): PermissionBox[] {
   const box = (
     envs: readonly string[],
-    severity: Severity,
-    row: Tier,
+    row: Row,
+    rowReason: Reason | null,
     facts: readonly FactInfo[],
   ): PermissionBox => ({
     riskId: risk.id,
     label: risk.label,
-    severity,
     envs,
     row,
+    rowReason,
     fallback: risk.fallback,
     sensitiveBy: row === 2 ? facts.filter((f) => f.movesGate).map((f) => f.word) : [],
   });
-  if (entry.envLevels.length === 0) return [box([], risk.severity, risk.tier, risk.facts)];
+  if (entry.envLevels.length === 0) return [box([], risk.row, risk.rowReason, risk.facts)];
   const merged = new Map<string, PermissionBox>();
   for (const { env } of entry.envLevels) {
     const variant = risk.envVariants.find((v) => v.env === env);
     if (!variant) continue;
-    const key = `${variant.tier}/${variant.severity}`;
+    const key = `${variant.row}/${variant.rowReason ?? ''}`;
     const known = merged.get(key);
     merged.set(
       key,
       known
         ? { ...known, envs: [...known.envs, env] }
-        : box([env], variant.severity, variant.tier, variant.facts),
+        : box([env], variant.row, variant.rowReason, variant.facts),
     );
   }
   return [...merged.values()];
@@ -242,7 +246,7 @@ export function levelsSentence(levels: readonly RowLevel[]): string {
   return groups.map((g) => `${GATE_WORDS[g.gate]} at ${listWords(g.labels)}`).join(', ');
 }
 
-function rowLevels(row: Tier): RowLevel[] {
+function rowLevels(row: Row): RowLevel[] {
   return TRUST_LEVELS.map((level) => ({
     level,
     label: TRUST_LEVEL_LABELS[level],
@@ -277,7 +281,7 @@ export function mapOf(plugin: PluginInfo): PluginMap {
     const levels = rowLevels(row);
     return {
       row,
-      word: UNDO_ROW_WORDS[row],
+      word: ROW_WORDS[row],
       levels,
       levelsSentence: levelsSentence(levels),
       sensitiveBy: [...new Set(cells.flat().flatMap((b) => b.sensitiveBy))],
@@ -286,7 +290,7 @@ export function mapOf(plugin: PluginInfo): PluginMap {
   });
   // A permission in two macro-actions is two boxes, one place in the counts; an
   // environment-scoped one counts once per environment.
-  const places = new Map<string, Tier>();
+  const places = new Map<string, Row>();
   for (const b of boxesByColumn.flat()) {
     if (b.fallback) continue;
     for (const env of b.envs.length > 0 ? b.envs : ['']) places.set(`${b.riskId}[${env}]`, b.row);
@@ -304,9 +308,9 @@ export function mapOf(plugin: PluginInfo): PluginMap {
 
 /**
  * The sentence that reads the map, computed from its counts: how many sit in
- * each undo row, then what each trust level does with them.
+ * each row, then what each trust level does with them.
  */
-export function readingOf(rows: readonly Tier[], envScoped: boolean): string {
+export function readingOf(rows: readonly Row[], envScoped: boolean): string {
   const total = rows.length;
   if (total === 0) return 'No permission of this plugin is held by a macro-action yet.';
   const noun = envScoped
@@ -320,7 +324,7 @@ export function readingOf(rows: readonly Tier[], envScoped: boolean): string {
   const undo = byRow
     .slice()
     .reverse()
-    .map((r) => `${UNDO_ROW_WORDS[r.row]} for ${r.n}`);
+    .map((r) => `${ROW_WORDS[r.row].toLowerCase()}: ${r.n}`);
   const levels = TRUST_LEVELS.map((level) => {
     const counts = (['free', 'ask', 'off'] as const)
       .map((gate) => ({
@@ -331,7 +335,7 @@ export function readingOf(rows: readonly Tier[], envScoped: boolean): string {
       .map((c) => `${GATE_WORDS[c.gate]} ${c.n}`);
     return `${TRUST_LEVEL_LABELS[level]}: ${counts.join(', ')}`;
   });
-  return `Of the ${total} ${noun}, undo is ${undo.join('; ')}. ${levels.join('; ')}.`;
+  return `Of the ${total} ${noun}: ${undo.join('; ')}. ${levels.join('; ')}.`;
 }
 
 /** The map restricted to one macro-action's column: what a spread shows beside its table. */
@@ -358,7 +362,8 @@ export interface SpreadLine {
   readonly reason: string;
   readonly env: string | null;
   readonly facts: readonly FactInfo[];
-  readonly severity: Severity;
+  readonly row: Row;
+  readonly rowReason: Reason | null;
   readonly levels: LevelBudgets;
 }
 
@@ -392,7 +397,8 @@ function spreadLines(action: MacroActionInfo, risks: ReadonlyMap<string, RiskInf
     const line = (
       env: string | null,
       facts: readonly FactInfo[],
-      severity: Severity,
+      row: Row,
+      rowReason: Reason | null,
       levels: LevelBudgets,
     ) => ({
       riskId: risk.id,
@@ -400,13 +406,15 @@ function spreadLines(action: MacroActionInfo, risks: ReadonlyMap<string, RiskInf
       reason: risk.reason,
       env,
       facts,
-      severity,
+      row,
+      rowReason,
       levels,
     });
-    if (entry.envLevels.length === 0) return [line(null, risk.facts, risk.severity, entry.levels)];
+    if (entry.envLevels.length === 0)
+      return [line(null, risk.facts, risk.row, risk.rowReason, entry.levels)];
     return entry.envLevels.flatMap(({ env, levels }) => {
       const variant = risk.envVariants.find((v) => v.env === env);
-      return variant ? [line(env, variant.facts, variant.severity, levels)] : [];
+      return variant ? [line(env, variant.facts, variant.row, variant.rowReason, levels)] : [];
     });
   });
 }

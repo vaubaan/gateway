@@ -1,20 +1,20 @@
-import { RISK_VECTOR_AXES, type RiskCatalog } from '@vaubaan/shared';
+import type { RiskCatalog } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { fullCatalogRiskIds } from '../../server/authority';
 import {
+  byRowWorstFirst,
   enumerateCatalog,
   formatRate,
   groupByKind,
   groupVariants,
   isResolvable,
   patternsOf,
+  hardestToRepair,
   riskKindOf,
-  VECTOR_AXES,
   noteBody,
   FALLBACK_NOTE,
   DEPRECATED_NOTE,
-  vectorBadges,
 } from './catalog-view';
 import { ACME_CATALOG } from '../../../tests/support/missions/testing';
 
@@ -62,10 +62,26 @@ describe('enumerateCatalog', () => {
     expect(rows.find((r) => r.risk_id === 'acme.read')?.rate_ceiling_per_minute).toBeNull();
   });
 
-  it('resolves the vector per env: the prod row is more severe than the staging row', () => {
+  it('resolves the vector per env; the row is read from it, the first branch deciding', () => {
     const staging = rows.find((r) => r.risk_id === 'acme[staging].write');
     const prod = rows.find((r) => r.risk_id === 'acme[prod].write');
-    expect(prod?.severity).toBeGreaterThan(staging?.severity ?? Number.POSITIVE_INFINITY);
+    expect(prod?.vector.visibility).toBe('public');
+    expect(staging?.vector.visibility).toBe('internal');
+    // Costly to undo in both: that branch comes before "public".
+    expect(staging).toMatchObject({ row: 3, row_reason: 'costly-to-undo' });
+    expect(prod).toMatchObject({ row: 3, row_reason: 'costly-to-undo' });
+    expect(rows.find((r) => r.risk_id === 'acme.read')).toMatchObject({ row: 1, row_reason: null });
+  });
+
+  it('orders by row, the hardest to repair first, then catalog order', () => {
+    const ordered = byRowWorstFirst(rows);
+    for (let i = 1; i < ordered.length; i++) {
+      expect(ordered[i - 1]!.row).toBeGreaterThanOrEqual(ordered[i]!.row);
+    }
+    const sameRow = (row: number) => rows.filter((r) => r.row === row).map((r) => r.risk_id);
+    expect(ordered.filter((r) => r.row === 1).map((r) => r.risk_id)).toEqual(sameRow(1));
+    expect(hardestToRepair(rows)).toBe(ordered[0]);
+    expect(hardestToRepair([])).toBeNull();
   });
 });
 
@@ -100,43 +116,10 @@ describe('explaining a risk', () => {
     expect(row('acme[prod].write').vector).toMatchObject({ blast: 'env', visibility: 'public' });
   });
 
-  it('names the six axes in the order of the shared vocabulary, each with its question', () => {
-    expect(VECTOR_AXES.map((a) => a.axis)).toEqual(Object.keys(RISK_VECTOR_AXES));
-    expect(VECTOR_AXES.every((a) => a.label !== '' && a.question.endsWith('?'))).toBe(true);
-  });
-
-  it('gives each axis a short name of its own for the compact strip', () => {
-    const abbrs = VECTOR_AXES.map((a) => a.abbr);
-    expect(new Set(abbrs).size).toBe(abbrs.length);
-    expect(abbrs.every((abbr) => abbr.length > 0 && abbr.length <= 5)).toBe(true);
-    expect(vectorBadges(row('acme.admin').vector).map((b) => b.abbr)).toEqual(abbrs);
-  });
-
   it('prints a note without its lead where the lead is already the title', () => {
     expect(noteBody(FALLBACK_NOTE)).toMatch(/^Counts only for a write/);
     expect(noteBody(DEPRECATED_NOTE)).toMatch(/^Kept so that/);
     expect(noteBody('No lead here.')).toBe('No lead here.');
-  });
-
-  it('turns a vector into six badges whose text carries the value and whose weight follows the scale', () => {
-    const badges = vectorBadges(row('acme.admin').vector);
-    expect(badges.map((b) => `${b.label}: ${b.value}`)).toEqual([
-      'Reversibility: costly',
-      'Blast radius: account',
-      'Data: secret',
-      'Cost: free',
-      'Visibility: team',
-      'Persistence: posture',
-    ]);
-    expect(badges.map((b) => b.weight)).toEqual([
-      'middle',
-      'middle',
-      'middle',
-      'mildest',
-      'middle',
-      'worst',
-    ]);
-    expect(badges[1]?.scale).toEqual(['single', 'env', 'account', 'bulk']);
   });
 
   it('tells reads from writes by the patterns, and destructive writes by the vector', () => {

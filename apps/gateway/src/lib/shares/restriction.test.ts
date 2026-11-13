@@ -4,9 +4,9 @@ import { depotPlugin } from '../../../tests/support/execution/testing';
 import { enumerateCatalog } from '../missions/catalog-view';
 import {
   envNotes,
-  groupBySeverity,
+  groupByRow,
+  ROW_ORDER,
   selectAllIds,
-  SEVERITY_ORDER,
   summarizeRestriction,
   type EnvLabelling,
 } from './restriction';
@@ -20,10 +20,10 @@ const LABELLED: EnvLabelling = {
 };
 
 describe('the restriction of a share, as the dialog shows it', () => {
-  it('groups the catalog by severity, most severe first, without empty groups', () => {
-    const groups = groupBySeverity(RISKS);
-    const levels = groups.map((group) => group.level);
-    expect(levels).toEqual(SEVERITY_ORDER.filter((level) => levels.includes(level)));
+  it('groups the catalog by row, the hardest to repair first, without empty groups', () => {
+    const groups = groupByRow(RISKS);
+    const rows = groups.map((group) => group.row);
+    expect(rows).toEqual(ROW_ORDER.filter((row) => rows.includes(row)));
     expect(groups.every((group) => group.risks.length > 0)).toBe(true);
     // Every row is in exactly one group.
     expect(groups.flatMap((group) => group.risks.map((risk) => risk.risk_id)).sort()).toEqual(
@@ -48,15 +48,15 @@ describe('the restriction of a share, as the dialog shows it', () => {
     expect(selectAllIds(withDeprecated)).not.toContain('depot.read');
   });
 
-  it('summarizes in one line: how many, per level, and the most severe', () => {
+  it('summarizes in one line: how many, per row, and the hardest to repair', () => {
     expect(summarizeRestriction(RISKS, new Set())).toBe(
       'Nothing ticked: this access would allow nothing.',
     );
     const one = summarizeRestriction(RISKS, new Set(['depot.read']));
-    expect(one).toMatch(/^1 of 6 permissions · 1 \w+ · most severe: Read items \(\w+\)$/);
+    expect(one).toBe('1 of 6 permissions · 1 harmless · hardest to repair: Read items (harmless)');
     const all = summarizeRestriction(RISKS, new Set(selectAllIds(RISKS)));
     expect(all).toMatch(/^5 of 6 permissions · /);
-    expect(all).toContain('most severe: Purge a space');
+    expect(all).toContain('hardest to repair: Purge a space (cannot be repaired)');
     expect(all.split('\n')).toHaveLength(1);
     // An id that is not in the catalog counts for nothing.
     expect(summarizeRestriction(RISKS, new Set(['depot.nope']))).toMatch(/^Nothing ticked/);

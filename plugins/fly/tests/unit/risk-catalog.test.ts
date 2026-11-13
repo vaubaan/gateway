@@ -40,7 +40,7 @@ describe('fly catalog', () => {
     expect(gatesAt({ operate: 'trusting' }).get('fly[prod].machine-exec')).toBe('approval');
   });
 
-  test('operate at Trusting : deploys, power, scaling and snapshots run freely, the shell asks first', () => {
+  test('operate at Trusting : deploys, power and snapshots run freely ; scaling (unbounded cost) and the shell ask first', () => {
     expect(
       policyFromMacroActions(flyPlugin, { operate: 'trusting' }, ENVS).map(
         (e) => `${e.risk_id}:${e.gate}`,
@@ -48,8 +48,8 @@ describe('fly catalog', () => {
     ).toEqual([
       'fly[staging].deploy:auto',
       'fly[prod].deploy:auto',
-      'fly[staging].scale:auto',
-      'fly[prod].scale:auto',
+      'fly[staging].scale:approval',
+      'fly[prod].scale:approval',
       'fly[staging].machine-power:auto',
       'fly[prod].machine-power:auto',
       'fly[staging].machine-exec:approval',
@@ -68,7 +68,7 @@ describe('fly catalog', () => {
     const careful = gatesAt({ operate: 'careful', build: 'trusting', 'tear-down': 'careful' });
     expect(careful.get('fly[prod].deploy')).toBe('approval');
     expect(careful.get('fly[prod].machine-config-write')).toBe('approval');
-    expect(careful.get('fly[staging].machine-power')).toBe('auto');
+    expect(careful.get('fly[staging].machine-power')).toBe('approval');
     expect(careful.has('fly[prod].volume-destroy')).toBe(false);
   });
 

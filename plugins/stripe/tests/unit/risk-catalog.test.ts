@@ -20,7 +20,7 @@ describe('stripe risk-catalog — shape', () => {
   test('16 named risks + 1 fallback, version 8', () => {
     expect(catalog.provider).toBe('stripe');
     expect(catalog.risks).toHaveLength(17);
-    expect(catalog.catalog_version).toBe(8);
+    expect(catalog.catalog_version).toBe(9);
     expect(catalog.risks.filter((r) => r.id.startsWith('stripe.uncategorized'))).toHaveLength(1);
   });
 

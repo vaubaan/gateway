@@ -26,8 +26,10 @@ plugin: [providers README](README.md).
 
 - One resource per connection, constant ref `docs`: no REST answer names the teamspace. `library`
   stays an entity so the audit names the library read; `resolve-library-id` is always `[*]`.
-- One risk for both tools: what is priced is the agent's free text leaving for a third party that
-  keeps queries 30 days (`data`, `public`, `irreversible`), not the read.
+- One risk for both tools, with the vector of a documentation read (`reversible`, `single`,
+  `data`, `free`, `internal`: row 1, harmless). The disclosure of the agent's free text to a
+  third party that keeps queries 30 days is said in the reason and the narrative; until
+  2026-11-13 the vector priced it as `irreversible`, which put a read in "Cannot be repaired".
 - No identifier reaches a URL (one `POST` to a constant URL), so the identifier proof runs with
   `pathIdentifiers: { none }`; `libraryId` still has a grammar because it lands in a slice.
 - The gateway does not check that a library exists or that the key may read it: teamspace policies

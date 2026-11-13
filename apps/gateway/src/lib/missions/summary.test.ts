@@ -19,17 +19,17 @@ function summaryOf(
 }
 
 describe('summarize — the three lines of the creation screen', () => {
-  it('says what the mission can do, per connection, with its most severe risk', () => {
+  it('says what the mission can do, per connection, with the risk hardest to repair', () => {
     const s = summaryOf([
       { connection_id: 'conn-acme', trust_levels: { read: 'careful', change: 'trusting' } },
     ]);
     expect(s.can).toBe(
       // `all`: the labelled resources, one set per environment (`scratch` has no label).
-      'Acme "Acme main": 4 risks on 2 of 3 resources, up to "Delete things in bulk" (high).',
+      'Acme "Acme main": 4 risks on 2 of 3 resources, up to "Delete things in bulk" (cannot be repaired).',
     );
   });
 
-  it('says what it cannot do: withheld risks by severity, resources left out', () => {
+  it('says what it cannot do: withheld risks by row, resources left out', () => {
     const s = summaryOf([
       {
         connection_id: 'conn-acme',
@@ -38,7 +38,7 @@ describe('summarize — the three lines of the creation screen', () => {
       },
     ]);
     expect(s.cannot).toBe(
-      'Acme: 5 risks withheld, the most severe "Delete things in bulk" (high); 2 resources left out. Anything outside the selected resources and the accepted risks is refused.',
+      'Acme: 5 risks withheld, the hardest to repair "Delete things in bulk" (cannot be repaired); 2 resources left out. Anything outside the selected resources and the accepted risks is refused.',
     );
   });
 
