@@ -83,7 +83,7 @@ test('Supabase: the token is the way, guided, checked, never shown back', async 
   await expect(
     guide.getByRole('link', { name: 'Open the token page at Supabase' }),
   ).toHaveAttribute('href', 'https://supabase.com/dashboard/account/tokens');
-  // The permissions come from the plugin's declaration, each with what it is for.
+  // The permissions come from the plugin's declaration, by name and access, without their tools.
   const permissions = page.getByTestId('token-permissions');
   await expect(permissions).toContainText('Database');
   await expect(permissions).toContainText('Edge Functions');
@@ -115,7 +115,7 @@ test('GitHub: a fine-grained token, its permissions listed, a classic token refu
   await page.goto('/accounts/new/github');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Connect a GitHub account$/);
   // How wide to grant, and why, above the steps: the mission narrows it.
-  await expect(page.getByTestId('token-reach')).toContainText('All repositories');
+  await expect(page.getByTestId('token-reach')).toContainText('Only select repositories');
   await expect(page.getByTestId('token-permissions')).toContainText('Tick all of them');
   await expect(page.getByTestId('token-permissions')).toContainText('Contents');
   await expect(page.getByTestId('token-permissions')).toContainText('Workflows');

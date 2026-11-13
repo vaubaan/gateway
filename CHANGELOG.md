@@ -89,6 +89,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **`/plugins.json`**: each permission carries `row` and `row_reason` (per environment in
   `env_variants` too) instead of `severity` and `tier`, and its `vector` has five facts;
   the worked mission's lines and left-out risks carry `row`.
+- **The connect screen lists the permissions to tick without their tools**: each
+  permission by name and access ("read and write" when any declaration writes), no
+  longer "for <tools>". The tools stay in the plugin's declaration (coverage).
+- **GitHub: the guide asks for the repositories the missions will use**, "Only select
+  repositories", instead of "All repositories" (ADR
+  one-place-to-authorize-services-token-first, amendment 2026-11-13). The other guides
+  keep their wide grant until reviewed.
 
 ## [2.0.0-alpha.19] - 2026-11-13
 

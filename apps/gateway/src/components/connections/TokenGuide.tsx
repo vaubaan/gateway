@@ -3,15 +3,16 @@
  * declaration (`ConnectableProvider.guide`): how wide to grant and why, the
  * steps with their menu paths (highlighted chips), pages, commands and
  * screenshots (a figure with its provenance line), the token page, who knows the expiry
- * and the service's documentation (step 1); the permissions to tick with the
- * tools each one serves (step 2). The connect page adds the last step, the
+ * and the service's documentation (step 1); the permissions to tick, each with
+ * its access (step 2) — not the tools they serve: the person is configuring a
+ * service here, not reading the detail of what each permission is for. The connect page adds the last step, the
  * form. Nothing about a service is written here; the frame's words are
  * `TOKEN_CONNECT`.
  */
 import type { CredentialAlternative } from '@vaubaan/plugin-sdk';
 
 import { Callout, CodeBlock, FormStep, Hint, Radio, Row, Rows } from '@/components/ui';
-import { listed, TOKEN_CONNECT } from '@/lib/vocabulary';
+import { TOKEN_CONNECT } from '@/lib/vocabulary';
 import {
   ALTERNATIVE_FIELD,
   type AlternativeView,
@@ -19,32 +20,25 @@ import {
   type GuideStepView,
   type TokenGuideView,
   type TokenPermissionView,
-  type ToolLabel,
 } from '@/server/connections';
 
 import styles from './TokenGuide.module.css';
 
-/** At most this many tool titles are named after a permission; the rest are counted. */
-const TOOLS_NAMED = 3;
-
-/** One row per permission name: "read and write" when any tool writes, every tool it serves. */
+/** One row per permission name: "read and write" when any declaration of it writes. */
 interface PermissionLine {
   readonly name: string;
   readonly write: boolean;
-  readonly tools: readonly ToolLabel[];
 }
 
 export function permissionLines(permissions: readonly TokenPermissionView[]): PermissionLine[] {
-  const lines = new Map<string, { write: boolean; tools: ToolLabel[] }>();
+  const lines = new Map<string, boolean>();
   for (const permission of permissions) {
-    const line = lines.get(permission.name) ?? { write: false, tools: [] };
-    line.write ||= permission.access === 'read-write';
-    for (const tool of permission.tools) {
-      if (!line.tools.some((known) => known.name === tool.name)) line.tools.push(tool);
-    }
-    lines.set(permission.name, line);
+    lines.set(
+      permission.name,
+      (lines.get(permission.name) ?? false) || permission.access === 'read-write',
+    );
   }
-  return [...lines].map(([name, line]) => ({ name, ...line }));
+  return [...lines].map(([name, write]) => ({ name, write }));
 }
 
 /** What the page says about the token's lifetime, by who knows it. */
@@ -237,12 +231,6 @@ export function TokenGuide({
                     {line.write ? TOKEN_CONNECT.writeAccess : TOKEN_CONNECT.readAccess}
                   </span>
                 }
-                description={TOKEN_CONNECT.usedBy(
-                  listed(
-                    line.tools.map((tool) => tool.title),
-                    TOOLS_NAMED,
-                  ),
-                )}
               />
             ))}
           </Rows>

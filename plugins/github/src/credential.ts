@@ -6,8 +6,8 @@
  *        one-place-to-authorize-services-token-first.
  *
  * A person creates a token at GitHub — often on a shared service account —
- * over all the repositories of the organization, with every permission the
- * tools use, and pastes it : this gateway decides, mission by mission, what
+ * over the repositories the missions will use (ADR amendment 2026-11-13), with
+ * every permission the tools use, and pastes it : this gateway decides, mission by mission, what
  * an agent may do with it. The token is the
  * connection's secret ; every API tool and the git remote send it as the
  * bearer. GitHub enforces what it may do : the permissions its owner ticked.
@@ -78,7 +78,10 @@ export const githubCredential: ApiKeyCredentialSpec = {
         url: GITHUB_TOKENS_PAGE,
       },
       { do: 'Choose the organization that owns the repositories.', path: ['Resource owner'] },
-      { do: 'Choose All repositories.', path: ['Repository access', 'All repositories'] },
+      {
+        do: 'Choose Only select repositories, then the repositories the missions will use.',
+        path: ['Repository access', 'Only select repositories'],
+      },
       {
         do: 'Tick every permission below at the access shown; GitHub adds Metadata (read) by itself.',
         path: ['Permissions', 'Repository permissions'],
@@ -91,8 +94,8 @@ export const githubCredential: ApiKeyCredentialSpec = {
     permissions: GITHUB_TOKEN_PERMISSIONS,
     reach: {
       what: 'Repository access',
-      grant: 'All repositories of the resource owner, with every permission below',
-      why: 'GitHub is the ceiling and each mission the narrowing: this gateway gives an agent only the repositories and permissions its mission names, and a token that lacks one means a new token.',
+      grant: 'Only select repositories: the ones the missions will use',
+      why: 'Each mission narrows further, to the repositories and permissions it names; a repository the token lacks means a new token.',
     },
     expiry: { kind: 'provider-reports' },
     docsUrl:

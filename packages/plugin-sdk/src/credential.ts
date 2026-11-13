@@ -171,13 +171,15 @@ export function screenshotSourceHost(screenshot: Pick<Screenshot, 'source'>): st
  * How wide the grant is at the provider (ADR
  * one-place-to-authorize-services-token-first, amendment 2026-10-31): the
  * person grants the widest the provider offers for what this account
- * connects, once, and each mission narrows it. The connect page shows it
- * above the steps.
+ * connects, once, and each mission narrows it — except where the token picks
+ * the resources it reaches (amendment 2026-11-13: GitHub asks for the
+ * repositories the missions will use). The connect page shows it above the
+ * steps.
  */
 export interface TokenReach {
   /** What the token reaches, in the provider's words: "Repository access", "Zone Resources". */
   readonly what: string;
-  /** What to pick there, wide: "All repositories", "All zones", "Full access". */
+  /** What to pick there: "All zones", "Full access", "Only select repositories: the ones the missions will use". */
   readonly grant: string;
   /** Why wide is safe and saves a second visit: one sentence, the gateway's argument. */
   readonly why: string;
