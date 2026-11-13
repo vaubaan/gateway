@@ -39,6 +39,7 @@ import {
   gateWordOf,
   isAcceptableInEnv,
   macroActionsOf,
+  parseSlice,
   REASON_AXIS,
   reasonOf,
   resolveVector,
@@ -56,6 +57,8 @@ import {
   type WhyAxis,
 } from '@vaubaan/policy-engine';
 import type {
+  DataModel,
+  DataModelCardinality,
   Gate,
   MacroAction,
   MacroActionEntry,
@@ -226,7 +229,7 @@ export interface CredentialFieldInfo {
 
 /**
  * Where the credential comes from, one of the three ways of connecting
- * (website spec §2.3 item 7): a key the person creates at the service and
+ * (website spec §2.3 item 9): a key the person creates at the service and
  * pastes (`api-key`, `ssh-key`), a client the gateway registers itself at the
  * service (`oauth2` with `clientRegistration`), or an OAuth broker's client
  * (`oauth2` with `broker`).
@@ -271,7 +274,7 @@ export function connectFigureFiles(
   plugin: Pick<PluginInfo, 'dir' | 'credentials'>,
 ): [string, string][] {
   return plugin.credentials.flatMap((c) =>
-    c.steps.flatMap((step) =>
+    allSteps(c).flatMap((step) =>
       step.figure
         ? [
             [
@@ -284,6 +287,18 @@ export function connectFigureFiles(
   );
 }
 
+/**
+ * One shape of the key (`alternatives` of an `api-key` spec, Vercel: a team or one
+ * project): what the toggle of the connect guide says, and the steps of that shape,
+ * which come before the guide's shared steps.
+ */
+export interface ConnectAlternativeInfo {
+  readonly id: string;
+  readonly label: string;
+  readonly help: string | null;
+  readonly steps: readonly ConnectStepInfo[];
+}
+
 export interface CredentialInfo {
   readonly kind: CredentialSpec['kind'];
   readonly clientSource: ClientSource;
@@ -293,8 +308,10 @@ export interface CredentialInfo {
   readonly label: string | null;
   readonly fields: readonly CredentialFieldInfo[];
   readonly createUrl: string | null;
-  /** The guide's steps, each alternative's first, said with the alternative's label. */
+  /** The guide's own steps, shared by every alternative (they follow an alternative's steps). */
   readonly steps: readonly ConnectStepInfo[];
+  /** The shapes of the key, two to four when declared, each with its own steps; empty otherwise. */
+  readonly alternatives: readonly ConnectAlternativeInfo[];
   readonly reach: TokenReach | null;
   /** What to grant at the provider, each with the tools of the plugin that need it. */
   readonly permissions: readonly {
@@ -308,6 +325,45 @@ export interface CredentialInfo {
   readonly scopes: readonly string[];
   /** How the person removes the grant by hand at the provider, when the gateway cannot. */
   readonly manualRevocation: string | null;
+}
+
+/** Every step of a way of connecting: each alternative's, then the shared ones. */
+export function allSteps(c: Pick<CredentialInfo, 'steps' | 'alternatives'>): ConnectStepInfo[] {
+  return [...c.alternatives.flatMap((alt) => alt.steps), ...c.steps];
+}
+
+/** An entity of the plugin's data model (`dataModel`), as the model section draws it. */
+export interface ModelEntityInfo {
+  readonly name: string;
+  /** The entity it nests in; `null` at the root of its plane. */
+  readonly parent: string | null;
+  readonly cardinalities: readonly DataModelCardinality[];
+  readonly description: string;
+  /** `envScopable`: this entity carries the service's environment. */
+  readonly carriesEnv: boolean;
+  /** True when a slice of a classified example names it: some tool touches it. */
+  readonly touched: boolean;
+}
+
+export interface ModelPlaneInfo {
+  readonly slug: string;
+  readonly description: string | null;
+  readonly entities: readonly ModelEntityInfo[];
+}
+
+/**
+ * Where the environment of a call comes from (risk model §6), as the gateway's
+ * provider reference says it: the call itself (the plugin declares `envOf`), the
+ * label the owner puts on the resource, or nowhere (no catalog entry names one).
+ */
+export type EnvironmentSource = 'call' | 'resource-label' | 'none';
+
+export interface EnvironmentInfo {
+  readonly source: EnvironmentSource;
+  /** Every environment an entry of the catalog can be accepted in, in the order the catalog first names them. */
+  readonly envs: readonly string[];
+  /** `plane.entity` of each entity the data model marks as the carrier. */
+  readonly carriers: readonly string[];
 }
 
 export interface PluginInfo {
@@ -343,6 +399,11 @@ export interface PluginInfo {
   readonly workedMission: WorkedMission;
   readonly credentials: readonly CredentialInfo[];
   readonly gitRemote: boolean;
+  /** The plugin's data model: its planes and their entities, declaration order. */
+  readonly dataModel: { readonly planes: readonly ModelPlaneInfo[] };
+  readonly environment: EnvironmentInfo;
+  /** The file declaring the examples, from the repository root, when the plugin has one. */
+  readonly examplesSource: string | null;
 }
 
 /** `plugins/<name>` folders that hold a plugin: a `package.json`, a name not starting with `_`. */
@@ -542,11 +603,10 @@ function stepInfo(
   service: string,
   screenshots: Readonly<Record<string, Screenshot>> | undefined,
   step: GuideStep,
-  prefix: string,
 ): ConnectStepInfo {
   const shot = step.screenshot === undefined ? undefined : screenshots?.[step.screenshot];
   return {
-    do: `${prefix}${step.do}`,
+    do: step.do,
     path: [...(step.path ?? [])],
     url: step.url ?? null,
     code: step.code ?? null,
@@ -583,20 +643,21 @@ function credentialInfo(plugin: ProviderPlugin): CredentialInfo {
       help: field.help ?? null,
     })),
     createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
-    // A key in several shapes (Vercel: a team or one project): each
-    // alternative's steps first, said with the alternative they belong to.
     steps: guide
-      ? [
-          ...(spec.kind === 'api-key' ? (spec.alternatives ?? []) : []).flatMap((alt) =>
-            alt.steps.map((step) =>
-              stepInfo(plugin.id, plugin.displayName, guide.screenshots, step, `${alt.label}: `),
-            ),
-          ),
-          ...guide.steps.map((step) =>
-            stepInfo(plugin.id, plugin.displayName, guide.screenshots, step, ''),
-          ),
-        ]
+      ? guide.steps.map((step) => stepInfo(plugin.id, plugin.displayName, guide.screenshots, step))
       : [],
+    // A key in several shapes (Vercel: a team or one project): each with its own steps.
+    alternatives:
+      guide && spec.kind === 'api-key'
+        ? (spec.alternatives ?? []).map((alt) => ({
+            id: alt.id,
+            label: alt.label,
+            help: alt.help ?? null,
+            steps: alt.steps.map((step) =>
+              stepInfo(plugin.id, plugin.displayName, guide.screenshots, step),
+            ),
+          }))
+        : [],
     reach: guide?.reach ?? null,
     permissions: guide
       ? guide.permissions.map((p) => ({ name: p.name, access: p.access, tools: [...p.tools] }))
@@ -608,12 +669,59 @@ function credentialInfo(plugin: ProviderPlugin): CredentialInfo {
   };
 }
 
+/** The entity names the slices of the classified examples go through. */
+function touchedEntities(examples: readonly ExampleInfo[]): Set<string> {
+  const names = new Set<string>();
+  for (const example of examples) {
+    for (const serialized of example.slices) {
+      for (const segment of parseSlice(serialized).path) {
+        if (segment.kind === 'name') names.add(segment.value);
+      }
+    }
+  }
+  return names;
+}
+
+function dataModelInfo(model: DataModel, touched: ReadonlySet<string>): PluginInfo['dataModel'] {
+  return {
+    planes: model.planes.map((plane) => ({
+      slug: plane.slug,
+      description: plane.description ?? null,
+      entities: plane.entities.map((entity) => ({
+        name: entity.name,
+        parent: entity.parent,
+        cardinalities: [...entity.cardinalities],
+        description: entity.description,
+        carriesEnv: entity.envScopable === true,
+        touched: touched.has(entity.name),
+      })),
+    })),
+  };
+}
+
+/** Where the environment comes from, as the gateway's provider reference decides it. */
+function environmentInfo(plugin: ProviderPlugin): EnvironmentInfo {
+  const envs = [...new Set(plugin.catalog.risks.flatMap((r) => r.acceptable_in_envs ?? []))];
+  return {
+    source: envs.length === 0 ? 'none' : plugin.envOf ? 'call' : 'resource-label',
+    envs,
+    carriers: plugin.dataModel.planes.flatMap((plane) =>
+      plane.entities.filter((e) => e.envScopable === true).map((e) => `${plane.slug}.${e.name}`),
+    ),
+  };
+}
+
 /**
  * The plain data the site shows of one plugin. Throws `ExampleError` when a
  * declared example does not classify onto the plugin's own catalog: the build
  * fails rather than publish a page showing what the gateway would not do.
  */
-export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: string): PluginInfo {
+export function pluginInfo(
+  plugin: ProviderPlugin,
+  dir: string,
+  packageName: string,
+  examplesSource: string | null = null,
+): PluginInfo {
   const catalog = plugin.catalog;
   const risksById = new Map(catalog.risks.map((r) => [r.id, r]));
   const order = new Map(catalog.risks.map((r, i) => [r.id, i]));
@@ -665,6 +773,9 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
     workedMission: workedMission(plugin),
     credentials: [credentialInfo(plugin)],
     gitRemote: plugin.gitRemote !== undefined,
+    dataModel: dataModelInfo(plugin.dataModel, touchedEntities(examples)),
+    environment: environmentInfo(plugin),
+    examplesSource,
   };
 }
 
@@ -676,7 +787,15 @@ export async function loadPlugins(repoRoot: string): Promise<PluginInfo[]> {
       name?: unknown;
     };
     const plugin = await importPlugin(repoRoot, dir);
-    plugins.push(pluginInfo(plugin, dir, typeof pkg.name === 'string' ? pkg.name : dir));
+    const examples = `${dir}/src/examples.ts`;
+    plugins.push(
+      pluginInfo(
+        plugin,
+        dir,
+        typeof pkg.name === 'string' ? pkg.name : dir,
+        existsSync(join(repoRoot, examples)) ? examples : null,
+      ),
+    );
   }
   return plugins.sort((a, b) => a.id.localeCompare(b.id));
 }

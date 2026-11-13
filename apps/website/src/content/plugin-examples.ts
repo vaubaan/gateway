@@ -1,5 +1,5 @@
 /**
- * The worked examples of a plugin page (website spec §2.3 item 4, item 6):
+ * The worked examples of a plugin page (website spec §2.3 item 5):
  * the plugin's declared `examples` run through its own `classify` when the
  * site is built, the slices matched against its catalog by the policy
  * engine's matcher, and what a Careful mission with the plugin's first two
@@ -81,7 +81,7 @@ export interface ExampleInfo {
   readonly permissions: readonly RiskId[];
   /** "What a Careful mission does": each permission touched at Careful, by the policy engine. */
   readonly atCareful: CarefulDecision;
-  /** What the page's worked mission (§2.3 item 6) does with this call. */
+  /** What the worked mission (`/plugins.json` only since the Atlas page) does with this call. */
   readonly inWorkedMission: WorkedDecision;
 }
 
@@ -186,7 +186,7 @@ function expand(plugin: ProviderPlugin, envs: readonly string[] | 'acceptable'):
   };
 }
 
-/** The worked mission the page writes out (§2.3 item 6). */
+/** The worked mission, written out in `/plugins.json` (the Atlas page no longer shows it). */
 export function workedMission(plugin: ProviderPlugin): WorkedMission {
   return expand(plugin, 'acceptable');
 }

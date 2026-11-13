@@ -1,6 +1,6 @@
 /**
  * The Markdown of the plugin pages (website spec §2.3, §2.4), the connect guide
- * included (section 7). One string per page: the site renders it as HTML and
+ * included (section 9). One string per page: the site renders it as HTML and
  * serves it as the page's Markdown twin.
  */
 import { githubBlob, githubTree } from '../site/constants';
@@ -23,50 +23,53 @@ import {
   REASON_WORDS,
   ROW_LABEL,
   ROW_WORDS,
+  TREE_LEGEND,
+  TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
   TRUST_LEVELS,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
 
 import { twinPathOf } from './outputs';
-import { WORKED_TRUST_LEVEL, type ExampleInfo } from './plugin-examples';
+import type { ExampleInfo } from './plugin-examples';
 import {
+  ALTERNATIVES_LEGEND,
+  anythingElseSentence,
   BROKER_ADMIN_TITLE,
   BROKER_DOC,
   brokerAdminSentences,
+  callsOf,
   callWords,
-  capitalise,
   carefulGateOf,
+  cellWords,
+  CARDINALITY_MARKS,
+  CARDINALITY_WORDS,
   connectGuidePath,
   connectKindBadge,
   connectKindCode,
   connectSentences,
+  countsOf,
   DAY_NOTE,
-  levelCellWords,
-  levelHeadings,
-  listWords,
+  GATE_SHORT,
+  grantsHeading,
+  LEFT_OUT_SENTENCE,
+  ledeOf,
+  levelHeading,
+  MACRO_ACTIONS_SENTENCE,
+  macroActionsTitle,
   mapOf,
-  missionOf,
-  openingOf,
+  modelOf,
+  MODEL_SENTENCE,
   PATH_SEPARATOR,
+  plural,
   retiredOf,
+  RETIRED_SENTENCE,
   screenshotCredits,
-  spreadsOf,
-  TOOLS_NOTE,
-  type MapColumn,
-  type MapRow,
-  type Spread,
+  toolsIntro,
+  type MapChip,
+  type ModelNode,
 } from './plugin-page';
-import type {
-  ConnectStepInfo,
-  CredentialInfo,
-  FactInfo,
-  LevelBudgets,
-  PluginInfo,
-  Reason,
-  RiskInfo,
-  Row,
-} from './plugins';
+import type { ConnectStepInfo, CredentialInfo, LevelBudgets, PluginInfo } from './plugins';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
 export interface PluginWithHealth extends PluginInfo {
@@ -127,76 +130,123 @@ export function pluginLinks(
   ];
 }
 
-/** A permission as the twin names it: its label, its id, its environment. */
-function permissionWords(
-  label: string,
-  riskId: string,
-  envs: readonly string[] | string | null,
-): string {
-  const list = envs === null ? [] : typeof envs === 'string' ? [envs] : envs;
-  return `${text(label)} ${code(riskId)}${list.length > 0 ? ` [${list.join(', ')}]` : ''}`;
+/** A permission as the twin names it: its label and its id. */
+function permissionWords(label: string, riskId: string): string {
+  return `${text(label)} ${code(riskId)}`;
 }
 
-function gateCell(levels: LevelBudgets, level: TrustLevel): string {
-  const { gate, quota } = levelCellWords(levels, level);
-  if (quota === null) return GATE_WORDS[gate];
-  return gate === 'free' ? quota : `${GATE_WORDS[gate]}, ${quota}`;
-}
-
-function factsWords(facts: readonly FactInfo[]): string {
-  return facts
-    .map((f) => (f.movesGate ? `**${f.label} ${f.word}**` : `${f.label} ${f.word}`))
+/** "Careful: no · Trusting: ask me, 150 a day · …" for the values of one environment (or none). */
+function levelsWords(values: MapChip['values'], env: string | null): string {
+  return TRUST_LEVELS.map((level) => {
+    const value = values.find((v) => v.level === level && v.env === env);
+    return value ? `${TRUST_LEVEL_LABELS[level]}: ${cellWords(value)}` : '';
+  })
+    .filter(Boolean)
     .join(' · ');
 }
 
-/** "Repairable, worth a look (personal data)": the row, then its reason when it has one. */
-function rowWords(row: Row, reason: Reason | null): string {
-  return reason ? `${ROW_WORDS[row]} (${REASON_WORDS[reason]})` : ROW_WORDS[row];
+/** The trust levels' lines for a fallback entry. */
+function fallbackLevels(levels: LevelBudgets): string[] {
+  return TRUST_LEVELS.map((level: TrustLevel) => {
+    const line = levels[level];
+    return line.gateWord === 'off'
+      ? GATE_SHORT.off
+      : `${GATE_SHORT[line.gateWord]} · ${line.quota.toLocaleString('en-US')} a day`;
+  });
 }
 
-function rowWordsOf(risk: RiskInfo | undefined): string {
-  return risk ? rowWords(risk.row, risk.rowReason) : '';
+/** One entity of the model as an outline line, then its children, indented. */
+function entityLines(node: ModelNode, depth: number, envs: readonly string[]): string[] {
+  const facts = [
+    node.marks.join(' '),
+    ...(node.resource ? ['the resource'] : []),
+    ...(node.carriesEnv
+      ? [
+          envs.length > 0
+            ? `carries the environment (${envs.join(', ')})`
+            : 'carries the environment, in the model only',
+        ]
+      : []),
+    ...(node.touched ? [] : ['no tool touches it']),
+  ];
+  return [
+    `${'  '.repeat(depth + 1)}- ${code(node.name)} (${facts.join('; ')}) — ${text(node.description)}`,
+    ...node.children.flatMap((child) => entityLines(child, depth + 1, envs)),
+  ];
 }
 
-function mapColumnMarkdown(rows: readonly MapRow[], columns: readonly MapColumn[]): string[] {
-  const lines: string[] = [];
-  for (const row of rows) {
-    const boxes = row.cells.flatMap((cell, i) =>
-      cell.map((b) => ({ ...b, column: columns[i]?.label ?? '' })),
-    );
-    const sensitive = row.sensitiveBy.length > 0 ? ` (${row.sensitiveBy.join(', ')})` : '';
-    lines.push(`- **${capitalise(row.word)}**${sensitive} — ${row.levelsSentence}.`);
-    for (const b of boxes) {
-      lines.push(
-        `  - ${columns.length > 1 ? `${text(b.column)}: ` : ''}${permissionWords(b.label, b.riskId, b.envs)}${b.rowReason ? `, ${REASON_WORDS[b.rowReason]}` : ''}${b.fallback ? ', the fallback' : ''}`,
-      );
-    }
-  }
-  return lines;
-}
-
-function spreadMarkdown(spread: Spread): string[] {
-  const lines: string[] = [
-    `### ${text(spread.label)}`,
+function modelMarkdown(plugin: PluginInfo): string[] {
+  const model = modelOf(plugin);
+  return [
+    `## How ${text(plugin.name)} is modelled`,
     '',
-    `${code(spread.id)} — ${text(spread.description)}`,
+    `${model.counts} ${MODEL_SENTENCE}`,
+    '',
+    ...(model.account ? [`- **Account** — ${text(model.account)}`] : []),
+    ...model.planes.flatMap((plane) => [
+      `  - Plane ${code(plane.slug)}${plane.description ? ` — ${text(plane.description)}` : ''}`,
+      ...plane.roots.flatMap((root) => entityLines(root, 1, model.envs)),
+    ]),
+    '',
+    `Marks: ${(['one', 'bounded', 'unbounded'] as const).map((c) => `${CARDINALITY_MARKS[c]} ${CARDINALITY_WORDS[c]}`).join('; ')}.`,
+    '',
+    `- **Account**: ${text(model.account ?? '')}`,
+    `- **Resource**: ${text(model.resource ?? '')}`,
+    `- **Environment**: ${model.environmentRule} Known: ${model.envs.length > 0 ? model.envs.map(code).join(', ') : 'none'}. Carried by: ${model.carriers.length > 0 ? model.carriers.map(code).join(', ') + (model.envInModelOnly ? ', in the model only' : '') : 'nothing in the model'}.${model.environmentNotes.map((note) => ` ${text(note)}`).join('')}`,
     '',
   ];
-  if (spread.narrative) lines.push(text(spread.narrative), '');
-  lines.push(
-    markdownTable(
-      ['Permission', 'The five facts', ROW_LABEL, ...spread.levelHeadings.map((h) => h.heading)],
-      spread.lines.map((line) => [
-        `${permissionWords(line.label, line.riskId, line.env)}: ${text(line.reason)}`,
-        factsWords(line.facts),
-        rowWords(line.row, line.rowReason),
-        ...TRUST_LEVELS.map((level) => gateCell(line.levels, level)),
-      ]),
+}
+
+function macroActionsMarkdown(plugin: PluginInfo): string[] {
+  return [
+    `## ${macroActionsTitle(plugin)}`,
+    '',
+    MACRO_ACTIONS_SENTENCE,
+    '',
+    ...plugin.macroActions.map(
+      (a, i) =>
+        `${i + 1}. **${text(a.label)}** — ${text(a.description)}${a.narrative ? ` ${text(a.narrative)}` : ''} (${plural(a.entries.length, 'permission', 'permissions')})`,
     ),
     '',
-    spread.limitsNote,
+  ];
+}
+
+/** The map as one list per row: each permission, its reason, its three gates and quotas, per environment. */
+function mapMarkdown(plugin: PluginInfo): string[] {
+  const map = mapOf(plugin);
+  const lines = [
+    '## The map',
     '',
-  );
+    `${map.introLead}${map.introTail}`,
+    '',
+    `${TRUST_LEVELS.map((l) => `${levelHeading(l)}: ${TRUST_LEVEL_HINTS[l]}`).join(' ')}`,
+    '',
+    `${GATE_SHORT.free}: ${GATE_WORDS.free}; ${GATE_SHORT.ask}: ${GATE_WORDS.ask}; ${GATE_SHORT.off}: ${GATE_WORDS.off}. ${TREE_LEGEND}`,
+    '',
+  ];
+  for (const row of map.rows) {
+    lines.push(`### ${row.word}`, '', row.gates, '');
+    const items = row.cells.flatMap((cell, i) =>
+      cell.map((chip) => ({ chip, column: map.columns[i]?.label ?? '' })),
+    );
+    if (items.length === 0) {
+      lines.push('None.', '');
+      continue;
+    }
+    for (const { chip, column } of items) {
+      const envs = [...new Set(chip.values.flatMap((v) => (v.env ? [v.env] : [])))];
+      const reason = chip.rowReason ? `, ${REASON_WORDS[chip.rowReason]}` : '';
+      const head = `- ${text(column)}: ${permissionWords(chip.label, chip.riskId)}${chip.envs ? ` [${chip.envs.join(', ')}]` : ''}${reason} — ${text(chip.reason)}`;
+      if (envs.length === 0) {
+        lines.push(`${head} ${levelsWords(chip.values, null)}.`);
+      } else {
+        lines.push(head, ...envs.map((env) => `  - On ${env}: ${levelsWords(chip.values, env)}.`));
+      }
+    }
+    lines.push('');
+  }
+  lines.push(...map.sums.map((s) => s.text), '', DAY_NOTE, '');
+  if (map.notes.length > 0) lines.push(map.notes.join(' '), '');
   return lines;
 }
 
@@ -205,51 +255,105 @@ function exampleMarkdown(example: ExampleInfo, labels: ReadonlyMap<string, strin
     `- ${code(callWords(example))}`,
     `  - the plugin sees: ${example.slices.map(code).join(', ')}`,
     `  - the catalog answers: ${example.permissions.map((id) => `${text(labels.get(id) ?? id)} ${code(id)}`).join(', ')}`,
-    `  - a ${TRUST_LEVEL_LABELS[WORKED_TRUST_LEVEL]} mission: ${GATE_WORDS[carefulGateOf(example)]}`,
+    `  - a ${TRUST_LEVEL_LABELS.careful} mission: ${GATE_SHORT[carefulGateOf(example)]}`,
   ].join('\n');
 }
 
+function callsMarkdown(plugin: PluginInfo): string[] {
+  const calls = callsOf(plugin);
+  const labels = new Map(plugin.risks.map((r) => [r.id, r.label]));
+  const link =
+    plugin.examplesSource && calls.total > 0
+      ? ` [${calls.linkLabel}](${githubBlob(plugin.examplesSource)}).`
+      : '';
+  return [
+    '## A few calls, classified by the plugin',
+    '',
+    `${calls.intro}${link}`,
+    '',
+    ...(calls.rows.length > 0 ? [...calls.rows.map((e) => exampleMarkdown(e, labels)), ''] : []),
+  ];
+}
+
+function anythingElseMarkdown(plugin: PluginInfo): string[] {
+  const risks = new Map(plugin.risks.map((r) => [r.id, r]));
+  const fallback = plugin.anythingElse?.entries ?? [];
+  const lines = ['## Anything else', '', anythingElseSentence(plugin), ''];
+  if (fallback.length > 0) {
+    lines.push(
+      markdownTable(
+        ['Permission', ROW_LABEL, ...TRUST_LEVELS.map(levelHeading)],
+        fallback.map((entry) => {
+          const risk = risks.get(entry.riskId);
+          return [
+            `${permissionWords(risk?.label ?? '', entry.riskId)}: ${text(risk?.reason ?? '')}`,
+            risk
+              ? `${ROW_WORDS[risk.row]}${risk.rowReason ? ` (${REASON_WORDS[risk.rowReason]})` : ''}`
+              : '',
+            ...fallbackLevels(entry.levels),
+          ];
+        }),
+      ),
+      '',
+    );
+  }
+  if (plugin.excludedTools.length > 0) {
+    lines.push(
+      LEFT_OUT_SENTENCE,
+      '',
+      ...plugin.excludedTools.map((tool) => `- ${code(tool.name)}: ${text(tool.reason)}`),
+      '',
+    );
+  }
+  return lines;
+}
+
 /**
- * Section 7 as Markdown, in the page's order: the kind, the administrator's block of
- * a brokered service, what the person does, the steps with their paths in bold and
- * their screenshots as images with the provenance line, then permissions, expiry,
- * fields and the documentation.
+ * The connect guide as Markdown, in the page's order: the kind, the administrator's
+ * block of a brokered service, what the person does, how wide to grant, the steps
+ * (one list per alternative, the shared steps continuing it), the permissions to
+ * grant, then where, the expiry, the fields and the documentation.
  */
 function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
-  const lines = [`**${connectKindBadge(c)}** — ${code(connectKindCode(c))}`, ''];
+  const lines = [`**${connectKindBadge(c)}** — ${code(c.label ?? connectKindCode(c))}`, ''];
   if (c.clientSource === 'broker') {
     lines.push(
       `**${BROKER_ADMIN_TITLE}** (an administrator, once):`,
       '',
-      ...brokerAdminSentences(c, plugin.name).map((sentence) => `- ${sentence}`),
+      ...brokerAdminSentences(c, plugin.name).map((s) => `- ${s}`),
       `- Provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
       '',
     );
   }
-  lines.push(...connectSentences(c, plugin.name).flatMap((sentence) => [sentence, '']));
+  lines.push(...connectSentences(c, plugin.name).flatMap((s) => [s, '']));
   if (c.clientSource === 'broker') return lines;
   if (c.clientSource === 'gateway-registered') {
     if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
     return lines;
   }
   if (c.reach) {
-    lines.push(
-      `Grant it wide, once — ${text(c.reach.what)}: ${text(c.reach.grant)}. ${text(c.reach.why)}`,
-      '',
-    );
+    lines.push(`**${text(c.reach.what)}** — ${text(c.reach.grant)}. ${text(c.reach.why)}`, '');
   }
-  if (c.steps.length > 0)
+  if (c.alternatives.length > 0) {
+    lines.push(`${ALTERNATIVES_LEGEND}:`, '');
+    for (const alt of c.alternatives) {
+      lines.push(`**${text(alt.label)}**${alt.help ? ` — ${text(alt.help)}` : ''}`, '');
+      lines.push(...[...alt.steps, ...c.steps].flatMap((step, i) => stepMarkdown(step, i + 1)), '');
+    }
+  } else if (c.steps.length > 0) {
     lines.push(...c.steps.flatMap((step, i) => stepMarkdown(step, i + 1)), '');
-  if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
+  }
   if (c.permissions.length > 0) {
     lines.push(
-      ...c.permissions.map(
-        (p) => `- ${text(p.name)}: ${p.access} (for ${p.tools.map(code).join(', ')})`,
+      markdownTable(
+        [grantsHeading(plugin.name), 'Access'],
+        c.permissions.map((p) => [text(p.name), p.access]),
       ),
       '',
     );
   }
-  if (c.expiry) lines.push(expiryWords(c.expiry), '');
+  if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
+  if (c.expiry) lines.push(`Expiry: ${expiryText(c.expiry)}`, '');
   if (c.fields.length > 0) {
     lines.push(
       `The connect page asks: ${c.fields.map((f) => `${text(f.label)}${f.secret ? ' (secret)' : ''}`).join(', ')}.`,
@@ -260,7 +364,7 @@ function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
   return lines;
 }
 
-/** Section 7 of a plugin page as Markdown: every way of connecting, then how to disconnect. */
+/** The connect section of a plugin page as Markdown: every way of connecting, then how to disconnect. */
 export function connectSectionMarkdown(plugin: PluginInfo): string {
   const lines = plugin.credentials.flatMap((c) => connectMarkdown(plugin, c));
   if (plugin.manualRevocation) lines.push(`Disconnecting: ${text(plugin.manualRevocation)}`, '');
@@ -269,117 +373,32 @@ export function connectSectionMarkdown(plugin: PluginInfo): string {
 
 /**
  * `/plugins/<id>` as Markdown: the sections of the page in the same order
- * (website spec §2.3, 1–8), the map as a list by undo row.
+ * (website spec §2.3, 1–10), the model as an outline, the map as one list per row.
  */
 export function pluginPageMarkdown(
   plugin: PluginWithHealth,
   thresholds: ValidationThresholds,
 ): string {
-  const labels = new Map(plugin.risks.map((r) => [r.id, r.label]));
-  const opening = openingOf(plugin);
-  const map = mapOf(plugin);
   const lines: string[] = [
     `# ${pluginPageTitle(plugin)}`,
     '',
-    `The ${plugin.name} plugin lets a Vaubaan Gateway mission use ${plugin.name} without handing the agent a credential. ${text(plugin.description)}`,
+    text(ledeOf(plugin)),
     '',
-    opening.verbs,
+    `Version ${code(plugin.version)} · ${[...countsOf(plugin), gatewaysSentence(plugin.health, thresholds.windowDays)].join(' · ')}`,
     '',
-    `Version ${code(plugin.version)} · ${opening.counts.join(' · ')} · ${gatewaysSentence(plugin.health, thresholds.windowDays)}`,
+    ...modelMarkdown(plugin),
+    ...macroActionsMarkdown(plugin),
+    ...mapMarkdown(plugin),
+    ...callsMarkdown(plugin),
+    ...anythingElseMarkdown(plugin),
+    '## Tools',
     '',
   ];
-  if (plugin.summary) lines.push(text(plugin.summary), '');
-  lines.push(
-    ...opening.dimensions.map((d) => `- **${d.term}**: ${d.line}`),
-    ...opening.levels.map((l) => `  - ${l.label} ×${l.factor}: ${l.hint}`),
-    '',
-    '## The map',
-    '',
-    'Every permission by its undo fact, the rows, and its macro-action; each row says what the trust levels do with it.',
-    '',
-    ...mapColumnMarkdown(map.rows, map.columns),
-    '',
-    `Read it: ${map.reading}`,
-    '',
-  );
-
-  for (const spread of spreadsOf(plugin, map)) lines.push(...spreadMarkdown(spread));
-
-  lines.push('## Worked examples', '');
-  if (plugin.examples.length === 0) {
-    lines.push('This plugin declares no example yet.', '');
-  } else {
-    lines.push(
-      `The plugin's declared calls, run through its own classifier when this page was built: what it sees, the permissions the catalog answers, and what a ${TRUST_LEVEL_LABELS[WORKED_TRUST_LEVEL]} mission does.`,
-      '',
-      ...plugin.examples.map((e) => exampleMarkdown(e, labels)),
-      '',
-    );
-  }
-
-  lines.push('## Anything else', '');
-  const fallback = plugin.anythingElse?.entries ?? [];
-  lines.push(
-    fallback.length > 0
-      ? `A call no permission covers touches ${listWords(fallback.map((e) => code(e.riskId)))} instead of slipping through. No macro-action holds it; a person ticks "${text(plugin.anythingElse?.label ?? '')}" knowingly. ${DAY_NOTE}`
-      : 'This plugin has no fallback permission.',
-    '',
-  );
-  if (fallback.length > 0) {
-    lines.push(
-      markdownTable(
-        ['Permission', ROW_LABEL, ...levelHeadings().map((h) => h.heading)],
-        fallback.map((entry) => [
-          permissionWords(labels.get(entry.riskId) ?? '', entry.riskId, null),
-          rowWordsOf(plugin.risks.find((r) => r.id === entry.riskId)),
-          ...TRUST_LEVELS.map((level) => gateCell(entry.levels, level)),
-        ]),
-      ),
-      '',
-    );
-  }
-  if (plugin.excludedTools.length > 0) {
-    lines.push(
-      'Left out on purpose — tools of the service this plugin does not expose:',
-      '',
-      ...plugin.excludedTools.map((tool) => `- ${code(tool.name)}: ${text(tool.reason)}`),
-      '',
-    );
-  }
-
-  const mission = missionOf(plugin);
-  lines.push('## A mission, worked out', '', text(mission.intro), '');
-  for (const group of mission.groups) {
-    lines.push(`**${group.heading}** (${group.items.length})`, '');
-    if (group.items.length > 0) {
-      lines.push(...group.items.map((i) => `- ${permissionWords(i.label, i.riskId, null)}`), '');
-    }
-  }
-  if (mission.notTicked) lines.push(text(mission.notTicked), '');
-
-  lines.push('## Connecting an account', '', connectSectionMarkdown(plugin), '');
-
-  const retired = retiredOf(plugin);
-  if (retired.length > 0) {
-    lines.push(
-      '## Retired permissions',
-      '',
-      'Kept so the missions that hold them still read; no tool touches them and no new mission is offered them.',
-      '',
-      ...retired.map(
-        (r) =>
-          `- ${permissionWords(r.label, r.riskId, null)}${r.replacedBy ? `: replaced by ${code(r.replacedBy)}` : ''}`,
-      ),
-      '',
-    );
-  }
-
-  lines.push('## Tools', '');
   if (plugin.tools.length === 0) {
     lines.push('This plugin exposes no tool yet.', '');
   } else {
     lines.push(
-      `${plural(plugin.tools.length, 'tool', 'tools')}. ${TOOLS_NOTE}`,
+      toolsIntro(plugin),
       '',
       markdownTable(
         ['Tool', 'What it does', 'Usually touches'],
@@ -392,11 +411,28 @@ export function pluginPageMarkdown(
       '',
     );
   }
-  if (plugin.gitRemote) {
-    lines.push(GIT_REMOTE_SENTENCE, '');
+  if (plugin.gitRemote) lines.push(GIT_REMOTE_SENTENCE, '');
+
+  const retired = retiredOf(plugin);
+  if (retired.length > 0) {
+    lines.push(
+      '## Retired permissions',
+      '',
+      RETIRED_SENTENCE,
+      '',
+      ...retired.map(
+        (r) =>
+          `- ${permissionWords(r.label, r.riskId)}${r.replacedBy ? `: replaced by ${code(r.replacedBy)}` : ''}`,
+      ),
+      '',
+    );
   }
 
   lines.push(
+    '## Connecting an account',
+    '',
+    connectSectionMarkdown(plugin),
+    '',
     '## Health',
     '',
     gatewaysSentence(plugin.health, thresholds.windowDays),
@@ -411,7 +447,7 @@ export function pluginPageMarkdown(
     '',
     // The twin is this text: it names the page it repeats instead.
     ...pluginLinks(plugin).map((l) =>
-      l.href.endsWith('.md')
+      l.href === twinPathOf(`/plugins/${plugin.id}`)
         ? `- The page: [/plugins/${plugin.id}](/plugins/${plugin.id})`
         : `- [${l.label}](${l.href})`,
     ),
@@ -425,10 +461,6 @@ export const GIT_REMOTE_SENTENCE =
 
 export function validatedSentence(thresholds: ValidationThresholds): string {
   return `A version is marked validated by the community with ${thresholdsSentence(thresholds)}; a gateway shows that mark on the accounts of this service. The figures are refreshed at most hourly ([what they mean](/plugins/health)). It is a community signal, not a security guarantee.`;
-}
-
-function plural(n: number, one: string, other: string): string {
-  return `${n} ${n === 1 ? one : other}`;
 }
 
 /**
@@ -453,15 +485,15 @@ function stepMarkdown(step: ConnectStepInfo, n: number): string[] {
   return lines;
 }
 
-/** The expiry of a pasted key in one sentence; `escape` is `text` for Markdown, none for HTML. */
-export function expiryWords(expiry: TokenExpiry, escape: (value: string) => string = text): string {
+/** The expiry of a pasted key, after "Expiry:"; `escape` is `text` for Markdown, none for HTML. */
+export function expiryText(expiry: TokenExpiry, escape: (value: string) => string = text): string {
   switch (expiry.kind) {
     case 'provider-reports':
-      return 'Expiry: the service tells the gateway the date, and the account page warns before it.';
+      return 'the service tells the gateway the date, and the account page warns before it.';
     case 'person-types':
-      return `Expiry: about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
+      return `about ${expiry.recommendedDays} days, chosen at the service; the service does not tell the gateway the date.`;
     case 'none':
-      return `Expiry: ${escape(expiry.reason)}`;
+      return escape(expiry.reason);
   }
 }
 

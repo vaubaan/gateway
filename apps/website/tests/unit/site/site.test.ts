@@ -73,7 +73,7 @@ describe('the pages of the site', () => {
     for (const doc of site.generatedDocs) expect(paths).toContain(doc.page.path);
     for (const plugin of site.plugins) {
       expect(paths).toContain(`/plugins/${plugin.id}`);
-      // The connect guide is section 7 of the plugin page: no page of its own.
+      // The connect guide is section 9 of the plugin page: no page of its own.
       expect(paths).not.toContain(`/docs/providers/${plugin.id}`);
     }
     for (const path of ['/', '/docs', '/plugins', '/plugins/health', '/trust']) {

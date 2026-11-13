@@ -96,6 +96,24 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   repositories", instead of "All repositories" (ADR
   one-place-to-authorize-services-token-first, amendment 2026-11-13). The other guides
   keep their wide grant until reviewed.
+- **vaubaan.com plugin pages in the "Atlas" layout** (website spec §2.3): ten sections,
+  each heading a fixed template over plugin fields. **The model** draws the plugin's data
+  model as nested boxes — the account, each plane, the resource entity highlighted, the
+  entity carrying the environment, cardinality marks, entities no tool touches dashed, each
+  description behind an (i) — with the Account / Resource / Environment callouts.
+  **Macro-actions** are cards. **The map** puts every permission in its row of the tree
+  by macro-action, with a trust-level toggle (Careful ×1 / Trusting ×3 / Autonomous ×10)
+  and, where the data model carries an environment, an environment toggle: each cell says
+  yes / ask me / no and the quota a day, an environment the catalog refuses reads "no ·
+  never on prod", dashed. **A few calls** shows one declared example per macro-action and
+  the first refused at Careful. Tools sit in a scrolling box; the connect guide shows a
+  key's alternatives (Vercel: team or one project) as a toggle, each with its own steps
+  then the shared ones, and the grants as "Permission at <service> · Access". All toggles
+  are CSS-only radio groups: every state is in the HTML. Gone: the worked mission, the
+  per-macro-action tables, the fact chips. The Markdown twin follows the same order (the
+  model as an outline, the map as one list per row with every level and environment).
+  `/plugins.json` adds `data_model`, `environment` and each way's `alternatives`; a
+  way's `steps` are now the guide's shared steps only.
 
 ## [2.0.0-alpha.19] - 2026-11-13
 

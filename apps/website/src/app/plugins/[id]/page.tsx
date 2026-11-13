@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return generatedPageMetadata(`/plugins/${id}`);
 }
 
-/** The plugin page in the C3 layout; its Markdown twin is `pluginPageMarkdown`, same order. */
+/** The plugin page in the Atlas layout; its Markdown twin is `pluginPageMarkdown`, same order. */
 export default async function PluginPage({ params }: Props) {
   const { id } = await params;
   const live = await liveSite();

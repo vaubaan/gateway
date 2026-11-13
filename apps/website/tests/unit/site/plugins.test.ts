@@ -464,7 +464,8 @@ describe('the plugin catalog of the site', () => {
     expect(tokenWays.length).toBeGreaterThan(0);
     for (const plugin of tokenWays) {
       const page = connectSectionMarkdown(plugin);
-      expect(page, plugin.id).toMatch(/^Grant it wide, once — .+: .+\. .*mission/m);
+      // The reach, headed by what it is: "**Repository access** — All repositories. …".
+      expect(page, plugin.id).toMatch(/^\*\*.+\*\* — .+\. .*mission/m);
       expect(page, plugin.id).toMatch(/^1\. /m);
       expect(page, plugin.id).toMatch(/^Expiry: /m);
       expect(page, plugin.id).not.toMatch(/and no more/);
@@ -505,5 +506,96 @@ describe('the plugin catalog of the site', () => {
       "Screenshots on these pages come from the services' own documentation where its licence allows it: Cloudflare DNS docs, developers.cloudflare.com (CC BY 4.0).",
     );
     expect(screenshotCredits([byId('github')])).toBeNull();
+  });
+
+  it('keeps the shapes of a key apart: each alternative its own steps, the guide’s steps shared', async () => {
+    const vercel = byId('vercel');
+    const c = vercel.credentials[0]!;
+    const plugin = await importPlugin(REPO_ROOT, 'plugins/vercel');
+    const spec = plugin.credential;
+    if (spec.kind !== 'api-key') throw new Error('vercel: expected an api-key way');
+    expect(c.alternatives.map((a) => a.id)).toEqual((spec.alternatives ?? []).map((a) => a.id));
+    expect(c.alternatives.length).toBeGreaterThanOrEqual(2);
+    for (const [i, alt] of c.alternatives.entries()) {
+      expect(alt.steps.map((s) => s.do)).toEqual(spec.alternatives![i]!.steps.map((s) => s.do));
+      expect(alt.label).toBe(spec.alternatives![i]!.label);
+    }
+    expect(c.steps.map((s) => s.do)).toEqual(spec.guide.steps.map((s) => s.do));
+    // A key of one shape has no alternative.
+    expect(byId('github').credentials[0]?.alternatives).toEqual([]);
+  });
+});
+
+describe('the data model of a plugin page', () => {
+  it('is the plugin’s own dataModel: planes, entities, parents, cardinalities, descriptions', async () => {
+    for (const dir of discoverPluginDirs(REPO_ROOT)) {
+      const plugin = await importPlugin(REPO_ROOT, dir);
+      const info = byId(plugin.id);
+      expect(
+        info.dataModel.planes.map((p) => ({
+          slug: p.slug,
+          description: p.description,
+          entities: p.entities.map((e) => ({
+            name: e.name,
+            parent: e.parent,
+            cardinalities: e.cardinalities,
+            description: e.description,
+            carriesEnv: e.carriesEnv,
+          })),
+        })),
+        plugin.id,
+      ).toEqual(
+        plugin.dataModel.planes.map((p) => ({
+          slug: p.slug,
+          description: p.description ?? null,
+          entities: p.entities.map((e) => ({
+            name: e.name,
+            parent: e.parent,
+            cardinalities: [...e.cardinalities],
+            description: e.description,
+            carriesEnv: e.envScopable === true,
+          })),
+        })),
+      );
+    }
+  }, 60_000);
+
+  it('marks an entity touched when a classified example’s slice names it', () => {
+    const github = byId('github');
+    const entities = github.dataModel.planes.flatMap((p) => p.entities);
+    const named = new Set(
+      github.examples.flatMap((e) =>
+        e.slices.flatMap((s) =>
+          parseSlice(s).path.flatMap((seg) => (seg.kind === 'name' ? [seg.value] : [])),
+        ),
+      ),
+    );
+    for (const e of entities) expect(e.touched, e.name).toBe(named.has(e.name));
+    expect(entities.find((e) => e.name === 'branch')?.touched).toBe(true);
+    expect(entities.some((e) => !e.touched)).toBe(true);
+  });
+
+  it('says where the environment comes from, as the gateway reference decides it', async () => {
+    expect(byId('vercel').environment.source).toBe('call');
+    expect(byId('supabase').environment).toMatchObject({
+      source: 'resource-label',
+      envs: ['preview', 'staging', 'prod'],
+      carriers: ['db.project', 'storage.project', 'auth.project', 'functions.project'],
+    });
+    expect(byId('github').environment).toEqual({
+      source: 'none',
+      envs: [],
+      carriers: ['repo.branch'],
+    });
+    const vercel = await importPlugin(REPO_ROOT, 'plugins/vercel');
+    expect(typeof vercel.envOf).toBe('function');
+  });
+
+  it('points at the file that declares the examples', () => {
+    for (const plugin of plugins) {
+      if (plugin.examplesSource === null) continue;
+      expect(existsSync(join(REPO_ROOT, plugin.examplesSource)), plugin.id).toBe(true);
+    }
+    expect(byId('github').examplesSource).toBe('plugins/github/src/examples.ts');
   });
 });

@@ -1,42 +1,37 @@
 /**
- * What a plugin page shows, section by section (website spec §2.3, 1–8),
- * as plain data both renderings read: the HTML page
- * (`components/plugin/PluginPage.tsx`) and its Markdown twin
- * (`pluginPageMarkdown` in `plugin-pages.ts`). Every word of the risk model
- * comes from `@vaubaan/policy-engine` — the undo rows, the gates, the trust
- * levels, the five facts —; this module only places, counts and joins them.
- * The rows are named by `ROW_WORDS`; the page never says "tier".
+ * What a plugin page shows, section by section (website spec §2.3, the
+ * "Atlas" layout, sections 1–10), as plain data both renderings read: the
+ * HTML page (`components/plugin/PluginPage.tsx`) and its Markdown twin
+ * (`pluginPageMarkdown` in `plugin-pages.ts`). Every sentence is a fixed
+ * template over a plugin field: the words of the risk model come from
+ * `@vaubaan/policy-engine` — the rows, their reasons and gate sentences, the
+ * gates, the trust levels —; this module only places, counts and joins them.
+ * The page never says "tier" and prints no severity word.
  */
 import {
-  ALLOW_WORDS,
   GATE_WORDS,
-  gateWordOf,
+  ROW_GATE_SENTENCES,
+  ROW_WORDS,
   TRUST_LEVEL_BUDGET_FACTOR,
-  TRUST_LEVEL_GATES,
-  TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
   TRUST_LEVELS,
-  ROW_WORDS,
-  TREE_LEGEND,
-  unqualifyRiskId,
-  WHY_LABELS,
-  WHY_ORDER,
   type GateWord,
   type Reason,
   type Row,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
-import { parseRiskId } from '@vaubaan/shared/risk-id';
+import type { DataModelCardinality } from '@vaubaan/shared';
 
 import type { CarefulOutcome, ExampleInfo } from './plugin-examples';
-import type {
-  CredentialInfo,
-  FactInfo,
-  LevelBudgets,
-  MacroActionEntryInfo,
-  MacroActionInfo,
-  PluginInfo,
-  RiskInfo,
+import {
+  allSteps,
+  type CredentialInfo,
+  type EnvironmentSource,
+  type LevelBudgets,
+  type MacroActionEntryInfo,
+  type ModelEntityInfo,
+  type PluginInfo,
+  type RiskInfo,
 } from './plugins';
 
 // ---------------------------------------------------------------------------
@@ -53,7 +48,7 @@ export function capitalise(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
-function plural(n: number, one: string, other: string): string {
+export function plural(n: number, one: string, other: string): string {
   return `${n} ${n === 1 ? one : other}`;
 }
 
@@ -62,406 +57,496 @@ export function figure(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-function windowWords(seconds: number): string {
-  if (seconds === 60) return 'a minute';
-  if (seconds === 3600) return 'an hour';
-  if (seconds === 86400) return 'a day';
-  return `per ${seconds} seconds`;
+/** "a" or "an" before a word, by its first letter. */
+function article(word: string): string {
+  return /^[aeiou]/i.test(word) ? 'An' : 'A';
 }
 
-/** The gate a trust level gives a permission of this kind, as the word class drawn. */
-function gateWordAt(level: TrustLevel, row: Row): GateWord {
-  const gate = TRUST_LEVEL_GATES[level][row];
-  return gate === null ? 'off' : gateWordOf(gate);
+/** A sentence ends with a period. */
+function sentence(text: string): string {
+  const trimmed = text.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+/** "Careful ×1". */
+export function levelHeading(level: TrustLevel): string {
+  return `${TRUST_LEVEL_LABELS[level]} ×${TRUST_LEVEL_BUDGET_FACTOR[level]}`;
+}
+
+/** The section numbers of the page, in order; retired permissions only when there are some. */
+export function sectionNumbers(plugin: PluginInfo): Readonly<Record<SectionId, number>> {
+  const order: SectionId[] = [
+    'model',
+    'macro-actions',
+    'map',
+    'examples',
+    'anything-else',
+    'tools',
+    ...(plugin.retired.length > 0 ? (['retired'] as const) : []),
+    'connect',
+    'health',
+    'links',
+  ];
+  const numbers = Object.fromEntries(order.map((id, i) => [id, i + 1]));
+  return { retired: 0, ...numbers } as Record<SectionId, number>;
+}
+
+export type SectionId =
+  | 'model'
+  | 'macro-actions'
+  | 'map'
+  | 'examples'
+  | 'anything-else'
+  | 'tools'
+  | 'retired'
+  | 'connect'
+  | 'health'
+  | 'links';
+
+// ---------------------------------------------------------------------------
+// The header
+// ---------------------------------------------------------------------------
+
+/** The lede: what the plugin is for, then its own description. */
+export function ledeOf(plugin: PluginInfo): string {
+  return `The ${plugin.name} plugin lets a Vaubaan Gateway mission use ${plugin.name} without handing the agent a credential. ${plugin.description}`.trim();
+}
+
+/** "17 permissions", "4 macro-actions", "28 tools": the counts line, the gateways added by the page. */
+export function countsOf(plugin: PluginInfo): string[] {
+  return [
+    plural(plugin.counts.permissions, 'permission', 'permissions'),
+    plural(plugin.counts.macroActions, 'macro-action', 'macro-actions'),
+    plural(plugin.counts.tools, 'tool', 'tools') + (plugin.gitRemote ? ' and the git remote' : ''),
+  ];
 }
 
 // ---------------------------------------------------------------------------
-// 1 · Opening
+// 1 · The model
 // ---------------------------------------------------------------------------
 
-export interface Opening {
-  readonly title: string;
-  /** "What an agent does in GitHub, in 4 macro-actions: Read, Propose, Ship and Administer." */
-  readonly verbs: string;
-  /** "17 permissions", "4 macro-actions", "28 tools". */
-  readonly counts: readonly string[];
-  /** The three dimensions of the page, each a term and a line. */
-  readonly dimensions: readonly { readonly term: string; readonly line: string }[];
-  /** One line per trust level: its label, its multiplier and what it does. */
-  readonly levels: readonly {
-    readonly label: string;
-    readonly factor: number;
-    readonly hint: string;
-  }[];
+/** The mark of a cardinality in the diagram. */
+export const CARDINALITY_MARKS: Readonly<Record<DataModelCardinality, string>> = {
+  one: '1',
+  bounded: 'n',
+  unbounded: '*',
+};
+
+/**
+ * How a cardinality reads (risk model §2.1): the gateway's provider reference
+ * says the same (`CARDINALITY_WORDS`, `apps/gateway/src/lib/providers/reference.ts`,
+ * which the site may not import; `sources-agree.test.ts` compares them).
+ */
+export const CARDINALITY_WORDS: Readonly<Record<DataModelCardinality, string>> = {
+  one: 'exactly one, named',
+  bounded: 'a finite, known set',
+  unbounded: 'an unknown number, possibly all',
+};
+
+/**
+ * The rule of the environment (risk model §6), as the gateway's provider
+ * reference says it (`ENVIRONMENT_EXPLANATIONS`; compared by `sources-agree.test.ts`).
+ */
+export const ENVIRONMENT_RULES: Readonly<Record<EnvironmentSource, string>> = {
+  call: 'The environment is read from each call: the plugin derives it from what the call names, whatever label the resource carries. A permission tied to an environment is held once per environment, and a call counts against the one it touches.',
+  'resource-label':
+    'The environment is the label the owner of the account puts on each resource. A permission tied to an environment is held once per label, and is refused on a resource that has no label or a label the permission does not list.',
+  none: 'No permission of this service depends on an environment: each is held once, whatever the resource.',
+};
+
+export const MODEL_SENTENCE =
+  'The things that exist at the service and how they nest. Every permission is written over these; a resource of an account is one of them, named by its ref.';
+
+export interface ModelNode {
+  readonly name: string;
+  readonly description: string;
+  readonly marks: readonly string[];
+  /** The entity a resource of an account is (named by the plugin's `resourceNoun`). */
+  readonly resource: boolean;
+  readonly carriesEnv: boolean;
+  /** False when no classified example touches it: drawn dashed. */
+  readonly touched: boolean;
+  readonly children: readonly ModelNode[];
 }
 
-export function openingOf(plugin: PluginInfo): Opening {
-  const labels = plugin.macroActions.map((a) => a.label);
-  const n = labels.length;
+export interface ModelPlane {
+  readonly slug: string;
+  readonly description: string | null;
+  readonly roots: readonly ModelNode[];
+}
+
+export interface ModelView {
+  /** "1 plane, 22 things." */
+  readonly counts: string;
+  readonly planes: readonly ModelPlane[];
+  /** The diagram said in one line, for a screen reader. */
+  readonly label: string;
+  /** The summary's account sentence. */
+  readonly account: string | null;
+  /** The summary's resource sentences. */
+  readonly resource: string | null;
+  /** The summary's sentences about the environment. */
+  readonly environmentNotes: readonly string[];
+  readonly environmentRule: string;
+  readonly envs: readonly string[];
+  readonly carriers: readonly string[];
+  /** The model marks a carrier but no catalog entry names an environment (GitHub's branch). */
+  readonly envInModelOnly: boolean;
+  /** Some entity is touched by no tool: the legend says what dashed means. */
+  readonly someUntouched: boolean;
+}
+
+/**
+ * The entities a resource of the service is, from the plugin's `resourceNoun`:
+ * each noun of it ("page or database" is two) names the entity spelled the
+ * same, the entity its last word names ("library index" → `index`), or the
+ * entity a one-word noun starts with ("repository" → `repo`). None without a noun.
+ */
+export function isResourceEntity(name: string, noun: PluginInfo['resourceNoun']): boolean {
+  if (noun === null) return false;
+  return noun.one.split(' or ').some((candidate) => {
+    const words = candidate.trim().split(' ');
+    return (
+      name === candidate ||
+      name === words.join('-') ||
+      name === words[words.length - 1] ||
+      (words.length === 1 && name.length >= 3 && candidate.startsWith(name) && !name.includes('-'))
+    );
+  });
+}
+
+/**
+ * The plugin's summary cut in three: the account (its first clause), the
+ * environment (the sentences that name it) and the resource (the rest).
+ */
+export function summaryParts(summary: string | null): {
+  account: string | null;
+  resource: string | null;
+  environment: string[];
+} {
+  if (!summary) return { account: null, resource: null, environment: [] };
+  const sentences = summary.trim().split(/(?<=[.!?])\s+(?=[A-Z`(])/);
+  const [first = '', ...others] = sentences;
+  const cut = first.indexOf('; ');
+  const account = sentence(cut < 0 ? first : first.slice(0, cut));
+  const rest = [...(cut < 0 ? [] : [capitalise(sentence(first.slice(cut + 2)))]), ...others];
+  const environment = rest.filter((s) => /environment/i.test(s));
+  const resource = rest.filter((s) => !/environment/i.test(s));
   return {
-    title: `${plugin.name} plugin`,
-    verbs:
-      n === 0
-        ? `${plugin.name} declares no macro-action yet.`
-        : `What an agent does in ${plugin.name}, in ${plural(n, 'macro-action', 'macro-actions')}: ${listWords(labels)}.`,
-    counts: [
-      plural(plugin.counts.permissions, 'permission', 'permissions'),
-      plural(plugin.counts.macroActions, 'macro-action', 'macro-actions'),
-      plural(plugin.counts.tools, 'tool', 'tools') +
-        (plugin.gitRemote ? ' and the git remote' : ''),
-    ],
-    dimensions: [
-      {
-        term: 'Risk',
-        line: `four rows — ${listWords(
-          MAP_ROWS.slice()
-            .reverse()
-            .map((row) => ROW_WORDS[row].toLowerCase()),
-        )} — read from five facts per permission (${listWords(WHY_ORDER.map((axis) => WHY_LABELS[axis].toLowerCase()))}). ${TREE_LEGEND}`,
-      },
-      {
-        term: 'Macro-actions',
-        line: `the verbs of the service${n > 0 ? ` (${listWords(labels)})` : ''}. A mission is made of them: the person ticks the ones the task needs and sets each to a trust level.`,
-      },
-      {
-        term: 'Trust',
-        line: `${listWords(TRUST_LEVELS.map((l) => TRUST_LEVEL_LABELS[l]))}, set per macro-action. From the row it decides whether a permission runs freely, asks first or is left out, and multiplies the limits.`,
-      },
-    ],
-    levels: TRUST_LEVELS.map((level) => ({
-      label: TRUST_LEVEL_LABELS[level],
-      factor: TRUST_LEVEL_BUDGET_FACTOR[level],
-      hint: TRUST_LEVEL_HINTS[level],
-    })),
+    account,
+    resource: resource.length > 0 ? resource.join(' ') : null,
+    environment,
+  };
+}
+
+function nodeOf(
+  entity: ModelEntityInfo,
+  all: readonly ModelEntityInfo[],
+  noun: PluginInfo['resourceNoun'],
+): ModelNode {
+  return {
+    name: entity.name,
+    description: entity.description,
+    marks: entity.cardinalities.map((c) => CARDINALITY_MARKS[c]),
+    resource: isResourceEntity(entity.name, noun),
+    carriesEnv: entity.carriesEnv,
+    touched: entity.touched,
+    children: all.filter((e) => e.parent === entity.name).map((e) => nodeOf(e, all, noun)),
+  };
+}
+
+export function modelOf(plugin: PluginInfo): ModelView {
+  const planes = plugin.dataModel.planes.map((plane): ModelPlane => ({
+    slug: plane.slug,
+    description: plane.description,
+    roots: plane.entities
+      .filter((e) => e.parent === null)
+      .map((e) => nodeOf(e, plane.entities, plugin.resourceNoun)),
+  }));
+  const things = plugin.dataModel.planes.reduce((n, p) => n + p.entities.length, 0);
+  const parts = summaryParts(plugin.summary);
+  const env = plugin.environment;
+  return {
+    counts: `${plural(planes.length, 'plane', 'planes')}, ${plural(things, 'thing', 'things')}.`,
+    planes,
+    label: `Diagram: ${plugin.dataModel.planes
+      .map((p) => `plane ${p.slug} with ${p.entities.map((e) => e.name).join(', ')}`)
+      .join('; ')}`,
+    account: parts.account,
+    resource: parts.resource,
+    environmentNotes: parts.environment,
+    environmentRule: ENVIRONMENT_RULES[env.source],
+    envs: env.envs,
+    carriers: env.carriers,
+    envInModelOnly: env.source === 'none' && env.carriers.length > 0,
+    someUntouched: plugin.dataModel.planes.some((p) => p.entities.some((e) => !e.touched)),
   };
 }
 
 // ---------------------------------------------------------------------------
-// 2 · The map
+// 2 · Macro-actions
+// ---------------------------------------------------------------------------
+
+export const MACRO_ACTIONS_SENTENCE =
+  'A mission is made of them: the person ticks the ones the task needs and sets each to a trust level.';
+
+export function macroActionsTitle(plugin: PluginInfo): string {
+  return `What an agent does at ${plugin.name}: ${plural(plugin.macroActions.length, 'macro-action', 'macro-actions')}`;
+}
+
+// ---------------------------------------------------------------------------
+// 3 · The map
 // ---------------------------------------------------------------------------
 
 /** The rows of the map, worst first. */
 export const MAP_ROWS: readonly Row[] = [4, 3, 2, 1];
 
-/** A permission on the map: one box, once per environment when it is environment-scoped. */
-export interface PermissionBox {
+/** The most environments the map's toggle draws (its CSS is written for this many). */
+export const ENV_TOGGLE_MAX = 6;
+
+/** A gate in one short word, in a cell of the map; the legend gives the gateway's words beside it. */
+export const GATE_SHORT: Readonly<Record<GateWord, string>> = {
+  free: 'yes',
+  ask: 'ask me',
+  off: 'no',
+};
+
+/** What a trust level does with a permission in one environment (or in all, `env: null`). */
+export interface CellValue {
+  readonly level: TrustLevel;
+  readonly env: string | null;
+  readonly gate: GateWord;
+  /** Calls a day; `null` when not included. */
+  readonly quota: number | null;
+  /** The catalog does not accept the permission on this environment. */
+  readonly never: boolean;
+}
+
+/** What follows the gate word in a cell: " · 1,000 a day", " · never on prod", or nothing. */
+export function cellSuffix(value: CellValue): string {
+  if (value.never) return ` · never on ${value.env ?? ''}`;
+  return value.quota === null ? '' : ` · ${figure(value.quota)} a day`;
+}
+
+/** "yes · 1,000 a day", "no", "no · never on prod". */
+export function cellWords(value: CellValue): string {
+  return `${GATE_SHORT[value.gate]}${cellSuffix(value)}`;
+}
+
+/** A permission in one cell of the map: one row, for some environments or all. */
+export interface MapChip {
   readonly riskId: string;
   readonly label: string;
-  /**
-   * The environments of this box, for an environment-scoped permission: one
-   * box per row and reason it lands in, so the environments that share them
-   * share the box. Empty for a permission without environments.
-   */
-  readonly envs: readonly string[];
+  /** The catalog's reason, in the tooltip. */
+  readonly reason: string;
   readonly row: Row;
-  /** The branch of the tree that put it in its row; `null` in row 1. */
+  /** The branch of the tree that put it in its row; `null` in the harmless row. */
   readonly rowReason: Reason | null;
-  /** The fallback, in "Anything else": drawn dashed, never counted. */
-  readonly fallback: boolean;
-  /** The fact that moved the gate, in words (`whole account`), for row 2. */
-  readonly sensitiveBy: readonly string[];
+  /** The environments this chip is drawn in; `null`: in every one (or there is no toggle). */
+  readonly envs: readonly string[] | null;
+  /** The catalog does not accept it on these environments: dashed. */
+  readonly refused: boolean;
+  /** One per trust level, and per environment of the chip when it is environment-scoped. */
+  readonly values: readonly CellValue[];
 }
 
-export interface MapColumn {
-  readonly id: string;
-  readonly label: string;
-  /** Distinct permissions in the column. */
-  readonly count: number;
-  /** "Anything else", added by the gateway. */
-  readonly byGateway: boolean;
-}
-
-/** What one trust level does with a row. */
-export interface RowLevel {
-  readonly level: TrustLevel;
-  readonly label: string;
-  readonly gate: GateWord;
-}
-
-export interface MapRow {
+export interface MapRowView {
   readonly row: Row;
-  /** The name of the row (`Cannot be repaired`, `Repairable, worth a look`). */
   readonly word: string;
-  readonly levels: readonly RowLevel[];
-  /** "runs freely at every level", "not included at Careful, ask me first at Trusting and Autonomous". */
-  readonly levelsSentence: string;
-  /** For row 2: the facts that put its permissions there, in words. */
-  readonly sensitiveBy: readonly string[];
-  /** One cell per column, in column order. */
-  readonly cells: readonly (readonly PermissionBox[])[];
+  /** What the trust levels do with the row (`ROW_GATE_SENTENCES`). */
+  readonly gates: string;
+  /** One cell per macro-action, in catalog order. */
+  readonly cells: readonly (readonly MapChip[])[];
 }
 
-export interface PluginMap {
-  readonly columns: readonly MapColumn[];
-  readonly rows: readonly MapRow[];
-  /** Distinct permissions on the map, the fallback left out. */
-  readonly permissions: number;
-  /** Places on the map, the fallback left out: a permission counts once per environment. */
-  readonly boxes: number;
-  readonly envScoped: boolean;
-  readonly reading: string;
+export interface MapSum {
+  readonly level: TrustLevel;
+  readonly env: string | null;
+  readonly text: string;
 }
 
-function boxesOf(entry: MacroActionEntryInfo, risk: RiskInfo): PermissionBox[] {
-  const box = (
-    envs: readonly string[],
-    row: Row,
-    rowReason: Reason | null,
-    facts: readonly FactInfo[],
-  ): PermissionBox => ({
-    riskId: risk.id,
-    label: risk.label,
-    envs,
-    row,
-    rowReason,
-    fallback: risk.fallback,
-    sensitiveBy: row === 2 ? facts.filter((f) => f.movesGate).map((f) => f.word) : [],
-  });
-  if (entry.envLevels.length === 0) return [box([], risk.row, risk.rowReason, risk.facts)];
-  const merged = new Map<string, PermissionBox>();
-  for (const { env } of entry.envLevels) {
-    const variant = risk.envVariants.find((v) => v.env === env);
-    if (!variant) continue;
-    const key = `${variant.row}/${variant.rowReason ?? ''}`;
-    const known = merged.get(key);
-    merged.set(
-      key,
-      known
-        ? { ...known, envs: [...known.envs, env] }
-        : box([env], variant.row, variant.rowReason, variant.facts),
-    );
-  }
-  return [...merged.values()];
-}
-
-/** "runs freely at every level" — the levels grouped by the gate they give, in level order. */
-export function levelsSentence(levels: readonly RowLevel[]): string {
-  const groups: { gate: GateWord; labels: string[] }[] = [];
-  for (const l of levels) {
-    const group = groups.find((g) => g.gate === l.gate);
-    if (group) group.labels.push(l.label);
-    else groups.push({ gate: l.gate, labels: [l.label] });
-  }
-  if (groups.length === 1) return `${GATE_WORDS[groups[0]!.gate]} at every level`;
-  return groups.map((g) => `${GATE_WORDS[g.gate]} at ${listWords(g.labels)}`).join(', ');
-}
-
-function rowLevels(row: Row): RowLevel[] {
-  return TRUST_LEVELS.map((level) => ({
-    level,
-    label: TRUST_LEVEL_LABELS[level],
-    gate: gateWordAt(level, row),
-  }));
-}
-
-/** The macro-actions as columns, then "Anything else" when the catalog has a fallback. */
-function columnsOf(plugin: PluginInfo): MacroActionInfo[] {
-  return plugin.anythingElse
-    ? [...plugin.macroActions, plugin.anythingElse]
-    : [...plugin.macroActions];
-}
-
-export function mapOf(plugin: PluginInfo): PluginMap {
-  const risks = new Map(plugin.risks.map((r) => [r.id, r]));
-  const actions = columnsOf(plugin);
-  const boxesByColumn = actions.map((action) =>
-    action.entries.flatMap((entry) => {
-      const risk = risks.get(entry.riskId);
-      return risk ? boxesOf(entry, risk) : [];
-    }),
-  );
-  const columns = actions.map((action, i): MapColumn => ({
-    id: action.id,
-    label: action.label,
-    count: new Set(boxesByColumn[i]!.map((b) => b.riskId)).size,
-    byGateway: action === plugin.anythingElse,
-  }));
-  const rows = MAP_ROWS.map((row): MapRow => {
-    const cells = boxesByColumn.map((boxes) => boxes.filter((b) => b.row === row));
-    const levels = rowLevels(row);
-    return {
-      row,
-      word: ROW_WORDS[row],
-      levels,
-      levelsSentence: levelsSentence(levels),
-      sensitiveBy: [...new Set(cells.flat().flatMap((b) => b.sensitiveBy))],
-      cells,
-    };
-  });
-  // A permission in two macro-actions is two boxes, one place in the counts; an
-  // environment-scoped one counts once per environment.
-  const places = new Map<string, Row>();
-  for (const b of boxesByColumn.flat()) {
-    if (b.fallback) continue;
-    for (const env of b.envs.length > 0 ? b.envs : ['']) places.set(`${b.riskId}[${env}]`, b.row);
-  }
-  const envScoped = boxesByColumn.flat().some((b) => b.envs.length > 0);
-  return {
-    columns,
-    rows,
-    permissions: new Set([...places.keys()].map((k) => k.slice(0, k.indexOf('[')))).size,
-    boxes: places.size,
-    envScoped,
-    reading: readingOf([...places.values()], envScoped),
-  };
+export interface MapView {
+  readonly columns: readonly {
+    readonly id: string;
+    readonly label: string;
+    readonly description: string;
+  }[];
+  readonly rows: readonly MapRowView[];
+  /** The environments of the toggle, the catalog's last-named (its production) first; empty: no toggle. */
+  readonly envs: readonly string[];
+  /** The intro, cut where the page names the chosen environment ("For the chosen trust level[ and environment (…)]"). */
+  readonly introLead: string;
+  readonly introTail: string;
+  readonly sums: readonly MapSum[];
+  /** What changes from one environment to another, when there is a toggle. */
+  readonly notes: readonly string[];
 }
 
 /**
- * The sentence that reads the map, computed from its counts: how many sit in
- * each row, then what each trust level does with them.
+ * The environments of the map's toggle: only when the data model carries an
+ * environment and the catalog names some; in the reverse of the order the
+ * catalog first names them, so its production comes first.
  */
-export function readingOf(rows: readonly Row[], envScoped: boolean): string {
-  const total = rows.length;
-  if (total === 0) return 'No permission of this plugin is held by a macro-action yet.';
-  const noun = envScoped
-    ? `${total === 1 ? 'permission' : 'permissions'}, counted once per environment`
-    : total === 1
-      ? 'permission'
-      : 'permissions';
-  const byRow = MAP_ROWS.map((row) => ({ row, n: rows.filter((r) => r === row).length })).filter(
-    (r) => r.n > 0,
-  );
-  const undo = byRow
-    .slice()
-    .reverse()
-    .map((r) => `${ROW_WORDS[r.row].toLowerCase()}: ${r.n}`);
-  const levels = TRUST_LEVELS.map((level) => {
-    const counts = (['free', 'ask', 'off'] as const)
-      .map((gate) => ({
-        gate,
-        n: byRow.filter((r) => gateWordAt(level, r.row) === gate).reduce((s, r) => s + r.n, 0),
-      }))
-      .filter((c) => c.n > 0)
-      .map((c) => `${GATE_WORDS[c.gate]} ${c.n}`);
-    return `${TRUST_LEVEL_LABELS[level]}: ${counts.join(', ')}`;
-  });
-  return `Of the ${total} ${noun}: ${undo.join('; ')}. ${levels.join('; ')}.`;
+export function toggleEnvsOf(plugin: PluginInfo): string[] {
+  const { envs, carriers } = plugin.environment;
+  if (carriers.length === 0 || envs.length === 0) return [];
+  return [...envs].reverse();
 }
 
-/** The map restricted to one macro-action's column: what a spread shows beside its table. */
-export function columnOf(map: PluginMap, actionId: string): readonly MapRow[] {
-  const i = map.columns.findIndex((c) => c.id === actionId);
-  return map.rows.map((row) => {
-    const cell = i < 0 ? [] : (row.cells[i] ?? []);
+function levelValues(levels: LevelBudgets, env: string | null): CellValue[] {
+  return TRUST_LEVELS.map((level) => {
+    const line = levels[level];
     return {
-      ...row,
-      cells: [cell],
-      sensitiveBy: [...new Set(cell.flatMap((b) => b.sensitiveBy))],
+      level,
+      env,
+      gate: line.gateWord,
+      quota: line.gateWord === 'off' ? null : line.quota,
+      never: false,
     };
   });
 }
 
-// ---------------------------------------------------------------------------
-// 3 · One spread per macro-action
-// ---------------------------------------------------------------------------
-
-/** One line of a spread's table: a permission, in one environment when it is scoped. */
-export interface SpreadLine {
-  readonly riskId: string;
-  readonly label: string;
-  readonly reason: string;
-  readonly env: string | null;
-  readonly facts: readonly FactInfo[];
-  readonly row: Row;
-  readonly rowReason: Reason | null;
-  readonly levels: LevelBudgets;
+function neverValues(env: string): CellValue[] {
+  return TRUST_LEVELS.map((level) => ({ level, env, gate: 'off', quota: null, never: true }));
 }
 
-export interface Spread {
-  readonly id: string;
-  readonly label: string;
-  readonly description: string;
-  readonly narrative: string | null;
-  readonly lines: readonly SpreadLine[];
-  /** The column headings for the trust levels: "Careful ×1 · a day". */
-  readonly levelHeadings: readonly { readonly level: TrustLevel; readonly heading: string }[];
-  /** Limits per day, the period note, the rates and the service's ceilings. */
-  readonly limitsNote: string;
-  readonly column: readonly MapRow[];
+/**
+ * The chips of one entry: one when it is not environment-scoped (or there is no
+ * toggle), else one per row and reason its environments land in — an
+ * environment the catalog does not accept lands in the permission's own row, dashed.
+ */
+function chipsOf(entry: MacroActionEntryInfo, risk: RiskInfo, envs: readonly string[]): MapChip[] {
+  const base = { riskId: risk.id, label: risk.label, reason: risk.reason };
+  if (envs.length === 0 || risk.acceptableInEnvs === null) {
+    return [
+      {
+        ...base,
+        row: risk.row,
+        rowReason: risk.rowReason,
+        envs: null,
+        refused: false,
+        values: levelValues(entry.levels, null),
+      },
+    ];
+  }
+  const groups = new Map<
+    string,
+    { row: Row; rowReason: Reason | null; refused: boolean; envs: string[]; values: CellValue[] }
+  >();
+  for (const env of envs) {
+    const accepted = risk.acceptableInEnvs.includes(env);
+    const variant = risk.envVariants.find((v) => v.env === env);
+    const levels = entry.envLevels.find((l) => l.env === env)?.levels;
+    const row = accepted && variant ? variant.row : risk.row;
+    const rowReason = accepted && variant ? variant.rowReason : risk.rowReason;
+    const refused = !accepted || levels === undefined;
+    const key = `${refused ? 'x' : 'o'}/${row}/${rowReason ?? ''}`;
+    const group = groups.get(key) ?? { row, rowReason, refused, envs: [], values: [] };
+    group.envs.push(env);
+    group.values.push(...(refused ? neverValues(env) : levelValues(levels, env)));
+    groups.set(key, group);
+  }
+  const single = groups.size === 1;
+  return [...groups.values()].map((g) => ({
+    ...base,
+    row: g.row,
+    rowReason: g.rowReason,
+    envs: single ? null : g.envs,
+    refused: g.refused,
+    values: g.values,
+  }));
+}
+
+function sumText(level: TrustLevel, env: string | null, counts: Record<GateWord, number>): string {
+  const parts = [`${GATE_WORDS.free} ${counts.free}`, `${GATE_WORDS.ask} ${counts.ask}`];
+  if (counts.off > 0) parts.push(`${GATE_WORDS.off} ${counts.off}`);
+  return `${TRUST_LEVEL_LABELS[level]}${env ? ` on ${env}` : ''}: ${parts.join(', ')}.`;
+}
+
+export function mapOf(plugin: PluginInfo): MapView {
+  const risks = new Map(plugin.risks.map((r) => [r.id, r]));
+  const envs = toggleEnvsOf(plugin);
+  // Each permission once, at its first macro-action: what the sums and notes count.
+  const firstChips = new Map<string, MapChip[]>();
+  const chipsByColumn = plugin.macroActions.map((action) =>
+    action.entries.flatMap((entry) => {
+      const risk = risks.get(entry.riskId);
+      if (!risk) return [];
+      const chips = chipsOf(entry, risk, envs);
+      if (!firstChips.has(risk.id)) firstChips.set(risk.id, chips);
+      return chips;
+    }),
+  );
+  const rows = MAP_ROWS.map((row): MapRowView => ({
+    row,
+    word: ROW_WORDS[row],
+    gates: ROW_GATE_SENTENCES[row],
+    cells: chipsByColumn.map((chips) => chips.filter((c) => c.row === row)),
+  }));
+  const sums: MapSum[] = [];
+  for (const level of TRUST_LEVELS) {
+    for (const env of envs.length > 0 ? envs : [null]) {
+      const counts: Record<GateWord, number> = { free: 0, ask: 0, off: 0 };
+      for (const chips of firstChips.values()) {
+        const own = chips
+          .flatMap((c) => c.values)
+          .find((v) => v.level === level && (v.env === null || v.env === env));
+        if (own) counts[own.gate] += 1;
+      }
+      sums.push({ level, env, text: sumText(level, env, counts) });
+    }
+  }
+
+  const notes: string[] = [];
+  if (envs.length > 0) {
+    const distinct = [...firstChips.values()].map((chips) => chips[0]!);
+    const held = distinct.filter((c) => risks.get(c.riskId)?.acceptableInEnvs !== null);
+    const once = distinct.filter((c) => risks.get(c.riskId)?.acceptableInEnvs === null);
+    if (held.length > 0 && held.length <= once.length) {
+      notes.push(`Held once per environment: ${held.map((c) => c.label).join('; ')}.`);
+    } else if (once.length > 0) {
+      notes.push(
+        `Held once, whatever the ${plugin.resourceNoun?.one ?? 'resource'}: ${once.map((c) => c.label).join('; ')}. Every other permission is held once per environment.`,
+      );
+    }
+    for (const env of envs) {
+      const refused = held.filter((c) => !risks.get(c.riskId)!.acceptableInEnvs!.includes(env));
+      if (refused.length > 0) {
+        notes.push(`Not accepted on ${env}: ${refused.map((c) => c.label).join('; ')}.`);
+      }
+    }
+    for (const env of envs) {
+      const moved = held.filter((c) => {
+        const risk = risks.get(c.riskId)!;
+        const variant = risk.envVariants.find((v) => v.env === env);
+        return variant !== undefined && variant.acceptable && variant.row !== risk.row;
+      });
+      if (moved.length > 0) {
+        notes.push(`In another row on ${env}: ${moved.map((c) => c.label).join('; ')}.`);
+      }
+    }
+  }
+
+  const permissions = firstChips.size;
+  return {
+    columns: plugin.macroActions.map((a) => ({
+      id: a.id,
+      label: a.label,
+      description: a.description,
+    })),
+    rows,
+    envs,
+    introLead: `${plural(permissions, 'permission', 'permissions')} of ${plural(plugin.macroActions.length, 'macro-action', 'macro-actions')}, in the four rows of the tree. For the chosen trust level${envs.length > 0 ? ' and environment' : ''}`,
+    introTail: `, each cell gives ${GATE_SHORT.free}, ${GATE_SHORT.ask} or ${GATE_SHORT.off}, and the quota a day.`,
+    sums,
+    notes,
+  };
 }
 
 export const DAY_NOTE =
   "Limits are counted over a mission's period: a day unless its creator picks another, or the mission's whole life for a one-off. The figures here are per day.";
 
-export function levelHeadings(): Spread['levelHeadings'] {
-  return TRUST_LEVELS.map((level) => ({
-    level,
-    heading: `${TRUST_LEVEL_LABELS[level]} ×${TRUST_LEVEL_BUDGET_FACTOR[level]} · a day`,
-  }));
-}
-
-function spreadLines(action: MacroActionInfo, risks: ReadonlyMap<string, RiskInfo>): SpreadLine[] {
-  return action.entries.flatMap((entry) => {
-    const risk = risks.get(entry.riskId);
-    if (!risk) return [];
-    const line = (
-      env: string | null,
-      facts: readonly FactInfo[],
-      row: Row,
-      rowReason: Reason | null,
-      levels: LevelBudgets,
-    ) => ({
-      riskId: risk.id,
-      label: risk.label,
-      reason: risk.reason,
-      env,
-      facts,
-      row,
-      rowReason,
-      levels,
-    });
-    if (entry.envLevels.length === 0)
-      return [line(null, risk.facts, risk.row, risk.rowReason, entry.levels)];
-    return entry.envLevels.flatMap(({ env, levels }) => {
-      const variant = risk.envVariants.find((v) => v.env === env);
-      return variant ? [line(env, variant.facts, variant.row, variant.rowReason, levels)] : [];
-    });
-  });
-}
-
-/** The rates of a macro-action at Careful, grouped, and the service's per-minute ceilings. */
-export function limitsNote(action: MacroActionInfo, risks: ReadonlyMap<string, RiskInfo>): string {
-  const groups = new Map<string, string[]>();
-  for (const entry of action.entries) {
-    const key = `${figure(entry.levels.careful.rateMax)} ${windowWords(entry.levels.careful.rateWindowSeconds)}`;
-    const label = risks.get(entry.riskId)?.label ?? entry.riskId;
-    groups.set(key, [...(groups.get(key) ?? []), label]);
-  }
-  const rates = [...groups].map(([rate, labels]) => `${rate} on ${listWords(labels)}`);
-  const ceilings = action.entries.flatMap((entry) => {
-    const ceiling = risks.get(entry.riskId)?.rateCeilingPerMinute ?? null;
-    return ceiling === null
-      ? []
-      : [`${figure(ceiling)} a minute on ${risks.get(entry.riskId)?.label ?? entry.riskId}`];
-  });
-  const parts = [DAY_NOTE];
-  if (rates.length > 0) {
-    parts.push(
-      `At ${TRUST_LEVEL_LABELS.careful} a call also runs at most ${rates.join('; ')}; the other levels multiply these rates as they multiply the limits.`,
-    );
-  }
-  if (ceilings.length > 0) {
-    parts.push(`The service's own ceiling, which no mission raises: ${ceilings.join('; ')}.`);
-  }
-  parts.push('A tinted fact is the one that moves the gate.');
-  return parts.join(' ');
-}
-
-export function spreadsOf(plugin: PluginInfo, map: PluginMap = mapOf(plugin)): Spread[] {
-  const risks = new Map(plugin.risks.map((r) => [r.id, r]));
-  return plugin.macroActions.map((action) => ({
-    id: action.id,
-    label: action.label,
-    description: action.description,
-    narrative: action.narrative,
-    lines: spreadLines(action, risks),
-    levelHeadings: levelHeadings(),
-    limitsNote: limitsNote(action, risks),
-    column: columnOf(map, action.id),
-  }));
-}
-
-/** The words of a trust level's cell: the gate (when not "runs freely") and the quota a day. */
+/** The words of a trust level's line: the gate (when not "runs freely") and the quota a day. */
 export function levelCellWords(
   levels: LevelBudgets,
   level: TrustLevel,
@@ -471,7 +556,7 @@ export function levelCellWords(
 }
 
 // ---------------------------------------------------------------------------
-// 4 · Worked examples
+// 4 · A few calls
 // ---------------------------------------------------------------------------
 
 const CAREFUL_GATE: Readonly<Record<CarefulOutcome, GateWord>> = {
@@ -503,65 +588,98 @@ export function callWords(example: ExampleInfo): string {
   return `${example.tool} ${JSON.stringify(shortValue(example.args))}`;
 }
 
-// ---------------------------------------------------------------------------
-// 6 · A mission, worked out
-// ---------------------------------------------------------------------------
-
-export interface MissionItem {
-  readonly riskId: string;
-  readonly label: string;
-  readonly env: string | null;
-}
-
-export interface MissionWorkedOut {
+export interface CallsView {
+  readonly total: number;
+  /** One per macro-action that has an example of its own, in catalog order, then the first refused at Careful. */
+  readonly rows: readonly ExampleInfo[];
+  /** The sentence before the link to the examples as code. */
   readonly intro: string;
-  readonly groups: readonly {
-    readonly key: 'can' | 'asks' | 'cannot';
-    readonly heading: string;
-    readonly items: readonly MissionItem[];
-  }[];
-  /** True when Careful leaves every permission of the mission out (Context7). */
-  readonly nothingRuns: boolean;
-  /** What the mission does not tick, in words, or null. */
-  readonly notTicked: string | null;
+  /** "The 42 calls, as code". */
+  readonly linkLabel: string;
 }
 
-export function missionOf(plugin: PluginInfo): MissionWorkedOut {
-  const labels = new Map(plugin.risks.map((r) => [r.id, r.label]));
-  const item = (riskId: string): MissionItem => ({
-    riskId,
-    label: labels.get(unqualifyRiskId(riskId)) ?? riskId,
-    env: parseRiskId(riskId)?.env ?? null,
-  });
-  const mission = plugin.workedMission;
-  const ticked = plugin.macroActions.filter((a) => mission.macroActions.includes(a.id));
-  const others = plugin.macroActions.filter((a) => !mission.macroActions.includes(a.id));
-  const level = TRUST_LEVEL_LABELS[mission.trustLevel];
-  const nothingRuns = mission.can.length === 0 && mission.asksFirst.length === 0;
-  const lines = mission.can.length + mission.asksFirst.length + mission.cannot.length;
+/**
+ * The calls the page shows: for each macro-action, the first declared example
+ * whose permissions all belong to it; then the first one Careful leaves out.
+ */
+export function callsOf(plugin: PluginInfo): CallsView {
+  const all = plugin.examples;
+  const chosen: ExampleInfo[] = [];
+  for (const action of plugin.macroActions) {
+    const own = new Set(action.entries.map((e) => e.riskId));
+    const pick = all.find(
+      (e) =>
+        !chosen.includes(e) && e.permissions.length > 0 && e.permissions.every((id) => own.has(id)),
+    );
+    if (pick) chosen.push(pick);
+  }
+  const refused = all.find((e) => e.atCareful.outcome === 'cannot');
+  if (refused && !chosen.includes(refused)) chosen.push(refused);
+  const careful = TRUST_LEVEL_LABELS.careful;
   return {
+    total: all.length,
+    rows: chosen,
     intro:
-      ticked.length === 0
-        ? `${plugin.name} has no macro-action to tick.`
-        : `Tick ${listWords(ticked.map((a) => a.label))} at ${level}: the policy engine writes the explicit list the person sees before issuing, ${plural(lines, 'permission', 'permissions')} summed up here.` +
-          (nothingRuns
-            ? ` At ${level} this mission can do nothing: every permission it would hold is left out, so it needs a higher trust level.`
-            : ''),
-    groups: [
-      { key: 'can', heading: ALLOW_WORDS.can, items: mission.can.map(item) },
-      { key: 'asks', heading: ALLOW_WORDS.asks, items: mission.asksFirst.map(item) },
-      { key: 'cannot', heading: ALLOW_WORDS.cannot, items: mission.cannot.map(item) },
-    ],
-    nothingRuns,
-    notTicked:
-      others.length === 0
-        ? null
-        : `Not ticked, so not part of the mission: ${listWords(others.map((a) => a.label))}.`,
+      all.length === 0
+        ? 'This plugin declares no example yet.'
+        : `${plural(all.length, 'declared call', 'declared calls')}, run through the plugin's own classifier when this page was built; here one per macro-action${refused ? ` and the first the catalog refuses at ${careful}` : ''}.`,
+    linkLabel: `The ${plural(all.length, 'call', 'calls')}, as code`,
   };
 }
 
 // ---------------------------------------------------------------------------
-// 7 · Connecting an account
+// 5 · Anything else
+// ---------------------------------------------------------------------------
+
+/** "A call no permission covers touches `x` instead of slipping through…" */
+export function anythingElseSentence(plugin: PluginInfo): string {
+  const fallback = plugin.anythingElse?.entries ?? [];
+  if (fallback.length === 0) return 'This plugin has no fallback permission.';
+  return `A call no permission covers touches ${listWords(fallback.map((e) => `\`${e.riskId}\``))} instead of slipping through. No macro-action holds it; a person ticks it knowingly.`;
+}
+
+export const LEFT_OUT_SENTENCE =
+  'Left out on purpose — tools of the service this plugin does not expose:';
+
+// ---------------------------------------------------------------------------
+// 6 · Tools
+// ---------------------------------------------------------------------------
+
+export const TOOLS_NOTE =
+  "A tool's permissions depend on its arguments, so a mission is made of the macro-actions above, not of tools.";
+
+export function toolsIntro(plugin: PluginInfo): string {
+  return `${plural(plugin.tools.length, 'tool', 'tools')}. ${TOOLS_NOTE}`;
+}
+
+export function toolsCount(plugin: PluginInfo): string {
+  return `${plural(plugin.tools.length, 'tool', 'tools')} · scroll the list`;
+}
+
+// ---------------------------------------------------------------------------
+// 7 · Retired permissions
+// ---------------------------------------------------------------------------
+
+export const RETIRED_SENTENCE =
+  'Kept so the missions that hold them still read; no tool touches them and no new mission is offered them.';
+
+export interface RetiredItem {
+  readonly riskId: string;
+  readonly label: string;
+  readonly replacedBy: string | null;
+}
+
+export function retiredOf(plugin: PluginInfo): RetiredItem[] {
+  const risks = new Map(plugin.risks.map((r) => [r.id, r]));
+  return plugin.retired.map((id) => ({
+    riskId: id,
+    label: risks.get(id)?.label ?? id,
+    replacedBy: risks.get(id)?.replacedBy ?? null,
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// 8 · Connecting an account
 // ---------------------------------------------------------------------------
 
 export const BROKER_DOC = '/docs/operations/oauth-broker';
@@ -574,12 +692,15 @@ export function connectGuidePath(pluginId: string): string {
   return `/plugins/${pluginId}#${CONNECT_ANCHOR}`;
 }
 
-/** Between two menu labels of a path, on the page and in the twin. */
+/** Between two menu labels of a path, in the twin. */
 export const PATH_SEPARATOR = '›';
+
+/** The legend of the alternatives' toggle. */
+export const ALTERNATIVES_LEGEND = 'Choose one';
 
 /**
  * The three ways of connecting, numbered so a reader learns there are only three
- * (website spec §2.3 item 7): the badge that opens the section, by client source.
+ * (website spec §2.3 item 9): the badge that opens the section, by client source.
  * An `ssh-key` way is the first kind, its key pair said by `connectSentences`.
  */
 export const CONNECT_KINDS: Readonly<
@@ -619,15 +740,23 @@ export function connectSentences(c: CredentialInfo, service: string): string[] {
       return [
         `The person signs in at ${service} and allows the gateway; nothing is created or pasted. The gateway registers its own client at the service the first time someone connects, one per instance.`,
       ];
-    case 'pasted-key':
-      return c.kind === 'ssh-key'
-        ? [
-            'The instance generates a key pair; the person installs its public key on the host. Nothing secret is pasted.',
-          ]
-        : [
-            `A ${c.label ?? 'key'} the person creates at ${service} and pastes once; nobody declares anything beforehand. Grant everything below: each mission narrows what an agent may do.`,
-          ];
+    case 'pasted-key': {
+      if (c.kind === 'ssh-key') {
+        return [
+          'The instance generates a key pair; the person installs its public key on the host. Nothing secret is pasted.',
+        ];
+      }
+      const label = c.label ?? 'key';
+      return [
+        `${article(label)} ${label} the person creates at ${service} and pastes once; nobody declares anything beforehand.`,
+      ];
+    }
   }
+}
+
+/** The heading of the permissions to grant at the service. */
+export function grantsHeading(service: string): string {
+  return `Permission at ${service}`;
 }
 
 /** The title of the administrator's block a brokered service opens with. */
@@ -651,12 +780,12 @@ export function screenshotCredits(plugins: readonly PluginInfo[]): string | null
   const credits = new Map<string, string>();
   for (const plugin of plugins) {
     for (const c of plugin.credentials) {
-      for (const step of c.steps) {
-        const figure = step.figure;
-        if (!figure || figure.sourceHost === null || figure.licence === 'ours') continue;
-        const key = `${figure.sourceHost} ${figure.licence}`;
+      for (const step of allSteps(c)) {
+        const shot = step.figure;
+        if (!shot || shot.sourceHost === null || shot.licence === 'ours') continue;
+        const key = `${shot.sourceHost} ${shot.licence}`;
         if (!credits.has(key)) {
-          credits.set(key, `${plugin.name} docs, ${figure.sourceHost} (${figure.licenceWords})`);
+          credits.set(key, `${plugin.name} docs, ${shot.sourceHost} (${shot.licenceWords})`);
         }
       }
     }
@@ -664,25 +793,3 @@ export function screenshotCredits(plugins: readonly PluginInfo[]): string | null
   if (credits.size === 0) return null;
   return `Screenshots on these pages come from the services' own documentation where its licence allows it: ${listWords([...credits.values()])}.`;
 }
-
-// ---------------------------------------------------------------------------
-// 8 · Retired, tools, links
-// ---------------------------------------------------------------------------
-
-export interface RetiredItem {
-  readonly riskId: string;
-  readonly label: string;
-  readonly replacedBy: string | null;
-}
-
-export function retiredOf(plugin: PluginInfo): RetiredItem[] {
-  const risks = new Map(plugin.risks.map((r) => [r.id, r]));
-  return plugin.retired.map((id) => ({
-    riskId: id,
-    label: risks.get(id)?.label ?? id,
-    replacedBy: risks.get(id)?.replacedBy ?? null,
-  }));
-}
-
-export const TOOLS_NOTE =
-  "A tool's permissions depend on its arguments, so a mission is made of the macro-actions above, not of tools.";
