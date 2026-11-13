@@ -332,7 +332,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pag
                   permissions={row.permissions.map((risk) => ({
                     id: risk.risk_id,
                     label: risk.label,
-                    level: risk.level,
+                    row: risk.row,
                     known: risk.known,
                   }))}
                 />

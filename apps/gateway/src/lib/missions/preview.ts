@@ -13,7 +13,12 @@
  * selection), §3.2 (mandatory budget, macro-actions and trust levels), §0 "Resource" (env-qualified
  * ids resolve against the selected resources). Browser-safe: no IO.
  */
-import { budgetIssues, exceedsRateCeiling, type BudgetField } from '@vaubaan/policy-engine';
+import {
+  budgetIssues,
+  exceedsRateCeiling,
+  ROW_WORDS,
+  type BudgetField,
+} from '@vaubaan/policy-engine';
 import type { Gate, MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 import { GATES } from '@vaubaan/shared/domain';
 
@@ -535,9 +540,9 @@ export function checkPolicyLines(
 
 /**
  * What the built-in `everything-i-hold` wrote out on this connection,
- * said before anything is issued: how many lines, the most severe, the critical
- * ones that run freely, and the fallback by id (ADR
- * preset-everything-i-hold-expands-explicitly). `risk_ids`: the critical ids
+ * said before anything is issued: how many lines, the hardest to repair, those
+ * that cannot be repaired and run freely, and the fallback by id (ADR
+ * preset-everything-i-hold-expands-explicitly). `risk_ids`: the row-4 ids
  * running freely, then the fallback. The lines themselves are `passes`.
  */
 export function everythingNotice(
@@ -547,15 +552,15 @@ export function everythingNotice(
 ): PreviewNotice {
   const digest = expansionDigest(passes, connection.risks);
   const name = connection.display_name;
-  const severe = digest.most_severe
-    ? ` Most severe: ${digest.most_severe.risk_id} (${digest.most_severe.level}).`
+  const severe = digest.hardest
+    ? ` The hardest to repair: ${digest.hardest.risk_id} (${ROW_WORDS[digest.hardest.row]}).`
     : '';
   const critical =
-    digest.critical_auto.length > 0
-      ? ` Critical by the catalog's severity, gate auto (no approval asked): ${list(
-          digest.critical_auto.map((r) => r.risk_id),
+    digest.irreparable_auto.length > 0
+      ? ` ${ROW_WORDS[4]}, gate auto (no approval asked): ${list(
+          digest.irreparable_auto.map((r) => r.risk_id),
         )}.`
-      : ' No critical risk among them.';
+      : ` None of them is in the row "${ROW_WORDS[4]}".`;
   const fallback =
     digest.fallback.length > 0
       ? ` Includes the fallback ${list(
@@ -569,7 +574,7 @@ export function everythingNotice(
     } (listed in passes): every non-deprecated risk your authority covers that the selected resources can reach, each at the catalog's rate ceiling where one exists, gate auto.${severe}${critical}${fallback} The mission stores this list, not "${EVERYTHING_I_HOLD}"; adjust it like any policy.`,
     resource_refs: [],
     risk_ids: [
-      ...digest.critical_auto.map((r) => r.risk_id),
+      ...digest.irreparable_auto.map((r) => r.risk_id),
       ...digest.fallback.map((r) => r.risk_id),
     ],
     ...where,

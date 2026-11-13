@@ -36,9 +36,11 @@
 # pattern or macro-action changed.
 # catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: caldav
-catalog_version: 4
-catalog_date: 2026-11-05
+catalog_version: 5
+catalog_date: 2026-11-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -55,8 +57,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: caldav.read-events
     label: 'Read events (times, titles, places, descriptions, attendees)'
     reason: >-
@@ -72,8 +72,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: caldav.read-wide-range
     label: 'Read events over a wide time range (more than 31 days)'
     reason: >-
@@ -88,8 +86,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── WRITES — EVENTS ───────────────────────────────────────────────────
 
   - id: caldav.event-create
@@ -105,8 +101,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: caldav.event-change
     label: 'Change events (time, title, place, description, attendees)'
     reason: >-
@@ -122,8 +116,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: caldav.event-delete
     label: 'Delete events'
     reason: >-
@@ -138,8 +130,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   # ─── WRITES — WHO IS NOTIFIED ──────────────────────────────────────────
 
   - id: caldav.attendees-internal
@@ -155,8 +145,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: caldav.attendees-allowlisted
     label: 'Invite, update or cancel attendees on the allowlist'
     reason: >-
@@ -171,8 +159,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
   - id: caldav.attendees-external
     label: 'Invite, update or cancel attendees outside the company and the allowlist'
     reason: >-
@@ -188,8 +174,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
   # ─── FALLBACK (required) ───────────────────────────────────────────────
 
   - id: caldav.uncategorized-write
@@ -207,8 +191,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: posture
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

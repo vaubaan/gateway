@@ -12,7 +12,7 @@ tracks:
   - apps/gateway/src/components/missions/
   - apps/gateway/src/app/api/missions/
   - apps/gateway/src/app/agent-bootstrap.md/
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-13
 ---
 
 # Missions — handbook
@@ -24,7 +24,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 - [`mission-service.ts`](../../apps/gateway/src/server/missions/mission-service.ts) — every act on a mission: issue, preview, edit, gate, limits, rotate, revoke, `verifyToken`, `access`.
 - [`preview.ts`](../../apps/gateway/src/lib/missions/preview.ts) — `previewDraft`, the pure decision behind the form, the management door's `preview_policy`, `issue` and `edit`.
 - [`macro-actions.ts`](../../apps/gateway/src/lib/missions/macro-actions.ts) — the connection's macro-actions ("Anything else" added for the fallback) and the lines a trust level writes (risk model §4.6); the mission screen draws them through `missions/cards/` (below).
-- [`everything-i-hold.ts`](../../apps/gateway/src/lib/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by level for a risk in no macro-action (spec §3.2; `RATE_BY_LEVEL`, `QUOTA_BY_LEVEL`).
+- [`everything-i-hold.ts`](../../apps/gateway/src/lib/missions/everything-i-hold.ts) — the built-in expansion and its one budget rule: the macro-action base budget at Autonomous, the catalog ceiling as rate, by row for a risk in no macro-action (spec §3.2; `RATE_BY_ROW`, `QUOTA_BY_ROW`: rows 1 to 4 keep the values of the retired low to critical).
 - [`team-service.ts`](../../apps/gateway/src/server/missions/team-service.ts) — teammates and keys (member and named tokens).
 - [`mission-reach.ts`](../../apps/gateway/src/server/store/mission-reach.ts) — what a mission reaches on a connection: its stored lists, less stale and self.
 - [`future-resources.ts`](../../apps/gateway/src/server/connections/future-resources.ts) — the joins and leaves of future resources (`MissionsRepo.applyResourceChanges`); the hourly job and "check now" are in [connections](connections.md).
@@ -64,7 +64,7 @@ How a mission is previewed, issued, edited, shared with teammates and handed to 
 - **Policy maps are keyed by line.** `PolicyLineKey` (`<set>::<risk>`, `policyLineKey`, `lineKeyOf`) keys usage, limits and open gates everywhere a risk id alone was a key; a helper that takes a bare `RiskId` (`lineOfRisk`, `placeLines`) puts it in every set accepting it, else the first set of its provider's account.
 - **The environment label is the effective one** — the resource's own, else the connection's `default_env` — applied by the repository on read; changing a default relabels every resource inheriting it.
 - **A base id of an env-scoped risk** is valid in a macro-action (expanded per environment the selection resolves) but `unknown-risk` in an explicit policy.
-- **Severity orders, never decides.** `severityOf` and `severityLevel` are the policy engine's (`severity.ts`), re-exported by `catalog-view.ts`; the site calls the same function.
+- **The row orders, and pre-fills; nothing else.** A `CatalogRisk` carries `row` and `row_reason` (the policy engine's `rowOf` / `reasonOf` on the vector of its environment); `reason` is the catalog's prose, so the tree's branch is `row_reason` everywhere. Order with `byRowWorstFirst` / `hardestToRepair` (`catalog-view.ts`: row, then catalog order, `sort` being stable), never with a score. The expansion digest names `hardest` and `irreparable_auto` (row 4 at gate `auto`); a summary line quotes the row in lower case ("(cannot be repaired)").
 - **`setGate` is single-process.** It reads the gate opening and writes the gate in two store calls; with a second process, move the decision into `MissionsRepo.setGate`'s transaction. It looks for the opening in the period running now even on an expired mission, else extending the expiry would revive it.
 - **Wiring order.** The root builds missions before the `SessionService`, so `budget` defaults to `missionUsageReader(store.sessions)` — the same function, not a copy.
 - **A trust level moved alone is no edit** (`hasChanges` ignores it), so it neither saves nor restarts a raise count; a raise always rewrites lines, so it saves.

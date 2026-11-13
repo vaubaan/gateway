@@ -11,7 +11,7 @@
  *
  * Pure and browser-safe, usable in server and client components. Its imports
  * are `lib/dates`, the one place a date becomes text, and the risk model's
- * words (the six facts, the gate, Can / Asks first / Cannot, the trust
+ * words (the rows and reasons, the five facts, the gate, Can / Asks first / Cannot, the trust
  * levels), which `@vaubaan/policy-engine` holds so the public site prints the
  * same words: re-exported here, a page imports them from this file as before.
  */
@@ -23,7 +23,11 @@ export {
   ALLOW_WORDS,
   GATE_WORDS,
   gateWordOf,
-  SEVERITY_LABEL,
+  REASON_WORDS,
+  ROW_GATE_SENTENCES,
+  ROW_LABEL,
+  ROW_WORDS,
+  TREE_LEGEND,
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
   WHY_LABELS,
@@ -31,7 +35,7 @@ export {
   WHY_VALUES,
   whyValue,
 } from '@vaubaan/policy-engine';
-export type { GateWord, WhyAxis } from '@vaubaan/policy-engine';
+export type { GateWord, Reason, Row, WhyAxis } from '@vaubaan/policy-engine';
 
 /** The product, and how it names itself in the shell. */
 export const PRODUCT = { name: 'Vaubaan', mark: 'V' } as const;
@@ -242,13 +246,12 @@ export function asksFirst(creator: string | null): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Severity: one word, kept as a chip. Only medium and above take a colour.
+// Risk: one concept, the row (four names, worst first) and the reason that put
+// a permission there. Only rows 2 and above take a colour.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type SeverityWord = 'low' | 'medium' | 'high' | 'critical';
-
-// The six facts, their words and the severity label: `@vaubaan/policy-engine`
-// (`risk-words.ts`), re-exported at the top of this file.
+// The four rows, the reasons, the five facts and their words:
+// `@vaubaan/policy-engine` (`risk-words.ts`), re-exported at the top of this file.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Limits: budget, quota and rate limit are "limits", with their unit.
@@ -608,11 +611,6 @@ export const ENVIRONMENT_WORDS = {
  * so no trust level writes exactly them (spec §4.2).
  */
 export const TRUST_LEVEL_CUSTOM = 'Custom';
-
-/** "Tier 3" — the tier of a permission, 1 mild to 4 irreversible. */
-export function tierWord(tier: number): string {
-  return `Tier ${tier}`;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Activity (the record at `/activity`). Protocol names: audit entry, call,

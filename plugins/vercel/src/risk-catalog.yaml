@@ -30,9 +30,11 @@
 # pattern or macro-action changed.
 # catalog_version 6 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 7 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: vercel
-catalog_version: 6
-catalog_date: 2026-11-05
+catalog_version: 7
+catalog_date: 2026-11-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -51,8 +53,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: vercel.read-deployment
     label: 'Read deployments + build/runtime logs'
     reason: >-
@@ -67,14 +67,12 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: vercel.read-env-var
     label: 'Read env vars (encrypted values only)'
     reason: >-
       Listing of env-var keys with values returned encrypted by Vercel.
       No direct secret exfiltration possible. Discriminates from the
-      plaintext variant which is the higher-severity write.
+      plaintext variant which is the harder write to repair.
     matches: 'vercel.project[**].env-var[*].R'
     vector:
       reversibility: reversible
@@ -82,8 +80,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: vercel.read-env-var-plaintext
     label: 'Read env vars in plaintext (`decrypt=true`)'
     reason: >-
@@ -98,8 +94,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: vercel.fetch-deployment-url
     label: 'HTTP fetch to a Vercel deployment URL'
     reason: >-
@@ -114,8 +108,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: stateless
-
   # ─── WRITES — DEPLOYMENT-PROTECTION BYPASS (credential mint) ───────────
 
   - id: vercel.mint-bypass-token
@@ -131,8 +123,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: session
-
   # ─── WRITES — DEPLOYMENT ───────────────────────────────────────────────
 
   - id: vercel.deploy
@@ -152,7 +142,6 @@ risks:
       data: data
       cost: moderate
       visibility: team
-      persistence: session
     vector_overrides:
       prod:
         reversibility: costly
@@ -174,8 +163,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   # ─── WRITES — ENV VARS (secrets) ───────────────────────────────────────
 
   - id: vercel.env-var-write
@@ -196,7 +183,6 @@ risks:
       data: secret
       cost: moderate
       visibility: internal
-      persistence: posture
     vector_overrides:
       prod:
         reversibility: costly
@@ -217,8 +203,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: posture
-
   # ─── WRITES — PROJECT SETTINGS (build pipeline) ────────────────────────
 
   - id: vercel.project-settings-write
@@ -234,8 +218,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: posture
-
   # ─── READS — FIREWALL (WAF config inspection) ──────────────────────────
 
   - id: vercel.firewall-read
@@ -253,8 +235,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── WRITES — FIREWALL (WAF toggle + rules + IP blocking) ─────────────
 
   - id: vercel.firewall-write
@@ -271,8 +251,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: vercel.firewall-rule-write
     label: 'Create / update / remove a custom firewall rule'
     reason: >-
@@ -287,8 +265,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: vercel.ip-rule-write
     label: 'Add / remove an IP blocking rule'
     reason: >-
@@ -302,8 +278,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   # ─── WRITES — DOMAINS (external DNS posture shift) ──────────────────────
 
   - id: vercel.domain-write
@@ -320,8 +294,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   # ─── FALLBACK (required) ───────────────────────────────────────────────
 
   - id: vercel.uncategorized-write
@@ -339,8 +311,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

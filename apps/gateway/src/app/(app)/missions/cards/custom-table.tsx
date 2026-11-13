@@ -8,7 +8,7 @@
  */
 import type { RiskId } from '@vaubaan/shared';
 
-import { Input } from '@/components/ui';
+import { Input, RowChip } from '@/components/ui';
 import { CARD_WORDS, LIMIT_WORDS } from '@/lib/vocabulary';
 import type { IssuanceConnection } from '@/lib/missions/model';
 
@@ -72,6 +72,9 @@ export function CustomTable({
             <tr key={risk.risk_id} data-permission={risk.risk_id}>
               <td>
                 {risk.label}
+                <span className={styles.permissionRow}>
+                  <RowChip row={risk.row} reason={risk.row_reason} inline />
+                </span>
                 <span className={styles.permissionId}>{risk.risk_id}</span>
                 {unavailable && <span className={styles.unavailable}>{unavailable}</span>}
               </td>

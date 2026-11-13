@@ -120,10 +120,10 @@ export {
   type BootstrapKitInput,
 } from './bootstrap-kit';
 export {
+  byRowWorstFirst,
   enumerateCatalog,
+  hardestToRepair,
   isResolvable,
-  severityLevel,
-  severityOf,
 } from '../../lib/missions/catalog-view';
 export {
   EVERYTHING_I_HOLD,
@@ -141,9 +141,8 @@ export {
   expandMacroAction,
   macroActionOfRisk,
   macroActionsOf,
-  tierOf,
+  rowOf,
   TRUST_LEVELS,
-  type Tier,
   type TrustLevel,
 } from '../../lib/missions/macro-actions';
 export { createMissionHandlers, type MissionHandlers } from './handlers';
@@ -198,11 +197,7 @@ export {
   TOKEN_NAME_RULE,
 } from '../../lib/missions/token-name';
 export type * from '../../lib/missions/model';
-export {
-  PREVIEW_ISSUE_CODES,
-  PREVIEW_NOTICE_CODES,
-  SEVERITY_LEVELS,
-} from '../../lib/missions/model';
+export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES } from '../../lib/missions/model';
 export { reachedResources, takesFutureResources } from '../store/mission-reach';
 export {
   budgetProblem,

@@ -52,22 +52,22 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares provider `supabase`, a version and a date', () => {
     expect(CATALOG.provider).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(8);
-    expect(CATALOG.catalog_date).toBe('2026-11-05');
+    expect(CATALOG.catalog_version).toBe(9);
+    expect(CATALOG.catalog_date).toBe('2026-11-13');
   });
 
   test('exposes 25 named risks plus the fallback', () => {
     expect(CATALOG.risks.length).toBe(26);
   });
 
-  test('every entry has the required fields and a 6-axis vector', () => {
+  test('every entry has the required fields and a five-axis vector', () => {
     for (const e of CATALOG.risks) {
       expect(typeof e.id).toBe('string');
       expect(typeof e.label).toBe('string');
       expect(typeof e.reason).toBe('string');
       expect(typeof e.matches === 'string' || Array.isArray(e.matches)).toBe(true);
       expect(Object.keys(e.vector).sort()).toEqual(
-        ['blast', 'cost', 'data', 'persistence', 'reversibility', 'visibility'].sort(),
+        ['blast', 'cost', 'data', 'reversibility', 'visibility'].sort(),
       );
     }
   });

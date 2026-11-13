@@ -119,7 +119,9 @@ describe('railway plugin — structural kit', () => {
     assertNoWildcard(railwayPlugin);
   });
 
-  test('at Careful, a deploy on staging runs freely and one on prod asks first ; no agent', () => {
+  // A deploy spends compute (moderate cost) : row 2 since 2026-11-13, it asks
+  // first at Careful on every environment and runs freely from Trusting on staging.
+  test('at Careful, a deploy asks first on staging and on prod ; no agent', () => {
     const lines = policyFromMacroActions(
       railwayPlugin,
       { watch: 'careful', deploy: 'careful', configure: 'careful' },
@@ -127,7 +129,13 @@ describe('railway plugin — structural kit', () => {
     );
     const gate = (id: string) => lines.find((e) => e.risk_id === id)?.gate;
     expect(gate('railway[prod].deploy')).toBe('approval');
-    expect(gate('railway[staging].deploy')).toBe('auto');
+    expect(gate('railway[staging].deploy')).toBe('approval');
+    const trusting = policyFromMacroActions(
+      railwayPlugin,
+      { deploy: 'trusting' },
+      { envs: ['staging'] },
+    );
+    expect(trusting.find((e) => e.risk_id === 'railway[staging].deploy')?.gate).toBe('auto');
     expect(lines.some((e) => e.risk_id === 'railway.agent-action')).toBe(false);
     for (const e of lines) expect(e.quota).toBeGreaterThan(0);
   });

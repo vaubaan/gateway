@@ -9,7 +9,7 @@ import type { GatewayRoot } from '@/server/compose';
 import { riskExplainer } from '@/lib/providers/reference';
 import type { RequestSummary, RequestView as View, WaitingItem } from '@/server/requests';
 import type { UserRecord } from '@/server/store/types';
-import type { SeverityWord } from '@/lib/vocabulary';
+import type { Row } from '@/lib/vocabulary';
 import type { RiskId } from '@vaubaan/shared';
 
 import { answeredWords, WaitingList } from './parts';
@@ -32,12 +32,12 @@ export async function loadInbox(root: GatewayRoot, user: UserRecord): Promise<In
   };
 }
 
-/** The severity of each permission a request is about, from the catalogs of the plugins. */
-export function levelsOf(root: GatewayRoot, view: View): Record<RiskId, SeverityWord | undefined> {
+/** The row of each permission a request is about, from the catalogs of the plugins. */
+export function rowsOfRequest(root: GatewayRoot, view: View): Record<RiskId, Row | undefined> {
   const explain = riskExplainer(root.registry);
-  const levels: Record<RiskId, SeverityWord | undefined> = {};
-  for (const risk of view.request.risks) levels[risk.risk_id] = explain(risk.risk_id)?.level;
-  return levels;
+  const rows: Record<RiskId, Row | undefined> = {};
+  for (const risk of view.request.risks) rows[risk.risk_id] = explain(risk.risk_id)?.row;
+  return rows;
 }
 
 function ledeOf(open: number): string {
@@ -53,14 +53,14 @@ export function WaitingFrame({
   inbox,
   viewerId,
   view,
-  levels,
+  rows,
   decided = false,
   problem = null,
 }: {
   inbox: InboxData;
   viewerId: string;
   view: View;
-  levels: Readonly<Record<RiskId, SeverityWord | undefined>>;
+  rows: Readonly<Record<RiskId, Row | undefined>>;
   decided?: boolean;
   problem?: string | null;
 }) {
@@ -87,7 +87,7 @@ export function WaitingFrame({
           view={view}
           viewerId={viewerId}
           now={now}
-          levels={levels}
+          rows={rows}
           decided={decided}
           problem={problem}
         />

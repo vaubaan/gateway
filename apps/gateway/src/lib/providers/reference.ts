@@ -37,9 +37,8 @@ import {
 import {
   expandMacroAction,
   macroActionsOf,
-  tierOf,
   TRUST_LEVELS,
-  type Tier,
+  type Row,
   type TrustLevel,
 } from '../missions/macro-actions';
 import { RISK_KINDS, type CatalogRisk, type RiskKind } from '../missions/model';
@@ -275,7 +274,7 @@ export interface PatternReference {
 /** One catalog entry: what a human reads before accepting it. */
 export interface RiskReference extends RiskFamily {
   readonly anchor: string;
-  /** The kind of its most severe variant: where the entry is listed. */
+  /** The kind of its worst variant (read, write, destructive): where the entry is listed. */
   readonly kind: RiskKind;
   /** Accepted per environment (`acceptable_in_envs`), or once for the account. */
   readonly env_scoped: boolean;
@@ -303,7 +302,8 @@ export interface MacroActionTag {
 /** What one variant of a risk gets at one trust level: its line, or `null` when the trust level leaves it out. */
 export interface TrustLevelCell {
   readonly risk: CatalogRisk;
-  readonly tier: Tier;
+  /** The row of the variant: what chose the gate of its line. */
+  readonly row: Row;
   readonly line: {
     readonly quota: number;
     readonly rate_limit: RateLimit;
@@ -349,7 +349,7 @@ function riskReferenceOf(
         trustLevel,
         family.variants.map((risk) => ({
           risk,
-          tier: tierOf(risk.vector),
+          row: risk.row,
           line: context.cells.get(risk.risk_id)?.[trustLevel] ?? null,
         })),
       ]),
@@ -369,7 +369,7 @@ function riskReferenceOf(
 /**
  * The catalog as the reference lists it: reads, writes, irreversible writes.
  * Unlike the editor's `groupByKind`, an entry is never split: it is listed
- * once, under the kind of its most severe variant, so its anchor is unique.
+ * once, under the kind of its worst variant, so its anchor is unique.
  */
 function riskGroupsOf(
   entries: readonly RiskEntry[],

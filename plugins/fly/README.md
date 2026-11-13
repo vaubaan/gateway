@@ -118,8 +118,11 @@ multiplies the base budget. The fallback sits apart, under "Anything else".
 | `tear-down`  | Destroy machines, volumes, apps, addresses and certificates. | `machine-destroy`, `volume-destroy`, `app-destroy`, `ip-release`, `certificate-remove`                                 |
 
 Destroying an app or a volume and `exec` are irreversible: left out at
-Careful, they ask first at every other trust level. Writing secrets asks first below
-Autonomous.
+Careful, they ask first at every other trust level. Writing secrets and scaling
+(an unbounded cost) ask first below Autonomous. Deploys, machine power,
+volumes, addresses and certificates are repairable but worth a look (a public
+effect, a moderate cost or secrets): they ask first at Careful and run freely
+from Trusting.
 
 ## Tests
 

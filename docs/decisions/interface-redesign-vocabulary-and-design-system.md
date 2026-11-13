@@ -61,7 +61,8 @@ undo words, checked by a test: a second source of truth (website spec §1.1).
 The words of the risk model — `WHY_LABELS`, `WHY_ORDER`, `WHY_VALUES`/`whyValue`,
 `gateWordOf`/`GATE_WORDS`, `ALLOW_WORDS`, `TRUST_LEVEL_LABELS`, `TRUST_LEVEL_HINTS`,
 `SEVERITY_LABEL` — live in `@vaubaan/policy-engine` (`risk-words.ts`), beside the severity and the
-tier they name. `lib/vocabulary.ts` re-exports them: it stays the one file a gateway page imports
+tier they name. (Since 2026-11-13: `ROW_LABEL`, `ROW_WORDS`, `REASON_WORDS`, `ROW_GATE_SENTENCES`,
+`TREE_LEGEND`, beside the row and the reason; see the amendment below.) `lib/vocabulary.ts` re-exports them: it stays the one file a gateway page imports
 its words from; the site imports the same values from the package.
 
 ### Consequences
@@ -76,3 +77,33 @@ its words from; the site imports the same values from the package.
 - **A copy in the site checked by a test**: two places to edit, and the test only catches drift
   after the fact.
 - **`@vaubaan/shared`**: the trust level type is the policy engine's; the words key on it.
+
+## Amendment 2026-11-13: the severity word is retired
+
+### Context
+
+A permission was printed with one severity word (low, medium, high, critical) summed from six
+axes, while its gate came from a tier read otherwise: two measures of risk on one row, which
+disagreed, and the word "medium" said nothing a person could act on.
+
+### Decision
+
+Risk is one concept in the interface: the **row** of the permission, named in words (Harmless,
+Repairable, worth a look, Repairable, at a price, Cannot be repaired), and the **reason** that put
+it there, in quiet type (personal data, costly to undo…), from the decision tree of
+[macro-actions-and-trust-levels-prefill-the-policy](macro-actions-and-trust-levels-prefill-the-policy.md)
+(amendment 2026-11-13). `SeverityChip` becomes `RowChip`; lists are ordered by row, the hardest to
+repair first; "the most severe" becomes "the hardest to repair". The five facts stay behind
+"why?" in the Reference only. The words live in `@vaubaan/policy-engine` as before.
+
+### Consequences
+
+- The site's plugin page and `/plugins.json` print the row and its reason; no page, twin or
+  answer of the management door carries a severity word or the word "tier".
+- Colour follows the row: Harmless plain, rows 2 and above in status colour, row 4 strong.
+
+### Rejected alternatives
+
+- **Keeping the word beside the row**: two measures of one risk, the one people read first being
+  the one that decides nothing.
+- **Printing the row number**: "row 3" asks the reader to learn a scale; the name says it.

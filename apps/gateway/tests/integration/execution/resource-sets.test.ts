@@ -48,7 +48,6 @@ const VECTOR = {
   data: 'data',
   cost: 'free',
   visibility: 'internal',
-  persistence: 'stateless',
 } as const;
 
 /** Spaces `alpha`, `beta`, `gamma`; `copy` reads one and writes another; `fork` creates one. */
@@ -117,7 +116,7 @@ function twinPlugin(): ProviderPlugin {
           label: 'Write an item',
           reason: 'Reversible edit.',
           matches: `${TWIN}.space[**].item[**].W`,
-          vector: { ...VECTOR, persistence: 'session' },
+          vector: { ...VECTOR },
         },
         {
           id: PROFILE,

@@ -450,7 +450,7 @@ describe('import of a v4 organization', () => {
       'ssh.uncategorized-write',
     ]);
     const fallback = missions[0]!.policy.find((p) => p.riskId === 'ssh.uncategorized-write')!;
-    // The fallback is costly (tier 3): Trusting asks first.
+    // The fallback is costly (row 3): Trusting asks first.
     expect([fallback.quota, fallback.gate]).toEqual([150, 'approval']);
     expect(missions[0]!.periodSeconds).toBe(86_400);
     expect(stderr).not.toContain('dropped ssh.uncategorized-write');

@@ -9,9 +9,11 @@
 # rewriting its name or description is a change AND a rewrite (`task-rewrite`).
 # catalog_version 2 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 3 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: asana
-catalog_version: 2
-catalog_date: 2026-11-05
+catalog_version: 3
+catalog_date: 2026-11-13
 
 risks:
   - id: asana.project-read
@@ -28,8 +30,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: asana.task-read
     label: 'Read tasks'
     reason: >-
@@ -43,7 +43,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
     # Asana caps its search endpoint at 60 requests a minute per token
     # (rate limits page) : no mission is issued above it.
     infra_limits:
@@ -61,8 +60,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: asana.task-create
     label: 'Create tasks'
     reason: >-
@@ -75,8 +72,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: asana.task-update
     label: 'Change tasks'
     reason: >-
@@ -90,8 +85,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   # Rewriting a task's text gets its own decision through the `rewrite` leaf :
   # `update_task` with `name` or `notes` emits `task[t].W` AND
   # `task[t].rewrite.W`, so it touches `task-update` and `task-rewrite`.
@@ -108,8 +101,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: asana.comment-create
     label: 'Comment on tasks'
     reason: >-
@@ -122,8 +113,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: asana.task-delete
     label: 'Delete tasks'
     reason: >-
@@ -137,8 +126,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   # Fallback — exactly once, in no macro-action. Seen in an audit, it means a
   # tool classifies to a slice no entry above covers : add the entry.
   - id: asana.uncategorized-write
@@ -154,8 +141,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
 macro_actions:
   - id: read
     label: 'Read'

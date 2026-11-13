@@ -2,7 +2,7 @@ import { PermissionsEditor } from '../missions/[id]/permissions-editor';
 /**
  * One request, as its creator reads it — in the order they need it: who asks
  * and on which mission, exactly what will run (the call, its arguments, the
- * permission and its severity), what an answer changes, then the answers.
+ * permission and its row), what an answer changes, then the answers.
  * Context comes after: what led here, and what the agent sees meanwhile.
  *
  * An approval (spec §3.5) and a limit that was reached (spec §3.4) share the
@@ -38,7 +38,7 @@ import {
   Mono,
   RequestStatement,
   SectionHeading,
-  SeverityChip,
+  RowChip,
   StatusMark,
   type ArgItem,
   type Column,
@@ -63,7 +63,7 @@ import {
   until,
   usedOf,
   WAITING,
-  type SeverityWord,
+  type Row,
 } from '@/lib/vocabulary';
 import { riskReferencePath } from '@/lib/providers/links';
 import type {
@@ -91,8 +91,8 @@ export interface RequestViewProps {
   readonly view: View;
   readonly viewerId: string;
   readonly now: Date;
-  /** The severity of each permission of the request, from the catalogs; absent when unknown. */
-  readonly levels: Readonly<Record<RiskId, SeverityWord | undefined>>;
+  /** The row of each permission of the request, from the catalogs; absent when unknown. */
+  readonly rows: Readonly<Record<RiskId, Row | undefined>>;
   /** The person just answered (`?decided=1`). */
   readonly decided: boolean;
   /** Why the last answer was not taken (`?problem=<code>`); `null` otherwise. */
@@ -337,10 +337,10 @@ function GateNow({ gate }: { gate: ApprovalView['gates'][number] }) {
 
 function PermissionLine({
   gate,
-  level,
+  row,
 }: {
   gate: ApprovalView['gates'][number];
-  level: SeverityWord | undefined;
+  row: Row | undefined;
 }) {
   const href = riskReferencePath(gate.risk_id);
   return (
@@ -349,10 +349,10 @@ function PermissionLine({
         <GateNow gate={gate} />
       </span>{' '}
       · {gate.label}
-      {level && (
+      {row !== undefined && (
         <>
           {' '}
-          · <SeverityChip level={level} />
+          · <RowChip row={row} />
         </>
       )}
       <div>
@@ -569,7 +569,7 @@ function ApprovalBody({
   view,
   viewerId,
   now,
-  levels,
+  rows,
   decided,
   problem,
 }: RequestViewProps & { view: ApprovalView }) {
@@ -640,7 +640,7 @@ function ApprovalBody({
                 : `${REQUEST_WORDS.permissionsNeeded} · one answer for the ${gates.length}`,
             testId: 'approval-gated-risks',
             value: gates.map((gate) => (
-              <PermissionLine key={gate.risk_id} gate={gate} level={levels[gate.risk_id]} />
+              <PermissionLine key={gate.risk_id} gate={gate} row={rows[gate.risk_id]} />
             )),
           },
           {

@@ -13,9 +13,11 @@
 # `api_time_consumed` counter): the base budgets are kept moderate.
 # catalog_version 2 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 3 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: axonaut
-catalog_version: 2
-catalog_date: 2026-11-05
+catalog_version: 3
+catalog_date: 2026-11-13
 
 risks:
   # ─── Reads ─────────────────────────────────────────────────────────────
@@ -36,8 +38,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: axonaut.read-sales
     label: 'Read quotes, invoices and payments'
     reason: >-
@@ -53,8 +53,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: axonaut.read-work
     label: 'Read projects, tasks and tickets'
     reason: >-
@@ -70,8 +68,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: axonaut.read-catalog
     label: 'Read the product catalog'
     reason: >-
@@ -83,8 +79,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── Writes — CRM and work ─────────────────────────────────────────────
   - id: axonaut.crm-write
     label: 'Create or modify companies, contacts and CRM events'
@@ -104,8 +98,6 @@ risks:
       data: pii
       cost: free
       visibility: team
-      persistence: posture
-
   - id: axonaut.opportunity-write
     label: 'Create or modify opportunities'
     reason: >-
@@ -120,8 +112,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: axonaut.opportunity-outcome
     label: 'Mark an opportunity won or lost'
     reason: >-
@@ -134,8 +124,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: axonaut.work-write
     label: 'Create or modify tasks and tickets'
     reason: >-
@@ -153,8 +141,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   # ─── Writes — sales ────────────────────────────────────────────────────
   - id: axonaut.quotation-create
     label: 'Create a quotation'
@@ -168,8 +154,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: axonaut.quotation-outcome
     label: 'Mark a quotation accepted or refused'
     reason: >-
@@ -183,8 +167,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: axonaut.invoice-create
     label: 'Create an invoice'
     reason: >-
@@ -197,8 +179,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: posture
-
   - id: axonaut.payment-record
     label: 'Record a payment on an invoice'
     reason: >-
@@ -211,8 +191,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: posture
-
   # ─── Writes — deletions ────────────────────────────────────────────────
   - id: axonaut.delete-record
     label: 'Delete a company, contact, opportunity or task'
@@ -230,8 +208,6 @@ risks:
       data: pii
       cost: free
       visibility: team
-      persistence: posture
-
   # Fallback — must exist, exactly once, in no macro-action. Seen in the
   # audit, it means a tool classifies to a write no entry above covers.
   - id: axonaut.uncategorized-write
@@ -247,8 +223,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
 macro_actions:
   - id: read
     label: 'Read'

@@ -104,7 +104,8 @@ risks (`deploy`, `upsert-variable`, `read-variables`) accept `staging`,
 A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
 risk model §4.6); the trust level turns each risk's vector into a gate and scales its
 base budget. The persisted policy is the explicit list.
-`prod` deploys and variable writes ask first below Autonomous;
+Deploys spend compute (a moderate cost) and ask first at Careful; `prod`
+deploys and variable writes ask first below Autonomous;
 `bulk-variables-replace` is left out at Careful and always asks first;
 `railway.agent-action` asks first below Autonomous.
 

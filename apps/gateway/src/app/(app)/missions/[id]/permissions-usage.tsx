@@ -3,7 +3,7 @@
  * what was used in the current period and what is left — one row per
  * permission, grouped by account. Each row says in words what it allows,
  * prints its id as the protocol spells it, and keeps "why?" one click away
- * (the reason, the six words of the risk model, the entry in the reference).
+ * (the reason and the entry in the reference).
  *
  * The creator changes "ask me first" on a row here, when the server would
  * take the change (`MissionDetail.gates_editable`); anyone else reads it.
@@ -88,7 +88,7 @@ export function PermissionsUsage({
         key={`${entry.resource_set_id ?? ''}:${entry.risk_id}`}
         label={entry.label}
         id={entry.risk_id}
-        severity={entry.level ?? 'low'}
+        {...(entry.row !== null ? { row: entry.row } : {})}
         tag={
           risk?.env || entry.gate_open_until ? (
             <>
@@ -132,7 +132,6 @@ export function PermissionsUsage({
           risk
             ? {
                 reason: risk.reason,
-                cells: risk.vector,
                 referenceHref: riskReferencePath(entry.risk_id) ?? undefined,
               }
             : undefined

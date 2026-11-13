@@ -3,7 +3,7 @@
 # Handbook : docs/handbook/providers/notion.md.
 #
 # No risk is env-scoped (product owner, 2026-10-16) : the destructive
-# operations are gated by their tier instead. Write patterns do not
+# operations are gated by their row instead. Write patterns do not
 # overlap : each write slice touches exactly one named risk, except the
 # trash of the root page itself, which emits two slices (`page-trash` and
 # `root-trash`).
@@ -15,9 +15,11 @@
 # pattern or macro-action changed.
 # catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: notion
-catalog_version: 4
-catalog_date: 2026-11-05
+catalog_version: 5
+catalog_date: 2026-11-13
 
 risks:
   # ─── Reads ─────────────────────────────────────────────────────────────────
@@ -42,8 +44,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: notion.query-databases
     label: 'Query database entries in bulk'
     reason: >-
@@ -59,8 +59,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: notion.read-comments
     label: 'Read comments and discussions'
     reason: >-
@@ -74,8 +72,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── Writes — pages and their content ──────────────────────────────────────
 
   - id: notion.page-create
@@ -92,8 +88,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.page-update
     label: "Change a page's title, icon or cover"
     reason: >-
@@ -108,8 +102,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.content-append
     label: 'Add content to a page'
     reason: >-
@@ -124,8 +116,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.block-update
     label: 'Rewrite a block of a page'
     reason: >-
@@ -141,8 +131,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.block-delete
     label: 'Delete a block of a page'
     reason: >-
@@ -159,8 +147,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.page-trash
     label: 'Move a page to the trash'
     reason: >-
@@ -175,8 +161,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.page-restore
     label: 'Bring a page back from the trash'
     reason: >-
@@ -192,8 +176,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.root-trash
     label: 'Move a whole shared root page to the trash'
     reason: >-
@@ -208,8 +190,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: posture
-
   # ─── Writes — database entries ─────────────────────────────────────────────
 
   - id: notion.entry-create
@@ -225,8 +205,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   - id: notion.entry-update
     label: "Change a database entry's properties"
     reason: >-
@@ -242,8 +220,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
   # ─── Writes — comments ─────────────────────────────────────────────────────
 
   - id: notion.comment-create
@@ -260,8 +236,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   # ─── Fallback (required) ───────────────────────────────────────────────────
 
   - id: notion.uncategorized-write
@@ -277,8 +251,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: posture
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

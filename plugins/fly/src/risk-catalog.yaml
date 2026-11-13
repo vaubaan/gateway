@@ -15,9 +15,11 @@
 # pattern or macro-action changed.
 # catalog_version 4 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 5 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: fly
-catalog_version: 4
-catalog_date: 2026-11-05
+catalog_version: 5
+catalog_date: 2026-11-13
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────────
@@ -39,7 +41,6 @@ risks:
         data: metadata,
         cost: free,
         visibility: internal,
-        persistence: stateless,
       }
 
   - id: fly.read-runtime
@@ -56,14 +57,7 @@ risks:
       - 'fly.org[*].app[*].certificate[*].R'
     infra_limits: { calls_per_minute_max: 120 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: data,
-        cost: free,
-        visibility: internal,
-        persistence: stateless,
-      }
+      { reversibility: reversible, blast: single, data: data, cost: free, visibility: internal }
 
   - id: fly.read-secret-names
     label: 'List the names of the app secrets'
@@ -73,14 +67,7 @@ risks:
     matches: 'fly.org[*].app[*].secret[*].R'
     infra_limits: { calls_per_minute_max: 30 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: metadata,
-        cost: free,
-        visibility: internal,
-        persistence: stateless,
-      }
+      { reversibility: reversible, blast: single, data: metadata, cost: free, visibility: internal }
 
   - id: fly.read-logs
     label: 'Read the app logs'
@@ -90,14 +77,7 @@ risks:
     matches: 'fly.org[*].app[*].logs.R'
     infra_limits: { calls_per_minute_max: 30 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: pii,
-        cost: free,
-        visibility: internal,
-        persistence: stateless,
-      }
+      { reversibility: reversible, blast: single, data: pii, cost: free, visibility: internal }
 
   # ─── Apps ────────────────────────────────────────────────────────────────────
 
@@ -116,7 +96,6 @@ risks:
         data: metadata,
         cost: moderate,
         visibility: internal,
-        persistence: posture,
       }
 
   - id: fly.app-destroy
@@ -127,15 +106,7 @@ risks:
     matches: 'fly.org[*].app[*].app-destroy.W'
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 2 }
-    vector:
-      {
-        reversibility: irreversible,
-        blast: env,
-        data: pii,
-        cost: free,
-        visibility: public,
-        persistence: posture,
-      }
+    vector: { reversibility: irreversible, blast: env, data: pii, cost: free, visibility: public }
 
   # ─── Machines ────────────────────────────────────────────────────────────────
 
@@ -154,7 +125,6 @@ risks:
         data: metadata,
         cost: moderate,
         visibility: internal,
-        persistence: session,
       }
 
   - id: fly.machine-config-write
@@ -170,14 +140,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 20 }
     vector:
-      {
-        reversibility: costly,
-        blast: single,
-        data: secret,
-        cost: moderate,
-        visibility: public,
-        persistence: posture,
-      }
+      { reversibility: costly, blast: single, data: secret, cost: moderate, visibility: public }
     vector_overrides:
       staging: { visibility: internal }
 
@@ -194,14 +157,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 20 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: secret,
-        cost: free,
-        visibility: public,
-        persistence: session,
-      }
+      { reversibility: reversible, blast: single, data: secret, cost: free, visibility: public }
     vector_overrides:
       staging: { visibility: internal }
 
@@ -218,7 +174,6 @@ risks:
         data: metadata,
         cost: unbounded,
         visibility: internal,
-        persistence: session,
       }
 
   - id: fly.machine-power
@@ -230,14 +185,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 30 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: metadata,
-        cost: free,
-        visibility: public,
-        persistence: session,
-      }
+      { reversibility: reversible, blast: single, data: metadata, cost: free, visibility: public }
 
   - id: fly.machine-destroy
     label: 'Destroy a machine'
@@ -247,15 +195,7 @@ risks:
     matches: 'fly.org[*].app[*].machine[*].machine-destroy.W'
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 10 }
-    vector:
-      {
-        reversibility: costly,
-        blast: single,
-        data: metadata,
-        cost: free,
-        visibility: public,
-        persistence: session,
-      }
+    vector: { reversibility: costly, blast: single, data: metadata, cost: free, visibility: public }
 
   - id: fly.machine-exec
     label: 'Run a command inside a machine'
@@ -267,14 +207,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 10 }
     vector:
-      {
-        reversibility: irreversible,
-        blast: env,
-        data: secret,
-        cost: free,
-        visibility: internal,
-        persistence: posture,
-      }
+      { reversibility: irreversible, blast: env, data: secret, cost: free, visibility: internal }
 
   # ─── Volumes ─────────────────────────────────────────────────────────────────
 
@@ -290,7 +223,6 @@ risks:
         data: metadata,
         cost: moderate,
         visibility: internal,
-        persistence: session,
       }
 
   - id: fly.volume-restore
@@ -303,14 +235,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 5 }
     vector:
-      {
-        reversibility: costly,
-        blast: single,
-        data: pii,
-        cost: moderate,
-        visibility: internal,
-        persistence: session,
-      }
+      { reversibility: costly, blast: single, data: pii, cost: moderate, visibility: internal }
 
   - id: fly.volume-extend
     label: 'Extend a volume'
@@ -325,7 +250,6 @@ risks:
         data: metadata,
         cost: moderate,
         visibility: internal,
-        persistence: posture,
       }
 
   - id: fly.volume-backup-settings
@@ -339,14 +263,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 5 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: data,
-        cost: moderate,
-        visibility: internal,
-        persistence: posture,
-      }
+      { reversibility: reversible, blast: single, data: data, cost: moderate, visibility: internal }
 
   - id: fly.volume-snapshot
     label: 'Take a volume snapshot'
@@ -360,7 +277,6 @@ risks:
         data: metadata,
         cost: moderate,
         visibility: internal,
-        persistence: stateless,
       }
 
   - id: fly.volume-destroy
@@ -372,14 +288,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 5 }
     vector:
-      {
-        reversibility: irreversible,
-        blast: single,
-        data: pii,
-        cost: free,
-        visibility: internal,
-        persistence: posture,
-      }
+      { reversibility: irreversible, blast: single, data: pii, cost: free, visibility: internal }
 
   # ─── Secrets, addresses, certificates ────────────────────────────────────────
 
@@ -392,15 +301,7 @@ risks:
     matches: 'fly.org[*].app[*].secret[*].W'
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 10 }
-    vector:
-      {
-        reversibility: costly,
-        blast: env,
-        data: secret,
-        cost: free,
-        visibility: internal,
-        persistence: posture,
-      }
+    vector: { reversibility: costly, blast: env, data: secret, cost: free, visibility: internal }
 
   - id: fly.ip-write
     label: 'Allocate an IP address'
@@ -417,7 +318,6 @@ risks:
         data: metadata,
         cost: moderate,
         visibility: public,
-        persistence: posture,
       }
 
   - id: fly.ip-release
@@ -429,14 +329,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 5 }
     vector:
-      {
-        reversibility: irreversible,
-        blast: single,
-        data: metadata,
-        cost: free,
-        visibility: public,
-        persistence: posture,
-      }
+      { reversibility: irreversible, blast: single, data: metadata, cost: free, visibility: public }
 
   - id: fly.certificate-write
     label: 'Request or re-check a certificate'
@@ -447,14 +340,7 @@ risks:
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 10 }
     vector:
-      {
-        reversibility: reversible,
-        blast: single,
-        data: metadata,
-        cost: free,
-        visibility: public,
-        persistence: posture,
-      }
+      { reversibility: reversible, blast: single, data: metadata, cost: free, visibility: public }
 
   - id: fly.certificate-remove
     label: 'Remove a certificate'
@@ -462,15 +348,7 @@ risks:
     matches: 'fly.org[*].app[*].certificate[*].certificate-remove.W'
     acceptable_in_envs: [staging, prod]
     infra_limits: { calls_per_minute_max: 5 }
-    vector:
-      {
-        reversibility: costly,
-        blast: single,
-        data: metadata,
-        cost: free,
-        visibility: public,
-        persistence: posture,
-      }
+    vector: { reversibility: costly, blast: single, data: metadata, cost: free, visibility: public }
 
   # ─── Fallback ────────────────────────────────────────────────────────────────
 
@@ -479,15 +357,7 @@ risks:
     reason: 'Catch-all for a write no other entry covers. Seeing it in the activity means the catalog misses an entry.'
     matches: 'fly.**.W'
     fallback: true
-    vector:
-      {
-        reversibility: costly,
-        blast: env,
-        data: data,
-        cost: moderate,
-        visibility: internal,
-        persistence: session,
-      }
+    vector: { reversibility: costly, blast: env, data: data, cost: moderate, visibility: internal }
 
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback

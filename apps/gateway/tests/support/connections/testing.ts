@@ -118,7 +118,6 @@ export function fixturePlugin(options: FixturePluginOptions): ProviderPlugin {
     data: 'data',
     cost: 'free',
     visibility: 'internal',
-    persistence: 'stateless',
   } as const;
   return definePlugin({
     id,

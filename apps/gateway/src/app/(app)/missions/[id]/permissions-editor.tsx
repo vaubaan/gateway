@@ -6,6 +6,7 @@ import { Button, ConfirmDialog, Hint, Input } from '@/components/ui';
 import type { MissionService } from '@/server/missions/mission-service';
 import type { MissionPolicyEntry } from '@vaubaan/shared';
 import { useAction, type PostAnswer } from '@/lib/http/post-json';
+import { ROW_WORDS } from '@/lib/vocabulary';
 
 import styles from './permissions-editor.module.css';
 
@@ -52,7 +53,7 @@ export function PermissionsEditor({
       .map((p) => ({
         risk_id: p.risk_id,
         label: p.risk_id,
-        level: '',
+        row: null,
         available: false,
         reason: 'No longer offered by the catalog.',
         ceiling: null,
@@ -149,7 +150,8 @@ export function PermissionsEditor({
                       />
                     </td>
                     <td>
-                      <strong>{c.label}</strong> {c.level && <span>· {c.level}</span>}
+                      <strong>{c.label}</strong>{' '}
+                      {c.row !== null && <span>· {ROW_WORDS[c.row]}</span>}
                       <br />
                       <code>{c.risk_id}</code>
                       {requested.includes(c.risk_id) && <p>Requested by the agent</p>}

@@ -28,7 +28,7 @@ import {
   RequestStatement,
   RunList,
   RunRow,
-  SeverityChip,
+  RowChip,
   StatusMark,
 } from '@/components/ui';
 
@@ -160,8 +160,7 @@ export function WaitingSections() {
                     label: 'Permission it needs',
                     value: (
                       <>
-                        <GateMark gate="ask" /> · Write on protected branches ·{' '}
-                        <SeverityChip level="high" />
+                        <GateMark gate="ask" /> · Write on protected branches · <RowChip row={3} />
                       </>
                     ),
                   },

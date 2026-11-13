@@ -109,7 +109,7 @@ import type {
   PreviewNotice,
   ResolvedDraftConnection,
   ResolvedDraftSet,
-  SeverityLevel,
+  Row,
 } from '../../lib/missions/model';
 import { parseMissionDraft } from './draft-schema';
 import {
@@ -612,7 +612,8 @@ export interface MissionDetailConnection {
 
 export interface MissionDetailRisk extends MissionPolicyEntry {
   readonly label: string;
-  readonly level: SeverityLevel | null;
+  /** The row of the permission (risk model §4.6); `null` when its catalog no longer knows it. */
+  readonly row: Row | null;
   /** Remaining actions this period; `null` when the mission is not active. */
   readonly remaining: number | null;
   /**
@@ -1440,7 +1441,7 @@ export class MissionService {
       /** "Resource set 2" when the account has several; `null` otherwise. */
       resource_set_label: string | null;
       label: string;
-      level: string;
+      row: Row;
       reason: string;
       available: boolean;
       ceiling: number | null;
@@ -1466,7 +1467,7 @@ export class MissionService {
             resource_set_id: set.id,
             resource_set_label: sets.length > 1 ? `Resource set ${set.position}` : null,
             label: risk.label,
-            level: risk.level,
+            row: risk.row,
             reason: issues.map((i) => i.message).join(' '),
             available: issues.length === 0,
             ceiling: risk.rate_ceiling_per_minute,
@@ -1929,7 +1930,7 @@ export class MissionService {
       return {
         ...entry,
         label: row?.label ?? entry.risk_id,
-        level: row?.level ?? null,
+        row: row?.row ?? null,
         remaining: remaining ? (remaining[lineKeyOf(entry)] ?? null) : null,
         gate_open_until: openUntil.get(lineKeyOf(entry)) ?? null,
       };

@@ -16,7 +16,7 @@ import type { MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 
 import { isResolvable } from './catalog-view';
 import { macroActionOfRisk } from './macro-actions';
-import type { CatalogRisk, IssuanceConnection, IssuanceResource, SeverityLevel } from './model';
+import type { CatalogRisk, IssuanceConnection, IssuanceResource, Row } from './model';
 import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
 
 /** Its id where the gateway names it (a notice, the reference). No catalog may declare a macro-action of that id. */
@@ -26,22 +26,22 @@ export const EVERYTHING_I_HOLD_DESCRIPTION =
   'Every permission you may allow on this account that the selected resources can reach, the uncategorized writes included, written out one by one: each at the service’s rate ceiling, with a generous daily limit, running freely.';
 
 /**
- * The quota of a line in no macro-action, by the catalog's severity level:
+ * The quota of a line in no macro-action, by its row (risk model §4.6):
  * sized for a period of one day.
  */
-export const QUOTA_BY_LEVEL: Readonly<Record<SeverityLevel, number>> = {
-  low: 5000,
-  medium: 1000,
-  high: 200,
-  critical: 50,
+export const QUOTA_BY_ROW: Readonly<Record<Row, number>> = {
+  1: 5000,
+  2: 1000,
+  3: 200,
+  4: 50,
 };
 
-/** Actions per minute of a line with no catalog ceiling and in no macro-action. */
-export const RATE_BY_LEVEL: Readonly<Record<SeverityLevel, number>> = {
-  low: 120,
-  medium: 60,
-  high: 20,
-  critical: 5,
+/** Actions per minute of a line with no catalog ceiling and in no macro-action, by its row. */
+export const RATE_BY_ROW: Readonly<Record<Row, number>> = {
+  1: 120,
+  2: 60,
+  3: 20,
+  4: 5,
 };
 
 /** The lines "Everything I hold" wrote on one connection, with what the picker shows. */
@@ -55,11 +55,11 @@ export interface EverythingIHold {
 /**
  * The budget of a line: its macro-action's base budget at Autonomous (the
  * widest trust level), the rate then the catalog ceiling per minute when the entry
- * sets one; by level for a risk in no macro-action.
+ * sets one; by row for a risk in no macro-action.
  */
 export function budgetFor(
   connection: Pick<IssuanceConnection, 'macro_actions'>,
-  risk: Pick<CatalogRisk, 'base_id' | 'rate_ceiling_per_minute' | 'level'>,
+  risk: Pick<CatalogRisk, 'base_id' | 'rate_ceiling_per_minute' | 'row'>,
 ): { readonly quota: number; readonly rate_limit: RateLimit } {
   const entry = macroActionOfRisk(connection, risk)?.entries.find(
     (e) => e.risk_id === risk.base_id,
@@ -70,8 +70,8 @@ export function budgetFor(
       : { max: risk.rate_ceiling_per_minute, window_seconds: SECONDS_PER_MINUTE };
   if (!entry) {
     return {
-      quota: QUOTA_BY_LEVEL[risk.level],
-      rate_limit: ceiling ?? { max: RATE_BY_LEVEL[risk.level], window_seconds: SECONDS_PER_MINUTE },
+      quota: QUOTA_BY_ROW[risk.row],
+      rate_limit: ceiling ?? { max: RATE_BY_ROW[risk.row], window_seconds: SECONDS_PER_MINUTE },
     };
   }
   const widest = budgetAtTrustLevel(entry, 'autonomous', risk.rate_ceiling_per_minute);
@@ -108,13 +108,14 @@ export function everythingIHold(
 /** What the expansion holds, for a person or an agent to read before confirming. */
 export interface ExpansionDigest {
   readonly count: number;
-  readonly most_severe: {
+  /** The line in the hardest row to repair, the first in catalog order on a tie. */
+  readonly hardest: {
     readonly risk_id: RiskId;
     readonly label: string;
-    readonly level: SeverityLevel;
+    readonly row: Row;
   } | null;
-  /** Lines whose catalog severity is critical and whose gate is `auto`: they run freely. */
-  readonly critical_auto: readonly CatalogRisk[];
+  /** Lines in row 4 ("Cannot be repaired") whose gate is `auto`: they run freely. */
+  readonly irreparable_auto: readonly CatalogRisk[];
   /** The catalog's fallback, when it is a line. */
   readonly fallback: readonly CatalogRisk[];
 }
@@ -125,22 +126,20 @@ export function expansionDigest(
   risks: readonly CatalogRisk[],
 ): ExpansionDigest {
   const byId = new Map(risks.map((risk) => [risk.risk_id, risk]));
-  let mostSevere: CatalogRisk | null = null;
-  const criticalAuto: CatalogRisk[] = [];
+  let hardest: CatalogRisk | null = null;
+  const irreparableAuto: CatalogRisk[] = [];
   const fallback: CatalogRisk[] = [];
   for (const line of lines) {
     const risk = byId.get(line.risk_id);
     if (!risk) continue;
-    if (mostSevere === null || risk.severity > mostSevere.severity) mostSevere = risk;
-    if (risk.level === 'critical' && line.gate === 'auto') criticalAuto.push(risk);
+    if (hardest === null || risk.row > hardest.row) hardest = risk;
+    if (risk.row === 4 && line.gate === 'auto') irreparableAuto.push(risk);
     if (risk.fallback) fallback.push(risk);
   }
   return {
     count: lines.length,
-    most_severe: mostSevere
-      ? { risk_id: mostSevere.risk_id, label: mostSevere.label, level: mostSevere.level }
-      : null,
-    critical_auto: criticalAuto,
+    hardest: hardest ? { risk_id: hardest.risk_id, label: hardest.label, row: hardest.row } : null,
+    irreparable_auto: irreparableAuto,
     fallback,
   };
 }

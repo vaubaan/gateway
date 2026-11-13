@@ -467,7 +467,7 @@ test('the gallery shows every component in both themes', async ({ page }) => {
   const meters = page.locator('section#meter [data-theme="light"]').first();
   await expect(meters.getByRole('meter')).toHaveCount(2);
 
-  // "why?" unfolds the six words of a permission.
+  // "why?" unfolds the reason of a permission.
   const editor = page.locator('section#permission [data-theme="light"]').first();
   const row = editor.locator('tr[data-permission="github.read-code"]');
   await row.getByRole('button', { name: 'why?' }).click();

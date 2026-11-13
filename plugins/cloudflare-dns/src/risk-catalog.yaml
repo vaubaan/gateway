@@ -29,9 +29,11 @@
 # pattern or macro-action changed.
 # catalog_version 6 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 7 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: cloudflare-dns
-catalog_version: 6
-catalog_date: 2026-11-05
+catalog_version: 7
+catalog_date: 2026-11-13
 
 risks:
   # ─── Reads ───────────────────────────────────────────────────────────────
@@ -53,8 +55,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: cloudflare-dns.read-records
     label: 'Read DNS records (IPs, CNAMEs, MX, TXT values)'
     reason: >-
@@ -68,8 +68,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: cloudflare-dns.export-zone-file
     label: 'Export the whole zone as a BIND file (all records in one dump)'
     reason: >-
@@ -83,8 +81,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── Writes — DNS records ────────────────────────────────────────────────
 
   - id: cloudflare-dns.record-write
@@ -102,8 +98,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: cloudflare-dns.critical-record-write
     label: 'Change an apex, wildcard, MX or NS record'
     reason: >-
@@ -121,8 +115,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: cloudflare-dns.record-delete
     label: 'Delete a DNS record'
     reason: >-
@@ -137,8 +129,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: cloudflare-dns.import-records
     label: 'Bulk import DNS records from a BIND zone file'
     reason: >-
@@ -152,8 +142,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   # ─── Writes — zone-level ─────────────────────────────────────────────────
 
   - id: cloudflare-dns.zone-settings-write
@@ -169,8 +157,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: cloudflare-dns.dnssec-write
     label: 'Enable / disable DNSSEC on a zone'
     reason: >-
@@ -184,8 +170,6 @@ risks:
       data: metadata
       cost: free
       visibility: public
-      persistence: posture
-
   - id: cloudflare-dns.cache-purge
     label: 'Purge the CDN cache (everything, by URL, tag, host or prefix)'
     reason: >-
@@ -199,8 +183,6 @@ risks:
       data: metadata
       cost: moderate
       visibility: public
-      persistence: session
-
   - id: cloudflare-dns.zone-delete
     label: 'Delete a whole DNS zone (the domain stops resolving)'
     reason: >-
@@ -217,8 +199,6 @@ risks:
       data: data
       cost: moderate
       visibility: public
-      persistence: posture
-
   # ─── Fallback (required) ─────────────────────────────────────────────────
 
   - id: cloudflare-dns.uncategorized-write
@@ -234,8 +214,6 @@ risks:
       data: data
       cost: moderate
       visibility: public
-      persistence: posture
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

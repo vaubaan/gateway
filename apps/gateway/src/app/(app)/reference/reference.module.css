@@ -132,7 +132,7 @@
 
 /* ── Permissions against presets ───────────────────────────────────────── */
 
-/* Fixed layout: the presets and the severity keep their width, the permission takes the rest. */
+/* Fixed layout: the trust levels and the row keep their width, the permission takes the rest. */
 .comparison {
   width: 100%;
   min-width: 620px;
@@ -161,8 +161,8 @@
   font-weight: var(--weight-strong);
   white-space: normal;
 }
-.comparison thead th.severityHead {
-  width: 72px;
+.comparison thead th.rowHead {
+  width: 150px;
 }
 .comparison tbody th,
 .comparison tbody td {
@@ -210,7 +210,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.severityCell {
+.rowCell {
   white-space: nowrap;
 }
 .trustLevelCell {

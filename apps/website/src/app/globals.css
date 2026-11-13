@@ -543,23 +543,23 @@ td code.id {
   white-space: normal;
 }
 
-/* The risk word: low is plain; medium and above take a colour. */
+/* The row word: harmless is plain; rows 2 and above take a colour. */
 .risk {
   color: var(--ink-3);
   font-size: var(--text-xs);
   white-space: nowrap;
 }
 
-.risk-medium {
+.risk-row-2 {
   color: var(--warn);
 }
 
-.risk-high,
-.risk-critical {
+.risk-row-3,
+.risk-row-4 {
   color: var(--bad);
 }
 
-.risk-critical {
+.risk-row-4 {
   font-weight: var(--weight-strong);
 }
 
@@ -666,13 +666,13 @@ li.perm + li.perm {
   margin-top: 0;
 }
 
-.perm-medium {
+.perm-row-2 {
   border-color: var(--warn-line);
   background: var(--warn-soft);
 }
 
-.perm-high,
-.perm-critical {
+.perm-row-3,
+.perm-row-4 {
   border-color: var(--bad-line);
   background: var(--bad-soft);
 }

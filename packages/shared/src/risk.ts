@@ -1,7 +1,7 @@
 /**
  * Risk-based authorization types.
  *
- * Spec : docs/spec/gateway-risk-model.md (slices, catalogs, 6-D vector,
+ * Spec : docs/spec/gateway-risk-model.md (slices, catalogs, 5-D vector,
  *        scope caps, §4.6 macro-actions) ; docs/spec/vaubaan-gateway.md §3.2 (budgets).
  * ADR  : docs/decisions/unified-gates-drop-confirm.md,
  *        docs/decisions/plugin-contract-and-credential-spec.md.
@@ -82,19 +82,19 @@ export type SliceSegment =
   | { readonly kind: 'wild-rec' };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Risk vector — 6D, attached to catalog entries (not to missions)
+// Risk vector — five facts, attached to catalog entries (not to missions)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The 6 orthogonal risk axes synthesized from OWASP LLM06, NIST AI RMF
- * Agentic Profile, MITRE ATLAS v5.1, Five Eyes 2026-05, Anthropic RSP v3.
+ * The five facts of a risk (spec gateway-risk-model §4.2), synthesized from
+ * OWASP LLM06, NIST AI RMF Agentic Profile, MITRE ATLAS v5.1, Five Eyes
+ * 2026-05, Anthropic RSP v3. The sixth axis, `persistence`, was retired on
+ * 2026-11-13: it decided nothing.
  *
- * Used to :
- *  - explain a risk in the UI / audit / docs (`reason` field is the
- *    natural-language version of the vector).
- *  - inform the mission creator's decision when they accept a risk.
- *  - drive a visual ordering by severity in the issuance UI (the only
- *    derived signal — no functional gate is computed from this).
+ * The vector is the catalog author's method for sorting a risk into a row
+ * (`rowOf` in `@vaubaan/policy-engine`, a decision tree read in order);
+ * the row pre-fills the gate a trust level writes. No sum, no score, and
+ * no runtime decision is derived from it.
  */
 /** Allowed values per axis — the one source for the type, YAML validation and UI pickers. */
 export const RISK_VECTOR_AXES = {
@@ -103,7 +103,6 @@ export const RISK_VECTOR_AXES = {
   data: ['metadata', 'data', 'secret', 'pii'],
   cost: ['free', 'moderate', 'unbounded'],
   visibility: ['internal', 'team', 'public'],
-  persistence: ['stateless', 'session', 'posture'],
 } as const;
 
 export type RiskVector = {
@@ -152,8 +151,8 @@ export interface RiskEntry {
    *  (a risk can have multiple patterns when no single pattern can
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
-  /** 6D vector explaining the risk's profile. Drives UI ordering, audit
-   *  explainability and the tier a trust level pre-fills a gate from
+  /** The five facts of the risk. They give it its row — what the interface
+   *  orders by and the gate a trust level pre-fills — and its reason
    *  (ADR macro-actions-and-trust-levels-prefill-the-policy) ; the runtime
    *  derives no decision from it.
    *  When `vector_overrides` is present this is the default (non-prod)

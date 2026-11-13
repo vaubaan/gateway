@@ -147,7 +147,7 @@ interface ListedConnection {
 interface Catalog {
   readonly risks: readonly {
     readonly risk_id: string;
-    readonly tier: number;
+    readonly row: number;
     readonly macro_action: string | null;
   }[];
   readonly macro_actions: readonly { readonly id: string; readonly entries: readonly unknown[] }[];
@@ -246,7 +246,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
     connection_id: github.connection_id,
   });
   expect(catalog.risks.find((risk) => risk.risk_id === 'github.read-code')).toMatchObject({
-    tier: 1,
+    row: 1,
     macro_action: 'read',
   });
   expect(catalog.macro_actions.map((action) => action.id)).toContain('read');

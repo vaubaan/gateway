@@ -16,6 +16,12 @@ status: stable
 > recorded in the History of
 > [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md));
 > what each trust level writes did not change.
+>
+> 2026-11-13 — the gate of a permission comes from an explicit decision tree over five facts (§4.6);
+> the `persistence` axis left the catalogs (§4.2) and the severity word (low, medium, high,
+> critical) left the product: a permission is printed with its row and the reason that put it there
+> (owner decision, recorded in the amendment of
+> [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
 
 ## 0. The idea — accepted risks, not granted capabilities
 
@@ -121,17 +127,18 @@ fits in a sentence; fine-grained intents, never one broad risk covering everythi
 
 ### 4.2 The vector
 
-Six axes, each a closed scale from mildest to most severe:
+Five axes, the facts of a risk, each a closed scale from mildest to hardest:
 
 - `reversibility`: `reversible` · `costly` · `irreversible`
 - `blast`: `single` · `env` · `account` · `bulk`
 - `data`: `metadata` · `data` · `secret` · `pii`
 - `cost`: `free` · `moderate` · `unbounded`
 - `visibility`: `internal` · `team` · `public`
-- `persistence`: `stateless` · `session` · `posture`
 
-The vector **explains** and **orders** risks, and gives each entry its **tier** (§4.6), which only
-pre-fills a gate in the creation form. No runtime decision is derived from it.
+The vector is the **catalog author's method** for sorting a risk into a **row** (§4.6), which only
+pre-fills a gate in the creation form and orders the lists of the interface. It is never summed and
+never scored; no runtime decision is derived from it. A catalog declaring any other axis does not
+load (`persistence`, retired on 2026-11-13, included).
 
 ### 4.3 The fallback entry
 
@@ -177,16 +184,30 @@ What a creator ticks per connection, in the connector's words
   the way they are ("two acts are kept apart because they destroy work"). It is shown on the
   plugin's public page and in the reference, reviewed like the rest of the catalog, and never read
   by the runtime. Shipped catalogs fill it (structural test).
-- **Tier**, read from the vector in the environment of the line: irreversible → 4, costly → 3,
-  reversible but `pii` or `secret` data, `bulk` or `account` blast, or `unbounded` cost → 2, else 1.
+- **Row**, read from the vector in the environment of the line by a decision tree whose branches are
+  read in order; the first that answers decides:
+
+  | Row | Name                     | Reached when                                                                                   |
+  | --- | ------------------------ | ---------------------------------------------------------------------------------------------- |
+  | 4   | Cannot be repaired       | `reversibility: irreversible`                                                                  |
+  | 3   | Repairable, at a price   | `reversibility: costly`, or `cost: unbounded`                                                  |
+  | 2   | Repairable, worth a look | `data: secret` or `pii`, `blast: account` or `bulk`, `cost: moderate`, or `visibility: public` |
+  | 1   | Harmless                 | none of the above                                                                              |
+
+  The **reason** of a permission is the one branch that decided, in tree order: `irreversible`,
+  `costly-to-undo`, `unbounded-cost`, `secret-data`, `personal-data`, `whole-account`, `in-bulk`,
+  `moderate-cost`, `public`; none in row 1. The interface prints the row's name and, in quiet type,
+  the reason; it orders lists by row, the hardest to repair first, then catalog order. The word
+  _tier_ is not printed, and no severity word exists.
+
 - **Trust level**, one per ticked macro-action, `careful` by default:
 
-  | Tier | Careful      | Trusting | Autonomous |
-  | ---- | ------------ | -------- | ---------- |
-  | 1    | auto         | auto     | auto       |
-  | 2    | approval     | auto     | auto       |
-  | 3    | approval     | approval | auto       |
-  | 4    | not accepted | approval | approval   |
+  | Row | Careful      | Trusting | Autonomous |
+  | --- | ------------ | -------- | ---------- |
+  | 1   | auto         | auto     | auto       |
+  | 2   | approval     | auto     | auto       |
+  | 3   | approval     | approval | auto       |
+  | 4   | not accepted | approval | approval   |
 
 - The trust level multiplies the base budget ×1, ×3, ×10; the rate stays under the entry's per-minute
   ceiling (§4bis).
@@ -348,6 +369,9 @@ replayed; decision with code and hint, or reason. No field for scope caps.
 In decisions written before v5: binding → resource; project policy → share restriction; root or
 project-scoped token → mission; child token, delegation chain, denied risks, escalation channel →
 none; mint → issue; gates `allow` / `confirm` / `deny` → accepted or not, then `auto` / `approval`.
+In documents written before 2026-11-13: tier → row (same numbers, now read by the tree of §4.6);
+severity, severity level, low / medium / high / critical, "the most severe" → the row and its
+reason, "the hardest to repair"; the six axes, `persistence` → the five facts of §4.2.
 
 ## 14. Pitfalls and guards
 

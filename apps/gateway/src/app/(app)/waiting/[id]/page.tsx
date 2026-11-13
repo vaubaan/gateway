@@ -14,7 +14,7 @@ import { currentUser } from '@/lib/auth/session';
 import { PAGES, ROUTES } from '@/lib/vocabulary';
 import { ADDRESSED_TO_CREATOR } from '@/server/requests';
 
-import { levelsOf, loadInbox, WaitingFrame, WaitingHeader } from '../frame';
+import { rowsOfRequest, loadInbox, WaitingFrame, WaitingHeader } from '../frame';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +55,7 @@ export default async function RequestPage({ params, searchParams }: Props) {
       inbox={await loadInbox(root, user)}
       viewerId={user.id}
       view={result.view}
-      levels={levelsOf(root, result.view)}
+      rows={rowsOfRequest(root, result.view)}
       decided={Boolean(decided)}
       problem={problem ?? null}
     />

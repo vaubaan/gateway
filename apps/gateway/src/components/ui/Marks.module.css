@@ -1,18 +1,26 @@
-.severity {
+.row {
   color: var(--ink-3);
   font-size: var(--text-xs);
   font-weight: var(--weight-regular);
   white-space: nowrap;
 }
-.severity_medium {
+.row_2 {
   color: var(--warn);
 }
-.severity_high,
-.severity_critical {
+.row_3,
+.row_4 {
   color: var(--bad);
 }
-.severity_critical {
+.row_4 {
   font-weight: var(--weight-strong);
+}
+.reason,
+.reasonInline {
+  color: var(--ink-3);
+  font-weight: var(--weight-regular);
+}
+.reason {
+  display: block;
 }
 
 .gate {

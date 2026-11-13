@@ -37,7 +37,6 @@ const envScopedEntry: RiskEntry = {
     data: 'data',
     cost: 'moderate',
     visibility: 'internal',
-    persistence: 'session',
   },
   acceptable_in_envs: ['staging', 'preview'],
 };
@@ -53,7 +52,6 @@ const accountScopedEntry: RiskEntry = {
     data: 'secret',
     cost: 'free',
     visibility: 'internal',
-    persistence: 'posture',
   },
 };
 

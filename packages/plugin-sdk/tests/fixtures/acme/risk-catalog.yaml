@@ -15,8 +15,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: acme.thing-write
     label: 'Write a thing'
     reason: 'Reversible edit of one thing. Costly on prod because customers see it.'
@@ -28,7 +26,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
     vector_overrides:
       prod:
         reversibility: costly
@@ -48,8 +45,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: stateless
-
   - id: acme.uncategorized-write
     label: 'Uncategorized write'
     reason: 'Catch-all. Seen in production, it means the catalog misses an entry.'
@@ -61,8 +56,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
 macro_actions:
   - id: read
     label: 'Read'

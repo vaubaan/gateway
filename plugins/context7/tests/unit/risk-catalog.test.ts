@@ -14,24 +14,23 @@ import { PROVIDER_ID, context7Catalog } from '../../src/index.ts';
 const { catalog, indexed } = context7Catalog;
 
 describe('context7 risk-catalog — YAML structural validation', () => {
-  test('one named risk and the fallback, at catalog version 4', () => {
+  test('one named risk and the fallback, at catalog version 5', () => {
     expect(catalog.provider).toBe(PROVIDER_ID);
-    expect(catalog.catalog_version).toBe(4);
+    expect(catalog.catalog_version).toBe(5);
     expect(catalog.risks.map((r) => [r.id, r.fallback === true])).toEqual([
       [`${PROVIDER_ID}.query-docs`, false],
       [`${PROVIDER_ID}.uncategorized-write`, true],
     ]);
   });
 
-  test('the vector of the disclosure, as decided', () => {
+  test('the vector of a documentation read (corrected 2026-11-13); the disclosure is in the reason', () => {
     const risk = catalog.risks.find((r) => r.id === `${PROVIDER_ID}.query-docs`)!;
     expect(risk.vector).toEqual({
-      reversibility: 'irreversible',
+      reversibility: 'reversible',
       blast: 'single',
       data: 'data',
-      cost: 'moderate',
-      visibility: 'public',
-      persistence: 'stateless',
+      cost: 'free',
+      visibility: 'internal',
     });
     expect(risk.reason).toMatch(/sent to Context7/);
   });

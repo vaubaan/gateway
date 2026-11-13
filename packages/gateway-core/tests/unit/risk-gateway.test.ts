@@ -31,7 +31,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'stateless',
       },
     },
     {
@@ -45,7 +44,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
     {
@@ -59,7 +57,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'moderate',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
     {
@@ -73,7 +70,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
   ],

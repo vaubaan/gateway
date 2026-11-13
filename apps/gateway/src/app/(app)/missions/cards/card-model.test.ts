@@ -194,7 +194,7 @@ describe('the gauge of a macro-action', () => {
       rate_limit: { max: 60, window_seconds: 60 },
       gate: 'auto' as const,
       label: 'Read things',
-      level: 'low' as const,
+      row: 1 as const,
       remaining: 76,
       gate_open_until: '2026-11-05T00:00:00.000Z',
     };

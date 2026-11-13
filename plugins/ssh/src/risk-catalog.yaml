@@ -9,7 +9,7 @@
 # 7 named risks + 1 fallback (`uncategorized-write`) : `exec-read`,
 # `exec-read-secret-files`, `exec-write`, and one risk per command class that
 # hurts (`exec-destructive`, `exec-package-install`, `exec-service-control`,
-# `exec-sudo`) so their tier can gate them with `approval`.
+# `exec-sudo`) so their row can gate them with `approval`.
 #
 # How a command reaches a risk (see `src/shell-lex.ts`, `src/policy.ts`,
 # `src/command/`) :
@@ -54,9 +54,11 @@
 # pattern or macro-action changed.
 # catalog_version 7 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 8 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: ssh
-catalog_version: 7
-catalog_date: 2026-11-05
+catalog_version: 8
+catalog_date: 2026-11-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -77,8 +79,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: ssh.exec-read-secret-files
     label: 'Read a credential-bearing file'
     reason: >-
@@ -97,8 +97,6 @@ risks:
       data: secret
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── WRITES ────────────────────────────────────────────────────────────
 
   - id: ssh.exec-write
@@ -119,7 +117,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
     vector_overrides:
       prod:
         reversibility: irreversible
@@ -141,7 +138,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
     vector_overrides:
       prod:
         data: secret
@@ -163,7 +159,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: posture
     acceptable_in_envs: [dev, staging, prod]
 
   - id: ssh.exec-service-control
@@ -180,7 +175,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: session
     vector_overrides:
       prod:
         visibility: public
@@ -201,7 +195,6 @@ risks:
       data: secret
       cost: moderate
       visibility: internal
-      persistence: posture
     acceptable_in_envs: [dev, staging, prod]
 
   # ─── FALLBACK ──────────────────────────────────────────────────────────
@@ -221,8 +214,6 @@ risks:
       data: data
       cost: moderate
       visibility: internal
-      persistence: session
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

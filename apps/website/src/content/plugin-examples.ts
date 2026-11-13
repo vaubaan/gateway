@@ -25,8 +25,8 @@ import {
   risksTouchedBy,
   risksTouchedByAll,
   serializeSlice,
+  rowOf,
   TRUST_LEVEL_GATES,
-  tierOf,
   unqualifyRiskId,
   type IndexedRiskCatalog,
   type TrustLevel,
@@ -89,7 +89,7 @@ export interface ExampleInfo {
 export interface WorkedLine {
   readonly riskId: RiskId;
   readonly gate: Gate;
-  readonly tier: number;
+  readonly row: number;
   readonly quota: number;
   readonly rateMax: number;
   readonly rateWindowSeconds: number;
@@ -104,7 +104,7 @@ export interface WorkedMission {
   readonly trustLevel: TrustLevel;
   readonly macroActions: readonly string[];
   readonly lines: readonly WorkedLine[];
-  readonly leftOut: readonly { readonly riskId: RiskId; readonly tier: number }[];
+  readonly leftOut: readonly { readonly riskId: RiskId; readonly row: number }[];
   /** Lines whose gate is `auto`. */
   readonly can: readonly RiskId[];
   /** Lines whose gate is `approval`. */
@@ -174,12 +174,12 @@ function expand(plugin: ProviderPlugin, envs: readonly string[] | 'acceptable'):
     lines: expansion.lines.map((line) => ({
       riskId: line.risk_id,
       gate: line.gate,
-      tier: line.tier,
+      row: line.row,
       quota: line.quota,
       rateMax: line.rate_limit.max,
       rateWindowSeconds: line.rate_limit.window_seconds,
     })),
-    leftOut: expansion.left_out.map((l) => ({ riskId: l.risk_id, tier: l.tier })),
+    leftOut: expansion.left_out.map((l) => ({ riskId: l.risk_id, row: l.row })),
     can: withGate('auto'),
     asksFirst: withGate('approval'),
     cannot: expansion.left_out.map((l) => l.risk_id),
@@ -236,7 +236,7 @@ function decide(
  * What a Careful mission holding exactly the permissions this call touches
  * does with it: `evaluateCall` against an empty mission names every touched
  * permission (env-qualified, as the gateway stores them), and Careful's gate
- * for each comes from its tier in that environment. A permission refused in
+ * for each comes from its row in that environment. A permission refused in
  * that environment (`acceptable_in_envs`) no mission holds: `null`.
  */
 function atCareful(
@@ -260,7 +260,7 @@ function atCareful(
     if (entry === undefined || !isAcceptableInEnv(entry, env)) return { riskId, gate: null };
     return {
       riskId,
-      gate: TRUST_LEVEL_GATES[WORKED_TRUST_LEVEL][tierOf(resolveVector(entry, env))],
+      gate: TRUST_LEVEL_GATES[WORKED_TRUST_LEVEL][rowOf(resolveVector(entry, env))],
     };
   });
   const outcome: CarefulOutcome = gates.some((g) => g.gate === null)

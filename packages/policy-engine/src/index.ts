@@ -49,32 +49,36 @@ export {
   expandAtTrustLevel,
   isTrustLevel,
   macroActionsOf,
-  tierFactsOf,
-  tierOf,
+  REASON_AXIS,
+  REASONS,
+  reasonOf,
+  ROW_OF_REASON,
+  rowOf,
   TRUST_LEVEL_BUDGET_FACTOR,
   TRUST_LEVEL_GATES,
   TRUST_LEVELS,
 } from './trust-level.ts';
 export {
-  MAX_SEVERITY,
-  SEVERITY_LEVELS,
-  SEVERITY_RANKS,
-  severityLevel,
-  severityOf,
-} from './severity.ts';
-export type { SeverityLevel } from './severity.ts';
-export {
   ALLOW_WORDS,
   GATE_WORDS,
   gateWordOf,
-  SEVERITY_LABEL,
+  REASON_WORDS,
+  ROW_GATE_SENTENCES,
+  ROW_LABEL,
+  ROW_WORDS,
+  TREE_LEGEND,
   TRUST_LEVEL_HINTS,
   TRUST_LEVEL_LABELS,
-  UNDO_ROW_WORDS,
   WHY_LABELS,
   WHY_ORDER,
   WHY_VALUES,
   whyValue,
 } from './risk-words.ts';
-export type { GateWord, UndoWord, WhyAxis } from './risk-words.ts';
-export type { Tier, TrustLevel, TrustLevelCandidate, TrustLevelLine } from './trust-level.ts';
+export type { GateWord, WhyAxis } from './risk-words.ts';
+export type {
+  Reason,
+  Row,
+  TrustLevel,
+  TrustLevelCandidate,
+  TrustLevelLine,
+} from './trust-level.ts';

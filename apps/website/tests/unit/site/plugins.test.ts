@@ -14,8 +14,9 @@ import {
   budgetAtTrustLevel,
   gateWordOf,
   parseSlice,
-  tierFactsOf,
-  tierOf,
+  REASON_AXIS,
+  reasonOf,
+  rowOf,
   TRUST_LEVEL_GATES,
   TRUST_LEVELS,
   WHY_ORDER,
@@ -85,7 +86,8 @@ describe('the plugin catalog of the site', () => {
       expect(plugin.credentials.length, plugin.id).toBeGreaterThan(0);
       for (const risk of plugin.risks) {
         expect(risk.id.startsWith(plugin.id), risk.id).toBe(true);
-        expect(['low', 'medium', 'high', 'critical']).toContain(risk.severity);
+        expect([1, 2, 3, 4]).toContain(risk.row);
+        expect(risk).not.toHaveProperty('severity');
       }
       const ids = new Set(plugin.risks.map((r) => r.id));
       for (const action of plugin.macroActions) {
@@ -95,18 +97,18 @@ describe('the plugin catalog of the site', () => {
     }
   });
 
-  it('exposes per permission the six facts, the undo word and the tier of the policy engine', () => {
+  it('exposes per permission the five facts, the undo word, the row and its reason of the policy engine', () => {
     for (const plugin of plugins) {
       for (const risk of plugin.risks) {
         expect(Object.keys(risk.vector).sort(), risk.id).toEqual([
           'blast',
           'cost',
           'data',
-          'persistence',
           'reversibility',
           'visibility',
         ]);
-        expect(risk.tier, risk.id).toBe(tierOf(risk.vector));
+        expect(risk.row, risk.id).toBe(rowOf(risk.vector));
+        expect(risk.rowReason, risk.id).toBe(reasonOf(risk.vector));
         expect(risk.undo, risk.id).toBe(WHY_VALUES.reversibility[risk.vector.reversibility]);
         expect(
           risk.facts.map((f) => f.axis),
@@ -115,14 +117,14 @@ describe('the plugin catalog of the site', () => {
         expect(
           risk.facts.filter((f) => f.movesGate).map((f) => f.axis),
           risk.id,
-        ).toEqual(tierFactsOf(risk.vector));
+        ).toEqual(risk.rowReason === null ? [] : [REASON_AXIS[risk.rowReason]]);
         expect(risk.patterns.length, risk.id).toBeGreaterThan(0);
       }
     }
     const github = byId('github');
     const deleteRelease = github.risks.find((r) => r.id === 'github.delete-release');
     expect(deleteRelease?.undo).toBe('impossible');
-    expect(deleteRelease?.tier).toBe(4);
+    expect(deleteRelease?.row).toBe(4);
     const retired = github.risks.find((r) => r.id === 'github.mint-install-token-push');
     expect(retired?.replacedBy).toBe('github.git-push');
   });
@@ -133,13 +135,18 @@ describe('the plugin catalog of the site', () => {
     for (const risk of ceilings) expect(risk.rateCeilingPerMinute, risk.id).toBeGreaterThan(0);
   });
 
-  it('gives an environment-scoped permission one variant per environment, with its own word and tier', () => {
+  it('gives an environment-scoped permission one variant per environment, with its own word and row', () => {
     const deploy = byId('railway').risks.find((r) => r.id === 'railway.deploy');
     expect(deploy?.envVariants.map((v) => v.env)).toEqual(['staging', 'preview', 'dev', 'prod']);
     const staging = deploy?.envVariants.find((v) => v.env === 'staging');
     const prod = deploy?.envVariants.find((v) => v.env === 'prod');
-    expect(staging).toMatchObject({ undo: 'easy', tier: 1, acceptable: true });
-    expect(prod).toMatchObject({ undo: 'costly', tier: 3, acceptable: true });
+    expect(staging).toMatchObject({
+      undo: 'easy',
+      row: 2,
+      rowReason: 'moderate-cost',
+      acceptable: true,
+    });
+    expect(prod).toMatchObject({ undo: 'costly', row: 3, acceptable: true });
     expect(prod?.vector.visibility).toBe('public');
 
     const entry = byId('railway')
@@ -147,7 +154,8 @@ describe('the plugin catalog of the site', () => {
       ?.entries.find((e) => e.riskId === 'railway.deploy');
     const careful = (env: string) =>
       entry?.envLevels.find((row) => row.env === env)?.levels.careful.gate;
-    expect(careful('staging')).toBe('auto');
+    // A deploy spends compute: it asks first at Careful in every environment (2026-11-13).
+    expect(careful('staging')).toBe('approval');
     expect(careful('prod')).toBe('approval');
   });
 
@@ -168,7 +176,7 @@ describe('the plugin catalog of the site', () => {
               level,
               risk.rateCeilingPerMinute,
             );
-            const gate = TRUST_LEVEL_GATES[level][risk.tier];
+            const gate = TRUST_LEVEL_GATES[level][risk.row];
             expect(entry.levels[level], `${entry.riskId} ${level}`).toEqual({
               gate,
               gateWord: gate === null ? 'off' : gateWordOf(gate),
@@ -320,7 +328,7 @@ describe('the plugin catalog of the site', () => {
           const base = risks.get(riskId.replace(/\[[^\]]*\]/, ''));
           if (base === undefined) throw new Error(`${where}: ${riskId}`);
           if (base.envVariants.length === 0) {
-            expect(gate, `${where} ${riskId}`).toBe(TRUST_LEVEL_GATES.careful[base.tier]);
+            expect(gate, `${where} ${riskId}`).toBe(TRUST_LEVEL_GATES.careful[base.row]);
           }
         }
         const gates = example.atCareful.gates.map((g) => g.gate);

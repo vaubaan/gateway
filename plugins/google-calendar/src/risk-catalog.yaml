@@ -29,9 +29,11 @@
 # macro-action changed.
 # catalog_version 5 (2026-11-05) : a narrative per macro-action (spec §4.6) ;
 # no risk, pattern or macro-action changed.
+# catalog_version 6 (2026-11-13) : the persistence axis is retired (spec §4.2) ;
+# no risk, pattern or macro-action changed.
 provider: google-calendar
-catalog_version: 5
-catalog_date: 2026-11-05
+catalog_version: 6
+catalog_date: 2026-11-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -48,8 +50,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: google-calendar.event-read
     label: 'Read events (titles, times, places, guests, descriptions)'
     reason: >-
@@ -64,8 +64,6 @@ risks:
       data: pii
       cost: free
       visibility: internal
-      persistence: stateless
-
   - id: google-calendar.free-busy-read
     label: 'Read when people are free or busy'
     reason: >-
@@ -79,8 +77,6 @@ risks:
       data: metadata
       cost: free
       visibility: internal
-      persistence: stateless
-
   # ─── WRITES — EVENTS ───────────────────────────────────────────────────
 
   - id: google-calendar.event-create
@@ -96,8 +92,6 @@ risks:
       data: data
       cost: free
       visibility: internal
-      persistence: session
-
   - id: google-calendar.event-change
     label: 'Change events (time, title, description, place, guests)'
     reason: >-
@@ -111,8 +105,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: google-calendar.event-delete
     label: 'Delete events'
     reason: >-
@@ -127,8 +119,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: google-calendar.event-respond
     label: 'Answer invitations (accept, maybe, decline)'
     reason: >-
@@ -142,8 +132,6 @@ risks:
       data: metadata
       cost: free
       visibility: team
-      persistence: session
-
   # ─── WRITES — WHO IS REACHED ───────────────────────────────────────────
 
   - id: google-calendar.invite-internal
@@ -160,8 +148,6 @@ risks:
       data: data
       cost: free
       visibility: team
-      persistence: session
-
   - id: google-calendar.invite-external
     label: 'Invite people outside the company'
     reason: >-
@@ -176,8 +162,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
   - id: google-calendar.notify-guests
     label: 'Let Google email the guests about a change or a cancellation'
     reason: >-
@@ -193,8 +177,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
   # ─── FALLBACK (required) ───────────────────────────────────────────────
 
   - id: google-calendar.uncategorized-write
@@ -211,8 +193,6 @@ risks:
       data: data
       cost: free
       visibility: public
-      persistence: session
-
 # Macro-actions (ADR macro-actions-and-trust-levels-prefill-the-policy) : what a
 # mission creator ticks, each at a trust level. Every entry but the fallback
 # belongs to exactly one, with its base budget (the trust level multiplies it ×1,

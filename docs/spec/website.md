@@ -61,21 +61,22 @@ upgrade, retention, telemetry), known limitations.
 
 Each shipped plugin has a page generated from its folder; a plugin is listed because it exists in
 the repository. The page shows how the service is modelled, in the gateway's own words and display
-codes ([style guide](./style-guide.md) §5: gate mark, risk word, the six facts, identifier, tag),
-along three dimensions: **risk** (six facts per permission, summed into one word), the
+codes ([style guide](./style-guide.md) §5: gate mark, row word, the five facts, identifier, tag),
+along three dimensions: **risk** (the row of each permission, read from five facts by the decision
+tree of [gateway-risk-model](./gateway-risk-model.md) §4.6), the
 **macro-actions** (the verbs of the service) and **trust** (the three levels). In order:
 
 1. **Opening** — the service, its version, the counts (permissions, macro-actions, tools, gateways
    running it), the verbs in one sentence built from the macro-action labels, and the three
    dimensions in a few lines.
-2. **The map** — every permission placed by macro-action (columns) and by its undo fact (rows:
-   impossible, costly, easy but sensitive, easy), tinted by its risk word; each row says what the
-   trust levels do with it. A reading sentence is computed from the counts. The page never says
-   "tier": the undo words carry that meaning.
+2. **The map** — every permission placed by macro-action (columns) and by its row (Cannot be
+   repaired, Repairable at a price, Repairable worth a look, Harmless), tinted by its row; each
+   row says what the trust levels do with it. A reading sentence is computed from the counts. The
+   page never says "tier", and prints no severity word.
 3. **One section per macro-action**, in catalog order: its narrative
    ([gateway-risk-model](./gateway-risk-model.md) §4.6), then a table of its permissions against
-   the trust levels — label, id, reason, the six facts in the gateway's words with the fact that
-   moves the gate tinted, the risk word, and per trust level the gate and the quota, written for a
+   the trust levels — label, id, reason, the five facts in the gateway's words with the fact that
+   decided the row tinted, the row word, and per trust level the gate and the quota, written for a
    day, the default period; the page says a mission's period may differ. Rate ceilings are a note.
    An environment-scoped permission is one line per environment, tagged. Beside the table, the
    macro-action's own column of the map.
@@ -112,9 +113,9 @@ along three dimensions: **risk** (six facts per permission, summed into one word
    health (§2.4), the links: connect, handbook, catalog as code, Markdown twin.
 
 Everything on the page comes from the plugin's declaration, its catalog, `@vaubaan/policy-engine`
-(tier, gates, budgets, severity) and the collector; the site restates nothing of the gateway by
+(rows and reasons, gates, budgets) and the collector; the site restates nothing of the gateway by
 hand (§1.1, no second source of truth; the [website handbook](../handbook/website.md) names the
-imports). The Markdown twin keeps the same order; the map becomes a list by undo row.
+imports). The Markdown twin keeps the same order; the map becomes a list by row.
 
 ### 2.4 Plugin health — `/plugins/health` and on each plugin page
 
@@ -166,7 +167,11 @@ A model must find the site, quote it correctly and act on it without a browser.
 - **Markdown beside every page** at its path + `.md` and on `Accept: text/markdown`, from the same
   source; `/llms.txt` (index) and `/llms-full.txt` (user docs, plugins, trust center);
   `/plugins.json` with the plugin pages' data. Whatever repeats a plugin page carries the same
-  health figures as the page, refreshed with it (§2.4).
+  health figures as the page, refreshed with it (§2.4). Each permission of `/plugins.json` carries
+  its `row` (1 to 4, [gateway-risk-model](./gateway-risk-model.md) §4.6) and `row_reason` (the
+  branch of the tree, `null` in row 1), per environment too (`env_variants`); its `vector` has the
+  five facts. Since 2026-11-13 there is no `severity` and no `tier` field, and the worked mission's
+  lines and left-out risks carry `row` instead of `tier`.
 - **Answers first**: each page opens with a quotable defining sentence; a "How Vaubaan compares"
   page and a Q&A block on the landing.
 - **Structured data** on the landing, docs pages and Q&A; a sitemap with real dates; canonical URLs.

@@ -116,15 +116,16 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(submit).toHaveText('Give access · 0 permissions');
   await expect(submit).toBeDisabled();
   await expect(dialog.getByLabel(`Give ${READ_CODE}`)).toBeVisible();
-  // What it allows in words, its id, its severity; the reason and the six words behind "why?".
+  // What it allows in words, its id, its row; the reason behind "why?" (the five facts are the
+  // Reference's alone).
   const readCode = dialog.locator(`tr[data-permission="${READ_CODE}"]`);
   await expect(readCode).toContainText('Read code, branches, commits, files');
   await expect(readCode).toContainText(READ_CODE);
-  await expect(readCode).toContainText('low');
+  await expect(readCode).toContainText('Harmless');
   await expect(dialog.getByText('Reads may leak secrets')).toBeHidden();
   await readCode.getByRole('button', { name: 'why?' }).click();
   await expect(dialog.getByText('Reads may leak secrets')).toBeVisible();
-  await expect(dialog.getByText('Blast radius').first()).toBeVisible();
+  await expect(dialog.getByText('Blast radius')).toHaveCount(0);
   await expect(dialog.getByRole('link', { name: 'Full entry in the reference' })).toHaveAttribute(
     'href',
     `/reference/github#risk-${READ_CODE}`,

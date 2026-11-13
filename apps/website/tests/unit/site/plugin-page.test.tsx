@@ -9,7 +9,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { GATE_WORDS, TRUST_LEVEL_LABELS, UNDO_ROW_WORDS, WHY_VALUES } from '@vaubaan/policy-engine';
+import { GATE_WORDS, ROW_WORDS, TRUST_LEVEL_LABELS, WHY_VALUES } from '@vaubaan/policy-engine';
 
 import { PluginPageView } from '../../../src/components/plugin/PluginPage';
 import { unreadSnapshot } from '../../../src/content/health';
@@ -75,14 +75,14 @@ function words(fragment: string): string {
 }
 
 describe('the map', () => {
-  it('has the four undo rows, worst first, named by the policy engine', () => {
+  it('has the four rows, worst first, named by the policy engine', () => {
     const map = mapOf(byId('github'));
-    expect(map.rows.map((r) => r.word)).toEqual(MAP_ROWS.map((row) => UNDO_ROW_WORDS[row]));
-    expect(map.rows[0]?.word).toBe(WHY_VALUES.reversibility.irreversible);
-    expect(map.rows[3]?.word).toBe(WHY_VALUES.reversibility.reversible);
+    expect(map.rows.map((r) => r.word)).toEqual(MAP_ROWS.map((row) => ROW_WORDS[row]));
+    expect(map.rows[0]?.word).toBe('Cannot be repaired');
+    expect(map.rows[3]?.word).toBe('Harmless');
   });
 
-  it('places each GitHub permission by macro-action and undo, tinted by its risk word', () => {
+  it('places each GitHub permission by macro-action and row, tinted by its row', () => {
     const map = mapOf(byId('github'));
     expect(map.columns.map((c) => c.id)).toEqual([
       'read',
@@ -96,7 +96,9 @@ describe('the map', () => {
       [];
     expect(cell(4, 'ship').map((b) => b.riskId)).toEqual(['github.delete-release']);
     expect(cell(2, 'read').map((b) => b.riskId)).toEqual(['github.search-global']);
-    expect(cell(3, 'administer').find((b) => b.riskId.includes('workflow'))?.severity).toBe('high');
+    expect(cell(3, 'administer').find((b) => b.riskId.includes('workflow'))?.rowReason).toBe(
+      'costly-to-undo',
+    );
     expect(map.rows.find((r) => r.row === 2)?.sensitiveBy).toEqual([WHY_VALUES.blast.account]);
     // The fallback sits in "Anything else", dashed, and is not counted.
     const fallback = cell(3, 'anything-else');
@@ -124,7 +126,7 @@ describe('the map', () => {
 
   it('computes the reading sentence from its counts', () => {
     expect(mapOf(byId('github')).reading).toBe(
-      `Of the 17 permissions, undo is easy for 8; easy, but sensitive for 1; costly for 7; impossible for 1. ` +
+      `Of the 17 permissions: harmless: 8; repairable, worth a look: 1; repairable, at a price: 7; cannot be repaired: 1. ` +
         `Careful: runs freely 8, ask me first 8, not included 1; ` +
         `Trusting: runs freely 9, ask me first 8; Autonomous: runs freely 16, ask me first 1.`,
     );
@@ -141,8 +143,8 @@ describe('the map', () => {
       for (const env of box.envs) {
         const variant = risk?.envVariants.find((v) => v.env === env);
         expect(variant?.acceptable, `${box.riskId}[${env}]`).toBe(true);
-        expect(variant?.tier, `${box.riskId}[${env}]`).toBe(box.row);
-        expect(variant?.severity, `${box.riskId}[${env}]`).toBe(box.severity);
+        expect(variant?.row, `${box.riskId}[${env}]`).toBe(box.row);
+        expect(variant?.rowReason, `${box.riskId}[${env}]`).toBe(box.rowReason);
       }
     }
   });
@@ -202,8 +204,16 @@ describe('the mission, worked out', () => {
     expect(mission.notTicked).toContain('Ship and Administer');
   });
 
-  it('says so when Careful leaves everything out (Context7)', () => {
-    const mission = missionOf(byId('context7'));
+  it('says so when Careful leaves everything out', () => {
+    // Context7's documentation read runs freely at Careful since its vector was corrected
+    // (2026-11-13); a mission whose every line is left out is drawn from it.
+    const context7 = byId('context7');
+    expect(missionOf(context7).nothingRuns).toBe(false);
+    const ids = [...context7.workedMission.can, ...context7.workedMission.asksFirst];
+    const mission = missionOf({
+      ...context7,
+      workedMission: { ...context7.workedMission, can: [], asksFirst: [], cannot: ids },
+    });
     expect(mission.nothingRuns).toBe(true);
     expect(mission.groups.find((g) => g.key === 'cannot')?.items.length).toBeGreaterThan(0);
     expect(mission.intro).toContain('can do nothing');
@@ -268,7 +278,7 @@ describe('the rendered page', () => {
     ids.delete('github.uncategorized-write');
     expect(ids.size).toBe(17);
     expect(map).toContain('perm-fallback');
-    expect(map).toMatch(/perm perm-high[^>]*data-risk-id="github.workflow-write-via-file"/);
+    expect(map).toMatch(/perm perm-row-3[^>]*data-risk-id="github.workflow-write-via-file"/);
 
     const connect = words(section(page, 'connect'));
     expect(section(page, 'connect')).toContain('data-client-source="pasted-key"');
@@ -322,7 +332,7 @@ describe('the Markdown twin', () => {
     ]);
     const map = md.slice(md.indexOf('## The map'), md.indexOf('### Read'));
     const rows = [...map.matchAll(/^- \*\*(.+?)\*\*/gm)].map((m) => m[1]?.toLowerCase());
-    expect(rows).toEqual(MAP_ROWS.map((row) => UNDO_ROW_WORDS[row]));
+    expect(rows).toEqual(MAP_ROWS.map((row) => ROW_WORDS[row].toLowerCase()));
     expect(map).toContain('`github.delete-release`');
   });
 

@@ -14,11 +14,11 @@ import {
   DEFAULT_TRUST_LEVEL,
   expandAtTrustLevel,
   isTrustLevel,
-  tierOf,
+  rowOf,
   TRUST_LEVELS,
   type TrustLevelCandidate,
   type TrustLevelLine,
-  type Tier,
+  type Row,
   type TrustLevel,
 } from '@vaubaan/policy-engine';
 import type { Gate, MacroAction, RiskId } from '@vaubaan/shared';
@@ -39,8 +39,8 @@ export { macroActionsOf } from '@vaubaan/policy-engine';
 /** One macro-action at one trust level, on this connection with these resources. */
 export interface MacroActionExpansion {
   readonly lines: readonly TrustLevelLine[];
-  /** Risks the trust level leaves out (tier 4 at Careful). */
-  readonly left_out: readonly { readonly risk_id: RiskId; readonly tier: Tier }[];
+  /** Risks the trust level leaves out (row 4 at Careful). */
+  readonly left_out: readonly { readonly risk_id: RiskId; readonly row: Row }[];
   /** Rows of the macro-action this creator cannot get here: outside the authority, or no resource carries the environment. */
   readonly unavailable: readonly CatalogRisk[];
 }
@@ -150,7 +150,7 @@ export function macroActionOfRisk(
 /**
  * The line a risk ticked by hand starts with: its macro-action's base budget
  * at the trust level that macro-action has (Careful when it is not ticked), and the
- * gate that trust level gives its tier; a risk the trust level leaves out asks first.
+ * gate that trust level gives its row; a risk the trust level leaves out asks first.
  * `null` for a risk in no macro-action.
  */
 export function defaultLineOf(
@@ -203,15 +203,12 @@ export function trustLevelsOf(
   );
 }
 
-/** The highest tier among lines, or `null` for none. */
-export function highestTier(lines: readonly Pick<CatalogRisk, 'vector'>[]): Tier | null {
-  let highest: Tier | null = null;
-  for (const line of lines) {
-    const tier = tierOf(line.vector);
-    if (highest === null || tier > highest) highest = tier;
-  }
+/** The highest row among lines, or `null` for none. */
+export function highestRow(lines: readonly Pick<CatalogRisk, 'row'>[]): Row | null {
+  let highest: Row | null = null;
+  for (const line of lines) if (highest === null || line.row > highest) highest = line.row;
   return highest;
 }
 
-export { TRUST_LEVEL_BUDGET_FACTOR, TRUST_LEVEL_GATES, DEFAULT_TRUST_LEVEL, tierOf, TRUST_LEVELS };
-export type { Tier, TrustLevel };
+export { TRUST_LEVEL_BUDGET_FACTOR, TRUST_LEVEL_GATES, DEFAULT_TRUST_LEVEL, rowOf, TRUST_LEVELS };
+export type { Row, TrustLevel };

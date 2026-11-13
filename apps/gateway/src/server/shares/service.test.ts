@@ -334,7 +334,7 @@ describe('ShareService', () => {
         [READ, 'Read items', true],
         ['depot.retired', 'depot.retired', false],
       ]);
-      expect(received?.risks.map((risk) => risk.level === null)).toEqual([false, true]);
+      expect(received?.risks.map((risk) => risk.row === null)).toEqual([false, true]);
       // A dropped risk is not part of the authority any more.
       const [context] = await rig.root.missions.service.issuanceContext(rig.bob);
       expect(context?.authority).toEqual([READ]);

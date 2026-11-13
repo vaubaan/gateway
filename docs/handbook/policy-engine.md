@@ -4,7 +4,7 @@ tracks:
   - packages/policy-engine/src/
   - packages/shared/src/wildcard.ts
   - packages/policy-engine/package.json
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-13
 ---
 
 # Policy engine — handbook
@@ -30,17 +30,20 @@ last_reviewed: 2026-11-05
 - **The barrel names the public API** (`src/index.ts`, no `export *`, **[inv: named-package-barrels]**): a name the other packages need is added there on purpose; the package's own tests import from the module.
 - Values come only from the browser-safe subpaths `@vaubaan/shared/risk-id` and `/domain`: the
   issuance UI bundles this package and the barrel pulls in `node:crypto`.
-- Severity (`severity.ts`) orders, never decides: `severityOf` is the score that sorts permissions,
-  `severityLevel` its word. The gateway's interface and the site call this one function; neither
-  restates it. `SEVERITY_RANKS` restates `RISK_VECTOR_AXES` (server-only barrel); a test asserts
-  they agree.
-- The words a person reads of the risk model live in `risk-words.ts` (the six facts and their
-  values, the gate words, Can / Asks first / Cannot, the trust levels, `UNDO_ROW_WORDS` — the
-  rows of a plugin map, keyed by tier, the site's only so far): the gateway's
-  `lib/vocabulary.ts` re-exports them, the public site imports them; `sources-agree.test.ts`
-  (website) fails when either holds a copy. `tierFactsOf` (beside `tierOf`, which it must follow
-  when the tier rule changes) names the facts that move the gate; `macroActionsOf` adds "Anything
-  else" for the creation form, the management door and the site alike.
+- **The row is the one measure of a risk** (`trust-level.ts`, spec gateway-risk-model §4.6):
+  `reasonOf` walks the decision tree in order and returns the first branch that answers (`null` in
+  row 1); `rowOf` is `ROW_OF_REASON` of it, so the two can never disagree, and `REASON_AXIS` names
+  the fact each branch read (what the site tints). No score, no sum: there is no severity
+  function; an ordering is "row, worst first, then catalog order". A test walks all 432 vectors
+  (every reason reached, a harder fact never lowers the row). Changing the tree changes the
+  pre-filled gates of shipped catalogs: list the moved lines in the CHANGELOG.
+- The words a person reads of the risk model live in `risk-words.ts` (`ROW_WORDS`, `REASON_WORDS`,
+  `ROW_LABEL`, `ROW_GATE_SENTENCES`, `TREE_LEGEND`, the five facts and their values, the gate
+  words, Can / Asks first / Cannot, the trust levels): the gateway's `lib/vocabulary.ts`
+  re-exports them, the public site imports them; `sources-agree.test.ts` (website) fails when
+  either holds a copy. `ROW_GATE_SENTENCES` is literal: a test checks it against
+  `TRUST_LEVEL_GATES`. `macroActionsOf` adds "Anything else" for the creation form, the
+  management door and the site alike.
 - One rule each, called by every consumer: `isAcceptableInEnv` (issuance, runtime, SDK macro-action
   checks, the store's `RegistryCatalogIndex`), `budgetIssues` (SDK loader, `macroActionIssues`,
   issuance preview). Never re-implement them.

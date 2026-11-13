@@ -76,7 +76,12 @@ One word per thing; a person never learns the protocol's word. The word list is
   the protocol's.
 - **Roles are said in sentences** ("you own it with Platform", "waiting for Alice's yes"); never
   "principal" or "beneficiary".
-- **The six risk axes are words**, behind "why?": Undo, Blast radius, Data, Cost, Visible to, Lasts.
+- **Risk is one concept: the row and its reason.** A permission is printed with the name of its row
+  — Harmless, Repairable, worth a look, Repairable, at a price, Cannot be repaired — and, in quiet
+  type where it helps, the reason that put it there (personal data, costly to undo…). No severity
+  word (low, medium, high, critical), no score, never the word "tier" (risk model §4.6).
+- **The five facts are words**, behind "why?" in the Reference only: Undo, Blast radius, Data,
+  Cost, Visible to.
 - **A state is a word**, never colour alone; the normal state is plain or unsaid.
 - **Routes follow the words**; an older path answers with a permanent redirect; a protocol path
   keeps its name.
@@ -142,7 +147,9 @@ guide and the design system are extended, then the screen is built. Rules a comp
   fill; a near-black brand takes the ink in the dark theme; never a status; two letters of its name
   on a hue without an icon.
 - **Identifier** — mono, as the protocol spells it; wraps between words, never inside one.
-- **Permission row** — what it allows in words, its id, one severity word, limits, gate, and "why?".
+- **Permission row** — what it allows in words, its id, the name of its row with the reason in quiet
+  type, limits, gate, and "why?". Harmless is plain; rows 2 and above take a status colour, row 4
+  in the strong weight. Lists of permissions are ordered by row, the hardest to repair first.
 - **Can / Asks first / Cannot** — a mission's summary; says how many permissions it sums up; never
   replaces the explicit list.
 - **Dialog** — one question, **the consequence stated before anything happens**, a button named

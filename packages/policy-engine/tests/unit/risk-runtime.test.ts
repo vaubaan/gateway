@@ -20,7 +20,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'stateless',
       },
     },
     {
@@ -34,7 +33,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
     {
@@ -48,7 +46,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'moderate',
         visibility: 'team',
-        persistence: 'session',
       },
     },
     {
@@ -62,7 +59,6 @@ const catalog: RiskCatalog = {
         data: 'data',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'session',
       },
     },
   ],
@@ -331,7 +327,6 @@ describe('evaluateCall — env-qualified subset check', () => {
           data: 'data',
           cost: 'moderate',
           visibility: 'internal',
-          persistence: 'session',
         },
         acceptable_in_envs: ['staging', 'prod'],
       },
@@ -451,7 +446,6 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
           data: 'secret',
           cost: 'moderate',
           visibility: 'internal',
-          persistence: 'posture',
         },
         vector_overrides: {
           prod: { reversibility: 'costly' },
@@ -468,7 +462,6 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
           data: 'data',
           cost: 'moderate',
           visibility: 'internal',
-          persistence: 'session',
         },
       },
     ],
@@ -545,7 +538,6 @@ describe('evaluateCall — env-scoped risk outside its acceptable envs', () => {
     data: 'data',
     cost: 'free',
     visibility: 'internal',
-    persistence: 'stateless',
   } as const;
   const acme: RiskCatalog = {
     provider: 'acme',

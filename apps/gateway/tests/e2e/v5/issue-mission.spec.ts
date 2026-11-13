@@ -523,7 +523,7 @@ test('the reference explains each service: permissions against the trust levels,
     'Autonomous',
   ]);
   await expect(page.getByTestId('trust-level-careful')).toHaveAttribute('title', /left out/);
-  // A costly write (tier 3): asks first until Autonomous, its limit ×1, ×3, ×10.
+  // A costly write (row 3): asks first until Autonomous, its limit ×1, ×3, ×10.
   const bulkCell = (trustLevel: string) =>
     page.getByTestId(`cell-${trustLevel}-supabase.bulk-row-write`);
   await expect(bulkCell('careful')).toContainText('staging');
@@ -532,7 +532,7 @@ test('the reference explains each service: permissions against the trust levels,
   await expect(bulkCell('trusting')).toContainText('150');
   await expect(bulkCell('autonomous')).toContainText('500');
   await expect(bulkCell('autonomous')).not.toContainText('asks first');
-  // An irreversible one (tier 4): left out at Careful, asks first above.
+  // An irreversible one (row 4): left out at Careful, asks first above.
   await expect(page.getByTestId('cell-careful-supabase.storage.bulk-object-write')).toContainText(
     'left out',
   );
@@ -607,14 +607,17 @@ test('the reference explains each service: permissions against the trust levels,
   const unfolded = page.locator('[id="risk-supabase.bulk-row-write-detail"]');
   await expect(unfolded).toContainText('once per environment');
   await expect(unfolded).toContainText('supabase[staging].bulk-row-write');
-  // The six words behind the severity, what it covers, and its line at each trust level.
+  // The five facts behind the row (the Reference alone prints them), what it covers, and
+  // its line at each trust level, named by its row.
   await expect(unfolded.getByText('Blast radius').first()).toBeVisible();
+  await expect(unfolded.getByText('Lasts')).toHaveCount(0);
   await expect(unfolded).toContainText('Write: project');
   await expect(unfolded).toContainText('supabase.project');
   await expect(unfolded).toContainText('Change data');
   await expect(unfolded).toContainText('Careful');
   await expect(unfolded).toContainText('Autonomous');
-  await expect(unfolded).toContainText('Tier 3');
+  await expect(unfolded).toContainText('Repairable, at a price');
+  await expect(unfolded).not.toContainText('Tier');
   await expect(unfolded).toContainText(/\d+\/min/);
   // The reader was on `auth`, which does not show this entry: its own part was opened.
   await expect(planes.getByRole('button', { name: 'db' })).toHaveAttribute('aria-pressed', 'true');

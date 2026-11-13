@@ -26,7 +26,8 @@ import {
   giveAccessLabel,
   holderWords,
   ownedBy,
-  tierWord,
+  ROW_WORDS,
+  REASON_WORDS,
   REFUSAL_WORDS,
   shortDate,
   stepsDone,
@@ -291,17 +292,15 @@ describe('the vocabulary', () => {
     expect(MISSION_STATES.waiting.tone).toBe('warn');
   });
 
-  it('labels the six axes of the risk model in words', () => {
+  it('labels the five facts of the risk model in words', () => {
     expect(WHY_ORDER.map((axis) => WHY_LABELS[axis])).toEqual([
       'Undo',
       'Blast radius',
       'Data',
       'Cost',
       'Visible to',
-      'Lasts',
     ]);
     expect(whyValue('blast', 'account')).toBe('whole account');
-    expect(whyValue('persistence', 'posture')).toBe('until reverted');
     // A value the catalog adds later is printed as it is, never dropped.
     expect(whyValue('data', 'something-new')).toBe('something-new');
   });
@@ -351,8 +350,9 @@ describe('the words of the accounts, reference, activity and settings pages', ()
     expect(shortDate('2025-09-02T08:00:00Z', now)).toBe('2 Sep 2025');
   });
 
-  it('names a tier, the retention of the record and the setup count', () => {
-    expect(tierWord(3)).toBe('Tier 3');
+  it('names a row and its reason, the retention of the record and the setup count', () => {
+    expect(ROW_WORDS[3]).toBe('Repairable, at a price');
+    expect(REASON_WORDS['personal-data']).toBe('personal data');
     expect(activityLede(90)).toBe(
       'Every call an agent made and every change a person made, kept 90 days. This is the audit record.',
     );

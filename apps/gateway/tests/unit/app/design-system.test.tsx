@@ -47,7 +47,7 @@ import {
   Section,
   serviceLetters,
   ServiceMark,
-  SeverityChip,
+  RowChip,
   Skeleton,
   StatusMark,
   SummaryLine,
@@ -287,13 +287,18 @@ describe('Rows', () => {
 });
 
 describe('marks', () => {
-  it('always carries its word: a status, an environment, a severity, a gate', () => {
+  it('always carries its word: a status, an environment, a row, a gate', () => {
     expect(text(renderToStaticMarkup(<StatusMark tone="bad">Limit reached</StatusMark>))).toBe(
       'Limit reached',
     );
     expect(text(renderToStaticMarkup(<EnvTag env="prod" />))).toBe('prod');
     expect(text(renderToStaticMarkup(<EnvTag env={null} />))).toBe('no label');
-    expect(renderToStaticMarkup(<SeverityChip level="high" />)).toContain('data-severity="high"');
+    expect(renderToStaticMarkup(<RowChip row={3} />)).toContain('data-row="3"');
+    expect(text(renderToStaticMarkup(<RowChip row={3} />))).toBe('Repairable, at a price');
+    expect(text(renderToStaticMarkup(<RowChip row={4} reason="irreversible" />))).toBe(
+      'Cannot be repaired irreversible',
+    );
+    expect(text(renderToStaticMarkup(<RowChip row={1} />))).toBe('Harmless');
     expect(text(renderToStaticMarkup(<GateMark gate="free" />))).toBe('runs freely');
     expect(text(renderToStaticMarkup(<GateMark gate="ask" />))).toBe('ask me first');
     expect(text(renderToStaticMarkup(<GateMark gate="off" />))).toBe('not included');
@@ -393,7 +398,8 @@ describe('PermissionRow', () => {
           <PermissionRow
             label="Write on main"
             id="github.merge-protected"
-            severity="high"
+            row={3}
+            rowReason="costly-to-undo"
             included={included}
             perDay={3000}
             perMinute={5}
@@ -409,18 +415,20 @@ describe('PermissionRow', () => {
       </PermissionTable>,
     );
 
-  it('shows the label, the id in mono, the severity, the limits and the gate', () => {
+  it('shows the label, the id in mono, the row and its reason, the limits and the gate', () => {
     const html = row('read');
     expect(html).toContain('<caption class="vbn-sr-only">Permissions on GitHub</caption>');
     expect(html).toContain('data-permission="github.merge-protected"');
     expect(html).toMatch(/<code[^>]*>github\.merge-protected<\/code>/);
-    expect(html).toContain('data-severity="high"');
+    expect(html).toContain('data-row="3"');
+    expect(text(html)).toContain('Repairable, at a price');
+    expect(text(html)).toContain('costly to undo');
     expect(html).toContain('3,000');
     expect(text(html)).toContain('ask me first');
     expect(html.match(/<th scope="col"/g)).toHaveLength(5);
   });
 
-  it('keeps "why?" one click away: closed, with the reason, the six words and the reference behind it', () => {
+  it('keeps "why?" one click away: closed, with the reason, the facts (Reference) and the reference behind it', () => {
     const html = row('read');
     expect(html).toMatch(/<button[^>]*aria-expanded="false"[^>]*>why\?<\/button>/);
     const panel = /aria-controls="([^"]+)"/.exec(html)?.[1];
@@ -437,7 +445,7 @@ describe('PermissionRow', () => {
     expect(row('usage')).toContain('Used today');
     const pick = row('pick');
     expect(pick.match(/<th scope="col"/g)).toHaveLength(3);
-    // Without a gate column, "why?" sits beside the severity.
+    // Without a gate column, "why?" sits beside the row.
     expect(pick).toContain('why?');
   });
 

@@ -35,9 +35,8 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.severityCell {
-  width: 84px;
-  white-space: nowrap;
+.rowCell {
+  width: 170px;
 }
 .usageCell {
   width: 230px;
@@ -100,7 +99,7 @@
 .why[aria-expanded='true'] {
   font-weight: var(--weight-strong);
 }
-.severityCell .why {
+.rowCell .why {
   margin-left: var(--space-2);
 }
 

@@ -9,7 +9,7 @@
  * client component.
  */
 import type { ResourceNoun } from '@vaubaan/plugin-sdk';
-import type { SeverityLevel, TrustLevel } from '@vaubaan/policy-engine';
+import type { Reason, Row, TrustLevel } from '@vaubaan/policy-engine';
 import type {
   Gate,
   MacroAction,
@@ -166,8 +166,8 @@ export interface MissionDraft {
 // Issuance context — what the creator may build a mission from
 // ─────────────────────────────────────────────────────────────────────────────
 
-// The four severity words are the policy engine's (one function for the gateway and the site).
-export { SEVERITY_LEVELS, type SeverityLevel } from '@vaubaan/policy-engine';
+// The four rows and the reasons are the policy engine's (one tree for the gateway and the site).
+export type { Reason, Row } from '@vaubaan/policy-engine';
 
 /**
  * What an entry does, in three words a creator sorts by: it only reads, it
@@ -186,12 +186,13 @@ export interface CatalogRisk {
   readonly env: string | null;
   readonly label: string;
   readonly reason: string;
-  /** The six-axis profile, resolved for `env` (risk model §4.2): it explains, it decides nothing. */
+  /** The five facts, resolved for `env` (risk model §4.2): what the row is read from. */
   readonly vector: RiskVector;
   readonly kind: RiskKind;
-  /** Ordering signal derived from the 6-D vector; never a gate (risk model §3). */
-  readonly severity: number;
-  readonly level: SeverityLevel;
+  /** The row of the decision tree (risk model §4.6): orders, and pre-fills a trust level's gate. */
+  readonly row: Row;
+  /** The branch of the tree that decided the row; `null` in row 1. */
+  readonly row_reason: Reason | null;
   /** The catalog's catch-all (`<provider>.uncategorized-write`); only in "Anything else". */
   readonly fallback: boolean;
   readonly deprecated: boolean;
@@ -352,7 +353,7 @@ export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
  *
  * `everything-i-hold-expanded` is of another kind: it says what the built-in
  * expansion `everything-i-hold` wrote out on a connection — how many explicit
- * lines, the most severe, the critical ones running freely and the fallback,
+ * lines, the hardest to repair, those that cannot be repaired running freely and the fallback,
  * whose ids are its `risk_ids` (ADR preset-everything-i-hold-expands-explicitly).
  */
 export interface PreviewNotice {
@@ -380,7 +381,7 @@ export interface UnresolvableEntry {
 /**
  * A risk the trust levels or `everything-i-hold` would have written that the policy
  * leaves out: outside the creator's authority, no selected resource in its
- * environment, or (`trust-level`) a tier the trust level does not accept.
+ * environment, or (`trust-level`) a row the trust level does not accept.
  */
 export interface LeftOutEntry {
   readonly risk_id: RiskId;

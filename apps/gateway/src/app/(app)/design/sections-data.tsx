@@ -413,7 +413,7 @@ function EditorSpecimen({ theme }: { theme: string }) {
         <PermissionRow
           label="Read code, branches, commits, files"
           id="github.read-code"
-          severity="low"
+          row={1}
           select={<Checkbox defaultChecked aria-label="Include: Read code" />}
           perDay={<Input size="sm" mono defaultValue="10,000" aria-label="Per day: Read code" />}
           perMinute={<Input size="sm" mono defaultValue="240" aria-label="Per minute: Read code" />}
@@ -429,7 +429,8 @@ function EditorSpecimen({ theme }: { theme: string }) {
         <PermissionRow
           label="Modify a GitHub Actions workflow file"
           id="github.workflow-write-via-file"
-          severity="high"
+          row={3}
+          rowReason="costly-to-undo"
           included={included}
           select={
             <Checkbox
@@ -454,14 +455,6 @@ function EditorSpecimen({ theme }: { theme: string }) {
           why={{
             reason:
               'The CI file defines what runs with the repository’s secrets; a modified workflow can leak them on the next push.',
-            cells: {
-              reversibility: 'costly',
-              blast: 'account',
-              data: 'secret',
-              cost: 'free',
-              visibility: 'internal',
-              persistence: 'posture',
-            },
             referenceHref: '#permission',
             tools: ['push_files', 'create_or_update_file'],
           }}
@@ -469,7 +462,8 @@ function EditorSpecimen({ theme }: { theme: string }) {
         <PermissionRow
           label="Modify branch protection"
           id="github.branch-protection-write"
-          severity="high"
+          row={3}
+          rowReason="costly-to-undo"
           included={false}
           select={<Checkbox aria-label="Include: Modify branch protection" />}
           why={{ reason: 'Removes the guard on main itself.' }}
@@ -485,11 +479,11 @@ export function PermissionSections() {
       <GallerySection
         id="permission"
         title="Permission row"
-        rule="What an agent may do, in words; the id in mono under it; one severity word; limits per day and per minute; runs freely or ask me first; and why, one click away. The list is always explicit."
+        rule="What an agent may do, in words; the id in mono under it; its row in words and the reason in quiet type; limits per day and per minute; runs freely or ask me first; and why, one click away. The list is always explicit."
       >
         <Specimen
           name="Editor"
-          note="tick to include; the limit and the gate appear; “why?” unfolds the six words"
+          note="tick to include; the limit and the gate appear; “why?” unfolds the reason"
         >
           {(theme) => <EditorSpecimen theme={theme} />}
         </Specimen>
@@ -500,7 +494,7 @@ export function PermissionSections() {
                 <PermissionRow
                   label="Open a pull request"
                   id="github.create-pr"
-                  severity="low"
+                  row={1}
                   perDay={200}
                   perMinute={10}
                   gate="free"
@@ -509,7 +503,8 @@ export function PermissionSections() {
                 <PermissionRow
                   label="Write on main, master, release-* (merge or direct commit)"
                   id="github.merge-protected"
-                  severity="high"
+                  row={3}
+                  rowReason="costly-to-undo"
                   perDay={50}
                   perMinute={5}
                   gate="ask"
@@ -523,7 +518,8 @@ export function PermissionSections() {
                   label="Apply a migration"
                   tag={<EnvTag env="staging" />}
                   id="supabase[staging].migration-write"
-                  severity="medium"
+                  row={2}
+                  rowReason="personal-data"
                   perDay={500}
                   perMinute={30}
                   gate="free"
@@ -538,21 +534,22 @@ export function PermissionSections() {
               <PermissionGroup title="GitHub · acme" note="7 used of 12">
                 <PermissionRow
                   label="Create or modify branches under feature/*, fix/*, chore/*"
-                  severity="low"
+                  row={1}
                   usage={<Meter used={1860} limit={3000} threshold={0} />}
                   perMinute={60}
                   gate="free"
                 />
                 <PermissionRow
                   label="Read code, branches, commits, files"
-                  severity="low"
+                  row={1}
                   usage={<Meter used={5000} limit={5000} threshold={0} />}
                   perMinute={240}
                   gate="free"
                 />
                 <PermissionRow
                   label="Write on main, master, release-*"
-                  severity="high"
+                  row={3}
+                  rowReason="costly-to-undo"
                   usage={<Meter used={1} limit={50} threshold={0} />}
                   perMinute={5}
                   gate="ask"
@@ -561,7 +558,7 @@ export function PermissionSections() {
             </PermissionTable>
           )}
         </Specimen>
-        <Specimen name="Pick" note="the ceiling given with an access: tick, permission, severity">
+        <Specimen name="Pick" note="the ceiling given with an access: tick, permission, row">
           {(theme) => (
             <PermissionTable variant="pick" caption={`Give access to GitHub · acme (${theme})`}>
               <PermissionGroup
@@ -571,12 +568,12 @@ export function PermissionSections() {
               >
                 <PermissionRow
                   label="Read code, branches, commits, files"
-                  severity="low"
+                  row={1}
                   select={<Checkbox defaultChecked aria-label="Read code" />}
                 />
                 <PermissionRow
                   label="Read PRs, issues, releases, workflows"
-                  severity="low"
+                  row={1}
                   select={<Checkbox defaultChecked aria-label="Read PRs" />}
                   why={{ reason: 'Metadata only; shows who works on what.' }}
                 />
@@ -588,7 +585,8 @@ export function PermissionSections() {
               >
                 <PermissionRow
                   label="Create a release"
-                  severity="medium"
+                  row={2}
+                  rowReason="personal-data"
                   included={false}
                   select={<Checkbox aria-label="Create a release" />}
                 />

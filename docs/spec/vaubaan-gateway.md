@@ -14,6 +14,10 @@ status: draft
 > English names before publication, a breaking rename in the alpha window (owner decision,
 > recorded in the History of
 > [macro-actions-and-trust-levels-prefill-the-policy](../decisions/macro-actions-and-trust-levels-prefill-the-policy.md)).
+>
+> 2026-11-13 — the tier became the row of a decision tree over five facts, and the severity word
+> left the product: a permission is shown with its row and the reason of the row
+> ([gateway-risk-model](./gateway-risk-model.md) §4.6, same ADR, amendment 2026-11-13).
 
 ## 0. Vocabulary
 
@@ -142,7 +146,7 @@ callback registered at a provider).
   "Change", "Administer"): a group of `RiskId`s of one catalog, each with a base budget
   ([gateway-risk-model](./gateway-risk-model.md) §4.6). Every connection also offers "Anything else"
   (the fallback). A creator ticks macro-actions and sets each to a **trust level** (Careful, Trusting,
-  Autonomous), which pre-fills the gate and budget of each of its risks from the risk's tier. It
+  Autonomous), which pre-fills the gate and budget of each of its risks from the risk's row. It
   grants nothing, is bounded by the creator's authority, and only the explicit lines it wrote reach
   the token. Every connection also offers the built-in expansion **"Everything I hold on this
   account"** (`everything-i-hold`, §3.2).
@@ -378,16 +382,16 @@ a mission whose accepted risk has no resolved budget.
   creator's authority, then adjusted risk by risk. The persisted policy never references a
   macro-action or a trust level, so a changed catalog alters no mission; the trust levels are recorded with the
   mission only to redraw the form. The interface shows what each macro-action yields at its trust level
-  (how many run freely, ask first, are left out) and the account's highest tier.
+  (how many run freely, ask first, are left out) and the account's highest row.
 - **`everything-i-hold`**
   ([preset-everything-i-hold-expands-explicitly](../decisions/preset-everything-i-hold-expands-explicitly.md)).
   At preview and issuance it expands to one line per non-deprecated `RiskId` the creator's authority
   covers now and the selected resources can reach (an environment-qualified id only when a selected
   resource carries that label, own or default, or the plugin derives the environment), the fallback
   included and named. Each line gets the catalog's rate ceiling (else its base budget's rate at
-  Autonomous, else a value by severity), its base budget's quota at Autonomous (else by severity) sized
-  for a daily period, and gate `auto`. The preview states the line count, the most severe,
-  which critical lines run freely, and the fallback; no gate is added silently.
+  Autonomous, else a value by row), its base budget's quota at Autonomous (else by row) sized
+  for a daily period, and gate `auto`. The preview states the line count, the hardest to repair,
+  which lines that cannot be repaired (row 4) run freely, and the fallback; no gate is added silently.
 - **Editing a mission**
   ([mission-editable-after-issuance](../decisions/mission-editable-after-issuance.md)). The creator
   may edit a mission while it is not revoked or orphaned — never a delegation: name, expiry,
@@ -518,7 +522,7 @@ providers to identify the user at consent
 ([management-door-authorization-server](../decisions/management-door-authorization-server.md)).
 
 - **Read**: my connections and those shared with me, with the exact restriction; each provider's
-  catalog with its macro-actions, each risk's tier and the trust level table; my missions, policy,
+  catalog with its macro-actions, each risk's row and its reason, and the trust level table; my missions, policy,
   session and remaining budget.
 - **Preview** a draft `RiskId → (budget, gate)` on some connections: what passes, what exceeds the
   authority, what the mission could call; issues nothing. A draft connection may give trust levels per
@@ -594,7 +598,7 @@ stands in without one.
 - **Waiting for you** — the inbox of requests awaiting me as creator. Each request has its own page
   at the URL the executor hands over: who asks on which mission, the call (tool and, for an
   approval, the arguments in clear, secret values as a fingerprint), the permission and its
-  severity, the room left, what each answer does. **A yes is given on this page only.** Its
+  row, the room left, what each answer does. **A yes is given on this page only.** Its
   statement is the catalog label of the risks plus the tool and arguments by name, never a sentence
   composed from arguments. Answers are the protocol's (§3.4, §3.5); a limit changes for good only on
   the mission. A closed request shows its outcome; anyone but the creator reads one sentence and
@@ -628,12 +632,12 @@ stands in without one.
   carries it, whoever created it — name, creator, state and who holds it, only this account's part,
   nothing of the mission's other accounts; removing an access or disconnecting says how many
   missions stop. **"Give access"**: a person or team, then the permission checklist with "select
-  all", each with severity and reason; it lists the orphaned missions the access would bring back.
+  all", each with its row and reason; it lists the orphaned missions the access would bring back.
   Ownerless accounts are the last region for an administrator, who names a new owner there.
 - **Reference** — generated for every registered plugin, read-only, for any signed-in user:
-  **Permissions** (permissions by macro-action, each with its tier, base budget and its gate at each
-  trust level; a permission
-  unfolds its reason, the six dimensions behind its severity and its tools), **Tools** ("depends on
+  **Permissions** (permissions by macro-action, each with its row and the reason of the row, base
+  budget and its gate at each trust level; a permission
+  unfolds its reason, the five facts its row is read from and its tools), **Tools** ("depends on
   the arguments" where a tool's risk does, never a guessed table), **How it is modelled**. Every
   permission shown elsewhere links here. Each service names its plugin version and, when the
   plugin is pinned by the operator rather than bundled with the image, says so.
@@ -881,7 +885,7 @@ values.
   the bucket is touched.
 - **No credential to the executor.** §2.4. No read returns a secret value under a non-secret risk:
   an answer that may carry secrets passes an allow-list of non-secret fields (others become
-  `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk, tier 2 at least, so
+  `[redacted by Vaubaan]`); reading secret values is a dedicated `data: secret` risk, row 2 at least, so
   Careful asks before it.
 - **Transport.** Plain HTTP on the local network, behind a TLS termination held by the company.
 - **Human authentication.** Each sign-in attempt carries its own `state`, nonce and PKCE verifier

@@ -1,6 +1,6 @@
 /**
- * A provider's catalog as issuance sees it: explicit ids, a severity for
- * ordering, and whether an env-qualified id can ever
+ * A provider's catalog as issuance sees it: explicit ids, a row and its
+ * reason for ordering (worst first), and whether an env-qualified id can ever
  * be touched with a given resource selection.
  *
  * Pure and browser-safe (the creation form runs the same functions as the
@@ -10,11 +10,9 @@
 import {
   isEnvScopedEntry,
   isFallbackEntry,
-  MAX_SEVERITY,
+  reasonOf,
   resolveVector,
-  SEVERITY_RANKS,
-  severityLevel,
-  severityOf,
+  rowOf,
 } from '@vaubaan/policy-engine';
 import type { RiskCatalog, RiskEntry, RiskId, RiskVector } from '@vaubaan/shared';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
@@ -29,9 +27,6 @@ import {
   type RiskKind,
 } from './model';
 import { SECONDS_PER_MINUTE } from '@vaubaan/shared/time';
-
-// The severity score and its word live in the policy engine (the site computes the same).
-export { MAX_SEVERITY, SEVERITY_RANKS, severityLevel, severityOf };
 
 /** The patterns of an entry, as a list (the catalog allows one string or several). */
 export function patternsOf(entry: Pick<RiskEntry, 'matches'>): readonly string[] {
@@ -53,7 +48,6 @@ export function riskKindOf(entry: Pick<RiskEntry, 'matches'>, vector: RiskVector
 function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk {
   const env = isEnvScopedEntry(entry) ? (parseRiskId(riskId)?.env ?? null) : null;
   const vector = resolveVector(entry, env);
-  const severity = severityOf(vector);
   return {
     risk_id: riskId,
     base_id: entry.id,
@@ -62,8 +56,8 @@ function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk
     reason: entry.reason,
     vector,
     kind: riskKindOf(entry, vector),
-    severity,
-    level: severityLevel(severity),
+    row: rowOf(vector),
+    row_reason: reasonOf(vector),
     fallback: isFallbackEntry(entry, provider),
     deprecated: entry.deprecated === true,
     rate_ceiling_per_minute: entry.infra_limits?.calls_per_minute_max ?? null,
@@ -112,69 +106,21 @@ export function isResolvable(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Explaining a risk: the vector as badges, the groups of a long catalog
+// Ordering and grouping a catalog
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The six axes as the interface names them, with the question each answers
- * (risk model §4.2). The order is the reading order of every badge row and of
- * the legend.
+ * Worst row first, then catalog order: how a list of permissions is ordered
+ * wherever it is ranked (risk model §4.6). `Array.prototype.sort` is stable,
+ * so ties keep the order they came in.
  */
-export const VECTOR_AXES: readonly {
-  readonly axis: keyof RiskVector;
-  readonly label: string;
-  /** The axis in a few letters, for the compact strip; the label is its full name. */
-  readonly abbr: string;
-  readonly question: string;
-}[] = [
-  {
-    axis: 'reversibility',
-    label: 'Reversibility',
-    abbr: 'Undo',
-    question: 'Can it be undone, and at what price?',
-  },
-  {
-    axis: 'blast',
-    label: 'Blast radius',
-    abbr: 'Blast',
-    question: 'How much does one action reach?',
-  },
-  { axis: 'data', label: 'Data', abbr: 'Data', question: 'What kind of data is exposed?' },
-  { axis: 'cost', label: 'Cost', abbr: 'Cost', question: 'Can it spend money?' },
-  { axis: 'visibility', label: 'Visibility', abbr: 'Seen', question: 'Who sees the effect?' },
-  {
-    axis: 'persistence',
-    label: 'Persistence',
-    abbr: 'Lasts',
-    question: 'Does the effect outlive the mission?',
-  },
-];
-
-/** Where a value sits on its axis: the mildest, the most severe, or in between. */
-export type VectorWeight = 'mildest' | 'middle' | 'worst';
-
-export interface VectorBadge {
-  readonly axis: keyof RiskVector;
-  /** The axis as the interface names it (`Blast radius`). */
-  readonly label: string;
-  /** The axis in a few letters (`Blast`). */
-  readonly abbr: string;
-  /** The catalog's value on that axis (`account`). */
-  readonly value: string;
-  readonly weight: VectorWeight;
-  /** The scale of the axis, mildest first: what the badge's tooltip spells out. */
-  readonly scale: readonly string[];
+export function byRowWorstFirst<T extends Pick<CatalogRisk, 'row'>>(risks: readonly T[]): T[] {
+  return [...risks].sort((a, b) => b.row - a.row);
 }
 
-/** One badge per axis, in the order of `VECTOR_AXES`; the text carries the information. */
-export function vectorBadges(vector: RiskVector): VectorBadge[] {
-  return VECTOR_AXES.map(({ axis, label, abbr }) => {
-    const scale: readonly string[] = SEVERITY_RANKS[axis];
-    const rank = scale.indexOf(vector[axis]);
-    const weight: VectorWeight =
-      rank <= 0 ? 'mildest' : rank === scale.length - 1 ? 'worst' : 'middle';
-    return { axis, label, abbr, value: vector[axis], weight, scale };
-  });
+/** The permission in the hardest row to repair, the first in catalog order on a tie; `null` for none. */
+export function hardestToRepair<T extends Pick<CatalogRisk, 'row'>>(risks: readonly T[]): T | null {
+  return byRowWorstFirst(risks)[0] ?? null;
 }
 
 /** How each kind reads as the title of a group, and the one line under it. */

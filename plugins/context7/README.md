@@ -99,9 +99,9 @@ needed), write the array, re-read the classifier, bump the version.
 
 A creator ticks macro-actions at a trust level (Careful / Trusting / Autonomous,
 risk model §4.6); the trust level sets each risk's gate from its vector and
-multiplies the base budget. The mission stores the explicit list. The question cannot be
-recalled once sent, so `query-docs` is irreversible: left out at Careful, it
-asks first at Trusting and Autonomous.
+multiplies the base budget. The mission stores the explicit list. `query-docs`
+is a documentation read (harmless): it runs freely at every trust level,
+within its budget. That the question leaves the company is said in its reason.
 
 ## Failures
 

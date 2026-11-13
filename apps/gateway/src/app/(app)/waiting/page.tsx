@@ -7,7 +7,7 @@
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { currentUser } from '@/lib/auth/session';
 
-import { levelsOf, loadInbox, NothingWaits, WaitingFrame } from './frame';
+import { rowsOfRequest, loadInbox, NothingWaits, WaitingFrame } from './frame';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,7 @@ export default async function WaitingPage() {
       inbox={inbox}
       viewerId={user.id}
       view={result.view}
-      levels={levelsOf(root, result.view)}
+      rows={rowsOfRequest(root, result.view)}
     />
   );
 }

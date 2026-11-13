@@ -4,7 +4,7 @@
  * plugin, its Read, Propose and Administer macro-actions at Trusting, a mocked
  * upstream.
  *
- * Administer at Trusting gates `github.workflow-write-via-file` (tier 3). A file write under
+ * Administer at Trusting gates `github.workflow-write-via-file` (row 3). A file write under
  * `.github/workflows/` on a feature branch touches that risk and the ungated
  * `github.feature-branch-write`: a multi-risk call with one gated risk. Over JSON-RPC
  * on `/mcp`: refusal → the creator grants → the identical replay passes and reaches

@@ -43,7 +43,7 @@ Read the agent's error (`code`, `hint`) or Activity filtered by mission and "ref
 
 - `budget-exhausted` (`risk_id`, `claim_url`) — unexpected when an ordinary day overruns the trust level's quota.
 - `rate-limited` (`retry_after_seconds`) — unexpected when ordinary work trips it repeatedly (the trust level's rate).
-- `approval-required` (`approval_url`) — unexpected when the identical replay asks again (bug) or an ordinary action asks all day (the tier's gate at that trust level).
+- `approval-required` (`approval_url`) — unexpected when the identical replay asks again (bug) or an ordinary action asks all day (the row's gate at that trust level).
 - `risk-not-accepted` (`missing_risks`) — unexpected for an ordinary action (a macro-action not ticked, or left out by its trust level), or `…uncategorized-write` (catalog hole).
 - `resource-not-in-mission` (`cited_ref`) — unexpected for a resource the project needs, or one gone `stale` after a discovery refresh.
 - `connection-unavailable` — unexpected on a healthy connection: credential refresh, read the server log.
