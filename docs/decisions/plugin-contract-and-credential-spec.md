@@ -193,3 +193,63 @@ Breaks "one way per plugin": two `verify`, two guides, two connect pages for one
 
 The form could not say which fields go together, and an error would come back only after a call
 to the service.
+
+## Amendment 2026-11-13: menu paths and screenshots in the connect guide
+
+### Context
+
+The guide of a pasted key said where to click inside its sentences ("Open Settings, Developer
+settings, …"), so neither the connect screen nor the site could show the path apart, and a person
+with the service open had to read every sentence. The site also kept a second connect page
+(`/docs/providers/<id>`) built from the README's hand-written "Credential" sections. The owner
+decided (2026-11-13, option A of the connect-guide wireframes) that the whole guide lives on the
+plugin page and on the gateway's connect screen, from one declaration, with the application paths
+highlighted and a screenshot only on the one hard screen of a service, with its provenance.
+
+### Decision
+
+- `GuideStep.path?: string[]`: the provider's own menu labels, in order, 1 to 8 segments of at
+  most 40 characters, none empty. A step has a `path`, a `url`, both or neither; the sentence `do`
+  never carries the path.
+- `GuideStep.screenshot?` names a file declared in `TokenGuide.screenshots?`, a map from file name
+  (`^[a-z0-9][a-z0-9-]*\.(png|webp)$`) to `{ source, licence, taken, alt }`. The files live in
+  `docs/connect/` of the plugin folder (`GUIDE_SCREENSHOT_DIR`), a convention like
+  `risk-catalog.yaml`. Every step's file is declared; every declared file is named by exactly one
+  step.
+- Provenance is declared, never discovered: `source` is the https page the image was taken from,
+  or `ours` for a capture of the Vaubaan team; `licence` is one of `CC-BY-4.0`, `MIT`,
+  `Apache-2.0` or `ours` (with `ours` only). A NonCommercial or NoDerivatives licence never ships.
+  `taken` is `YYYY-MM`. The line under the image is derived (`screenshotAttribution`): "GitHub docs,
+  2026-11 · from docs.github.com (CC BY 4.0)" or "Taken by the Vaubaan team, 2026-11".
+- `definePlugin` checks the declaration; a structural test of the gateway checks the files: present,
+  PNG or WebP by their magic bytes, at most 300 KB and 1600 px wide, nothing undeclared in the
+  folder. Personal data (an e-mail, an avatar, a real token) is the review's to refuse.
+- The host serves a file to signed-in users from the plugin's folder, bundled
+  (`plugins/<id>/docs/connect/`) or pinned (`<pin>/docs/connect/`, copied by the bundle script);
+  the site copies it beside the page.
+- `definePlugin` refuses what 0.7 accepted: a minor of the SDK before `1.0.0` (0.8.0).
+
+### Consequences
+
+- The site's `/docs/providers/<id>` becomes a permanent redirect to `/plugins/<id>#connect`; the
+  README "Credential" sections are no longer read by the build.
+- A pin built against `^0.7` is refused by a 0.8 host until it is rebuilt.
+- Screenshots go stale when a provider redesigns its screens: `taken` dates them, and the review
+  that refreshes the provider facts retakes them.
+
+### Rejected alternatives
+
+#### The path parsed from the sentence
+
+A sentence in prose has no reliable separators, and a renderer guessing the menus would highlight
+the wrong words.
+
+#### Screenshots discovered in the folder, without a declaration
+
+Nothing would say where an image comes from or under which licence, so nothing could refuse one
+that may not be redistributed.
+
+#### Images from any documentation, credited
+
+Most providers' documentation is not openly licensed; an allowlist of licences that permit
+redistribution with attribution is the only rule a test can hold.

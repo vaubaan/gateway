@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
-import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { PAT_FIELD } from '../../src/identity.ts';
 import { ASANA_DEVELOPER_CONSOLE, asanaCredential, verifyAsanaToken } from '../../src/index.ts';
@@ -26,7 +26,9 @@ describe('the Asana personal access token — the guide', () => {
     expect(asanaCredential.guide.permissions).toEqual([]);
     expect(asanaCredential.guide.reach.grant).toMatch(/no scopes/);
     expect(asanaCredential.guide.expiry.kind).toBe('none');
-    expect(guideText(asanaCredential.guide)).toMatch(/Create new token/);
+    expect(asanaCredential.guide.steps.flatMap((step) => step.path ?? [])).toContain(
+      '+ Create new token',
+    );
   });
 
   test('the field pattern bounds the token and nothing more (Asana: tokens are opaque)', () => {

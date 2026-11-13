@@ -29,6 +29,13 @@ export {
   type UnservedProvider,
 } from './inventory';
 export {
+  BUNDLED_PLUGINS_DIR,
+  connectFileUrl,
+  readConnectFile,
+  type ConnectFile,
+  type ConnectFileSources,
+} from './connect-files';
+export {
   importEntryFile,
   PINNED_CATALOG_FILE,
   readPinManifest,

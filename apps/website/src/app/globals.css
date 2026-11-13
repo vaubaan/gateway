@@ -58,6 +58,9 @@
   --warn: #a35e00;
   --warn-soft: #fbf2df;
   --warn-line: #eed9ae;
+  /* The connect guide's path chips: a warm band the eye finds before it reads. */
+  --path-bg: #fbe3a0;
+  --path-ink: #3b2a05;
   --ink-4: #9a9ca3;
   --ok: #1d7a3e;
   --bad: #b3261e;
@@ -84,6 +87,8 @@
     --warn: #e9b04a;
     --warn-soft: #30291d;
     --warn-line: #66512a;
+    --path-bg: #5a4415;
+    --path-ink: #fbe9bf;
     --ink-4: #5b606a;
     --ok: #5cc98a;
     --bad: #f2867d;
@@ -955,4 +960,79 @@ td.level .gate {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* 7 · Connecting an account: the kind, the administrator's block, the steps with their
+   path chips and the screenshot of the hard screen. */
+.connect-kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+}
+
+.connect-badge {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong, 600);
+}
+
+.connect-admin {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius-md);
+  background: var(--warn-soft);
+}
+
+.connect-admin h3 {
+  margin-top: 0;
+  font-size: var(--text-base);
+}
+
+.connect .steps > li + li {
+  margin-top: var(--space-3);
+}
+
+.connect .path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.connect .path-seg {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--path-bg);
+  color: var(--path-ink);
+  font-weight: var(--weight-strong, 600);
+}
+
+.connect .path-sep {
+  color: var(--ink-3);
+}
+
+.connect .shot {
+  margin: var(--space-2) 0 0;
+  max-width: 100%;
+}
+
+.connect .shot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.connect .shot figcaption {
+  margin-top: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
 }

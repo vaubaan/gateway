@@ -21,6 +21,9 @@
  * builds before testing, so it runs there; the container smoke test
  * (`deploy/docker/smoke.sh`) boots the image, which fails if a catalog is
  * missing.
+ *
+ * The screenshots of the connect guides (`plugins/*\/docs/connect/**`) are read the
+ * same way, behind a computed path (`readConnectFile`), and traced the same way.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -81,6 +84,18 @@ describe.skipIf(!hasBuild)('standalone output keeps the plugin risk catalogs (Ne
     expect(catalogs.length).toBeGreaterThan(0);
     const missing = catalogs.filter((path) => !existsSync(join(standaloneDir, path)));
     expect(missing).toEqual([]);
+  });
+
+  it('traces the screenshots of the connect guides', () => {
+    const shots = readdirSync(pluginsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .flatMap((entry) => {
+        const dir = join(pluginsDir, entry.name, 'docs/connect');
+        return existsSync(dir)
+          ? readdirSync(dir).map((file) => relative(repoRoot, join(dir, file)))
+          : [];
+      });
+    expect(shots.filter((path) => !existsSync(join(standaloneDir, path)))).toEqual([]);
   });
 
   it('ships no test file: no trace names one and the standalone tree holds none', () => {

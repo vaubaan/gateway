@@ -16,6 +16,8 @@
 //   package.json        name @vaubaan/plugin-<id>, the plugin's version, type module,
 //                       exports ".", peerDependencies["@vaubaan/plugin-sdk"]: ^<SDK version>
 //   LICENSE, README.md
+//   docs/connect/       the screenshots of the connect guide, when the plugin has any
+//                       (`GUIDE_SCREENSHOT_DIR`; the host serves them from the pin)
 //
 // then imports the bundle under plain Node in a child process and checks that its
 // default export is a plugin of that id and version (the smoke test).
@@ -29,6 +31,7 @@
 import { execFileSync } from 'node:child_process';
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -196,6 +199,12 @@ export async function buildPluginBundle(id, { out, sdkVersion, esbuild }) {
   copyFileSync(join(ROOT, 'LICENSE'), join(target, 'LICENSE'));
   if (existsSync(join(source, 'README.md'))) {
     copyFileSync(join(source, 'README.md'), join(target, 'README.md'));
+  }
+  // The connect guide's screenshots (`GUIDE_SCREENSHOT_DIR` of the SDK), served by the
+  // host from the pin's directory (/reference/<id>/connect/<file>).
+  const connectDir = join('docs', 'connect');
+  if (existsSync(join(source, connectDir))) {
+    cpSync(join(source, connectDir), join(target, connectDir), { recursive: true });
   }
 
   let loaded;

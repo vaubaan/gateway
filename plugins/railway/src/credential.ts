@@ -79,10 +79,12 @@ export const railwayCredential: ApiKeyCredentialSpec = {
         do: 'Sign in to Railway as the account the agents will act as; a shared service account that is a member of the workspace is fine.',
       },
       {
-        do: 'Open Account settings, Tokens, and create a token with the workspace selected: a workspace token reaches that workspace only.',
+        do: 'Open the page and create a token with the workspace selected: a workspace token reaches that workspace only.',
+        path: ['Account settings', 'Tokens'],
         url: RAILWAY_TOKENS_PAGE,
       },
       {
+        path: ['No workspace'],
         do: 'Choose No workspace instead only for an account token over every workspace of the account; a project token is not accepted: it reaches one environment of one project.',
       },
       { do: 'Copy the token and paste it here. Railway shows it once.' },

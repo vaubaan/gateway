@@ -558,14 +558,54 @@ export function missionOf(plugin: PluginInfo): MissionWorkedOut {
 
 export const BROKER_DOC = '/docs/operations/oauth-broker';
 
-/** The sentences that open the connect block, by where the credential comes from. */
+/** The section's anchor on `/plugins/<id>`: where a service's connect guide lives. */
+export const CONNECT_ANCHOR = 'connect';
+
+/** The address of a service's connect guide (the old `/docs/providers/<id>` redirects here). */
+export function connectGuidePath(pluginId: string): string {
+  return `/plugins/${pluginId}#${CONNECT_ANCHOR}`;
+}
+
+/** Between two menu labels of a path, on the page and in the twin. */
+export const PATH_SEPARATOR = '›';
+
+/**
+ * The three ways of connecting, numbered so a reader learns there are only three
+ * (website spec §2.3 item 7): the badge that opens the section, by client source.
+ * An `ssh-key` way is the first kind, its key pair said by `connectSentences`.
+ */
+export const CONNECT_KINDS: Readonly<
+  Record<CredentialInfo['clientSource'], { readonly n: 1 | 2 | 3; readonly words: string }>
+> = {
+  'pasted-key': { n: 1, words: 'a key you create and paste' },
+  'gateway-registered': { n: 2, words: 'you sign in and allow the gateway (its own client)' },
+  broker: { n: 3, words: 'you sign in through an OAuth broker' },
+};
+
+/** "1 of 3 · a key you create and paste". */
+export function connectKindBadge(c: Pick<CredentialInfo, 'clientSource'>): string {
+  const kind = CONNECT_KINDS[c.clientSource];
+  return `${kind.n} of 3 · ${kind.words}`;
+}
+
+/** The declaration in code words, beside the badge: `api-key · fine-grained personal access token`. */
+export function connectKindCode(c: CredentialInfo): string {
+  switch (c.clientSource) {
+    case 'broker':
+      return `oauth2 · broker · ${c.brokerProvider ?? ''}`;
+    case 'gateway-registered':
+      return 'oauth2 · clientRegistration';
+    case 'pasted-key':
+      return c.label ? `${c.kind} · ${c.label}` : c.kind;
+  }
+}
+
+/** The sentences that open the connect block: what the person does, by where the credential comes from. */
 export function connectSentences(c: CredentialInfo, service: string): string[] {
   switch (c.clientSource) {
     case 'broker':
       return [
-        `${service} signs in through the client of an OAuth broker: nothing is created or pasted, the person signs in at the service.`,
-        `The instance must be enrolled with an OAuth broker serving the provider \`${c.brokerProvider ?? ''}\`; an administrator sets it up once, for everyone on the instance. The gateway's pages tell whether the broker is attested.`,
-        'Two ways to get one: enrol with a broker someone else operates, or run the published broker image with your own client at the provider.',
+        `${service} signs in through the client of an OAuth broker: nothing is created or pasted, the person signs in at ${service} and allows the gateway.`,
       ];
     case 'gateway-registered':
       return [
@@ -580,6 +620,41 @@ export function connectSentences(c: CredentialInfo, service: string): string[] {
             `A ${c.label ?? 'key'} the person creates at ${service} and pastes once; nobody declares anything beforehand. Grant everything below: each mission narrows what an agent may do.`,
           ];
   }
+}
+
+/** The title of the administrator's block a brokered service opens with. */
+export const BROKER_ADMIN_TITLE = 'Before anyone connects';
+
+/** What an administrator does once, before anyone connects a brokered service. */
+export function brokerAdminSentences(c: CredentialInfo, service: string): string[] {
+  return [
+    `The instance must be enrolled with an OAuth broker serving the provider \`${c.brokerProvider ?? ''}\`; an administrator sets it up once, for everyone on the instance. Until then ${service} reads "not configured" on the connect screen.`,
+    'Two ways to get one: enrol with a broker someone else operates, or run the published broker image with your own client at the provider.',
+    "The gateway's pages tell whether the broker is attested.",
+  ];
+}
+
+/**
+ * The credits of the screenshots on the plugin pages, one per documentation and
+ * licence ("GitHub docs, docs.github.com (CC BY 4.0)"), generated from the
+ * declarations; `null` when no page shows one taken from someone else's documentation.
+ */
+export function screenshotCredits(plugins: readonly PluginInfo[]): string | null {
+  const credits = new Map<string, string>();
+  for (const plugin of plugins) {
+    for (const c of plugin.credentials) {
+      for (const step of c.steps) {
+        const figure = step.figure;
+        if (!figure || figure.sourceHost === null || figure.licence === 'ours') continue;
+        const key = `${figure.sourceHost} ${figure.licence}`;
+        if (!credits.has(key)) {
+          credits.set(key, `${plugin.name} docs, ${figure.sourceHost} (${figure.licenceWords})`);
+        }
+      }
+    }
+  }
+  if (credits.size === 0) return null;
+  return `Screenshots on these pages come from the services' own documentation where its licence allows it: ${listWords([...credits.values()])}.`;
 }
 
 // ---------------------------------------------------------------------------

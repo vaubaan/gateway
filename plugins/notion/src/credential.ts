@@ -71,16 +71,23 @@ export const notionCredential: ApiKeyCredentialSpec = {
     // The pages are shared before the paste, so the first discovery finds them.
     steps: [
       {
-        do: "Open Notion's Developer portal, go to Build, Internal connections and create a connection in the workspace you want to connect (you must be a Workspace Owner); the internal connection is the token, there is no app to install.",
+        do: "Open Notion's Developer portal and create a connection in the workspace you want to connect (you must be a Workspace Owner); the internal connection is the token, there is no app to install.",
+        path: ['Build', 'Internal connections', 'Create a new connection'],
         url: NOTION_CONNECTIONS_PAGE,
       },
       {
-        do: 'Tick every capability listed below on the Configuration tab, and choose No user information.',
+        do: 'Tick every capability listed below, and choose No user information.',
+        path: ['Configuration'],
       },
       {
-        do: 'Share every top-level page and database the agents may ever work in on the Content access tab (or, on a page, the ••• menu, Connections, Add connection); sharing a page includes everything under it.',
+        do: 'Share every top-level page and database the agents may ever work in; sharing a page includes everything under it.',
+        path: ['Content access', 'Edit access'],
       },
-      { do: 'Copy the token from the Configuration tab and paste it here.' },
+      {
+        do: 'Share a page from Notion itself instead, if you prefer: open the page and add the connection there.',
+        path: ['•••', 'Connections', 'Add connection'],
+      },
+      { do: 'Copy the token and paste it here.', path: ['Configuration'] },
     ],
     permissions: [
       {

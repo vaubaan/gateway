@@ -1,6 +1,6 @@
 ---
 title: Connect a provider
-description: How an account of a service is connected to an instance — a key pasted by hand, a client the gateway registers, or a client an OAuth broker holds — and one page per service, generated from its plugin.
+description: How an account of a service is connected to an instance — a key pasted by hand, a client the gateway registers, or a client an OAuth broker holds — and where each service's guide lives, on its plugin page.
 ---
 
 Connecting a provider means giving the instance, once, a credential for an account at a service — a key created by hand, or the service's own sign-in — so that missions can then use that account's resources without the agent ever holding the credential. Each service has one way.
@@ -35,6 +35,6 @@ After connecting, the owner labels resources with their environment (`staging`, 
 
 **No plugin has yet executed a tool against the real service it models**: every provider call of the test suites is answered by a double ([known limitations](/docs/known-limitations)).
 
-## One page per service
+## Each service's guide
 
-The pages below are generated from each plugin's declaration — how it connects, what the connect page asks, the permissions to grant — and completed with the registration notes of the plugin's README.
+Each service's guide is on its plugin page, section "Connecting an account" ([the plugins](/plugins), then a service, `#connect`): the kind of connection, the steps with the menus to follow at the service highlighted, a screenshot of the hard screen where one helps (with where it comes from and its licence), the permissions to grant, who knows the expiry and what the connect page asks. It is generated from the plugin's own declaration, the same the instance's connect screen shows. The former addresses `/docs/providers/<service>` redirect there.

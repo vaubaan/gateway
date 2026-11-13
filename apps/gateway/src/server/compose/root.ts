@@ -65,6 +65,7 @@ import {
   unservedProviders,
   type LoadedPlugins,
   type PluginInventory,
+  type PluginInventoryEntry,
 } from '../plugins';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
@@ -277,7 +278,16 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     );
     await checkSealedKeys(store, config, logger);
     const modules = await wireModules(
-      { config, logger, registry, store, build, masterKeyGenerated, encryptor },
+      {
+        config,
+        logger,
+        registry,
+        store,
+        build,
+        masterKeyGenerated,
+        encryptor,
+        pluginEntries: inventory.entries,
+      },
       deps,
       opened,
     );
@@ -487,6 +497,8 @@ interface RootBase {
   /** The boot wrote the master key file at this start (`boot-config.ts`). */
   readonly masterKeyGenerated: boolean;
   readonly encryptor: Encryptor;
+  /** Every plugin known, bundled or pinned: where a plugin's own files are read from. */
+  readonly pluginEntries: readonly PluginInventoryEntry[];
 }
 
 type RootModules = Pick<
@@ -523,7 +535,8 @@ type RootModules = Pick<
  * completes (`close()`) or a later step throws.
  */
 async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Promise<RootModules> {
-  const { config, logger, registry, store, build, masterKeyGenerated, encryptor } = base;
+  const { config, logger, registry, store, build, masterKeyGenerated, encryptor, pluginEntries } =
+    base;
 
   // Web sessions live in the embedded store (`store.webSessions`, table
   // `web_sessions`) so they survive a restart and are revocable; a hosted
@@ -624,6 +637,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     config,
     store,
     registry,
+    pluginEntries,
     sessions,
     rateLimiter,
     authenticator: auth.authenticator,

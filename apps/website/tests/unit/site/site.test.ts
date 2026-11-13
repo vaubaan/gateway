@@ -45,7 +45,12 @@ beforeAll(async () => {
 
 /** Every path the site answers besides its pages: the public files and the live ones. */
 function servedFiles(): Set<string> {
-  return new Set([...site.files.keys(), ...LIVE_FILES, ...BUILT_ROUTE_FILES]);
+  return new Set([
+    ...site.files.keys(),
+    ...site.assets.keys(),
+    ...LIVE_FILES,
+    ...BUILT_ROUTE_FILES,
+  ]);
 }
 
 function handwrittenDocPaths(): string[] {
@@ -68,7 +73,8 @@ describe('the pages of the site', () => {
     for (const doc of site.generatedDocs) expect(paths).toContain(doc.page.path);
     for (const plugin of site.plugins) {
       expect(paths).toContain(`/plugins/${plugin.id}`);
-      expect(paths).toContain(`/docs/providers/${plugin.id}`);
+      // The connect guide is section 7 of the plugin page: no page of its own.
+      expect(paths).not.toContain(`/docs/providers/${plugin.id}`);
     }
     for (const path of ['/', '/docs', '/plugins', '/plugins/health', '/trust']) {
       expect(paths).toContain(path);

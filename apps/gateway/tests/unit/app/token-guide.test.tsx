@@ -1,7 +1,8 @@
 /**
  * The token guide of the connect page (`TokenGuide`), rendered to static
  * markup from a `ConnectableProvider`: how wide to grant and why, the steps
- * with their page and command, the documentation, the expiry by who knows it.
+ * with their menu path, page, command and screenshot, the documentation, the
+ * expiry by who knows it.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -11,9 +12,23 @@ import type { ConnectableProvider, TokenGuideView } from '@/server/connections';
 
 const GUIDE: TokenGuideView = {
   steps: [
-    { do: 'Open the tokens page.', url: 'https://provider.example.com/tokens' },
-    { do: 'Run the command.', code: 'acme tokens create --all' },
-    { do: 'Copy the token and paste it here.' },
+    {
+      do: 'Open the tokens page.',
+      url: 'https://provider.example.com/tokens',
+      path: ['Settings', 'Developer settings', 'Tokens'],
+      figure: null,
+    },
+    { do: 'Run the command.', code: 'acme tokens create --all', figure: null },
+    {
+      do: 'Tick the permissions below.',
+      screenshot: 'token-form.webp',
+      figure: {
+        url: '/reference/acme/connect/token-form.webp',
+        alt: 'The new token form',
+        attribution: 'Acme docs, 2026-11 · from docs.acme.example (CC BY 4.0)',
+      },
+    },
+    { do: 'Copy the token and paste it here.', figure: null },
   ],
   reach: {
     what: 'Repository access',
@@ -62,6 +77,28 @@ describe('the token guide of the connect page', () => {
     );
   });
 
+  it('puts the menu path before the sentence, as highlighted chips', () => {
+    const segments = [...html.matchAll(/data-testid="guide-path-segment">([^<]*)</g)].map(
+      (m) => m[1],
+    );
+    expect(segments).toEqual(['Settings', 'Developer settings', 'Tokens']);
+    expect(html).toContain('aria-label="Where to click at Acme"');
+    expect(html.indexOf('Developer settings')).toBeLessThan(html.indexOf('Open the tokens page.'));
+    expect(html).toContain('›');
+  });
+
+  it('shows a screenshot under its step, with its provenance, and none elsewhere', () => {
+    const figures = [...html.matchAll(/<figure[^>]*>(.*?)<\/figure>/g)].map((m) => m[1] ?? '');
+    expect(figures).toHaveLength(1);
+    expect(figures[0]).toMatch(
+      /<img src="\/reference\/acme\/connect\/token-form\.webp" alt="The new token form" loading="lazy"\/>/,
+    );
+    expect(figures[0]).toContain(
+      '<figcaption>Acme docs, 2026-11 · from docs.acme.example (CC BY 4.0)</figcaption>',
+    );
+    expect(html.indexOf('Tick the permissions below.')).toBeLessThan(html.indexOf('<figure'));
+  });
+
   it('links a step to its page and shows its command as code to copy', () => {
     expect(html).toMatch(
       /Open the tokens page\. \(<a href="https:\/\/provider\.example\.com\/tokens"/,
@@ -95,14 +132,14 @@ describe('the token guide of a key with alternatives', () => {
       id: 'team',
       label: 'Team',
       fields: ['team_id'],
-      steps: [{ do: 'Copy the Team ID.' }],
+      steps: [{ do: 'Copy the Team ID.', figure: null }],
     },
     {
       id: 'project',
       label: 'One project',
       help: 'A token scoped to one project.',
       fields: ['project_id'],
-      steps: [{ do: 'Copy the Project ID.' }],
+      steps: [{ do: 'Copy the Project ID.', figure: null }],
     },
   ];
   const html = renderToStaticMarkup(
@@ -135,6 +172,6 @@ describe('the token guide of a key with alternatives', () => {
     expect(html.indexOf('Copy the Project ID.')).toBeLessThan(
       html.indexOf('Open the tokens page.'),
     );
-    expect(html).toMatch(/<li>Open the tokens page\./);
+    expect(html).toMatch(/<li><span class="path [^"]*"[^>]*>.*?<\/span>Open the tokens page\./);
   });
 });

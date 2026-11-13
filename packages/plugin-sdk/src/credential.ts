@@ -63,17 +63,108 @@ export interface TokenPermission {
 }
 
 /**
- * One thing the person does at the provider, in the imperative ("Open
- * Settings, Developer settings, then Generate new token."). One plain
- * sentence, no markup: a command to type goes in `code`, a page to open in
- * `url`, and the connect page renders them as a copyable block and a link.
+ * One thing the person does at the provider, in the imperative ("Open the
+ * page and start a new fine-grained token."). One plain sentence, no markup:
+ * the menus to follow go in `path`, a command to type in `code`, a page to
+ * open in `url`, a picture of the hard screen in `screenshot`; the connect
+ * page renders them as highlighted path chips, a copyable block, a link and a
+ * figure with its provenance (ADR plugin-contract-and-credential-spec,
+ * amendment 2026-11-13). The sentence never carries the path.
  */
 export interface GuideStep {
   readonly do: string;
+  /**
+   * The application path the person follows at the provider, in the
+   * provider's own menu labels: `['Settings', 'Developer settings', 'Personal
+   * access tokens']`. 1 to `GUIDE_PATH_MAX_SEGMENTS` segments of at most
+   * `GUIDE_PATH_SEGMENT_MAX_LENGTH` characters each.
+   */
+  readonly path?: readonly string[];
   /** The provider page this step happens on (https). */
   readonly url?: string;
   /** A command or a value to type, shown as code the person can copy. */
   readonly code?: string;
+  /** The file name of a screenshot declared in the guide's `screenshots` (`token-form.webp`). */
+  readonly screenshot?: string;
+}
+
+/** At most this many segments in a step's `path`. */
+export const GUIDE_PATH_MAX_SEGMENTS = 8;
+
+/** At most this many characters in one segment of a step's `path`. */
+export const GUIDE_PATH_SEGMENT_MAX_LENGTH = 40;
+
+/**
+ * The folder of a plugin, beside its `package.json`, that holds the files its
+ * guide's `screenshots` declare. Fixed, like `risk-catalog.yaml`: the host
+ * serves them from there and the bundle script copies it beside `index.js`.
+ */
+export const GUIDE_SCREENSHOT_DIR = 'docs/connect';
+
+/** A screenshot's file name: a lowercase slug, `.png` or `.webp`. */
+export const GUIDE_SCREENSHOT_FILE_PATTERN = /^[a-z0-9][a-z0-9-]*\.(png|webp)$/;
+
+/**
+ * The licences a screenshot may ship under: each allows redistribution with
+ * attribution. `ours` is a capture the Vaubaan team took itself. A
+ * NonCommercial or NoDerivatives licence never ships.
+ */
+export const SCREENSHOT_LICENCES = ['CC-BY-4.0', 'MIT', 'Apache-2.0', 'ours'] as const;
+export type ScreenshotLicence = (typeof SCREENSHOT_LICENCES)[number];
+
+/** When a screenshot was taken: `YYYY-MM`. */
+export const SCREENSHOT_TAKEN_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Upper bound of a screenshot's `alt` text. */
+export const SCREENSHOT_ALT_MAX_LENGTH = 200;
+
+/**
+ * Where a screenshot comes from, declared beside the guide: the page it was
+ * taken from and under which licence, or `ours`. The words under the image
+ * are derived from it (`screenshotAttribution`), never written.
+ */
+export interface Screenshot {
+  /** The https URL of the documentation page the image illustrates, or `'ours'`. */
+  readonly source: string;
+  readonly licence: ScreenshotLicence;
+  /** `YYYY-MM`: when it was taken, so that a stale one can be found. */
+  readonly taken: string;
+  /** What the image shows, for a person who cannot see it (1 to 200 characters). */
+  readonly alt: string;
+}
+
+/** The licence as people read it: `CC BY 4.0`, `MIT`, `Apache 2.0`. */
+const LICENCE_WORDS: Readonly<Record<Exclude<ScreenshotLicence, 'ours'>, string>> = {
+  'CC-BY-4.0': 'CC BY 4.0',
+  MIT: 'MIT',
+  'Apache-2.0': 'Apache 2.0',
+};
+
+/**
+ * The line under a screenshot, the same on the site and on the gateway:
+ * "Taken by the Vaubaan team, 2026-11" for a capture of ours, else
+ * "<service> docs, 2026-11 · from docs.github.com (CC BY 4.0)".
+ */
+export function screenshotAttribution(service: string, screenshot: Screenshot): string {
+  if (screenshot.source === 'ours' || screenshot.licence === 'ours') {
+    return `Taken by the Vaubaan team, ${screenshot.taken}`;
+  }
+  return `${service} docs, ${screenshot.taken} · from ${screenshotSourceHost(screenshot)} (${screenshotLicenceWords(screenshot.licence)})`;
+}
+
+/** A licence as people read it ("CC BY 4.0"); `ours` reads "taken by the Vaubaan team". */
+export function screenshotLicenceWords(licence: ScreenshotLicence): string {
+  return licence === 'ours' ? 'taken by the Vaubaan team' : LICENCE_WORDS[licence];
+}
+
+/** The host of a screenshot's source (`docs.github.com`), or `null` for one of ours. */
+export function screenshotSourceHost(screenshot: Pick<Screenshot, 'source'>): string | null {
+  if (screenshot.source === 'ours') return null;
+  try {
+    return new URL(screenshot.source).host;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -130,6 +221,13 @@ export interface TokenGuide {
   readonly expiry: TokenExpiry;
   /** The provider's documentation of this kind of token (https). */
   readonly docsUrl: string;
+  /**
+   * The screenshots the steps name, by file name, each with its provenance.
+   * The files live in `GUIDE_SCREENSHOT_DIR` of the plugin folder; every one
+   * declared is named by exactly one step. One, on the hard screen of the
+   * service, is the rule; absent when the sentences are enough.
+   */
+  readonly screenshots?: Readonly<Record<string, Screenshot>>;
 }
 
 /**

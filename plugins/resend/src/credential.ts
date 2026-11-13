@@ -54,7 +54,11 @@ export const resendCredential: ApiKeyCredentialSpec = {
   guide: {
     steps: [
       { do: 'Sign in to Resend as a member of the team that owns the sending domains.' },
-      { do: 'Open API Keys and choose Create API Key.', url: RESEND_API_KEYS_PAGE },
+      {
+        do: 'Open the page and start a new key.',
+        path: ['API Keys', 'Create API Key'],
+        url: RESEND_API_KEYS_PAGE,
+      },
       { do: 'Name the key, choose the Full access permission, and Add.' },
       { do: 'Copy the key and paste it here. Resend shows it once.' },
     ],

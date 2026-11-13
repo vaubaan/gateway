@@ -90,26 +90,39 @@ export const cloudflareDnsCredential: ApiKeyCredentialSpec = {
     steps: [
       { do: 'Sign in to Cloudflare as a member of the account that owns the zones.' },
       {
-        do: 'Open My Profile, API Tokens, choose Create Token, then Create Custom Token.',
+        do: 'Open the page, start a token from scratch and name it.',
+        path: ['My Profile', 'API Tokens', 'Create Token'],
         url: CLOUDFLARE_TOKENS_PAGE,
       },
       {
-        do: 'Add one permission row per line below, at the level shown (Edit for read and write, Purge for Cache Purge).',
+        do: 'Add a zone policy that includes all zones, with one permission per line below at the level shown (Edit for read and write, Purge for Cache Purge).',
+        path: ['Policies', 'Add new policy', 'Zone policy', 'Include', 'All zones'],
+        screenshot: 'create-token.webp',
       },
-      { do: 'Choose Include, All zones under Zone Resources.' },
       {
-        do: 'Leave the TTL empty or set an end date, choose Continue to summary, then Create Token.',
+        do: 'Leave Token expiration at no expiration or pick a date, then create the token.',
+        path: ['Continue to summary', 'Create Token'],
       },
       { do: 'Copy the token and paste it here. Cloudflare shows it once.' },
     ],
     reach: {
-      what: 'Zone Resources',
+      what: 'Zone policy',
       grant: 'Include, All zones, with every permission below',
       why: 'This gateway gives a mission its zones one by one and only the permissions it names; a token that lacks a zone or a permission means a new token.',
     },
     permissions: CLOUDFLARE_TOKEN_PERMISSIONS,
     expiry: { kind: 'provider-reports' },
     docsUrl: 'https://developers.cloudflare.com/fundamentals/api/get-started/create-token/',
+    // The Create Token form, from Cloudflare's own documentation (CC BY 4.0, the licence of
+    // cloudflare/cloudflare-docs): the hard screen, where the policy is built.
+    screenshots: {
+      'create-token.webp': {
+        source: 'https://developers.cloudflare.com/fundamentals/api/get-started/create-token/',
+        licence: 'CC-BY-4.0',
+        taken: '2026-11',
+        alt: 'The Create Token form of Cloudflare: a token name, a zone policy including all zones with DNS Write, the token expiration choices and Continue to summary.',
+      },
+    },
   },
   verify: verifyCloudflareToken,
 };
@@ -145,7 +158,7 @@ export async function verifyCloudflareToken(ctx: ConnectionContext): Promise<Cre
 }
 
 const NO_ZONE =
-  'Cloudflare: this token lists no zone. Give it Zone · Zone · Read and, under Zone Resources, Include, All zones.';
+  'Cloudflare: this token lists no zone. Give it Zone · Zone · Read and, in a zone policy, Include, All zones.';
 
 /** The first page of zones ; a token refused there lacks the zone read, which is said. */
 async function listZones(ctx: ConnectionContext, token: string): Promise<readonly unknown[]> {

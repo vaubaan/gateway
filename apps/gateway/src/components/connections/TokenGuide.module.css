@@ -50,3 +50,48 @@
   gap: var(--space-1);
   max-width: 22rem;
 }
+/*
+ * The menus to follow at the service, before the sentence: a warm band the eye
+ * finds before it reads (the connect guide's path chips, website twin `.path`).
+ */
+.path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+  font-size: var(--text-xs);
+}
+.pathItem {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.pathSegment {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--warn-line);
+  color: var(--ink);
+  font-weight: var(--weight-strong);
+  line-height: 1.6;
+}
+.pathSeparator {
+  color: var(--ink-3);
+}
+/* A screenshot of the hard screen, never wider than the column, its provenance under it. */
+.shot {
+  margin: var(--space-2) 0 0;
+  max-width: 100%;
+}
+.shot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.shot figcaption {
+  margin-top: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}

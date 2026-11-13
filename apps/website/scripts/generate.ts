@@ -8,9 +8,11 @@
  * known limitations, the threat model, the collector's thresholds — builds
  * the site as data (`src/content/build-site.ts`) and writes:
  *
- *   content/docs/configuration/keys.mdx, content/docs/known-limitations.mdx,
- *   content/docs/providers/<id>.mdx      the generated docs pages
- *   public/                              llms.txt, sitemap.xml, robots.txt
+ *   content/docs/configuration/keys.mdx, content/docs/known-limitations.mdx
+ *                                        the generated docs pages
+ *   public/                              llms.txt, sitemap.xml, robots.txt, and the
+ *                                        connect guides' screenshots
+ *                                        (plugins/<id>/connect/<file>)
  *   .generated/site.json                 what the pages render
  *
  * All three are gitignored. It reads no network: plugin health is read when
@@ -18,7 +20,7 @@
  * llms-full.txt and plugins.json are rendered by routes for the same reason.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { buildSite, DOCS_DIR_FROM_REPO, generatedMdx } from '../src/content/build-site';
@@ -74,11 +76,15 @@ async function main(): Promise<void> {
 
   rmSync(PUBLIC_DIR, { recursive: true, force: true });
   for (const [path, content] of site.files) write(join(PUBLIC_DIR, path), content);
+  for (const [path, source] of site.assets) {
+    mkdirSync(dirname(join(PUBLIC_DIR, path)), { recursive: true });
+    copyFileSync(join(REPO_ROOT, source), join(PUBLIC_DIR, path));
+  }
   write(join(GENERATED_DIR, 'site.json'), `${JSON.stringify(site.data, null, 2)}\n`);
 
   const docs = site.pages.filter((p) => p.group === 'docs').length;
   process.stdout.write(
-    `website: ${site.plugins.length} plugins, ${docs} docs pages, ${site.pages.length} pages, ${site.files.size} public files; plugin health is read when a page is rendered\n`,
+    `website: ${site.plugins.length} plugins, ${docs} docs pages, ${site.pages.length} pages, ${site.files.size + site.assets.size} public files; plugin health is read when a page is rendered\n`,
   );
 }
 

@@ -15,6 +15,7 @@ import { PluginPageView } from '../../../src/components/plugin/PluginPage';
 import { unreadSnapshot } from '../../../src/content/health';
 import {
   BROKER_DOC,
+  brokerAdminSentences,
   connectSentences,
   levelsSentence,
   mapOf,
@@ -30,6 +31,7 @@ import {
 } from '../../../src/content/plugin-pages';
 import { loadPlugins } from '../../../src/content/plugins';
 import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
+import { SITE_REDIRECTS } from '../../../src/site/redirects';
 import {
   parseThresholds,
   THRESHOLDS_SOURCE,
@@ -228,7 +230,10 @@ describe('connecting an account, in three shapes', () => {
       const plugin = byId(id);
       const c = plugin.credentials[0]!;
       expect(c.clientSource, id).toBe('broker');
-      const all = connectSentences(c, plugin.name).join(' ');
+      const all = [
+        ...brokerAdminSentences(c, plugin.name),
+        ...connectSentences(c, plugin.name),
+      ].join(' ');
       expect(all).toContain(`\`${c.brokerProvider}\``);
       expect(all).toContain('enrolled with an OAuth broker');
       expect(all).toContain('attested');
@@ -326,5 +331,58 @@ describe('the Markdown twin', () => {
     const connect = md.slice(md.indexOf('## Connecting an account'), md.indexOf('## Tools'));
     expect(connect).toContain('`google`');
     expect(connect).toContain(`](${BROKER_DOC})`);
+  });
+});
+
+describe('section 7, the connect guide inline', () => {
+  it('opens with the kind badge, one of three, for every way', () => {
+    const badge = (id: string) =>
+      /class="connect-badge">([^<]*)</.exec(section(html(id), 'connect'))?.[1];
+    expect(badge('github')).toBe('1 of 3 · a key you create and paste');
+    expect(badge('ssh')).toBe('1 of 3 · a key you create and paste');
+    expect(badge('miro')).toBe('2 of 3 · you sign in and allow the gateway (its own client)');
+    expect(badge('google-calendar')).toBe('3 of 3 · you sign in through an OAuth broker');
+  });
+
+  it('a brokered service starts with the administrator’s block, before what the person does', () => {
+    const connect = section(html('google-calendar'), 'connect');
+    expect(connect).toContain('class="connect-admin"');
+    expect(connect).toContain('Before anyone connects');
+    expect(connect.indexOf('connect-admin')).toBeLessThan(
+      connect.indexOf('signs in through the client'),
+    );
+    expect(connect).toContain(`href="${BROKER_DOC}"`);
+    expect(section(html('miro'), 'connect')).not.toContain('connect-admin');
+  });
+
+  it('draws each step’s menu path as chips before the sentence', () => {
+    const connect = section(html('github'), 'connect');
+    const chips = [...connect.matchAll(/class="path-seg">([^<]*)</g)].map((m) => m[1]);
+    expect(chips).toEqual(expect.arrayContaining(['Settings', 'Developer settings']));
+    expect(connect).toContain('aria-label="Where to click at GitHub"');
+    expect(connect).not.toContain('<figure');
+  });
+
+  it('shows the screenshot of the hard screen with its provenance line', () => {
+    const connect = section(html('cloudflare-dns'), 'connect');
+    const figures = [...connect.matchAll(/<figure class="shot">(.*?)<\/figure>/g)].map(
+      (m) => m[1] ?? '',
+    );
+    expect(figures).toHaveLength(1);
+    expect(figures[0]).toMatch(
+      /<img src="\/plugins\/cloudflare-dns\/connect\/create-token\.webp" alt="[^"]+" loading="lazy"\/>/,
+    );
+    expect(figures[0]).toContain(
+      '<figcaption>Cloudflare DNS docs, 2026-11 · from developers.cloudflare.com (CC BY 4.0)</figcaption>',
+    );
+  });
+
+  it('has no page of its own: the old address redirects to the section', () => {
+    expect(section(html('github'), 'connect')).not.toContain('/docs/providers/');
+    expect(SITE_REDIRECTS).toContainEqual({
+      source: '/docs/providers/:id([a-z][a-z0-9-]*)',
+      destination: '/plugins/:id#connect',
+      permanent: true,
+    });
   });
 });

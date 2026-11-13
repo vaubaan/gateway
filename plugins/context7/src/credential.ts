@@ -55,7 +55,10 @@ export const context7CredentialSpec: ApiKeyCredentialSpec = {
   guide: {
     steps: [
       { do: 'Sign in to Context7 and open the dashboard.', url: CONTEXT7_DASHBOARD },
-      { do: 'Choose Create API Key in the API Keys card; Context7 shows the key once.' },
+      {
+        do: 'Create an API key; Context7 shows the key once.',
+        path: ['API Keys', 'Create API Key'],
+      },
       { do: 'Copy the key and paste it here.' },
     ],
     permissions: [],

@@ -91,7 +91,8 @@ export const flyCredential: ApiKeyCredentialSpec = {
     steps: [
       { do: 'Sign in to Fly.io as a member of the organization the agents will work in.' },
       {
-        do: 'Open Tokens, choose the organization, name the token vaubaan-gateway, set an expiry, and choose Create Organization token.',
+        do: 'Open the page, choose the organization, name the token vaubaan-gateway and set an expiry, then create it.',
+        path: ['Tokens', 'Create Organization token'],
         url: FLY_TOKENS_PAGE,
       },
       {

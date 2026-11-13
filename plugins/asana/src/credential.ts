@@ -66,10 +66,14 @@ export const asanaCredential: ApiKeyCredentialSpec = {
         do: 'Sign in to Asana as the account the agents will act as; everything they do is signed by it.',
       },
       {
-        do: 'Open the developer console (profile photo, My Settings, Apps, Manage Developer Apps).',
+        do: 'Open the developer console from your profile photo, or straight from the link.',
+        path: ['Settings', 'Apps', 'View developer console'],
         url: ASANA_DEVELOPER_CONSOLE,
       },
-      { do: 'Choose + Create new token, name it Vaubaan Gateway and create it.' },
+      {
+        do: 'Create a new token named Vaubaan Gateway.',
+        path: ['+ Create new token'],
+      },
       { do: 'Copy the token and paste it here; Asana shows it only once.' },
     ],
     // A PAT has no scopes: it opens what the account opens.

@@ -11,7 +11,7 @@ import type {
 } from '../credential.ts';
 
 /**
- * Every step (sentence, page, command) — the steps of each alternative first
+ * Every step (its menu path, sentence, page, command) — the steps of each alternative first
  * when `alternatives` are given —, then how wide to grant and why, as one string.
  */
 export function guideText(
@@ -19,6 +19,7 @@ export function guideText(
   alternatives: readonly CredentialAlternative[] = [],
 ): string {
   const steps = [...alternatives.flatMap((alt) => alt.steps), ...guide.steps].flatMap((step) => [
+    ...(step.path ?? []),
     step.do,
     step.url ?? '',
     step.code ?? '',

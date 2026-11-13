@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'vitest';
 
-import type { ApiKeyCredentialSpec, CredentialSpec, TokenGuide } from '../../src/credential.ts';
+import {
+  screenshotAttribution,
+  type ApiKeyCredentialSpec,
+  type CredentialSpec,
+  type TokenGuide,
+} from '../../src/credential.ts';
 import { pluginIssues } from '../../src/define-plugin.ts';
 import type { ProviderPlugin } from '../../src/plugin.ts';
+import { guideText } from '../../src/testing/guide.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 const GUIDE: TokenGuide = {
@@ -81,7 +87,7 @@ describe('the token guide of an api-key credential', () => {
     );
     expect(issues).toEqual(
       expect.arrayContaining([
-        'credential.guide.steps[0]: expected { do, url?, code? }',
+        'credential.guide.steps[0]: expected { do, path?, url?, code?, screenshot? }',
         'credential.guide.steps[1].do: expected one plain sentence',
         'credential.guide.steps[1].url: expected an https URL when present',
         'credential.guide.steps[1].code: expected a non-empty command when present',
@@ -217,5 +223,111 @@ describe('the alternatives of an api-key credential', () => {
       withAlternatives([{ ...WORKSPACE, fields: ['workspace_id', 'token'] }, PROJECT]),
     );
     expect(issues).toContain('credential.alternatives[1]: asks for no secret field');
+  });
+});
+
+describe('the menu path and the screenshot of a step', () => {
+  const SHOT = {
+    source: 'https://acme.example/docs/tokens',
+    licence: 'CC-BY-4.0',
+    taken: '2026-11',
+    alt: 'The new token form with its permissions',
+  } as const;
+  const WITH_SHOT: TokenGuide = {
+    ...GUIDE,
+    steps: [
+      { do: 'Open the page and start a new token.', path: ['Settings', 'Tokens', 'New token'] },
+      { do: 'Tick the permissions below.', screenshot: 'token-form.webp' },
+    ],
+    screenshots: { 'token-form.webp': SHOT },
+  };
+
+  test('a path of menu labels and a declared screenshot pass', () => {
+    expect(pluginIssues(withGuide(WITH_SHOT))).toEqual([]);
+  });
+
+  test('a path has 1 to 8 menu labels of at most 40 characters, none empty', () => {
+    const issues = (path: unknown) =>
+      pluginIssues(withGuide({ ...GUIDE, steps: [{ do: 'Open it.', path }] }));
+    expect(issues([])).toContain(
+      'credential.guide.steps[0].path: expected 1 to 8 menu labels when present',
+    );
+    expect(issues(Array.from({ length: 9 }, () => 'Menu'))).toContain(
+      'credential.guide.steps[0].path: expected 1 to 8 menu labels when present',
+    );
+    expect(issues(['Settings', ' ', 'x'.repeat(41)])).toEqual([
+      'credential.guide.steps[0].path[1]: expected a menu label of 1 to 40 characters',
+      'credential.guide.steps[0].path[2]: expected a menu label of 1 to 40 characters',
+    ]);
+  });
+
+  test('every screenshot a step names is declared, and every declared one is named once', () => {
+    expect(pluginIssues(withGuide({ ...WITH_SHOT, screenshots: undefined }))).toEqual([
+      "credential.guide.screenshots: 'token-form.webp' is named by a step but not declared",
+    ]);
+    expect(
+      pluginIssues(
+        withGuide({ ...WITH_SHOT, screenshots: { ...WITH_SHOT.screenshots, 'spare.png': SHOT } }),
+      ),
+    ).toEqual(["credential.guide.screenshots['spare.png']: declared but named by no step"]);
+    expect(
+      pluginIssues(
+        withGuide({
+          ...WITH_SHOT,
+          steps: [...WITH_SHOT.steps, { do: 'Look again.', screenshot: 'token-form.webp' }],
+        }),
+      ),
+    ).toEqual(["credential.guide.screenshots['token-form.webp']: named by 2 steps, expected one"]);
+  });
+
+  test('a screenshot is a png or webp slug with a source, an allowed licence, a month and an alt', () => {
+    const issues = pluginIssues(
+      withGuide({
+        ...GUIDE,
+        steps: [{ do: 'Look.', screenshot: 'Token Form.jpg' }],
+        screenshots: {
+          'Token Form.jpg': {
+            source: 'http://acme.example',
+            licence: 'CC-BY-NC-4.0',
+            taken: '2026-13',
+            alt: '',
+          },
+        },
+      }),
+    );
+    expect(issues).toEqual([
+      "credential.guide.steps[0].screenshot: expected a file name such as 'token-form.webp'",
+      "credential.guide.screenshots['Token Form.jpg']: expected a file name such as 'token-form.webp' (.png or .webp)",
+      "credential.guide.screenshots['Token Form.jpg'].source: expected the https URL of the page it was taken from, or 'ours'",
+      "credential.guide.screenshots['Token Form.jpg'].licence: expected one of CC-BY-4.0 | MIT | Apache-2.0 | ours (a licence that forbids commercial use or changes never ships)",
+      "credential.guide.screenshots['Token Form.jpg'].taken: expected the month it was taken, YYYY-MM",
+      "credential.guide.screenshots['Token Form.jpg'].alt: expected what the image shows, 1 to 200 characters",
+    ]);
+  });
+
+  test("'ours' is a source and a licence together", () => {
+    expect(
+      pluginIssues(
+        withGuide({
+          ...WITH_SHOT,
+          screenshots: { 'token-form.webp': { ...SHOT, licence: 'ours' } },
+        }),
+      ),
+    ).toEqual([
+      "credential.guide.screenshots['token-form.webp'].licence: 'ours' goes with the source 'ours', and only with it",
+    ]);
+  });
+
+  test('the attribution under the image is derived from the declaration', () => {
+    expect(
+      screenshotAttribution('GitHub', { ...SHOT, source: 'https://docs.github.com/en/x' }),
+    ).toBe('GitHub docs, 2026-11 · from docs.github.com (CC BY 4.0)');
+    expect(screenshotAttribution('GitHub', { ...SHOT, source: 'ours', licence: 'ours' })).toBe(
+      'Taken by the Vaubaan team, 2026-11',
+    );
+  });
+
+  test('guideText reads the menu path of every step', () => {
+    expect(guideText(WITH_SHOT)).toContain('Settings Tokens New token Open the page');
   });
 });

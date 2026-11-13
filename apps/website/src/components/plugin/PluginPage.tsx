@@ -15,10 +15,15 @@ import { SEVERITY_LABEL, TRUST_LEVELS, TRUST_LEVEL_LABELS } from '@vaubaan/polic
 import { gatewaysSentence, healthFootnote, NOT_READ } from '../../content/health';
 import { WORKED_TRUST_LEVEL } from '../../content/plugin-examples';
 import {
+  BROKER_ADMIN_TITLE,
   BROKER_DOC,
+  brokerAdminSentences,
   callWords,
   capitalise,
   carefulGateOf,
+  CONNECT_ANCHOR,
+  connectKindBadge,
+  connectKindCode,
   connectSentences,
   DAY_NOTE,
   levelCellWords,
@@ -27,6 +32,7 @@ import {
   mapOf,
   missionOf,
   openingOf,
+  PATH_SEPARATOR,
   retiredOf,
   spreadsOf,
   TOOLS_NOTE,
@@ -42,7 +48,12 @@ import {
   validatedSentence,
   type PluginWithHealth,
 } from '../../content/plugin-pages';
-import type { CredentialInfo, LevelBudgets, PluginInfo } from '../../content/plugins';
+import type {
+  ConnectStepInfo,
+  CredentialInfo,
+  LevelBudgets,
+  PluginInfo,
+} from '../../content/plugins';
 import type { ValidationThresholds } from '../../content/thresholds';
 import { FactCells, GateMark, Mono, PermissionBox, RiskWord, Tag } from './Codes';
 
@@ -254,6 +265,51 @@ function Scopes({ scopes }: { scopes: readonly string[] }) {
   );
 }
 
+/** The menus to follow at the service, as highlighted chips: "Settings › Developer settings". */
+function GuidePath({ path, service }: { path: readonly string[]; service: string }) {
+  return (
+    <span className="path" aria-label={`Where to click at ${service}`}>
+      {path.map((segment, i) => (
+        <Fragment key={`${i}:${segment}`}>
+          {i > 0 && (
+            <span className="path-sep" aria-hidden="true">
+              {PATH_SEPARATOR}
+            </span>
+          )}
+          <span className="path-seg">{segment}</span>
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+function Step({ step, service }: { step: ConnectStepInfo; service: string }) {
+  return (
+    <li>
+      {step.path.length > 0 && <GuidePath path={step.path} service={service} />}
+      <span className="step-do">{step.do}</span>
+      {step.url && (
+        <>
+          {' '}
+          (<a href={step.url}>open</a>)
+        </>
+      )}
+      {step.code && (
+        <>
+          {' '}
+          <Mono>{step.code}</Mono>
+        </>
+      )}
+      {step.figure && (
+        <figure className="shot">
+          <img src={step.figure.src} alt={step.figure.alt} loading="lazy" />
+          <figcaption>{step.figure.attribution}</figcaption>
+        </figure>
+      )}
+    </li>
+  );
+}
+
 function ConnectBlock({
   plugin,
   credential: c,
@@ -263,13 +319,18 @@ function ConnectBlock({
 }) {
   return (
     <div className="connect" data-client-source={c.clientSource}>
-      {connectSentences(c, plugin.name).map((sentence) => (
-        <p key={sentence}>
-          <Inline text={sentence} />
-        </p>
-      ))}
+      <p className="connect-kind">
+        <span className="connect-badge">{connectKindBadge(c)}</span>{' '}
+        <Mono quiet>{connectKindCode(c)}</Mono>
+      </p>
       {c.clientSource === 'broker' && (
-        <>
+        <aside className="connect-admin" aria-labelledby={`connect-admin-${plugin.id}`}>
+          <h3 id={`connect-admin-${plugin.id}`}>{BROKER_ADMIN_TITLE}</h3>
+          {brokerAdminSentences(c, plugin.name).map((sentence) => (
+            <p key={sentence}>
+              <Inline text={sentence} />
+            </p>
+          ))}
           <dl className="facts">
             <dt>Provider</dt>
             <dd>
@@ -283,8 +344,13 @@ function ConnectBlock({
           <p>
             <a href={BROKER_DOC}>Your own OAuth broker</a>
           </p>
-        </>
+        </aside>
       )}
+      {connectSentences(c, plugin.name).map((sentence) => (
+        <p key={sentence}>
+          <Inline text={sentence} />
+        </p>
+      ))}
       {c.clientSource === 'gateway-registered' && c.scopes.length > 0 && (
         <dl className="facts">
           <dt>Scopes asked</dt>
@@ -293,37 +359,29 @@ function ConnectBlock({
           </dd>
         </dl>
       )}
-      {c.clientSource === 'pasted-key' && <PastedKey credential={c} />}
+      {c.clientSource === 'pasted-key' && <PastedKey credential={c} service={plugin.name} />}
+      {plugin.manualRevocation && (
+        <p>
+          <strong>Disconnecting</strong>: {plugin.manualRevocation}
+        </p>
+      )}
     </div>
   );
 }
 
-function PastedKey({ credential: c }: { credential: CredentialInfo }) {
+function PastedKey({ credential: c, service }: { credential: CredentialInfo; service: string }) {
   return (
     <>
       {c.reach && (
-        <p>
-          How wide to grant — {c.reach.what}: <strong>{c.reach.grant}</strong>. {c.reach.why}
+        <p className="connect-reach">
+          <strong>Grant it wide, once.</strong> {c.reach.what}: <strong>{c.reach.grant}</strong>.{' '}
+          {c.reach.why}
         </p>
       )}
       {c.steps.length > 0 && (
         <ol className="steps">
           {c.steps.map((step) => (
-            <li key={step.do}>
-              {step.do}
-              {step.url && (
-                <>
-                  {' '}
-                  (<a href={step.url}>open</a>)
-                </>
-              )}
-              {step.code && (
-                <>
-                  {' '}
-                  <Mono>{step.code}</Mono>
-                </>
-              )}
-            </li>
+            <Step key={step.do} step={step} service={service} />
           ))}
         </ol>
       )}
@@ -607,13 +665,10 @@ export function PluginPageView({
         </Section>
 
         {/* 7 · Connecting an account */}
-        <Section id="connect" title="Connecting an account">
+        <Section id={CONNECT_ANCHOR} title="Connecting an account">
           {plugin.credentials.map((c) => (
             <ConnectBlock key={c.kind + c.clientSource} plugin={plugin} credential={c} />
           ))}
-          <p>
-            The steps: <a href={`/docs/providers/${plugin.id}`}>Connect {plugin.name}</a>.
-          </p>
         </Section>
 
         {/* 8 · Retired, tools, health, links */}

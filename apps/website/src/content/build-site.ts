@@ -1,7 +1,7 @@
 /**
  * The whole site as data, built from the repository: every page with its
  * Markdown, the generated docs pages, and the files served from `public/`
- * (llms.txt, sitemap.xml, robots.txt). The pages that carry plugin health —
+ * (llms.txt, sitemap.xml, robots.txt, the connect guides' screenshots). The pages that carry plugin health —
  * the plugins list, the health page, each plugin page — and what repeats
  * them (the Markdown twins, llms-full.txt, plugins.json) are rendered at
  * request time from the same functions (`src/site/live.ts`): here they are
@@ -16,16 +16,9 @@ import { LANDING_LEDE, landingMarkdown } from '../site/landing';
 import { configKeysMarkdown, CONFIG_HANDBOOK, parseConfigKeys } from './config-keys';
 import { loadHandwrittenDocs, orderDocs, withSectionLists, type DocPage } from './docs';
 import { unreadSnapshot, type HealthSnapshot } from './health';
-import {
-  escapeMdx,
-  rewriteRelativeLinks,
-  sectionsOf,
-  splitFrontmatter,
-  splitTitle,
-} from './markdown';
+import { escapeMdx, rewriteRelativeLinks, splitFrontmatter, splitTitle } from './markdown';
 import { llmsTxt, robotsTxt, sitemapXml, type SitePage } from './outputs';
 import {
-  connectPageMarkdown,
   PLUGIN_GROUP_PATH,
   pluginGroupMarkdown,
   pluginPageDescription,
@@ -33,7 +26,7 @@ import {
   withHealth,
   type PluginWithHealth,
 } from './plugin-pages';
-import type { PluginInfo } from './plugins';
+import { connectFigureFiles, type PluginInfo } from './plugins';
 import { readRepoFile } from './repo';
 import { THRESHOLDS_SOURCE, type ValidationThresholds } from './thresholds';
 import { parseAcceptedRisks, parseOutOfScope, THREAT_MODEL, trustMarkdown } from './trust';
@@ -62,6 +55,12 @@ export interface BuiltSite {
   readonly plugins: readonly PluginWithHealth[];
   /** The files of `public/`, by path from it (`llms.txt`, `sitemap.xml`, `robots.txt`). */
   readonly files: ReadonlyMap<string, string>;
+  /**
+   * The binary files copied into `public/`, by path from it, each with its source from
+   * the repository root: the screenshots of the connect guides
+   * (`plugins/<id>/connect/<file>` from `plugins/<id>/docs/connect/<file>`).
+   */
+  readonly assets: ReadonlyMap<string, string>;
   /** What the pages render (`.generated/site.json`). */
   readonly data: SiteData;
 }
@@ -119,26 +118,6 @@ function knownLimitationsDoc(): GeneratedDoc {
   );
 }
 
-/** The hand-written "Credential…" sections of a plugin's README, links pointed at GitHub. */
-export function readmeCredentialSections(plugin: Pick<PluginInfo, 'dir'>): string {
-  const readmePath = `${plugin.dir}/README.md`;
-  const { body } = splitFrontmatter(readRepoFile(readmePath));
-  const sections = sectionsOf(body, 2).filter((s) => /^credential/i.test(s.heading));
-  return rewriteRelativeLinks(sections.map((s) => s.text).join('\n\n'), readmePath);
-}
-
-function providerDoc(plugin: PluginInfo): GeneratedDoc {
-  const markdown = connectPageMarkdown(plugin, readmeCredentialSections(plugin));
-  return generatedDoc(
-    `providers/${plugin.id}.mdx`,
-    `/docs/providers/${plugin.id}`,
-    `Connect ${plugin.name}`,
-    `How to connect a ${plugin.name} account to Vaubaan Gateway: ${plugin.credentials.some((c) => c.kind === 'oauth2') ? 'the sign-in at the service' : 'the token to make'}, and what to grant.`,
-    splitTitle(markdown).rest,
-    [plugin.dir],
-  );
-}
-
 /** The MDX file of a generated docs page: frontmatter, a do-not-edit note, escaped Markdown. */
 export function generatedMdx(doc: GeneratedDoc): string {
   const { page } = doc;
@@ -161,11 +140,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
   const docsDir = join(repoRoot, DOCS_DIR_FROM_REPO);
   const withStatus = withHealth(plugins, UNREAD);
 
-  const generatedDocs = [
-    configurationKeysDoc(),
-    knownLimitationsDoc(),
-    ...plugins.map(providerDoc),
-  ];
+  const generatedDocs = [configurationKeysDoc(), knownLimitationsDoc()];
   const docs = withSectionLists(
     orderDocs(
       [...loadHandwrittenDocs(docsDir, DOCS_DIR_FROM_REPO), ...generatedDocs.map((g) => g.page)],
@@ -260,5 +235,7 @@ export function buildSite(inputs: SiteInputs): BuiltSite {
     pages: pages.map(({ markdown: _markdown, ...meta }) => meta),
   };
 
-  return { pages, generatedDocs, plugins: withStatus, files, data };
+  const assets = new Map(plugins.flatMap(connectFigureFiles));
+
+  return { pages, generatedDocs, plugins: withStatus, files, assets, data };
 }

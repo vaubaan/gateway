@@ -13,6 +13,7 @@ import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
+import { bundledInventory, readConnectFile, type PluginInventoryEntry } from '../plugins';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { CredentialBroker } from './credentials';
@@ -31,6 +32,11 @@ export interface ConnectionsModuleDeps {
   readonly config: InstanceConfig;
   readonly store: Store;
   readonly registry: PluginRegistry;
+  /**
+   * Every plugin known, bundled or pinned (`root.plugins.entries`): where the connect
+   * guide's screenshots are read from. Absent (tests): every plugin bundled and enabled.
+   */
+  readonly pluginEntries?: readonly PluginInventoryEntry[];
   readonly sessions: SessionStore;
   readonly rateLimiter: RateLimiter;
   readonly authenticator: Authenticator;
@@ -126,6 +132,16 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     connections: service,
     notices,
     logger,
+    connectFile: (providerId, file) =>
+      readConnectFile(
+        {
+          registry: deps.registry,
+          inventory:
+            deps.pluginEntries ?? bundledInventory(deps.registry.all().map((r) => r.plugin)),
+        },
+        providerId,
+        file,
+      ),
   });
   const discoveryAfterCall = new DiscoveryAfterCall({
     registry: deps.registry,
@@ -281,6 +297,9 @@ export {
   toPluginResource,
   type Actor,
   type ConnectableProvider,
+  type AlternativeView,
+  type GuideFigureView,
+  type GuideStepView,
   type TokenGuideView,
   type TokenPermissionView,
   type ToolLabel,

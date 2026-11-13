@@ -20,10 +20,16 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import {
+  GUIDE_SCREENSHOT_DIR,
   isBrokeredSpec,
+  screenshotAttribution,
+  screenshotLicenceWords,
+  screenshotSourceHost,
   type CredentialSpec,
   type GuideStep,
   type ProviderPlugin,
+  type Screenshot,
+  type ScreenshotLicence,
   type TokenExpiry,
   type TokenReach,
 } from '@vaubaan/plugin-sdk';
@@ -229,6 +235,57 @@ export interface CredentialFieldInfo {
  */
 export type ClientSource = 'pasted-key' | 'gateway-registered' | 'broker';
 
+/**
+ * A screenshot of the connect guide as the site shows it: copied at build beside the
+ * page (`src`), its provenance line derived by the SDK (`screenshotAttribution`).
+ */
+export interface ConnectFigureInfo {
+  /** The file name in the plugin's `docs/connect/`. */
+  readonly file: string;
+  /** Where the page loads it: `/plugins/<id>/connect/<file>`. */
+  readonly src: string;
+  readonly alt: string;
+  readonly attribution: string;
+  /** The documentation it comes from (`docs.github.com`), `null` for one of ours. */
+  readonly sourceHost: string | null;
+  readonly licence: ScreenshotLicence;
+  /** The licence as people read it: "CC BY 4.0". */
+  readonly licenceWords: string;
+}
+
+/** One step of the guide: the sentence, the menus to follow, its page, command and figure. */
+export interface ConnectStepInfo {
+  readonly do: string;
+  /** The provider's menu labels, in order; empty when the step has none. */
+  readonly path: readonly string[];
+  readonly url: string | null;
+  readonly code: string | null;
+  readonly figure: ConnectFigureInfo | null;
+}
+
+/** Where the site serves a screenshot of a plugin's connect guide. */
+export function connectFigureSrc(pluginId: string, file: string): string {
+  return `/plugins/${pluginId}/connect/${file}`;
+}
+
+/** The figures of a plugin, as `[public path, source file]` for the build to copy. */
+export function connectFigureFiles(
+  plugin: Pick<PluginInfo, 'dir' | 'credentials'>,
+): [string, string][] {
+  return plugin.credentials.flatMap((c) =>
+    c.steps.flatMap((step) =>
+      step.figure
+        ? [
+            [
+              step.figure.src.replace(/^\//, ''),
+              `${plugin.dir}/${GUIDE_SCREENSHOT_DIR}/${step.figure.file}`,
+            ] as [string, string],
+          ]
+        : [],
+    ),
+  );
+}
+
 export interface CredentialInfo {
   readonly kind: CredentialSpec['kind'];
   readonly clientSource: ClientSource;
@@ -238,7 +295,8 @@ export interface CredentialInfo {
   readonly label: string | null;
   readonly fields: readonly CredentialFieldInfo[];
   readonly createUrl: string | null;
-  readonly steps: readonly GuideStep[];
+  /** The guide's steps, each alternative's first, said with the alternative's label. */
+  readonly steps: readonly ConnectStepInfo[];
   readonly reach: TokenReach | null;
   /** What to grant at the provider, each with the tools of the plugin that need it. */
   readonly permissions: readonly {
@@ -484,7 +542,37 @@ function clientSourceOf(spec: CredentialSpec): ClientSource {
   return isBrokeredSpec(spec) ? 'broker' : 'gateway-registered';
 }
 
-function credentialInfo(spec: CredentialSpec, manualRevocation: string | null): CredentialInfo {
+function stepInfo(
+  pluginId: string,
+  service: string,
+  screenshots: Readonly<Record<string, Screenshot>> | undefined,
+  step: GuideStep,
+  prefix: string,
+): ConnectStepInfo {
+  const shot = step.screenshot === undefined ? undefined : screenshots?.[step.screenshot];
+  return {
+    do: `${prefix}${step.do}`,
+    path: [...(step.path ?? [])],
+    url: step.url ?? null,
+    code: step.code ?? null,
+    figure:
+      step.screenshot !== undefined && shot !== undefined
+        ? {
+            file: step.screenshot,
+            src: connectFigureSrc(pluginId, step.screenshot),
+            alt: shot.alt,
+            attribution: screenshotAttribution(service, shot),
+            sourceHost: screenshotSourceHost(shot),
+            licence: shot.licence,
+            licenceWords: screenshotLicenceWords(shot.licence),
+          }
+        : null,
+  };
+}
+
+function credentialInfo(plugin: ProviderPlugin): CredentialInfo {
+  const spec = plugin.credential;
+  const manualRevocation = plugin.manualRevocation ?? null;
   // An `oauth2` way asks for nothing: the gateway registers its own client at the service,
   // or signs in through the OAuth broker it is enrolled with (`broker`).
   const fields = spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [];
@@ -505,9 +593,13 @@ function credentialInfo(spec: CredentialSpec, manualRevocation: string | null): 
     steps: guide
       ? [
           ...(spec.kind === 'api-key' ? (spec.alternatives ?? []) : []).flatMap((alt) =>
-            alt.steps.map((step) => ({ ...step, do: `${alt.label}: ${step.do}` })),
+            alt.steps.map((step) =>
+              stepInfo(plugin.id, plugin.displayName, guide.screenshots, step, `${alt.label}: `),
+            ),
           ),
-          ...guide.steps,
+          ...guide.steps.map((step) =>
+            stepInfo(plugin.id, plugin.displayName, guide.screenshots, step, ''),
+          ),
         ]
       : [],
     reach: guide?.reach ?? null,
@@ -576,7 +668,7 @@ export function pluginInfo(plugin: ProviderPlugin, dir: string, packageName: str
     },
     examples,
     workedMission: workedMission(plugin),
-    credentials: [credentialInfo(plugin.credential, plugin.manualRevocation ?? null)],
+    credentials: [credentialInfo(plugin)],
     gitRemote: plugin.gitRemote !== undefined,
   };
 }

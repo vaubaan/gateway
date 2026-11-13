@@ -9,6 +9,40 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Plugin SDK
+
+- **0.8.0 — the connect guide: menu paths and screenshots with their provenance; a
+  minor because `definePlugin` now refuses what 0.7 accepted** (a malformed `path`, a
+  screenshot without a source, a licence outside the allowlist, a step naming an
+  undeclared file), and before `1.0.0` such a rule is a minor. A pin built against 0.7
+  (`^0.7.0`, `^0.7.1`) is turned away until it is rebuilt (ADR
+  plugin-contract-and-credential-spec, amendment 2026-11-13).
+  - `GuideStep.path?: string[]`: the menus the person follows at the provider, in its
+    own labels (1 to 8, at most 40 characters each); the sentence `do` no longer
+    carries them. The connect page and the site draw them as highlighted chips.
+  - `GuideStep.screenshot?` and `TokenGuide.screenshots?`: one picture of the hard
+    screen, a `.png` or `.webp` in `docs/connect/` of the plugin folder
+    (`GUIDE_SCREENSHOT_DIR`), declared with `source` (the https page it comes from, or
+    `ours`), `licence` (`CC-BY-4.0`, `MIT`, `Apache-2.0` or `ours`: no NonCommercial, no
+    NoDerivatives), `taken` (`YYYY-MM`) and `alt`; every declared file named by one
+    step. `screenshotAttribution(service, screenshot)` derives the line under the
+    image, the same on the site and the gateway.
+  - `guideText(guide, alternatives?)` reads the paths too.
+
+### Added
+
+- **The connect guide, one declaration in three places** (website spec §2.3 item 7):
+  the plugin page of vaubaan.com carries the whole guide in its section "Connecting
+  an account" — the kind badge (1 of 3 · a key you create and paste, 2 of 3 · you
+  sign in and allow the gateway, 3 of 3 · you sign in through an OAuth broker), the
+  menu paths as highlighted chips, the screenshot of the hard screen with its
+  provenance line, permissions, expiry and fields; `/docs/providers/<id>` now
+  redirects there (`/plugins/<id>#connect`). The gateway's connect screen draws the
+  same paths and screenshots, served from the plugin's folder, bundled or pinned
+  (`GET /reference/<id>/connect/<file>`, signed-in users). Every guide step carries
+  its menu path; Cloudflare DNS shows the Create Token form from Cloudflare's own
+  documentation (CC BY 4.0). The plugin bundle carries `docs/connect/`.
+
 ## [2.0.0-alpha.19] - 2026-11-13
 
 ### Plugin SDK

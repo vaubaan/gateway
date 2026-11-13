@@ -1,19 +1,22 @@
 /**
  * How to create a token by hand at a service, read from the plugin's
  * declaration (`ConnectableProvider.guide`): how wide to grant and why, the
- * steps with their pages and commands, the token page, who knows the expiry
+ * steps with their menu paths (highlighted chips), pages, commands and
+ * screenshots (a figure with its provenance line), the token page, who knows the expiry
  * and the service's documentation (step 1); the permissions to tick with the
  * tools each one serves (step 2). The connect page adds the last step, the
  * form. Nothing about a service is written here; the frame's words are
  * `TOKEN_CONNECT`.
  */
-import type { CredentialAlternative, GuideStep } from '@vaubaan/plugin-sdk';
+import type { CredentialAlternative } from '@vaubaan/plugin-sdk';
 
 import { Callout, CodeBlock, FormStep, Hint, Radio, Row, Rows } from '@/components/ui';
 import { listed, TOKEN_CONNECT } from '@/lib/vocabulary';
 import {
   ALTERNATIVE_FIELD,
+  type AlternativeView,
   type ConnectableProvider,
+  type GuideStepView,
   type TokenGuideView,
   type TokenPermissionView,
   type ToolLabel,
@@ -58,7 +61,7 @@ export function expiryWords(service: string, expiry: TokenGuideView['expiry']): 
 
 /** A step, and the alternative whose panel it belongs to (`-1`: every alternative). */
 interface PanelStep {
-  readonly step: GuideStep;
+  readonly step: GuideStepView;
   readonly panel: number;
 }
 
@@ -67,8 +70,8 @@ interface PanelStep {
  * one numbered list, the page hiding the panels of the alternatives not chosen.
  */
 export function panelSteps(
-  alternatives: readonly CredentialAlternative[],
-  steps: readonly GuideStep[],
+  alternatives: readonly AlternativeView[],
+  steps: readonly GuideStepView[],
 ): PanelStep[] {
   return [
     ...alternatives.flatMap((alt, panel) => alt.steps.map((step) => ({ step, panel }))),
@@ -76,11 +79,32 @@ export function panelSteps(
   ];
 }
 
-function Steps({ steps }: { steps: readonly PanelStep[] }) {
+/** The menus to follow at the service, as highlighted chips: "Settings › Developer settings". */
+export function GuidePath({ path, service }: { path: readonly string[]; service: string }) {
+  return (
+    <span className={`path ${styles.path}`} aria-label={TOKEN_CONNECT.pathLabel(service)}>
+      {path.map((segment, i) => (
+        <span key={`${i}:${segment}`} className={styles.pathItem}>
+          {i > 0 && (
+            <span className={styles.pathSeparator} aria-hidden="true">
+              {TOKEN_CONNECT.pathSeparator}
+            </span>
+          )}
+          <span className={styles.pathSegment} data-testid="guide-path-segment">
+            {segment}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function Steps({ steps, service }: { steps: readonly PanelStep[]; service: string }) {
   return (
     <ol className={styles.steps}>
       {steps.map(({ step, panel }) => (
         <li key={`${panel}:${step.do}`} data-alternative-panel={panel < 0 ? undefined : panel}>
+          {step.path && step.path.length > 0 && <GuidePath path={step.path} service={service} />}
           {step.do}
           {step.url && (
             <>
@@ -98,6 +122,13 @@ function Steps({ steps }: { steps: readonly PanelStep[] }) {
                 {step.code}
               </CodeBlock>
             </div>
+          )}
+          {step.figure && (
+            <figure className={`shot ${styles.shot}`} data-testid="guide-screenshot">
+              {/* Served by the gateway from the plugin's folder (`connectFileUrl`). */}
+              <img src={step.figure.url} alt={step.figure.alt} loading="lazy" />
+              <figcaption>{step.figure.attribution}</figcaption>
+            </figure>
           )}
         </li>
       ))}
@@ -173,7 +204,7 @@ export function TokenGuide({
         {provider.alternatives.length > 0 && (
           <AlternativeChoice alternatives={provider.alternatives} chosen={chosen} formId={formId} />
         )}
-        <Steps steps={panelSteps(provider.alternatives, guide.steps)} />
+        <Steps steps={panelSteps(provider.alternatives, guide.steps)} service={service} />
         {provider.createUrl && (
           <p className={styles.link}>
             <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">

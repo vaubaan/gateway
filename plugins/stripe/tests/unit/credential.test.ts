@@ -39,7 +39,9 @@ describe('stripe keys — the guide', () => {
     expect(stripePlugin.credential).toBe(stripeCredential);
     expect(stripeCredential.createUrl).toBe(STRIPE_KEYS_PAGE);
     const text = guideText(stripeCredential.guide);
-    expect(text).toMatch(/Reveal live key/);
+    expect(stripeCredential.guide.steps.flatMap((step) => step.path ?? [])).toContain(
+      'Reveal live key',
+    );
     expect(text).toMatch(/not a restricted key/);
     expect(stripeCredential.guide.expiry.kind).toBe('none');
   });

@@ -1,7 +1,7 @@
 /**
- * The Markdown of the plugin pages (website spec §2.3, §2.4) and of the docs
- * page "Connect <service>" (§2.2). One string per page: the site renders it as
- * HTML and serves it as the page's Markdown twin.
+ * The Markdown of the plugin pages (website spec §2.3, §2.4), the connect guide
+ * included (section 7). One string per page: the site renders it as HTML and
+ * serves it as the page's Markdown twin.
  */
 import { githubBlob, githubTree } from '../site/constants';
 import {
@@ -17,7 +17,7 @@ import {
   rateWords,
 } from './health';
 import { code, markdownTable, text } from './markdown';
-import type { GuideStep, TokenExpiry } from '@vaubaan/plugin-sdk';
+import type { TokenExpiry } from '@vaubaan/plugin-sdk';
 import {
   GATE_WORDS,
   SEVERITY_LABEL,
@@ -29,10 +29,15 @@ import {
 import { twinPathOf } from './outputs';
 import { WORKED_TRUST_LEVEL, type ExampleInfo } from './plugin-examples';
 import {
+  BROKER_ADMIN_TITLE,
   BROKER_DOC,
+  brokerAdminSentences,
   callWords,
   capitalise,
   carefulGateOf,
+  connectGuidePath,
+  connectKindBadge,
+  connectKindCode,
   connectSentences,
   DAY_NOTE,
   levelCellWords,
@@ -41,14 +46,22 @@ import {
   mapOf,
   missionOf,
   openingOf,
+  PATH_SEPARATOR,
   retiredOf,
+  screenshotCredits,
   spreadsOf,
   TOOLS_NOTE,
   type MapColumn,
   type MapRow,
   type Spread,
 } from './plugin-page';
-import type { CredentialInfo, FactInfo, LevelBudgets, PluginInfo } from './plugins';
+import type {
+  ConnectStepInfo,
+  CredentialInfo,
+  FactInfo,
+  LevelBudgets,
+  PluginInfo,
+} from './plugins';
 import { thresholdsSentence, type ValidationThresholds } from './thresholds';
 
 export interface PluginWithHealth extends PluginInfo {
@@ -98,7 +111,7 @@ export function pluginLinks(
   plugin: PluginInfo,
 ): { readonly label: string; readonly href: string }[] {
   return [
-    { label: `Connect a ${plugin.name} account`, href: `/docs/providers/${plugin.id}` },
+    { label: `Connect a ${plugin.name} account`, href: connectGuidePath(plugin.id) },
     ...(plugin.docsUrl ? [{ label: `How ${plugin.name} is modelled`, href: plugin.docsUrl }] : []),
     {
       label: 'The catalog, as code',
@@ -187,26 +200,37 @@ function exampleMarkdown(example: ExampleInfo, labels: ReadonlyMap<string, strin
   ].join('\n');
 }
 
+/**
+ * Section 7 as Markdown, in the page's order: the kind, the administrator's block of
+ * a brokered service, what the person does, the steps with their paths in bold and
+ * their screenshots as images with the provenance line, then permissions, expiry,
+ * fields and the documentation.
+ */
 function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
-  const lines = connectSentences(c, plugin.name).flatMap((sentence) => [sentence, '']);
+  const lines = [`**${connectKindBadge(c)}** — ${code(connectKindCode(c))}`, ''];
   if (c.clientSource === 'broker') {
     lines.push(
-      `Provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
+      `**${BROKER_ADMIN_TITLE}** (an administrator, once):`,
+      '',
+      ...brokerAdminSentences(c, plugin.name).map((sentence) => `- ${sentence}`),
+      `- Provider ${code(c.brokerProvider ?? '')}; scopes asked: ${c.scopes.map(code).join(', ')}. [Your own OAuth broker](${BROKER_DOC})`,
       '',
     );
-    return lines;
   }
+  lines.push(...connectSentences(c, plugin.name).flatMap((sentence) => [sentence, '']));
+  if (c.clientSource === 'broker') return lines;
   if (c.clientSource === 'gateway-registered') {
     if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
     return lines;
   }
   if (c.reach) {
     lines.push(
-      `How wide to grant — ${text(c.reach.what)}: ${text(c.reach.grant)}. ${text(c.reach.why)}`,
+      `Grant it wide, once — ${text(c.reach.what)}: ${text(c.reach.grant)}. ${text(c.reach.why)}`,
       '',
     );
   }
-  if (c.steps.length > 0) lines.push(...c.steps.map((step, i) => stepMarkdown(step, i + 1)), '');
+  if (c.steps.length > 0)
+    lines.push(...c.steps.flatMap((step, i) => stepMarkdown(step, i + 1)), '');
   if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
   if (c.permissions.length > 0) {
     lines.push(
@@ -225,6 +249,13 @@ function connectMarkdown(plugin: PluginInfo, c: CredentialInfo): string[] {
   }
   if (c.docsUrl) lines.push(`The service's documentation: [${c.docsUrl}](${c.docsUrl})`, '');
   return lines;
+}
+
+/** Section 7 of a plugin page as Markdown: every way of connecting, then how to disconnect. */
+export function connectSectionMarkdown(plugin: PluginInfo): string {
+  const lines = plugin.credentials.flatMap((c) => connectMarkdown(plugin, c));
+  if (plugin.manualRevocation) lines.push(`Disconnecting: ${text(plugin.manualRevocation)}`, '');
+  return lines.join('\n').trimEnd();
 }
 
 /**
@@ -317,9 +348,7 @@ export function pluginPageMarkdown(
   }
   if (mission.notTicked) lines.push(text(mission.notTicked), '');
 
-  lines.push('## Connecting an account', '');
-  plugin.credentials.forEach((c) => lines.push(...connectMarkdown(plugin, c)));
-  lines.push(`The steps: [Connect ${plugin.name}](/docs/providers/${plugin.id}).`, '');
+  lines.push('## Connecting an account', '', connectSectionMarkdown(plugin), '');
 
   const retired = retiredOf(plugin);
   if (retired.length > 0) {
@@ -393,24 +422,26 @@ function plural(n: number, one: string, other: string): string {
   return `${n} ${n === 1 ? one : other}`;
 }
 
-function credentialKindWords(c: CredentialInfo): string {
-  switch (c.clientSource) {
-    case 'broker':
-      return `by signing in at the service through an OAuth broker's client (nothing to create or paste; the instance must be enrolled with a broker serving ${code(c.brokerProvider ?? '')}: one someone else operates, or the published image run with your own client, [Your own OAuth broker](/docs/operations/oauth-broker); the gateway's pages tell whether the broker is attested)`;
-    case 'gateway-registered':
-      return 'by signing in at the service and allowing the gateway (nothing to create or paste: the gateway registers its own client there)';
-    case 'pasted-key':
-      return c.kind === 'ssh-key'
-        ? 'with a key pair the instance generates; you install its public key on the host'
-        : `with a ${c.label ?? 'key'} pasted by hand`;
-  }
-}
-
-/** One step of the guide: the sentence, its page as a link, its command as code. */
-function stepMarkdown(step: GuideStep, n: number): string {
+/**
+ * One step of the guide: its menu path in bold ("**Settings › Tokens**"), the
+ * sentence, its page as a link, its command as code; its screenshot as an image
+ * with the provenance line under it.
+ */
+function stepMarkdown(step: ConnectStepInfo, n: number): string[] {
+  const path =
+    step.path.length > 0 ? `**${step.path.map(text).join(` ${PATH_SEPARATOR} `)}** — ` : '';
   const where = step.url ? ` ([open](${step.url}))` : '';
   const command = step.code ? ` ${code(step.code)}` : '';
-  return `${n}. ${text(step.do)}${where}${command}`;
+  const lines = [`${n}. ${path}${text(step.do)}${where}${command}`];
+  if (step.figure) {
+    lines.push(
+      '',
+      `   ![${text(step.figure.alt)}](${step.figure.src})`,
+      `   *${text(step.figure.attribution)}*`,
+      '',
+    );
+  }
+  return lines;
 }
 
 /** The expiry of a pasted key in one sentence; `escape` is `text` for Markdown, none for HTML. */
@@ -423,85 +454,6 @@ export function expiryWords(expiry: TokenExpiry, escape: (value: string) => stri
     case 'none':
       return `Expiry: ${escape(expiry.reason)}`;
   }
-}
-
-function credentialMarkdown(c: CredentialInfo): string[] {
-  const lines: string[] = [`### The way: ${credentialKindWords(c)}`, ''];
-  if (c.reach) {
-    lines.push(
-      `How wide to grant — ${text(c.reach.what)}: ${text(c.reach.grant)}. ${text(c.reach.why)}`,
-      '',
-    );
-  }
-  if (c.steps.length > 0) {
-    lines.push(...c.steps.map((step, i) => stepMarkdown(step, i + 1)), '');
-  }
-  if (c.createUrl) lines.push(`Where: [${c.createUrl}](${c.createUrl})`, '');
-  if (c.permissions.length > 0) {
-    lines.push(
-      'Permissions to grant at the service, all of them: each mission narrows what an agent may do.',
-      '',
-      ...c.permissions.map(
-        (p) => `- ${text(p.name)}: ${p.access} (for ${p.tools.map(code).join(', ')})`,
-      ),
-      '',
-    );
-  }
-  if (c.expiry) lines.push(expiryWords(c.expiry), '');
-  if (c.scopes.length > 0) lines.push(`Scopes asked: ${c.scopes.map(code).join(', ')}.`, '');
-  if (c.fields.length > 0) {
-    lines.push(
-      'What the connect page asks:',
-      '',
-      ...c.fields.map(
-        (f) =>
-          `- ${text(f.label)}${f.secret ? ' (secret)' : ''}${f.help ? `: ${text(f.help)}` : ''}`,
-      ),
-      '',
-    );
-  }
-  if (c.docsUrl) lines.push(`The service's documentation: [${c.docsUrl}](${c.docsUrl})`, '');
-  return lines;
-}
-
-/**
- * `/docs/providers/<id>`: how an account of this service is connected. The
- * steps come from the plugin's declaration; the registration notes are the
- * hand-written "Credential" sections of the plugin's README, with their links
- * pointed at GitHub.
- */
-export function connectPageMarkdown(plugin: PluginInfo, readmeCredentialSections: string): string {
-  const lines: string[] = [
-    `# Connect ${plugin.name}`,
-    '',
-    `An account of ${plugin.name} is connected once, on the instance, by a person who then gives missions access to its resources; the agent never receives the credential. ${text(plugin.description)}`,
-    '',
-  ];
-  if (plugin.summary) lines.push(text(plugin.summary), '');
-  lines.push(
-    `Permissions, macro-actions and tools of this service: [${plugin.name} plugin](/plugins/${plugin.id}).`,
-    '',
-    '## How to connect',
-    '',
-    'On the instance: Accounts → Connect an account, then pick the service. Most services take a key the person creates at the service and pastes (a token, or for Gmail an app password); nobody declares anything beforehand. A service that signs people in through its own authorization (Miro) needs nothing either: the gateway registers its own client there the first time someone connects. Every instance has its own client: this gateway never uses one shared with another instance. Google takes no client registered that way: Google Calendar signs in through an OAuth broker the instance is enrolled with, which holds one client and keeps no token ([Your own OAuth broker](/docs/operations/oauth-broker)).',
-    '',
-  );
-  plugin.credentials.forEach((c) => lines.push(...credentialMarkdown(c)));
-  if (plugin.manualRevocation) {
-    lines.push('## Disconnecting', '', text(plugin.manualRevocation), '');
-  }
-  if (readmeCredentialSections.trim() !== '') {
-    lines.push(
-      '## Registration notes from the plugin',
-      '',
-      `From the plugin's [README](${githubBlob(`${plugin.dir}/README.md`)}), written for the people who create the key.`,
-      '',
-      // The README's own headings start at level 2; under this section they move one level down.
-      readmeCredentialSections.replace(/^(#{2,5}) /gm, '#$1 '),
-      '',
-    );
-  }
-  return lines.join('\n').trimEnd() + '\n';
 }
 
 /** The figures of a line, in the columns Gateways | Calls | Success. */
@@ -554,7 +506,14 @@ export function pluginListMarkdown(
     '',
     `Write a plugin for another service: the [plugin guide](${githubBlob('plugins/README.md')}) and the kit in [plugins/_template](${githubTree('plugins/_template')}). Every plugin as data: [/plugins.json](/plugins.json).`,
     '',
+    ...creditLines(plugins),
   ].join('\n');
+}
+
+/** The credits line of the screenshots, generated from the declarations; nothing when none. */
+function creditLines(plugins: readonly PluginInfo[]): string[] {
+  const credits = screenshotCredits(plugins);
+  return credits ? [text(credits), ''] : [];
 }
 
 /** "2026-11-01 15:00 UTC" */

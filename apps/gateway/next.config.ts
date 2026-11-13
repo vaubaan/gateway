@@ -185,6 +185,9 @@ const nextConfig: NextConfig = {
       // readFileSync behind a computed path, so every plugin YAML is traced here
       // (docs/handbook/plugin-sdk.md).
       '../../plugins/*/src/**/*.yaml',
+      // The screenshots of the connect guides, read by `readConnectFile`
+      // (src/server/plugins/connect-files.ts) behind a computed path, like the catalogs.
+      '../../plugins/*/docs/connect/**',
     ],
   },
   // Tests never ship. `catalogPathNextTo` (`packages/plugin-sdk/src/catalog-path.ts`)
