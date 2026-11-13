@@ -2,12 +2,13 @@
  * The token guide of the connect page (`TokenGuide`), rendered to static
  * markup from a `ConnectableProvider`: how wide to grant and why, the steps
  * with their menu path, page, command and screenshot, the documentation, the
- * expiry by who knows it.
+ * expiry by who knows it; the permissions by name and access, without the
+ * tools they serve.
  */
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { expiryWords, TokenGuide } from '@/components/connections/TokenGuide';
+import { expiryWords, permissionLines, TokenGuide } from '@/components/connections/TokenGuide';
 import type { ConnectableProvider, TokenGuideView } from '@/server/connections';
 
 const GUIDE: TokenGuideView = {
@@ -36,7 +37,9 @@ const GUIDE: TokenGuideView = {
     why: 'Each mission narrows what an agent may do.',
   },
   permissions: [
-    { name: 'Contents', access: 'read-write', tools: [{ name: 'acme__push', title: 'Push' }] },
+    { name: 'Contents', access: 'read' },
+    { name: 'Contents', access: 'read-write' },
+    { name: 'Metadata', access: 'read' },
   ],
   expiry: { kind: 'provider-reports' },
   docsUrl: 'https://provider.example.com/docs/tokens',
@@ -111,6 +114,18 @@ describe('the token guide of the connect page', () => {
   it('links the service documentation and asks to tick every permission', () => {
     expect(html).toContain('href="https://provider.example.com/docs/tokens"');
     expect(html).toContain('Tick all of them');
+  });
+
+  it('lists each permission once, by name and access, without the tools it serves', () => {
+    expect(permissionLines(GUIDE.permissions)).toEqual([
+      { name: 'Contents', write: true },
+      { name: 'Metadata', write: false },
+    ]);
+    const permissions = html.slice(html.indexOf('data-testid="token-permissions"'));
+    expect(permissions.match(/>Contents</g)).toHaveLength(1);
+    expect(permissions).toContain('read and write');
+    expect(permissions).toContain('>Metadata<');
+    expect(permissions).not.toMatch(/\bfor [A-Z]/);
   });
 
   it('words the expiry by who knows it', () => {

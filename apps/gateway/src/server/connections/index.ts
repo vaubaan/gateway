@@ -302,7 +302,6 @@ export {
   type GuideStepView,
   type TokenGuideView,
   type TokenPermissionView,
-  type ToolLabel,
   type Connected,
   type ConnectionDetail,
   type ConnectionView,

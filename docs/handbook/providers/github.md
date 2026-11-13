@@ -76,6 +76,11 @@ env-scoped. Rules common to every plugin: [providers README](README.md).
 - **Fine-grained token** only: a classic `ghp_` token is refused by the field pattern (it reaches
   every repo with coarse scopes). Permissions to grant: `src/permissions.ts`; they are the hard
   ceiling at GitHub, which matters where a private repo on a free plan has no branch protection.
+- The guide asks for **Only select repositories**, the ones the missions will use (ADR
+  one-place-to-authorize-services-token-first, amendment 2026-11-13). Discovery
+  (`discoverGithubResources`, `GET /user/repos`) lists only the repositories the token reaches: a
+  repository left out never appears as a resource; adding it means editing the token's repository
+  access at GitHub (or a new token), then a discovery refresh or a reconnect.
 - The gateway cannot change a token's permissions or revoke it: create a new token and reconnect;
   delete the old one on GitHub's token settings page.
 

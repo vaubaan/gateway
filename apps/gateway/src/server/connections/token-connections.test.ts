@@ -74,13 +74,8 @@ describe('a service connected with a pasted token', () => {
       label: 'personal access token',
       createUrl: 'https://provider.example.com/tokens',
     });
-    expect(provider?.guide?.permissions).toEqual([
-      {
-        name: 'Things',
-        access: 'read',
-        tools: [{ name: 'dual__list_things', title: 'List things' }],
-      },
-    ]);
+    // By name and access only: the tools stay in the declaration, not on the connect page.
+    expect(provider?.guide?.permissions).toEqual([{ name: 'Things', access: 'read' }]);
   });
 
   it('a pasted token is checked first; who it acts as and its expiry are kept, never the token', async () => {

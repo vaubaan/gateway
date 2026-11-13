@@ -8,8 +8,9 @@
  * Read from the plugins the image ships (`compose/shipped-plugins.ts`), not
  * from a list kept here. `definePlugin` refuses an incomplete guide; this
  * holds the shipped ones to the parts a definition cannot judge: a step is an
- * imperative sentence, the reach argues for the wide grant, the last step
- * ends at the paste, a secret field exists.
+ * imperative sentence, the reach says the mission narrows it (wide, or for
+ * GitHub the repositories the missions will use: amendment 2026-11-13), the
+ * last step ends at the paste, a secret field exists.
  */
 import { describe, expect, it } from 'vitest';
 

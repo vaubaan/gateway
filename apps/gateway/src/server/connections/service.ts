@@ -145,18 +145,13 @@ export interface Actor {
   readonly groups: readonly GroupRecord[];
 }
 
-/** A tool of the plugin, as a person reads it: its title and its name. */
-export interface ToolLabel {
-  readonly name: string;
-  /** The plugin's title (`Merge a pull request`), or the name when it has none. */
-  readonly title: string;
-}
-
-/** One permission to tick at the provider, with the tools it serves. */
+/**
+ * One permission to tick at the provider and its access. The tools it serves
+ * stay in the plugin's declaration (coverage), not on the connect page.
+ */
 export interface TokenPermissionView {
   readonly name: string;
   readonly access: TokenPermissionAccess;
-  readonly tools: readonly ToolLabel[];
 }
 
 /**
@@ -553,11 +548,7 @@ export class ConnectionService {
         ? {
             steps: steps(guide.steps),
             reach: guide.reach,
-            permissions: guide.permissions.map((p) => ({
-              name: p.name,
-              access: p.access,
-              tools: p.tools.map((tool) => toolLabel(plugin, tool)),
-            })),
+            permissions: guide.permissions.map((p) => ({ name: p.name, access: p.access })),
             expiry: guide.expiry,
             docsUrl: guide.docsUrl,
           }
@@ -2046,10 +2037,6 @@ function stepView(
           }
         : null,
   };
-}
-
-function toolLabel(plugin: ProviderPlugin, name: string): ToolLabel {
-  return { name, title: plugin.toolTitles?.[name] ?? name };
 }
 
 function isTransportFailure(err: unknown): boolean {

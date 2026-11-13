@@ -161,20 +161,22 @@ Activity says who made it.
 
 1. At GitHub, signed in as the account the agents will act as: Settings →
    Developer settings → Personal access tokens → Fine-grained tokens →
-   Generate new token. Resource owner: the organization; All repositories;
-   an expiry; every permission the connect page lists, built from
+   Generate new token. Resource owner: the organization; Only select
+   repositories, then the repositories the missions will use; an expiry;
+   every permission the connect page lists, built from
    `GITHUB_TOKEN_PERMISSIONS` in GitHub's alphabetical order (Actions,
    Administration, Contents, Issues, Metadata read — GitHub adds it —, Pull
-   requests, Workflows). Grant this wide
-   once: each mission narrows it to its repositories and permissions, and a
-   token that lacks one means a new token.
+   requests, Workflows). Each mission narrows further, to the repositories
+   and permissions it names; a repository or permission the token lacks
+   means a new token.
 2. Paste it on "Connect a GitHub account". A classic token (`ghp_`) is
    refused by the field's pattern: it reaches every repository of its
    account.
 3. The gateway checks it (`GET /user` names the account; the
    `github-authentication-token-expiration` header, when sent, gives the
    expiry), lists the repositories it reaches (`GET /user/repos`, 100 per
-   page, up to 10 pages) as resources, and seals it. Every API tool and the
+   page, up to 10 pages) as resources — only those, so a repository left
+   out of the token is not offered to missions —, and seals it. Every API tool and the
    git remote send it as the bearer.
 
 GitHub enforces what the token may do; a call it lacks a permission for

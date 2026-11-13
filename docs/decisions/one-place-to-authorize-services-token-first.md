@@ -123,3 +123,31 @@ Blocks owners whose policy forbids a team-wide token, for a breadth the gateway 
 #### A second plugin (`vercel-project`)
 
 Two catalogs, two pages and two sets of tests for one service.
+
+## Amendment 2026-11-13: the repositories the missions will use
+
+### Context
+
+GitHub's guide asked for "All repositories" of the resource owner. A token over every repository of
+an organisation is wider than any mission, and the person creating it hesitates or refuses.
+
+### Decision
+
+The owner (Renaud Pelissier) reverses the wide grant where the token lets the person pick the
+resources it reaches: the guide says to pick the ones the missions will use, not everything; the
+permissions are still all ticked, and each mission narrows further. GitHub applies it now ("Only
+select repositories"); the other guides keep their wide grant until each is reviewed.
+
+### Consequences
+
+- Discovery lists only what the token reaches, so a repository left out is not a resource of the
+  account; a mission needing it means a new token (or an edited one at GitHub) and a reconnect.
+- The connect page lists each permission by name and access only, without the tools it serves:
+  the person is configuring a service there, not reading the detail of each permission.
+
+### Rejected alternatives
+
+#### Keep "All repositories"
+
+A token over every repository of an organisation is wider than any mission and frightens the
+person who creates it; the second visit it saves is rare next to the token it costs.
