@@ -40,8 +40,10 @@ import {
   type Resource,
   type ResourceNoun,
   type ServiceIcon,
+  screenshotAttribution,
   type SshKeyCredentialSpec,
   type TokenExpiry,
+  type TokenGuide,
   type TokenPermission,
   type TokenPermissionAccess,
   type TokenReach,
@@ -53,6 +55,7 @@ import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { CeilingCheck } from '../limits';
 import type { Logger } from '../logging';
+import { connectFileUrl } from '../plugins/connect-files';
 import { catalogEnvsOf } from '../../lib/missions/catalog-view';
 import { resourceNounOf } from '../../lib/providers/resource-noun';
 import type { ResourceMove, ResourceMoveReason, Store } from '../store';
@@ -156,13 +159,34 @@ export interface TokenPermissionView {
   readonly tools: readonly ToolLabel[];
 }
 
+/**
+ * A screenshot under a step: where the page loads it from (`connectFileUrl`), what it
+ * shows, and the provenance line derived from its declaration (`screenshotAttribution`).
+ */
+export interface GuideFigureView {
+  readonly url: string;
+  readonly alt: string;
+  readonly attribution: string;
+}
+
+/** A step of the guide as the connect page draws it: the plugin's step and its figure. */
+export interface GuideStepView extends GuideStep {
+  /** `null` when the step names no screenshot. */
+  readonly figure: GuideFigureView | null;
+}
+
 /** How to create the token by hand, read from the plugin's declaration. */
 export interface TokenGuideView {
-  readonly steps: readonly GuideStep[];
+  readonly steps: readonly GuideStepView[];
   readonly reach: TokenReach;
   readonly permissions: readonly TokenPermissionView[];
   readonly expiry: TokenExpiry;
   readonly docsUrl: string;
+}
+
+/** An alternative of the key, its steps with their figures. */
+export interface AlternativeView extends CredentialAlternative {
+  readonly steps: readonly GuideStepView[];
 }
 
 /**
@@ -197,7 +221,7 @@ export interface ConnectableProvider {
   /** The fields of the connect form (`api-key`, `ssh-key`); empty for the redirect flow. */
   readonly fields: readonly CredentialField[];
   /** The shapes the key comes in, one chosen at connect (`api-key`); empty when it has one. */
-  readonly alternatives: readonly CredentialAlternative[];
+  readonly alternatives: readonly AlternativeView[];
   /** Where the user creates the key (`api-key`). */
   readonly createUrl: string | null;
   /** What the person creates, in the service's words (`api-key`): "fine-grained personal access token". */
@@ -503,6 +527,8 @@ export class ConnectionService {
     const { plugin } = this.deps.registry.require(providerId);
     const spec = plugin.credential;
     const guide = spec.kind === 'api-key' ? spec.guide : undefined;
+    const steps = (list: readonly GuideStep[]): GuideStepView[] =>
+      list.map((step) => stepView(plugin, guide?.screenshots, step));
     return {
       id: plugin.id,
       displayName: plugin.displayName,
@@ -517,12 +543,15 @@ export class ConnectionService {
           ? (this.deps.brokers.forProvider(spec.broker.provider)?.attested ?? null)
           : null,
       fields: spec.kind === 'api-key' || spec.kind === 'ssh-key' ? spec.fields : [],
-      alternatives: spec.kind === 'api-key' ? (spec.alternatives ?? []) : [],
+      alternatives:
+        spec.kind === 'api-key'
+          ? (spec.alternatives ?? []).map((alt) => ({ ...alt, steps: steps(alt.steps) }))
+          : [],
       createUrl: spec.kind === 'api-key' ? (spec.createUrl ?? null) : null,
       label: spec.kind === 'api-key' ? (spec.label ?? null) : null,
       guide: guide
         ? {
-            steps: guide.steps,
+            steps: steps(guide.steps),
             reach: guide.reach,
             permissions: guide.permissions.map((p) => ({
               name: p.name,
@@ -1996,6 +2025,26 @@ export function toPluginResource(provider: string, record: ConnectionResourceRec
     env: record.env,
     displayName: record.displayName,
     ...(record.metadata ? { metadata: record.metadata } : {}),
+  };
+}
+
+/** A step with its screenshot resolved: served from the plugin's folder, its provenance derived. */
+function stepView(
+  plugin: ProviderPlugin,
+  screenshots: TokenGuide['screenshots'],
+  step: GuideStep,
+): GuideStepView {
+  const shot = step.screenshot === undefined ? undefined : screenshots?.[step.screenshot];
+  return {
+    ...step,
+    figure:
+      step.screenshot !== undefined && shot !== undefined
+        ? {
+            url: connectFileUrl(plugin.id, step.screenshot),
+            alt: shot.alt,
+            attribution: screenshotAttribution(plugin.displayName, shot),
+          }
+        : null,
   };
 }
 

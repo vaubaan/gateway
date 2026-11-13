@@ -11,4 +11,4 @@
  * checks it) : bump both together (docs/handbook/plugin-sdk.md "Versions of
  * the SDK").
  */
-export const SDK_VERSION = '0.7.1';
+export const SDK_VERSION = '0.8.0';

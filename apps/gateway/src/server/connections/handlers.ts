@@ -12,6 +12,8 @@
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /connections/<id>/default-env               the owner's default environment label
  *                                                    for the unlabelled resources
+ *   GET  /reference/<provider>/connect/<file>        a screenshot of the connect guide
+ *                                                    (signed-in users; read-only)
  *   POST /api/missions/<id>/resources/check          JSON `{ connection_id }`: "check now"
  *                                                    on a mission card — discovery of that
  *                                                    connection, answered as JSON with what
@@ -39,6 +41,7 @@ import {
 import { notAFormResponse, readForm, stringField } from '../http/form';
 import { resolveReturnTo } from '../http/return-to';
 import { errorFields, type Logger } from '../logging';
+import type { ConnectFile } from '../plugins';
 import { CONNECT_ERROR_MESSAGES, ConnectError } from './errors';
 import { echoOfForm } from './input';
 import type { Notice, NoticeStore } from './pending';
@@ -88,6 +91,8 @@ export interface ConnectionHandlerDeps {
   readonly connections: ConnectionService;
   readonly notices: NoticeStore;
   readonly logger: Logger;
+  /** A screenshot of a plugin's connect guide, or `null` (`readConnectFile` of `../plugins`). */
+  readonly connectFile: (providerId: string, file: string) => Promise<ConnectFile | null>;
 }
 
 export interface ConnectionHandlers {
@@ -105,6 +110,12 @@ export interface ConnectionHandlers {
    * connection) and answers `MissionResourceCheck` as JSON.
    */
   checkMissionResources(request: Request, missionId: string): Promise<Response>;
+  /**
+   * `GET /reference/:provider/connect/:file` — a screenshot the plugin's connect guide
+   * declares, for a signed-in user (the connect page's reader); 401 without a session,
+   * 403 for the bootstrap operator, 404 for anything not declared.
+   */
+  connectFile(request: Request, providerId: string, file: string): Promise<Response>;
 }
 
 const INVALID_CHECK = {
@@ -270,6 +281,20 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
             : notice,
         );
       }
+    },
+
+    async connectFile(request, providerId, file) {
+      const guard = await guardSession(request, deps, 'user');
+      if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
+      const found = await deps.connectFile(providerId, file);
+      if (!found) return new Response(null, { status: 404 });
+      return new Response(new Uint8Array(found.body), {
+        headers: {
+          'Content-Type': found.contentType,
+          'Cache-Control': 'private, max-age=3600',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
     },
 
     async callback(request, providerId) {

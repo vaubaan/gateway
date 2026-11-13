@@ -13,7 +13,13 @@ import {
   CREDENTIAL_ALTERNATIVE_ID_PATTERN,
   CREDENTIAL_ALTERNATIVES_MAX,
   type CredentialField,
+  GUIDE_PATH_MAX_SEGMENTS,
+  GUIDE_PATH_SEGMENT_MAX_LENGTH,
+  GUIDE_SCREENSHOT_FILE_PATTERN,
   OAUTH2_REVOCATION_FORMATS,
+  SCREENSHOT_ALT_MAX_LENGTH,
+  SCREENSHOT_LICENCES,
+  SCREENSHOT_TAKEN_PATTERN,
   TOKEN_EXPIRY_KINDS,
   TOKEN_PERMISSION_ACCESS,
   type CredentialSpec,
@@ -50,8 +56,91 @@ export function credentialSpecIssues(spec: CredentialSpec, tools: ReadonlySet<un
     if (spec.alternatives !== undefined) {
       issues.push(...alternativesIssues(spec.alternatives, spec.fields, `${at}.alternatives`));
     }
+    issues.push(...screenshotsIssues(spec.guide, spec.alternatives, `${at}.guide.screenshots`));
   }
   return issues;
+}
+
+/**
+ * The screenshots of a guide (ADR plugin-contract-and-credential-spec,
+ * amendment 2026-11-13): each declared with a source, a licence of the
+ * allowlist, the month it was taken and an alt text, and named by exactly
+ * one step, the alternatives' steps included; every step's screenshot is
+ * declared. Whether the file exists, its format, weight and width are the
+ * host's structural test: the declaration is all `definePlugin` sees.
+ */
+function screenshotsIssues(guide: unknown, alternatives: unknown, at: string): string[] {
+  if (!isRecord(guide)) return [];
+  const steps = [
+    ...(isList(alternatives)
+      ? alternatives.flatMap((alt) => (isRecord(alt) && isList(alt.steps) ? alt.steps : []))
+      : []),
+    ...(isList(guide.steps) ? guide.steps : []),
+  ];
+  const named = new Map<string, number>();
+  for (const step of steps) {
+    if (isRecord(step) && typeof step.screenshot === 'string') {
+      named.set(step.screenshot, (named.get(step.screenshot) ?? 0) + 1);
+    }
+  }
+  const declared = guide.screenshots;
+  if (declared === undefined) {
+    return [...named.keys()].map((file) => `${at}: '${file}' is named by a step but not declared`);
+  }
+  if (!isRecord(declared)) return [`${at}: expected { '<file>': { source, licence, taken, alt } }`];
+  const issues: string[] = [];
+  for (const [file, shot] of Object.entries(declared)) {
+    const where = `${at}['${file}']`;
+    if (!GUIDE_SCREENSHOT_FILE_PATTERN.test(file)) {
+      issues.push(`${where}: expected a file name such as 'token-form.webp' (.png or .webp)`);
+    }
+    issues.push(...screenshotIssues(shot, where));
+    const uses = named.get(file) ?? 0;
+    if (uses === 0) issues.push(`${where}: declared but named by no step`);
+    if (uses > 1) issues.push(`${where}: named by ${uses} steps, expected one`);
+  }
+  for (const file of named.keys()) {
+    if (!Object.hasOwn(declared, file)) {
+      issues.push(`${at}: '${file}' is named by a step but not declared`);
+    }
+  }
+  return issues;
+}
+
+function screenshotIssues(shot: unknown, at: string): string[] {
+  if (!isRecord(shot)) return [`${at}: expected { source, licence, taken, alt }`];
+  const issues: string[] = [];
+  if (shot.source !== 'ours' && !isHttpsUrl(shot.source)) {
+    issues.push(`${at}.source: expected the https URL of the page it was taken from, or 'ours'`);
+  }
+  if (!(SCREENSHOT_LICENCES as readonly unknown[]).includes(shot.licence)) {
+    issues.push(
+      `${at}.licence: expected one of ${SCREENSHOT_LICENCES.join(' | ')} (a licence that forbids commercial use or changes never ships)`,
+    );
+  } else if ((shot.source === 'ours') !== (shot.licence === 'ours')) {
+    issues.push(`${at}.licence: 'ours' goes with the source 'ours', and only with it`);
+  }
+  if (typeof shot.taken !== 'string' || !SCREENSHOT_TAKEN_PATTERN.test(shot.taken)) {
+    issues.push(`${at}.taken: expected the month it was taken, YYYY-MM`);
+  }
+  if (!isSentence(shot.alt, SCREENSHOT_ALT_MAX_LENGTH)) {
+    issues.push(
+      `${at}.alt: expected what the image shows, 1 to ${SCREENSHOT_ALT_MAX_LENGTH} characters`,
+    );
+  }
+  return issues;
+}
+
+/** A path is the provider's menu labels, in order: 1 to 8 segments, none empty, none long. */
+function pathIssues(path: unknown, at: string): string[] {
+  if (!isList(path) || path.length === 0 || path.length > GUIDE_PATH_MAX_SEGMENTS) {
+    return [`${at}: expected 1 to ${GUIDE_PATH_MAX_SEGMENTS} menu labels when present`];
+  }
+  return path.flatMap((segment, i) =>
+    isSentence(segment, GUIDE_PATH_SEGMENT_MAX_LENGTH)
+      ? []
+      : [`${at}[${i}]: expected a menu label of 1 to ${GUIDE_PATH_SEGMENT_MAX_LENGTH} characters`],
+  );
 }
 
 /**
@@ -138,14 +227,17 @@ function guideIssues(guide: unknown, tools: ReadonlySet<unknown>, at: string): s
   ];
 }
 
-/** Every step is one sentence to act on, with an https page and a command to copy when it has them. */
+/**
+ * Every step is one sentence to act on, with the provider's menu path, an
+ * https page, a command to copy and a screenshot's file name when it has them.
+ */
 function stepIssues(steps: unknown, at: string): string[] {
   if (!isList(steps) || steps.length === 0) return [`${at}: expected at least one step`];
   const issues: string[] = [];
   steps.forEach((step, i) => {
     const where = `${at}[${i}]`;
     if (!isRecord(step)) {
-      issues.push(`${where}: expected { do, url?, code? }`);
+      issues.push(`${where}: expected { do, path?, url?, code?, screenshot? }`);
       return;
     }
     if (!isSentence(step.do, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
@@ -156,6 +248,13 @@ function stepIssues(steps: unknown, at: string): string[] {
     }
     if (step.code !== undefined && !isSentence(step.code, CREDENTIAL_SENTENCE_MAX_LENGTH)) {
       issues.push(`${where}.code: expected a non-empty command when present`);
+    }
+    if (step.path !== undefined) issues.push(...pathIssues(step.path, `${where}.path`));
+    if (
+      step.screenshot !== undefined &&
+      (typeof step.screenshot !== 'string' || !GUIDE_SCREENSHOT_FILE_PATTERN.test(step.screenshot))
+    ) {
+      issues.push(`${where}.screenshot: expected a file name such as 'token-form.webp'`);
     }
   });
   return issues;

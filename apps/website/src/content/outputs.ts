@@ -15,6 +15,7 @@ import {
   type LineFigures,
   type PluginHealth,
 } from './health';
+import { connectGuidePath } from './plugin-page';
 import type { PluginWithHealth } from './plugin-pages';
 import type { LevelBudgets, MacroActionInfo, RiskInfo } from './plugins';
 import type { ValidationThresholds } from './thresholds';
@@ -280,7 +281,7 @@ function pluginJson(p: PluginWithHealth): Record<string, unknown> {
       expiry: c.expiry,
       docs_url: c.docsUrl,
       manual_revocation: c.manualRevocation,
-      connect: absolute(`/docs/providers/${p.id}`),
+      connect: absolute(connectGuidePath(p.id)),
     })),
   };
 }

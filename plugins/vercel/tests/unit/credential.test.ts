@@ -55,14 +55,23 @@ describe('vercel token — the guide', () => {
   });
 
   test('each alternative reads its ID first, then scopes the token', () => {
-    const teamText = guideText({ ...vercelCredential.guide, steps: [] }, [team!]);
-    expect(teamText.indexOf('Team ID')).toBeLessThan(teamText.indexOf('Account Settings, Tokens'));
-    expect(teamText).toMatch(/choose the team, then All Projects/);
-    const projectText = guideText({ ...vercelCredential.guide, steps: [] }, [project!]);
-    expect(projectText.indexOf('Project ID')).toBeLessThan(
-      projectText.indexOf('Account Settings, Tokens'),
+    const tokensStep = ['Account Settings', 'Tokens'];
+    const teamPaths = team!.steps.map((step) => step.path);
+    expect(teamPaths.findIndex((path) => path?.includes('Team ID'))).toBeGreaterThan(-1);
+    expect(teamPaths.findIndex((path) => path?.includes('Team ID'))).toBeLessThan(
+      teamPaths.findIndex((path) => path?.join() === tokensStep.join()),
     );
-    expect(projectText).toMatch(/then the project/);
+    expect(guideText({ ...vercelCredential.guide, steps: [] }, [team!])).toMatch(
+      /Choose the team, then All Projects/,
+    );
+    const projectPaths = project!.steps.map((step) => step.path);
+    expect(projectPaths.findIndex((path) => path?.includes('Project ID'))).toBeGreaterThan(-1);
+    expect(projectPaths.findIndex((path) => path?.includes('Project ID'))).toBeLessThan(
+      projectPaths.findIndex((path) => path?.join() === tokensStep.join()),
+    );
+    expect(guideText({ ...vercelCredential.guide, steps: [] }, [project!])).toMatch(
+      /then the project/,
+    );
   });
 });
 

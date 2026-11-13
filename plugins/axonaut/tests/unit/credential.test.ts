@@ -5,7 +5,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { UpstreamAuthError, type ConnectionContext } from '@vaubaan/plugin-sdk';
-import { guideText, mockFetch } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { AXONAUT_API_BASE } from '../../src/execute.ts';
 import { API_KEY_FIELD } from '../../src/identity.ts';
@@ -28,7 +28,10 @@ const me = (overrides: Record<string, unknown> = {}) => ({
 describe('the Axonaut key — the guide', () => {
   test('names the menu path, the whole account as the grant, and no expiry', () => {
     expect(axonautCredential.createUrl).toBe(AXONAUT_SIGN_IN_PAGE);
-    expect(guideText(axonautCredential.guide)).toMatch(/Settings \(Paramètres\), then API/);
+    expect(axonautCredential.guide.steps.map((step) => step.path)).toContainEqual([
+      'Settings (Paramètres)',
+      'API',
+    ]);
     expect(axonautCredential.guide.reach.grant).toMatch(/^The whole Axonaut account/);
     expect(axonautCredential.guide.permissions).toEqual([]);
     expect(axonautCredential.guide.expiry).toMatchObject({ kind: 'none' });

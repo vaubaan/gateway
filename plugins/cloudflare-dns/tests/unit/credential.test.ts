@@ -10,7 +10,7 @@ import {
   UpstreamProtocolError,
   type ConnectionContext,
 } from '@vaubaan/plugin-sdk';
-import { guideText, mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
 
 import {
   CLOUDFLARE_API_BASE,
@@ -48,9 +48,18 @@ describe('cloudflare-dns token — the guide', () => {
     expect(cloudflareDnsCredential.createUrl).toBe(
       'https://dash.cloudflare.com/profile/api-tokens',
     );
-    const text = guideText(cloudflareDnsCredential.guide);
-    expect(text).toMatch(/Create Custom Token/);
-    expect(text).toMatch(/Include, All zones/);
+    const paths = cloudflareDnsCredential.guide.steps.map((step) => step.path);
+    expect(paths).toContainEqual(['My Profile', 'API Tokens', 'Create Token']);
+    expect(paths).toContainEqual([
+      'Policies',
+      'Add new policy',
+      'Zone policy',
+      'Include',
+      'All zones',
+    ]);
+    expect(cloudflareDnsCredential.guide.screenshots?.['create-token.webp']?.licence).toBe(
+      'CC-BY-4.0',
+    );
     expect(cloudflareDnsCredential.guide.expiry).toEqual({ kind: 'provider-reports' });
   });
 

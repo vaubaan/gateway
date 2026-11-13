@@ -52,7 +52,10 @@ export const VERCEL_PROJECT_ID_PATTERN = '^prj_[A-Za-z0-9]+$';
 const FIELD = { token: 'token', teamId: 'team_id', projectId: 'project_id' } as const;
 
 const NAME_AND_TOKEN_STEP =
-  'Open Account Settings, Tokens, and name the token; make sure the scope selector at the top left shows your personal account.';
+  'Open the page and name the token; make sure the scope selector at the top left shows your personal account.';
+
+/** Where the token is made, in Vercel's own labels. */
+const TOKENS_PATH = ['Account Settings', 'Tokens'] as const;
 
 export const vercelCredential: ApiKeyCredentialSpec = {
   kind: 'api-key',
@@ -90,12 +93,11 @@ export const vercelCredential: ApiKeyCredentialSpec = {
       fields: [FIELD.teamId],
       steps: [
         {
-          do: 'Open the team on Vercel, then Settings, General, and copy the Team ID (team_…).',
+          do: 'Open the team on Vercel and copy the Team ID (team_…).',
+          path: ['Settings', 'General', 'Team ID'],
         },
-        {
-          do: `${NAME_AND_TOKEN_STEP} Under Scope choose the team, then All Projects.`,
-          url: VERCEL_TOKENS_URL,
-        },
+        { do: NAME_AND_TOKEN_STEP, path: TOKENS_PATH, url: VERCEL_TOKENS_URL },
+        { do: 'Choose the team, then All Projects.', path: ['Scope'] },
       ],
     },
     {
@@ -105,18 +107,17 @@ export const vercelCredential: ApiKeyCredentialSpec = {
       fields: [FIELD.projectId],
       steps: [
         {
-          do: 'Open the project on Vercel, then Settings, General, and copy the Project ID (prj_…).',
+          do: 'Open the project on Vercel and copy the Project ID (prj_…).',
+          path: ['Settings', 'General', 'Project ID'],
         },
-        {
-          do: `${NAME_AND_TOKEN_STEP} Under Scope choose the team that owns the project, then the project.`,
-          url: VERCEL_TOKENS_URL,
-        },
+        { do: NAME_AND_TOKEN_STEP, path: TOKENS_PATH, url: VERCEL_TOKENS_URL },
+        { do: 'Choose the team that owns the project, then the project.', path: ['Scope'] },
       ],
     },
   ],
   guide: {
     steps: [
-      { do: 'Choose an expiration and Create.' },
+      { do: 'Choose an expiration and create the token.', path: ['Create'] },
       { do: 'Copy the token and paste it here with the ID. Vercel shows it once.' },
     ],
     reach: {

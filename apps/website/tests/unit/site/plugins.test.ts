@@ -23,8 +23,10 @@ import {
 } from '@vaubaan/policy-engine';
 
 import { ExampleError } from '../../../src/content/plugin-examples';
-import { connectPageMarkdown } from '../../../src/content/plugin-pages';
+import { screenshotCredits } from '../../../src/content/plugin-page';
+import { connectSectionMarkdown } from '../../../src/content/plugin-pages';
 import {
+  connectFigureFiles,
   discoverPluginDirs,
   importPlugin,
   loadPlugins,
@@ -216,13 +218,18 @@ describe('the plugin catalog of the site', () => {
       brokerProvider: 'google',
     });
     expect(calendar?.scopes).toHaveLength(2);
-    const way = (id: string) =>
-      /^### The way: .*$/m.exec(connectPageMarkdown(byId(id), ''))?.[0] ?? '';
-    expect(way('google-calendar')).toMatch(/OAuth broker's client/);
-    expect(way('google-calendar')).toContain('`google`');
-    expect(way('google-calendar')).not.toMatch(/registers/);
-    expect(way('miro')).toMatch(/the gateway registers its own client there/);
-    expect(way('github')).toMatch(/pasted by hand/);
+    const section = (id: string) => connectSectionMarkdown(byId(id));
+    expect(section('google-calendar')).toMatch(
+      /^\*\*3 of 3 · you sign in through an OAuth broker\*\*/,
+    );
+    expect(section('google-calendar')).toMatch(/OAuth broker/);
+    expect(section('google-calendar')).toContain('`google`');
+    expect(section('google-calendar')).not.toMatch(/registers/);
+    expect(section('miro')).toMatch(/^\*\*2 of 3 · you sign in and allow the gateway/);
+    expect(section('miro')).toMatch(/The gateway registers its own client at the service/);
+    expect(section('github')).toMatch(/^\*\*1 of 3 · a key you create and paste\*\*/);
+    expect(section('ssh')).toMatch(/^\*\*1 of 3 · a key you create and paste\*\*/);
+    expect(section('ssh')).toMatch(/key pair/);
   });
 
   it('classifies the declared examples at build: a GitHub push touches git-push and the feature branch write', () => {
@@ -444,15 +451,51 @@ describe('the plugin catalog of the site', () => {
     for (const plugin of plugins) expect(plugin, plugin.id).not.toHaveProperty('experimental');
   });
 
-  it('the connect page of a token way says how wide to grant, the steps and the expiry', () => {
+  it('the connect guide of a token way says how wide to grant, the steps and the expiry', () => {
     const tokenWays = plugins.filter((p) => p.credentials.some((c) => c.kind === 'api-key'));
     expect(tokenWays.length).toBeGreaterThan(0);
     for (const plugin of tokenWays) {
-      const page = connectPageMarkdown(plugin, '');
-      expect(page, plugin.id).toMatch(/^How wide to grant — .+: .+\. .*mission/m);
+      const page = connectSectionMarkdown(plugin);
+      expect(page, plugin.id).toMatch(/^Grant it wide, once — .+: .+\. .*mission/m);
       expect(page, plugin.id).toMatch(/^1\. /m);
       expect(page, plugin.id).toMatch(/^Expiry: /m);
       expect(page, plugin.id).not.toMatch(/and no more/);
     }
+  });
+
+  it('every step of a token guide carries its menu path, written in bold in the twin', () => {
+    const github = byId('github');
+    const steps = github.credentials[0]?.steps ?? [];
+    expect(steps.some((step) => step.path.includes('Developer settings'))).toBe(true);
+    expect(connectSectionMarkdown(github)).toMatch(
+      /^\d+\. \*\*Settings › Developer settings › Personal access tokens › .+\*\* — /m,
+    );
+  });
+
+  it('a screenshot is copied beside the page, shown with its provenance line and credited', () => {
+    const cloudflare = byId('cloudflare-dns');
+    const figure = cloudflare.credentials[0]?.steps.find((step) => step.figure)?.figure;
+    expect(figure).toMatchObject({
+      src: '/plugins/cloudflare-dns/connect/create-token.webp',
+      sourceHost: 'developers.cloudflare.com',
+      licence: 'CC-BY-4.0',
+      attribution: 'Cloudflare DNS docs, 2026-11 · from developers.cloudflare.com (CC BY 4.0)',
+    });
+    expect(connectFigureFiles(cloudflare)).toEqual([
+      [
+        'plugins/cloudflare-dns/connect/create-token.webp',
+        'plugins/cloudflare-dns/docs/connect/create-token.webp',
+      ],
+    ]);
+    const twin = connectSectionMarkdown(cloudflare);
+    expect(twin).toContain('![The Create Token form');
+    expect(twin).toContain('(/plugins/cloudflare-dns/connect/create-token.webp)');
+    expect(twin).toContain(
+      '*Cloudflare DNS docs, 2026-11 · from developers.cloudflare.com (CC BY 4.0)*',
+    );
+    expect(screenshotCredits(plugins)).toBe(
+      "Screenshots on these pages come from the services' own documentation where its licence allows it: Cloudflare DNS docs, developers.cloudflare.com (CC BY 4.0).",
+    );
+    expect(screenshotCredits([byId('github')])).toBeNull();
   });
 });

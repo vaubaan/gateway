@@ -50,11 +50,13 @@ export const stripeCredential: ApiKeyCredentialSpec = {
     steps: [
       { do: 'Sign in to the Stripe Dashboard of the account the agents will work on.' },
       {
-        do: 'Open Developers, API keys; in the sandbox, reveal the Secret key (sk_test_…) and copy it.',
+        do: 'Open the page and, in the sandbox, reveal the Secret key (sk_test_…) and copy it.',
+        path: ['Developers', 'API keys'],
         url: STRIPE_KEYS_PAGE,
       },
       {
-        do: 'Switch to live mode and choose Reveal live key on the Secret key (sk_live_…), or create one: Stripe shows a key you create once.',
+        do: 'Switch to live mode and reveal the Secret key (sk_live_…), or create one: Stripe shows a key you create once.',
+        path: ['Standard keys', 'Reveal live key'],
       },
       { do: 'Paste the test key, the live key, or both, here.' },
     ],

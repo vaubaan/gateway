@@ -892,6 +892,23 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'connect-screenshots-declared',
+    statement:
+      "Every screenshot a shipped plugin's connect guide declares is a file of its docs/connect folder, a PNG or a WebP by its magic bytes, at most 300 KB and 1600 px wide, and no undeclared file sits in that folder; its source, licence (an allowlist without NonCommercial or NoDerivatives), month and alt text are checked by definePlugin.",
+    source: 'ADR plugin-contract-and-credential-spec (amendment 2026-11-13)',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/connect-screenshots.test.ts`,
+        tests: [
+          'reads the headers it relies on',
+          'finds the declared screenshots',
+          '%s: %s is a light PNG or WebP of at most 1600 px',
+          'plugins/%s/docs/connect holds only declared files',
+        ],
+      },
+    ],
+  },
+  {
     id: 'shipped-plugin-icons',
     statement:
       'Every plugin the image ships declares the icon the interface shows it by (the path data of one SVG path on a 24-unit grid) and the brand colour it is drawn in: no service of the repository falls back to two letters or to the plain ink, and the interface keeps no provider → icon or colour list of its own.',

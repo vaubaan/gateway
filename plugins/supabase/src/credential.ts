@@ -63,7 +63,8 @@ export const supabaseCredential: ApiKeyCredentialSpec = {
     steps: [
       { do: 'Sign in to Supabase as the account the agents will act as.' },
       {
-        do: 'Open Account preferences, Access tokens, then generate a new token.',
+        do: 'Open the page and generate a new token.',
+        path: ['Account preferences', 'Access Tokens'],
         url: SUPABASE_TOKENS_PAGE,
       },
       {

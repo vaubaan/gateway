@@ -962,7 +962,8 @@ revokes the bootstrap token.
 A user picks a service and lands on the one place that authorizes it
 ([one-place-to-authorize-services-token-first](../decisions/one-place-to-authorize-services-token-first.md)):
 a key the person makes and pastes whenever the service allows one, with a guide derived from the
-plugin; else the service's own sign-in, through a client the gateway registered or through the
+plugin (each step's menu path at the service highlighted, and a screenshot with its provenance on
+the one hard screen when the plugin declares one); else the service's own sign-in, through a client the gateway registered or through the
 broker that serves the service (§4.2, Administration › OAuth brokers); a service no broker serves reads
 "not configured", with the way to Settings for an administrator. A pasted
 token is checked before it is stored, never shown back, its expiry warned 14 days ahead. An account

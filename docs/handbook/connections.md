@@ -8,8 +8,10 @@ tracks:
   - apps/gateway/src/app/(app)/accounts/
   - apps/gateway/src/app/(app)/connections/callback/
   - apps/gateway/src/components/connections/
+  - apps/gateway/src/server/plugins/connect-files.ts
+  - apps/gateway/src/app/(app)/reference/[id]/connect/
   - apps/gateway/tests/integration/connections/
-last_reviewed: 2026-11-11
+last_reviewed: 2026-11-13
 ---
 
 # Connections — handbook
@@ -33,7 +35,7 @@ discovering and curating its resources. Spec:
 ## Invariants
 
 - **Connect state** (`pending.ts`): 32 random bytes, consumed once whoever presents it, returned only to the session of the user who started it, for that provider only; anything else is `state-invalid`. The redirect URI is built from `public_url`, never the request host; a foreign `return_to` is refused (`return-url-refused`), never defaulted.
-- **A token way is guided entirely by its plugin** (`TokenGuideView` in `service.ts`, rendered by `components/connections/TokenGuide.tsx`): how wide to grant and why, the steps, the token page, the permissions, the expiry kind, the documentation. The page writes nothing about a service; `definePlugin` refuses a token way without its guide or `verify`, and `tests/unit/structural/token-guides.test.ts` holds the shipped ones to it (ADR one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide, narrowed by each mission).
+- **A token way is guided entirely by its plugin** (`TokenGuideView` in `service.ts`, rendered by `components/connections/TokenGuide.tsx`): how wide to grant and why, the steps with their menu path (highlighted chips, words of the frame in `TOKEN_CONNECT`) and their screenshot (`GuideStepView.figure`: URL, alt, provenance line from the SDK's `screenshotAttribution`), the token page, the permissions, the expiry kind, the documentation. The page writes nothing about a service; `definePlugin` refuses a token way without its guide or `verify`, and `tests/unit/structural/token-guides.test.ts` holds the shipped ones to it (ADR one-place-to-authorize-services-token-first, amended 2026-10-31: granted wide, narrowed by each mission).
 - **A key in several shapes** (`CredentialAlternative`, Vercel: Team or One project): the radio (`alternative`, in step 1, bound to the form by `form="connect-form"`) and every alternative's steps and fields are rendered; `accounts.module.css` hides the panels (`data-alternative-panel`) of the alternatives not chosen with `:has` (at most four), and the browser holds none of their fields required. The server is the rule (`readCredentialForm` in `input.ts`): only the shared fields and the chosen alternative's are read and kept; no choice (the v4 import) → the only alternative whose fields hold a value, else `invalid-input`. The choice is not stored; the plugin reads it back from its fields.
 - **A token is checked before it is stored**: a rejected one stores nothing. A failed first discovery refuses an `api-key` connection, is recorded for `oauth2` (the code is spent), is not attempted for `ssh-key`.
 - **No message in a URL**: outcomes travel as an opaque `?notice=<id>`, readable once, only by the web session it was written for. A refused form is echoed back, **never a `secret` field**.
@@ -62,6 +64,9 @@ discovering and curating its resources. Spec:
 - A plugin-set `env` wins over the owner's label (`label-read-only`).
 - `refresh` is single-flight per connection (rotating refresh tokens are single use); a broker down is `OAuthBrokerUnavailableError` and never expires the connection: only `400 invalid_grant` on `/token` does.
 - An attested broker is reached over a TLS socket of its own whose chain is not checked (`broker-channel.ts`): trust comes from the attestation naming that socket's key, never from a CA. Nothing, the broker key included, is written before the key is pinned.
+
+- **Screenshots of the connect guide** are served by `GET /reference/<id>/connect/<file>` (`connections.handlers.connectFile`, `guardSession` role `user`, so 401 without a session and 403 for the bootstrap operator) from the plugin's own folder, `readConnectFile` in `server/plugins/connect-files.ts`: two origins by the inventory entry, **bundled** → `plugins/<id>/docs/connect/` of the repository (`BUNDLED_PLUGINS_DIR`, resolved from the module like the migrations; in the image it exists only because `next.config.ts` traces `../../plugins/*/docs/connect/**`), **pinned** → `<pin path>/docs/connect/` (`scripts/build-plugin-bundle.mjs` copies the folder beside `index.js`; a pin built before it has none, and its images 404). Only a file the registered, enabled plugin's guide declares, by a name matching `GUIDE_SCREENSHOT_FILE_PATTERN`, is read: never a path. `Cache-Control: private, max-age=3600`.
+- A file added to `docs/connect/` without a declaration fails `tests/unit/structural/connect-screenshots.test.ts`; a declared one heavier than 300 KB, wider than 1600 px or not a PNG/WebP by its bytes too. Personal data in the image is the review's.
 
 ## Procedures
 

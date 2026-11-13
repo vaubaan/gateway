@@ -3,6 +3,8 @@ import { createMDX } from 'fumadocs-mdx/next';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { SITE_REDIRECTS } from './src/site/redirects';
+
 /**
  * The `@vaubaan/*` workspaces this app imports as TypeScript source, read
  * from its own package.json so the list is written once.
@@ -23,6 +25,9 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: process.env.VAUBAAN_BUILD_TYPECHECKED === '1' },
   transpilePackages: workspaceDependencies(),
   poweredByHeader: false,
+  // The former connect pages answer on the plugin page (src/site/redirects.ts).
+  redirects: async () => [...SITE_REDIRECTS],
+
   // The site sets no cookie and loads nothing from a third party (website spec §1.1).
   async headers() {
     return [

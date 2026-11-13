@@ -637,6 +637,8 @@ const READS: Readonly<Record<string, string>> = {
   'auth.handlers.loginCallback': 'GET from the IdP; protected by the single-use state and PKCE',
   'connections.handlers.callback':
     'GET from the provider; protected by the single-use state bound to the user (guardSession)',
+  'connections.handlers.connectFile':
+    'GET; a screenshot of a connect guide, read from the plugin folder (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
   'oauth.handlers.authorize':

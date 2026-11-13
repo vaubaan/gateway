@@ -17,7 +17,7 @@ tracks:
   - scripts/plugin-release-plan.mjs
   - deploy/docker/plugin.Dockerfile
   - deploy/docker/plugin.Dockerfile.dockerignore
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-13
 ---
 
 # Plugin loading — handbook
@@ -54,7 +54,7 @@ ADR [plugins-bundled-or-pinned-by-the-operator](../decisions/plugins-bundled-or-
 - **Tests never read the feed**: `validEnv()` sets `VAUBAAN_UPDATES_CHECK=false`. A test that wants the check sets it back and injects `updatesFetch` (`RootDeps`).
 - **`RootDeps.buildRegistry`** bypasses the loader: the inventory then lists the injected plugins as bundled, and no pin is read. `reseal` runs `loadPlugins` like the root, so a pin that stops the boot stops it too (exit 78).
 - **The e2e instance never reads the feed** (`VAUBAAN_UPDATES_CHECK=false` in `ephemeral-instance.ts`): Administration › Plugins shows no notice there, only "the versions check is off". A notice is tested on the view (`tests/unit/app/admin-plugins.test.tsx`).
-- **A bundle inlines JSON imports**, but a file read at run time (`catalogPathNextTo`) must be copied beside `index.js`: the script copies `src/*.yaml`. A plugin reading another file needs the script taught.
+- **A bundle inlines JSON imports**, but a file read at run time (`catalogPathNextTo`) must be copied beside `index.js`: the script copies `src/*.yaml`, and `docs/connect/` (the connect guide's screenshots, which the host serves from `<pin>/docs/connect/`; a pin built before 2026-11-13 has none and its images answer 404). A plugin reading another file needs the script taught.
 - **A native addon cannot be bundled** (esbuild has no `.node` loader): the plugin declares `"vaubaan": { "bundleable": false, "reason": … }` (today `ssh`) and stays image-only.
 - **The plugin image's context** is filtered by `plugin.Dockerfile.dockerignore` (BuildKit reads it before the root `.dockerignore`, which excludes `dist/`).
 - **A plugin image version never moves**: a gateway release skips versions already on GHCR; a `plugin-<id>-v<version>` tag on an existing version fails.

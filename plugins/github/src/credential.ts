@@ -67,16 +67,26 @@ export const githubCredential: ApiKeyCredentialSpec = {
     steps: [
       { do: 'Sign in to GitHub as the account the agents will act as.' },
       {
-        do: 'Open Settings, Developer settings, Personal access tokens, Fine-grained tokens, then Generate new token.',
+        do: 'Open the page and start a new fine-grained token.',
+        path: [
+          'Settings',
+          'Developer settings',
+          'Personal access tokens',
+          'Fine-grained tokens',
+          'Generate new token',
+        ],
         url: GITHUB_TOKENS_PAGE,
       },
-      {
-        do: 'Choose the organization as Resource owner, then All repositories.',
-      },
+      { do: 'Choose the organization that owns the repositories.', path: ['Resource owner'] },
+      { do: 'Choose All repositories.', path: ['Repository access', 'All repositories'] },
       {
         do: 'Tick every permission below at the access shown; GitHub adds Metadata (read) by itself.',
+        path: ['Permissions', 'Repository permissions'],
       },
-      { do: 'Generate the token, copy it, and paste it here. GitHub shows it once.' },
+      {
+        do: 'Generate the token, copy it, and paste it here. GitHub shows it once.',
+        path: ['Generate token'],
+      },
     ],
     permissions: GITHUB_TOKEN_PERMISSIONS,
     reach: {

@@ -50,17 +50,20 @@ export const caldavGuide: TokenGuide = {
   // One step per server: where its app password is made, and the server URL to type.
   steps: [
     {
-      do: 'Open Sign-In and Security, App-Specific Passwords for iCloud, and create one named "Vaubaan Gateway" (two-factor authentication must be on); the server URL is below.',
+      path: ['Sign-In and Security', 'App-Specific Passwords'],
+      do: 'Open your Apple Account for iCloud, and create one named "Vaubaan Gateway" (two-factor authentication must be on); the server URL is below.',
       url: APPLE_ACCOUNT_URL,
       code: ICLOUD_CALDAV_URL,
     },
     {
-      do: 'Open Settings, Privacy & Security, Manage app passwords for Fastmail, and create one named "Vaubaan Gateway" with access to Calendars (CalDAV); the server URL is below.',
+      path: ['Settings', 'Privacy & Security', 'Manage app passwords and access'],
+      do: 'Open the security settings for Fastmail, and create one named "Vaubaan Gateway" with access to Calendars (CalDAV); the server URL is below.',
       url: FASTMAIL_SECURITY_URL,
       code: FASTMAIL_CALDAV_URL,
     },
     {
-      do: 'Open Personal settings, Security, Devices & sessions on your Nextcloud, and create an app password named "Vaubaan Gateway"; use the App login it shows as the username, and your cloud address with the path below.',
+      path: ['Personal settings', 'Security', 'Devices & sessions'],
+      do: 'Open the security settings of your Nextcloud, and create an app password named "Vaubaan Gateway"; use the App login it shows as the username, and your cloud address with the path below.',
       code: NEXTCLOUD_CALDAV_PATH,
     },
     {

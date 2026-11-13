@@ -57,12 +57,23 @@ export const templateCredential: ApiKeyCredentialSpec = {
     },
   ],
   guide: {
-    // One sentence per thing to do, in order, ending with the paste. A page
-    // goes in `url`, a command to type in `code`.
+    // One sentence per thing to do, in order, ending with the paste. The menus
+    // to follow go in `path`, in the service's own labels (the page draws them
+    // as highlighted chips; the sentence never repeats them), a page in `url`,
+    // a command to type in `code`. One screenshot of the hard screen may go in
+    // `screenshot`, its file in `docs/connect/` and its provenance declared in
+    // `screenshots` below (source, licence, month taken, alt).
     steps: [
       { do: 'Sign in to the template service as the account the agents will act as.' },
-      { do: 'Open Settings, API keys, and choose New key.', url: TEMPLATE_KEYS_PAGE },
-      { do: 'Choose All workspaces and tick every permission below.' },
+      {
+        do: 'Open the page and start a new key.',
+        path: ['Settings', 'API keys', 'New key'],
+        url: TEMPLATE_KEYS_PAGE,
+      },
+      {
+        do: 'Choose All workspaces and tick every permission below.',
+        path: ['Workspaces', 'All workspaces'],
+      },
       { do: 'Create the key, copy it, and paste it here. The service shows it once.' },
     ],
     // Grant wide, once: the person never comes back for a missing workspace
@@ -78,6 +89,16 @@ export const templateCredential: ApiKeyCredentialSpec = {
     // says it back, `none` (with how to end the key) when keys do not expire.
     expiry: { kind: 'person-types', recommendedDays: 90 },
     docsUrl: 'https://example.com/docs/api-keys',
+    // A screenshot of the hard screen, when a sentence is not enough:
+    //   screenshots: {
+    //     'new-key.webp': {
+    //       source: 'https://example.com/docs/api-keys', // or 'ours'
+    //       licence: 'CC-BY-4.0', // CC-BY-4.0 | MIT | Apache-2.0 | ours
+    //       taken: '2026-11',
+    //       alt: 'The new key form with its workspace and permission choices',
+    //     },
+    //   },
+    // and `screenshot: 'new-key.webp'` on the step it illustrates.
   },
   verify: verifyTemplateKey,
 };

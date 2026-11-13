@@ -58,8 +58,8 @@ export const axonautCredential: ApiKeyCredentialSpec = {
         do: 'Sign in to Axonaut as the user the agents will act as: ideally a user of its own, whose role in Axonaut matches what agents may do.',
         url: AXONAUT_SIGN_IN_PAGE,
       },
-      { do: 'Open Settings (Paramètres), then API.' },
-      { do: 'Reveal the API key (Afficher la clé API) and copy it.' },
+      { do: 'Open the API settings.', path: ['Settings (Paramètres)', 'API'] },
+      { do: 'Reveal the API key and copy it.', path: ['Afficher la clé API'] },
       { do: 'Paste the key here.' },
     ],
     reach: {

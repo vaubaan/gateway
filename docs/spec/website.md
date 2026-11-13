@@ -52,8 +52,9 @@ your identity provider), supported providers from the plugin list, the licence, 
 ### 2.2 User docs — `/docs`
 
 In English; every command works on the released image. Concepts in the interface's words, quick look
-(the demo), install, configuration (every key of gateway §4.3), one page per plugin to connect it,
-missions and agents (clients, management door, git remote), operations (backup, key rotation,
+(the demo), install, configuration (every key of gateway §4.3), connecting a provider (the three
+ways; each service's guide is on its plugin page, §2.3 item 7, and the former per-service pages
+redirect there), missions and agents (clients, management door, git remote), operations (backup, key rotation,
 upgrade, retention, telemetry), known limitations.
 
 ### 2.3 Plugins — `/plugins`, `/plugins/<id>`
@@ -86,15 +87,27 @@ along three dimensions: **risk** (six facts per permission, summed into one word
    (`excludedTools`), each with its reason.
 6. **A mission, worked out** — the first two macro-actions at Careful, expanded by the policy engine
    into Can / Asks first / Cannot, as the gateway shows a mission.
-7. **Connecting an account** — the way, one of three: a key the person creates at the service and
-   pastes (`api-key`, `ssh-key`); a client the gateway registers itself at the service (`oauth2`
-   with `clientRegistration`); **a broker's client** (`oauth2` with `broker`). For the third the page
-   says that the instance must be enrolled with an OAuth broker serving that provider, names the
-   provider and the exact scopes asked, says that the person signs in at the service and that the
-   gateway's pages tell whether the broker is attested, and gives the two ways to get one: enrol
-   with a broker someone else operates, or run the published image with one's own client
-   ([oauth-broker](./oauth-broker.md)). A brokered way is never described as a client the gateway
-   registers.
+7. **Connecting an account** — the whole guide, inline (anchor `#connect`), from the plugin's
+   declaration alone, the same the gateway's connect screen shows. It opens with the **kind badge**,
+   numbered so a reader learns there are only three: "1 of 3 · a key you create and paste"
+   (`api-key`, and `ssh-key` with its key-pair sentence), "2 of 3 · you sign in and allow the
+   gateway (its own client)" (`oauth2` with `clientRegistration`), "3 of 3 · you sign in through an
+   OAuth broker" (`oauth2` with `broker`). For a pasted key: how wide to grant and why, the
+   numbered steps — each with the **application path** at the service (the provider's own menu
+   labels, highlighted, before the sentence), its page and its command —, a **screenshot** under
+   the one step whose screen is the hard part, when the plugin declares one, with its provenance
+   line ("GitHub docs, 2026-11 · from docs.github.com (CC BY 4.0)", or taken by the Vaubaan team),
+   the permissions with the tools that need each, the expiry, the fields the connect page asks and
+   the service's documentation. A brokered way starts with an administrator's block, **Before
+   anyone connects**: the instance must be enrolled with an OAuth broker serving that provider,
+   the provider and the exact scopes asked, the two ways to get one (enrol with a broker someone
+   else operates, or run the published image with one's own client,
+   [oauth-broker](./oauth-broker.md)), and that the gateway's pages tell whether the broker is
+   attested; then what the person does. A brokered way is never described as a client the gateway
+   registers. A way with the gateway's own client gives what the person does and the scopes. How
+   to disconnect closes the section. A screenshot ships only under a licence that allows
+   redistribution with attribution ([ADR](../decisions/plugin-contract-and-credential-spec.md),
+   amendment 2026-11-13); the plugin list's foot credits the documentation they come from.
 8. The retired permissions, the tools (count, link to the list with what each usually touches),
    health (§2.4), the links: connect, handbook, catalog as code, Markdown twin.
 

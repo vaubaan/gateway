@@ -72,7 +72,8 @@ export const upstashRedisCredential: ApiKeyCredentialSpec = {
         do: 'Sign in to the Upstash console with a native Upstash account: an account made through Vercel or Fly has no Developer API.',
       },
       {
-        do: 'Open Account, Developer API, and choose Create API Key.',
+        do: 'Open the page and start a new API key.',
+        path: ['Account', 'Developer API', 'Create API Key'],
         url: UPSTASH_API_KEYS_URL,
       },
       { do: 'Name the key, choose the Read/Write permission and an expiration, then Submit.' },

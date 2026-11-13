@@ -54,6 +54,8 @@ const PAGES_FOR_ANY_SESSION: readonly string[] = [
 const AUTHENTICATING_HANDLERS: readonly string[] = [
   'connections.handlers.connect',
   'connections.handlers.callback',
+  // `GET /reference/<id>/connect/<file>`: `guardSession` with the role `user` first.
+  'connections.handlers.connectFile',
   'connections.handlers.discover',
   'connections.handlers.revoke',
   'connections.handlers.updateResource',
@@ -79,6 +81,7 @@ const PARAMS = {
   provider: 'no-such-provider',
   resourceId: 'no-such-resource',
   shareId: 'no-such-share',
+  file: 'no-such-file.png',
 };
 
 function isNeedsUser(outcome: Outcome): boolean {
