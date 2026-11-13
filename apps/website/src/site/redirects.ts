@@ -1,7 +1,7 @@
 /**
  * The permanent redirects of the site (`next.config.ts` reads them). A service's
  * connect guide lives on its plugin page, section "Connecting an account" (website
- * spec §2.3 item 7): the former "Connect <service>" docs pages `/docs/providers/<id>`
+ * spec §2.3 item 9): the former "Connect <service>" docs pages `/docs/providers/<id>`
  * answer there, their Markdown twins at the plugin page's twin. The index
  * `/docs/providers` stays a page.
  */

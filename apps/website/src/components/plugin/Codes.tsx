@@ -1,24 +1,22 @@
 /**
- * The display codes of the gateway (style guide §5), mirrored for the site:
- * the same words, the same marks, the same colour rule — a status is
- * coloured only when it differs from normal. The words come from
- * `@vaubaan/policy-engine`; the look is `globals.css` ("Display codes").
+ * The marks of a plugin page (website spec §2.3), styled in `globals.css`
+ * ("The plugin page"):
  *
- * - `RiskWord` — the row word of a permission; harmless is plain, rows 2 and above tinted.
- * - `GateMark` — runs freely, ask me first, not included: a dot and the words.
- * - `FactCells` — the five facts in words, the one that moved the gate tinted.
- * - `Tag` — a fact that is not a state (an environment), squared.
  * - `Mono` — an identifier as the protocol spells it, wrapping between words.
- * - `PermissionBox` — a permission on the map, tinted by its row.
+ * - `Gate` — what a trust level does, in one short word (yes, ask me, no),
+ *   coloured; the map's legend gives the gateway's words beside each.
+ * - `RowGlyph` — the glyph of a row of the tree, beside its name.
+ * - `Info` — an (i) that shows a declared text on hover or focus; the text is
+ *   in the DOM, so a reader without the tooltip still reads it.
+ * - `ServiceMark` — the plugin's brand icon in its colour, near-black in ink.
  *
  * Imports are relative: the unit tests render these without the `@/` alias.
  */
-import { Fragment, type ReactNode } from 'react';
+import { Fragment } from 'react';
 
-import { GATE_WORDS, REASON_WORDS, ROW_WORDS, type GateWord } from '@vaubaan/policy-engine';
+import type { GateWord, Row } from '@vaubaan/policy-engine';
 
-import type { PermissionBox as Box } from '../../content/plugin-page';
-import type { FactInfo, Row } from '../../content/plugins';
+import { GATE_SHORT } from '../../content/plugin-page';
 
 /** `a_b.c-d/e` → where an identifier may wrap: after each separator. */
 const WORD_END = /(?<=[_.\-/:\]@])(?=[^_.\-/:\]@])/;
@@ -38,54 +36,80 @@ export function Mono({ children, quiet = false }: { children: string; quiet?: bo
   );
 }
 
-export function RiskWord({ row }: { row: Row }) {
+export function Gate({ gate }: { gate: GateWord }) {
   return (
-    <span className={`risk risk-row-${row}`} data-row={row}>
-      {ROW_WORDS[row]}
+    <b className={`pp-g g-${gate}`} data-gate={gate}>
+      {GATE_SHORT[gate]}
+    </b>
+  );
+}
+
+/** One glyph per row, worst first: no entry, a warning, an eye, an undo arrow. */
+const GLYPHS: Readonly<Record<Row, readonly string[]>> = {
+  4: ['M8 2a6 6 0 1 0 0 12A6 6 0 1 0 8 2z', 'M3.8 3.8l8.4 8.4'],
+  3: ['M8 2.2L14.2 13.3H1.8z', 'M8 6.5v3.2M8 11.4v.4'],
+  2: [
+    'M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z',
+    'M8 6a2 2 0 1 0 0 4A2 2 0 1 0 8 6z',
+  ],
+  1: ['M3.5 6.5h6.5a3.5 3.5 0 0 1 0 7H6', 'M6.5 3.5l-3 3 3 3'],
+};
+
+export function RowGlyph({ row }: { row: Row }) {
+  return (
+    <svg className="pp-gl" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      {GLYPHS[row].map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
+
+/** A declared text behind an (i): the catalog's reason, an entity's description. */
+export function Info({ label, text, code }: { label: string; text: string; code?: string }) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return (
+    <span className="pp-info" tabIndex={0}>
+      <svg className="pp-ic" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+        <path d="M8 1.5a6.5 6.5 0 1 0 0 13A6.5 6.5 0 1 0 8 1.5z" />
+        <path d="M8 7.3v4" />
+        <path d="M8 4.8v.2" />
+      </svg>
+      <span className="sr">{label}: </span>
+      <span className="pp-tip" role="tooltip">
+        {parts.map((part, i) =>
+          part.startsWith('`') && part.endsWith('`') && part.length > 1 ? (
+            <code key={i}>{part.slice(1, -1)}</code>
+          ) : (
+            <Fragment key={i}>{part}</Fragment>
+          ),
+        )}
+        {code && (
+          <>
+            {' '}
+            <code>{code}</code>
+          </>
+        )}
+      </span>
     </span>
   );
 }
 
-export function GateMark({ gate, children }: { gate: GateWord; children?: ReactNode }) {
+/** A colour whose luminance is near black: drawn in the page's ink, so dark mode keeps it visible. */
+function isNearBlack(hex: string): boolean {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return false;
+  const [r, g, b] = [m[1]!, m[2]!, m[3]!].map((h) => parseInt(h, 16) / 255);
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! < 0.12;
+}
+
+export function ServiceMark({ path, color }: { path: string; color: string | null }) {
+  const fill = color && !isNearBlack(color) ? color : 'currentColor';
   return (
-    <span className={`gate gate-${gate}`} data-gate={gate}>
-      {children ?? GATE_WORDS[gate]}
+    <span className="pp-svc" aria-hidden="true">
+      <svg width="32" height="32" viewBox="0 0 24 24" focusable="false">
+        <path fill={fill} d={path} />
+      </svg>
     </span>
-  );
-}
-
-export function FactCells({ facts }: { facts: readonly FactInfo[] }) {
-  return (
-    <dl className="cells">
-      {facts.map((fact) => (
-        <div
-          key={fact.axis}
-          className={fact.movesGate ? 'cell cell-moves' : 'cell'}
-          data-moves-gate={fact.movesGate || undefined}
-        >
-          <dt>{fact.label}</dt>
-          <dd>{fact.word}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function Tag({ children }: { children: ReactNode }) {
-  return <span className="tag">{children}</span>;
-}
-
-export function PermissionBox({ box }: { box: Box }) {
-  const classes = ['perm', `perm-row-${box.row}`, box.fallback ? 'perm-fallback' : '']
-    .filter(Boolean)
-    .join(' ');
-  const why = box.rowReason ? ` · ${REASON_WORDS[box.rowReason]}` : '';
-  return (
-    <li className={classes} data-risk-id={box.riskId} title={`${box.riskId}${why}`}>
-      <span>{box.label}</span>
-      {box.envs.map((env) => (
-        <Tag key={env}>{env}</Tag>
-      ))}
-    </li>
   );
 }

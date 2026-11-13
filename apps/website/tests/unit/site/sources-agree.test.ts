@@ -19,6 +19,7 @@ import {
   CONFIG_HANDBOOK,
   parseConfigKeys,
 } from '../../../src/content/config-keys';
+import { CARDINALITY_WORDS, ENVIRONMENT_RULES } from '../../../src/content/plugin-page';
 import { factsOf, loadPlugins } from '../../../src/content/plugins';
 import { readRepoFile, REPO_ROOT } from '../../../src/content/repo';
 import { parseThresholds, THRESHOLDS_SOURCE } from '../../../src/content/thresholds';
@@ -108,6 +109,8 @@ describe('the words of the risk model', () => {
       ...Object.values(policyEngine.WHY_VALUES).flatMap((values) => Object.values(values)),
       ...Object.values(policyEngine.ROW_WORDS),
       ...Object.values(policyEngine.REASON_WORDS),
+      ...Object.values(policyEngine.ROW_GATE_SENTENCES),
+      policyEngine.TREE_LEGEND,
     ]
       // A reason spelled like the catalog's own value (`irreversible`) is a protocol name too.
       .filter(
@@ -129,6 +132,27 @@ describe('the words of the risk model', () => {
     for (const file of files) {
       const source = readRepoFile(`apps/website/src/${file}`);
       for (const word of words) expect(source, `${file}: '${word}'`).not.toContain(`'${word}'`);
+    }
+  });
+});
+
+describe('the data model words of the plugin page', () => {
+  // The gateway's provider reference holds them in `apps/gateway`, which the site may not
+  // import (ADR website-nextjs-on-vercel D1): the site restates them, and this compares.
+  const reference = readRepoFile('apps/gateway/src/lib/providers/reference.ts').replace(
+    /\s+/g,
+    ' ',
+  );
+
+  it('say each cardinality as the gateway reference says it', () => {
+    for (const [cardinality, words] of Object.entries(CARDINALITY_WORDS)) {
+      expect(reference, cardinality).toContain(`${cardinality}: '${words}'`);
+    }
+  });
+
+  it('say the rule of the environment as the gateway reference says it', () => {
+    for (const [source, rule] of Object.entries(ENVIRONMENT_RULES)) {
+      expect(reference, source).toContain(rule);
     }
   });
 });
